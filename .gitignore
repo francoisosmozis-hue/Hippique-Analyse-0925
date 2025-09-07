@@ -1,0 +1,64 @@
+# ==========================
+# Python
+# ==========================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+.eggs/
+.Python
+.env
+.venv/
+venv/
+ENV/
+env.bak/
+*.log
+
+# ==========================
+# OS / IDE
+# ==========================
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+
+# ==========================
+# Données sensibles
+# ==========================
+# Ne jamais committer les credentials ni tokens
+credentials.json
+token.json
+*.key
+*.pem
+
+# ==========================
+# Données locales / résultats
+# ==========================
+# Fichiers générés automatiquement par les scripts
+data/
+results/
+out_*/
+*.json
+*.csv
+*.parquet
+*.pkl
+*.db
+
+# ==========================
+# Excel et suivi local
+# ==========================
+# Fichier Excel de suivi → version locale uniquement
+*.xlsx
+*.xlsm
+excel/
+
+# ==========================
+# Backup / rapports temporaires
+# ==========================
+*.bak
+*.tmp
+*.old
