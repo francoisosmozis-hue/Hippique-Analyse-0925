@@ -1,0 +1,29 @@
+# payout_calibration.yaml — calibrage prudent des payouts exotiques (GPI v5.1)
+# Les valeurs sont des facteurs "safety" utilisés dans l'heuristique payout ≈ (1/prob) * safety
+# Ajustez par type de pari et par fourchette de partants en fonction de votre historique.
+
+cp:   # Couplé Placé
+  default_safety: 0.60
+  by_partants:
+    "8-9": 0.58
+    "10-12": 0.60
+    "13-16": 0.62
+
+cg:   # Couplé Gagnant
+  default_safety: 0.60
+  by_partants:
+    "8-9": 0.58
+    "10-12": 0.60
+    "13-16": 0.62
+
+trio:
+  default_safety: 0.55
+  by_partants:
+    "9-11": 0.54
+    "12-16": 0.56
+
+ze4:
+  default_safety: 0.50
+  by_partants:
+    "9-11": 0.49
+    "12-16": 0.51
