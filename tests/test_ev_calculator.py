@@ -203,6 +203,20 @@ def test_ticket_metrics_and_std_dev() -> None:
     assert math.isclose(res["ev_over_std"], expected_ratio)
 
 
+def test_optimized_allocation_respects_budget_and_improves_ev() -> None:
+    """Optimisation should keep stakes within budget and increase EV."""
+    tickets = [
+        {"p": 0.9, "odds": 2.0},
+        {"p": 0.8, "odds": 3.0},
+        {"p": 0.7, "odds": 3.0},
+    ]
+
+    res = compute_ev_roi(tickets, budget=100, optimize=True)
+
+    assert sum(res["optimized_stakes"]) <= 100 + 1e-6
+    assert res["ev"] > res["ev_individual"]
+
+
 
 def test_green_flag_true_when_thresholds_met() -> None:
     """EV ratio and ROI above thresholds should yield a green flag."""
