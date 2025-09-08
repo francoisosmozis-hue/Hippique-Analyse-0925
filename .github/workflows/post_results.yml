@@ -24,13 +24,24 @@ jobs:
           pip install -r requirements.txt
       - name: Fetch results + prepare Excel update commands
         run: |
-          python scripts/get_arrivee_geny.py             --planning data/planning/$(date +%F).json             --out data/results/$(date +%F)_arrivees.json
-
-          python scripts/p_finale_export.py             --arrivees data/results/$(date +%F)_arrivees.json             --analyses-dir data/analyses             --excel excel/modele_suivi_courses_hippiques.xlsx             --out-dir data/results
+         python scripts/get_arrivee_geny.py \
+            --planning data/planning/$(date +%F).json \
+            --out data/results/$(date +%F)_arrivees.json
+            
+          python scripts/p_finale_export.py \
+            --arrivees data/results/$(date +%F)_arrivees.json \
+            --analyses-dir data/analyses \
+            --excel excel/modele_suivi_courses_hippiques.xlsx \
+            --out-dir data/results
 
       - name: Update Excel with results
         run: |
-          python scripts/update_excel_with_results.py             --excel excel/modele_suivi_courses_hippiques.xlsx             --arrivees data/results/$(date +%F)_arrivees.json             --analyses-dir data/analyses             --save
+          python scripts/update_excel_with_results.py \
+            --excel excel/modele_suivi_courses_hippiques.xlsx \
+            --arrivees data/results/$(date +%F)_arrivees.json \
+            --analyses-dir data/analyses \
+            --results-dir data/results \
+            --save
 
       - name: Commit results + updated Excel
         run: |
@@ -45,4 +56,8 @@ jobs:
           DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
           GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
         run: |
-          python scripts/drive_sync.py             --folder-id "${DRIVE_FOLDER_ID}"             --credentials-json "${GOOGLE_CREDENTIALS_JSON}"             --upload-glob "data/results/**/*.json"             --upload-glob "excel/*.xlsx"
+          python scripts/drive_sync.py \
+            --folder-id "${DRIVE_FOLDER_ID}" \
+            --credentials-json "${GOOGLE_CREDENTIALS_JSON}" \
+            --upload-glob "data/results/**/*.json" \
+            --upload-glob "excel/*.xlsx"
