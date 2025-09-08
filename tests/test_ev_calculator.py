@@ -95,6 +95,14 @@ def test_invalid_odds_raises() -> None:
         compute_ev_roi([{"p": 0.5, "odds": 1.0}], budget=100)
 
 
+def test_budget_must_be_positive() -> None:
+    """Budget must be greater than 0."""
+    with pytest.raises(ValueError):
+        compute_ev_roi([{"p": 0.5, "odds": 2.0}], budget=0)
+    with pytest.raises(ValueError):
+        compute_ev_roi([{"p": 0.5, "odds": 2.0}], budget=-1)
+
+
 def test_apply_dutching_ignores_invalid_odds() -> None:
     """Tickets with odds <= 1 are ignored during dutching."""
     tickets = [
