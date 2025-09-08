@@ -62,14 +62,18 @@ def compute_ev_roi(tickets: List[Dict[str, Any]], budget: float) -> Dict[str, An
     -------
     dict
         A dictionary with keys ``ev`` (global expected value), ``roi`` (overall
-        ROI) and ``green`` (boolean flag, ``True`` when EV is positive).
+        ROI), ``ev_ratio`` (EV relative to the budget) and ``green`` (boolean
+        flag).  When ``green`` is ``False`` an additional ``failure_reasons``
+        list explains which criteria were not met
     """
     # First adjust stakes for dutching groups
     _apply_dutching(tickets)
 
     total_ev = 0.0
     total_stake = 0.0
-
+    combined_expected_payout = 0.0
+    has_combined = False
+ 
     for t in tickets:
         p = t.get("p")
         if p is None and simulate_wrapper and "legs" in t:
@@ -83,11 +87,29 @@ def compute_ev_roi(tickets: List[Dict[str, Any]], budget: float) -> Dict[str, An
 
         ev = stake * (p * (odds - 1) - (1 - p))
         total_ev += ev
-        total_stake += stake
+        total_stake += stake  
+
+        if "legs" in t:
+            has_combined = True
+            combined_expected_payout += p * stake * odds
 
     roi_total = total_ev / total_stake if total_stake else 0.0
-    green_flag = total_ev > 0
-    return {"ev": total_ev, "roi": roi_total, "green": green_flag}
+    ev_ratio = total_ev / budget if budget else 0.0
+
+    reasons = []
+    if ev_ratio < 0.40:
+        reasons.append("EV ratio below 0.40")
+    if roi_total < 0.20:
+        reasons.append("ROI below 0.20")
+    if has_combined and combined_expected_payout <= 10:
+        reasons.append("expected payout for combined bets ≤ 10€")
+
+    green_flag = not reasons
+
+    result = {"ev": total_ev, "roi": roi_total, "ev_ratio": ev_ratio, "green": green_flag}
+    if not green_flag:
+        result["failure_reasons"] = reasons
+    return result
 
 
 __all__ = ["compute_ev_roi"]
