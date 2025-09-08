@@ -182,6 +182,7 @@ def compute_ev_roi(
     has_combined = False
     total_clv = 0.0
     clv_count = 0
+    ticket_metrics: List[Dict[str, float]] = []
  
     for t in tickets:
         p = t.get("p")
@@ -215,16 +216,27 @@ def compute_ev_roi(
             total_clv += clv
             clv_count += 1
         else:
-            t["clv"] = 0.0
+            clv = 0.0
+            t["clv"] = clv
         kelly_stake = _kelly_fraction(p, odds) * budget
         stake_input = t.get("stake", kelly_stake)
         stake = min(stake_input, kelly_stake * kelly_cap)
         t["stake"] = stake
 
         ev = stake * (p * (odds - 1) - (1 - p))
+        variance = p * (1 - p) * (stake * odds) ** 2
+        metrics = {
+            "kelly_stake": kelly_stake,
+            "stake": stake,
+            "ev": ev,
+            "variance": variance,
+            "clv": clv,
+        }
+        t.update(metrics)
+        ticket_metrics.append(metrics)
         total_ev += ev
         total_stake += stake
-        total_variance += p * (1 - p) * (stake * odds) ** 2
+        total_variance += variance
         
         if "legs" in t:
             has_combined = True
@@ -233,8 +245,13 @@ def compute_ev_roi(
     total_stake_normalized = total_stake
     if total_stake > budget:
         scale = budget / total_stake
-        for t in tickets:
+        for t, metrics in zip(tickets, ticket_metrics):
             t["stake"] *= scale
+            t["ev"] *= scale
+            t["variance"] *= scale ** 2
+            metrics["stake"] *= scale
+            metrics["ev"] *= scale
+            metrics["variance"] *= scale ** 2
         total_ev *= scale
         combined_expected_payout *= scale
         total_variance *= scale ** 2
@@ -243,6 +260,8 @@ def compute_ev_roi(
     roi_total = total_ev / total_stake_normalized if total_stake_normalized else 0.0
     ev_ratio = total_ev / budget if budget else 0.0
     ruin_risk = risk_of_ruin(total_ev, total_variance, budget)
+    std_dev = math.sqrt(total_variance)
+    ev_over_std = total_ev / std_dev if std_dev else 0.0
 
     reasons = []
     if ev_ratio < ev_threshold:
@@ -262,6 +281,9 @@ def compute_ev_roi(
         "total_stake_normalized": total_stake_normalized,
         "risk_of_ruin": ruin_risk,
         "clv": (total_clv / clv_count) if clv_count else 0.0,
+        "std_dev": std_dev,
+        "ev_over_std": ev_over_std,
+        "ticket_metrics": ticket_metrics,
     }
     if not green_flag:
         result["failure_reasons"] = reasons
