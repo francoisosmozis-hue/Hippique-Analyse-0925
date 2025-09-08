@@ -169,6 +169,8 @@ def compute_ev_roi(
     total_stake = 0.0
     combined_expected_payout = 0.0
     has_combined = False
+    total_clv = 0.0
+    clv_count = 0
  
     for t in tickets:
         p = t.get("p")
@@ -191,10 +193,18 @@ def compute_ev_roi(
             else:
                 raise ValueError("Ticket must include probability 'p'")
         odds = t["odds"]
+        closing_odds = t.get("closing_odds")
         if not 0 < p < 1:
             raise ValueError("probability must be in (0,1)")
         if odds <= 1:
             raise ValueError("odds must be > 1")
+        if closing_odds is not None and odds > 0:
+            clv = (closing_odds - odds) / odds
+            t["clv"] = clv
+            total_clv += clv
+            clv_count += 1
+        else:
+            t["clv"] = 0.0
         kelly_stake = _kelly_fraction(p, odds) * budget
         stake_input = t.get("stake", kelly_stake)
         stake = min(stake_input, kelly_stake * KELLY_CAP)
@@ -240,6 +250,7 @@ def compute_ev_roi(
         "green": green_flag,
         "total_stake_normalized": total_stake_normalized,
         "risk_of_ruin": ruin_risk,
+        "clv": (total_clv / clv_count) if clv_count else 0.0,
     }
     if not green_flag:
         result["failure_reasons"] = reasons
