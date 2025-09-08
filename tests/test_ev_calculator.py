@@ -107,3 +107,28 @@ def test_apply_dutching_ignores_invalid_odds() -> None:
     assert tickets[0]["stake"] == 100
     assert tickets[1]["stake"] == 50
 
+
+def test_stakes_normalized_when_exceeding_budget() -> None:
+    """Stakes are proportionally reduced when exceeding the budget."""
+    budget = 100
+    tickets = [
+        {"p": 0.99, "odds": 2.0},
+        {"p": 0.9, "odds": 5.0},
+    ]
+
+    k1 = _kelly_fraction(0.99, 2.0) * budget * KELLY_CAP
+    k2 = _kelly_fraction(0.9, 5.0) * budget * KELLY_CAP
+    total = k1 + k2
+    scale = budget / total
+
+    expected1 = k1 * scale
+    expected2 = k2 * scale
+
+    res = compute_ev_roi(tickets, budget=budget)
+
+    assert math.isclose(sum(t["stake"] for t in tickets), budget)
+    assert math.isclose(tickets[0]["stake"], expected1)
+    assert math.isclose(tickets[1]["stake"], expected2)
+    assert math.isclose(res["total_stake_normalized"], budget)
+
+
