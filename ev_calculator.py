@@ -2,8 +2,8 @@
 
 This module exposes :func:`compute_ev_roi` which handles single bets,
 SP dutching groups and combined bets via a caller-provided simulation function
-(``simulate_fn``).  Stakes are capped to 60% of the Kelly criterion
-recommended stake.
+(``simulate_fn``).  Stakes are capped to a fraction of the Kelly criterion
+recommended stake (60% by default).
 """
 from __future__ import annotations
 
@@ -119,6 +119,9 @@ def compute_ev_roi(
     simulate_fn: Optional[Callable[[Iterable[Any]], float]] = None,
     *,
     cache_simulations: bool = True,
+    ev_threshold: float = 0.40,
+    roi_threshold: float = 0.20,
+    kelly_cap: float = KELLY_CAP,
 ) -> Dict[str, Any]:
     """Compute EV and ROI for a list of betting tickets.
 
@@ -140,6 +143,14 @@ def compute_ev_roi(
         When ``True`` (default), results of ``simulate_fn`` are cached so that
         repeated combined bets with identical ``legs`` reuse the previously
         computed probability.  Set to ``False`` to disable this behaviour.
+    ev_threshold:
+        Minimum EV ratio (``ev / budget``) required for the ticket set to be
+        considered "green".
+    roi_threshold:
+        Minimum ROI required for the ticket set to be considered "green".
+    kelly_cap:
+        Maximum fraction of the Kelly stake to actually wager.  Defaults to
+        :data:`KELLY_CAP`.
 
     Returns
     -------
@@ -207,7 +218,7 @@ def compute_ev_roi(
             t["clv"] = 0.0
         kelly_stake = _kelly_fraction(p, odds) * budget
         stake_input = t.get("stake", kelly_stake)
-        stake = min(stake_input, kelly_stake * KELLY_CAP)
+        stake = min(stake_input, kelly_stake * kelly_cap)
         t["stake"] = stake
 
         ev = stake * (p * (odds - 1) - (1 - p))
@@ -234,10 +245,10 @@ def compute_ev_roi(
     ruin_risk = risk_of_ruin(total_ev, total_variance, budget)
 
     reasons = []
-    if ev_ratio < 0.40:
-        reasons.append("EV ratio below 0.40")
-    if roi_total < 0.20:
-        reasons.append("ROI below 0.20")
+    if ev_ratio < ev_threshold:
+        reasons.append(f"EV ratio below {ev_threshold:.2f}")
+    if roi_total < roi_threshold:
+        reasons.append(f"ROI below {roi_threshold:.2f}")
     if has_combined and combined_expected_payout <= 10:
         reasons.append("expected payout for combined bets ≤ 10€")
 
