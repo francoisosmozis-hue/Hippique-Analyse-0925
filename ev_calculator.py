@@ -11,6 +11,8 @@ from collections import defaultdict
 import math
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
+from scipy.optimize import minimize
+
 # ``simulate_wrapper`` is an optional dependency kept for backward compatibility.
 try:  # pragma: no cover - optional dependency
     from simulate_wrapper import simulate_wrapper  # type: ignore
@@ -79,6 +81,57 @@ def _apply_dutching(tickets: Iterable[Dict[str, Any]]) -> None:
             t["stake"] = total * w / weight_sum
             
 
+def optimize_stake_allocation(
+    tickets: List[Dict[str, Any]],
+    budget: float,
+    kelly_cap: float,
+) -> List[float]:
+    """Optimise stakes to maximise the sum of expected log-returns.
+
+    Each ticket's stake is bounded above by ``kelly_cap`` times its Kelly
+    recommendation and the total stake cannot exceed the budget.  The objective
+    maximises ``sum(p*log(1 + f*(odds-1)) + (1-p)*log(1-f))`` where ``f`` is the
+    fraction of bankroll wagered on each ticket.
+
+    Parameters
+    ----------
+    tickets:
+        List of tickets containing ``p`` and ``odds``.
+    budget:
+        Total bankroll available.
+    kelly_cap:
+        Fraction of the Kelly stake allowed per ticket.
+
+    Returns
+    -------
+    list of float
+        Optimised stakes for each ticket.
+    """
+
+    p_odds: List[Tuple[float, float]] = []
+    bounds: List[Tuple[float, float]] = []
+    x0: List[float] = []
+    for t in tickets:
+        p = t["p"]
+        odds = t["odds"]
+        kelly_frac = _kelly_fraction(p, odds)
+        cap_fraction = min(kelly_frac * kelly_cap, 1 - 1e-9)
+        p_odds.append((p, odds))
+        bounds.append((0.0, cap_fraction))
+        x0.append(min(t.get("stake", 0.0) / budget, cap_fraction))
+
+    def objective(fractions: Iterable[float]) -> float:
+        total = 0.0
+        for f, (p, odds) in zip(fractions, p_odds):
+            total += p * math.log1p(f * (odds - 1)) + (1 - p) * math.log1p(-f)
+        return -total
+
+    constraints = {"type": "ineq", "fun": lambda x: 1.0 - sum(x)}
+    res = minimize(objective, x0, bounds=bounds, constraints=[constraints], method="SLSQP")
+    fractions = x0 if not res.success else res.x
+    return [max(0.0, budget * f) for f in fractions]
+
+
 def risk_of_ruin(total_ev: float, total_variance: float, bankroll: float) -> float:
     """Approximate the probability of losing the entire bankroll.
 
@@ -122,6 +175,7 @@ def compute_ev_roi(
     ev_threshold: float = 0.40,
     roi_threshold: float = 0.20,
     kelly_cap: float = KELLY_CAP,
+    optimize: bool = False,
 ) -> Dict[str, Any]:
     """Compute EV and ROI for a list of betting tickets.
 
@@ -151,6 +205,11 @@ def compute_ev_roi(
     kelly_cap:
         Maximum fraction of the Kelly stake to actually wager.  Defaults to
         :data:`KELLY_CAP`.
+    optimize:
+        When ``True`` the stake allocation is optimised globally to maximise
+        the sum of expected log-returns under the budget and Kelly cap
+        constraints.  The result will also include ``ev_individual`` and
+        ``roi_individual`` for the pre-optimisation allocation.
 
     Returns
     -------
@@ -263,6 +322,72 @@ def compute_ev_roi(
     std_dev = math.sqrt(total_variance)
     ev_over_std = total_ev / std_dev if std_dev else 0.0
 
+    if optimize:
+        baseline_metrics = ticket_metrics
+        baseline_ev = total_ev
+        baseline_roi = roi_total
+        optimized_stakes = optimize_stake_allocation(tickets, budget, kelly_cap)
+
+        opt_ev = 0.0
+        opt_variance = 0.0
+        opt_stake_sum = 0.0
+        opt_combined_payout = 0.0
+        optimized_metrics: List[Dict[str, float]] = []
+        for t, stake_opt in zip(tickets, optimized_stakes):
+            p = t["p"]
+            odds = t["odds"]
+            ev = stake_opt * (p * (odds - 1) - (1 - p))
+            variance = p * (1 - p) * (stake_opt * odds) ** 2
+            metrics = {
+                "kelly_stake": _kelly_fraction(p, odds) * budget,
+                "stake": stake_opt,
+                "ev": ev,
+                "variance": variance,
+                "clv": t.get("clv", 0.0),
+            }
+            optimized_metrics.append(metrics)
+            t["optimized_stake"] = stake_opt
+            opt_ev += ev
+            opt_variance += variance
+            opt_stake_sum += stake_opt
+            if "legs" in t:
+                opt_combined_payout += p * stake_opt * odds
+
+        roi_opt = opt_ev / opt_stake_sum if opt_stake_sum else 0.0
+        ev_ratio_opt = opt_ev / budget if budget else 0.0
+        ruin_risk_opt = risk_of_ruin(opt_ev, opt_variance, budget)
+        std_dev_opt = math.sqrt(opt_variance)
+        ev_over_std_opt = opt_ev / std_dev_opt if std_dev_opt else 0.0
+
+        reasons = []
+        if ev_ratio_opt < ev_threshold:
+            reasons.append(f"EV ratio below {ev_threshold:.2f}")
+        if roi_opt < roi_threshold:
+            reasons.append(f"ROI below {roi_threshold:.2f}")
+        if has_combined and opt_combined_payout <= 10:
+            reasons.append("expected payout for combined bets ≤ 10€")
+
+        green_flag = not reasons
+        result = {
+            "ev": opt_ev,
+            "roi": roi_opt,
+            "ev_ratio": ev_ratio_opt,
+            "green": green_flag,
+            "total_stake_normalized": opt_stake_sum,
+            "risk_of_ruin": ruin_risk_opt,
+            "clv": (total_clv / clv_count) if clv_count else 0.0,
+            "std_dev": std_dev_opt,
+            "ev_over_std": ev_over_std_opt,
+            "ticket_metrics": optimized_metrics,
+            "ev_individual": baseline_ev,
+            "roi_individual": baseline_roi,
+            "ticket_metrics_individual": baseline_metrics,
+            "optimized_stakes": optimized_stakes,
+        }
+        if not green_flag:
+            result["failure_reasons"] = reasons
+        return result
+        
     reasons = []
     if ev_ratio < ev_threshold:
         reasons.append(f"EV ratio below {ev_threshold:.2f}")
@@ -290,4 +415,4 @@ def compute_ev_roi(
     return result
 
 
-__all__ = ["compute_ev_roi", "risk_of_ruin"]
+__all__ = ["compute_ev_roi", "risk_of_ruin", "optimize_stake_allocation"]
