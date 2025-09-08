@@ -10,12 +10,17 @@ import pytest
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from ev_calculator import (
-    KELLY_CAP,
     _apply_dutching,
     _kelly_fraction,
     compute_ev_roi,
     risk_of_ruin,
 )
+import inspect
+
+SIG = inspect.signature(compute_ev_roi)
+EV_THRESHOLD = SIG.parameters["ev_threshold"].default
+ROI_THRESHOLD = SIG.parameters["roi_threshold"].default
+KELLY_CAP = SIG.parameters["kelly_cap"].default
 
 
 def test_single_bet_ev_positive_and_negative() -> None:
@@ -255,12 +260,12 @@ def test_green_flag_true_when_thresholds_met() -> None:
     res = compute_ev_roi(
         tickets,
         budget=100,
-        ev_threshold=0.40,
-        roi_threshold=0.20,
+        ev_threshold=EV_THRESHOLD,
+        roi_threshold=ROI_THRESHOLD,
     )
 
-    assert res["ev_ratio"] >= 0.40
-    assert res["roi"] >= 0.20
+    assert res["ev_ratio"] >= EV_THRESHOLD
+    assert res["roi"] >= ROI_THRESHOLD
     assert res["green"] is True
     assert "failure_reasons" not in res
 
@@ -268,11 +273,14 @@ def test_green_flag_true_when_thresholds_met() -> None:
 @pytest.mark.parametrize(
     "tickets,budget,expected_reasons",
     [
-        ([{"p": 0.65, "odds": 2.0}], 100, ["EV ratio below 0.40"]),
+        ([{"p": 0.65, "odds": 2.0}], 100, [f"EV ratio below {EV_THRESHOLD:.2f}"]),
         (
             [{"p": 0.55, "odds": 2.0}],
             100,
-            ["EV ratio below 0.40", "ROI below 0.20"],
+            [
+                f"EV ratio below {EV_THRESHOLD:.2f}",
+                f"ROI below {ROI_THRESHOLD:.2f}",
+            ],
         ),
         (
             [{"p": 0.8, "odds": 2.5, "legs": ["leg1", "leg2"]}],
@@ -288,8 +296,8 @@ def test_green_flag_failure_reasons(
     res = compute_ev_roi(
         tickets,
         budget=budget,
-        ev_threshold=0.40,
-        roi_threshold=0.20,
+        ev_threshold=EV_THRESHOLD,
+        roi_threshold=ROI_THRESHOLD,
     )
 
     assert res["green"] is False
