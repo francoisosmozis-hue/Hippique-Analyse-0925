@@ -1,0 +1,9 @@
++payout_calibration:
++  - probability: 0.05
++    expected_payout: 50
++  - probability: 0.10
++    expected_payout: 20
++  - probability: 0.20
++    expected_payout: 10
++  - probability: 0.30
++    expected_payout: 5

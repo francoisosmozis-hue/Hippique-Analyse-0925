@@ -1,0 +1,4 @@
+ev_threshold: 0.02
+roi_target: 0.10
+budget: 1000
+kelly_cap: 0.25
