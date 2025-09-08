@@ -94,7 +94,7 @@ def compute_ev_roi(
         ``p``; in that case ``simulate_fn`` is used to estimate the
         probability.
     budget:
-        Bankroll used for Kelly criterion computations.
+        Bankroll used for Kelly criterion computations. Must be greater than ``0``.
     simulate_fn:
         Callable used to estimate the probability of combined bets from their
         ``legs``.  Its signature must be ``legs -> probability``.  Required when
@@ -108,7 +108,14 @@ def compute_ev_roi(
         and ``total_stake_normalized`` (total stake after potential
         normalisation).  When ``green`` is ``False`` an additional
         ``failure_reasons`` list explains which criteria were not met
+    Raises
+    ------
+    ValueError
+        If ``budget`` is not greater than ``0``.
     """
+    if budget <= 0:
+        raise ValueError("budget must be > 0")
+        
     # First adjust stakes for dutching groups
     _apply_dutching(tickets)
 
