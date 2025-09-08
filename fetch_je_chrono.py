@@ -1,3 +1,4 @@
+"""Fetch time-related features (chronos) for each runner."""
 
 from pathlib import Path
 from typing import Union
@@ -22,3 +23,4 @@ def fetch_je_chrono(source: Union[str, Path]) -> pd.DataFrame:
         return pd.read_csv(path)
 
     raise ValueError(f"Unsupported file type: {path.suffix}")
+
