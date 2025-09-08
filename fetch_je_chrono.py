@@ -1,31 +1,24 @@
-#!/usr/bin/env python3
-import argparse
-import json
-import logging
+
 from pathlib import Path
+from typing import Union
+import pandas as pd
 
-DATA_DIR = Path("data")
 
-logging.basicConfig(level=logging.INFO, format="%(message)s")
-logger = logging.getLogger(__name__)
+def fetch_je_chrono(source: Union[str, Path]) -> pd.DataFrame:
+    """Return chronometric features as a DataFrame.
 
-def log(level: str, message: str, **kwargs) -> None:
-    record = {"level": level, "message": message}
-    if kwargs:
-        record.update(kwargs)
-    logger.log(logging.INFO if level == "INFO" else logging.ERROR, json.dumps(record))
+    Parameters
+    ----------
+    source: str or Path
+        Path to a JSON or CSV file with chrono data.
+    """
+    path = Path(source)
+    if not path.exists():
+        raise FileNotFoundError(path)
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Fetch chrono data from Jour de l'Expert.")
-    parser.add_argument("--reunion", required=True, help="Reunion identifier.")
-    parser.add_argument("--course", required=True, help="Course identifier.")
-    parser.add_argument("--out", required=True, help="Output JSON path under data/")
-    args = parser.parse_args()
+    if path.suffix.lower() == ".json":
+        return pd.read_json(path)
+    if path.suffix.lower() == ".csv":
+        return pd.read_csv(path)
 
-    out_path = Path(args.out)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(json.dumps({"reunion": args.reunion, "course": args.course}, indent=2))
-    log("INFO", "fetch_chrono_complete", out=str(out_path))
-
-if __name__ == "__main__":
-    main()
+    raise ValueError(f"Unsupported file type: {path.suffix}")
