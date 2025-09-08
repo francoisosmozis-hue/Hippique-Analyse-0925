@@ -5,10 +5,17 @@ import argparse
 import json
 from pathlib import Path
 from typing import Any, List
+import inspect
 
 import yaml
 
-from ev_calculator import KELLY_CAP, compute_ev_roi
+from ev_calculator import compute_ev_roi
+
+SIG = inspect.signature(compute_ev_roi)
+DEFAULT_EV_THRESHOLD = SIG.parameters["ev_threshold"].default
+DEFAULT_ROI_THRESHOLD = SIG.parameters["roi_threshold"].default
+DEFAULT_KELLY_CAP = SIG.parameters["kelly_cap"].default
+
 
 
 def load_tickets(path: Path) -> List[dict[str, Any]]:
@@ -44,19 +51,19 @@ def main() -> None:
     parser.add_argument(
         "--ev-threshold",
         type=float,
-        default=0.40,
+        default=DEFAULT_EV_THRESHOLD,
         help="Minimum EV ratio to mark as green",
     )
     parser.add_argument(
         "--roi-threshold",
         type=float,
-        default=0.20,
+        default=DEFAULT_ROI_THRESHOLD,
         help="Minimum ROI to mark as green",
     )
     parser.add_argument(
         "--kelly-cap",
         type=float,
-        default=KELLY_CAP,
+        default=DEFAULT_KELLY_CAP,
         help="Maximum fraction of Kelly stake to wager",
     )
     args = parser.parse_args()
