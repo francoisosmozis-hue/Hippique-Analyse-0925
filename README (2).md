@@ -153,6 +153,12 @@ python scripts/runner_chain.py --reunion R1 --course C3 --phase RESULT \
   --excel excel/modele_suivi_courses_hippiques.xlsx
 ```
 
+### Calculer EV/ROI via la CLI
+```bash
+python cli_ev.py --tickets tickets.json --budget 100 \
+  --ev-threshold 5 --roi-threshold 0.2
+```
+
 ---
 
 ## 🧾 Artifacts produits
