@@ -39,10 +39,14 @@ token.json
 # Données locales / résultats
 # ==========================
 # Fichiers générés automatiquement par les scripts
-data/
+data/*
+!data/planning/
+!data/planning/**
+!data/planning/.gitkeep
 results/
 out_*/
 *.json
+!data/planning/*.json
 *.csv
 *.parquet
 *.pkl
@@ -62,3 +66,4 @@ excel/
 *.bak
 *.tmp
 *.old
+
