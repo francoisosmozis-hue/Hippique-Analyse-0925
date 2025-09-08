@@ -1,8 +1,5 @@
 zeturf:
-  base_url: https://www.zeturf.fr
-  endpoints:
-    races: /api/races
-    odds: /api/odds
+  planning_url: "https://api.zeturf.fr/rest/clientweb/api/programme/{date}"
 geny:
   base_url: https://www.geny.com
   endpoints:
