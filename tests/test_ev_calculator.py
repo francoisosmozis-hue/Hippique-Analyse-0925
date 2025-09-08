@@ -61,6 +61,26 @@ def test_combined_bet_with_simulator() -> None:
     assert math.isclose(res["roi"], 1.5)
 
 
+def test_simulate_fn_called_once_for_identical_legs() -> None:
+    """Repeated combined bets with same legs should reuse cached probability."""
+    call_count = 0
+
+    def fake_simulator(legs: List[Any]) -> float:  # pragma: no cover - simple stub
+        nonlocal call_count
+        call_count += 1
+        return 0.3
+
+    shared_legs = ["A", "B"]
+    tickets = [
+        {"odds": 3.0, "legs": shared_legs},
+        {"odds": 5.0, "legs": shared_legs},
+    ]
+
+    compute_ev_roi(tickets, budget=100, simulate_fn=fake_simulator)
+
+    assert call_count == 1
+
+
 def test_kelly_cap_respected() -> None:
     """Stake must be capped to 60% of the Kelly recommendation."""
     p, odds = 0.6, 2.0
