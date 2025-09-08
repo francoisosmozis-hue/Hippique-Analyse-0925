@@ -43,6 +43,9 @@ data/*
 !data/planning/
 !data/planning/**
 !data/planning/.gitkeep
+!data/results/
+!data/results/**
+!data/results/.gitkeep
 results/
 out_*/
 *.json
@@ -66,4 +69,5 @@ excel/
 *.bak
 *.tmp
 *.old
+
 
