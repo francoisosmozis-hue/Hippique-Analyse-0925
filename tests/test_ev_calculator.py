@@ -14,6 +14,7 @@ from ev_calculator import (
     _apply_dutching,
     _kelly_fraction,
     compute_ev_roi,
+    risk_of_ruin,
 )
 
 
@@ -201,6 +202,35 @@ def test_ticket_metrics_and_std_dev() -> None:
     expected_ratio = (ev1 + ev2) / expected_std
     assert math.isclose(res["std_dev"], expected_std)
     assert math.isclose(res["ev_over_std"], expected_ratio)
+
+
+def test_average_clv_from_closing_odds() -> None:
+    """Providing closing odds should compute CLV per ticket and overall."""
+    tickets = [
+        {"p": 0.5, "odds": 2.0, "closing_odds": 2.2},
+        {"p": 0.5, "odds": 3.0, "closing_odds": 3.3},
+    ]
+
+    res = compute_ev_roi(tickets, budget=100)
+
+    clv1 = (2.2 - 2.0) / 2.0
+    clv2 = (3.3 - 3.0) / 3.0
+    assert math.isclose(tickets[0]["clv"], clv1)
+    assert math.isclose(tickets[1]["clv"], clv2)
+    assert math.isclose(res["clv"], (clv1 + clv2) / 2)
+
+
+def test_risk_of_ruin_decreases_with_lower_variance() -> None:
+    """Risk of ruin should drop as variance decreases for the same EV."""
+    ev = 2.0
+    bankroll = 100.0
+    var_high = 400.0
+    var_low = 200.0
+
+    risk_high = risk_of_ruin(ev, var_high, bankroll)
+    risk_low = risk_of_ruin(ev, var_low, bankroll)
+
+    assert risk_low < risk_high
 
 
 def test_optimized_allocation_respects_budget_and_improves_ev() -> None:
