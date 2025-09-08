@@ -8,6 +8,7 @@ recommended stake.
 from __future__ import annotations
 
 from collections import defaultdict
+import math
 from typing import Any, Callable, Dict, Iterable, List, Optional
 
 # ``simulate_wrapper`` is an optional dependency kept for backward compatibility.
@@ -76,6 +77,40 @@ def _apply_dutching(tickets: Iterable[Dict[str, Any]]) -> None:
         weight_sum = sum(weights)
         for t, w in zip(valid_tickets, weights):
             t["stake"] = total * w / weight_sum
+            
+
+def risk_of_ruin(total_ev: float, total_variance: float, bankroll: float) -> float:
+    """Approximate the probability of losing the entire bankroll.
+
+    The approximation is based on the gambler's ruin model for a process with
+    drift ``total_ev`` and variance ``total_variance`` over one period:
+    ``exp(-2 * total_ev * bankroll / total_variance)``.  When the expected
+    value is non-positive the risk is ``1`` as ruin is inevitable.
+
+    Parameters
+    ----------
+    total_ev:
+        Expected profit of the set of bets.
+    total_variance:
+        Variance of the profit distribution.
+    bankroll:
+        Current bankroll to protect.
+
+    Returns
+    -------
+    float
+        Approximate risk of ruin, between ``0`` (no risk) and ``1`` (certainty
+        of ruin).
+    """
+
+    if bankroll <= 0:
+        raise ValueError("bankroll must be > 0")
+    if total_ev <= 0:
+        return 1.0
+    if total_variance <= 0:
+        return 0.0
+    exponent = -2 * total_ev * bankroll / total_variance
+    return min(1.0, math.exp(exponent))
 
 
 def compute_ev_roi(
@@ -123,6 +158,7 @@ def compute_ev_roi(
         simulate_fn = simulate_wrapper
 
     total_ev = 0.0
+    total_variance = 0.0
     total_stake = 0.0
     combined_expected_payout = 0.0
     has_combined = False
@@ -153,6 +189,7 @@ def compute_ev_roi(
         ev = stake * (p * (odds - 1) - (1 - p))
         total_ev += ev
         total_stake += stake
+        total_variance += p * (1 - p) * (stake * odds) ** 2
         
         if "legs" in t:
             has_combined = True
@@ -165,10 +202,12 @@ def compute_ev_roi(
             t["stake"] *= scale
         total_ev *= scale
         combined_expected_payout *= scale
+        total_variance *= scale ** 2
         total_stake_normalized = budget
 
     roi_total = total_ev / total_stake_normalized if total_stake_normalized else 0.0
     ev_ratio = total_ev / budget if budget else 0.0
+    ruin_risk = risk_of_ruin(total_ev, total_variance, budget)
 
     reasons = []
     if ev_ratio < 0.40:
@@ -186,10 +225,11 @@ def compute_ev_roi(
         "ev_ratio": ev_ratio,
         "green": green_flag,
         "total_stake_normalized": total_stake_normalized,
+        "risk_of_ruin": ruin_risk,
     }
     if not green_flag:
         result["failure_reasons"] = reasons
     return result
 
 
-__all__ = ["compute_ev_roi"]
+__all__ = ["compute_ev_roi", "risk_of_ruin"]
