@@ -115,6 +115,14 @@ Dans **Settings → Secrets and variables → Actions** du repo, créer :
 **SP Dutching (placé)** : EV(€) par jambe = `stake * [ p*(odds-1) − (1−p) ]`  
 **Combinés (CP/Trio/ZE4)** : via `simulate_wrapper` + calibration `payout_calibration.yaml`.
 
+### 📊 Closing Line Value (CLV)
+
+Chaque ticket conserve maintenant la cote d'ouverture et la cote de clôture
+observée au moment du départ. Le **CLV** est défini comme
+`(closing_odds - open_odds) / open_odds`. Un CLV positif signifie que le
+marché est allé dans notre sens et corrèle généralement avec un **ROI réel**
+supérieur.
+
 ### 📉 Risque de ruine
 
 `compute_ev_roi` renvoie un champ `risk_of_ruin` qui approxime la probabilité de
