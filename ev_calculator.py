@@ -19,8 +19,6 @@ try:  # pragma: no cover - optional dependency
 except Exception:  # pragma: no cover - handled gracefully
     simulate_wrapper = None  # type: ignore
 
-KELLY_CAP = 0.60
-
 
 def _kelly_fraction(p: float, odds: float) -> float:
     """Return the Kelly fraction for given probability and odds.
@@ -174,7 +172,7 @@ def compute_ev_roi(
     cache_simulations: bool = True,
     ev_threshold: float = 0.40,
     roi_threshold: float = 0.20,
-    kelly_cap: float = KELLY_CAP,
+    kelly_cap: float = 0.60,
     optimize: bool = False,
 ) -> Dict[str, Any]:
     """Compute EV and ROI for a list of betting tickets.
@@ -204,7 +202,7 @@ def compute_ev_roi(
         Minimum ROI required for the ticket set to be considered "green".
     kelly_cap:
         Maximum fraction of the Kelly stake to actually wager.  Defaults to
-        :data:`KELLY_CAP`.
+        ``0.60``..
     optimize:
         When ``True`` the stake allocation is optimised globally to maximise
         the sum of expected log-returns under the budget and Kelly cap
