@@ -86,7 +86,7 @@ def test_kelly_cap_respected() -> None:
     p, odds = 0.6, 2.0
     budget = 1_000
     tickets = [{"p": p, "odds": odds, "stake": 1_000}]
-    res = compute_ev_roi(tickets, budget=budget)
+    res = compute_ev_roi(tickets, budget=budget, kelly_cap=KELLY_CAP)
 
     kelly_fraction = (p * odds - 1) / (odds - 1)
     kelly_stake = kelly_fraction * budget
@@ -152,7 +152,8 @@ def test_stakes_normalized_when_exceeding_budget() -> None:
     expected1 = k1 * scale
     expected2 = k2 * scale
 
-    res = compute_ev_roi(tickets, budget=budget)
+     res = compute_ev_roi(tickets, budget=budget, kelly_cap=KELLY_CAP)
+
 
     assert math.isclose(sum(t["stake"] for t in tickets), budget)
     assert math.isclose(tickets[0]["stake"], expected1)
@@ -165,7 +166,12 @@ def test_green_flag_true_when_thresholds_met() -> None:
     """EV ratio and ROI above thresholds should yield a green flag."""
     tickets = [{"p": 0.8, "odds": 2.5}]
 
-    res = compute_ev_roi(tickets, budget=100)
+    res = compute_ev_roi(
+        tickets,
+        budget=100,
+        ev_threshold=0.40,
+        roi_threshold=0.20,
+    )
 
     assert res["ev_ratio"] >= 0.40
     assert res["roi"] >= 0.20
@@ -193,7 +199,12 @@ def test_green_flag_failure_reasons(
     tickets: List[dict[str, Any]], budget: float, expected_reasons: List[str]
 ) -> None:
     """Check that failing criteria produce the appropriate reasons."""
-    res = compute_ev_roi(tickets, budget=budget)
+    res = compute_ev_roi(
+        tickets,
+        budget=budget,
+        ev_threshold=0.40,
+        roi_threshold=0.20,
+    )
 
     assert res["green"] is False
     assert res["failure_reasons"] == expected_reasons
