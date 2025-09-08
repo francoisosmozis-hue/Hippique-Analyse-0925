@@ -1,0 +1,10 @@
+zeturf:
+  base_url: https://www.zeturf.fr
+  endpoints:
+    races: /api/races
+    odds: /api/odds
+geny:
+  base_url: https://www.geny.com
+  endpoints:
+    races: /races/api
+    odds: /odds/api
