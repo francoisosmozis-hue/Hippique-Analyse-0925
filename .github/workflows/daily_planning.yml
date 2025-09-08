@@ -24,7 +24,10 @@ jobs:
           pip install -r requirements.txt
       - name: Generate today's planning (meetings + races + hours)
         run: |
-          python scripts/online_fetch_zeturf.py             --mode planning             --out data/planning/$(date +%F).json             --sources config/sources.yml
+          python scripts/online_fetch_zeturf.py \
+            --mode planning \
+            --out data/planning/$(date +%F).json \
+            --sources config/sources.yml
       - name: Commit planning
         run: |
           git config user.name "github-actions"
