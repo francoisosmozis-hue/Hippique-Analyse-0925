@@ -1,15 +1,16 @@
 """Utility for computing expected value (EV) and return on investment (ROI) for betting tickets.
 
 This module exposes :func:`compute_ev_roi` which handles single bets,
-SP dutching groups and combined bets via ``simulate_wrapper``.  Stakes are
-capped to 60% of the Kelly criterion recommended stake.
+SP dutching groups and combined bets via a caller-provided simulation function
+(``simulate_fn``).  Stakes are capped to 60% of the Kelly criterion
+recommended stake.
 """
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import Any, Dict, Iterable, List
+from typing import Any, Callable, Dict, Iterable, List, Optional
 
-# ``simulate_wrapper`` is expected to be provided by the caller's environment.
+# ``simulate_wrapper`` is an optional dependency kept for backward compatibility.
 try:  # pragma: no cover - optional dependency
     from simulate_wrapper import simulate_wrapper  # type: ignore
 except Exception:  # pragma: no cover - handled gracefully
@@ -44,7 +45,11 @@ def _apply_dutching(tickets: Iterable[Dict[str, Any]]) -> None:
             t["stake"] = total * w / weight_sum
 
 
-def compute_ev_roi(tickets: List[Dict[str, Any]], budget: float) -> Dict[str, Any]:
+def compute_ev_roi(
+    tickets: List[Dict[str, Any]],
+    budget: float,
+    simulate_fn: Optional[Callable[[Iterable[Any]], float]] = None,
+) -> Dict[str, Any]:
     """Compute EV and ROI for a list of betting tickets.
 
     Parameters
@@ -53,10 +58,14 @@ def compute_ev_roi(tickets: List[Dict[str, Any]], budget: float) -> Dict[str, An
         Each ticket is a mapping containing ``p`` (probability), ``odds`` and an
         optional ``stake``.  Tickets forming a dutching SP group may share a
         ``dutching`` identifier.  Combined bets may provide ``legs`` and omit
-        ``p``; in that case ``simulate_wrapper`` is used to estimate the
+        ``p``; in that case ``simulate_fn`` is used to estimate the
         probability.
     budget:
         Bankroll used for Kelly criterion computations.
+    simulate_fn:
+        Callable used to estimate the probability of combined bets from their
+        ``legs``.  Its signature must be ``legs -> probability``.  Required when
+        tickets contain ``legs`` without providing ``p``.
 
     Returns
     -------
@@ -69,6 +78,9 @@ def compute_ev_roi(tickets: List[Dict[str, Any]], budget: float) -> Dict[str, An
     # First adjust stakes for dutching groups
     _apply_dutching(tickets)
 
+    if simulate_fn is None:
+        simulate_fn = simulate_wrapper
+
     total_ev = 0.0
     total_stake = 0.0
     combined_expected_payout = 0.0
@@ -76,10 +88,16 @@ def compute_ev_roi(tickets: List[Dict[str, Any]], budget: float) -> Dict[str, An
  
     for t in tickets:
         p = t.get("p")
-        if p is None and simulate_wrapper and "legs" in t:
-            p = simulate_wrapper(t["legs"])  # type: ignore
         if p is None:
-            raise ValueError("Ticket must include probability 'p' or legs for simulation")
+            legs = t.get("legs")
+            if legs is not None:
+                if simulate_fn is None:
+                    raise ValueError(
+                        "simulate_fn must be provided when tickets include 'legs'"
+                    )
+                p = simulate_fn(legs)
+            else:
+                raise ValueError("Ticket must include probability 'p'")
         odds = t["odds"]
         kelly_stake = _kelly_fraction(p, odds) * budget
         stake_input = t.get("stake", kelly_stake)
