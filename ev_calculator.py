@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 import math
-from typing import Any, Callable, Dict, Iterable, List, Optional
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 # ``simulate_wrapper`` is an optional dependency kept for backward compatibility.
 try:  # pragma: no cover - optional dependency
@@ -117,6 +117,8 @@ def compute_ev_roi(
     tickets: List[Dict[str, Any]],
     budget: float,
     simulate_fn: Optional[Callable[[Iterable[Any]], float]] = None,
+    *,
+    cache_simulations: bool = True,
 ) -> Dict[str, Any]:
     """Compute EV and ROI for a list of betting tickets.
 
@@ -134,6 +136,10 @@ def compute_ev_roi(
         Callable used to estimate the probability of combined bets from their
         ``legs``.  Its signature must be ``legs -> probability``.  Required when
         tickets contain ``legs`` without providing ``p``.
+    cache_simulations:
+        When ``True`` (default), results of ``simulate_fn`` are cached so that
+        repeated combined bets with identical ``legs`` reuse the previously
+        computed probability.  Set to ``False`` to disable this behaviour.
 
     Returns
     -------
@@ -157,6 +163,7 @@ def compute_ev_roi(
     if simulate_fn is None:
         simulate_fn = simulate_wrapper
 
+    cache: Dict[Tuple[Any, ...], float] = {}
     total_ev = 0.0
     total_variance = 0.0
     total_stake = 0.0
@@ -172,7 +179,14 @@ def compute_ev_roi(
                     raise ValueError(
                         "simulate_fn must be provided when tickets include 'legs'"
                     )
-                p = simulate_fn(legs)
+                if cache_simulations:
+                    key: Tuple[Any, ...] = tuple(legs)
+                    p = cache.get(key)
+                    if p is None:
+                        p = simulate_fn(legs)
+                        cache[key] = p
+                else:
+                    p = simulate_fn(legs)
                 t["p"] = p
             else:
                 raise ValueError("Ticket must include probability 'p'")
