@@ -20,7 +20,33 @@ KELLY_CAP = 0.60
 
 
 def _kelly_fraction(p: float, odds: float) -> float:
-    """Return the Kelly fraction for given probability and odds."""
+     """Return the Kelly fraction for given probability and odds.
+
+    Parameters
+    ----------
+    p:
+        Estimated probability of winning the bet.  Must satisfy ``0 < p < 1``.
+    odds:
+        Decimal odds offered for the bet.  Must be greater than ``1``.
+
+    Returns
+    -------
+    float
+        The fraction of the bankroll to wager according to the Kelly
+        criterion, capped at zero when the edge is negative.
+
+    Raises
+    ------
+    ValueError
+        If ``p`` is not in the interval ``(0, 1)`` or ``odds`` is not greater
+        than ``1``.
+    """
+
+    if not 0 < p < 1:
+        raise ValueError("probability must be in (0,1)")
+    if odds <= 1:
+        raise ValueError("odds must be > 1")
+
     return max((p * odds - 1) / (odds - 1), 0.0)
 
 
@@ -38,10 +64,17 @@ def _apply_dutching(tickets: Iterable[Dict[str, Any]]) -> None:
             groups[group].append(t)
 
     for group_tickets in groups.values():
-        total = sum(t.get("stake", 0) for t in group_tickets)
-        weights = [1 / (t["odds"] - 1) for t in group_tickets]
+        # Skip tickets with invalid odds to avoid division by zero when
+        # computing ``1 / (odds - 1)``.  These tickets are left untouched and
+        # will later trigger validation errors in ``compute_ev_roi``.
+        valid_tickets = [t for t in group_tickets if t.get("odds", 0) > 1]
+        if len(valid_tickets) < 2:
+            continue
+
+        total = sum(t.get("stake", 0) for t in valid_tickets)
+        weights = [1 / (t["odds"] - 1) for t in valid_tickets]
         weight_sum = sum(weights)
-        for t, w in zip(group_tickets, weights):
+        for t, w in zip(valid_tickets, weights):
             t["stake"] = total * w / weight_sum
 
 
@@ -99,6 +132,10 @@ def compute_ev_roi(
             else:
                 raise ValueError("Ticket must include probability 'p'")
         odds = t["odds"]
+        if not 0 < p < 1:
+            raise ValueError("probability must be in (0,1)")
+        if odds <= 1:
+            raise ValueError("odds must be > 1")
         kelly_stake = _kelly_fraction(p, odds) * budget
         stake_input = t.get("stake", kelly_stake)
         stake = min(stake_input, kelly_stake * KELLY_CAP)
