@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import math
 import os
 import sys
@@ -152,7 +154,7 @@ def test_stakes_normalized_when_exceeding_budget() -> None:
     expected1 = k1 * scale
     expected2 = k2 * scale
 
-     res = compute_ev_roi(tickets, budget=budget, kelly_cap=KELLY_CAP)
+    res = compute_ev_roi(tickets, budget=budget, kelly_cap=KELLY_CAP)
 
 
     assert math.isclose(sum(t["stake"] for t in tickets), budget)
