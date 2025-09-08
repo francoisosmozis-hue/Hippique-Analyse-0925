@@ -115,6 +115,15 @@ Dans **Settings → Secrets and variables → Actions** du repo, créer :
 **SP Dutching (placé)** : EV(€) par jambe = `stake * [ p*(odds-1) − (1−p) ]`  
 **Combinés (CP/Trio/ZE4)** : via `simulate_wrapper` + calibration `payout_calibration.yaml`.
 
+### 📉 Risque de ruine
+
+`compute_ev_roi` renvoie un champ `risk_of_ruin` qui approxime la probabilité de
+perdre l'intégralité du bankroll sur l'ensemble des tickets. L'approximation
+utilise `exp(-2 * EV * bankroll / variance)` : une variance élevée ou un
+bankroll réduit augmentent ce risque qui tend vers `1`. Pour maintenir un
+risque cible (ex. 1 %), ajuster `KELLY_CAP` : diminuer ce cap réduit les mises,
+la variance et donc le `risk_of_ruin`.
+
 ---
 
 ## ▶️ Exécutions manuelles (local)
