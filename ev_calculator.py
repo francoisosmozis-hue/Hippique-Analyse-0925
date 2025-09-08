@@ -20,7 +20,7 @@ KELLY_CAP = 0.60
 
 
 def _kelly_fraction(p: float, odds: float) -> float:
-     """Return the Kelly fraction for given probability and odds.
+    """Return the Kelly fraction for given probability and odds.
 
     Parameters
     ----------
@@ -104,9 +104,10 @@ def compute_ev_roi(
     -------
     dict
         A dictionary with keys ``ev`` (global expected value), ``roi`` (overall
-        ROI), ``ev_ratio`` (EV relative to the budget) and ``green`` (boolean
-        flag).  When ``green`` is ``False`` an additional ``failure_reasons``
-        list explains which criteria were not met
+        ROI), ``ev_ratio`` (EV relative to the budget), ``green`` (boolean flag)
+        and ``total_stake_normalized`` (total stake after potential
+        normalisation).  When ``green`` is ``False`` an additional
+        ``failure_reasons`` list explains which criteria were not met
     """
     # First adjust stakes for dutching groups
     _apply_dutching(tickets)
@@ -129,6 +130,7 @@ def compute_ev_roi(
                         "simulate_fn must be provided when tickets include 'legs'"
                     )
                 p = simulate_fn(legs)
+                t["p"] = p
             else:
                 raise ValueError("Ticket must include probability 'p'")
         odds = t["odds"]
@@ -139,16 +141,26 @@ def compute_ev_roi(
         kelly_stake = _kelly_fraction(p, odds) * budget
         stake_input = t.get("stake", kelly_stake)
         stake = min(stake_input, kelly_stake * KELLY_CAP)
+        t["stake"] = stake
 
         ev = stake * (p * (odds - 1) - (1 - p))
         total_ev += ev
-        total_stake += stake  
-
+        total_stake += stake
+        
         if "legs" in t:
             has_combined = True
             combined_expected_payout += p * stake * odds
 
-    roi_total = total_ev / total_stake if total_stake else 0.0
+    total_stake_normalized = total_stake
+    if total_stake > budget:
+        scale = budget / total_stake
+        for t in tickets:
+            t["stake"] *= scale
+        total_ev *= scale
+        combined_expected_payout *= scale
+        total_stake_normalized = budget
+
+    roi_total = total_ev / total_stake_normalized if total_stake_normalized else 0.0
     ev_ratio = total_ev / budget if budget else 0.0
 
     reasons = []
@@ -161,7 +173,13 @@ def compute_ev_roi(
 
     green_flag = not reasons
 
-    result = {"ev": total_ev, "roi": roi_total, "ev_ratio": ev_ratio, "green": green_flag}
+    result = {
+        "ev": total_ev,
+        "roi": roi_total,
+        "ev_ratio": ev_ratio,
+        "green": green_flag,
+        "total_stake_normalized": total_stake_normalized,
+    }
     if not green_flag:
         result["failure_reasons"] = reasons
     return result
