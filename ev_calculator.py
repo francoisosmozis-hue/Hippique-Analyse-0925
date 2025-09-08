@@ -71,7 +71,9 @@ def compute_ev_roi(tickets: List[Dict[str, Any]], budget: float) -> Dict[str, An
     -------
     dict
         A dictionary with keys ``ev`` (global expected value), ``roi`` (overall
-        ROI) and ``green`` (boolean flag, ``True`` when EV is positive).
+        ROI), ``green`` (boolean flag, ``True`` when EV is positive) and
+        ``total_stake_normalized`` (sum of stakes after potential normalization
+        against the budget).
     """
     # First adjust stakes for dutching groups
     _apply_dutching(tickets)
@@ -94,14 +96,28 @@ def compute_ev_roi(tickets: List[Dict[str, Any]], budget: float) -> Dict[str, An
         kelly_stake = _kelly_fraction(p, odds) * budget
         stake_input = t.get("stake", kelly_stake)
         stake = min(stake_input, kelly_stake * KELLY_CAP)
-
+        t["stake"] = stake
         ev = stake * (p * (odds - 1) - (1 - p))
         total_ev += ev
         total_stake += stake
 
-    roi_total = total_ev / total_stake if total_stake else 0.0
+    if total_stake > budget:
+        ratio = budget / total_stake
+        for t in tickets:
+            t["stake"] *= ratio
+        total_ev *= ratio
+        total_stake_normalized = budget
+    else:
+        total_stake_normalized = total_stake
+
+    roi_total = total_ev / total_stake_normalized if total_stake_normalized else 0.0
     green_flag = total_ev > 0
-    return {"ev": total_ev, "roi": roi_total, "green": green_flag}
+    return {
+        "ev": total_ev,
+        "roi": roi_total,
+        "green": green_flag,
+        "total_stake_normalized": total_stake_normalized,
+    }
 
 
 __all__ = ["compute_ev_roi"]
