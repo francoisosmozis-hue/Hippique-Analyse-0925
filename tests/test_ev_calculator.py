@@ -163,6 +163,46 @@ def test_stakes_normalized_when_exceeding_budget() -> None:
     assert math.isclose(res["total_stake_normalized"], budget)
 
 
+def test_ticket_metrics_and_std_dev() -> None:
+    """Ticket metrics and aggregated statistics should be reported."""
+    tickets = [
+        {"p": 0.6, "odds": 2.0, "closing_odds": 2.1},
+        {"p": 0.4, "odds": 3.0, "closing_odds": 3.2},
+    ]
+
+    res = compute_ev_roi(tickets, budget=100)
+    metrics = res["ticket_metrics"]
+
+    assert len(metrics) == 2
+
+    k1 = _kelly_fraction(0.6, 2.0) * 100
+    s1 = min(k1, k1 * KELLY_CAP)
+    ev1 = s1 * (0.6 * (2.0 - 1) - (1 - 0.6))
+    var1 = 0.6 * 0.4 * (s1 * 2.0) ** 2
+    clv1 = (2.1 - 2.0) / 2.0
+    assert math.isclose(metrics[0]["kelly_stake"], k1)
+    assert math.isclose(metrics[0]["stake"], s1)
+    assert math.isclose(metrics[0]["ev"], ev1)
+    assert math.isclose(metrics[0]["variance"], var1)
+    assert math.isclose(metrics[0]["clv"], clv1)
+
+    k2 = _kelly_fraction(0.4, 3.0) * 100
+    s2 = min(k2, k2 * KELLY_CAP)
+    ev2 = s2 * (0.4 * (3.0 - 1) - (1 - 0.4))
+    var2 = 0.4 * 0.6 * (s2 * 3.0) ** 2
+    clv2 = (3.2 - 3.0) / 3.0
+    assert math.isclose(metrics[1]["kelly_stake"], k2)
+    assert math.isclose(metrics[1]["stake"], s2)
+    assert math.isclose(metrics[1]["ev"], ev2)
+    assert math.isclose(metrics[1]["variance"], var2)
+    assert math.isclose(metrics[1]["clv"], clv2)
+
+    expected_std = math.sqrt(var1 + var2)
+    expected_ratio = (ev1 + ev2) / expected_std
+    assert math.isclose(res["std_dev"], expected_std)
+    assert math.isclose(res["ev_over_std"], expected_ratio)
+
+
 
 def test_green_flag_true_when_thresholds_met() -> None:
     """EV ratio and ROI above thresholds should yield a green flag."""
