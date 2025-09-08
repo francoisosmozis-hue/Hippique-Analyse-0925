@@ -140,3 +140,41 @@ def test_stakes_normalized_when_exceeding_budget() -> None:
     assert math.isclose(res["total_stake_normalized"], budget)
 
 
+
+def test_green_flag_true_when_thresholds_met() -> None:
+    """EV ratio and ROI above thresholds should yield a green flag."""
+    tickets = [{"p": 0.8, "odds": 2.5}]
+
+    res = compute_ev_roi(tickets, budget=100)
+
+    assert res["ev_ratio"] >= 0.40
+    assert res["roi"] >= 0.20
+    assert res["green"] is True
+    assert "failure_reasons" not in res
+
+
+@pytest.mark.parametrize(
+    "tickets,budget,expected_reasons",
+    [
+        ([{"p": 0.65, "odds": 2.0}], 100, ["EV ratio below 0.40"]),
+        (
+            [{"p": 0.55, "odds": 2.0}],
+            100,
+            ["EV ratio below 0.40", "ROI below 0.20"],
+        ),
+        (
+            [{"p": 0.8, "odds": 2.5, "legs": ["leg1", "leg2"]}],
+            10,
+            ["expected payout for combined bets ≤ 10€"],
+        ),
+    ],
+)
+def test_green_flag_failure_reasons(
+    tickets: List[dict[str, Any]], budget: float, expected_reasons: List[str]
+) -> None:
+    """Check that failing criteria produce the appropriate reasons."""
+    res = compute_ev_roi(tickets, budget=budget)
+
+    assert res["green"] is False
+    assert res["failure_reasons"] == expected_reasons
+
