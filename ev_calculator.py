@@ -37,10 +37,19 @@ def _apply_dutching(tickets: Iterable[Dict[str, Any]]) -> None:
             groups[group].append(t)
 
     for group_tickets in groups.values():
-        total = sum(t.get("stake", 0) for t in group_tickets)
-        weights = [1 / (t["odds"] - 1) for t in group_tickets]
+         valid_tickets = []
+        for t in group_tickets:
+            odds = t["odds"]
+            if odds <= 1:
+                raise ValueError(
+                    f"Odds must be greater than 1 for dutching, got {odds}"
+                )
+            valid_tickets.append(t)
+
+        total = sum(t.get("stake", 0) for t in valid_tickets)
+        weights = [1 / (t["odds"] - 1) for t in valid_tickets]
         weight_sum = sum(weights)
-        for t, w in zip(group_tickets, weights):
+        for t, w in zip(valid_tickets, weights):
             t["stake"] = total * w / weight_sum
 
 
@@ -77,6 +86,11 @@ def compute_ev_roi(tickets: List[Dict[str, Any]], budget: float) -> Dict[str, An
         if p is None:
             raise ValueError("Ticket must include probability 'p' or legs for simulation")
         odds = t["odds"]
+        if not (0 < p < 1):
+            raise ValueError(f"Probability 'p' must be between 0 and 1, got {p}")
+        if odds <= 1:
+            raise ValueError(f"Odds must be greater than 1, got {odds}")
+
         kelly_stake = _kelly_fraction(p, odds) * budget
         stake_input = t.get("stake", kelly_stake)
         stake = min(stake_input, kelly_stake * KELLY_CAP)
