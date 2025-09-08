@@ -60,12 +60,12 @@ analyse-hippique/
 ## ⚙️ Installation locale
 
 1) **Python 3.12+**
-2) Dépendances :
+2) Dépendances : installer via `pip install -r requirements.txt`
 ```bash
 python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
-**Ex. de packages** : `pandas`, `openpyxl`, `pyyaml`, `requests`, `google-api-python-client`, `google-auth`, `google-auth-httplib2`, `google-auth-oauthlib` …
+**Ex. de packages** : `pandas`, `openpyxl`, `numpy`, `scipy`, `joblib`, `pyyaml`, `requests`, `google-api-python-client`, `google-auth`, `google-auth-httplib2`, `google-auth-oauthlib` …
 
 3) Variables locales : dupliquez `.env.example` en `.env` et ajustez si besoin.
 
