@@ -133,7 +133,7 @@ def dutching_kelly_fractional(
         "p": [float(_safe_prob(p)) for p in probs],
         "f_kelly": f_k,
         "Part": shares,
-        "Mise (€)": [round(st,2) for st in stakes],
+        "Stake (€)": [round(st,2) for st in stakes],
         "Gain brut (€)": [round(g,2) for g in gains],
         "EV (€)": [round(e,2) for e in evs],
     })
