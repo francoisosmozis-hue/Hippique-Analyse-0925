@@ -131,7 +131,7 @@ def optimize_stake_allocation(
 
 
 def risk_of_ruin(total_ev: float, total_variance: float, bankroll: float) -> float:
-     """Return the gambler's ruin approximation for a given EV and variance."""
+    """Return the gambler's ruin approximation for a given EV and variance."""
  
     if bankroll <= 0:
         raise ValueError("bankroll must be > 0")
@@ -260,10 +260,12 @@ def compute_ev_roi(
 
         ev = stake * (p * (odds - 1) - (1 - p))
         variance = p * (stake * (odds - 1)) ** 2 + (1 - p) * (-stake) ** 2 - ev ** 2
+        roi = ev / stake if stake else 0.0
         metrics = {
             "kelly_stake": kelly_stake,
             "stake": stake,
-            "ev": ev,
+            "ev": ev "roi": roi,
+            v
             "variance": variance,
             "clv": clv,
         }
@@ -287,6 +289,8 @@ def compute_ev_roi(
             metrics["stake"] *= scale
             metrics["ev"] *= scale
             metrics["variance"] *= scale ** 2
+            t["roi"] = t["ev"] / t["stake"] if t["stake"] else 0.0
+            metrics["roi"] = t["roi"]
         total_ev *= scale
         combined_expected_payout *= scale
         total_variance *= scale ** 2
@@ -318,10 +322,12 @@ def compute_ev_roi(
                 + (1 - p) * (-stake_opt) ** 2
                 - ev ** 2
             )
+            roi = ev / stake_opt if stake_opt else 0.0
             metrics = {
                 "kelly_stake": _kelly_fraction(p, odds) * budget,
                 "stake": stake_opt,
                 "ev": ev,
+                "roi": roi,
                 "variance": variance,
                 "clv": t.get("clv", 0.0),
             }
