@@ -11,32 +11,46 @@ from typing import Any, Dict, List
 
 import requests
 import yaml
+from bs4 import BeautifulSoup
+
+GENY_FALLBACK_URL = "https://www.geny.com/reunions-courses-pmu"
 
 
-FALLBACK_URL = "https://www.zeturf.fr/rest/api/races?date=today"
+def _fetch_from_geny() -> Dict[str, Any]:
+    """Scrape meetings from Geny when the Zeturf API is unavailable."""
+    resp = requests.get(GENY_FALLBACK_URL, timeout=10)
+    resp.raise_for_status()
+
+    soup = BeautifulSoup(resp.text, "html.parser")
+    today = dt.date.today().isoformat()
+    meetings: List[Dict[str, Any]] = []
+    for li in soup.select("li[data-date]"):
+        date = li["data-date"]
+        if date != today:
+            continue
+        meetings.append(
+            {
+                "id": li.get("data-id"),
+                "name": li.get_text(strip=True),
+                "date": date,
+            }
+        )
+    return {"meetings": meetings}
 
 
 def fetch_meetings(url: str) -> Any:
-    """Retrieve meeting data from the given URL."""
-    resp = requests.get(url, timeout=10)
-    resp.raise_for_status()
-    return resp.json()
-    """Retrieve meeting data from the given URL with fallback on 404."""
+    """Retrieve meeting data from the given URL with Geny fallback."""
     try:
         resp = requests.get(url, timeout=10)
         resp.raise_for_status()
         return resp.json()
+    except requests.Timeout:
+        return _fetch_from_geny()
     except requests.HTTPError as exc:  # pragma: no cover - exercised via test
         status = exc.response.status_code if exc.response is not None else None
         if status == 404:
-            fallback_resp = requests.get(FALLBACK_URL, timeout=10)
-            try:
-                fallback_resp.raise_for_status()
-                return fallback_resp.json()
-            except requests.HTTPError as exc2:  # pragma: no cover - simple rethrow
-                raise RuntimeError(
-                    "Primary and fallback Zeturf endpoints both failed"
-                ) from exc2
+            return _fetch_from_geny()
+            
         raise
 
 
@@ -52,7 +66,9 @@ def filter_today(meetings: Any) -> List[Dict[str, Any]]:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Fetch today's meetings from Zeturf")
     parser.add_argument("--out", required=True, help="Output JSON file")
-    parser.add_argument("--sources", default="config/sources.yml", help="Path to sources YAML config")
+    parser.add_argument(
+        "--sources", default="config/sources.yml", help="Path to sources YAML config"
+    )
     parser.add_argument("--mode", default="planning", help="Operational mode (unused)")
     args = parser.parse_args()
 
