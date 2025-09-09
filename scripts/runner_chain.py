@@ -4,8 +4,8 @@
 This lightweight runner loads the day's planning and for each race determines
 whether the start time falls within the configured H-30 or H-5 windows.  When a
 window matches, snapshot/analysis files are written under the designated
-directories.  The analysis step uses :func:`compute_ev_roi` as a placeholder to
-produce EV/ROI metrics.
+directories.  The analysis step now leverages :func:`simulate_ev_batch` and
+``validate_ev`` to compute and validate EV/ROI metrics.
 """
 from __future__ import annotations
 
@@ -19,7 +19,8 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from ev_calculator import compute_ev_roi
+from simulate_ev import simulate_ev_batch
+from validator_ev import validate_ev
 
 
 def _load_planning(path: Path) -> List[Dict[str, Any]]:
@@ -72,17 +73,13 @@ def _write_analysis(
     dest.mkdir(parents=True, exist_ok=True)
 
     tickets = [{"p": 0.5, "odds": 2.0, "stake": 1.0}]
-    result = compute_ev_roi(
-        tickets,
-        budget=budget,
-        ev_threshold=ev_min,
-        roi_threshold=roi_min,
-    )
+    stats = simulate_ev_batch(tickets, bankroll=budget)
+    validate_ev(stats)
     payload = {
         "race_id": race_id,
-        "ev": result.get("ev"),
-        "roi": result.get("roi"),
-        "green": result.get("green"),
+        "ev": stats.get("ev"),
+        "roi": stats.get("roi"),
+        "green": stats.get("green"),
     }
     with (dest / "analysis.json").open("w", encoding="utf-8") as fh:
         json.dump(payload, fh, ensure_ascii=False, indent=2)
