@@ -131,37 +131,15 @@ def optimize_stake_allocation(
 
 
 def risk_of_ruin(total_ev: float, total_variance: float, bankroll: float) -> float:
-    """Approximate the probability of losing the entire bankroll.
-
-    The approximation is based on the gambler's ruin model for a process with
-    drift ``total_ev`` and variance ``total_variance`` over one period:
-    ``exp(-2 * total_ev * bankroll / total_variance)``.  When the expected
-    value is non-positive the risk is ``1`` as ruin is inevitable.
-
-    Parameters
-    ----------
-    total_ev:
-        Expected profit of the set of bets.
-    total_variance:
-        Variance of the profit distribution.
-    bankroll:
-        Current bankroll to protect.
-
-    Returns
-    -------
-    float
-        Approximate risk of ruin, between ``0`` (no risk) and ``1`` (certainty
-        of ruin).
-    """
-
+     """Return the gambler's ruin approximation for a given EV and variance."""
+ 
     if bankroll <= 0:
         raise ValueError("bankroll must be > 0")
     if total_ev <= 0:
         return 1.0
     if total_variance <= 0:
         return 0.0
-    exponent = -2 * total_ev * bankroll / total_variance
-    return min(1.0, math.exp(exponent))
+    return math.exp(-2 * total_ev * bankroll / total_variance)
 
 
 def compute_ev_roi(
@@ -281,7 +259,7 @@ def compute_ev_roi(
         t["stake"] = stake
 
         ev = stake * (p * (odds - 1) - (1 - p))
-        variance = p * (1 - p) * (stake * odds) ** 2
+         variance = p * (stake * (odds - 1)) ** 2 + (1 - p) * (-stake) ** 2 - ev ** 2
         metrics = {
             "kelly_stake": kelly_stake,
             "stake": stake,
@@ -335,7 +313,11 @@ def compute_ev_roi(
             p = t["p"]
             odds = t["odds"]
             ev = stake_opt * (p * (odds - 1) - (1 - p))
-            variance = p * (1 - p) * (stake_opt * odds) ** 2
+            variance = (
+                p * (stake_opt * (odds - 1)) ** 2
+                + (1 - p) * (-stake_opt) ** 2
+                - ev ** 2
+            )
             metrics = {
                 "kelly_stake": _kelly_fraction(p, odds) * budget,
                 "stake": stake_opt,
