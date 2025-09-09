@@ -184,7 +184,7 @@ def test_ticket_metrics_and_std_dev() -> None:
     k1 = _kelly_fraction(0.6, 2.0) * 100
     s1 = min(k1, k1 * KELLY_CAP)
     ev1 = s1 * (0.6 * (2.0 - 1) - (1 - 0.6))
-    var1 = 0.6 * 0.4 * (s1 * 2.0) ** 2
+    var1 = 0.6 * (s1 * (2.0 - 1)) ** 2 + 0.4 * (-s1) ** 2 - ev1 ** 2
     clv1 = (2.1 - 2.0) / 2.0
     assert math.isclose(metrics[0]["kelly_stake"], k1)
     assert math.isclose(metrics[0]["stake"], s1)
@@ -195,7 +195,7 @@ def test_ticket_metrics_and_std_dev() -> None:
     k2 = _kelly_fraction(0.4, 3.0) * 100
     s2 = min(k2, k2 * KELLY_CAP)
     ev2 = s2 * (0.4 * (3.0 - 1) - (1 - 0.4))
-    var2 = 0.4 * 0.6 * (s2 * 3.0) ** 2
+    var2 = 0.4 * (s2 * (3.0 - 1)) ** 2 + 0.6 * (-s2) ** 2 - ev2 ** 2
     clv2 = (3.2 - 3.0) / 3.0
     assert math.isclose(metrics[1]["kelly_stake"], k2)
     assert math.isclose(metrics[1]["stake"], s2)
