@@ -12,10 +12,11 @@ Principes
 - Fractionnement λ (par défaut 0.5) pour limiter la variance (risk control).
 - Cap par cheval (par défaut 0.60) pour éviter la concentration.
 - Arrondi à 0,10 € par défaut (compatibilité opérateurs).
-- Si `probs` est absent, fallback p ≈ 1/odds (prudence).
+- Si `probs` est absent, `prob_fallback` fournit p (défaut ≈ 1/odds).
 
 API principale
 - dutching_kelly_fractional(odds, total_stake=5.0, probs=None,
+                            prob_fallback=lambda o: 1/max(1.01,o),
                             lambda_kelly=0.5, cap_per_horse=0.60, round_to=0.1)
   → DataFrame: Cheval, Cote, p, f_kelly, Part (share), Stake (€), Gain brut (€), EV (€)
 
@@ -25,7 +26,7 @@ Notes
 - Prévu pour des **cotes décimales** de type **placé**.
 - Si vous passez des cotes gagnant, fournissez des `probs` adaptées (p_win).
 """
-from typing import List, Optional, Sequence
+from typing import List, Optional, Sequence, Callable
 import math
 import pandas as pd
 
@@ -43,7 +44,7 @@ def dutching_kelly_fractional(
     odds: Sequence[float],
     total_stake: float = 5.0,
     probs: Optional[Sequence[float]] = None,
-    lambda_kelly: float = 0.5,
+    prob_fallback: Callable[[float], float] = lambda o: 1 / max(1.01, float(o)),
     cap_per_horse: float = 0.60,
     round_to: float = 0.10,
     horse_labels: Optional[Sequence[str]] = None,
@@ -53,7 +54,9 @@ def dutching_kelly_fractional(
     Args:
         odds: liste des cotes décimales (placé de préférence).
         total_stake: budget total à répartir (par défaut 5.0 €).
-        probs: probabilités estimées (même ordre que `odds`). Si None, fallback 1/odds.
+        probs: probabilités estimées (même ordre que `odds`). Si None, `prob_fallback` est utilisé.
+        prob_fallback: fonction appliquée aux cotes pour obtenir p si `probs` est None
+                       (défaut lambda o: 1/max(1.01,o)).
         lambda_kelly: fraction de Kelly (0<λ≤1), défaut 0.5.
         cap_per_horse: ratio max du Kelly par cheval (0..1), défaut 0.60.
         round_to: granularité d'arrondi des mises (€, 0.10 par défaut).
@@ -65,7 +68,7 @@ def dutching_kelly_fractional(
         raise ValueError("`odds` ne peut pas être vide.")
     n = len(odds)
     if probs is None:
-        probs = [1.0/max(1.01, float(o)) for o in odds]
+        probs = [prob_fallback(float(o)) for o in odds]
     if horse_labels is None:
         horse_labels = [f"#{i+1}" for i in range(n)]
 
