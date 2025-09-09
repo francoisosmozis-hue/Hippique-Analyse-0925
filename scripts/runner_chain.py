@@ -1,0 +1,136 @@
+#!/usr/bin/env python3
+"""Run scheduled H-30 and H-5 windows based on a planning file.
+
+This lightweight runner loads the day's planning and for each race determines
+whether the start time falls within the configured H-30 or H-5 windows.  When a
+window matches, snapshot/analysis files are written under the designated
+directories.  The analysis step uses :func:`compute_ev_roi` as a placeholder to
+produce EV/ROI metrics.
+"""
+from __future__ import annotations
+
+import argparse
+import datetime as dt
+import json
+from pathlib import Path
+from typing import Any, Dict, List
+
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from ev_calculator import compute_ev_roi
+
+
+def _load_planning(path: Path) -> List[Dict[str, Any]]:
+    """Return planning entries from ``path``.
+
+    The planning file is expected to be a JSON array of objects containing at
+    least ``id`` and ``start`` (ISO timestamp) fields.  Entries missing these
+    fields are ignored.
+    """
+    with path.open("r", encoding="utf-8") as fh:
+        data = json.load(fh) or []
+    if not isinstance(data, list):
+        raise ValueError("Planning file must contain a list")
+    return [d for d in data if isinstance(d, dict)]
+
+
+def _write_snapshot(race_id: str, window: str, base: Path) -> None:
+    """Write a snapshot file for ``race_id`` under ``base``.
+
+    Parameters
+    ----------
+    race_id:
+        Identifier for the race, e.g. ``"R1C3"``.
+    window:
+        Window label (``"H30"`` or ``"H5"``).
+    base:
+        Base directory where snapshot files are written.
+    """
+    dest = base / race_id
+    dest.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "race_id": race_id,
+        "window": window,
+        "timestamp": dt.datetime.now().isoformat(),
+    }
+    with (dest / f"snapshot_{window}.json").open("w", encoding="utf-8") as fh:
+        json.dump(payload, fh, ensure_ascii=False, indent=2)
+
+
+def _write_analysis(
+    race_id: str,
+    base: Path,
+    *,
+    budget: float,
+    ev_min: float,
+    roi_min: float,
+) -> None:
+    """Compute a dummy EV/ROI analysis and write it to disk."""
+    dest = base / race_id
+    dest.mkdir(parents=True, exist_ok=True)
+
+    tickets = [{"p": 0.5, "odds": 2.0, "stake": 1.0}]
+    result = compute_ev_roi(
+        tickets,
+        budget=budget,
+        ev_threshold=ev_min,
+        roi_threshold=roi_min,
+    )
+    payload = {
+        "race_id": race_id,
+        "ev": result.get("ev"),
+        "roi": result.get("roi"),
+        "green": result.get("green"),
+    }
+    with (dest / "analysis.json").open("w", encoding="utf-8") as fh:
+        json.dump(payload, fh, ensure_ascii=False, indent=2)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Run H-30 and H-5 windows from planning information"
+    )
+    parser.add_argument("--planning", required=True, help="Path to planning JSON file")
+    parser.add_argument("--h30-window-min", type=int, default=27)
+    parser.add_argument("--h30-window-max", type=int, default=33)
+    parser.add_argument("--h5-window-min", type=int, default=3)
+    parser.add_argument("--h5-window-max", type=int, default=7)
+    parser.add_argument("--snap-dir", default="data/snapshots")
+    parser.add_argument("--analysis-dir", default="data/analyses")
+    parser.add_argument("--budget", type=float, default=5.0)
+    parser.add_argument("--ev-min", type=float, default=0.40)
+    parser.add_argument("--roi-min", type=float, default=0.20)
+    parser.add_argument("--pastille-rule", default="", help="Unused placeholder")
+    parser.add_argument("--gpi-config", default="", help="Path to GPI config (unused)")
+    parser.add_argument(
+        "--payout-calib", default="", help="Path to payout calibration (unused)"
+    )
+    args = parser.parse_args()
+
+    planning = _load_planning(Path(args.planning))
+    now = dt.datetime.now()
+
+    snap_dir = Path(args.snap_dir)
+    analysis_dir = Path(args.analysis_dir)
+
+    for entry in planning:
+        race_id = entry.get("id") or f"{entry.get('meeting', '')}{entry.get('race', '')}"
+        start = entry.get("start")
+        if not race_id or not start:
+            continue
+        try:
+            start_time = dt.datetime.fromisoformat(start)
+        except ValueError:
+            continue
+        delta = (start_time - now).total_seconds() / 60
+        if args.h30_window_min <= delta <= args.h30_window_max:
+            _write_snapshot(race_id, "H30", snap_dir)
+        if args.h5_window_min <= delta <= args.h5_window_max:
+            _write_snapshot(race_id, "H5", snap_dir)
+            _write_analysis(race_id, analysis_dir, budget=args.budget, ev_min=args.ev_min, roi_min=args.roi_min)
+
+
+if __name__ == "__main__":
+    main()
