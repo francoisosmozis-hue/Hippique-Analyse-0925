@@ -251,6 +251,17 @@ def test_optimized_allocation_respects_budget_and_improves_ev() -> None:
     assert sum(res["optimized_stakes"]) <= 100 + 1e-6
     assert res["ev"] > res["ev_individual"]
 
+    for metrics in res["ticket_metrics"]:
+        assert "roi" in metrics
+        assert math.isclose(
+            metrics["roi"], metrics["ev"] / metrics["stake"] if metrics["stake"] else 0.0
+        )
+    for metrics in res["ticket_metrics_individual"]:
+        assert "roi" in metrics
+        assert math.isclose(
+            metrics["roi"], metrics["ev"] / metrics["stake"] if metrics["stake"] else 0.0
+        )
+
 
 
 def test_green_flag_true_when_thresholds_met() -> None:
