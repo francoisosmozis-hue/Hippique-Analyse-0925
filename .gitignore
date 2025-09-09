@@ -46,6 +46,10 @@ data/*
 !data/results/
 !data/results/**
 !data/results/.gitkeep
+!data/snapshots/
+!data/snapshots/**
+!data/analyses/
+!data/analyses/**
 results/
 out_*/
 *.json
@@ -69,5 +73,6 @@ excel/
 *.bak
 *.tmp
 *.old
+
 
 
