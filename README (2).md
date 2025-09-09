@@ -192,6 +192,12 @@ python cli_ev.py --tickets tickets.json --budget 100 \
   --ev-threshold 5 --roi-threshold 0.2
 ```
 
+### Calibrer le simulateur
+```bash
+python calibration/calibrate_simulator.py --results data/results.csv
+
+```
+
 ---
 
 ## 🧾 Artifacts produits
