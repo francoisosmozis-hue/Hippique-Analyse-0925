@@ -259,7 +259,7 @@ def compute_ev_roi(
         t["stake"] = stake
 
         ev = stake * (p * (odds - 1) - (1 - p))
-         variance = p * (stake * (odds - 1)) ** 2 + (1 - p) * (-stake) ** 2 - ev ** 2
+        variance = p * (stake * (odds - 1)) ** 2 + (1 - p) * (-stake) ** 2 - ev ** 2
         metrics = {
             "kelly_stake": kelly_stake,
             "stake": stake,
