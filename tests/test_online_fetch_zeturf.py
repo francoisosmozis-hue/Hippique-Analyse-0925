@@ -2,6 +2,7 @@
 
 import os
 import sys
+import datetime as dt
 from typing import Any
 
 import pytest
@@ -14,9 +15,10 @@ import scripts.online_fetch_zeturf as ofz
 class DummyResp:
     """Minimal Response object for simulating HTTP errors."""
 
-    def __init__(self, status_code: int, payload: Any):
+    def __init__(self, status_code: int, payload: Any, text: str | None = None):
         self.status_code = status_code
         self._payload = payload
+        self.text = text if text is not None else payload
 
     def raise_for_status(self) -> None:
         if self.status_code >= 400:
@@ -42,12 +44,12 @@ def test_fetch_meetings_fallback_on_404(monkeypatch: pytest.MonkeyPatch) -> None
     def fake_get(url: str, timeout: int) -> DummyResp:
         calls.append(url)
         if url == primary:
-             return DummyResp(404)
-        return DummyResp(200, text=geny_html)
+             return DummyResp(404, None)
+        return DummyResp(200, geny_html)
 
     monkeypatch.setattr(ofz.requests, "get", fake_get)
 
     data = ofz.fetch_meetings(primary)
 
-    aassert calls == [primary, ofz.GENY_FALLBACK_URL]
+    assert calls == [primary, ofz.GENY_FALLBACK_URL]
     assert data == {"meetings": [{"id": "R1", "name": "Meeting A", "date": today}]}
