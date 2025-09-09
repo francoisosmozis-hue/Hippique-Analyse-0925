@@ -265,7 +265,7 @@ def compute_ev_roi(
             "kelly_stake": kelly_stake,
             "stake": stake,
             "ev": ev,
-            "roi": roi
+            "roi": roi,
             "variance": variance,
             "clv": clv,
         }
