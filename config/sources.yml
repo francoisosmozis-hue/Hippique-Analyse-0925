@@ -1,2 +1,3 @@
 zeturf:
+  # Primary endpoint for Zeturf meetings
   url: "https://www.zeturf.fr/rest/api/meetings/today"
