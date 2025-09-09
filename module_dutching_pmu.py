@@ -17,7 +17,7 @@ Principes
 API principale
 - dutching_kelly_fractional(odds, total_stake=5.0, probs=None,
                             lambda_kelly=0.5, cap_per_horse=0.60, round_to=0.1)
-  → DataFrame: Cheval, Cote, p, f_kelly, Part (share), Mise (€), Gain brut (€), EV (€)
+  → DataFrame: Cheval, Cote, p, f_kelly, Part (share), Stake (€), Gain brut (€), EV (€)
 
 - ev_panier(df): EV total du panier (en €)
 
@@ -55,11 +55,11 @@ def dutching_kelly_fractional(
         total_stake: budget total à répartir (par défaut 5.0 €).
         probs: probabilités estimées (même ordre que `odds`). Si None, fallback 1/odds.
         lambda_kelly: fraction de Kelly (0<λ≤1), défaut 0.5.
-        cap_per_horse: part max du budget par cheval (0..1), défaut 0.60.
+        cap_per_horse: ratio max du Kelly par cheval (0..1), défaut 0.60.
         round_to: granularité d'arrondi des mises (€, 0.10 par défaut).
         horse_labels: noms/identifiants à afficher (optionnel).
     Returns:
-        DataFrame avec colonnes: Cheval, Cote, p, f_kelly, Part, Mise (€), Gain brut (€), EV (€)
+        DataFrame avec colonnes: Cheval, Cote, p, f_kelly, Part, Stake (€), Gain brut (€), EV (€)
     """
     if not odds or len(odds) == 0:
         raise ValueError("`odds` ne peut pas être vide.")
@@ -84,31 +84,40 @@ def dutching_kelly_fractional(
     else:
         shares = [f/sum_f for f in f_k]
 
-    # Appliquer cap par cheval puis renormaliser
-    shares = [min(cap_per_horse, s) for s in shares]
-    s = sum(shares)
-    if s <= 0:
-        shares = [1.0/n] * n
-        s = 1.0
-    shares = [s_i / s for s_i in shares]
-
-    # Mises brutes puis arrondi
+    # Mises brutes selon la part Kelly
     stakes = [s_i * total_stake for s_i in shares]
+
+    # Cap 60 % du Kelly brut par cheval (pas de réallocation du reliquat)
+    caps = []
+    for i, (st, p, o) in enumerate(zip(stakes, probs, odds)):
+        k_raw = _kelly_fraction(_safe_prob(float(p)), float(o))
+        cap = total_stake * k_raw * cap_per_horse
+        caps.append(cap)
+        stakes[i] = min(st, cap)
+
+    # Si dépassement du budget total, réduction proportionnelle
+    total_alloc = sum(stakes)
+    if total_alloc > total_stake:
+        factor = total_stake / total_alloc
+        stakes = [st * factor for st in stakes]
+
     # Arrondir à la granularité (0.10 € par défaut)
     def _round_to(x: float, step: float) -> float:
         return round(x/step)*step
     stakes = [_round_to(st, round_to) for st in stakes]
 
-    # Corriger l'écart d'arrondi pour respecter strictement le budget
+    # Corriger l'écart d'arrondi uniquement si dépassement
     diff = round(total_stake - sum(stakes), 2)
     if abs(diff) >= round_to/2:
         # on pousse le reliquat sur le cheval le plus "efficace" (f_k max)
         try:
-            idx = max(range(n), key=lambda i: f_k[i])
+            idx = max(range(n), key=lambda i: stakes[i])
         except ValueError:
             idx = 0
         stakes[idx] = max(0.0, _round_to(stakes[idx] + diff, round_to))
 
+    shares = [st/total_stake for st in stakes]
+  
     # Calculs gains/EV
     gains = [st * o for st, o in zip(stakes, odds)]
     evs = []
