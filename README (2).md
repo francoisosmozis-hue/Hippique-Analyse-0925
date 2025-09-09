@@ -132,6 +132,23 @@ bankroll réduit augmentent ce risque qui tend vers `1`. Pour maintenir un
 risque cible (ex. 1 %), ajuster `KELLY_CAP` : diminuer ce cap réduit les mises,
 la variance et donc le `risk_of_ruin`.
 
+### 🤖 Auto‑sélection des tickets
+
+Chaque appel à `compute_ev_roi` renvoie désormais une liste `ticket_metrics` où
+chaque ticket est décrit par :
+
+- `kelly_stake` – mise recommandée par Kelly avant plafonnement,
+- `stake` – mise réellement engagée après cap `kelly_cap`,
+- `ev` – espérance de gain en euros,
+- `roi` – retour sur investissement (`ev / stake`),
+- `variance` – variance de la mise,
+- `clv` – *closing line value*.
+
+Ces métriques permettent d'automatiser la sélection des tickets :
+filtrer ceux dont le `roi` ou l'`ev` est négatif, privilégier les meilleurs
+rapports `ev/variance` ou encore appliquer des seuils personnalisés avant de
+valider l'envoi des tickets.
+
 ### 🚀 Optimisation des simulations
 
 `compute_ev_roi` mémorise désormais les probabilités calculées par
