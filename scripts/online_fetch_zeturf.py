@@ -13,11 +13,31 @@ import requests
 import yaml
 
 
+FALLBACK_URL = "https://www.zeturf.fr/rest/api/races?date=today"
+
+
 def fetch_meetings(url: str) -> Any:
     """Retrieve meeting data from the given URL."""
     resp = requests.get(url, timeout=10)
     resp.raise_for_status()
     return resp.json()
+    """Retrieve meeting data from the given URL with fallback on 404."""
+    try:
+        resp = requests.get(url, timeout=10)
+        resp.raise_for_status()
+        return resp.json()
+    except requests.HTTPError as exc:  # pragma: no cover - exercised via test
+        status = exc.response.status_code if exc.response is not None else None
+        if status == 404:
+            fallback_resp = requests.get(FALLBACK_URL, timeout=10)
+            try:
+                fallback_resp.raise_for_status()
+                return fallback_resp.json()
+            except requests.HTTPError as exc2:  # pragma: no cover - simple rethrow
+                raise RuntimeError(
+                    "Primary and fallback Zeturf endpoints both failed"
+                ) from exc2
+        raise
 
 
 def filter_today(meetings: Any) -> List[Dict[str, Any]]:
