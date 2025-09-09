@@ -1,3 +1,6 @@
 zeturf:
   # Primary endpoint for Zeturf meetings
   url: "https://www.zeturf.fr/rest/api/meetings/today"
+geny:
+  # Fallback endpoint scraped when Zeturf is unavailable
+  url: "https://www.geny.com/reunions-courses-pmu"
