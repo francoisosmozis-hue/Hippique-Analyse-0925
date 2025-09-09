@@ -29,19 +29,25 @@ class DummyResp:
 
 
 def test_fetch_meetings_fallback_on_404(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A 404 from the primary endpoint should trigger the fallback."""
+    """A 404 from the primary endpoint should trigger the Geny fallback."""
     primary = "https://www.zeturf.fr/rest/api/meetings/today"
     calls: list[str] = []
+    today = dt.date.today().isoformat()
+    geny_html = f"""
+    <ul id='reunions'>
+        <li data-id='R1' data-date='{today}'>Meeting A</li>
+    </ul>
+    """
 
     def fake_get(url: str, timeout: int) -> DummyResp:
         calls.append(url)
         if url == primary:
-            return DummyResp(404, {})
-        return DummyResp(200, {"meetings": ["ok"]})
+             return DummyResp(404)
+        return DummyResp(200, text=geny_html)
 
     monkeypatch.setattr(ofz.requests, "get", fake_get)
 
     data = ofz.fetch_meetings(primary)
 
-    assert calls == [primary, ofz.FALLBACK_URL]
-    assert data == {"meetings": ["ok"]}
+    aassert calls == [primary, ofz.GENY_FALLBACK_URL]
+    assert data == {"meetings": [{"id": "R1", "name": "Meeting A", "date": today}]}
