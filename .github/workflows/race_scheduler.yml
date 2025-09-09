@@ -42,10 +42,11 @@ jobs:
             --payout-calib config/payout_calibration.yamll
       - name: Commit snapshots/analyses
         run: |
+          mkdir -p data/snapshots data/analyses
           git config user.name "github-actions"
           git config user.email "actions@users.noreply.github.com"
-          git add data/snapshots/** data/analyses/**
-          git commit -m "snap/analysis: $(date +%F' '%T)" || echo "No changes"
+          git add -A data/snapshots data/analyses
+          git diff --cached --quiet || git commit -m "snap/analysis: $(date +%F' '%T)"
           git push
       - name: Upload to Drive (if any new files)
         env:
