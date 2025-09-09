@@ -28,7 +28,18 @@ jobs:
           pip install -r requirements.txt
       - name: Run scheduler windows (H-30/H-5)
         run: |
-          python scripts/runner_chain.py             --planning data/planning/$(date +%F).json             --h30-window-min 27 --h30-window-max 33             --h5-window-min 3  --h5-window-max 7              --snap-dir data/snapshots             --analysis-dir data/analyses             --budget ${GPI_BUDGET}             --ev-min ${EV_MIN}             --roi-min ${ROI_MIN}             --pastille-rule "${PASTILLE_RULE}"             --gpi-config config/gpi_v51.yml             --payout-calib config/payout_calibration.yaml
+          python scripts/runner_chain.py \
+            --planning data/planning/$(date +%F).json \
+            --h30-window-min 27 --h30-window-max 33 \
+            --h5-window-min 3 --h5-window-max 7 \
+            --snap-dir data/snapshots \
+            --analysis-dir data/analyses \
+            --budget ${GPI_BUDGET} \
+            --ev-min ${EV_MIN} \
+            --roi-min ${ROI_MIN} \
+            --pastille-rule "${PASTILLE_RULE}" \
+            --gpi-config config/gpi_v51.yml \
+            --payout-calib config/payout_calibration.yamll
       - name: Commit snapshots/analyses
         run: |
           git config user.name "github-actions"
