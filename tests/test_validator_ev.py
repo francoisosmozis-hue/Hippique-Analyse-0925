@@ -1,29 +1,96 @@
+import pathlib
+import sys
 import pytest
-from validator_ev import validate
+ 
+sys.path.append(str(pathlib.Path(__file__).resolve().parent.parent))
+from validator_ev import must_have, validate_inputs
 
-def sample(h):
-    return {
-        "runners":[
-            {"id":"1","name":"A","odds":2.5,"je_stats":{"j_win":10,"e_win":11}},
-            {"id":"2","name":"B","odds":3.5,"je_stats":{"j_win":9,"e_win":8}}
-        ]
+
+def sample_data():
+    partants = [
+        {"id": "1", "name": "A"},
+        {"id": "2", "name": "B"},
+    ]
+    odds_h30 = {"1": 2.5, "2": 3.5}
+    odds_h5 = {"1": 2.0, "2": 4.0}
+    stats_je = {
+        "1": {"j_win": 10, "e_win": 11},
+        "2": {"j_win": 9, "e_win": 8},
     }
+    return partants, odds_h30, odds_h5, stats_je
 
-def test_validate_ok():
-    h30=sample("H30")
-    h5=sample("H05")
-    assert validate(h30,h5,allow_je_na=False)
+
+def cfg(**overrides):
+    base = {
+        "ALLOW_JE_NA": False,
+        "REQUIRE_DRIFT_LOG": True,
+        "REQUIRE_ODDS_WINDOWS": [30, 5],
+ sys.path.append(str(pathlib.Path(__file__).resolve().parent.parent))
+from validator_ev import must_have, validate_inputs
+
+
+def sample_data():
+    partants = [
+        {"id": "1", "name": "A"},
+        {"id": "2", "name": "B"},
+    ]
+    odds_h30 = {"1": 2.5, "2": 3.5}
+    odds_h5 = {"1": 2.0, "2": 4.0}
+    stats_je = {
+        "1": {"j_win": 10, "e_win": 11},
+        "2": {"j_win": 9, "e_win": 8},
+    }
+    return partants, odds_h30, odds_h5, stats_je
+
+
+def cfg(**overrides):
+    base = {
+        "ALLOW_JE_NA": False,
+        "REQUIRE_DRIFT_LOG": True,
+        "REQUIRE_ODDS_WINDOWS": [30, 5],
+    }               
+base.update(overrides)
+    return base
+
+
+def test_must_have_raises():
+    with pytest.raises(RuntimeError):
+        must_have([], "manquant")
+
+
+def test_validate_inputs_ok():
+    partants, odds_h30, odds_h5, stats_je = sample_data()
+    assert validate_inputs(cfg(), partants, odds_h30, odds_h5, stats_je)
+
 
 def test_incoherent_partants():
-    h30=sample("H30")
-    h5=sample("H05")
-    h5["runners"].append({"id":"3","name":"C","odds":5.0,"je_stats":{"j_win":7,"e_win":7}})
+    partants, odds_h30, odds_h5, stats_je = sample_data()
+    odds_h5["3"] = 5.0
     with pytest.raises(ValueError):
-        validate(h30,h5,allow_je_na=False)    
+        validate_inputs(cfg(), partants, odds_h30, odds_h5, stats_je)
+    
 
 def test_missing_stats_blocked():
-    h30=sample("H30")
-    h5=sample("H05")
-    del h5["runners"][0]["je_stats"]
+    partants, odds_h30, odds_h5, stats_je = sample_data()
+    stats_je.pop("1")
     with pytest.raises(ValueError):
-        validate(h30,h5,allow_je_na=False)
+        validate_inputs(cfg(), partants, odds_h30, odds_h5, stats_je)
+
+
+def test_missing_required_window():
+    partants, _h30, odds_h5, stats_je = sample_data()
+    with pytest.raises(RuntimeError):
+        validate_inputs(cfg(), partants, None, odds_h5, stats_je)
+
+
+def test_require_drift_log():
+    partants, odds_h30, _h5, stats_je = sample_data()
+    with pytest.raises(RuntimeError):
+        validate_inputs(cfg(REQUIRE_ODDS_WINDOWS=[]), partants, odds_h30, None, stats_je)
+
+
+def test_invalid_odds_value():
+    partants, odds_h30, odds_h5, stats_je = sample_data()
+    odds_h30["1"] = "abc"
+    with pytest.raises(ValueError):
+        validate_inputs(cfg(), partants, odds_h30, odds_h5, stats_je)
