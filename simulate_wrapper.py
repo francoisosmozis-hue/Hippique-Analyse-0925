@@ -37,19 +37,19 @@ def _load_calibration() -> None:
     with CALIBRATION_PATH.open("r", encoding="utf-8") as fh:
         data = yaml.safe_load(fh) or {}
    _calibration_cache = {
-        k: {
-            "alpha": float(v.get("alpha", 1.0)),
-            "beta": float(v.get("beta", 1.0)),
-            "p": float(
-                v.get(
-                    "p",
-                    float(v.get("alpha", 1.0))
-                    / (float(v.get("alpha", 1.0)) + float(v.get("beta", 1.0))),
-                )
-            ),
+            k: {
+                "alpha": float(v.get("alpha", 1.0)),
+                "beta": float(v.get("beta", 1.0)),
+                "p": float(
+                    v.get(
+                        "p",
+                        float(v.get("alpha", 1.0))
+                        / (float(v.get("alpha", 1.0)) + float(v.get("beta", 1.0))),
+                    )
+                ),
+            } 
+            for k, v in data.items()
         }
-        for k, v in data.items()
-    }
     _calibration_mtime = mtime
 
 
@@ -84,6 +84,3 @@ def simulate_wrapper(legs: Iterable[object]) -> float:
         prob *= alpha / (alpha + beta)
     return prob
 
-    # Fallback: assume independent 50% events
-    legs_list: List[object] = list(legs)
-    return 0.5 ** len(legs_list)
