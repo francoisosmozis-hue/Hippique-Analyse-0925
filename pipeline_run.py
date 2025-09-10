@@ -14,12 +14,16 @@ except Exception as e:
 REQ_KEYS = [
     "BUDGET_TOTAL","SP_RATIO","COMBO_RATIO","EV_MIN_SP","EV_MIN_GLOBAL",
     "MAX_VOL_PAR_CHEVAL","ALLOW_JE_NA","PAUSE_EXOTIQUES","OUTDIR_DEFAULT",
-    "EXCEL_PATH","CALIB_PATH","MODEL"
+    "EXCEL_PATH","CALIB_PATH","MODEL","REQUIRE_DRIFT_LOG",
+    "REQUIRE_ODDS_WINDOWS","MIN_PAYOUT_COMBOS"
 ]
 
 def load_yaml(path:str)->dict:
     with open(path,"r",encoding="utf-8") as f:
-        cfg=yaml.safe_load(f)
+        cfg = yaml.safe_load(f) or {}
+    cfg.setdefault("REQUIRE_DRIFT_LOG", True)
+    cfg.setdefault("REQUIRE_ODDS_WINDOWS", [30, 5])
+    cfg.setdefault("MIN_PAYOUT_COMBOS", 10.0)
     missing=[k for k in REQ_KEYS if k not in cfg]
     if missing:
         raise RuntimeError(f"Config incomplète: clés manquantes {missing}")
