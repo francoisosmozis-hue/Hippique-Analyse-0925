@@ -1,5 +1,7 @@
+import os
 import pathlib
 import sys
+
 import pytest
  
 sys.path.append(str(pathlib.Path(__file__).resolve().parent.parent))
@@ -7,16 +9,10 @@ from validator_ev import must_have, validate_inputs
 
 
 def sample_data():
-    partants = [
-        {"id": "1", "name": "A"},
-        {"id": "2", "name": "B"},
-    ]
+    partants = [{"id": "1", "name": "A"}, {"id": "2", "name": "B"}]
     odds_h30 = {"1": 2.5, "2": 3.5}
     odds_h5 = {"1": 2.0, "2": 4.0}
-    stats_je = {
-        "1": {"j_win": 10, "e_win": 11},
-        "2": {"j_win": 9, "e_win": 8},
-    }
+    stats_je = {"1": {"j_win": 10, "e_win": 11}, "2": {"j_win": 9, "e_win": 8}}
     return partants, odds_h30, odds_h5, stats_je
 
 
@@ -25,31 +21,8 @@ def cfg(**overrides):
         "ALLOW_JE_NA": False,
         "REQUIRE_DRIFT_LOG": True,
         "REQUIRE_ODDS_WINDOWS": [30, 5],
- sys.path.append(str(pathlib.Path(__file__).resolve().parent.parent))
-from validator_ev import must_have, validate_inputs
-
-
-def sample_data():
-    partants = [
-        {"id": "1", "name": "A"},
-        {"id": "2", "name": "B"},
-    ]
-    odds_h30 = {"1": 2.5, "2": 3.5}
-    odds_h5 = {"1": 2.0, "2": 4.0}
-    stats_je = {
-        "1": {"j_win": 10, "e_win": 11},
-        "2": {"j_win": 9, "e_win": 8},
-    }
-    return partants, odds_h30, odds_h5, stats_je
-
-
-def cfg(**overrides):
-    base = {
-        "ALLOW_JE_NA": False,
-        "REQUIRE_DRIFT_LOG": True,
-        "REQUIRE_ODDS_WINDOWS": [30, 5],
-    }               
-base.update(overrides)
+     }
+    base.update(overrides)
     return base
 
 
