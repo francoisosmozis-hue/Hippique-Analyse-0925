@@ -1,43 +1,33 @@
-"""Validation utilities for EV statistics."""
-from __future__ import annotations
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 
-from typing import Any, Mapping
+def validate(h30:dict, h5:dict, allow_je_na:bool)->bool:
+    ids30=[x["id"] for x in h30.get("runners",[])]
+    ids05=[x["id"] for x in h5.get("runners",[])]
+    if set(ids30)!=set(ids05):
+        raise ValueError("Partants incohérents (H-30 vs H-5).")
+    if not ids05:
+        raise ValueError("Aucun partant.")
 
+    for snap,label in [(h30,"H-30"),(h5,"H-5")]:
+        for r in snap.get("runners",[]):
+            if "odds" not in r or r["odds"] in (None,""):
+                raise ValueError(f"Cotes manquantes {label} pour {r.get('name',r.get('id'))}.")
+            try:
+                if float(r["odds"])<=1.01:
+                    raise ValueError(f"Cote invalide {label} pour {r.get('name',r.get('id'))}: {r['odds']}")
+            except Exception:
+                raise ValueError(f"Cote non numérique {label} pour {r.get('name',r.get('id'))}: {r.get('odds')}")
+    if not allow_je_na:
+        for r in h5.get("runners",[]):
+            je=r.get("je_stats",{})
+            if not je or ("j_win" not in je and "e_win" not in je):
+                raise ValueError(f"Stats J/E manquantes: {r.get('name',r.get('id'))}")
+    return True
 
-def validate_ev(stats: Mapping[str, Any]) -> bool:
-    """Validate the structure and bounds of EV statistics.
-
-    Parameters
-    ----------
-    stats:
-        Mapping containing at least ``ev_ratio``, ``ev`` and ``roi``.
-
-    Returns
-    -------
-    bool
-        ``True`` when all checks pass.
-
-    Raises
-    ------
-    ValueError
-        If a required key is missing or a bound is violated.
-    """
-    required = ("ev_ratio", "ev", "roi")
-    for key in required:
-        if key not in stats:
-            raise ValueError(f"missing '{key}' in stats")
-        if not isinstance(stats[key], (int, float)):
-            raise ValueError(f"'{key}' must be a number")
-
-    ev_ratio = float(stats["ev_ratio"])
-    if not 0 <= ev_ratio <= 1:
-        raise ValueError("ev_ratio must be within [0, 1]")
-    if ev_ratio < 0.40:
-        raise ValueError("ev_ratio below minimum threshold 0.40")
-
-    roi = float(stats["roi"])
-    if roi < -1:
-        raise ValueError("roi must be greater than or equal to -1")
-
-    # ``ev`` already checked for being numeric; no additional bounds
+   # Backward compatibility: validation basée sur EV ratio
+def validate_ev(stats:dict, threshold:float=0.40)->bool:
+    ev_ratio = float(stats.get("ev_ratio", 0.0))
+    if ev_ratio < threshold:
+        raise ValueError("EV ratio en dessous du seuil")
     return True
