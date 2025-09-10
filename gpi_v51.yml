@@ -7,6 +7,9 @@ EV_MIN_GLOBAL: 0.40
 MAX_VOL_PAR_CHEVAL: 0.60
 ALLOW_JE_NA: false         # true => Stats J/E manquantes tolérées (neutre)
 PAUSE_EXOTIQUES: false     # true => force SP only (par ex. si calibration > 15 % d’erreur)
+REQUIRE_DRIFT_LOG: true
+REQUIRE_ODDS_WINDOWS: [30, 5]
+MIN_PAYOUT_COMBOS: 10.0
 
 # Options d’E/S
 OUTDIR_DEFAULT: "runs"
