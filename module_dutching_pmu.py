@@ -45,6 +45,7 @@ def dutching_kelly_fractional(
     total_stake: float = 5.0,
     probs: Optional[Sequence[float]] = None,
     prob_fallback: Callable[[float], float] = lambda o: 1 / max(1.01, float(o)),
+    lambda_kelly: float = 0.5,
     cap_per_horse: float = 0.60,
     round_to: float = 0.10,
     horse_labels: Optional[Sequence[str]] = None,
