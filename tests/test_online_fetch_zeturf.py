@@ -10,6 +10,7 @@ import pytest
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import scripts.online_fetch_zeturf as ofz
+import online_fetch_zeturf as core
 
 
 class DummyResp:
@@ -53,3 +54,32 @@ def test_fetch_meetings_fallback_on_404(monkeypatch: pytest.MonkeyPatch) -> None
 
     assert calls == [primary, ofz.GENY_FALLBACK_URL]
     assert data == {"meetings": [{"id": "R1", "name": "Meeting A", "date": today}]}
+
+
+def test_compute_diff_top_lists() -> None:
+    """``compute_diff`` should expose top steams and drifts."""
+
+    h30 = {
+        "runners": [
+            {"id": "1", "odds": 10},
+            {"id": "2", "odds": 5},
+            {"id": "3", "odds": 7},
+            {"id": "4", "odds": 9},
+            {"id": "5", "odds": 6},
+            {"id": "6", "odds": 11},
+        ]
+    }
+    h5 = {
+        "runners": [
+            {"id": "1", "odds": 8},
+            {"id": "2", "odds": 7},
+            {"id": "3", "odds": 6},
+            {"id": "4", "odds": 4},
+            {"id": "5", "odds": 9},
+            {"id": "6", "odds": 17},
+        ]
+    }
+
+    res = core.compute_diff(h30, h5)
+    assert [r["id"] for r in res["top_steams"]] == ["4", "1", "3"]
+    assert [r["id"] for r in res["top_drifts"]] == ["6", "5", "2"]
