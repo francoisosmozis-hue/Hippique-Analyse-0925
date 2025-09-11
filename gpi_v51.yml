@@ -10,6 +10,9 @@ PAUSE_EXOTIQUES: false     # true => force SP only (par ex. si calibration > 15 
 REQUIRE_DRIFT_LOG: true
 REQUIRE_ODDS_WINDOWS: [30, 5]
 MIN_PAYOUT_COMBOS: 10.0
+REQUIRE_DRIFT_LOG: true
+REQUIRE_ODDS_WINDOWS: [30, 5]
+MIN_PAYOUT_COMBOS: 10.0
 
 # Options d’E/S
 OUTDIR_DEFAULT: "runs"
