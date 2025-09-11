@@ -127,21 +127,28 @@ def test_smoke_run(tmp_path):
     if tickets:
         assert tickets[0]["id"] == exp_tickets[0]["id"]
 
-    # Combined payout is zero -> combo flag should be False
+    # Combined payout is zero -> combo flag should be False and a high ROI
+    # threshold should block SP tickets
     cfg = {
         "BUDGET_TOTAL": 5,
         "SP_RATIO": 0.6,
-        "EV_MIN_SP": 0.20,
-        "EV_MIN_GLOBAL": 0.40,
+        EV_MIN_SP": 0.0,
+        "EV_MIN_GLOBAL": 0.0,
+        "ROI_MIN_SP": 0.5,
+        "ROI_MIN_GLOBAL": 0.5,
         "MIN_PAYOUT_COMBOS": 10.0,
     }
     stats_ev = simulate_ev_batch(tickets, bankroll=cfg["BUDGET_TOTAL"])
+    roi_sp = float(data["ev"]["sp"]) / stake_total if stake_total else 0.0
     flags = gate_ev(
         cfg,
         ev_sp=float(data["ev"]["sp"]),
         ev_global=float(data["ev"]["global"]),
+        roi_sp=roi_sp,
+        roi_global=stats_ev.get("roi", 0.0),
         min_payout_combos=stats_ev.get("combined_expected_payout", 0.0),
     )
+    assert not flags["sp"]
     assert not flags["combo"]
 
 
