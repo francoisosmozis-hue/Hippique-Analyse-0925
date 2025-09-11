@@ -140,13 +140,36 @@ def build_p_true(cfg, partants, odds_h5, odds_h30, stats_je) -> dict:
     return {cid: w / total for cid, w in weights.items()}
 
 
-def export(outdir: Path, meta: dict, tickets: list, ev_sp: float, ev_global: float, p_true: dict, drift: dict, cfg: dict) -> None:
-    save_json(outdir / "p_finale.json", {
-        "meta": meta,
-        "p_true": p_true,
-        "tickets": tickets,
-        "ev": {"sp": ev_sp, "global": ev_global},
-    })
+def export(
+    outdir: Path,
+    meta: dict,
+    tickets: list,
+    ev_sp: float,
+    ev_global: float,
+    roi_sp: float,
+    roi_global: float,
+    risk_of_ruin: float,
+    clv_moyen: float,
+    p_true: dict,
+    drift: dict,
+    cfg: dict,
+) -> None:
+    save_json(
+        outdir / "p_finale.json",
+        {
+            "meta": meta,
+            "p_true": p_true,
+            "tickets": tickets,
+            "ev": {
+                "sp": ev_sp,
+                "global": ev_global,
+                "roi_sp": roi_sp,
+                "roi_global": roi_global,
+                "risk_of_ruin": risk_of_ruin,
+                "clv_moyen": clv_moyen,
+            },
+        },
+    )
     save_json(outdir / "diff_drift.json", drift)
     total = sum(t.get("stake", 0) for t in tickets)
     ligne = (
@@ -154,10 +177,12 @@ def export(outdir: Path, meta: dict, tickets: list, ev_sp: float, ev_global: flo
         f'{meta.get("date", "")};{meta.get("discipline", "")};'
         f'{total:.2f};{ev_global:.4f};{cfg.get("MODEL", "")}'
     )
-    save_text(outdir / "ligne.csv", "R/C;hippodrome;date;discipline;mises;EV_globale;model\n" + ligne + "\n")
-    cmd = (
+    save_text(
+        outdir / "ligne.csv",
+        "R/C;hippodrome;date;discipline;mises;EV_globale;model\n" + ligne + "\n",
+    )
         f'python update_excel_with_results.py '
-         f'--excel "{cfg.get("EXCEL_PATH")}" '
+        f'--excel "{cfg.get("EXCEL_PATH")}" '
         f'--arrivee "{outdir / "arrivee_officielle.json"}" '
         f'--tickets "{outdir / "p_finale.json"}"\n'
     )
@@ -295,7 +320,22 @@ def main() -> None:
         raise RuntimeError("Budget dépassé")
 
     outdir.mkdir(parents=True, exist_ok=True)
-    export(outdir, meta, tickets, ev_sp, ev_global, p_true, drift, cfg)
+    risk_of_ruin = float(stats_ev.get("risk_of_ruin", 0.0))
+    clv_moyen = float(stats_ev.get("clv", 0.0))
+    export(
+        outdir,
+        meta,
+        tickets,
+        ev_sp,
+        ev_global,
+        roi_sp,
+        roi_global,
+        risk_of_ruin,
+        clv_moyen,
+        p_true,
+        drift,
+        cfg,
+    )
     print(f"OK: analyse exportée dans {outdir}")
 
 
