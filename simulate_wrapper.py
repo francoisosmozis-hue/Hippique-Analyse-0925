@@ -36,20 +36,17 @@ def _load_calibration() -> None:
         return
     with CALIBRATION_PATH.open("r", encoding="utf-8") as fh:
         data = yaml.safe_load(fh) or {}
-        _calibration_cache = {
-            k: {
-                "alpha": float(v.get("alpha", 1.0)),
-                "beta": float(v.get("beta", 1.0)),
-                "p": float(
-                    v.get(
-                        "p",
-                        float(v.get("alpha", 1.0))
-                        / (float(v.get("alpha", 1.0)) + float(v.get("beta", 1.0))),
-                    )
-                ),
-            }
-            for k, v in data.items()
-        }
+        parsed: Dict[str, Dict[str, float]] = {}
+        for k, v in data.items():
+            alpha = float(v.get("alpha", 1.0))
+            beta = float(v.get("beta", 1.0))
+            p = float(v.get("p", alpha / (alpha + beta)))
+            if alpha <= 0 or beta <= 0 or not (0.0 < p < 1.0):
+                raise ValueError(
+                    f"Invalid calibration for {k}: alpha={alpha}, beta={beta}, p={p}"
+                )
+            parsed[k] = {"alpha": alpha, "beta": beta, "p": p}
+        _calibration_cache = parsed
     _calibration_mtime = mtime
 
 
