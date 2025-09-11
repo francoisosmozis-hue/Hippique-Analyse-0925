@@ -46,7 +46,8 @@ def load_yaml(path: str) -> dict:
         raise RuntimeError(f"Config incomplète: clés manquantes {missing}")
     return cfg
 
-    def load_json(path: str):
+
+def load_json(path: str):    
     with open(path, "r", encoding="utf-8") as fh:
         return json.load(fh)
 
