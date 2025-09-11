@@ -39,6 +39,7 @@ REQ_KEYS = [
     "MAX_TICKETS_SP",
     "MIN_STAKE_SP",
     "DRIFT_COEF",
+    "ROUND_TO_SP",
     "JE_BONUS_COEF",
 ]
 
@@ -54,6 +55,7 @@ def load_yaml(path: str) -> dict:
     cfg.setdefault("JE_BONUS_COEF", 0.001)
     cfg.setdefault("KELLY_FRACTION", 0.5)
     cfg.setdefault("MIN_STAKE_SP", 0.1)
+    cfg.setdefault("ROUND_TO_SP", 0.10)
     cfg.setdefault("ROI_MIN_SP", 0.0)
     cfg.setdefault("ROI_MIN_GLOBAL", 0.0)
     cfg.setdefault("ROR_MAX", 0.05)
