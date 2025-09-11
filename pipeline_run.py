@@ -24,6 +24,7 @@ REQ_KEYS = [
     "EV_MIN_GLOBAL",
     "ROI_MIN_SP",
     "ROI_MIN_GLOBAL",
+    "ROR_MAX",
     "MAX_VOL_PAR_CHEVAL",
     "ALLOW_JE_NA",
     "PAUSE_EXOTIQUES",
@@ -51,6 +52,7 @@ def load_yaml(path: str) -> dict:
     cfg.setdefault("JE_BONUS_COEF", 0.001)
     cfg.setdefault("ROI_MIN_SP", 0.0)
     cfg.setdefault("ROI_MIN_GLOBAL", 0.0)
+    cfg.setdefault("ROR_MAX", 0.05)
     missing = [k for k in REQ_KEYS if k not in cfg]
     if missing:
         raise RuntimeError(f"Config incomplète: clés manquantes {missing}")
@@ -213,6 +215,7 @@ def main() -> None:
         roi_sp,
         roi_global,
         stats_ev.get("combined_expected_payout", 0.0),
+        stats_ev.get("risk_of_ruin", 0.0),
     )
     if not flags.get("sp", False):
         tickets = []
