@@ -61,6 +61,7 @@ def allocate_dutching_sp(cfg: Dict[str, float], runners: List[Dict[str, Any]]) -
             "name": runner.get("name", runner.get("id")),
             "odds": o,
             "stake": stake,
+            "p": p,
         }
         tickets.append(ticket)
         ev_sp += stake * (p * (o - 1.0) - (1.0 - p))
