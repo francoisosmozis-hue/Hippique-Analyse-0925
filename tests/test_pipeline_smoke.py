@@ -11,6 +11,7 @@ COMBO_RATIO: 0.4
 EV_MIN_SP: 0.20
 EV_MIN_GLOBAL: 0.40
 MAX_VOL_PAR_CHEVAL: 0.60
+MAX_TICKETS_SP: 1
 ALLOW_JE_NA: true
 PAUSE_EXOTIQUES: false
 OUTDIR_DEFAULT: "runs/test"
@@ -98,7 +99,7 @@ def test_smoke_run(tmp_path):
 
     data = json.loads((outdir / "p_finale.json").read_text(encoding="utf-8"))
     tickets = data["tickets"]
-    assert len(tickets) <= 2
+    assert len(tickets) <= 1
     stake_total = sum(t.get("stake", 0) for t in tickets)
     assert stake_total <= 5.00 + 1e-6
 
