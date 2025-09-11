@@ -47,11 +47,12 @@ def allocate_dutching_sp(cfg: Dict[str, float], runners: List[Dict[str, Any]]) -
 
     kellys = [kelly_fraction(p, o - 1.0) for p, o in zip(probs, odds)]
     total_kelly = sum(kellys) or 1.0
+    kelly_coef = float(cfg.get("KELLY_FRACTION", 0.5))
 
     tickets: List[Dict[str, Any]] = []
     ev_sp = 0.0
     for runner, p, o, k in zip(runners, probs, odds, kellys):
-        f = min(cap, k / total_kelly)
+        f = min(cap, k * kelly_coef / total_kelly)
         stake = round(budget * f, 2)
         if stake <= 0:
             continue
@@ -77,6 +78,7 @@ def gate_ev(
     roi_sp: float,
     roi_global: float,
     min_payout_combos: float,
+    risk_of_ruin: float = 0.0,
 ) -> Dict[str, bool]:
     """Return activation flags for SP and combinés based on EV/ROI thresholds."""
 
@@ -84,6 +86,7 @@ def gate_ev(
     sp_ok = (
         ev_sp >= float(cfg.get("EV_MIN_SP", 0.0)) * sp_budget
         and roi_sp >= float(cfg.get("ROI_MIN_SP", 0.0))
+        and risk_of_ruin <= float(cfg.get("ROR_MAX", 1.0))
     )
 
     combo_ok = (
@@ -91,6 +94,7 @@ def gate_ev(
         >= float(cfg.get("EV_MIN_GLOBAL", 0.0)) * float(cfg.get("BUDGET_TOTAL", 0.0))
         and roi_global >= float(cfg.get("ROI_MIN_GLOBAL", 0.0))
         and min_payout_combos >= float(cfg.get("MIN_PAYOUT_COMBOS", 0.0))
+        and risk_of_ruin <= float(cfg.get("ROR_MAX", 1.0))
     )
 
     return {"sp": sp_ok, "combo": combo_ok}
