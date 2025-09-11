@@ -33,6 +33,7 @@ REQ_KEYS = [
     "REQUIRE_ODDS_WINDOWS",
     "MIN_PAYOUT_COMBOS",
     "MAX_TICKETS_SP",
+    "DRIFT_COEF",
 ]
 
 
@@ -43,6 +44,7 @@ def load_yaml(path: str) -> dict:
     cfg.setdefault("REQUIRE_ODDS_WINDOWS", [30, 5])
     cfg.setdefault("MIN_PAYOUT_COMBOS", 10.0)
     cfg.setdefault("MAX_TICKETS_SP", 2)
+    cfg.setdefault("DRIFT_COEF", 0.05)
     missing = [k for k in REQ_KEYS if k not in cfg]
     if missing:
         raise RuntimeError(f"Config incomplète: clés manquantes {missing}")
@@ -83,7 +85,7 @@ def compute_drift_dict(h30: dict, h5: dict, id2name: dict) -> dict:
     return {"drift": diff}
 
 
-def build_p_true(partants, odds_h5, odds_h30, stats_je) -> dict:
+def build_p_true(cfg, partants, odds_h5, odds_h30, stats_je) -> dict:
     weights = {}
     for p in partants:
         cid = str(p["id"])
@@ -96,7 +98,8 @@ def build_p_true(partants, odds_h5, odds_h30, stats_je) -> dict:
         drift = 0.0
         if cid in odds_h30:
             drift = float(odds_h30[cid]) - o5
-        weight = base * (1.0 + bonus) * (1.0 - 0.05 * drift)
+        coef = float(cfg.get("DRIFT_COEF", 0.05))
+        weight = base * (1.0 + bonus) * (1.0 - coef * drift)
         weights[cid] = max(weight, 0.0)
     total = sum(weights.values()) or 1.0
     return {cid: w / total for cid, w in weights.items()}
@@ -164,7 +167,7 @@ def main() -> None:
 
     # Drift & p_true
     drift = compute_drift_dict(odds_h30, odds_h5, id2name)
-    p_true = build_p_true(partants, odds_h5, odds_h30, stats_je)
+    p_true = build_p_true(cfg, partants, odds_h5, odds_h30, stats_je)
 
     # Tickets allocation
     runners = []
