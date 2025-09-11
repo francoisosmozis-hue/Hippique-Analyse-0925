@@ -2,7 +2,9 @@ import json
 import subprocess
 import sys
 
-from simulate_ev import gate_ev, simulate_ev_batch
+import yaml
+
+from simulate_ev import allocate_dutching_sp, gate_ev, simulate_ev_batch
 from pipeline_run import build_p_true
 
 GPI_YML = """\
@@ -104,6 +106,24 @@ def test_smoke_run(tmp_path):
     assert len(tickets) <= 1
     stake_total = sum(t.get("stake", 0) for t in tickets)
     assert stake_total <= 5.00 + 1e-6
+
+    # Ensure selected ticket has the highest individual EV
+    cfg_full = yaml.safe_load(GPI_YML)
+    p_true = build_p_true(cfg_full, partants["runners"], h5, h30, stats)
+    runners = [
+        {
+            "id": str(r["id"]),
+            "name": r.get("name", str(r["id"])),
+            "odds": float(h5[str(r["id"])]) if str(r["id"]) in h5 else 0.0,
+            "p": float(p_true[str(r["id"])]) if str(r["id"]) in p_true else 0.0,
+        }
+        for r in partants["runners"]
+        if str(r["id"]) in h5 and str(r["id"]) in p_true
+    ]
+    exp_tickets, _ = allocate_dutching_sp(cfg_full, runners)
+    exp_tickets.sort(key=lambda t: t["ev_ticket"], reverse=True)
+    if tickets:
+        assert tickets[0]["id"] == exp_tickets[0]["id"]
 
     # Combined payout is zero -> combo flag should be False
     cfg = {
