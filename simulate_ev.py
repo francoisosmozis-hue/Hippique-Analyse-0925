@@ -79,6 +79,7 @@ def gate_ev(
     roi_global: float,
     min_payout_combos: float,
     risk_of_ruin: float = 0.0,
+    ev_over_std: float = 0.0,
 ) -> Dict[str, Any]:
     """Return activation flags and failure reasons for SP and combinés."""
 
@@ -102,6 +103,11 @@ def gate_ev(
     if risk_of_ruin > ror_max:
         reasons["sp"].append("ROR_MAX")
         reasons["combo"].append("ROR_MAX")
+
+    sharpe_min = float(cfg.get("SHARPE_MIN", 0.0))
+    if ev_over_std < sharpe_min:
+        reasons["sp"].append("SHARPE_MIN")
+        reasons["combo"].append("SHARPE_MIN")
 
     sp_ok = not reasons["sp"]
     combo_ok = not reasons["combo"]
