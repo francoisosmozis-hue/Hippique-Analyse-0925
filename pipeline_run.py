@@ -220,6 +220,35 @@ def main() -> None:
         stats_ev.get("combined_expected_payout", 0.0),
         stats_ev.get("risk_of_ruin", 0.0),
     )
+
+    # If combinés are blocked but SP is valid, reallocate the combo budget to SP
+    if flags.get("sp") and not flags.get("combo"):
+        cfg_sp = dict(cfg)
+        cfg_sp["SP_RATIO"] = float(cfg.get("SP_RATIO", 0.0)) + float(
+            cfg.get("COMBO_RATIO", 0.0)
+        )
+        tickets, ev_sp = allocate_dutching_sp(cfg_sp, runners)
+        tickets.sort(key=lambda t: t.get("ev_ticket", 0), reverse=True)
+        tickets = tickets[: int(cfg["MAX_TICKETS_SP"])]
+        ev_sp = sum(t.get("ev_ticket", 0.0) for t in tickets)
+        total_stake_sp = sum(t.get("stake", 0.0) for t in tickets)
+        roi_sp = ev_sp / total_stake_sp if total_stake_sp > 0 else 0.0
+        stats_ev = (
+            simulate_ev_batch(tickets, bankroll=float(cfg.get("BUDGET_TOTAL", 0.0)))
+            if tickets
+            else {"ev": 0.0}
+        )
+        ev_global = float(stats_ev.get("ev", 0.0))
+        roi_global = float(stats_ev.get("roi", 0.0))
+        flags = gate_ev(
+            cfg_sp,
+            ev_sp,
+            ev_global,
+            roi_sp,
+            roi_global,
+            stats_ev.get("combined_expected_payout", 0.0),
+            stats_ev.get("risk_of_ruin", 0.0),
+        )
     if flags.get("reasons", {}).get("sp"):
         print(
             "Blocage SP dû aux seuils: "
