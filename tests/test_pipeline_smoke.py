@@ -109,6 +109,12 @@ def test_smoke_run(tmp_path):
     stake_total = sum(t.get("stake", 0) for t in tickets)
     assert stake_total <= 5.00 + 1e-6
 
+    ev_sum = sum(t.get("ev_ticket", 0) for t in tickets)
+    assert data["ev"]["sp"] == pytest.approx(ev_sum)
+    roi_sp = ev_sum / stake_total if stake_total else 0.0
+    data_roi = float(data["ev"]["sp"]) / stake_total if stake_total else 0.0
+    assert data_roi == pytest.approx(roi_sp)
+
     # Ensure selected ticket has the highest individual EV
     cfg_full = yaml.safe_load(GPI_YML)
     p_true = build_p_true(cfg_full, partants["runners"], h5, h30, stats)
@@ -139,7 +145,6 @@ def test_smoke_run(tmp_path):
         "MIN_PAYOUT_COMBOS": 10.0,
     }
     stats_ev = simulate_ev_batch(tickets, bankroll=cfg["BUDGET_TOTAL"])
-    roi_sp = float(data["ev"]["sp"]) / stake_total if stake_total else 0.0
     flags = gate_ev(
         cfg,
         ev_sp=float(data["ev"]["sp"]),
