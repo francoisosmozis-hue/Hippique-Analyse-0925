@@ -54,7 +54,7 @@ def allocate_dutching_sp(cfg: Dict[str, float], runners: List[Dict[str, Any]]) -
     for runner, p, o, k in zip(runners, probs, odds, kellys):
         f = min(cap, k * kelly_coef / total_kelly)
         stake = round(budget * f, 2)
-        if stake <= 0:
+        if stake <= 0 or stake < float(cfg["MIN_STAKE_SP"]):
             continue
         ev_ticket = stake * (p * (o - 1.0) - (1.0 - p))
         ticket = {
