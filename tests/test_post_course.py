@@ -15,8 +15,8 @@ def sample_tickets():
             "model": "GPI",
         },
         "tickets": [
-            {"id": "1", "name": "A", "stake": 2.0, "odds": 5.0},
-            {"id": "3", "name": "C", "stake": 1.0, "odds": 3.0},
+            {"id": "1", "name": "A", "stake": 2.0, "odds": 5.0, "p": 0.3},
+            {"id": "3", "name": "C", "stake": 1.0, "odds": 3.0, "p": 0.2},
         ],
     }
 
@@ -51,14 +51,21 @@ def test_post_course_flow(tmp_path: Path):
     assert results == [1, 0]
     rois = [t.get("roi_reel") for t in data.get("tickets", [])]
     assert rois == [pytest.approx(4.0), pytest.approx(-1.0)]
+    briers = [t.get("brier") for t in data.get("tickets", [])]
+    assert briers == [pytest.approx(0.49), pytest.approx(0.04)]
     assert data["roi_reel"] == pytest.approx((10.0 - 3.0) / 3.0)
     assert data["result_moyen"] == pytest.approx(0.5)
     assert data["roi_reel_moyen"] == pytest.approx(1.5)
+    assert data["brier_total"] == pytest.approx(0.53)
+    assert data["brier_moyen"] == pytest.approx(0.265)
+
 
     arrivee_out = json.loads((tmp_path / "arrivee.json").read_text(encoding="utf-8"))
     assert arrivee_out["roi_reel"] == data["roi_reel"]
     assert arrivee_out["result_moyen"] == data["result_moyen"]
     assert arrivee_out["roi_reel_moyen"] == data["roi_reel_moyen"]
+    assert arrivee_out["brier_total"] == data["brier_total"]
+    assert arrivee_out["brier_moyen"] == data["brier_moyen"]
 
     ligne_path = tmp_path / "ligne_resultats.csv"
     assert ligne_path.exists()
@@ -67,8 +74,12 @@ def test_post_course_flow(tmp_path: Path):
     row_cols = row.split(";")
     idx_result = header_cols.index("result_moyen")
     idx_roi_ticket = header_cols.index("ROI_reel_moyen")
+    idx_brier_total = header_cols.index("Brier_total")
+    idx_brier_moyen = header_cols.index("Brier_moyen")
     assert float(row_cols[idx_result]) == pytest.approx(0.5)
     assert float(row_cols[idx_roi_ticket]) == pytest.approx(1.5)
+    assert float(row_cols[idx_brier_total]) == pytest.approx(0.53)
+    assert float(row_cols[idx_brier_moyen]) == pytest.approx(0.265)
     
     cmd_txt = (tmp_path / "cmd_update_excel.txt").read_text(encoding="utf-8")
     assert "update_excel_with_results.py" in cmd_txt
@@ -102,6 +113,10 @@ def test_post_course_flow_multi_places(tmp_path: Path):
     assert results == [1, 1]
     rois = [t.get("roi_reel") for t in data.get("tickets", [])]
     assert rois == [pytest.approx(4.0), pytest.approx(2.0)]
+    briers = [t.get("brier") for t in data.get("tickets", [])]
+    assert briers == [pytest.approx(0.49), pytest.approx(0.64)]
     assert data["roi_reel"] == pytest.approx((13.0 - 3.0) / 3.0)
     assert data["result_moyen"] == pytest.approx(1.0)
     assert data["roi_reel_moyen"] == pytest.approx(3.0)
+    assert data["brier_total"] == pytest.approx(1.13)
+    assert data["brier_moyen"] == pytest.approx(0.565)
