@@ -314,3 +314,12 @@ def test_green_flag_failure_reasons(
     assert res["green"] is False
     assert res["failure_reasons"] == expected_reasons
 
+
+def test_variance_cap_triggers_failure() -> None:
+    """High variance should trigger a failure reason when capped."""
+    tickets = [{"p": 0.5, "odds": 10.0, "stake": 20}]
+
+    res = compute_ev_roi(tickets, budget=100, variance_cap=0.01)
+
+    assert res["green"] is False
+    assert f"variance above {0.01:.2f} * bankroll^2" in res["failure_reasons"]
