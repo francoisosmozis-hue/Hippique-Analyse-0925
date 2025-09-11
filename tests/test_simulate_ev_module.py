@@ -34,6 +34,10 @@ def test_allocate_dutching_sp_cap():
         {"id": "2", "name": "B", "odds": 5.0, "p": 0.3},
     ]
     tickets, ev_sp = allocate_dutching_sp(cfg, runners)
+    id_to_p = {r["id"]: r["p"] for r in runners}
+    assert all("p" in t for t in tickets)
+    for t in tickets:
+        assert math.isclose(t["p"], id_to_p[t["id"]])
     total_budget = cfg["BUDGET_TOTAL"] * cfg["SP_RATIO"]
     assert sum(t["stake"] for t in tickets) <= total_budget + 1e-6
     assert all(t["stake"] <= total_budget * cfg["MAX_VOL_PAR_CHEVAL"] + 1e-6 for t in tickets)
