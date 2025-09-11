@@ -79,6 +79,7 @@ def test_gate_ev_thresholds():
         roi_sp=0.05,
         roi_global=0.1,
         min_payout_combos=12.0,
+        risk_of_ruin=0.01,
     )
     assert not res["sp"]
     assert not res["combo"]
@@ -90,6 +91,7 @@ def test_gate_ev_thresholds():
         roi_sp=0.5,
         roi_global=0.3,
         min_payout_combos=5.0,
+        risk_of_ruin=0.01,
     )
     assert res["sp"] and not res["combo"]
 
@@ -101,3 +103,4 @@ def test_simulate_ev_batch_uses_simulate_wrapper():
     # missing probability.  When the estimated payout is below the minimum
     # threshold, ``compute_ev_roi`` reports the condition in failure reasons.
     assert "expected payout for combined bets" in " ".join(res.get("failure_reasons", []))
+    assert "risk_of_ruin" in res
