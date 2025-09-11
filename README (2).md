@@ -193,6 +193,14 @@ python scripts/runner_chain.py --reunion R1 --course C3 --phase RESULT \
   --excel excel/modele_suivi_courses_hippiques.xlsx
 ```
 
+Le script autonome `post_course.py` accepte désormais l'option `--places`
+pour indiquer le nombre de positions rémunérées à considérer (1 par défaut).
+Par exemple :
+
+```bash
+python post_course.py --arrivee arrivee.json --tickets tickets.json --places 3
+```
+
 ### Calculer EV/ROI via la CLI
 ```bash
 python cli_ev.py --tickets tickets.json --budget 100 \
