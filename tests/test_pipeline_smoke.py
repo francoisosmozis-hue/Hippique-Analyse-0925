@@ -123,8 +123,18 @@ def test_smoke_run(tmp_path):
     ev_sum = sum(t.get("ev_ticket", 0) for t in tickets)
     assert data["ev"]["sp"] == pytest.approx(ev_sum)
     roi_sp = ev_sum / stake_total if stake_total else 0.0
-    data_roi = float(data["ev"]["sp"]) / stake_total if stake_total else 0.0
-    assert data_roi == pytest.approx(roi_sp)
+    assert data["ev"]["roi_sp"] == pytest.approx(roi_sp)
+
+    if tickets:
+        stats_ev = simulate_ev_batch(tickets, bankroll=5)
+    else:
+        stats_ev = {"ev": 0.0, "roi": 0.0, "risk_of_ruin": 0.0, "clv": 0.0}
+    assert data["ev"]["global"] == pytest.approx(stats_ev.get("ev", 0.0))
+    assert data["ev"]["roi_global"] == pytest.approx(stats_ev.get("roi", 0.0))
+    assert data["ev"]["risk_of_ruin"] == pytest.approx(
+        stats_ev.get("risk_of_ruin", 0.0)
+    )
+    assert data["ev"]["clv_moyen"] == pytest.approx(stats_ev.get("clv", 0.0))
 
     # Ensure selected ticket has the highest individual EV
     cfg_full = yaml.safe_load(GPI_YML)
