@@ -183,6 +183,9 @@ def main() -> None:
 
     tickets, ev_sp = allocate_dutching_sp(cfg, runners)
     
+    # Prioritize tickets by individual EV before truncating
+    tickets.sort(key=lambda t: t.get("ev_ticket", 0), reverse=True)
+    
     # Limit number of tickets
     tickets = tickets[: int(cfg["MAX_TICKETS_SP"])]
 
