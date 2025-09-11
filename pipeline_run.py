@@ -195,7 +195,8 @@ def main() -> None:
     # Limit number of tickets
     tickets = tickets[: int(cfg["MAX_TICKETS_SP"])]
 
-    # Compute ROI for SP tickets
+    # Recompute EV/ROI after truncation
+    ev_sp = sum(t.get("ev_ticket", 0.0) for t in tickets)
     total_stake_sp = sum(t.get("stake", 0.0) for t in tickets)
     roi_sp = ev_sp / total_stake_sp if total_stake_sp > 0 else 0.0
 
