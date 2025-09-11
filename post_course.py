@@ -34,7 +34,7 @@ def _save_text(path: str | Path, txt: str) -> None:
 def _compute_gains(
     tickets: Iterable[Dict[str, Any]],
     winners: List[str],
-) -> tuple[float, float, float, float, float]:
+) -> tuple[float, float, float, float, float, float, float]:
     """Update ``tickets`` in place with realised gains and return aggregates.
 
     Parameters
@@ -48,22 +48,34 @@ def _compute_gains(
     Returns
     -------
     tuple
-        ``(total_gain, total_stake, roi, ev_total, diff_ev_total)`` where ``roi``
-        is the return on investment computed as ``(gain - stake) / stake``.
+        ``(total_gain, total_stake, roi, ev_total, diff_ev_total, result_mean, roi_ticket_mean)``
+        where ``roi`` is the overall return on investment computed as
+        ``(gain - stake) / stake``.
     """
 
     total_stake = 0.0
     total_gain = 0.0
     total_ev = 0.0
     total_diff_ev = 0.0
+    total_result = 0.0
+    total_roi_ticket = 0.0
+    n_tickets = 0
     winner_set = {str(w) for w in winners}
     for t in tickets:
         stake = float(t.get("stake", 0.0))
         odds = float(t.get("odds", 0.0))
         gain = stake * odds if str(t.get("id")) in winner_set else 0.0
         t["gain_reel"] = round(gain, 2)
+        t["result"] = 1 if gain else 0
+        roi_reel = (gain - stake) / stake if stake else 0.0
+        t["roi_reel"] = round(roi_reel, 4)
+        
         total_stake += stake
         total_gain += gain
+
+        total_result += t["result"]
+        total_roi_ticket += roi_reel
+        n_tickets += 1
         
         ev = None
         if "ev" in t:
@@ -78,7 +90,17 @@ def _compute_gains(
             total_diff_ev += diff_ev
 
     roi = (total_gain - total_stake) / total_stake if total_stake else 0.0
-    return total_gain, total_stake, roi, total_ev, total_diff_ev
+    result_mean = total_result / n_tickets if n_tickets else 0.0
+    roi_ticket_mean = total_roi_ticket / n_tickets if n_tickets else 0.0
+    return (
+        total_gain,
+        total_stake,
+        roi,
+        total_ev,
+        total_diff_ev,
+        result_mean,
+        roi_ticket_mean,
+    )
 
 
 def main() -> None:
@@ -103,10 +125,18 @@ def main() -> None:
     tickets_data = _load_json(args.tickets)
 
     winners = [str(x) for x in arrivee_data.get("result", [])[: args.places]]
-    total_gain, total_stake, roi, ev_total, diff_ev_total = _compute_gains(
-        tickets_data.get("tickets", []), winners
-    )
+    (
+        total_gain,
+        total_stake,
+        roi,
+        ev_total,
+        diff_ev_total,
+        result_moyen,
+        roi_reel_moyen,
+    ) = _compute_gains(tickets_data.get("tickets", []), winners)
     tickets_data["roi_reel"] = roi
+    tickets_data["result_moyen"] = result_moyen
+    tickets_data["roi_reel_moyen"] = roi_reel_moyen
     _save_json(args.tickets, tickets_data)
 
     outdir = Path(args.outdir or Path(args.tickets).parent)
@@ -117,6 +147,8 @@ def main() -> None:
         "result": winners,
         "gains": total_gain,
         "roi_reel": roi,
+        "result_moyen": result_moyen,
+        "roi_reel_moyen": roi_reel_moyen,
         "ev_total": ev_total,
         "ev_ecart_total": diff_ev_total,
     }
@@ -125,12 +157,16 @@ def main() -> None:
     ligne = (
         f'{meta.get("rc", "")};{meta.get("hippodrome", "")};{meta.get("date", "")};'
         f'{meta.get("discipline", "")};{total_stake:.2f};{roi:.4f};'
+        f'{result_moyen:.4f};{roi_reel_moyen:.4f};'
         f'{ev_total:.2f};{diff_ev_total:.2f};'
         f'{meta.get("model", meta.get("MODEL", ""))}'
     )
     _save_text(
         outdir / "ligne_resultats.csv",
-        "R/C;hippodrome;date;discipline;mises;ROI_reel;EV_total;EV_ecart;model\n" + ligne + "\n",
+        (
+            "R/C;hippodrome;date;discipline;mises;ROI_reel;result_moyen;"
+            "ROI_reel_moyen;EV_total;EV_ecart;model\n" + ligne + "\n"
+        ),
     )
     
     cmd = (
