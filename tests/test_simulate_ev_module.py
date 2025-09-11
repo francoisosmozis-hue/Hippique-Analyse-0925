@@ -28,7 +28,12 @@ def test_kelly_fraction_basic():
 
 
 def test_allocate_dutching_sp_cap():
-    cfg = {"BUDGET_TOTAL": 10.0, "SP_RATIO": 1.0, "MAX_VOL_PAR_CHEVAL": 0.60}
+    cfg = {
+        "BUDGET_TOTAL": 10.0,
+        "SP_RATIO": 1.0,
+        "MAX_VOL_PAR_CHEVAL": 0.60,
+        "KELLY_FRACTION": 0.5,
+    }
     runners = [
         {"id": "1", "name": "A", "odds": 2.0, "p": 0.6},
         {"id": "2", "name": "B", "odds": 5.0, "p": 0.3},
@@ -39,13 +44,22 @@ def test_allocate_dutching_sp_cap():
     for t in tickets:
         assert math.isclose(t["p"], id_to_p[t["id"]])
     total_budget = cfg["BUDGET_TOTAL"] * cfg["SP_RATIO"]
-    assert sum(t["stake"] for t in tickets) <= total_budget + 1e-6
-    assert all(t["stake"] <= total_budget * cfg["MAX_VOL_PAR_CHEVAL"] + 1e-6 for t in tickets)
+    total_stake = sum(t["stake"] for t in tickets)
+    assert math.isclose(total_stake, total_budget * cfg["KELLY_FRACTION"], rel_tol=1e-6)
+    assert all(
+        t["stake"] <= total_budget * cfg["MAX_VOL_PAR_CHEVAL"] + 1e-6 for t in tickets
+    )
     k1 = kelly_fraction(0.6, 2.0 - 1.0)
     k2 = kelly_fraction(0.3, 5.0 - 1.0)
     total_k = k1 + k2
-    stake1 = round(total_budget * min(cfg["MAX_VOL_PAR_CHEVAL"], k1 / total_k), 2)
-    stake2 = round(total_budget * min(cfg["MAX_VOL_PAR_CHEVAL"], k2 / total_k), 2)
+    stake1 = round(
+        total_budget * min(cfg["MAX_VOL_PAR_CHEVAL"], k1 * cfg["KELLY_FRACTION"] / total_k),
+        2,
+    )
+    stake2 = round(
+        total_budget * min(cfg["MAX_VOL_PAR_CHEVAL"], k2 * cfg["KELLY_FRACTION"] / total_k),
+        2,
+    )
     expected_ev = stake1 * (0.6 * (2.0 - 1.0) - (1.0 - 0.6)) + stake2 * (
         0.3 * (5.0 - 1.0) - (1.0 - 0.3)
     )
