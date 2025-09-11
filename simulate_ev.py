@@ -67,7 +67,24 @@ def allocate_dutching_sp(cfg: Dict[str, float], runners: List[Dict[str, Any]]) -
             "ev_ticket": ev_ticket,
         }
         tickets.append(ticket)
-        ev_sp += ev_ticket
+        
+    if tickets:
+        total_stake = sum(t["stake"] for t in tickets)
+        diff = round(raw_total - total_stake, 2)
+        adjust = round(diff / step) * step
+        if adjust:
+            best = max(tickets, key=lambda t: t["ev_ticket"])
+            new_stake = round(best["stake"] + adjust, 2)
+            if new_stake >= float(cfg["MIN_STAKE_SP"]):
+                best["stake"] = new_stake
+                best["ev_ticket"] = new_stake * (
+                    best["p"] * (best["odds"] - 1.0) - (1.0 - best["p"])
+                )
+            else:
+                tickets.remove(best)
+        ev_sp = sum(t["ev_ticket"] for t in tickets)
+    else:
+        ev_sp = 0.0
     return tickets, ev_sp
 
 
