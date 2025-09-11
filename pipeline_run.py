@@ -188,7 +188,12 @@ def main() -> None:
     ev_global = float(stats_ev.get("ev", 0.0))
 
     # Gating before emitting tickets
-    flags = gate_ev(cfg, ev_sp, ev_global, cfg["MIN_PAYOUT_COMBOS"])
+    flags = gate_ev(
+        cfg,
+        ev_sp,
+        ev_global,
+        stats_ev.get("combined_expected_payout", 0.0),
+    )
     if not flags.get("sp", False):
         tickets = []
         ev_sp = ev_global = 0.0
