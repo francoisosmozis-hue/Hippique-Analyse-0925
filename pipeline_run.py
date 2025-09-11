@@ -179,9 +179,7 @@ def main() -> None:
             })
 
     tickets, ev_sp = allocate_dutching_sp(cfg, runners)
-    for t in tickets:
-        t["p"] = float(p_true[str(t["id"])])
-
+    
     # Limit number of tickets
     tickets = tickets[: int(cfg["MAX_TICKETS_SP"])]
 
