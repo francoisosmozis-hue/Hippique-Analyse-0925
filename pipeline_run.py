@@ -218,6 +218,16 @@ def main() -> None:
         stats_ev.get("combined_expected_payout", 0.0),
         stats_ev.get("risk_of_ruin", 0.0),
     )
+    if flags.get("reasons", {}).get("sp"):
+        print(
+            "Blocage SP dû aux seuils: "
+            + ", ".join(flags["reasons"]["sp"])
+        )
+    if flags.get("reasons", {}).get("combo"):
+        print(
+            "Blocage combinés dû aux seuils: "
+            + ", ".join(flags["reasons"]["combo"])
+        )
     if not flags.get("sp", False):
         tickets = []
         ev_sp = ev_global = 0.0
