@@ -4,7 +4,8 @@
 This script reads the official arrival of a race and updates the tickets
 with the realised gains and ROI.  It also produces convenient artefacts
 for bookkeeping such as a CSV summary line and the command required to
-update the tracking spreadsheet.
+update the tracking spreadsheet.  The number of paid positions can be
+controlled via the ``--places`` option (defaults to one winner).
 """
 from __future__ import annotations
 
@@ -72,12 +73,18 @@ def main() -> None:
         default="modele_suivi_courses_hippiques.xlsx",
         help="Excel workbook for update command",
     )
+    ap.add_argument(
+        "--places",
+        type=int,
+        default=1,
+        help="Nombre de positions rémunérées à prendre en compte",
+    )
     args = ap.parse_args()
 
     arrivee_data = _load_json(args.arrivee)
     tickets_data = _load_json(args.tickets)
 
-    winners = [str(x) for x in arrivee_data.get("result", [])[:1]]
+    winners = [str(x) for x in arrivee_data.get("result", [])[: args.places]]
     total_gain, total_stake, roi = _compute_gains(tickets_data.get("tickets", []), winners)
     tickets_data["roi_reel"] = roi
     _save_json(args.tickets, tickets_data)
