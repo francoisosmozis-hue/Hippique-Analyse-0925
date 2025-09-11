@@ -92,4 +92,5 @@ def simulate_ev_batch(tickets: List[Dict[str, Any]], bankroll: float) -> Dict[st
     This is a thin wrapper around :func:`compute_ev_roi` that also hooks into
     :func:`simulate_wrapper` to estimate probabilities of combined bets.
     """
-    return compute_ev_roi(tickets, budget=bankroll, simulate_fn=simulate_wrapper)
+    stats = compute_ev_roi(tickets, budget=bankroll, simulate_fn=simulate_wrapper)
+    return stats
