@@ -30,14 +30,23 @@ def test_kelly_fraction_basic():
 def test_allocate_dutching_sp_cap():
     cfg = {"BUDGET_TOTAL": 10.0, "SP_RATIO": 1.0, "MAX_VOL_PAR_CHEVAL": 0.60}
     runners = [
-        {"id": "1", "name": "A", "odds": 2.0},
-        {"id": "2", "name": "B", "odds": 5.0},
+        {"id": "1", "name": "A", "odds": 2.0, "p": 0.6},
+        {"id": "2", "name": "B", "odds": 5.0, "p": 0.3},
     ]
     tickets, ev_sp = allocate_dutching_sp(cfg, runners)
     total_budget = cfg["BUDGET_TOTAL"] * cfg["SP_RATIO"]
     assert sum(t["stake"] for t in tickets) <= total_budget + 1e-6
     assert all(t["stake"] <= total_budget * cfg["MAX_VOL_PAR_CHEVAL"] + 1e-6 for t in tickets)
-    assert ev_sp != 0
+    k1 = kelly_fraction(0.6, 2.0 - 1.0)
+    k2 = kelly_fraction(0.3, 5.0 - 1.0)
+    total_k = k1 + k2
+    stake1 = round(total_budget * min(cfg["MAX_VOL_PAR_CHEVAL"], k1 / total_k), 2)
+    stake2 = round(total_budget * min(cfg["MAX_VOL_PAR_CHEVAL"], k2 / total_k), 2)
+    expected_ev = stake1 * (0.6 * (2.0 - 1.0) - (1.0 - 0.6)) + stake2 * (
+        0.3 * (5.0 - 1.0) - (1.0 - 0.3)
+    )
+    assert math.isclose(ev_sp, expected_ev)
+
 
 
 def test_gate_ev_thresholds():
