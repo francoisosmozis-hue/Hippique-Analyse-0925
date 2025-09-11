@@ -29,17 +29,25 @@ def partants_sample():
             {"id": "2", "name": "B"},
             {"id": "3", "name": "C"},
             {"id": "4", "name": "D"},
-        ],
-        "rc": "R1C1",
-        "hippodrome": "Test",
-        "date": "2025-09-10",
-        "discipline": "trot",
-        "runners": [
-            {"id": "1", "name": "A"},
-            {"id": "2", "name": "B"},
-            {"id": "3", "name": "C"},
-            {"id": "4", "name": "D"},
+        ],        
     }
+
+def odds_h30():
+    return {"1": 2.0, "2": 3.0, "3": 4.0, "4": 5.0}
+
+
+def odds_h5():
+    return {"1": 2.2, "2": 3.1, "3": 4.2, "4": 6.0}
+
+
+def stats_sample():
+    return {
+        "1": {"j_win": 1, "e_win": 1},
+        "2": {"j_win": 1, "e_win": 1},
+        "3": {"j_win": 1, "e_win": 1},
+        "4": {"j_win": 1, "e_win": 1},
+    }
+
 
 def test_smoke_run(tmp_path):
     partants = partants_sample()
@@ -60,7 +68,7 @@ def test_smoke_run(tmp_path):
     partants_path.write_text(json.dumps(partants), encoding="utf-8")
     gpi_path.write_text(GPI_YML, encoding="utf-8")
 
-   cmd = [
+    cmd = [
         sys.executable,
         "pipeline_run.py",
         "--h30",
