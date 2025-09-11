@@ -3,9 +3,10 @@ import subprocess
 import sys
 
 import yaml
+import pytest
 
 from simulate_ev import allocate_dutching_sp, gate_ev, simulate_ev_batch
-from pipeline_run import build_p_true
+from pipeline_run import build_p_true, load_yaml
 
 GPI_YML = """\
 BUDGET_TOTAL: 5
@@ -166,3 +167,13 @@ def test_je_bonus_coef_sensitivity():
     p_no_bonus = build_p_true({"JE_BONUS_COEF": 0.0}, partants, h5, h30, stats)
 
     assert p_default["1"] > p_no_bonus["1"]
+
+
+def test_invalid_config_ratio(tmp_path):
+    bad_yml = GPI_YML.replace("SP_RATIO: 0.6", "SP_RATIO: 0.7").replace(
+        "COMBO_RATIO: 0.4", "COMBO_RATIO: 0.5"
+    )
+    cfg_path = tmp_path / "gpi_bad.yml"
+    cfg_path.write_text(bad_yml, encoding="utf-8")
+    with pytest.raises(RuntimeError):
+        load_yaml(str(cfg_path))
