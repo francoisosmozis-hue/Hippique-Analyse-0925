@@ -21,7 +21,7 @@ SIG = inspect.signature(compute_ev_roi)
 EV_THRESHOLD = SIG.parameters["ev_threshold"].default
 ROI_THRESHOLD = SIG.parameters["roi_threshold"].default
 KELLY_CAP = SIG.parameters["kelly_cap"].default
-
+ROUND_TO = SIG.parameters["round_to"].default
 
 def test_single_bet_ev_positive_and_negative() -> None:
     """Check EV sign for a positive and a negative edge."""
@@ -42,8 +42,8 @@ def test_dutching_group_equal_profit() -> None:
         {"p": 0.55, "odds": 4.0, "stake": 50, "dutching": "A"},
     ]
     # Large budget so that Kelly capping does not interfere
-    compute_ev_roi(tickets, budget=10_000)
-
+    compute_ev_roi(tickets, budget=10_000, round_to=0)
+    
     total_stake = sum(t["stake"] for t in tickets)
     profit1 = tickets[0]["stake"] * (tickets[0]["odds"] - 1)
     profit2 = tickets[1]["stake"] * (tickets[1]["odds"] - 1)
@@ -62,7 +62,7 @@ def test_combined_bet_with_simulator() -> None:
         return 0.25
 
     tickets = [{"odds": 10.0, "stake": 10, "legs": ["leg1", "leg2"]}]
-    res = compute_ev_roi(tickets, budget=1_000, simulate_fn=fake_simulator)
+    res = compute_ev_roi(tickets, budget=1_000, simulate_fn=fake_simulator, round_to=0)
 
     assert called == [["leg1", "leg2"]]
     assert math.isclose(res["ev"], 15.0)
@@ -167,6 +167,20 @@ def test_stakes_normalized_when_exceeding_budget() -> None:
     assert math.isclose(tickets[0]["stake"], expected1)
     assert math.isclose(tickets[1]["stake"], expected2)
     assert math.isclose(res["total_stake_normalized"], budget)
+
+
+def test_rounded_stakes_sum_to_budget() -> None:
+    """After rounding, total stakes should match the budget."""
+    budget = 1.0
+    tickets = [
+        {"p": 0.9, "odds": 10.0, "stake": 0.33},
+        {"p": 0.9, "odds": 10.0, "stake": 0.33},
+    ]
+
+    compute_ev_roi(tickets, budget=budget, kelly_cap=1.0, round_to=ROUND_TO)
+
+    total = sum(t["stake"] for t in tickets)
+    assert math.isclose(total, budget, abs_tol=ROUND_TO / 2)
 
 
 def test_ticket_metrics_and_std_dev() -> None:
