@@ -14,6 +14,7 @@ SP_RATIO: 0.6
 COMBO_RATIO: 0.4
 EV_MIN_SP: 0.20
 EV_MIN_GLOBAL: 0.40
+ROR_MAX: 0.05
 MAX_VOL_PAR_CHEVAL: 0.60
 MAX_TICKETS_SP: 1
 ALLOW_JE_NA: true
@@ -143,6 +144,7 @@ def test_smoke_run(tmp_path):
         "ROI_MIN_SP": 0.5,
         "ROI_MIN_GLOBAL": 0.5,
         "MIN_PAYOUT_COMBOS": 10.0,
+        "ROR_MAX": 1.0,
     }
     stats_ev = simulate_ev_batch(tickets, bankroll=cfg["BUDGET_TOTAL"])
     flags = gate_ev(
@@ -152,9 +154,33 @@ def test_smoke_run(tmp_path):
         roi_sp=roi_sp,
         roi_global=stats_ev.get("roi", 0.0),
         min_payout_combos=stats_ev.get("combined_expected_payout", 0.0),
+        risk_of_ruin=stats_ev.get("risk_of_ruin", 0.0),
     )
     assert not flags["sp"]
     assert not flags["combo"]
+
+    cfg_ror = {
+        "BUDGET_TOTAL": 5,
+        "SP_RATIO": 0.6,
+        "EV_MIN_SP": 0.0,
+        "EV_MIN_GLOBAL": 0.0,
+        "ROI_MIN_SP": 0.0,
+        "ROI_MIN_GLOBAL": 0.0,
+        "MIN_PAYOUT_COMBOS": 0.0,
+        "ROR_MAX": 0.0,
+    }
+    flags_ror = gate_ev(
+        cfg_ror,
+        ev_sp=float(data["ev"]["sp"]),
+        ev_global=float(data["ev"]["global"]),
+        roi_sp=roi_sp,
+        roi_global=stats_ev.get("roi", 0.0),
+        min_payout_combos=stats_ev.get("combined_expected_payout", 0.0),
+        risk_of_ruin=stats_ev.get("risk_of_ruin", 0.0),
+    )
+    assert not flags_ror["sp"]
+    assert not flags_ror["combo"]
+
 
 
 def test_drift_coef_sensitivity():
