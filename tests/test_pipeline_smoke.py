@@ -3,6 +3,7 @@ import subprocess
 import sys
 
 from simulate_ev import gate_ev, simulate_ev_batch
+from pipeline_run import build_p_true
 
 GPI_YML = """\
 BUDGET_TOTAL: 5
@@ -17,6 +18,7 @@ PAUSE_EXOTIQUES: false
 OUTDIR_DEFAULT: "runs/test"
 EXCEL_PATH: "modele_suivi_courses_hippiques.xlsx"
 CALIB_PATH: "payout_calibration.yaml"
+DRIFT_COEF: 0.05
 MODEL: "GPI v5.1"
 """
 
@@ -119,3 +121,16 @@ def test_smoke_run(tmp_path):
         min_payout_combos=stats_ev.get("combined_expected_payout", 0.0),
     )
     assert not flags["combo"]
+
+
+def test_drift_coef_sensitivity():
+    partants = partants_sample()["runners"]
+    h30 = odds_h30()
+    h5 = odds_h5()
+    stats = stats_sample()
+
+    p_default = build_p_true({}, partants, h5, h30, stats)
+    p_no_drift = build_p_true({"DRIFT_COEF": 0.0}, partants, h5, h30, stats)
+
+    assert abs(p_default["4"] - p_no_drift["4"]) > 1e-9
+
