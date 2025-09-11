@@ -48,6 +48,8 @@ def allocate_dutching_sp(cfg: Dict[str, float], runners: List[Dict[str, Any]]) -
     kellys = [kelly_fraction(p, o - 1.0) for p, o in zip(probs, odds)]
     total_kelly = sum(kellys) or 1.0
     kelly_coef = float(cfg.get("KELLY_FRACTION", 0.5))
+    raw_total = budget * kelly_coef
+    step = float(cfg.get("ROUND_TO_SP", 0.10))
 
     tickets: List[Dict[str, Any]] = []
     ev_sp = 0.0
