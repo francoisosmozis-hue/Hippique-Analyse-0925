@@ -38,3 +38,31 @@ def test_combination_order(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     p1 = sw.simulate_wrapper([1, 2])
     p2 = sw.simulate_wrapper([2, 1])
     assert math.isclose(p1, 0.25) and math.isclose(p2, 0.25)
+
+
+def test_cache_prevents_recomputation(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    """Repeated calls to a missing combination should use cached result."""
+    cal = tmp_path / "probabilities.yaml"
+    cal.write_text("")
+    monkeypatch.setattr(sw, "CALIBRATION_PATH", cal)
+    monkeypatch.setattr(sw, "_calibration_cache", {})
+    monkeypatch.setattr(sw, "_calibration_mtime", 0.0)
+
+    counter = {"iters": 0}
+
+    class CountingIterable:
+        def __init__(self, items):
+            self.items = items
+
+        def __iter__(self):
+            counter["iters"] += 1
+            return iter(self.items)
+
+    legs = CountingIterable(["x", "y"])
+
+    sw.simulate_wrapper(legs)
+    assert counter["iters"] == 2
+
+    counter["iters"] = 0
+    sw.simulate_wrapper(legs)
+    assert counter["iters"] == 1
