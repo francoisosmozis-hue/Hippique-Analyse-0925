@@ -74,15 +74,22 @@ def gate_ev(
     cfg: Dict[str, float],
     ev_sp: float,
     ev_global: float,
+    roi_sp: float,
+    roi_global: float,
     min_payout_combos: float,
 ) -> Dict[str, bool]:
-    """Return activation flags for SP and combinés based on EV thresholds."""
+    """Return activation flags for SP and combinés based on EV/ROI thresholds."""
 
     sp_budget = float(cfg.get("BUDGET_TOTAL", 0.0)) * float(cfg.get("SP_RATIO", 1.0))
-    sp_ok = ev_sp >= float(cfg.get("EV_MIN_SP", 0.0)) * sp_budget
+    sp_ok = (
+        ev_sp >= float(cfg.get("EV_MIN_SP", 0.0)) * sp_budget
+        and roi_sp >= float(cfg.get("ROI_MIN_SP", 0.0))
+    )
 
     combo_ok = (
-        ev_global >= float(cfg.get("EV_MIN_GLOBAL", 0.0)) * float(cfg.get("BUDGET_TOTAL", 0.0))
+        ev_global
+        >= float(cfg.get("EV_MIN_GLOBAL", 0.0)) * float(cfg.get("BUDGET_TOTAL", 0.0))
+        and roi_global >= float(cfg.get("ROI_MIN_GLOBAL", 0.0))
         and min_payout_combos >= float(cfg.get("MIN_PAYOUT_COMBOS", 0.0))
     )
 
