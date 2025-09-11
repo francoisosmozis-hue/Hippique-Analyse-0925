@@ -132,7 +132,7 @@ def test_smoke_run(tmp_path):
     cfg = {
         "BUDGET_TOTAL": 5,
         "SP_RATIO": 0.6,
-        EV_MIN_SP": 0.0,
+        "EV_MIN_SP": 0.0,
         "EV_MIN_GLOBAL": 0.0,
         "ROI_MIN_SP": 0.5,
         "ROI_MIN_GLOBAL": 0.5,
