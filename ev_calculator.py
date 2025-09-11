@@ -409,6 +409,7 @@ def compute_ev_roi(
             "roi_individual": baseline_roi,
             "ticket_metrics_individual": baseline_metrics,
             "optimized_stakes": optimized_stakes,
+            "combined_expected_payout": opt_combined_payout,
         }
         if not green_flag:
             result["failure_reasons"] = reasons
@@ -438,6 +439,7 @@ def compute_ev_roi(
         "ev_over_std": ev_over_std,
         "variance": total_variance,
         "ticket_metrics": ticket_metrics,
+        "combined_expected_payout": combined_expected_payout,
     }
     if not green_flag:
         result["failure_reasons"] = reasons
