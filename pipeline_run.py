@@ -99,9 +99,7 @@ def build_p_true(cfg, partants, odds_h5, odds_h30, stats_je) -> dict:
         base = 1.0 / o5
         je = stats_je.get(cid, {})
         bonus = (je.get("j_win", 0) + je.get("e_win", 0)) * float(cfg["JE_BONUS_COEF"])
-        drift = 0.0
-        if cid in odds_h30:
-            drift = float(odds_h30[cid]) - o5
+        drift = o5 - float(odds_h30.get(cid, o5))
         coef = float(cfg.get("DRIFT_COEF", 0.05))
         weight = base * (1.0 + bonus) * (1.0 - coef * drift)
         weights[cid] = max(weight, 0.0)
