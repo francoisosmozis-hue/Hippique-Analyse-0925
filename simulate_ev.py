@@ -55,6 +55,7 @@ def allocate_dutching_sp(cfg: Dict[str, float], runners: List[Dict[str, Any]]) -
         stake = round(budget * f, 2)
         if stake <= 0:
             continue
+        ev_ticket = stake * (p * (o - 1.0) - (1.0 - p))
         ticket = {
             "type": "SP",
             "id": runner.get("id"),
@@ -62,9 +63,10 @@ def allocate_dutching_sp(cfg: Dict[str, float], runners: List[Dict[str, Any]]) -
             "odds": o,
             "stake": stake,
             "p": p,
+            "ev_ticket": ev_ticket,
         }
         tickets.append(ticket)
-        ev_sp += stake * (p * (o - 1.0) - (1.0 - p))
+        ev_sp += ev_ticket
     return tickets, ev_sp
 
 
