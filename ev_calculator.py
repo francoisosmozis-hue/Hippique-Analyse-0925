@@ -152,6 +152,7 @@ def compute_ev_roi(
     roi_threshold: float = 0.20,
     kelly_cap: float = 0.60,
     optimize: bool = False,
+    variance_cap: Optional[float] = None,
 ) -> Dict[str, Any]:
     """Compute EV and ROI for a list of betting tickets.
 
@@ -202,6 +203,8 @@ def compute_ev_roi(
     """
     if budget <= 0:
         raise ValueError("budget must be > 0")
+    if variance_cap is not None and variance_cap <= 0:
+        raise ValueError("variance_cap must be > 0")
         
     # First adjust stakes for dutching groups
     _apply_dutching(tickets)
@@ -296,6 +299,25 @@ def compute_ev_roi(
         total_variance *= scale ** 2
         total_stake_normalized = budget
 
+    variance_exceeded = False
+    var_limit = variance_cap * budget ** 2 if variance_cap is not None else None
+    if var_limit is not None and total_variance > var_limit:
+        variance_exceeded = True
+        scale = math.sqrt(var_limit / total_variance)
+        for t, metrics in zip(tickets, ticket_metrics):
+            t["stake"] *= scale
+            t["ev"] *= scale
+            t["variance"] *= scale ** 2
+            metrics["stake"] *= scale
+            metrics["ev"] *= scale
+            metrics["variance"] *= scale ** 2
+            t["roi"] = t["ev"] / t["stake"] if t["stake"] else 0.0
+            metrics["roi"] = t["roi"]
+        total_ev *= scale
+        combined_expected_payout *= scale
+        total_variance *= scale ** 2
+        total_stake_normalized *= scale
+
     roi_total = total_ev / total_stake_normalized if total_stake_normalized else 0.0
     ev_ratio = total_ev / budget if budget else 0.0
     ruin_risk = risk_of_ruin(total_ev, total_variance, budget)
@@ -339,6 +361,21 @@ def compute_ev_roi(
             if "legs" in t:
                 opt_combined_payout += p * stake_opt * odds
 
+        variance_exceeded_opt = False
+        if var_limit is not None and opt_variance > var_limit:
+            variance_exceeded_opt = True
+            scale = math.sqrt(var_limit / opt_variance)
+            for t, metrics, stake_opt in zip(tickets, optimized_metrics, optimized_stakes):
+                metrics["stake"] *= scale
+                metrics["ev"] *= scale
+                metrics["variance"] *= scale ** 2
+                stake_scaled = stake_opt * scale
+                t["optimized_stake"] = stake_scaled
+            opt_ev *= scale
+            opt_variance *= scale ** 2
+            opt_stake_sum *= scale
+            opt_combined_payout *= scale
+
         roi_opt = opt_ev / opt_stake_sum if opt_stake_sum else 0.0
         ev_ratio_opt = opt_ev / budget if budget else 0.0
         ruin_risk_opt = risk_of_ruin(opt_ev, opt_variance, budget)
@@ -352,6 +389,8 @@ def compute_ev_roi(
             reasons.append(f"ROI below {roi_threshold:.2f}")
         if has_combined and opt_combined_payout <= 10:
             reasons.append("expected payout for combined bets ≤ 10€")
+        if variance_exceeded_opt:
+            reasons.append(f"variance above {variance_cap:.2f} * bankroll^2")
 
         green_flag = not reasons
         result = {
@@ -364,6 +403,7 @@ def compute_ev_roi(
             "clv": (total_clv / clv_count) if clv_count else 0.0,
             "std_dev": std_dev_opt,
             "ev_over_std": ev_over_std_opt,
+            "variance": opt_variance,
             "ticket_metrics": optimized_metrics,
             "ev_individual": baseline_ev,
             "roi_individual": baseline_roi,
@@ -381,6 +421,8 @@ def compute_ev_roi(
         reasons.append(f"ROI below {roi_threshold:.2f}")
     if has_combined and combined_expected_payout <= 10:
         reasons.append("expected payout for combined bets ≤ 10€")
+    if variance_exceeded:
+        reasons.append(f"variance above {variance_cap:.2f} * bankroll^2")
 
     green_flag = not reasons
 
@@ -394,6 +436,7 @@ def compute_ev_roi(
         "clv": (total_clv / clv_count) if clv_count else 0.0,
         "std_dev": std_dev,
         "ev_over_std": ev_over_std,
+        "variance": total_variance,
         "ticket_metrics": ticket_metrics,
     }
     if not green_flag:
