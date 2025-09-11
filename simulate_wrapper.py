@@ -38,6 +38,7 @@ def _load_calibration() -> None:
         data = yaml.safe_load(fh) or {}
         parsed: Dict[str, Dict[str, float]] = {}
         for k, v in data.items():
+            key = "|".join(sorted(k.split("|")))
             alpha = float(v.get("alpha", 1.0))
             beta = float(v.get("beta", 1.0))
             p = float(v.get("p", alpha / (alpha + beta)))
@@ -45,7 +46,7 @@ def _load_calibration() -> None:
                 raise ValueError(
                     f"Invalid calibration for {k}: alpha={alpha}, beta={beta}, p={p}"
                 )
-            parsed[k] = {"alpha": alpha, "beta": beta, "p": p}
+            parsed[key] = {"alpha": alpha, "beta": beta, "p": p}
         _calibration_cache = parsed
     _calibration_mtime = mtime
 
@@ -66,7 +67,7 @@ def simulate_wrapper(legs: Iterable[object]) -> float:
         available, and the resulting probabilities are multiplied..
     """
     _load_calibration()
-    key = "|".join(map(str, legs))
+    key = "|".join(sorted(map(str, legs)))
     if key in _calibration_cache:
         return _calibration_cache[key]["p"]
 
