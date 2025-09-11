@@ -157,6 +157,21 @@ def test_drift_coef_sensitivity():
     assert abs(p_default["4"] - p_no_drift["4"]) > 1e-9
 
 
+def test_negative_drift_increases_p_true():
+    partants = partants_sample()["runners"]
+    h30 = odds_h30()
+    h5_no_drift = odds_h30()
+    h5_neg = dict(h30)
+    h5_neg["1"] = h30["1"] - 0.5
+    stats = stats_sample()
+
+    cfg = {"JE_BONUS_COEF": 0.001}
+    p_no_drift = build_p_true(cfg, partants, h5_no_drift, h30, stats)
+    p_neg = build_p_true(cfg, partants, h5_neg, h30, stats)
+
+    assert p_neg["1"] > p_no_drift["1"]
+
+
 def test_je_bonus_coef_sensitivity():
     partants = partants_sample()["runners"]
     h30 = odds_h30()
