@@ -6,6 +6,7 @@ EV_MIN_SP: 0.20
 EV_MIN_GLOBAL: 0.40
 ROI_MIN_SP: 0.20
 ROI_MIN_GLOBAL: 0.40
+ROR_MAX: 0.05
 MAX_VOL_PAR_CHEVAL: 0.60
 MAX_TICKETS_SP: 2             # nombre max de tickets émis
 ALLOW_JE_NA: false         # true => Stats J/E manquantes tolérées (neutre)
