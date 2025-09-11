@@ -111,6 +111,7 @@ Dans **Settings → Secrets and variables → Actions** du repo, créer :
 | ROI estimé global | **≥ +20 %** |
 | Payout min combinés | **> 10 €** |
 Coefficient de drift des cotes (`DRIFT_COEF`) | **0.05** |
+| Coefficient bonus J/E (`JE_BONUS_COEF`) | **0.001** |
 | Pastille **VERT** si | EV≥40% & ROI≥20% & (si combinés) payout>10€ |
 
 **SP Dutching (placé)** : EV(€) par jambe = `stake * [ p*(odds-1) − (1−p) ]`  
