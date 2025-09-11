@@ -32,6 +32,7 @@ REQ_KEYS = [
     "REQUIRE_DRIFT_LOG",
     "REQUIRE_ODDS_WINDOWS",
     "MIN_PAYOUT_COMBOS",
+    "MAX_TICKETS_SP",
 ]
 
 
@@ -41,6 +42,7 @@ def load_yaml(path: str) -> dict:
     cfg.setdefault("REQUIRE_DRIFT_LOG", True)
     cfg.setdefault("REQUIRE_ODDS_WINDOWS", [30, 5])
     cfg.setdefault("MIN_PAYOUT_COMBOS", 10.0)
+    cfg.setdefault("MAX_TICKETS_SP", 2)
     missing = [k for k in REQ_KEYS if k not in cfg]
     if missing:
         raise RuntimeError(f"Config incomplète: clés manquantes {missing}")
@@ -180,8 +182,8 @@ def main() -> None:
     for t in tickets:
         t["p"] = float(p_true[str(t["id"])])
 
-    # Limit to two tickets
-    tickets = tickets[:2]
+    # Limit number of tickets
+    tickets = tickets[: int(cfg["MAX_TICKETS_SP"])]
 
     # Global EV using simulations
     stats_ev = simulate_ev_batch(tickets, bankroll=float(cfg.get("BUDGET_TOTAL", 0.0))) if tickets else {"ev": 0.0}
