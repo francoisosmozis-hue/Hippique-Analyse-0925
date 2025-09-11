@@ -31,7 +31,10 @@ def _save_text(path: str | Path, txt: str) -> None:
     p.write_text(txt, encoding="utf-8")
 
 
-def _compute_gains(tickets: Iterable[Dict[str, Any]], winners: List[str]) -> tuple[float, float, float]:
+def _compute_gains(
+    tickets: Iterable[Dict[str, Any]],
+    winners: List[str],
+) -> tuple[float, float, float, float, float]:
     """Update ``tickets`` in place with realised gains and return aggregates.
 
     Parameters
@@ -45,12 +48,14 @@ def _compute_gains(tickets: Iterable[Dict[str, Any]], winners: List[str]) -> tup
     Returns
     -------
     tuple
-        ``(total_gain, total_stake, roi)`` where ``roi`` is the return on
-        investment computed as ``(gain - stake) / stake``.
+        ``(total_gain, total_stake, roi, ev_total, diff_ev_total)`` where ``roi``
+        is the return on investment computed as ``(gain - stake) / stake``.
     """
 
     total_stake = 0.0
     total_gain = 0.0
+    total_ev = 0.0
+    total_diff_ev = 0.0
     winner_set = {str(w) for w in winners}
     for t in tickets:
         stake = float(t.get("stake", 0.0))
@@ -59,8 +64,21 @@ def _compute_gains(tickets: Iterable[Dict[str, Any]], winners: List[str]) -> tup
         t["gain_reel"] = round(gain, 2)
         total_stake += stake
         total_gain += gain
+        
+        ev = None
+        if "ev" in t:
+            ev = float(t.get("ev", 0.0))
+        elif "p" in t:
+            p = float(t.get("p", 0.0))
+            ev = stake * (p * (odds - 1) - (1 - p))
+        if ev is not None:
+            diff_ev = gain - ev
+            t["ev_ecart"] = round(diff_ev, 2)
+            total_ev += ev
+            total_diff_ev += diff_ev
+
     roi = (total_gain - total_stake) / total_stake if total_stake else 0.0
-    return total_gain, total_stake, roi
+    return total_gain, total_stake, roi, total_ev, total_diff_ev
 
 
 def main() -> None:
@@ -85,7 +103,9 @@ def main() -> None:
     tickets_data = _load_json(args.tickets)
 
     winners = [str(x) for x in arrivee_data.get("result", [])[: args.places]]
-    total_gain, total_stake, roi = _compute_gains(tickets_data.get("tickets", []), winners)
+    total_gain, total_stake, roi, ev_total, diff_ev_total = _compute_gains(
+        tickets_data.get("tickets", []), winners
+    )
     tickets_data["roi_reel"] = roi
     _save_json(args.tickets, tickets_data)
 
@@ -97,15 +117,22 @@ def main() -> None:
         "result": winners,
         "gains": total_gain,
         "roi_reel": roi,
+        "ev_total": ev_total,
+        "ev_ecart_total": diff_ev_total,
     }
     _save_json(outdir / "arrivee.json", arrivee_out)
 
     ligne = (
         f'{meta.get("rc", "")};{meta.get("hippodrome", "")};{meta.get("date", "")};'
-        f'{meta.get("discipline", "")};{total_stake:.2f};{roi:.4f};{meta.get("model", meta.get("MODEL", ""))}'
+        f'{meta.get("discipline", "")};{total_stake:.2f};{roi:.4f};'
+        f'{ev_total:.2f};{diff_ev_total:.2f};'
+        f'{meta.get("model", meta.get("MODEL", ""))}'
     )
-    _save_text(outdir / "ligne_resultats.csv", "R/C;hippodrome;date;discipline;mises;ROI_reel;model\n" + ligne + "\n")
-
+    _save_text(
+        outdir / "ligne_resultats.csv",
+        "R/C;hippodrome;date;discipline;mises;ROI_reel;EV_total;EV_ecart;model\n" + ligne + "\n",
+    )
+    
     cmd = (
         f'python update_excel_with_results.py '
         f'--excel "{args.excel}" '
