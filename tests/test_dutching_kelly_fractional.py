@@ -29,3 +29,10 @@ def test_remainder_allocated_to_max_fk():
     max_fk_idx = df["f_kelly"].idxmax()
     assert df.loc[max_fk_idx, "Stake (€)"] == df["Stake (€)"].max()
     assert df["Stake (€)"].sum() == 5.0
+    
+
+def test_shares_sum_to_one_after_rounding():
+    odds = [2.0, 3.5, 4.0]
+    probs = [0.4, 0.3, 0.3]
+    df = dutching_kelly_fractional(odds, total_stake=10.0, probs=probs, round_to=0.01)
+    assert round(df["Part"].sum(), 10) == 1.0
