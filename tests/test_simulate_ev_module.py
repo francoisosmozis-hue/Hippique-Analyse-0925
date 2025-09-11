@@ -86,6 +86,8 @@ def test_gate_ev_thresholds():
         min_payout_combos=12.0,
     )
     assert res["sp"] and res["combo"]
+    assert res["reasons"] == {"sp": [], "combo": []}
+    
     res = gate_ev(
         cfg,
         ev_sp=5.0,
@@ -97,6 +99,8 @@ def test_gate_ev_thresholds():
     )
     assert not res["sp"]
     assert not res["combo"]
+    assert set(res["reasons"]["sp"]) == {"EV_MIN_SP", "ROI_MIN_SP"}
+    assert set(res["reasons"]["combo"]) == {"EV_MIN_GLOBAL", "ROI_MIN_GLOBAL"}
     # Low expected payout should block combined bets even if EV thresholds pass
     res = gate_ev(
         cfg,
@@ -108,6 +112,32 @@ def test_gate_ev_thresholds():
         risk_of_ruin=0.01,
     )
     assert res["sp"] and not res["combo"]
+    assert res["reasons"]["sp"] == []
+    assert res["reasons"]["combo"] == ["MIN_PAYOUT_COMBOS"]
+
+    # Exceeding risk of ruin should block both types and record ROR_MAX
+    cfg_ror = {
+        "BUDGET_TOTAL": 100.0,
+        "SP_RATIO": 0.5,
+        "EV_MIN_SP": 0.0,
+        "EV_MIN_GLOBAL": 0.0,
+        "ROI_MIN_SP": 0.0,
+        "ROI_MIN_GLOBAL": 0.0,
+        "MIN_PAYOUT_COMBOS": 0.0,
+        "ROR_MAX": 0.05,
+    }
+    res = gate_ev(
+        cfg_ror,
+        ev_sp=0.0,
+        ev_global=0.0,
+        roi_sp=0.0,
+        roi_global=0.0,
+        min_payout_combos=0.0,
+        risk_of_ruin=0.1,
+    )
+    assert not res["sp"] and not res["combo"]
+    assert res["reasons"]["sp"] == ["ROR_MAX"]
+    assert res["reasons"]["combo"] == ["ROR_MAX"]
 
 
 def test_simulate_ev_batch_uses_simulate_wrapper():
