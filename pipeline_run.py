@@ -34,6 +34,7 @@ REQ_KEYS = [
     "MIN_PAYOUT_COMBOS",
     "MAX_TICKETS_SP",
     "DRIFT_COEF",
+    "JE_BONUS_COEF",
 ]
 
 
@@ -45,6 +46,7 @@ def load_yaml(path: str) -> dict:
     cfg.setdefault("MIN_PAYOUT_COMBOS", 10.0)
     cfg.setdefault("MAX_TICKETS_SP", 2)
     cfg.setdefault("DRIFT_COEF", 0.05)
+    cfg.setdefault("JE_BONUS_COEF", 0.001)
     missing = [k for k in REQ_KEYS if k not in cfg]
     if missing:
         raise RuntimeError(f"Config incomplète: clés manquantes {missing}")
@@ -94,7 +96,7 @@ def build_p_true(cfg, partants, odds_h5, odds_h30, stats_je) -> dict:
         o5 = float(odds_h5[cid])
         base = 1.0 / o5
         je = stats_je.get(cid, {})
-        bonus = (je.get("j_win", 0) + je.get("e_win", 0)) * 0.001
+        bonus = (je.get("j_win", 0) + je.get("e_win", 0)) * float(cfg["JE_BONUS_COEF"])
         drift = 0.0
         if cid in odds_h30:
             drift = float(odds_h30[cid]) - o5
