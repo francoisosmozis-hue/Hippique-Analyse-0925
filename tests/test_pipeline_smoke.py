@@ -21,6 +21,7 @@ OUTDIR_DEFAULT: "runs/test"
 EXCEL_PATH: "modele_suivi_courses_hippiques.xlsx"
 CALIB_PATH: "payout_calibration.yaml"
 DRIFT_COEF: 0.05
+JE_BONUS_COEF: 0.001
 MODEL: "GPI v5.1"
 """
 
@@ -149,8 +150,19 @@ def test_drift_coef_sensitivity():
     h5 = odds_h5()
     stats = stats_sample()
 
-    p_default = build_p_true({}, partants, h5, h30, stats)
-    p_no_drift = build_p_true({"DRIFT_COEF": 0.0}, partants, h5, h30, stats)
+    p_default = build_p_true({"JE_BONUS_COEF": 0.001}, partants, h5, h30, stats)
+    p_no_drift = build_p_true({"DRIFT_COEF": 0.0, "JE_BONUS_COEF": 0.001}, partants, h5, h30, stats)
 
     assert abs(p_default["4"] - p_no_drift["4"]) > 1e-9
 
+
+def test_je_bonus_coef_sensitivity():
+    partants = partants_sample()["runners"]
+    h30 = odds_h30()
+    h5 = odds_h5()
+    stats = {"1": {"j_win": 5, "e_win": 0}}
+
+    p_default = build_p_true({"JE_BONUS_COEF": 0.001}, partants, h5, h30, stats)
+    p_no_bonus = build_p_true({"JE_BONUS_COEF": 0.0}, partants, h5, h30, stats)
+
+    assert p_default["1"] > p_no_bonus["1"]
