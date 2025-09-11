@@ -138,7 +138,7 @@ def main() -> None:
     ap.add_argument("--outdir", default=None)
     args = ap.parse_args()
 
-     cfg = load_yaml(args.gpi)
+    cfg = load_yaml(args.gpi)
     outdir = Path(args.outdir or cfg["OUTDIR_DEFAULT"])
 
 
