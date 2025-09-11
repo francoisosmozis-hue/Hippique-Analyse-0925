@@ -36,6 +36,7 @@ REQ_KEYS = [
     "REQUIRE_ODDS_WINDOWS",
     "MIN_PAYOUT_COMBOS",
     "MAX_TICKETS_SP",
+    "MIN_STAKE_SP",
     "DRIFT_COEF",
     "JE_BONUS_COEF",
 ]
@@ -51,6 +52,7 @@ def load_yaml(path: str) -> dict:
     cfg.setdefault("DRIFT_COEF", 0.05)
     cfg.setdefault("JE_BONUS_COEF", 0.001)
     cfg.setdefault("KELLY_FRACTION", 0.5)
+    cfg.setdefault("MIN_STAKE_SP", 0.1)
     cfg.setdefault("ROI_MIN_SP", 0.0)
     cfg.setdefault("ROI_MIN_GLOBAL", 0.0)
     cfg.setdefault("ROR_MAX", 0.05)
