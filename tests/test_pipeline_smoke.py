@@ -6,7 +6,7 @@ import yaml
 import pytest
 
 from simulate_ev import allocate_dutching_sp, gate_ev, simulate_ev_batch
-from pipeline_run import build_p_true, load_yaml
+from pipeline_run import build_p_true, compute_drift_dict, load_yaml
 
 GPI_YML = """\
 BUDGET_TOTAL: 5
@@ -58,6 +58,16 @@ def stats_sample():
         "3": {"j_win": 1, "e_win": 1},
         "4": {"j_win": 1, "e_win": 1},
     }
+
+
+def test_drift_missing_snapshots():
+    """Ensure drift dict reports ids absent from either snapshot."""
+    h30 = {"1": 2.0, "2": 3.0}
+    h5 = {"2": 3.1, "3": 4.0}
+    id2name = {"1": "A", "2": "B", "3": "C"}
+    res = compute_drift_dict(h30, h5, id2name)
+    assert set(res["missing_h30"]) == {"3"}
+    assert set(res["missing_h5"]) == {"1"}
 
 
 def test_smoke_run(tmp_path):
