@@ -47,11 +47,29 @@ def test_post_course_flow(tmp_path: Path):
     data = json.loads(tickets_path.read_text(encoding="utf-8"))
     gains = [t.get("gain_reel", 0) for t in data.get("tickets", [])]
     assert gains == [10.0, 0.0]
+    results = [t.get("result") for t in data.get("tickets", [])]
+    assert results == [1, 0]
+    rois = [t.get("roi_reel") for t in data.get("tickets", [])]
+    assert rois == [pytest.approx(4.0), pytest.approx(-1.0)]
     assert data["roi_reel"] == pytest.approx((10.0 - 3.0) / 3.0)
+    assert data["result_moyen"] == pytest.approx(0.5)
+    assert data["roi_reel_moyen"] == pytest.approx(1.5)
 
     arrivee_out = json.loads((tmp_path / "arrivee.json").read_text(encoding="utf-8"))
     assert arrivee_out["roi_reel"] == data["roi_reel"]
-    assert (tmp_path / "ligne_resultats.csv").exists()
+    assert arrivee_out["result_moyen"] == data["result_moyen"]
+    assert arrivee_out["roi_reel_moyen"] == data["roi_reel_moyen"]
+
+    ligne_path = tmp_path / "ligne_resultats.csv"
+    assert ligne_path.exists()
+    header, row = ligne_path.read_text(encoding="utf-8").strip().splitlines()
+    header_cols = header.split(";")
+    row_cols = row.split(";")
+    idx_result = header_cols.index("result_moyen")
+    idx_roi_ticket = header_cols.index("ROI_reel_moyen")
+    assert float(row_cols[idx_result]) == pytest.approx(0.5)
+    assert float(row_cols[idx_roi_ticket]) == pytest.approx(1.5)
+    
     cmd_txt = (tmp_path / "cmd_update_excel.txt").read_text(encoding="utf-8")
     assert "update_excel_with_results.py" in cmd_txt
 
@@ -80,4 +98,10 @@ def test_post_course_flow_multi_places(tmp_path: Path):
     data = json.loads(tickets_path.read_text(encoding="utf-8"))
     gains = [t.get("gain_reel", 0) for t in data.get("tickets", [])]
     assert gains == [10.0, 3.0]
+    results = [t.get("result") for t in data.get("tickets", [])]
+    assert results == [1, 1]
+    rois = [t.get("roi_reel") for t in data.get("tickets", [])]
+    assert rois == [pytest.approx(4.0), pytest.approx(2.0)]
     assert data["roi_reel"] == pytest.approx((13.0 - 3.0) / 3.0)
+    assert data["result_moyen"] == pytest.approx(1.0)
+    assert data["roi_reel_moyen"] == pytest.approx(3.0)
