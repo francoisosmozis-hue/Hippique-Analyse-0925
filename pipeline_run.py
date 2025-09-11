@@ -181,6 +181,7 @@ def export(
         outdir / "ligne.csv",
         "R/C;hippodrome;date;discipline;mises;EV_globale;model\n" + ligne + "\n",
     )
+    cmd = (
         f'python update_excel_with_results.py '
         f'--excel "{cfg.get("EXCEL_PATH")}" '
         f'--arrivee "{outdir / "arrivee_officielle.json"}" '
