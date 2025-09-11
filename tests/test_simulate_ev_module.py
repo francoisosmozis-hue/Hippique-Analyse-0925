@@ -33,6 +33,7 @@ def test_allocate_dutching_sp_cap():
         "SP_RATIO": 1.0,
         "MAX_VOL_PAR_CHEVAL": 0.60,
         "KELLY_FRACTION": 0.5,
+        "MIN_STAKE_SP": 0.1,
     }
     runners = [
         {"id": "1", "name": "A", "odds": 2.0, "p": 0.6},
@@ -63,6 +64,26 @@ def test_allocate_dutching_sp_cap():
     expected_ev = stake1 * (0.6 * (2.0 - 1.0) - (1.0 - 0.6)) + stake2 * (
         0.3 * (5.0 - 1.0) - (1.0 - 0.3)
     )
+    assert math.isclose(ev_sp, expected_ev)
+
+
+def test_allocate_dutching_sp_min_stake_filter():
+    cfg = {
+        "BUDGET_TOTAL": 0.49,
+        "SP_RATIO": 1.0,
+        "MAX_VOL_PAR_CHEVAL": 0.60,
+        "KELLY_FRACTION": 0.5,
+        "MIN_STAKE_SP": 0.1,
+    }
+    runners = [
+        {"id": "1", "name": "A", "odds": 2.0, "p": 0.6},
+        {"id": "2", "name": "B", "odds": 5.0, "p": 0.3},
+    ]
+    tickets, ev_sp = allocate_dutching_sp(cfg, runners)
+    assert len(tickets) == 1
+    assert tickets[0]["id"] == "1"
+    assert tickets[0]["stake"] >= cfg["MIN_STAKE_SP"]
+    expected_ev = tickets[0]["stake"] * (0.6 * (2.0 - 1.0) - (1.0 - 0.6))
     assert math.isclose(ev_sp, expected_ev)
 
 
