@@ -118,6 +118,7 @@ def test_smoke_run(tmp_path):
 
     # Ensure selected ticket has the highest individual EV
     cfg_full = yaml.safe_load(GPI_YML)
+    cfg_full["MIN_STAKE_SP"] = 0.1
     p_true = build_p_true(cfg_full, partants["runners"], h5, h30, stats)
     runners = [
         {
