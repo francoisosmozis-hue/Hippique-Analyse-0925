@@ -80,6 +80,22 @@ def save_text(path: Path, txt: str) -> None:
 
 
 def compute_drift_dict(h30: dict, h5: dict, id2name: dict) -> dict:
+    """Compute odds drift between two snapshots.
+
+    Parameters
+    ----------
+    h30, h5 : dict
+        Mapping of ``id`` -> cote at H-30 and H-5 respectively.
+    id2name : dict
+        Mapping ``id`` -> human readable name.
+
+    Returns
+    -------
+    dict
+        A dictionary containing the per-runner drift as well as lists of
+        identifiers missing from either snapshot.
+    """
+
     diff = []
     for cid in set(h30) & set(h5):
         delta = float(h5[cid]) - float(h30[cid])
@@ -95,7 +111,11 @@ def compute_drift_dict(h30: dict, h5: dict, id2name: dict) -> dict:
     diff.sort(key=lambda r: r["delta"])
     for rank, row in enumerate(diff, start=1):
         row["rank_delta"] = rank
-    return {"drift": diff}
+        
+    missing_h30 = sorted(set(h5) - set(h30))
+    missing_h5 = sorted(set(h30) - set(h5))
+
+    return {"drift": diff, "missing_h30": missing_h30, "missing_h5": missing_h5}
 
 
 def build_p_true(cfg, partants, odds_h5, odds_h30, stats_je) -> dict:
