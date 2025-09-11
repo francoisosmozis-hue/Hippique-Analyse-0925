@@ -132,6 +132,12 @@ bankroll réduit augmentent ce risque qui tend vers `1`. Pour maintenir un
 risque cible (ex. 1 %), ajuster `KELLY_CAP` : diminuer ce cap réduit les mises,
 la variance et donc le `risk_of_ruin`.
 
+### 🎯 Limite de variance
+
+Un paramètre optionnel `variance_cap` permet de plafonner la volatilité globale.
+Si la variance cumulée des tickets dépasse `variance_cap * bankroll^2`, les mises
+sont réduites proportionnellement et le panier est signalé comme trop risqué.
+
 ### 🤖 Auto‑sélection des tickets
 
 Chaque appel à `compute_ev_roi` renvoie désormais une liste `ticket_metrics` où
