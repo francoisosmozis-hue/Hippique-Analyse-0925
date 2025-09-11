@@ -22,6 +22,8 @@ REQ_KEYS = [
     "COMBO_RATIO",
     "EV_MIN_SP",
     "EV_MIN_GLOBAL",
+    "ROI_MIN_SP",
+    "ROI_MIN_GLOBAL",
     "MAX_VOL_PAR_CHEVAL",
     "ALLOW_JE_NA",
     "PAUSE_EXOTIQUES",
@@ -47,6 +49,8 @@ def load_yaml(path: str) -> dict:
     cfg.setdefault("MAX_TICKETS_SP", 2)
     cfg.setdefault("DRIFT_COEF", 0.05)
     cfg.setdefault("JE_BONUS_COEF", 0.001)
+    cfg.setdefault("ROI_MIN_SP", 0.0)
+    cfg.setdefault("ROI_MIN_GLOBAL", 0.0)
     missing = [k for k in REQ_KEYS if k not in cfg]
     if missing:
         raise RuntimeError(f"Config incomplète: clés manquantes {missing}")
@@ -191,15 +195,22 @@ def main() -> None:
     # Limit number of tickets
     tickets = tickets[: int(cfg["MAX_TICKETS_SP"])]
 
-    # Global EV using simulations
+    # Compute ROI for SP tickets
+    total_stake_sp = sum(t.get("stake", 0.0) for t in tickets)
+    roi_sp = ev_sp / total_stake_sp if total_stake_sp > 0 else 0.0
+
+    # Global EV/ROI using simulations
     stats_ev = simulate_ev_batch(tickets, bankroll=float(cfg.get("BUDGET_TOTAL", 0.0))) if tickets else {"ev": 0.0}
     ev_global = float(stats_ev.get("ev", 0.0))
+    roi_global = float(stats_ev.get("roi", 0.0))
 
     # Gating before emitting tickets
     flags = gate_ev(
         cfg,
         ev_sp,
         ev_global,
+        roi_sp,
+        roi_global,
         stats_ev.get("combined_expected_payout", 0.0),
     )
     if not flags.get("sp", False):
