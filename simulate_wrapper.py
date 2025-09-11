@@ -72,6 +72,7 @@ def simulate_wrapper(legs: Iterable[object]) -> float:
         return _calibration_cache[key]["p"]
 
     prob = 1.0
+    alpha = beta = 1.0
     for leg in legs:
         s = str(leg)
         if s in _calibration_cache:
@@ -80,5 +81,7 @@ def simulate_wrapper(legs: Iterable[object]) -> float:
         else:
             alpha = beta = 1.0
         prob *= alpha / (alpha + beta)
+
+    _calibration_cache[key] = {"alpha": alpha, "beta": beta, "p": prob}
     return prob
 
