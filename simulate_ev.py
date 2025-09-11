@@ -27,13 +27,21 @@ def kelly_fraction(p: float, b: float) -> float:
 
 
 def allocate_dutching_sp(cfg: Dict[str, float], runners: List[Dict[str, Any]]) -> tuple[List[Dict[str, Any]], float]:
-    """Allocate SP dutching stakes according to a Kelly share with 60% cap."""
+    """Allocate SP dutching stakes according to a Kelly share with 60% cap.
+
+    When each ``runner`` provides an estimated win probability ``p``, those
+    probabilities are used directly.  Otherwise, probabilities are inferred
+    from decimal ``odds`` via :func:`implied_probs`.
+    """
 
     if not runners:
         return [], 0.0
 
     odds = [float(r["odds"]) for r in runners]
-    probs = implied_probs(odds)
+    if all("p" in r for r in runners):
+        probs = [float(r["p"]) for r in runners]
+    else:
+        probs = implied_probs(odds)
     budget = float(cfg.get("BUDGET_TOTAL", 0.0)) * float(cfg.get("SP_RATIO", 1.0))
     cap = float(cfg.get("MAX_VOL_PAR_CHEVAL", 0.60))
 
