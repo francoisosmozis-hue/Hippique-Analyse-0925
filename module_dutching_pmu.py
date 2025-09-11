@@ -92,11 +92,9 @@ def dutching_kelly_fractional(
     stakes = [s_i * total_stake for s_i in shares]
 
     # Cap 60 % du Kelly brut par cheval (pas de réallocation du reliquat)
-    caps = []
     for i, (st, p, o) in enumerate(zip(stakes, probs, odds)):
         k_raw = _kelly_fraction(_safe_prob(float(p)), float(o))
         cap = total_stake * k_raw * cap_per_horse
-        caps.append(cap)
         stakes[i] = min(st, cap)
 
     # Si dépassement du budget total, réduction proportionnelle
@@ -115,7 +113,7 @@ def dutching_kelly_fractional(
     if abs(diff) >= round_to/2:
         # on pousse le reliquat sur le cheval le plus "efficace" (f_k max)
         try:
-            idx = max(range(n), key=lambda i: stakes[i])
+            idx = max(range(n), key=lambda i: f_k[i])
         except ValueError:
             idx = 0
         stakes[idx] = max(0.0, _round_to(stakes[idx] + diff, round_to))
