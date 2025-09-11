@@ -50,6 +50,8 @@ def load_yaml(path: str) -> dict:
     missing = [k for k in REQ_KEYS if k not in cfg]
     if missing:
         raise RuntimeError(f"Config incomplète: clés manquantes {missing}")
+    if float(cfg["SP_RATIO"]) + float(cfg["COMBO_RATIO"]) > 1.0:
+        raise RuntimeError("SP_RATIO + COMBO_RATIO doit être <= 1.0")
     return cfg
 
 
