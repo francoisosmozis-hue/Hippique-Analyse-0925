@@ -10,8 +10,8 @@ Pipeline **pro** pour planifier, capturer H‑30 / H‑5, analyser et consigner 
 - **Scheduler (*/5 min)** : déclenche auto les fenêtres **H‑30** (snapshots cotes + stats) et **H‑5** (analyse GPI v5.1 + tickets).
 - **Post‑results (*/15 min)** : récupération **arrivées officielles**, **mise à jour Excel** (ROI réel), **upload Drive**.
 
-**Standards verrouillés** (GPI v5.1) :  
-- Budget **max 5 €** / course, **2 tickets max** (SP + 1 combiné éventuel).  
+**Standards verrouillés** (GPI v5.1) :
+- Budget **max 5 €** / course, **2 tickets max** (SP + 1 combiné éventuel, configurable via `MAX_TICKETS_SP`).  
 - **EV globale ≥ +40 %** et **ROI estimé ≥ +20 %** pour valider le **vert**.  
 - Combinés uniquement si **payout attendu > 10 €** (calibration).  
 - **Kelly fractionné** avec **cap 60 %** par cheval.
