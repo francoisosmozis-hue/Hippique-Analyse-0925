@@ -151,6 +151,7 @@ def compute_ev_roi(
     ev_threshold: float = 0.40,
     roi_threshold: float = 0.20,
     kelly_cap: float = 0.60,
+    round_to: float = 0.10,
     optimize: bool = False,
     variance_cap: Optional[float] = None,
 ) -> Dict[str, Any]:
@@ -181,7 +182,10 @@ def compute_ev_roi(
         Minimum ROI required for the ticket set to be considered "green".
     kelly_cap:
         Maximum fraction of the Kelly stake to actually wager.  Defaults to
-        ``0.60``..
+        ``0.60``.
+    round_to:
+        Amount to which individual stakes are rounded.  ``0.10`` by default.
+        Set to ``0`` to disable rounding.
     optimize:
         When ``True`` the stake allocation is optimised globally to maximise
         the sum of expected log-returns under the budget and Kelly cap
@@ -222,6 +226,7 @@ def compute_ev_roi(
     clv_count = 0
     ticket_metrics: List[Dict[str, float]] = []
  
+    processed: List[Dict[str, Any]] = []
     for t in tickets:
         p = t.get("p")
         if p is None:
@@ -256,30 +261,88 @@ def compute_ev_roi(
         else:
             clv = 0.0
             t["clv"] = clv
+            
         kelly_stake = _kelly_fraction(p, odds) * budget
+        max_stake = kelly_stake * kelly_cap
         stake_input = t.get("stake", kelly_stake)
-        stake = min(stake_input, kelly_stake * kelly_cap)
-        t["stake"] = stake
+        capped = stake_input > max_stake
+        stake = min(stake_input, max_stake)
+        if round_to > 0:
+            stake = round(stake / round_to) * round_to
+
+        processed.append(
+            {
+                "ticket": t,
+                "p": p,
+                "odds": odds,
+                "stake": stake,
+                "kelly_stake": kelly_stake,
+                "max_stake": max_stake,
+                "capped": capped,
+                "clv": clv,
+            }
+        )
+        if "legs" in t:
+            has_combined = True
+
+         total_stake = sum(d["stake"] for d in processed)
+    if round_to > 0 and total_stake < budget:
+        remaining = budget - total_stake
+        non_capped = [d for d in processed if not d["capped"]]
+        if non_capped and remaining >= round_to / 2:
+            weight_sum = sum(d["kelly_stake"] for d in non_capped)
+            for d in non_capped:
+                max_extra = d["max_stake"] - d["stake"]
+                if max_extra <= 0:
+                    continue
+                allocation = (
+                    remaining * (d["kelly_stake"] / weight_sum) if weight_sum else 0.0
+                )
+                allocation = min(allocation, max_extra)
+                allocation = math.floor((allocation + 1e-12) / round_to) * round_to
+                d["stake"] += allocation
+                remaining -= allocation
+            if remaining >= round_to / 2:
+                non_capped.sort(key=lambda x: x["kelly_stake"], reverse=True)
+                for d in non_capped:
+                    if remaining < round_to / 2:
+                        break
+                    max_extra = d["max_stake"] - d["stake"]
+                    add_units = min(
+                        int((max_extra + 1e-12) / round_to),
+                        int((remaining + 1e-12) / round_to),
+                    )
+                    if add_units <= 0:
+                        continue
+                    add_amount = add_units * round_to
+                    d["stake"] += add_amount
+                    remaining -= add_amount
+                    if remaining < round_to / 2:
+                        break
+            total_stake = budget - remaining
+
+    for d in processed:
+        t = d["ticket"]
+        stake = d["stake"]
+        p = d["p"]
+        odds = d["odds"]
 
         ev = stake * (p * (odds - 1) - (1 - p))
         variance = p * (stake * (odds - 1)) ** 2 + (1 - p) * (-stake) ** 2 - ev ** 2
         roi = ev / stake if stake else 0.0
         metrics = {
-            "kelly_stake": kelly_stake,
+            "kelly_stake": d["kelly_stake"],
             "stake": stake,
             "ev": ev,
             "roi": roi,
             "variance": variance,
-            "clv": clv,
+            "clv": d["clv"],
         }
         t.update(metrics)
         ticket_metrics.append(metrics)
         total_ev += ev
-        total_stake += stake
         total_variance += variance
-        
         if "legs" in t:
-            has_combined = True
             combined_expected_payout += p * stake * odds
 
     total_stake_normalized = total_stake
