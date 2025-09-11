@@ -50,6 +50,7 @@ def load_yaml(path: str) -> dict:
     cfg.setdefault("MAX_TICKETS_SP", 2)
     cfg.setdefault("DRIFT_COEF", 0.05)
     cfg.setdefault("JE_BONUS_COEF", 0.001)
+    cfg.setdefault("KELLY_FRACTION", 0.5)
     cfg.setdefault("ROI_MIN_SP", 0.0)
     cfg.setdefault("ROI_MIN_GLOBAL", 0.0)
     cfg.setdefault("ROR_MAX", 0.05)
