@@ -34,7 +34,7 @@ def _save_text(path: str | Path, txt: str) -> None:
 def _compute_gains(
     tickets: Iterable[Dict[str, Any]],
     winners: List[str],
-) -> tuple[float, float, float, float, float, float, float]:
+) -> tuple[float, float, float, float, float, float, float, float, float]:
     """Update ``tickets`` in place with realised gains and return aggregates.
 
     Parameters
@@ -48,7 +48,7 @@ def _compute_gains(
     Returns
     -------
     tuple
-        ``(total_gain, total_stake, roi, ev_total, diff_ev_total, result_mean, roi_ticket_mean)``
+        ``(total_gain, total_stake, roi, ev_total, diff_ev_total, result_mean, roi_ticket_mean, brier_total, brier_mean)``
         where ``roi`` is the overall return on investment computed as
         ``(gain - stake) / stake``.
     """
@@ -59,6 +59,7 @@ def _compute_gains(
     total_diff_ev = 0.0
     total_result = 0.0
     total_roi_ticket = 0.0
+    total_brier = 0.0
     n_tickets = 0
     winner_set = {str(w) for w in winners}
     for t in tickets:
@@ -89,9 +90,17 @@ def _compute_gains(
             total_ev += ev
             total_diff_ev += diff_ev
 
+        if "p" in t:
+            p = float(t.get("p", 0.0))
+            brier = (t["result"] - p) ** 2
+            t["brier"] = round(brier, 4)
+            total_brier += brier
+
+
     roi = (total_gain - total_stake) / total_stake if total_stake else 0.0
     result_mean = total_result / n_tickets if n_tickets else 0.0
     roi_ticket_mean = total_roi_ticket / n_tickets if n_tickets else 0.0
+    brier_mean = total_brier / n_tickets if n_tickets else 0.0
     return (
         total_gain,
         total_stake,
@@ -100,6 +109,8 @@ def _compute_gains(
         total_diff_ev,
         result_mean,
         roi_ticket_mean,
+        total_brier,
+        brier_mean,
     )
 
 
@@ -132,11 +143,15 @@ def main() -> None:
         ev_total,
         diff_ev_total,
         result_moyen,
+        brier_total,
+        brier_moyen,
         roi_reel_moyen,
     ) = _compute_gains(tickets_data.get("tickets", []), winners)
     tickets_data["roi_reel"] = roi
     tickets_data["result_moyen"] = result_moyen
     tickets_data["roi_reel_moyen"] = roi_reel_moyen
+    tickets_data["brier_total"] = brier_total
+    tickets_data["brier_moyen"] = brier_moyen
     _save_json(args.tickets, tickets_data)
 
     outdir = Path(args.outdir or Path(args.tickets).parent)
@@ -149,6 +164,8 @@ def main() -> None:
         "roi_reel": roi,
         "result_moyen": result_moyen,
         "roi_reel_moyen": roi_reel_moyen,
+        "brier_total": brier_total,
+        "brier_moyen": brier_moyen,
         "ev_total": ev_total,
         "ev_ecart_total": diff_ev_total,
     }
@@ -158,6 +175,7 @@ def main() -> None:
         f'{meta.get("rc", "")};{meta.get("hippodrome", "")};{meta.get("date", "")};'
         f'{meta.get("discipline", "")};{total_stake:.2f};{roi:.4f};'
         f'{result_moyen:.4f};{roi_reel_moyen:.4f};'
+        f'{brier_total:.4f};{brier_moyen:.4f};'
         f'{ev_total:.2f};{diff_ev_total:.2f};'
         f'{meta.get("model", meta.get("MODEL", ""))}'
     )
@@ -165,7 +183,7 @@ def main() -> None:
         outdir / "ligne_resultats.csv",
         (
             "R/C;hippodrome;date;discipline;mises;ROI_reel;result_moyen;"
-            "ROI_reel_moyen;EV_total;EV_ecart;model\n" + ligne + "\n"
+            "ROI_reel_moyen;Brier_total;Brier_moyen;EV_total;EV_ecart;model\n" + ligne + "\n"
         ),
     )
     
