@@ -184,6 +184,77 @@ def test_smoke_run(tmp_path):
 
 
 
+def test_reallocate_combo_budget_to_sp(tmp_path):
+    partants = partants_sample()
+    h30 = odds_h30()
+    h5 = odds_h5()
+    stats = stats_sample()
+    stats["4"] = {"j_win": 500, "e_win": 0}
+
+    h30_path = tmp_path / "h30.json"
+    h5_path = tmp_path / "h5.json"
+    stats_path = tmp_path / "stats_je.json"
+    partants_path = tmp_path / "partants.json"
+    gpi_path = tmp_path / "gpi.yml"
+    outdir = tmp_path / "out"
+
+    h30_path.write_text(json.dumps(h30), encoding="utf-8")
+    h5_path.write_text(json.dumps(h5), encoding="utf-8")
+    stats_path.write_text(json.dumps(stats), encoding="utf-8")
+    partants_path.write_text(json.dumps(partants), encoding="utf-8")
+
+    gpi_txt = (
+        GPI_YML.replace("EV_MIN_SP: 0.20", "EV_MIN_SP: 0.0")
+        .replace("EV_MIN_GLOBAL: 0.40", "EV_MIN_GLOBAL: 10.0")
+        .replace("ROR_MAX: 0.05", "ROR_MAX: 1.0")
+    )
+    gpi_path.write_text(gpi_txt, encoding="utf-8")
+
+    cmd = [
+        sys.executable,
+        "pipeline_run.py",
+        "--h30",
+        str(h30_path),
+        "--h5",
+        str(h5_path),
+        "--stats-je",
+        str(stats_path),
+        "--partants",
+        str(partants_path),
+        "--gpi",
+        str(gpi_path),
+        "--outdir",
+        str(outdir),
+    ]
+    res = subprocess.run(cmd, capture_output=True, text=True)
+    assert res.returncode == 0, res.stderr
+    assert "Blocage combinés" in res.stdout
+
+    data = json.loads((outdir / "p_finale.json").read_text(encoding="utf-8"))
+    tickets = data["tickets"]
+    assert tickets, "expected at least one SP ticket"
+
+    # Expected allocation when combo budget is reassigned to SP
+    cfg_full = yaml.safe_load(gpi_txt)
+    cfg_full["MIN_STAKE_SP"] = 0.1
+    p_true = build_p_true(cfg_full, partants["runners"], h5, h30, stats)
+    runners = [
+        {
+            "id": str(r["id"]),
+            "name": r.get("name", str(r["id"])),
+            "odds": float(h5[str(r["id"])]) if str(r["id"]) in h5 else 0.0,
+            "p": float(p_true[str(r["id"])]) if str(r["id"]) in p_true else 0.0,
+        }
+        for r in partants["runners"]
+        if str(r["id"]) in h5 and str(r["id"]) in p_true
+    ]
+    cfg_full_sp = dict(cfg_full)
+    cfg_full_sp["SP_RATIO"] = cfg_full["SP_RATIO"] + cfg_full["COMBO_RATIO"]
+    exp_tickets, _ = allocate_dutching_sp(cfg_full_sp, runners)
+    exp_tickets.sort(key=lambda t: t["ev_ticket"], reverse=True)
+    assert tickets[0]["ev_ticket"] == pytest.approx(exp_tickets[0]["ev_ticket"])
+
+
 def test_drift_coef_sensitivity():
     partants = partants_sample()["runners"]
     h30 = odds_h30()
