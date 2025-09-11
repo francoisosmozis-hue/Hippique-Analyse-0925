@@ -285,7 +285,7 @@ def compute_ev_roi(
         if "legs" in t:
             has_combined = True
 
-         total_stake = sum(d["stake"] for d in processed)
+    total_stake = sum(d["stake"] for d in processed)
     if round_to > 0 and total_stake < budget:
         remaining = budget - total_stake
         non_capped = [d for d in processed if not d["capped"]]
