@@ -62,6 +62,9 @@ def test_gate_ev_thresholds():
     res = gate_ev(cfg, ev_sp=5.0, ev_global=30.0, min_payout_combos=12.0)
     assert not res["sp"]
     assert not res["combo"]
+    # Low expected payout should block combined bets even if EV thresholds pass
+    res = gate_ev(cfg, ev_sp=20.0, ev_global=50.0, min_payout_combos=5.0)
+    assert res["sp"] and not res["combo"]
 
 
 def test_simulate_ev_batch_uses_simulate_wrapper():
