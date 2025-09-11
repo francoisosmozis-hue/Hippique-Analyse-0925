@@ -105,6 +105,7 @@ def test_gate_ev_thresholds():
         roi_sp=0.5,
         roi_global=0.3,
         min_payout_combos=12.0,
+        ev_over_std=1.0,
     )
     assert res["sp"] and res["combo"]
     assert res["reasons"] == {"sp": [], "combo": []}
@@ -117,6 +118,7 @@ def test_gate_ev_thresholds():
         roi_global=0.1,
         min_payout_combos=12.0,
         risk_of_ruin=0.01,
+        ev_over_std=1.0,
     )
     assert not res["sp"]
     assert not res["combo"]
@@ -131,6 +133,7 @@ def test_gate_ev_thresholds():
         roi_global=0.3,
         min_payout_combos=5.0,
         risk_of_ruin=0.01,
+        ev_over_std=1.0,
     )
     assert res["sp"] and not res["combo"]
     assert res["reasons"]["sp"] == []
@@ -155,6 +158,7 @@ def test_gate_ev_thresholds():
         roi_global=0.0,
         min_payout_combos=0.0,
         risk_of_ruin=0.1,
+        ev_over_std=1.0,
     )
     assert not res["sp"] and not res["combo"]
     assert res["reasons"]["sp"] == ["ROR_MAX"]
