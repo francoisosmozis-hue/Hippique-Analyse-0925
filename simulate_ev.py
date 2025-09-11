@@ -79,25 +79,34 @@ def gate_ev(
     roi_global: float,
     min_payout_combos: float,
     risk_of_ruin: float = 0.0,
-) -> Dict[str, bool]:
-    """Return activation flags for SP and combinés based on EV/ROI thresholds."""
+) -> Dict[str, Any]:
+    """Return activation flags and failure reasons for SP and combinés."""
 
+    reasons = {"sp": [], "combo": []}
+    
     sp_budget = float(cfg.get("BUDGET_TOTAL", 0.0)) * float(cfg.get("SP_RATIO", 1.0))
-    sp_ok = (
-        ev_sp >= float(cfg.get("EV_MIN_SP", 0.0)) * sp_budget
-        and roi_sp >= float(cfg.get("ROI_MIN_SP", 0.0))
-        and risk_of_ruin <= float(cfg.get("ROR_MAX", 1.0))
-    )
+    
+    if ev_sp < float(cfg.get("EV_MIN_SP", 0.0)) * sp_budget:
+        reasons["sp"].append("EV_MIN_SP")
+    if roi_sp < float(cfg.get("ROI_MIN_SP", 0.0)):
+        reasons["sp"].append("ROI_MIN_SP")
 
-    combo_ok = (
-        ev_global
-        >= float(cfg.get("EV_MIN_GLOBAL", 0.0)) * float(cfg.get("BUDGET_TOTAL", 0.0))
-        and roi_global >= float(cfg.get("ROI_MIN_GLOBAL", 0.0))
-        and min_payout_combos >= float(cfg.get("MIN_PAYOUT_COMBOS", 0.0))
-        and risk_of_ruin <= float(cfg.get("ROR_MAX", 1.0))
-    )
+    if ev_global < float(cfg.get("EV_MIN_GLOBAL", 0.0)) * float(cfg.get("BUDGET_TOTAL", 0.0)):
+        reasons["combo"].append("EV_MIN_GLOBAL")
+    if roi_global < float(cfg.get("ROI_MIN_GLOBAL", 0.0)):
+        reasons["combo"].append("ROI_MIN_GLOBAL")
+    if min_payout_combos < float(cfg.get("MIN_PAYOUT_COMBOS", 0.0)):
+        reasons["combo"].append("MIN_PAYOUT_COMBOS")
 
-    return {"sp": sp_ok, "combo": combo_ok}
+    ror_max = float(cfg.get("ROR_MAX", 1.0))
+    if risk_of_ruin > ror_max:
+        reasons["sp"].append("ROR_MAX")
+        reasons["combo"].append("ROR_MAX")
+
+    sp_ok = not reasons["sp"]
+    combo_ok = not reasons["combo"]
+
+    return {"sp": sp_ok, "combo": combo_ok, "reasons": reasons}
 
 
 def simulate_ev_batch(tickets: List[Dict[str, Any]], bankroll: float) -> Dict[str, Any]:
