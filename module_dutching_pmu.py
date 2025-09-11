@@ -118,7 +118,8 @@ def dutching_kelly_fractional(
             idx = 0
         stakes[idx] = max(0.0, _round_to(stakes[idx] + diff, round_to))
 
-    shares = [st/total_stake for st in stakes]
+    sum_alloc = sum(stakes)
+    shares = [st/sum_alloc if sum_alloc else 0 for st in stakes]
   
     # Calculs gains/EV
     gains = [st * o for st, o in zip(stakes, odds)]
