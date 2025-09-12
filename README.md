@@ -135,6 +135,13 @@ Dans **Settings → Secrets and variables → Actions** du repo, créer :
 | `MIN_PAYOUT_COMBOS` | Gain minimal attendu pour autoriser un ticket combiné. |
 | `ALLOW_JE_NA` | Autorise l'absence de stats jockey/entraîneur lors de l'analyse. |
 
+Ces seuils peuvent être surchargés lors de l'exécution du pipeline avec les
+options `--ev-global`, `--roi-global` et `--min-payout` :
+
+```bash
+python pipeline_run.py analyse --ev-global 0.4 --roi-global 0.4 --min-payout 10
+```
+
 **SP Dutching (placé)** : EV(€) par jambe = `stake * [ p*(odds-1) − (1−p) ]` 
 **Combinés (CP/Trio/ZE4)** : via `simulate_wrapper` + calibration `payout_calibration.yaml`.
 
