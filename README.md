@@ -87,7 +87,7 @@ Dans **Settings → Secrets and variables → Actions** du repo, créer :
 ## 🧰 Workflows GitHub
 
 ### 1) `daily_planning.yml` — 09:00 Paris
-- Appelle `online_fetch_zeturf.py --mode planning`
+- Appelle `scripts/online_fetch_zeturf.py --mode planning`
 - Écrit `data/planning/YYYY-MM-DD.json`
 
 ### 2) `race_scheduler.yml` — toutes les 5 min
@@ -192,7 +192,7 @@ Passer `cache_simulations=False` désactive cette optimisation.
 
 ### Générer le planning du jour
 ```bash
-python online_fetch_zeturf.py \
+python scripts/online_fetch_zeturf.py \
   --mode planning \
   --out data/planning/$(date +%F).json \
   --sources config/sources.yml
