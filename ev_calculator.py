@@ -11,7 +11,10 @@ from collections import defaultdict
 import math
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
-from scipy.optimize import minimize
+try:  # pragma: no cover - SciPy is optional
+    from scipy.optimize import minimize
+except ImportError:  # pragma: no cover - handled gracefully
+    minimize = None  # type: ignore
 
 from kelly import kelly_fraction
 
@@ -107,8 +110,36 @@ def optimize_stake_allocation(
         return -total
 
     constraints = {"type": "ineq", "fun": lambda x: 1.0 - sum(x)}
-    res = minimize(objective, x0, bounds=bounds, constraints=[constraints], method="SLSQP")
-    fractions = x0 if not res.success else res.x
+    if minimize is not None:
+        res = minimize(objective, x0, bounds=bounds, constraints=[constraints], method="SLSQP")
+        fractions = x0 if not res.success else res.x
+    else:
+        # Fallback: naive grid search with 5 % granularity
+        step = 0.05
+        best_val = float("inf")
+        best_fracs = x0[:]
+
+        def search(i: int, remaining: float, current: List[float]) -> None:
+            nonlocal best_val, best_fracs
+            if i == len(p_odds):
+                if remaining < -1e-9:
+                    return
+                val = objective(current)
+                if val < best_val:
+                    best_val = val
+                    best_fracs = current[:]
+                return
+
+            max_f = min(bounds[i][1], remaining)
+            f = 0.0
+            while f <= max_f + 1e-9:
+                current.append(f)
+                search(i + 1, remaining - f, current)
+                current.pop()
+                f += step
+
+        search(0, 1.0, [])
+        fractions = best_fracs
     return [max(0.0, budget * f) for f in fractions]
 
 
