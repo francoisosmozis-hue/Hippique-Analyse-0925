@@ -1,30 +1,88 @@
-# gpi_v51.yml — GPI v5.1 (cap dur 5 €)
-BUDGET_TOTAL: 5
-SP_RATIO: 0.6
-COMBO_RATIO: 0.4
-EV_MIN_SP: 0.20
-EV_MIN_GLOBAL: 0.40
-ROI_MIN_SP: 0.20
-ROI_MIN_GLOBAL: 0.40
-ROR_MAX: 0.05
-MAX_VOL_PAR_CHEVAL: 0.60
-MAX_TICKETS_SP: 2             # nombre max de tickets émis
-ALLOW_JE_NA: false         # true => Stats J/E manquantes tolérées (neutre)
-PAUSE_EXOTIQUES: false     # true => force SP only (par ex. si calibration > 15 % d’erreur)
-REQUIRE_DRIFT_LOG: true
-REQUIRE_ODDS_WINDOWS: [30, 5]
-MIN_PAYOUT_COMBOS: 10.0
-DRIFT_COEF: 0.05
-JE_BONUS_COEF: 0.001
-MIN_STAKE_SP: 0.10       # Mise minimale par ticket SP; limite la variance mais peut réduire l'EV en bloquant les très petites mises.
-ROUND_TO_SP: 0.10        # Pas d'arrondi des mises SP; peut réduire l'EV par arrondi mais évite une variance inutilement fine.
-KELLY_FRACTION: 0.5      # Fraction de Kelly appliquée aux mises; 0.5 diminue la variance au prix d'une EV moindre vs Kelly pleine.
-SHARPE_MIN: 0.0          # Ratio EV/σ minimal requis (Sharpe); filtre les paris à variance trop élevée.
+name: GPI v5.1 – H-30 / H-5
 
-# Options d’E/S
-OUTDIR_DEFAULT: "runs"
-EXCEL_PATH: "modele_suivi_courses_hippiques.xlsx"
-CALIB_PATH: "payout_calibration.yaml"
+on:
+  workflow_dispatch:
+    inputs:
+      meeting: { description: "Réunion ex: R1", required: false }
+      race:    { description: "Course ex: C5", required: false }
+  schedule:
+    # Paris (été) : 16:25 ≈ H-30 ; 16:55 ≈ H-5  (adapte si besoin)
+    - cron: "25 15 * * *"
+    - cron: "55 15 * * *"
 
-# Métadonnées
-MODEL: "GPI v5.1"
+env:
+  TZ: Europe/Paris
+  PYTHONUTF8: "1"
+  # Paramètres GPI v5.1
+  GPI_BUDGET: "5"
+  SP_RATIO: "0.6"
+  COMBO_RATIO: "0.4"
+  EV_MIN_SP: "0.20"
+  EV_MIN_GLOBAL: "0.40"
+  ROI_MIN_GLOBAL: "0.40"
+  MAX_VOL_PER_HORSE: "0.60"
+  ALLOW_JE_NA: "false"
+
+jobs:
+  gpi:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+
+      - name: Install deps
+        run: |
+          python -m pip install -U pip
+          pip install -r requirements.txt || true
+          pip install requests beautifulsoup4 pyyaml python-dotenv pytest
+
+      - name: Resolve inputs
+        id: in
+        run: |
+          echo "MEETING=${{ github.event.inputs.meeting || '' }}" >> $GITHUB_OUTPUT
+          echo "RACE=${{ github.event.inputs.race || '' }}" >> $GITHUB_OUTPUT
+
+      # H-30 SNAPHOT
+      - name: H-30 snapshot (meetings + odds)
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && contains('25 15 * * *', github.event.schedule))
+        run: |
+          mkdir -p data/h30
+          python online_fetch_zeturf.py --mode h30 --out data/h30/h30.json
+          # Option ciblage R/C si fournis (écrit RnCx-h30.json)
+          if [ -n "${{ steps.in.outputs.MEETING }}" ] && [ -n "${{ steps.in.outputs.RACE }}" ]; then
+            python pipeline_run.py snapshot --when h30 --meeting "${{ steps.in.outputs.MEETING }}" --race "${{ steps.in.outputs.RACE }}" --outdir data/h30
+          fi
+
+      # H-5 ANALYSE + DIFF
+      - name: H-5 snapshot + diff + analyse
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && contains('55 15 * * *', github.event.schedule))
+        run: |
+          mkdir -p data/h5 data/diff data/out
+          python online_fetch_zeturf.py --mode h5 --out data/h5/h5.json
+          python online_fetch_zeturf.py --mode diff --out data/diff/diff_drift.json
+          python pipeline_run.py analyse \
+            --h30 data/h30/h30.json \
+            --h5  data/h5/h5.json \
+            --diff data/diff/diff_drift.json \
+            --outdir data/out \
+            --allow-je-na=${ALLOW_JE_NA} \
+            --budget=${GPI_BUDGET} \
+            --ev-global=${EV_MIN_GLOBAL} \
+            --roi-global=${ROI_MIN_GLOBAL} \
+            --max-vol=${MAX_VOL_PER_HORSE}
+
+      - name: Tests unitaires essentiels
+        run: pytest -q
+
+      - name: Upload artefacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gpi_v51_${{ github.run_id }}
+          path: |
+            data/h30/**
+            data/h5/**
+            data/diff/**
+            data/out/**
