@@ -245,10 +245,22 @@ python calibration/calibrate_simulator.py --results data/results.csv
 ```
 ### Analyse des courses du jour (Geny)
 
-- Dépend de `beautifulsoup4` et `requests` (déjà listés dans `requirements.txt`).
-  ```bash
-  pip install beautifulsoup4 requests
-  ```
+#### Usage
+
+```bash
+python fetch_reunions_geny.py --date 2025-09-12 --out data/reunions.json
+python analyse_courses_du_jour_enrichie.py --reunions-file data/reunions.json --budget <B> --kelly <K>
+```
+
+Le second script déclenche automatiquement les phases **H30** puis **H5** pour chaque réunion française listée dans `data/reunions.json`.
+
+#### Dépendances
+
+- `beautifulsoup4`
+- `requests`
+
+#### Autres usages
+
 - Exemple pour traiter toutes les réunions du jour :
   ```bash
   python analyse_courses_du_jour_enrichie.py --from-geny-today --phase H5 --budget 5
@@ -257,7 +269,6 @@ python calibration/calibrate_simulator.py --results data/results.csv
   ```bash
   python analyse_courses_du_jour_enrichie.py --reunions-file data/reunions.json
   ```
-  Chaque réunion est traitée successivement en **H30** puis **H5**.
 - Pour une réunion spécifique issue de ZEturf :
   ```bash
   python analyse_courses_du_jour_enrichie.py --reunion-url https://www.zeturf.fr/fr/reunion/... --phase H5
