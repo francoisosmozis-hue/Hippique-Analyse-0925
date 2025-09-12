@@ -102,6 +102,23 @@ Dans **Settings → Secrets and variables → Actions** du repo, créer :
 - `update_excel_with_results.py` → met à jour `excel/modele_suivi_courses_hippiques.xlsx`
 - Upload Excel + résultats sur Drive
 
+### ☁️ Synchronisation Google Drive
+
+Le module `scripts/drive_sync.py` expose les fonctions `upload_file` et
+`download_file` basées sur `google-api-python-client`.  Il s'appuie sur les
+variables d'environnement `DRIVE_FOLDER_ID` et `GOOGLE_CREDENTIALS_JSON` (contenu
+du `credentials.json` du compte de service).
+
+```bash
+python scripts/drive_sync.py \
+  --upload-glob "data/results/**/*.json" \
+  --upload-glob "excel/*.xlsx"
+```
+
+Plusieurs motifs `--upload-glob` peuvent être fournis.  Pour télécharger un
+fichier par identifiant : `python scripts/drive_sync.py --download FILE_ID
+destination.xlsx`.
+
 ---
 
 ## 🧮 Règles EV/ROI (GPI v5.1)
