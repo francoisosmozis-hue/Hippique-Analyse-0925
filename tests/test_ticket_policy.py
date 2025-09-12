@@ -31,7 +31,18 @@ def test_max_two_tickets():
 
 
 
-def test_combo_requires_payout_threshold(monkeypatch):
+def test_combo_thresholds(monkeypatch):
     monkeypatch.delenv("EV_MIN_GLOBAL", raising=False)
-    assert not allow_combo(ev_global=0.5, payout_est=10.0)
-    assert allow_combo(ev_global=0.5, payout_est=10.1)
+    monkeypatch.delenv("ROI_MIN_GLOBAL", raising=False)
+    monkeypatch.delenv("MIN_PAYOUT_COMBOS", raising=False)
+
+    # default MIN_PAYOUT_COMBOS is 10.0
+    assert not allow_combo(ev_global=0.5, roi_global=0.5, payout_est=9.9)
+    assert allow_combo(ev_global=0.5, roi_global=0.5, payout_est=10.0)
+
+    monkeypatch.setenv("EV_MIN_GLOBAL", "0.6")
+    assert not allow_combo(ev_global=0.5, roi_global=0.5, payout_est=20.0)
+
+    monkeypatch.setenv("EV_MIN_GLOBAL", "0.0")
+    monkeypatch.setenv("ROI_MIN_GLOBAL", "0.3")
+    assert not allow_combo(ev_global=0.5, roi_global=0.2, payout_est=20.0)
