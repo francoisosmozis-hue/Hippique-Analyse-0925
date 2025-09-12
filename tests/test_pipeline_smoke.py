@@ -93,6 +93,7 @@ def test_smoke_run(tmp_path):
     partants_path = tmp_path / "partants.json"
     gpi_path = tmp_path / "gpi.yml"
     outdir = tmp_path / "out"
+    diff_path = tmp_path / "diff.json"
 
     h30_path.write_text(json.dumps(h30), encoding="utf-8")
     h5_path.write_text(json.dumps(h5), encoding="utf-8")
@@ -100,9 +101,12 @@ def test_smoke_run(tmp_path):
     partants_path.write_text(json.dumps(partants), encoding="utf-8")
     gpi_path.write_text(GPI_YML, encoding="utf-8")
 
+    diff_path.write_text("{}", encoding="utf-8")
+
     cmd = [
         sys.executable,
         "pipeline_run.py",
+        "analyse",
         "--h30",
         str(h30_path),
         "--h5",
@@ -115,17 +119,19 @@ def test_smoke_run(tmp_path):
         str(gpi_path),
         "--outdir",
         str(outdir),
+        "--diff",
+        str(diff_path),
+        "--budget",
+        "5",
+        "--ev-global",
+        "0.40",
+        "--roi-global",
+        "0.40",
+        "--max-vol",
+        "0.60",
+        "--allow-je-na",
     ]
-    env = {
-        **os.environ,
-        "BUDGET_TOTAL": "5",
-        "SP_RATIO": "0.6",
-        "COMBO_RATIO": "0.4",
-        "EV_MIN_SP": "0.20",
-        "EV_MIN_GLOBAL": "0.40",
-        "MAX_VOL_PAR_CHEVAL": "0.60",
-    }
-    res = subprocess.run(cmd, capture_output=True, text=True, env=env)
+    res = subprocess.run(cmd, capture_output=True, text=True)
     assert res.returncode == 0, res.stderr
 
     # artefacts
@@ -254,9 +260,13 @@ def test_reallocate_combo_budget_to_sp(tmp_path):
     )
     gpi_path.write_text(gpi_txt, encoding="utf-8")
 
+    diff_path = tmp_path / "diff.json"
+    diff_path.write_text("{}", encoding="utf-8")
+
     cmd = [
         sys.executable,
         "pipeline_run.py",
+        "analyse",
         "--h30",
         str(h30_path),
         "--h5",
@@ -269,17 +279,19 @@ def test_reallocate_combo_budget_to_sp(tmp_path):
         str(gpi_path),
         "--outdir",
         str(outdir),
+        "--diff",
+        str(diff_path),
+        "--budget",
+        "5",
+        "--ev-global",
+        "10.0",
+        "--roi-global",
+        "0.40",
+        "--max-vol",
+        "0.60",
+        "--allow-je-na",
     ]
-    env = {
-        **os.environ,
-        "BUDGET_TOTAL": "5",
-        "SP_RATIO": "0.6",
-        "COMBO_RATIO": "0.4",
-        "EV_MIN_SP": "0.0",
-        "EV_MIN_GLOBAL": "10.0",
-        "MAX_VOL_PAR_CHEVAL": "0.60",
-    }
-    res = subprocess.run(cmd, capture_output=True, text=True, env=env)
+    res = subprocess.run(cmd, capture_output=True, text=True)
     assert res.returncode == 0, res.stderr
     assert "Blocage combinés" in res.stdout
 
