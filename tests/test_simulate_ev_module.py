@@ -45,10 +45,15 @@ def test_allocate_dutching_sp_cap():
     assert all("p" in t for t in tickets)
     for t in tickets:
         assert math.isclose(t["p"], id_to_p[t["id"]])
+    step = cfg["ROUND_TO_SP"]
+    assert all(
+        math.isclose(round(t["stake"] / step) * step, t["stake"], abs_tol=1e-9)
+        for t in tickets
+    )
     total_budget = cfg["BUDGET_TOTAL"] * cfg["SP_RATIO"]
     total_stake = sum(t["stake"] for t in tickets)
     target = total_budget * cfg["KELLY_FRACTION"]
-    assert abs(total_stake - target) <= cfg["ROUND_TO_SP"] / 2
+    assert abs(total_stake - target) <= step / 2
     assert all(
         t["stake"] <= total_budget * cfg["MAX_VOL_PAR_CHEVAL"] + 1e-6 for t in tickets
     )
@@ -75,12 +80,16 @@ def test_allocate_dutching_sp_min_stake_filter():
     assert len(tickets) == 1
     assert tickets[0]["id"] == "1"
     assert tickets[0]["stake"] >= cfg["MIN_STAKE_SP"]
+    step = cfg["ROUND_TO_SP"]
+    assert math.isclose(
+        round(tickets[0]["stake"] / step) * step, tickets[0]["stake"], abs_tol=1e-9
+    )
     expected_ev = tickets[0]["stake"] * (0.6 * (2.0 - 1.0) - (1.0 - 0.6))
     assert math.isclose(ev_sp, expected_ev)
     total_budget = cfg["BUDGET_TOTAL"] * cfg["SP_RATIO"]
     target = total_budget * cfg["KELLY_FRACTION"]
     total_stake = sum(t["stake"] for t in tickets)
-    assert abs(total_stake - target) <= cfg["ROUND_TO_SP"] / 2
+    assert abs(total_stake - target) <= step / 2
 
 
 
