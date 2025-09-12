@@ -232,3 +232,57 @@ def test_main_planning_mode(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     ofz.main()
     data = json.loads(out.read_text(encoding="utf-8"))
     assert data == [{"id": "R1", "name": "Meeting A", "date": today}]
+
+
+def test_fetch_from_geny_idcourse(monkeypatch: pytest.MonkeyPatch) -> None:
+    partants_html = """
+    <div>R1C1</div>
+    <table>
+        <tr><td>1</td><td>A</td><td>J1</td><td>T1</td></tr>
+        <tr><td>2</td><td>B</td><td>J2</td><td>T2</td></tr>
+    </table>
+    """
+    odds_json = {"runners": [{"num": "1", "odds": 5}, {"num": "2", "odds": 7}]}
+
+    def fake_get(url: str, headers: dict[str, str] | None = None, timeout: int = 10) -> DummyResp:
+        if "partants" in url:
+            return DummyResp(200, None, text=partants_html)
+        if "cotes" in url:
+            return DummyResp(200, odds_json)
+        raise AssertionError("unexpected url")
+
+    monkeypatch.setattr(ofz.requests, "get", fake_get)
+
+    snap = ofz.fetch_from_geny_idcourse("123")
+    assert snap["r_label"] == "R1"
+    assert snap["partants"] == 2
+    assert snap["runners"][0]["odds"] == 5
+    assert snap["runners"][1]["odds"] == 7
+
+
+def test_write_snapshot_from_geny(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    sample = {
+        "date": "2025-09-10",
+        "source": "geny",
+        "id_course": "123",
+        "r_label": "R1",
+        "runners": [],
+        "partants": 0,
+    }
+
+    monkeypatch.setattr(ofz, "fetch_from_geny_idcourse", lambda _id: sample)
+
+    class DummyDT(dt.datetime):
+        @classmethod
+        def now(cls, tz: dt.tzinfo | None = None) -> "DummyDT":
+            return cls(2025, 9, 10, 8, 7, 6)
+
+    monkeypatch.setattr(ofz.dt, "datetime", DummyDT)
+
+    dest = ofz.write_snapshot_from_geny("123", "h30", tmp_path)
+    data = json.loads(dest.read_text(encoding="utf-8"))
+
+    assert dest.parent == tmp_path
+    assert dest.name == "20250910T080706_R1C?_H-30.json"
+    assert data["id_course"] == "123"
+    assert data["source"] == "geny"
