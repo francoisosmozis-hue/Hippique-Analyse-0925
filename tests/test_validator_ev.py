@@ -5,7 +5,13 @@ import pytest
  
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from validator_ev import ValidationError, validate_ev, validate_inputs
+from validator_ev import (
+    ValidationError,
+    validate_ev,
+    validate_inputs,
+    validate_policy,
+    validate_combos,
+)
 
 def test_validate_ev_passes_with_defaults(monkeypatch):
     monkeypatch.delenv("EV_MIN_SP", raising=False)
@@ -26,6 +32,29 @@ def test_validate_ev_combo_required(monkeypatch):
     monkeypatch.setenv("EV_MIN_GLOBAL", "0.4")
     with pytest.raises(ValidationError):
         validate_ev(ev_sp=0.5, ev_global=0.2, need_combo=True)
+
+
+def test_validate_policy_pass():
+    assert validate_policy(ev_global=0.5, roi_global=0.3, min_ev=0.4, min_roi=0.2)
+
+
+def test_validate_policy_fail_ev():
+    with pytest.raises(ValidationError):
+        validate_policy(ev_global=0.3, roi_global=0.3, min_ev=0.4, min_roi=0.2)
+
+
+def test_validate_policy_fail_roi():
+    with pytest.raises(ValidationError):
+        validate_policy(ev_global=0.5, roi_global=0.1, min_ev=0.4, min_roi=0.2)
+
+
+def test_validate_combos_pass():
+    assert validate_combos(expected_payout=12.0, min_payout=10.0)
+
+
+def test_validate_combos_fail():
+    with pytest.raises(ValidationError):
+        validate_combos(expected_payout=8.0, min_payout=10.0)
 
 
 def _sample_partants(n=6):
