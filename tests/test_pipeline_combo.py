@@ -15,9 +15,9 @@ import pipeline_run
 
 def test_pipeline_creates_single_combo(tmp_path, monkeypatch):
     # Patch allow_combo to always allow combined bets
-    monkeypatch.setattr(tickets_builder, "allow_combo", lambda e, p: True)
-    monkeypatch.setattr(pipeline_run, "allow_combo", lambda e, p: True)
-
+    monkeypatch.setattr(tickets_builder, "allow_combo", lambda e, r, p: True)
+    monkeypatch.setattr(pipeline_run, "allow_combo", lambda e, r, p: True)
+    
     partants = partants_sample()
     h30 = odds_h30()
     h5 = odds_h5()
