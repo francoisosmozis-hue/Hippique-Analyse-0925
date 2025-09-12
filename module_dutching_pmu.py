@@ -30,15 +30,10 @@ from typing import List, Optional, Sequence, Callable
 import math
 import pandas as pd
 
+from kelly import kelly_fraction
+
 def _safe_prob(p: float) -> float:
     return max(0.01, min(0.90, float(p)))
-
-def _kelly_fraction(p: float, o: float) -> float:
-    b = max(0.0, float(o) - 1.0)
-    if b <= 0.0:
-        return 0.0
-    f = (b * p - (1.0 - p)) / b
-    return max(0.0, min(1.0, f))
 
 def dutching_kelly_fractional(
     odds: Sequence[float],
@@ -73,35 +68,21 @@ def dutching_kelly_fractional(
     if horse_labels is None:
         horse_labels = [f"#{i+1}" for i in range(n)]
 
-    # Kelly pur puis λ-fraction
+    # Fraction Kelly directe par cheval (déjà capée)
     f_k = []
     for p, o in zip(probs, odds):
         p = _safe_prob(float(p))
         o = float(o)
-        f_star = _kelly_fraction(p, o) * float(lambda_kelly)
-        f_k.append(max(0.0, f_star))
+        f_k.append(kelly_fraction(p, o, lam=float(lambda_kelly), cap=float(cap_per_horse)))
 
-    sum_f = sum(f_k)
-    # Si tout 0 (EV négatives), on répartit à parts égales minimales (protéger pipeline)
-    if sum_f <= 0:
-        shares = [1.0/n] * n
+    if sum(f_k) <= 0:
+        stakes = [total_stake / n] * n
     else:
-        shares = [f/sum_f for f in f_k]
-
-    # Mises brutes selon la part Kelly
-    stakes = [s_i * total_stake for s_i in shares]
-
-    # Cap 60 % du Kelly brut par cheval (pas de réallocation du reliquat)
-    for i, (st, p, o) in enumerate(zip(stakes, probs, odds)):
-        k_raw = _kelly_fraction(_safe_prob(float(p)), float(o))
-        cap = total_stake * k_raw * cap_per_horse
-        stakes[i] = min(st, cap)
-
-    # Si dépassement du budget total, réduction proportionnelle
-    total_alloc = sum(stakes)
-    if total_alloc > total_stake:
-        factor = total_stake / total_alloc
-        stakes = [st * factor for st in stakes]
+        stakes = [f * total_stake for f in f_k]
+        total_alloc = sum(stakes)
+        if total_alloc > total_stake:
+            factor = total_stake / total_alloc
+            stakes = [st * factor for st in stakes]
 
     # Arrondir à la granularité (0.10 € par défaut)
     def _round_to(x: float, step: float) -> float:
@@ -111,7 +92,6 @@ def dutching_kelly_fractional(
     # Corriger l'écart d'arrondi uniquement si dépassement
     diff = round(total_stake - sum(stakes), 2)
     if abs(diff) >= round_to/2:
-        # on pousse le reliquat sur le cheval le plus "efficace" (f_k max)
         try:
             idx = max(range(n), key=lambda i: f_k[i])
         except ValueError:
