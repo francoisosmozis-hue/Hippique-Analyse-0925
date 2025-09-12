@@ -20,6 +20,7 @@ import yaml
 from simulate_ev import allocate_dutching_sp, gate_ev, simulate_ev_batch
 from tickets_builder import allow_combo
 from validator_ev import validate_inputs
+from logging_io import append_csv_line, append_json, CSV_HEADER
 
 load_dotenv()
 
@@ -364,6 +365,28 @@ def main() -> None:
     total_stake = sum(t.get("stake", 0) for t in tickets)
     if total_stake > float(cfg.get("BUDGET_TOTAL", 0.0)) + 1e-6:
         raise RuntimeError("Budget dépassé")
+
+    course_id = meta.get("rc", "")
+    append_csv_line(
+        "modele_suivi_courses_hippiques_clean.csv",
+        {
+            "course_id": course_id,
+            "hippodrome": meta.get("hippodrome", ""),
+            "date": meta.get("date", ""),
+            "discipline": meta.get("discipline", ""),
+            "nb_tickets": len(tickets),
+            "total_stake": total_stake,
+            "ev_sp": ev_sp,
+            "ev_global": ev_global,
+            "model": cfg.get("MODEL", ""),
+        },
+        CSV_HEADER,
+    )
+    append_json(
+        f"journaux/{course_id}_pre.json",
+        {"tickets": tickets, "ev": {"sp": ev_sp, "global": ev_global}},
+    )
+
 
     outdir.mkdir(parents=True, exist_ok=True)
     risk_of_ruin = float(stats_ev.get("risk_of_ruin", 0.0))
