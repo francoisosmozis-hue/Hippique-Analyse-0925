@@ -81,6 +81,31 @@ def test_drift_missing_snapshots():
     assert set(res["missing_h5"]) == {"1"}
 
 
+def test_snapshot_cli(tmp_path):
+    """Ensure snapshot subcommand renames snapshot files correctly."""
+    src = tmp_path / "h30.json"
+    src.write_text("{}", encoding="utf-8")
+
+    cmd = [
+        sys.executable,
+        "pipeline_run.py",
+        "snapshot",
+        "--when",
+        "h30",
+        "--meeting",
+        "R1",
+        "--race",
+        "C1",
+        "--outdir",
+        str(tmp_path),
+    ]
+    res = subprocess.run(cmd, capture_output=True, text=True)
+    assert res.returncode == 0, res.stderr
+
+    dest = tmp_path / "R1C1-h30.json"
+    assert dest.exists()
+    assert json.loads(dest.read_text(encoding="utf-8")) == {}
+
 def test_smoke_run(tmp_path):
     partants = partants_sample()
     h30 = odds_h30()
