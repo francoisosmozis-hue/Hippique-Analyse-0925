@@ -116,7 +116,16 @@ def test_smoke_run(tmp_path):
         "--outdir",
         str(outdir),
     ]
-    res = subprocess.run(cmd, capture_output=True, text=True)
+    env = {
+        **os.environ,
+        "BUDGET_TOTAL": "5",
+        "SP_RATIO": "0.6",
+        "COMBO_RATIO": "0.4",
+        "EV_MIN_SP": "0.20",
+        "EV_MIN_GLOBAL": "0.40",
+        "MAX_VOL_PAR_CHEVAL": "0.60",
+    }
+    res = subprocess.run(cmd, capture_output=True, text=True, env=env)
     assert res.returncode == 0, res.stderr
 
     # artefacts
@@ -261,7 +270,16 @@ def test_reallocate_combo_budget_to_sp(tmp_path):
         "--outdir",
         str(outdir),
     ]
-    res = subprocess.run(cmd, capture_output=True, text=True)
+    env = {
+        **os.environ,
+        "BUDGET_TOTAL": "5",
+        "SP_RATIO": "0.6",
+        "COMBO_RATIO": "0.4",
+        "EV_MIN_SP": "0.0",
+        "EV_MIN_GLOBAL": "10.0",
+        "MAX_VOL_PAR_CHEVAL": "0.60",
+    }
+    res = subprocess.run(cmd, capture_output=True, text=True, env=env)
     assert res.returncode == 0, res.stderr
     assert "Blocage combinés" in res.stdout
 
