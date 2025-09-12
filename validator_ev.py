@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import os
+from typing import Dict
 
 
 class ValidationError(Exception):
@@ -118,4 +119,32 @@ def validate_ev(ev_sp: float, ev_global: float | None, need_combo: bool = True) 
         if ev_global is None or ev_global < min_global:
             raise ValidationError("EV global below threshold")
             
+    return True
+
+
+def validate_policy(ev_global: float, roi_global: float, min_ev: float, min_roi: float) -> bool:
+    """Validate global EV and ROI against minimum thresholds."""
+    if ev_global < min_ev:
+        raise ValidationError("EV global below threshold")
+    if roi_global < min_roi:
+        raise ValidationError("ROI global below threshold")
+    return True
+
+
+def validate_budget(stakes: Dict[str, float], budget_cap: float, max_vol_per_horse: float) -> bool:
+    """Ensure total stake and per-horse stakes respect budget constraints."""
+    total = sum(stakes.values())
+    if total > budget_cap:
+        raise ValidationError("Budget cap exceeded")
+    per_horse_cap = budget_cap * max_vol_per_horse
+    for horse, stake in stakes.items():
+        if stake > per_horse_cap:
+            raise ValidationError(f"Stake cap exceeded for {horse}")
+    return True
+
+
+def validate_combos(expected_payout: float, min_payout: float) -> bool:
+    """Validate that combined expected payout exceeds the minimum required."""
+    if expected_payout <= min_payout:
+        raise ValidationError("expected payout for combined bets below threshold")
     return True
