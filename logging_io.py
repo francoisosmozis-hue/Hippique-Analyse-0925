@@ -4,14 +4,20 @@ from typing import Iterable, Mapping
 
 # CSV header for the tracking file.
 CSV_HEADER = [
-    "course_id",
+    "reunion",
+    "course",
     "hippodrome",
     "date",
     "discipline",
+    "partants",
     "nb_tickets",
     "total_stake",
     "ev_sp",
     "ev_global",
+    "roi_sp",
+    "roi_global",
+    "risk_of_ruin",
+    "clv_moyen",
     "model",
 ]
 
