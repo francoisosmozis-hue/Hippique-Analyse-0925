@@ -70,6 +70,8 @@ pip install -r requirements.txt
 ```
 **Ex. de packages** : `pandas`, `openpyxl`, `pyyaml`, `requests`, `google-api-python-client`, `google-auth`, `google-auth-httplib2`, `google-auth-oauthlib` …
 
+> **SciPy facultatif** : si `scipy` n'est pas installé, `optimize_stake_allocation` utilisera un optimiseur de secours plus simple.
+
 3) Variables locales : dupliquez `.env.example` en `.env` et ajustez si besoin.
 
 ---
