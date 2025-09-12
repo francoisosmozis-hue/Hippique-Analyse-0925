@@ -5,7 +5,7 @@ import pytest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from validator_ev import ValidationError, validate_ev
+from validator_ev import ValidationError, validate_ev, validate_policy
 
 
 def test_ev_sp_below_default_threshold(monkeypatch):
@@ -19,3 +19,8 @@ def test_ev_global_below_default_threshold(monkeypatch):
     monkeypatch.delenv("EV_MIN_GLOBAL", raising=False)
     with pytest.raises(ValidationError):
         validate_ev(ev_sp=0.5, ev_global=0.39, need_combo=True)
+
+
+def test_validate_policy_roi_below_threshold():
+    with pytest.raises(ValidationError):
+        validate_policy(ev_global=1.0, roi_global=0.39, min_ev=0.0, min_roi=0.40)
