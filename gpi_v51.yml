@@ -72,7 +72,8 @@ jobs:
             --budget=${BUDGET_TOTAL} \
             --ev-global=${EV_MIN_GLOBAL} \
             --roi-global=${ROI_MIN_GLOBAL} \
-            --max-vol=${MAX_VOL_PAR_CHEVAL}
+            --max-vol=${MAX_VOL_PAR_CHEVAL} \
+            --min-payout=${MIN_PAYOUT_COMBOS}
 
       - name: Tests unitaires essentiels
         run: pytest -q
