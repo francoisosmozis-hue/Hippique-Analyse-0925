@@ -23,22 +23,6 @@ from validator_ev import validate_inputs
 from logging_io import append_csv_line, append_json, CSV_HEADER
 
 load_dotenv()
-
-REQ_VARS = [
-    "BUDGET_TOTAL",
-    "SP_RATIO",
-    "COMBO_RATIO",
-    "EV_MIN_SP",
-    "EV_MIN_GLOBAL",
-    "MAX_VOL_PAR_CHEVAL",
-]
-
-if __name__ == "__main__":
-    missing_env = [v for v in REQ_VARS if os.getenv(v) is None]
-    if missing_env:
-        raise SystemExit(
-            f"Variables d'environnement manquantes: {missing_env}"
-        )
         
 # ---------------------------------------------------------------------------
 # Helpers
@@ -218,23 +202,24 @@ def export(
     save_text(outdir / "cmd_update_excel.txt", cmd)
 
 # ---------------------------------------------------------------------------
-# Main
+# Analyse helper
 # ---------------------------------------------------------------------------
 
 
-def main() -> None:
-    ap = argparse.ArgumentParser(description="GPI v5.1 pipeline")
-    ap.add_argument("--h30", required=True)
-    ap.add_argument("--h5", required=True)
-    ap.add_argument("--stats-je", required=True)
-    ap.add_argument("--partants", required=True)
-    ap.add_argument("--gpi", required=True)
-    ap.add_argument("--outdir", default=None)
-    args = ap.parse_args()
-
+def cmd_analyse(args: argparse.Namespace) -> None:
     cfg = load_yaml(args.gpi)
-    outdir = Path(args.outdir or cfg["OUTDIR_DEFAULT"])
+    if args.budget is not None:
+        cfg["BUDGET_TOTAL"] = args.budget
+    if args.ev_global is not None:
+        cfg["EV_MIN_GLOBAL"] = args.ev_global
+    if args.roi_global is not None:
+        cfg["ROI_MIN_GLOBAL"] = args.roi_global
+    if args.max_vol is not None:
+        cfg["MAX_VOL_PAR_CHEVAL"] = args.max_vol
+    if args.allow_je_na:
+        cfg["ALLOW_JE_NA"] = True
 
+    outdir = Path(args.outdir or cfg["OUTDIR_DEFAULT"])
 
     odds_h30 = load_json(args.h30)
     odds_h5 = load_json(args.h5)
@@ -425,6 +410,48 @@ def main() -> None:
         cfg,
     )
     print(f"OK: analyse exportée dans {outdir}")
+
+
+def cmd_snapshot(args: argparse.Namespace) -> None:
+    """Write a race-specific snapshot file."""
+
+    base = Path(args.outdir)
+    src = base / f"{args.when}.json"
+    data = load_json(str(src))
+    rc = f"{args.meeting}{args.race}"
+    dest = base / f"{rc}-{args.when}.json"
+    save_json(dest, data)
+    print(f"Snapshot écrit: {dest}")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="GPI v5.1 pipeline")
+    sub = parser.add_subparsers(dest="cmd", required=True)
+
+    snap = sub.add_parser("snapshot", help="Renommer un snapshot h30/h5")
+    snap.add_argument("--when", choices=["h30", "h5"], required=True)
+    snap.add_argument("--meeting", required=True)
+    snap.add_argument("--race", required=True)
+    snap.add_argument("--outdir", required=True)
+    snap.set_defaults(func=cmd_snapshot)
+
+    ana = sub.add_parser("analyse", help="Analyser une course")
+    ana.add_argument("--h30", required=True)
+    ana.add_argument("--h5", required=True)
+    ana.add_argument("--stats-je", required=True)
+    ana.add_argument("--partants", required=True)
+    ana.add_argument("--gpi", required=True)
+    ana.add_argument("--outdir", default=None)
+    ana.add_argument("--diff", default=None)
+    ana.add_argument("--budget", type=float)
+    ana.add_argument("--ev-global", dest="ev_global", type=float)
+    ana.add_argument("--roi-global", dest="roi_global", type=float)
+    ana.add_argument("--max-vol", dest="max_vol", type=float)
+    ana.add_argument("--allow-je-na", dest="allow_je_na", action="store_true")
+    ana.set_defaults(func=cmd_analyse)
+
+    args = parser.parse_args()
+    args.func(args)
 
 
 if __name__ == "__main__":
