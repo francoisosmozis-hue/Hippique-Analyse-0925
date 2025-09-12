@@ -41,8 +41,12 @@ def test_pipeline_creates_single_combo(tmp_path, monkeypatch):
     )
     gpi_path.write_text(gpi_txt, encoding="utf-8")
 
+    diff_path = tmp_path / "diff.json"
+    diff_path.write_text("{}", encoding="utf-8")
+
     argv = [
         "pipeline_run.py",
+        "analyse",
         "--h30",
         str(h30_path),
         "--h5",
@@ -55,6 +59,17 @@ def test_pipeline_creates_single_combo(tmp_path, monkeypatch):
         str(gpi_path),
         "--outdir",
         str(outdir),
+        "--diff",
+        str(diff_path),
+        "--budget",
+        "5",
+        "--ev-global",
+        "0.0",
+        "--roi-global",
+        "0.0",
+        "--max-vol",
+        "0.60",
+        "--allow-je-na",
     ]
     monkeypatch.setattr(sys, "argv", argv)
     pipeline_run.main()
