@@ -36,9 +36,8 @@ REQ_VARS = [
 if __name__ == "__main__":
     missing_env = [v for v in REQ_VARS if os.getenv(v) is None]
     if missing_env:
-        print(
-            f"Variables d'environnement manquantes ignorées: {missing_env}",
-            file=sys.stderr,
+        raise SystemExit(
+            f"Variables d'environnement manquantes: {missing_env}"
         )
         
 # ---------------------------------------------------------------------------
