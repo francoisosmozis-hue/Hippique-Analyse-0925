@@ -16,6 +16,10 @@ REQUIRE_ODDS_WINDOWS: [30, 5]
 MIN_PAYOUT_COMBOS: 10.0
 DRIFT_COEF: 0.05
 JE_BONUS_COEF: 0.001
+MIN_STAKE_SP: 0.10       # Mise minimale par ticket SP; limite la variance mais peut réduire l'EV en bloquant les très petites mises.
+ROUND_TO_SP: 0.10        # Pas d'arrondi des mises SP; peut réduire l'EV par arrondi mais évite une variance inutilement fine.
+KELLY_FRACTION: 0.5      # Fraction de Kelly appliquée aux mises; 0.5 diminue la variance au prix d'une EV moindre vs Kelly pleine.
+SHARPE_MIN: 0.0          # Ratio EV/σ minimal requis (Sharpe); filtre les paris à variance trop élevée.
 
 # Options d’E/S
 OUTDIR_DEFAULT: "runs"
