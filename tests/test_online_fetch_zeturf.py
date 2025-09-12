@@ -141,3 +141,71 @@ def test_make_diff(tmp_path: Path) -> None:
     assert out_fp.name == "R1C1_diff_drift.json"
     assert [r["id_cheval"] for r in data["steams"]] == ["4", "7", "8", "1", "3"]
     assert [r["id_cheval"] for r in data["drifts"]] == ["6", "10", "9", "5", "2"]
+
+
+
+
+def sample_snapshot() -> dict:
+    return {
+        "rc": "R1C1",
+        "hippodrome": "Test",
+        "date": "2025-09-10",
+        "discipline": "trot",
+        "runners": [
+            {"id": 1, "name": "A", "odds": "5"},
+            {"id": 2, "name": "B", "odds": 7},
+        ],
+    }
+
+
+@pytest.mark.parametrize("mode", ["h30", "h5"])
+def test_main_snapshot_modes(mode: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """CLI should normalise snapshots for h30/h5 modes."""
+
+    def fake_get(url: str, timeout: int = 10) -> DummyResp:
+        return DummyResp(200, sample_snapshot())
+
+    monkeypatch.setattr(core.requests, "get", fake_get)
+    sources = tmp_path / "src.yml"
+    sources.write_text("zeturf:\n  url: 'http://x'\n", encoding="utf-8")
+    out = tmp_path / f"{mode}.json"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["online_fetch_zeturf.py", "--mode", mode, "--out", str(out), "--sources", str(sources)],
+    )
+    core.main()
+    data = json.loads(out.read_text(encoding="utf-8"))
+    assert data["rc"] == "R1C1"
+    assert data["runners"][0]["odds"] == 5.0
+    assert data["id2name"]["1"] == "A"
+
+
+def test_main_diff_mode(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """``main`` should compute drifts when run with ``--mode diff``."""
+
+    root = tmp_path
+    h30_dir = root / "h30"
+    h5_dir = root / "h5"
+    diff_dir = root / "diff"
+    h30_dir.mkdir()
+    h5_dir.mkdir()
+    diff_dir.mkdir()
+    h30_dir.joinpath("h30.json").write_text(
+        json.dumps({"runners": [{"id": "1", "odds": 10}, {"id": "2", "odds": 5}]}),
+        encoding="utf-8",
+    )
+    h5_dir.joinpath("h5.json").write_text(
+        json.dumps({"runners": [{"id": "1", "odds": 8}, {"id": "2", "odds": 7}]}),
+        encoding="utf-8",
+    )
+    out = diff_dir / "diff_drift.json"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["online_fetch_zeturf.py", "--mode", "diff", "--out", str(out)],
+    )
+    core.main()
+    data = json.loads(out.read_text(encoding="utf-8"))
+    assert data["steams"][0]["id_cheval"] == "1"
+    assert data["drifts"][0]["id_cheval"] == "2"
