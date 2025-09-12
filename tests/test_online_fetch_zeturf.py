@@ -165,7 +165,7 @@ def test_main_snapshot_modes(mode: str, tmp_path: Path, monkeypatch: pytest.Monk
         return DummyResp(200, sample_snapshot())
 
     monkeypatch.setattr(ofz.requests, "get", fake_get)
-    sources.write_text("zeturf:\n  url: 'http://x'\n", encoding="utf-8")
+    sources = tmp_path / "src.yml"
     out = tmp_path / f"{mode}.json"
     monkeypatch.setattr(
         sys,
