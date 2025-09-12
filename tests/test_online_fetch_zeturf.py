@@ -11,8 +11,7 @@ import pytest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-import scripts.online_fetch_zeturf as ofz
-import online_fetch_zeturf as core
+import online_fetch_zeturf as ofz
 
 
 class DummyResp:
@@ -90,7 +89,7 @@ def test_compute_diff_top_lists() -> None:
         ]
     }
 
-    res = core.compute_diff(h30, h5)
+    res = ofz.compute_diff(h30, h5)
     assert [r["id"] for r in res["top_steams"]] == ["4", "7", "8", "1", "3"]
     assert [r["id"] for r in res["top_drifts"]] == ["6", "10", "9", "5", "2"]
     assert len(res["top_steams"]) == 5
@@ -134,7 +133,7 @@ def test_make_diff(tmp_path: Path) -> None:
     h5_fp = tmp_path / "h5.json"
     h5_fp.write_text(json.dumps(h5), encoding="utf-8")
 
-    out_fp = core.make_diff("R1C1", h30_fp, h5_fp, outdir=tmp_path)
+    out_fp = ofz.make_diff("R1C1", h30_fp, h5_fp, outdir=tmp_path)
     with open(out_fp, "r", encoding="utf-8") as fh:
         data = json.load(fh)
 
@@ -165,8 +164,7 @@ def test_main_snapshot_modes(mode: str, tmp_path: Path, monkeypatch: pytest.Monk
     def fake_get(url: str, timeout: int = 10) -> DummyResp:
         return DummyResp(200, sample_snapshot())
 
-    monkeypatch.setattr(core.requests, "get", fake_get)
-    sources = tmp_path / "src.yml"
+    monkeypatch.setattr(ofz.requests, "get", fake_get)
     sources.write_text("zeturf:\n  url: 'http://x'\n", encoding="utf-8")
     out = tmp_path / f"{mode}.json"
     monkeypatch.setattr(
@@ -174,7 +172,7 @@ def test_main_snapshot_modes(mode: str, tmp_path: Path, monkeypatch: pytest.Monk
         "argv",
         ["online_fetch_zeturf.py", "--mode", mode, "--out", str(out), "--sources", str(sources)],
     )
-    core.main()
+    ofz.main()
     data = json.loads(out.read_text(encoding="utf-8"))
     assert data["rc"] == "R1C1"
     assert data["runners"][0]["odds"] == 5.0
@@ -205,7 +203,31 @@ def test_main_diff_mode(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
         "argv",
         ["online_fetch_zeturf.py", "--mode", "diff", "--out", str(out)],
     )
-    core.main()
+    ofz.main()
     data = json.loads(out.read_text(encoding="utf-8"))
     assert data["steams"][0]["id_cheval"] == "1"
     assert data["drifts"][0]["id_cheval"] == "2"
+
+
+
+def test_main_planning_mode(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """``main`` should fetch and filter today's meetings in planning mode."""
+
+    today = dt.date.today().isoformat()
+
+    def fake_get(url: str, timeout: int = 10) -> DummyResp:
+        payload = {"meetings": [{"id": "R1", "name": "Meeting A", "date": today}]}
+        return DummyResp(200, payload)
+
+    monkeypatch.setattr(ofz.requests, "get", fake_get)
+    sources = tmp_path / "src.yml"
+    sources.write_text("zeturf:\n  url: 'http://x'\n", encoding="utf-8")
+    out = tmp_path / "planning.json"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["online_fetch_zeturf.py", "--mode", "planning", "--out", str(out), "--sources", str(sources)],
+    )
+    ofz.main()
+    data = json.loads(out.read_text(encoding="utf-8"))
+    assert data == [{"id": "R1", "name": "Meeting A", "date": today}]
