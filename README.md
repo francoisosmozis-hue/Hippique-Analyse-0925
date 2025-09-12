@@ -11,9 +11,9 @@ Pipeline **pro** pour planifier, capturer H‑30 / H‑5, analyser et consigner 
 - **Post‑results (*/15 min)** : récupération **arrivées officielles**, **mise à jour Excel** (ROI réel), **upload Drive**.
 
 **Standards verrouillés** (GPI v5.1) :
-- Budget **max 5 €** / course, **2 tickets max** (SP + 1 combiné éventuel, configurable via `MAX_TICKETS_SP`).  
-- **EV globale ≥ +40 %** et **ROI estimé ≥ +20 %** pour valider le **vert**.  
-- Combinés uniquement si **payout attendu > 10 €** (calibration).  
+- Budget **max 5 €** / course, **2 tickets max** (SP + 1 combiné éventuel, configurable via `MAX_TICKETS_SP`).
+- **EV globale ≥ +40 %** et **ROI estimé global ≥ +40 %** (**ROI SP ≥ +20 %**) pour valider le **vert**.
+- Combinés uniquement si **payout attendu > 10 €** (calibration).
 - **KELLY_FRACTION = 0.5** : moitié de Kelly pour réduire la variance au prix d'une EV moindre; cap 60 % par cheval.
 - **MIN_STAKE_SP = 0.10** : mise minimale par ticket SP, évite les micro-mises (réduit variance) mais peut bloquer un peu d'EV.
 - **ROUND_TO_SP = 0.10** : pas d'arrondi des mises SP; l'arrondi peut rogner légèrement l'EV tout en limitant la variance.
@@ -109,13 +109,17 @@ Dans **Settings → Secrets and variables → Actions** du repo, créer :
 | Budget max par course | **5 €** |
 | Tickets max | **2** (SP + 1 combiné) |
 | Partage SP / Combinés | **60% / 40%** |
-| Cap Kelly par cheval | **60 %** |
+| Cap Kelly par cheval (`KELLY_FRACTION`) | **60 %** |
 | EV globale (combinés) | **≥ +40 %** |
-| ROI estimé global | **≥ +20 %** |
+| ROI estimé SP | **≥ +20 %** |
+| ROI estimé global | **≥ +40 %** |
 | Payout min combinés | **> 10 €** |
-Coefficient de drift des cotes (`DRIFT_COEF`) | **0.05** |
+| Mise minimale SP (`MIN_STAKE_SP`) | **0.10 €** |
+| Arrondi mise SP (`ROUND_TO_SP`) | **0.10 €** |
+| Sharpe min (`SHARPE_MIN`) | **0.0** |
+| Coefficient de drift des cotes (`DRIFT_COEF`) | **0.05** |
 | Coefficient bonus J/E (`JE_BONUS_COEF`) | **0.001** |
-| Pastille **VERT** si | EV≥40% & ROI≥20% & (si combinés) payout>10€ |
+| Pastille **VERT** si | EV≥40% & ROI≥40% & (si combinés) payout>10€ |
 
 **SP Dutching (placé)** : EV(€) par jambe = `stake * [ p*(odds-1) − (1−p) ]`  
 **Combinés (CP/Trio/ZE4)** : via `simulate_wrapper` + calibration `payout_calibration.yaml`.
