@@ -128,19 +128,25 @@ def make_diff(course_id: str, h30_path: Path | str, h5_path: Path | str, outdir:
 
 def main() -> None:  # pragma: no cover - minimal CLI wrapper
     parser = argparse.ArgumentParser(description="Fetch data from Zeturf")
-    parser.add_argument("--mode", choices=["h30", "h5", "diff"], required=True)  
+    parser.add_argument(
+        "--mode", choices=["planning", "h30", "h5", "diff"], required=True
+    )
     parser.add_argument("--out", required=True, help="Output JSON file")
     parser.add_argument("--sources", default="config/sources.yml", help="YAML sources")
     args = parser.parse_args()
     
-    if args.mode in {"h30", "h5"}:
+    if args.mode in {"planning", "h30", "h5"}:
         with open(args.sources, "r", encoding="utf-8") as fh:
             config = yaml.safe_load(fh) or {}
         url = config.get("zeturf", {}).get("url")
         if not url:
             raise ValueError("No Zeturf source URL configured in sources.yml")
-        payload = fetch_runners(url)
-        data = normalize_snapshot(payload)
+        if args.mode == "planning":
+            meetings = fetch_meetings(url)
+            data = filter_today(meetings)
+        else:
+            payload = fetch_runners(url)
+            data = normalize_snapshot(payload)
         Path(args.out).parent.mkdir(parents=True, exist_ok=True)
         Path(args.out).write_text(
             json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
