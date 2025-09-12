@@ -242,9 +242,21 @@ def main() -> None:
     partants_data = load_json(args.partants)
 
     partants = partants_data.get("runners", [])
-    id2name = partants_data.get("id2name", {str(p["id"]): p.get("name", str(p["id"])) for p in partants})
+    id2name = partants_data.get(
+        "id2name", {str(p["id"]): p.get("name", str(p["id"])) for p in partants}
+    )
+    rc = partants_data.get("rc", "R?C?")
+    if "C" in rc:
+        reunion_part, course_part = rc.split("C", 1)
+        reunion = reunion_part
+        course = f"C{course_part}"
+    else:
+        reunion = rc
+        course = ""
     meta = {
-        "rc": partants_data.get("rc", "R?C?"),
+        "rc": rc,
+        "reunion": reunion,
+        "course": course,
         "hippodrome": partants_data.get("hippodrome", ""),
         "date": partants_data.get("date", dt.date.today().isoformat()),
         "discipline": partants_data.get("discipline", ""),
@@ -359,6 +371,10 @@ def main() -> None:
     if not flags.get("sp", False):
         tickets = []
         ev_sp = ev_global = 0.0
+        roi_sp = roi_global = 0.0
+
+    risk_of_ruin = float(stats_ev.get("risk_of_ruin", 0.0)) if tickets else 0.0
+    clv_moyen = float(stats_ev.get("clv", 0.0)) if tickets else 0.0
 
     # Hard budget stop
     total_stake = sum(t.get("stake", 0) for t in tickets)
@@ -369,14 +385,20 @@ def main() -> None:
     append_csv_line(
         "modele_suivi_courses_hippiques_clean.csv",
         {
-            "course_id": course_id,
+            "reunion": meta.get("reunion", ""),
+            "course": meta.get("course", ""),
             "hippodrome": meta.get("hippodrome", ""),
             "date": meta.get("date", ""),
             "discipline": meta.get("discipline", ""),
+            "partants": len(partants),
             "nb_tickets": len(tickets),
             "total_stake": total_stake,
             "ev_sp": ev_sp,
             "ev_global": ev_global,
+            "roi_sp": roi_sp,
+            "roi_global": roi_global,
+            "risk_of_ruin": risk_of_ruin,
+            "clv_moyen": clv_moyen,
             "model": cfg.get("MODEL", ""),
         },
         CSV_HEADER,
@@ -387,9 +409,7 @@ def main() -> None:
     )
 
 
-    outdir.mkdir(parents=True, exist_ok=True)
-    risk_of_ruin = float(stats_ev.get("risk_of_ruin", 0.0))
-    clv_moyen = float(stats_ev.get("clv", 0.0))
+    outdir.mkdir(parents=True, exist_ok=True)    
     export(
         outdir,
         meta,
