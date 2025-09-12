@@ -24,3 +24,8 @@ def test_ev_global_below_default_threshold(monkeypatch):
 def test_validate_policy_roi_below_threshold():
     with pytest.raises(ValidationError):
         validate_policy(ev_global=1.0, roi_global=0.39, min_ev=0.0, min_roi=0.40)
+
+
+def test_validate_policy_raises_on_low_roi_message():
+    with pytest.raises(ValidationError, match="ROI global below threshold"):
+        validate_policy(ev_global=1.0, roi_global=0.1, min_ev=0.0, min_roi=0.2)
