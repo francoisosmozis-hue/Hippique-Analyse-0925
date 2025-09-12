@@ -328,7 +328,7 @@ def cmd_analyse(args: argparse.Namespace) -> None:
         )
     combo = None
     if flags.get("sp") and flags.get("combo") and allow_combo(
-        ev_global, stats_ev.get("combined_expected_payout", 0.0)
+        ev_global, roi_global, stats_ev.get("combined_expected_payout", 0.0)
     ):
         combo = {
             "id": "CP1",
