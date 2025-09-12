@@ -40,9 +40,14 @@ def test_combo_thresholds(monkeypatch):
     assert not allow_combo(ev_global=0.5, roi_global=0.5, payout_est=9.9)
     assert allow_combo(ev_global=0.5, roi_global=0.5, payout_est=10.0)
 
+    monkeypatch.setenv("MIN_PAYOUT_COMBOS", "15.0")
+    assert not allow_combo(ev_global=0.5, roi_global=0.5, payout_est=14.9)
+    assert allow_combo(ev_global=0.5, roi_global=0.5, payout_est=15.0)
+
     monkeypatch.setenv("EV_MIN_GLOBAL", "0.6")
     assert not allow_combo(ev_global=0.5, roi_global=0.5, payout_est=20.0)
 
     monkeypatch.setenv("EV_MIN_GLOBAL", "0.0")
     monkeypatch.setenv("ROI_MIN_GLOBAL", "0.3")
     assert not allow_combo(ev_global=0.5, roi_global=0.2, payout_est=20.0)
+    assert allow_combo(ev_global=0.5, roi_global=0.3, payout_est=20.0)
