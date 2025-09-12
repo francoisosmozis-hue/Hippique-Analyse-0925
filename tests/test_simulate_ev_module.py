@@ -169,7 +169,29 @@ def test_gate_ev_thresholds():
     assert res["reasons"]["sp"] == ["ROR_MAX"]
     assert res["reasons"]["combo"] == ["ROR_MAX"]
 
-
+def test_gate_ev_sharpe_min():
+    cfg = {
+        "BUDGET_TOTAL": 100.0,
+        "SP_RATIO": 0.5,
+        "EV_MIN_SP": 0.0,
+        "EV_MIN_GLOBAL": 0.0,
+        "ROI_MIN_SP": 0.0,
+        "ROI_MIN_GLOBAL": 0.0,
+        "MIN_PAYOUT_COMBOS": 0.0,
+        "SHARPE_MIN": 0.5,
+    }
+    res = gate_ev(
+        cfg,
+        ev_sp=50.0,
+        ev_global=100.0,
+        roi_sp=0.5,
+        roi_global=0.5,
+        min_payout_combos=20.0,
+        ev_over_std=0.3,
+    )
+    assert not res["sp"] and not res["combo"]
+    assert res["reasons"]["sp"] == ["SHARPE_MIN"]
+    assert res["reasons"]["combo"] == ["SHARPE_MIN"]
 def test_simulate_ev_batch_uses_simulate_wrapper():
     tickets = [{"legs": ["a", "b"], "odds": 3.0, "stake": 2.0}]
     res = simulate_ev_batch(tickets, bankroll=10.0)
