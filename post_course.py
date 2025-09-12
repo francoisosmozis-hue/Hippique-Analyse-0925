@@ -143,9 +143,9 @@ def main() -> None:
         ev_total,
         diff_ev_total,
         result_moyen,
-        brier_total,
-        brier_moyen,
         roi_reel_moyen,
+        brier_total,
+        brier_moyen,        
     ) = _compute_gains(tickets_data.get("tickets", []), winners)
     tickets_data["roi_reel"] = roi
     tickets_data["result_moyen"] = result_moyen
