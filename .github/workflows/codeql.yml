@@ -26,10 +26,14 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.11'
+      - name: Prepare trap cache
+        run: mkdir -p ${{ runner.temp }}/trap-cache-python
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
         with:
           languages: ${{ matrix.language }}
+        env:
+          CODEQL_EXTRACTOR_PYTHON_TRAP_CACHE: ${{ runner.temp }}/trap-cache-python
       - name: Autobuild
         uses: github/codeql-action/autobuild@v3
       - name: Perform CodeQL Analysis
