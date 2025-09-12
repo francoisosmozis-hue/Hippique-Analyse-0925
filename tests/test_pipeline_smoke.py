@@ -1,9 +1,12 @@
 import json
 import subprocess
 import sys
+import os
 
 import yaml
 import pytest
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from simulate_ev import allocate_dutching_sp, gate_ev, simulate_ev_batch
 from pipeline_run import build_p_true, compute_drift_dict, load_yaml
@@ -44,15 +47,17 @@ def partants_sample():
             {"id": "2", "name": "B"},
             {"id": "3", "name": "C"},
             {"id": "4", "name": "D"},
-        ],        
+            {"id": "5", "name": "E"},
+            {"id": "6", "name": "F"},
+        ],
     }
 
 def odds_h30():
-    return {"1": 2.0, "2": 3.0, "3": 4.0, "4": 5.0}
+    return {"1": 2.0, "2": 3.0, "3": 4.0, "4": 5.0, "5": 8.0, "6": 10.0}
 
 
 def odds_h5():
-    return {"1": 2.2, "2": 3.1, "3": 4.2, "4": 6.0}
+    return {"1": 2.2, "2": 3.1, "3": 4.2, "4": 6.0, "5": 9.0, "6": 11.0}
 
 
 def stats_sample():
@@ -61,6 +66,8 @@ def stats_sample():
         "2": {"j_win": 1, "e_win": 1},
         "3": {"j_win": 1, "e_win": 1},
         "4": {"j_win": 1, "e_win": 1},
+        "5": {"j_win": 1, "e_win": 1},
+        "6": {"j_win": 1, "e_win": 1},
     }
 
 
@@ -139,6 +146,7 @@ def test_smoke_run(tmp_path):
         stats_ev.get("risk_of_ruin", 0.0)
     )
     assert data["ev"]["clv_moyen"] == pytest.approx(stats_ev.get("clv", 0.0))
+     cfg_full = yaml.safe_load(GPI_YML)
     assert cfg_full["MIN_STAKE_SP"] == 0.10
     assert cfg_full["ROUND_TO_SP"] == 0.10
     assert cfg_full["KELLY_FRACTION"] == 0.5
@@ -216,7 +224,7 @@ def test_reallocate_combo_budget_to_sp(tmp_path):
     h30 = odds_h30()
     h5 = odds_h5()
     stats = stats_sample()
-    stats["4"] = {"j_win": 500, "e_win": 0}
+    stats["4"] = {"j_win": 5000, "e_win": 0}
 
     h30_path = tmp_path / "h30.json"
     h5_path = tmp_path / "h5.json"
