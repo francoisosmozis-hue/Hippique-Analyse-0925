@@ -1,6 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+import os
+
+
+class ValidationError(Exception):
+    """Raised when EV metrics do not meet required thresholds."""
+    
+
 def must_have(value, msg):
     """Raise ``RuntimeError`` if ``value`` is falsy."""
     if not value:
@@ -107,9 +114,39 @@ def validate(h30: dict, h5: dict, allow_je_na: bool) -> bool:
     return True
 
 
-   # Backward compatibility: validation basée sur EV ratio
-def validate_ev(stats: dict, threshold: float = 0.40) -> bool:
-    ev_ratio = float(stats.get("ev_ratio", 0.0))
-    if ev_ratio < threshold:
-        raise ValueError("EV ratio en dessous du seuil")
+   def validate_ev(ev_sp: float, ev_global: float | None, need_combo: bool = True) -> bool:
+    """Validate SP and combined EVs against environment thresholds.
+
+    Parameters
+    ----------
+    ev_sp:
+        Expected value for simple bets.
+    ev_global:
+        Expected value for combined bets. Ignored when ``need_combo`` is
+        ``False``.
+    need_combo:
+        When ``True`` both SP and combined EVs must satisfy their respective
+        thresholds.
+
+    Returns
+    -------
+    bool
+        ``True`` if all required thresholds are met.
+
+    Raises
+    ------
+    ValidationError
+        If any required EV is below its threshold.
+    """
+
+    min_sp = float(os.getenv("EV_MIN_SP", 0.20))
+    min_global = float(os.getenv("EV_MIN_GLOBAL", 0.40))
+
+    if ev_sp < min_sp:
+        raise ValidationError("EV SP below threshold")
+
+    if need_combo:
+        if ev_global is None or ev_global < min_global:
+            raise ValidationError("EV global below threshold")
+            
     return True
