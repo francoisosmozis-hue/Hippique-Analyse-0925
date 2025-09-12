@@ -4,6 +4,8 @@ import os
 import sys
 import datetime as dt
 from typing import Any
+from pathlib import Path
+import json
 
 import pytest
 
@@ -83,3 +85,41 @@ def test_compute_diff_top_lists() -> None:
     res = core.compute_diff(h30, h5)
     assert [r["id"] for r in res["top_steams"]] == ["4", "1", "3"]
     assert [r["id"] for r in res["top_drifts"]] == ["6", "5", "2"]
+
+
+def test_make_diff(tmp_path: Path) -> None:
+    """``make_diff`` writes expected steam and drift lists."""
+
+    h30 = {
+        "runners": [
+            {"id": "1", "odds": 10},
+            {"id": "2", "odds": 5},
+            {"id": "3", "odds": 7},
+            {"id": "4", "odds": 9},
+            {"id": "5", "odds": 6},
+            {"id": "6", "odds": 11},
+        ]
+    }
+    h5 = {
+        "runners": [
+            {"id": "1", "odds": 8},
+            {"id": "2", "odds": 7},
+            {"id": "3", "odds": 6},
+            {"id": "4", "odds": 4},
+            {"id": "5", "odds": 9},
+            {"id": "6", "odds": 17},
+        ]
+    }
+
+    h30_fp = tmp_path / "h30.json"
+    h30_fp.write_text(json.dumps(h30), encoding="utf-8")
+    h5_fp = tmp_path / "h5.json"
+    h5_fp.write_text(json.dumps(h5), encoding="utf-8")
+
+    out_fp = core.make_diff("R1C1", h30_fp, h5_fp, outdir=tmp_path)
+    with open(out_fp, "r", encoding="utf-8") as fh:
+        data = json.load(fh)
+
+    assert out_fp.name == "R1C1_diff_drift.json"
+    assert [r["id_cheval"] for r in data["steams"]] == ["4", "1", "3"]
+    assert [r["id_cheval"] for r in data["drifts"]] == ["6", "5", "2"]
