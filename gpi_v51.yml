@@ -50,7 +50,7 @@ jobs:
         if: github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && contains('25 15 * * *', github.event.schedule))
         run: |
           mkdir -p data/h30
-          python online_fetch_zeturf.py --mode h30 --out data/h30/h30.json
+          python scripts/online_fetch_zeturf.py --mode h30 --out data/h30/h30.json
           # Option ciblage R/C si fournis (écrit RnCx-h30.json)
           if [ -n "${{ steps.in.outputs.MEETING }}" ] && [ -n "${{ steps.in.outputs.RACE }}" ]; then
             python pipeline_run.py snapshot --when h30 --meeting "${{ steps.in.outputs.MEETING }}" --race "${{ steps.in.outputs.RACE }}" --outdir data/h30
@@ -61,8 +61,8 @@ jobs:
         if: github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && contains('55 15 * * *', github.event.schedule))
         run: |
           mkdir -p data/h5 data/diff data/out
-          python online_fetch_zeturf.py --mode h5 --out data/h5/h5.json
-          python online_fetch_zeturf.py --mode diff --out data/diff/diff_drift.json
+          python scripts/online_fetch_zeturf.py --mode h5 --out data/h5/h5.json
+          python scripts/online_fetch_zeturf.py --mode diff --out data/diff/diff_drift.json
           python pipeline_run.py analyse \
             --h30 data/h30/h30.json \
             --h5  data/h5/h5.json \
