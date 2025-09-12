@@ -11,10 +11,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
 from typing import Any
+
+import requests
+from bs4 import BeautifulSoup
 
 try:  # pragma: no cover - optional dependency in tests
     from scripts.online_fetch_zeturf import write_snapshot_from_geny
