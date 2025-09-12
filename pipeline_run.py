@@ -18,6 +18,7 @@ except Exception:  # pragma: no cover - optional dependency
 import yaml
 
 from simulate_ev import allocate_dutching_sp, gate_ev, simulate_ev_batch
+from tickets_builder import allow_combo
 from validator_ev import validate_inputs
 
 load_dotenv()
@@ -328,6 +329,23 @@ def main() -> None:
             stats_ev.get("risk_of_ruin", 0.0),
             stats_ev.get("ev_over_std", 0.0),
         )
+    combo = None
+    if flags.get("sp") and flags.get("combo") and allow_combo(
+        ev_global, stats_ev.get("combined_expected_payout", 0.0)
+    ):
+        combo = {
+            "id": "CP1",
+            "type": "CP",
+            "legs": [t.get("id") for t in tickets],
+            "ev_check": {
+                "ev_ratio": ev_global,
+                "payout_expected": stats_ev.get(
+                    "combined_expected_payout", 0.0
+                ),
+            },
+        }
+        tickets.append(combo)
+
     if flags.get("reasons", {}).get("sp"):
         print(
             "Blocage SP dû aux seuils: "
