@@ -31,7 +31,7 @@ jobs:
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
         with:
-          languages: ${{ matrix.language }}
+          config-file: .github/codeql/codeql-config.yml
         env:
           CODEQL_EXTRACTOR_PYTHON_TRAP_CACHE: ${{ runner.temp }}/trap-cache-python
       - name: Autobuild
