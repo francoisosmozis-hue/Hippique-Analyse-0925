@@ -23,7 +23,7 @@ except Exception:  # pragma: no cover - handled gracefully
 
 
 def _kelly_fraction(p: float, odds: float) -> float:
-   """Return the pure Kelly fraction for given probability and odds."""
+    """Return the pure Kelly fraction for given probability and odds."""
 
     if not 0 < p < 1:
         raise ValueError("probability must be in (0,1)")
