@@ -143,8 +143,16 @@ def validate_budget(stakes: Dict[str, float], budget_cap: float, max_vol_per_hor
     return True
 
 
-def validate_combos(expected_payout: float, min_payout: float) -> bool:
-    """Validate that combined expected payout exceeds the minimum required."""
+def validate_combos(expected_payout: float, min_payout: float = 10.0) -> bool:
+    """Validate that combined expected payout exceeds the minimum required.
+
+    Parameters
+    ----------
+    expected_payout:
+        Expected payout from the combined tickets.
+    min_payout:
+        Minimum acceptable payout. Defaults to ``10.0`` (euros).
+    """
     if expected_payout <= min_payout:
         raise ValidationError("expected payout for combined bets below threshold")
     return True
