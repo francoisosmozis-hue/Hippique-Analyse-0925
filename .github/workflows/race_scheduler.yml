@@ -20,6 +20,8 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
       - name: Install deps
@@ -45,6 +47,7 @@ jobs:
           mkdir -p data/snapshots data/analyses
           git config user.name "github-actions"
           git config user.email "actions@users.noreply.github.com"
+          git pull --rebase origin main
           git add -A data/snapshots data/analyses
           git diff --cached --quiet || git commit -m "snap/analysis: $(date +%F' '%T)"
           git push
