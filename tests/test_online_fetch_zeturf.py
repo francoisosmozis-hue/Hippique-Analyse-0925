@@ -69,6 +69,10 @@ def test_compute_diff_top_lists() -> None:
             {"id": "4", "odds": 9},
             {"id": "5", "odds": 6},
             {"id": "6", "odds": 11},
+            {"id": "7", "odds": 12},
+            {"id": "8", "odds": 14},
+            {"id": "9", "odds": 10},
+            {"id": "10", "odds": 5},
         ]
     }
     h5 = {
@@ -79,12 +83,18 @@ def test_compute_diff_top_lists() -> None:
             {"id": "4", "odds": 4},
             {"id": "5", "odds": 9},
             {"id": "6", "odds": 17},
+            {"id": "7", "odds": 8},
+            {"id": "8", "odds": 11},
+            {"id": "9", "odds": 14},
+            {"id": "10", "odds": 10},
         ]
     }
 
     res = core.compute_diff(h30, h5)
-    assert [r["id"] for r in res["top_steams"]] == ["4", "1", "3"]
-    assert [r["id"] for r in res["top_drifts"]] == ["6", "5", "2"]
+    assert [r["id"] for r in res["top_steams"]] == ["4", "7", "8", "1", "3"]
+    assert [r["id"] for r in res["top_drifts"]] == ["6", "10", "9", "5", "2"]
+    assert len(res["top_steams"]) == 5
+    assert len(res["top_drifts"]) == 5
 
 
 def test_make_diff(tmp_path: Path) -> None:
@@ -98,6 +108,10 @@ def test_make_diff(tmp_path: Path) -> None:
             {"id": "4", "odds": 9},
             {"id": "5", "odds": 6},
             {"id": "6", "odds": 11},
+            {"id": "7", "odds": 12},
+            {"id": "8", "odds": 14},
+            {"id": "9", "odds": 10},
+            {"id": "10", "odds": 5},
         ]
     }
     h5 = {
@@ -108,6 +122,10 @@ def test_make_diff(tmp_path: Path) -> None:
             {"id": "4", "odds": 4},
             {"id": "5", "odds": 9},
             {"id": "6", "odds": 17},
+            {"id": "7", "odds": 8},
+            {"id": "8", "odds": 11},
+            {"id": "9", "odds": 14},
+            {"id": "10", "odds": 10},
         ]
     }
 
@@ -121,5 +139,5 @@ def test_make_diff(tmp_path: Path) -> None:
         data = json.load(fh)
 
     assert out_fp.name == "R1C1_diff_drift.json"
-    assert [r["id_cheval"] for r in data["steams"]] == ["4", "1", "3"]
-    assert [r["id_cheval"] for r in data["drifts"]] == ["6", "5", "2"]
+    assert [r["id_cheval"] for r in data["steams"]] == ["4", "7", "8", "1", "3"]
+    assert [r["id_cheval"] for r in data["drifts"]] == ["6", "10", "9", "5", "2"]
