@@ -92,7 +92,7 @@ def normalize_snapshot(payload: Dict[str, Any]) -> Dict[str, Any]:
 def compute_diff(h30: Dict[str, Any], h5: Dict[str, Any]) -> Dict[str, List[Dict[str, Any]]]:
     """Compute steams and drifts between two snapshots."""
     odds30 = {str(r["id"]): float(r.get("odds", 0)) for r in h30.get("runners", [])}
-    odds05 = {str(r["id"]): float(r.get("odds", 0)) for r in h5.get("runners", []
+    odds05 = {str(r["id"]): float(r.get("odds", 0)) for r in h5.get("runners", [])}
     deltas: Dict[str, float] = {}
     for cid, o30 in odds30.items():
         if cid in odds05:
