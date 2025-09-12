@@ -1,104 +1,109 @@
-"""Utility helpers for working with ZEturf snapshots.
-
-This module only provides a tiny subset of the original project required by
-unit tests. The real project also exposes network fetching functions which
-are deliberately omitted here."""
+#!/usr/bin/env python3
+"""Fetch today's race meetings from Zeturf and save to JSON."""
 
 from __future__ import annotations
 
+import argparse
+import datetime as dt
 import json
-from pathlib import Path
+import os
 from typing import Any, Dict, List
 
-def save_json(p: str | Path, obj: Any) -> None:
-    Path(p).parent.mkdir(parents=True, exist_ok=True)
-    with open(p, "w", encoding="utf-8") as f:
-        json.dump(obj, f, ensure_ascii=False, indent=2)
+import requests
+import yaml
+from bs4 import BeautifulSoup
+
+import online_fetch_zeturf as core
+
+GENY_FALLBACK_URL = "https://www.geny.com/reunions-courses-pmu"
 
 
-def save_snapshot(label: str, data: Dict[str, Any], outdir: str | Path) -> Path:
-    """Save ``data`` under ``outdir`` using a normalised filename."""
+def _fetch_from_geny() -> Dict[str, Any]:
+    """Scrape meetings from Geny when the Zeturf API is unavailable."""
+    resp = requests.get(GENY_FALLBACK_URL, timeout=10)
+    resp.raise_for_status()
 
-    name = "h30.json" if label.upper() == "H30" else "h5.json"
-    path = Path(outdir) / name
-    save_json(path, data)
-    return path
-
-
-def compute_diff(h30: Dict[str, Any], h5: Dict[str, Any]) -> Dict[str, Any]:
-    """Compute odds drift between two snapshots.
-
-    Returns a mapping with keys ``diff``, ``top_steams`` and ``top_drifts``.
-    """
-
-    o30 = {r["id"]: float(r["odds"]) for r in h30.get("runners", []) if "odds" in r}
-    o05 = {r["id"]: float(r["odds"]) for r in h5.get("runners", []) if "odds" in r}
-    rows: List[Dict[str, Any]] = []
-    for cid in set(o30) & set(o05):
-        delta = o05[cid] - o30[cid]
-        rows.append({"id": cid, "cote_h30": o30[cid], "cote_h5": o05[cid], "delta": delta})
-    rows = sorted(rows, key=lambda x: x["delta"])
-    for i, r in enumerate(rows, 1):
-        r["rank_delta"] = i
-    top_steams = [r for r in rows if r["delta"] < 0][:3]
-    top_drifts = [r for r in reversed(rows) if r["delta"] > 0][:3]
-    return {"diff": rows, "top_steams": top_steams, "top_drifts": top_drifts}
-
-
-def make_diff(
-    course_id: str,
-    h30_fp: str | Path,
-    h5_fp: str | Path,
-    outdir: str | Path = "snapshots",
-) -> Path:
-    """Compute drift/steam information between two snapshot files.
-
-    Parameters
-    ----------
-    course_id : str
-        Identifier of the course used for naming the output file.
-    h30_fp, h5_fp : str | Path
-        Paths to the H-30 and H-5 snapshot JSON files.
-    outdir : str | Path, optional
-        Directory where the diff file should be written, by default "snapshots".
-
-    Returns
-    -------
-    Path
-        Path to the generated diff JSON file.
-    """
-
-    with open(h30_fp, "r", encoding="utf-8") as fh:
-        h30 = json.load(fh)
-    with open(h5_fp, "r", encoding="utf-8") as fh:
-        h5 = json.load(fh)
-
-    # Map of runner id to odds
-    o30 = {str(r["id"]): float(r["odds"]) for r in h30.get("runners", []) if "odds" in r}
-    o05 = {str(r["id"]): float(r["odds"]) for r in h5.get("runners", []) if "odds" in r}
-
-    rows: List[Dict[str, Any]] = []
-    for cid in set(o30) & set(o05):
-        delta = o30[cid] - o05[cid]
-        rows.append(
+    soup = BeautifulSoup(resp.text, "html.parser")
+    today = dt.date.today().isoformat()
+    meetings: List[Dict[str, Any]] = []
+    for li in soup.select("li[data-date]"):
+        date = li["data-date"]
+        if date != today:
+            continue
+        meetings.append(
             {
-                "id_cheval": cid,
-                "cote_h30": o30[cid],
-                "cote_h5": o05[cid],
-                "delta": delta,
+                "id": li.get("data-id"),
+                "name": li.get_text(strip=True),
+                "date": date,
             }
         )
-
-    rows.sort(key=lambda r: r["delta"], reverse=True)
-    for rank, row in enumerate(rows, start=1):
-        row["rank_delta"] = rank
-
-    steams = [r for r in rows if r["delta"] > 0][:5]
-    drifts = [r for r in reversed(rows) if r["delta"] < 0][:5]
-
-    out_path = Path(outdir) / f"{course_id}_diff_drift.json"
-    save_json(out_path, {"diff": rows, "steams": steams, "drifts": drifts})
-    return out_path
+    return {"meetings": meetings}
 
 
-__all__ = ["save_json", "save_snapshot", "compute_diff", "make_diff"]
+@@ -43,49 +45,66 @@ def fetch_meetings(url: str) -> Any:
+    try:
+        resp = requests.get(url, timeout=10)
+        resp.raise_for_status()
+        return resp.json()
+    except requests.Timeout:
+        return _fetch_from_geny()
+    except requests.HTTPError as exc:  # pragma: no cover - exercised via test
+        status = exc.response.status_code if exc.response is not None else None
+        if status == 404:
+            return _fetch_from_geny()
+            
+        raise
+
+
+def filter_today(meetings: Any) -> List[Dict[str, Any]]:
+    """Filter meetings that occur today based on a ``date`` field."""
+    today = dt.date.today().isoformat()
+    items = meetings
+    if isinstance(meetings, dict):
+        items = meetings.get("meetings") or meetings.get("data") or []
+    return [m for m in items if m.get("date") == today]
+
+
+def main() -> None:    
+    parser.add_argument("--out", required=True, help="Output JSON file")
+    parser.add_argument("--out", help="Output JSON file")
+    parser.add_argument(
+        "--sources", default="config/sources.yml", help="Path to sources YAML config"
+    )    
+    parser.add_argument(
+        "--mode", default="planning", help="Operational mode (planning or diff)"
+    )
+    parser.add_argument("--course-id", help="Course identifier when mode=diff")
+    parser.add_argument("--h30", help="Path to H-30 snapshot (mode=diff)")
+    parser.add_argument("--h5", help="Path to H-5 snapshot (mode=diff)")
+    parser.add_argument(
+        "--outdir", default="snapshots", help="Directory for diff output (mode=diff)"
+    )
+    args = parser.parse_args()
+
+    if args.mode == "diff":
+        if not (args.course_id and args.h30 and args.h5):
+            parser.error("--course-id, --h30 and --h5 are required in diff mode")
+        core.make_diff(args.course_id, args.h30, args.h5, outdir=args.outdir)
+        return
+
+    if not args.out:
+        parser.error("--out is required in planning mode")
+
+    with open(args.sources, "r", encoding="utf-8") as fh:
+        config = yaml.safe_load(fh) or {}
+
+    url = config.get("zeturf", {}).get("url")
+    if not url:
+        raise ValueError("No Zeturf source URL configured in sources.yml")
+
+    meetings = fetch_meetings(url)
+    today_meetings = filter_today(meetings)
+
+    os.makedirs(os.path.dirname(args.out), exist_ok=True)
+    with open(args.out, "w", encoding="utf-8") as fh:
+        json.dump(today_meetings, fh, ensure_ascii=False, indent=2)
+
+
+if __name__ == "__main__":
+    main()
