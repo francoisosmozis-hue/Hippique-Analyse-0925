@@ -41,7 +41,7 @@ jobs:
             --roi-min ${ROI_MIN} \
             --pastille-rule "${PASTILLE_RULE}" \
             --gpi-config config/gpi_v51.yml \
-            --payout-calib config/payout_calibration.yamll
+            --payout-calib config/payout_calibration.yaml
       - name: Commit snapshots/analyses
         run: |
           mkdir -p data/snapshots data/analyses
