@@ -6,12 +6,12 @@ from pathlib import Path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from simulate_ev import (
-    implied_probs,
-    kelly_fraction,
+    implied_probs,    
     allocate_dutching_sp,
     gate_ev,
     simulate_ev_batch,
 )
+from kelly import kelly_fraction
 
 
 def test_implied_probs_normalizes():
@@ -23,8 +23,8 @@ def test_implied_probs_normalizes():
 
 
 def test_kelly_fraction_basic():
-    assert math.isclose(kelly_fraction(0.6, 1.0), 0.2)
-    assert math.isclose(kelly_fraction(0.2, 1.0), 0.0)
+    assert math.isclose(kelly_fraction(0.6, 2.0, lam=1.0), 0.2)
+    assert math.isclose(kelly_fraction(0.2, 2.0, lam=1.0), 0.0)
 
 
 def test_allocate_dutching_sp_cap():
