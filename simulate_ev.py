@@ -5,6 +5,7 @@ from typing import Any, Dict, Iterable, List, Sequence
 
 from ev_calculator import compute_ev_roi
 from simulate_wrapper import simulate_wrapper
+from kelly import kelly_fraction
 
 
 def implied_probs(odds_list: Sequence[float]) -> List[float]:
@@ -15,15 +16,6 @@ def implied_probs(odds_list: Sequence[float]) -> List[float]:
     if total <= 0:
         return [0.0] * len(inv)
     return [x / total for x in inv]
-
-
-def kelly_fraction(p: float, b: float) -> float:
-    """Return the Kelly fraction for win probability ``p`` and net odds ``b``."""
-
-    if b <= 0:
-        return 0.0
-    f = (b * p - (1.0 - p)) / b
-    return max(0.0, min(1.0, f))
 
 
 def allocate_dutching_sp(cfg: Dict[str, float], runners: List[Dict[str, Any]]) -> tuple[List[Dict[str, Any]], float]:
@@ -45,17 +37,16 @@ def allocate_dutching_sp(cfg: Dict[str, float], runners: List[Dict[str, Any]]) -
     budget = float(cfg.get("BUDGET_TOTAL", 0.0)) * float(cfg.get("SP_RATIO", 1.0))
     cap = float(cfg.get("MAX_VOL_PAR_CHEVAL", 0.60))
 
-    kellys = [kelly_fraction(p, o - 1.0) for p, o in zip(probs, odds)]
-    total_kelly = sum(kellys) or 1.0
+    total_kelly = sum(kelly_fraction(p, o, lam=1.0, cap=1.0) for p, o in zip(probs, odds)) or 1.0
     kelly_coef = float(cfg.get("KELLY_FRACTION", 0.5))
     raw_total = budget * kelly_coef
     step = float(cfg.get("ROUND_TO_SP", 0.10))
 
     tickets: List[Dict[str, Any]] = []
     ev_sp = 0.0
-    for runner, p, o, k in zip(runners, probs, odds, kellys):
-        f = min(cap, k * kelly_coef / total_kelly)
-        stake = round(budget * f / step) * step
+    for runner, p, o in zip(runners, probs, odds):
+        frac = kelly_fraction(p, o, lam=kelly_coef / total_kelly, cap=cap)
+        stake = round(budget * frac / step) * step
         if stake <= 0 or stake < float(cfg["MIN_STAKE_SP"]):
             continue
         ev_ticket = stake * (p * (o - 1.0) - (1.0 - p))
@@ -75,7 +66,7 @@ def allocate_dutching_sp(cfg: Dict[str, float], runners: List[Dict[str, Any]]) -
         diff = round((raw_total - total_stake) / step) * step
         if diff:
             best = max(tickets, key=lambda t: t["ev_ticket"])
-            new_stake = round((best["stake"] + diff) / step) * step
+            new_stake = min(new_stake, budget * cap)
             if new_stake >= float(cfg["MIN_STAKE_SP"]):
                 best["stake"] = new_stake
                 best["ev_ticket"] = new_stake * (
