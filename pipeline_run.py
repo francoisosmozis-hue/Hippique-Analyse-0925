@@ -7,10 +7,29 @@ import datetime as dt
 import json
 from pathlib import Path
 
+import os
+import sys
+
+from dotenv import load_dotenv
 import yaml
 
 from simulate_ev import allocate_dutching_sp, gate_ev, simulate_ev_batch
 from validator_ev import validate_inputs
+
+load_dotenv()
+
+REQ_VARS = [
+    "BUDGET_TOTAL",
+    "SP_RATIO",
+    "COMBO_RATIO",
+    "EV_MIN_SP",
+    "EV_MIN_GLOBAL",
+    "MAX_VOL_PAR_CHEVAL",
+]
+
+for _var in REQ_VARS:
+    if os.getenv(_var) is None:
+        sys.exit(f"Variable d'environnement manquante: {_var}")
 
 # ---------------------------------------------------------------------------
 # Helpers
