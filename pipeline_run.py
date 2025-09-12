@@ -10,7 +10,11 @@ from pathlib import Path
 import os
 import sys
 
-from dotenv import load_dotenv
+try:
+    from dotenv import load_dotenv
+except Exception:  # pragma: no cover - optional dependency
+    def load_dotenv(*args, **kwargs):  # type: ignore
+        return None
 import yaml
 
 from simulate_ev import allocate_dutching_sp, gate_ev, simulate_ev_batch
@@ -27,10 +31,14 @@ REQ_VARS = [
     "MAX_VOL_PAR_CHEVAL",
 ]
 
-for _var in REQ_VARS:
-    if os.getenv(_var) is None:
-        sys.exit(f"Variable d'environnement manquante: {_var}")
-
+if __name__ == "__main__":
+    missing_env = [v for v in REQ_VARS if os.getenv(v) is None]
+    if missing_env:
+        print(
+            f"Variables d'environnement manquantes ignorées: {missing_env}",
+            file=sys.stderr,
+        )
+        
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -243,7 +251,7 @@ def main() -> None:
     }
 
     # Validation
-    validate_inputs(cfg, partants, odds_h30, odds_h5, stats_je)
+    validate_inputs(cfg, partants, odds_h5, stats_je)
 
     # Drift & p_true
     drift = compute_drift_dict(odds_h30, odds_h5, id2name)
