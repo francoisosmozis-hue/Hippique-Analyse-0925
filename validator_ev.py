@@ -83,7 +83,7 @@ def validate(h30: dict, h5: dict, allow_je_na: bool) -> bool:
     return True
 
 
-   ef validate_ev(ev_sp: float, ev_global: float | None, need_combo: bool = True) -> bool:
+   def validate_ev(ev_sp: float, ev_global: float | None, need_combo: bool = True) -> bool:
     """Validate SP and combined EVs against environment thresholds.
     
     Parameters
