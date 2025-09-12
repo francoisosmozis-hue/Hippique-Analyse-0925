@@ -74,12 +74,12 @@ def compute_diff(h30: Dict[str, Any], h5: Dict[str, Any]) -> Dict[str, List[Dict
         {"id": cid, "delta": d}
         for cid, d in sorted(deltas.items(), key=lambda x: x[1], reverse=True)
         if d > 0
-    ][:3]
+    ][:5]
     drifts = [
         {"id": cid, "delta": d}
         for cid, d in sorted(deltas.items(), key=lambda x: x[1])
         if d < 0
-    ][:3]
+    ][:5]
     return {"top_steams": steams, "top_drifts": drifts}
 
 
