@@ -139,7 +139,7 @@ def test_smoke_run(tmp_path):
         stats_ev.get("risk_of_ruin", 0.0)
     )
     assert data["ev"]["clv_moyen"] == pytest.approx(stats_ev.get("clv", 0.0))
-assert cfg_full["MIN_STAKE_SP"] == 0.10
+    assert cfg_full["MIN_STAKE_SP"] == 0.10
     assert cfg_full["ROUND_TO_SP"] == 0.10
     assert cfg_full["KELLY_FRACTION"] == 0.5
     assert cfg_full["SHARPE_MIN"] == 0.0
