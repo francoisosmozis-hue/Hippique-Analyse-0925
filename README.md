@@ -243,6 +243,18 @@ python cli_ev.py --tickets tickets.json --budget 100 \
 python calibration/calibrate_simulator.py --results data/results.csv
 
 ```
+### Analyse des courses du jour (Geny)
+
+- Dépend de `beautifulsoup4` et `requests` (déjà listés dans `requirements.txt`).
+  ```bash
+  pip install beautifulsoup4 requests
+  ```
+- Exemple pour traiter toutes les réunions du jour :
+  ```bash
+  python analyse_courses_du_jour_enrichie.py --from-geny-today --phase H5 --budget 5
+  ```
+- Pour une course isolée, la fonction `write_snapshot_from_geny` permet d'écrire un snapshot `H30`/`H5`.
+- Limitations : les cotes Geny sont chargées dynamiquement et peuvent varier après capture ; aucune authentification n'est requise.
 
 ---
 
