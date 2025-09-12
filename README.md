@@ -253,6 +253,16 @@ python calibration/calibrate_simulator.py --results data/results.csv
   ```bash
   python analyse_courses_du_jour_enrichie.py --from-geny-today --phase H5 --budget 5
   ```
+  Pour lancer l'analyse depuis un fichier de réunions (`fetch_reunions_geny.py`) :
+  ```bash
+  python analyse_courses_du_jour_enrichie.py --reunions-file data/reunions.json
+  ```
+  Chaque réunion est traitée successivement en **H30** puis **H5**.
+- Pour une réunion spécifique issue de ZEturf :
+  ```bash
+  python analyse_courses_du_jour_enrichie.py --reunion-url https://www.zeturf.fr/fr/reunion/... --phase H5
+  ```
+  Les sorties sont écrites sous `data/RxCy/` (ex. `data/R1C3/`).
 - Pour une course isolée, la fonction `write_snapshot_from_geny` permet d'écrire un snapshot `H30`/`H5`.
 - Limitations : les cotes Geny sont chargées dynamiquement et peuvent varier après capture ; aucune authentification n'est requise.
 
