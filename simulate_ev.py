@@ -66,7 +66,7 @@ def allocate_dutching_sp(cfg: Dict[str, float], runners: List[Dict[str, Any]]) -
         diff = round((raw_total - total_stake) / step) * step
         if diff:
             best = max(tickets, key=lambda t: t["ev_ticket"])
-            new_stake = min(new_stake, budget * cap)
+            new_stake = min(best["stake"] + diff, budget * cap)
             if new_stake >= float(cfg["MIN_STAKE_SP"]):
                 best["stake"] = new_stake
                 best["ev_ticket"] = new_stake * (
