@@ -121,7 +121,21 @@ Dans **Settings → Secrets and variables → Actions** du repo, créer :
 | Coefficient bonus J/E (`JE_BONUS_COEF`) | **0.001** |
 | Pastille **VERT** si | EV≥40% & ROI≥40% & (si combinés) payout>10€ |
 
-**SP Dutching (placé)** : EV(€) par jambe = `stake * [ p*(odds-1) − (1−p) ]`  
+### Variables de configuration principales
+
+| Clé | Description |
+| --- | --- |
+| `BUDGET_TOTAL` | Budget maximum alloué par course. |
+| `SP_RATIO` | Part du budget dédiée aux paris simples (SP). |
+| `COMBO_RATIO` | Part du budget dédiée aux combinés. |
+| `EV_MIN_SP` | EV minimale requise pour les tickets SP (ratio du budget SP). |
+| `EV_MIN_GLOBAL` | EV minimale globale pour valider l'émission des combinés. |
+| `ROI_MIN_GLOBAL` | ROI minimal global attendu pour les combinés. |
+| `MAX_VOL_PAR_CHEVAL` | Fraction maximale du budget sur un seul cheval. |
+| `MIN_PAYOUT_COMBOS` | Gain minimal attendu pour autoriser un ticket combiné. |
+| `ALLOW_JE_NA` | Autorise l'absence de stats jockey/entraîneur lors de l'analyse. |
+
+**SP Dutching (placé)** : EV(€) par jambe = `stake * [ p*(odds-1) − (1−p) ]` 
 **Combinés (CP/Trio/ZE4)** : via `simulate_wrapper` + calibration `payout_calibration.yaml`.
 
 ### 📊 Closing Line Value (CLV)
