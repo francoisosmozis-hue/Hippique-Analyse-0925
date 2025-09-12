@@ -13,6 +13,8 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 from scipy.optimize import minimize
 
+from kelly import kelly_fraction
+
 # ``simulate_wrapper`` is an optional dependency kept for backward compatibility.
 try:  # pragma: no cover - optional dependency
     from simulate_wrapper import simulate_wrapper  # type: ignore
@@ -21,35 +23,14 @@ except Exception:  # pragma: no cover - handled gracefully
 
 
 def _kelly_fraction(p: float, odds: float) -> float:
-    """Return the Kelly fraction for given probability and odds.
-
-    Parameters
-    ----------
-    p:
-        Estimated probability of winning the bet.  Must satisfy ``0 < p < 1``.
-    odds:
-        Decimal odds offered for the bet.  Must be greater than ``1``.
-
-    Returns
-    -------
-    float
-        The fraction of the bankroll to wager according to the Kelly
-        criterion, capped at zero when the edge is negative.
-
-    Raises
-    ------
-    ValueError
-        If ``p`` is not in the interval ``(0, 1)`` or ``odds`` is not greater
-        than ``1``.
-    """
+   """Return the pure Kelly fraction for given probability and odds."""
 
     if not 0 < p < 1:
         raise ValueError("probability must be in (0,1)")
     if odds <= 1:
         raise ValueError("odds must be > 1")
 
-    return max((p * odds - 1) / (odds - 1), 0.0)
-
+    return kelly_fraction(p, odds, lam=1.0, cap=1.0)
 
 def _apply_dutching(tickets: Iterable[Dict[str, Any]]) -> None:
     """Normalise stakes inside each dutching group so that profit is identical.
@@ -113,7 +94,8 @@ def optimize_stake_allocation(
         p = t["p"]
         odds = t["odds"]
         kelly_frac = _kelly_fraction(p, odds)
-        cap_fraction = min(kelly_frac * kelly_cap, 1 - 1e-9)
+        cap_fraction = kelly_fraction(p, odds, lam=kelly_cap, cap=1.0)
+        cap_fraction = min(cap_fraction, 1 - 1e-9)
         p_odds.append((p, odds))
         bounds.append((0.0, cap_fraction))
         x0.append(min(t.get("stake", 0.0) / budget, cap_fraction))
@@ -263,7 +245,7 @@ def compute_ev_roi(
             t["clv"] = clv
             
         kelly_stake = _kelly_fraction(p, odds) * budget
-        max_stake = kelly_stake * kelly_cap
+        max_stake = kelly_fraction(p, odds, lam=kelly_cap, cap=1.0) * budget
         stake_input = t.get("stake", kelly_stake)
         capped = stake_input > max_stake
         stake = min(stake_input, max_stake)
