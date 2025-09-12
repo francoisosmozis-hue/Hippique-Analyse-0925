@@ -11,9 +11,12 @@ from typing import Any, Dict, List
 import requests
 import yaml
 from bs4 import BeautifulSoup
+import re
 
 
-GENY_FALLBACK_URL = "https://www.geny.com/reunions-courses-pmu"
+GENY_BASE = "https://www.geny.com"
+HDRS = {"User-Agent": "Mozilla/5.0 (+EV; GPI v5.1)"}
+GENY_FALLBACK_URL = f"{GENY_BASE}/reunions-courses-pmu"
 
 
 def _fetch_from_geny() -> Dict[str, Any]:
@@ -67,6 +70,110 @@ def fetch_runners(url: str) -> Dict[str, Any]:
     resp = requests.get(url, timeout=10)
     resp.raise_for_status()
     return resp.json()
+
+
+def fetch_from_geny_idcourse(id_course: str) -> Dict[str, Any]:
+    """Return a snapshot for ``id_course`` scraped from geny.com.
+
+    Parameters
+    ----------
+    id_course:
+        Identifier of the course on geny.com.
+    """
+
+    partants_url = f"{GENY_BASE}/partants-pmu/_c{id_course}"
+    cotes_url = f"{GENY_BASE}/cotes?id_course={id_course}"
+
+    resp_partants = requests.get(partants_url, headers=HDRS, timeout=10)
+    resp_partants.raise_for_status()
+    soup = BeautifulSoup(resp_partants.text, "html.parser")
+
+    text = soup.get_text(" ", strip=True)
+    match = re.search(r"R\d+", text)
+    r_label = match.group(0) if match else None
+
+    runners: List[Dict[str, Any]] = []
+    for tr in soup.select("tr"):
+        cols = [td.get_text(strip=True) for td in tr.find_all("td")]
+        if len(cols) < 4 or not cols[0].isdigit():
+            continue
+        runners.append(
+            {
+                "num": cols[0],
+                "name": cols[1],
+                "jockey": cols[2],
+                "entraineur": cols[3],
+            }
+        )
+
+    resp_cotes = requests.get(cotes_url, headers=HDRS, timeout=10)
+    resp_cotes.raise_for_status()
+    odds_map: Dict[str, float] = {}
+    try:
+        data = resp_cotes.json()
+    except ValueError:
+        soup_cotes = BeautifulSoup(resp_cotes.text, "html.parser")
+        for tr in soup_cotes.select("tr"):
+            cols = [td.get_text(strip=True) for td in tr.find_all("td")]
+            if len(cols) < 2 or not cols[0].isdigit():
+                continue
+            try:
+                odds_map[cols[0]] = float(cols[1].replace(",", "."))
+            except ValueError:
+                continue
+    else:
+        items: Any
+        if isinstance(data, dict):
+            items = data.get("runners") or data.get("data") or data.get("cotes") or []
+        else:
+            items = data
+        for item in items:
+            num = str(item.get("num") or item.get("numero") or item.get("id") or item.get("number"))
+            if not num:
+                continue
+            val = item.get("cote") or item.get("odds") or item.get("rapport") or item.get("value")
+            if isinstance(val, str):
+                val = val.replace(",", ".")
+            try:
+                odds_map[num] = float(val)
+            except (TypeError, ValueError):
+                continue
+
+    for r in runners:
+        num = r.get("num")
+        if num in odds_map:
+            r["odds"] = odds_map[num]
+
+    snapshot = {
+        "date": dt.date.today().isoformat(),
+        "source": "geny",
+        "id_course": id_course,
+        "r_label": r_label,
+        "runners": runners,
+        "partants": len(runners),
+    }
+    return snapshot
+
+
+def write_snapshot_from_geny(id_course: str, phase: str, out_dir: Path) -> Path:
+    """Fetch a Geny snapshot for ``id_course`` and write it to ``out_dir``.
+
+    The output filename embeds a timestamp, the race label and the phase tag
+    (``"H-30"`` or ``"H-5"``).
+    """
+
+    snap = fetch_from_geny_idcourse(id_course)
+
+    phase_tag = "H-30" if phase.upper().replace("-", "") == "H30" else "H-5"
+    timestamp = dt.datetime.now().strftime("%Y%m%dT%H%M%S")
+    r_label = snap.get("r_label") or "R?"
+    filename = f"{timestamp}_{r_label}C?_{phase_tag}.json"
+
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    dest = out_dir / filename
+    dest.write_text(json.dumps(snap, ensure_ascii=False, indent=2), encoding="utf-8")
+    return dest
 
 
 def normalize_snapshot(payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -124,6 +231,19 @@ def make_diff(course_id: str, h30_path: Path | str, h5_path: Path | str, outdir:
     out_fp = outdir / f"{course_id}_diff_drift.json"
     out_fp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
     return out_fp
+
+
+__all__ = [
+    "fetch_meetings",
+    "filter_today",
+    "fetch_runners",
+    "fetch_from_geny_idcourse",
+    "write_snapshot_from_geny",
+    "normalize_snapshot",
+    "compute_diff",
+    "make_diff",
+    "main",
+]
 
 
 def main() -> None:  # pragma: no cover - minimal CLI wrapper
