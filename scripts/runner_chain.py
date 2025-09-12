@@ -20,7 +20,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from simulate_ev import simulate_ev_batch
-from validator_ev import validate_ev
+from validator_ev import ValidationError, validate_ev
 
 
 def _load_planning(path: Path) -> List[Dict[str, Any]]:
@@ -74,7 +74,10 @@ def _write_analysis(
 
     tickets = [{"p": 0.5, "odds": 2.0, "stake": 1.0}]
     stats = simulate_ev_batch(tickets, bankroll=budget)
-    validate_ev(stats)
+    try:
+        validate_ev(float(stats.get("ev", 0.0)), None, need_combo=False)
+    except ValidationError:
+        return
     payload = {
         "race_id": race_id,
         "ev": stats.get("ev"),
