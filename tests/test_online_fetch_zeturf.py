@@ -11,7 +11,7 @@ import pytest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-import online_fetch_zeturf as ofz
+import scripts.online_fetch_zeturf as ofz
 
 
 class DummyResp:
@@ -171,7 +171,7 @@ def test_main_snapshot_modes(mode: str, tmp_path: Path, monkeypatch: pytest.Monk
     monkeypatch.setattr(
         sys,
         "argv",
-        ["online_fetch_zeturf.py", "--mode", mode, "--out", str(out), "--sources", str(sources)],
+        ["scripts/online_fetch_zeturf.py", "--mode", mode, "--out", str(out), "--sources", str(sources)],
     )
     ofz.main()
     data = json.loads(out.read_text(encoding="utf-8"))
@@ -202,7 +202,7 @@ def test_main_diff_mode(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
     monkeypatch.setattr(
         sys,
         "argv",
-        ["online_fetch_zeturf.py", "--mode", "diff", "--out", str(out)],
+        ["scripts/online_fetch_zeturf.py", "--mode", "diff", "--out", str(out)],
     )
     ofz.main()
     data = json.loads(out.read_text(encoding="utf-8"))
@@ -227,7 +227,7 @@ def test_main_planning_mode(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.setattr(
         sys,
         "argv",
-        ["online_fetch_zeturf.py", "--mode", "planning", "--out", str(out), "--sources", str(sources)],
+        ["scripts/online_fetch_zeturf.py", "--mode", "planning", "--out", str(out), "--sources", str(sources)],
     )
     ofz.main()
     data = json.loads(out.read_text(encoding="utf-8"))
