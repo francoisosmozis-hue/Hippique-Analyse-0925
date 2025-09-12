@@ -216,6 +216,8 @@ def cmd_analyse(args: argparse.Namespace) -> None:
         cfg["ROI_MIN_GLOBAL"] = args.roi_global
     if args.max_vol is not None:
         cfg["MAX_VOL_PAR_CHEVAL"] = args.max_vol
+    if args.min_payout is not None:
+        cfg["MIN_PAYOUT_COMBOS"] = args.min_payout
     if args.allow_je_na:
         cfg["ALLOW_JE_NA"] = True
 
@@ -450,6 +452,7 @@ def main() -> None:
     ana.add_argument("--ev-global", dest="ev_global", type=float)
     ana.add_argument("--roi-global", dest="roi_global", type=float)
     ana.add_argument("--max-vol", dest="max_vol", type=float)
+    ana.add_argument("--min-payout", dest="min_payout", type=float)
     ana.add_argument("--allow-je-na", dest="allow_je_na", action="store_true")
     ana.set_defaults(func=cmd_analyse)
 
