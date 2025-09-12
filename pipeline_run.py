@@ -252,7 +252,10 @@ def cmd_analyse(args: argparse.Namespace) -> None:
     validate_inputs(cfg, partants, odds_h5, stats_je)
 
     # Drift & p_true
-    drift = compute_drift_dict(odds_h30, odds_h5, id2name)
+    if args.diff:
+        drift = load_json(args.diff)
+    else:
+        drift = compute_drift_dict(odds_h30, odds_h5, id2name)
     p_true = build_p_true(cfg, partants, odds_h5, odds_h30, stats_je)
 
     # Tickets allocation
