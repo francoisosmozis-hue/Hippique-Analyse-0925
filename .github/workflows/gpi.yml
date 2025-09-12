@@ -1,0 +1,56 @@
+name: GPI v5.1 - GPI
+
+on:
+  workflow_dispatch:
+    inputs:
+      course_id:
+        description: "Course ID"
+        required: true
+  schedule:
+    - cron: "25 15 * * *"
+    - cron: "55 15 * * *"
+
+env:
+  TZ: Europe/Paris
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Fetch H-30 odds
+        if: github.event_name == 'schedule' && github.event.schedule == '25 15 * * *'
+        run: |
+          python online_fetch_zeturf.py --mode h30 --out data/h30.json
+      - name: Fetch H-5 odds
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && github.event.schedule == '55 15 * * *')
+        run: |
+          COURSE_ID="${{ github.event.inputs.course_id }}"
+          if [ -n "$COURSE_ID" ]; then
+            python online_fetch_zeturf.py --mode h5 --out data/h5.json --course-id "$COURSE_ID"
+          else
+            python online_fetch_zeturf.py --mode h5 --out data/h5.json
+          fi
+      - name: Compute diff
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && github.event.schedule == '55 15 * * *')
+        run: |
+          COURSE_ID="${{ github.event.inputs.course_id }}"
+          if [ -n "$COURSE_ID" ]; then
+            python online_fetch_zeturf.py --mode diff --out data/diff.json --course-id "$COURSE_ID"
+          else
+            python online_fetch_zeturf.py --mode diff --out data/diff.json
+          fi
+      - name: Run tests
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && github.event.schedule == '55 15 * * *')
+        run: pytest -q
+      - name: Run pipeline
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && github.event.schedule == '55 15 * * *')
+        run: |
+          python pipeline_run.py
