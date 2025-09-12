@@ -14,7 +14,10 @@ Pipeline **pro** pour planifier, capturer H‑30 / H‑5, analyser et consigner 
 - Budget **max 5 €** / course, **2 tickets max** (SP + 1 combiné éventuel, configurable via `MAX_TICKETS_SP`).  
 - **EV globale ≥ +40 %** et **ROI estimé ≥ +20 %** pour valider le **vert**.  
 - Combinés uniquement si **payout attendu > 10 €** (calibration).  
-- **Kelly fractionné** avec **cap 60 %** par cheval.
+- **KELLY_FRACTION = 0.5** : moitié de Kelly pour réduire la variance au prix d'une EV moindre; cap 60 % par cheval.
+- **MIN_STAKE_SP = 0.10** : mise minimale par ticket SP, évite les micro-mises (réduit variance) mais peut bloquer un peu d'EV.
+- **ROUND_TO_SP = 0.10** : pas d'arrondi des mises SP; l'arrondi peut rogner légèrement l'EV tout en limitant la variance.
+- **SHARPE_MIN = 0.0** : seuil minimal de ratio EV/σ; filtre les paris à variance trop élevée.
 
 ---
 
