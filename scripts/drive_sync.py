@@ -29,7 +29,12 @@ from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
 
-SCOPES = ["https://www.googleapis.com/auth/drive.file"]
+SCOPES = [
+    "https://www.googleapis.com/auth/drive.file",
+    "https://www.googleapis.com/auth/drive.metadata.readonly",
+]
+
+FOLDER_MIME = "application/vnd.google-apps.folder"
 
 
 def _build_service(credentials_json: Optional[str] = None):
@@ -88,6 +93,95 @@ def download_file(
     while not done:
         _, done = downloader.next_chunk()
     return Path(dest)
+
+
+def find_item(
+    name: str,
+    *,
+    parent: str,
+    service=None,
+    mime_type: Optional[str] = None,
+) -> Optional[str]:
+    """Return the id of ``name`` under ``parent`` if it exists."""
+
+    srv = service or _build_service()
+    query = [f"name = '{name}'", f"'{parent}' in parents", "trashed = false"]
+    if mime_type:
+        query.append(f"mimeType = '{mime_type}'")
+    result = (
+        srv.files()
+        .list(q=" and ".join(query), fields="files(id, name)")
+        .execute()
+    )
+    files = result.get("files", [])
+    return files[0]["id"] if files else None
+
+
+def ensure_folder(
+    path: str | Path,
+    *,
+    parent: str,
+    service=None,
+) -> str:
+    """Ensure that ``path`` exists under ``parent`` and return its id."""
+
+    srv = service or _build_service()
+    current = parent
+    parts = [p for p in Path(path).parts if p not in ("", ".")]
+    for part in parts:
+        existing = find_item(part, parent=current, service=srv, mime_type=FOLDER_MIME)
+        if existing:
+            current = existing
+        else:
+            metadata = {"name": part, "parents": [current], "mimeType": FOLDER_MIME}
+            current = (
+                srv.files().create(body=metadata, fields="id").execute()["id"]
+            )
+    return current
+
+
+def upload_or_update(
+    path: str | Path,
+    *,
+    folder_id: str,
+    service=None,
+) -> str:
+    """Upload ``path`` or update the existing remote file."""
+
+    srv = service or _build_service()
+    name = Path(path).name
+    file_id = find_item(name, parent=folder_id, service=srv)
+    media = MediaFileUpload(str(path), resumable=True)
+    if file_id:
+        srv.files().update(fileId=file_id, media_body=media).execute()
+        return file_id
+    metadata = {"name": name, "parents": [folder_id]}
+    created = srv.files().create(body=metadata, media_body=media, fields="id").execute()
+    return created.get("id")
+
+
+def push_tree(
+    base: str | Path,
+    *,
+    folder_id: Optional[str] = None,
+    service=None,
+) -> None:
+    """Recursively upload ``base`` into ``folder_id`` on Drive."""
+
+    srv = service or _build_service()
+    dest = folder_id or os.environ.get("DRIVE_FOLDER_ID")
+    if not dest:
+        raise EnvironmentError("DRIVE_FOLDER_ID is not set")
+    root = Path(base)
+    known: dict[Path, str] = {root: dest}
+    for path in sorted(root.rglob("*")):
+        if path.is_dir():
+            parent_id = known[path.parent]
+            folder = ensure_folder(path.name, parent=parent_id, service=srv)
+            known[path] = folder
+        else:
+            parent_id = known[path.parent]
+            upload_or_update(path, folder_id=parent_id, service=srv)
 
 
 def _iter_uploads(patterns: Iterable[str]) -> Iterable[Path]:
