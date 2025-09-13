@@ -1,10 +1,14 @@
 import pytest
-pytest.importorskip("googleapiclient")
+
+# Skip the whole module if googleapiclient is missing. Import the submodule via
+# ``importorskip`` so the subsequent access to ``HttpError`` does not trigger a
+# ``ModuleNotFoundError`` during collection on systems without the dependency.
+errors = pytest.importorskip("googleapiclient.errors")
+HttpError = errors.HttpError
 
 import io
 import json
 from unittest.mock import MagicMock, patch, ANY
-from googleapiclient.errors import HttpError
 from httplib2 import Response
 
 from scripts import drive_sync
