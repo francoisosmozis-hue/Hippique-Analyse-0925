@@ -111,6 +111,22 @@ Dans **Settings → Secrets and variables → Actions** du repo, créer :
 - `update_excel_with_results.py` → met à jour `excel/modele_suivi_courses_hippiques.xlsx`
 - Upload Excel + résultats sur Drive
 
+### Lancer les workflows manuellement
+
+Les trois workflows ci-dessus sont planifiés mais peuvent aussi être déclenchés à la demande depuis l'onglet **Actions** du dépôt
+via le bouton **Run workflow** ou en ligne de commande :
+
+```bash
+gh workflow run race_scheduler.yml
+```
+
+Les fichiers générés apparaissent ensuite sous `data/` et `excel/`.
+
+### Alertes dans les fichiers de suivi
+
+Chaque course analysée ajoute une ligne dans `data/RxCy/tracking.csv`. Si une colonne `ALERTE_VALUE` est présente, le combiné
+associé affiche un EV > 0.5 et un payout attendu > 20 € et mérite une vérification manuelle.
+
 ### ☁️ Synchronisation Google Drive
 
 1. Créez un **compte de service** dans la console Google Cloud et partagez le
@@ -175,9 +191,18 @@ options `--ev-global`, `--roi-global` et `--min-payout` :
 python pipeline_run.py analyse --ev-global 0.4 --roi-global 0.4 --min-payout 10
 ```
 
-**SP Dutching (placé)** : EV(€) par jambe = `stake * [ p*(odds-1) − (1−p) ]` 
+**SP Dutching (placé)** : EV(€) par jambe = `stake * [ p*(odds-1) − (1−p) ]
 **Combinés (CP/Trio/ZE4)** : via `simulate_wrapper` + calibration `payout_calibration.yaml`.
 
+### Calibration, budget & `ALERTE_VALUE`
+
+- Les fichiers `calibration/payout_calibration.yaml` et `calibration/probabilities.yaml` doivent être présents avant toute
+  analyse. Ils calibrent respectivement les gains des combinés et les probabilités de base. Mettre ces fichiers à jour
+  régulièrement avec `calibrate_simulator.py` ou `recalibrate_payouts_pro.py`.
+- Le budget total (`BUDGET_TOTAL`) est réparti entre paris simples et combinés selon `SP_RATIO` et `COMBO_RATIO`
+  (par défaut **60 % / 40 %**). Modifier ces variables pour ajuster la répartition.
+- Lorsqu'une combinaison présente à la fois un EV élevé et un payout attendu important, un drapeau `ALERTE_VALUE` est posé
+  sur le ticket. Ce flag est propagé jusqu'au `tracking.csv` pour attirer l'attention sur ces cas à surveiller.
 ### ♻️ Recalibrage des payouts
 
 Le script `recalibrate_payouts_pro.py` met à jour `calibration/payout_calibration.yaml`
@@ -327,8 +352,9 @@ Le second script déclenche automatiquement les phases **H30** puis **H5** pour 
 ## 🧾 Artifacts produits
 
 - `data/snapshots/R1C3/snapshot_H30.json` et `snapshot_H5.json`
-- `data/R1C3/analysis_H5.json` (tickets, EV/ROI, pastille)
-- `data/R1C3/tracking.csv` (ligne synthèse)
+- `data/R1C3/analysis_H5.json` – méta, tickets (EV/ROI, flags), validation, `ev_ok`, `abstain`
+- `data/R1C3/per_horse_report.csv` – rapport par cheval (`num`, `nom`, `p_finale`, `j_rate`, `e_rate`, `chrono_ok`)
+- `data/R1C3/tracking.csv` – ligne synthèse (`ALERTE_VALUE` ajouté si alerte)
 - `data/results/YYYY-MM-DD_arrivees.json`
 - `excel/modele_suivi_courses_hippiques.xlsx` (mis à jour)
 
@@ -349,6 +375,9 @@ Extrait `analysis_H5.json` :
   "abstain": false
 }
 ```
+
+Le fichier `per_horse_report.csv` est sauvegardé dans le même dossier que l'analyse et contient une ligne par partant avec les
+colonnes listées ci-dessus.
 
 ---
 
