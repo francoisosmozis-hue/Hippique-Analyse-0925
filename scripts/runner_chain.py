@@ -21,6 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from simulate_ev import simulate_ev_batch
 from validator_ev import ValidationError, validate_ev
+from scripts.drive_sync import upload_file
 
 
 def _load_planning(path: Path) -> List[Dict[str, Any]]:
@@ -56,8 +57,10 @@ def _write_snapshot(race_id: str, window: str, base: Path) -> None:
         "window": window,
         "timestamp": dt.datetime.now().isoformat(),
     }
-    with (dest / f"snapshot_{window}.json").open("w", encoding="utf-8") as fh:
+    path = dest / f"snapshot_{window}.json"
+    with path.open("w", encoding="utf-8") as fh:
         json.dump(payload, fh, ensure_ascii=False, indent=2)
+    upload_file(path)
 
 
 def _write_analysis(
@@ -84,8 +87,10 @@ def _write_analysis(
         "roi": stats.get("roi"),
         "green": stats.get("green"),
     }
-    with (dest / "analysis.json").open("w", encoding="utf-8") as fh:
+    path = dest / "analysis.json"
+    with path.open("w", encoding="utf-8") as fh:
         json.dump(payload, fh, ensure_ascii=False, indent=2)
+    upload_file(path)
 
 
 def main() -> None:
