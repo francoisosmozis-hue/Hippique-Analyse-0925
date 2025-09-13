@@ -202,7 +202,7 @@ def main() -> None:
         "--upload-glob",
         action="append",
         default=[],
-        help="Glob pattern of files to upload",
+        help="Glob pattern of files to upload or update",
     )
     parser.add_argument(
         "--download",
@@ -217,7 +217,7 @@ def main() -> None:
     service = _build_service(args.credentials_json)
 
     for path in _iter_uploads(args.upload_glob):
-        upload_file(path, folder_id=args.folder_id, service=service)
+        upload_or_update(path, folder_id=args.folder_id, service=service)
 
     for file_id, dest in args.download:
         download_file(file_id, dest, service=service)
