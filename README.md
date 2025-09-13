@@ -34,7 +34,8 @@ analyse-hippique/
 │  ├─ probabilities.yaml
 │  └─ calibrate_simulator.py
 ├─ config/
-│  └─ sources.yml
+│  ├─ sources.yml
+│  └─ meetings.json    # exemple de planning (reunion/course/time)
 ├─ data/
 │  ├─ planning/          # programmes du jour (JSON)
 │  ├─ snapshots/         # H-30 / H-5 (cotes + stats)
@@ -44,6 +45,7 @@ analyse-hippique/
 │  └─ modele_suivi_courses_hippiques.xlsx
 ├─ scripts/
 │  ├─ runner_chain.py
+│  ├─ fetch_schedule.py
 │  ├─ pipeline_run.py
 │  ├─ simulate_ev.py
 │  ├─ simulate_wrapper.py
@@ -82,6 +84,10 @@ Variables disponibles :
 | Variable | Défaut | Description |
 | --- | --- | --- |
 | `ALLOW_HEURISTIC` | `0` | désactive les heuristiques de backup (`1` pour les autoriser). |
+
+Afin de tester localement ou en CI, un fichier d'exemple `config/meetings.json`
+illustre le format attendu (`reunion`, `course`, `time`).
+Un planning réel peut être généré via `python scripts/fetch_schedule.py --out config/meetings.json`.
 
 ---
 
