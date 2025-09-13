@@ -146,6 +146,7 @@ def evaluate_combo(
             return {
                 "status": "insufficient_data",
                 "ev_ratio": 0.0,
+                "roi": 0.0,
                 "payout_expected": 0.0,
                 "notes": notes,
                 "requirements": requirements,
@@ -164,6 +165,7 @@ def evaluate_combo(
     return {
         "status": "ok",
         "ev_ratio": float(stats.get("ev_ratio", 0.0)),
+        "roi": float(stats.get("roi", 0.0)),
         "payout_expected": float(stats.get("combined_expected_payout", 0.0)),
         "notes": notes,
         "requirements": requirements,
