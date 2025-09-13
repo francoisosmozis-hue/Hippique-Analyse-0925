@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import os
 import re
 import subprocess
 import sys
@@ -28,11 +29,16 @@ except Exception:  # pragma: no cover - used when optional deps are missing
         raise RuntimeError("write_snapshot_from_geny is unavailable")
 
 try:  # pragma: no cover - optional dependency in tests
-    from scripts.drive_sync import upload_file
+    from scripts.drive_sync import (
+        ensure_folder as drive_ensure_folder,
+        push_tree,
+    )
 except Exception:  # pragma: no cover - used when optional deps are missing
-    def upload_file(*args: Any, **kwargs: Any) -> None:
-        raise RuntimeError("upload_file is unavailable")
+    def drive_ensure_folder(*args: Any, **kwargs: Any) -> str:
+        raise RuntimeError("drive_ensure_folder is unavailable")
 
+    def push_tree(*args: Any, **kwargs: Any) -> None:
+        raise RuntimeError("push_tree is unavailable")
 
 # ---------------------------------------------------------------------------
 # Helper stubs - these functions are expected to be provided elsewhere in the
@@ -63,14 +69,17 @@ def build_prompt_from_meta(rc_dir: Path, *, budget: float, kelly: float) -> None
     return None
 
 
-def _upload_jsons(base_dir: Path) -> None:
-    """Upload all JSON files under ``base_dir`` to Google Drive."""
+def _upload_artifacts(rc_dir: Path, *, drive_folder_id: str | None) -> None:
+    """Upload ``rc_dir`` contents to Drive under a race-specific subfolder."""
 
-    for json_file in base_dir.rglob("*.json"):
-        try:
-            upload_file(json_file)
-        except Exception as exc:  # pragma: no cover - best effort
-            print(f"[WARN] Failed to upload {json_file}: {exc}")
+
+    if not drive_folder_id:
+        return
+    try:
+        sub_id = drive_ensure_folder(rc_dir.name, parent=drive_folder_id)
+        push_tree(rc_dir, folder_id=sub_id)
+    except Exception as exc:  # pragma: no cover - best effort
+        print(f"[WARN] Failed to upload {rc_dir}: {exc}")
 
 
 def _snap_prefix(rc_dir: Path) -> str | None:
@@ -159,6 +168,7 @@ def _process_reunion(
     *,
     budget: float,
     kelly: float,
+    drive_folder_id: str | None,
 ) -> None:
     """Fetch ``url`` and run the pipeline for each course of the meeting."""
 
@@ -190,7 +200,7 @@ def _process_reunion(
             build_prompt_from_meta(rc_dir, budget=budget, kelly=kelly)
             csv_path = export_per_horse_csv(rc_dir)
             print(f"[INFO] per-horse report écrit: {csv_path}")
-        _upload_jsons(rc_dir)
+        _upload_artifacts(rc_dir, drive_folder_id=drive_folder_id)
 
 
 def main() -> None:
@@ -209,7 +219,22 @@ def main() -> None:
         "--reunions-file",
         help="Fichier JSON listant les réunions à traiter (mode batch)",
     )
+    ap.add_argument(
+        "--upload-drive",
+        action="store_true",
+        help="Upload des artefacts générés sur Google Drive",
+    )
+    ap.add_argument(
+        "--drive-folder-id",
+        help="Identifiant du dossier Drive racine pour les uploads",
+    )
     args = ap.parse_args()
+
+    drive_folder_id = None
+    if args.upload_drive:
+        drive_folder_id = args.drive_folder_id or os.environ.get("DRIVE_FOLDER_ID")
+        if not drive_folder_id:
+            print("[WARN] drive-folder-id manquant, envoi vers Drive ignoré")
 
     if args.reunions_file:
         script = Path(__file__).resolve()
@@ -218,40 +243,24 @@ def main() -> None:
             url_zeturf = reunion.get("url_zeturf")
             if not url_zeturf:
                 continue
-            subprocess.run(
-                [
+            for phase in ["H30", "H5"]:
+                cmd = [
                     sys.executable,
                     str(script),
                     "--reunion-url",
                     url_zeturf,
                     "--phase",
-                    "H30",
+                    phase,
                     "--data-dir",
                     args.data_dir,
                     "--budget",
                     str(args.budget),
                     "--kelly",
                     str(args.kelly),
-                ],
-                check=True,
-            )
-            subprocess.run(
-                [
-                    sys.executable,
-                    str(script),
-                    "--reunion-url",
-                    url_zeturf,
-                    "--phase",
-                    "H5",
-                    "--data-dir",
-                    args.data_dir,
-                    "--budget",
-                    str(args.budget),
-                    "--kelly",
-                    str(args.kelly),
-                ],
-                check=True,
-            )
+                ]
+                if drive_folder_id:
+                    cmd.extend(["--upload-drive", "--drive-folder-id", drive_folder_id])
+                subprocess.run(cmd, check=True)
         return
 
     if args.reunion_url and args.phase:
@@ -261,6 +270,7 @@ def main() -> None:
             Path(args.data_dir),
             budget=args.budget,
             kelly=args.kelly,
+            drive_folder_id=drive_folder_id,
         )
         return
 
@@ -286,13 +296,13 @@ def main() -> None:
                 build_prompt_from_meta(rc_dir, budget=args.budget, kelly=args.kelly)
                 csv_path = export_per_horse_csv(rc_dir)
                 print(f"[INFO] per-horse report écrit: {csv_path}")
-                _upload_jsons(rc_dir)
+                _upload_artifacts(rc_dir, drive_folder_id=drive_folder_id)
         print("[DONE] from-geny-today pipeline terminé.")
         return
 
     # Fall back to original behaviour: simply run the pipeline on ``data_dir``
     run_pipeline(Path(args.data_dir), budget=args.budget, kelly=args.kelly)
-    _upload_jsons(Path(args.data_dir))
+    _upload_artifacts(Path(args.data_dir), drive_folder_id=drive_folder_id)
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point
