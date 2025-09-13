@@ -17,6 +17,8 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, Iterable
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 from config.env_utils import get_env
 
 try:  # Python 3.9+
