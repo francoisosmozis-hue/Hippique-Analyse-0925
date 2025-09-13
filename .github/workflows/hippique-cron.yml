@@ -1,0 +1,45 @@
+name: Hippique Cron
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+    - cron: "0 8 * * *"
+  workflow_dispatch:
+
+jobs:
+  prepare:
+    if: github.event.schedule == '0 8 * * *'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+      - run: pip install -r requirements.txt
+      - run: |
+          python scripts/online_fetch_zeturf.py --mode planning --out meetings.json --sources config/sources.yml
+      - uses: actions/upload-artifact@v4
+        with:
+          name: meetings
+          path: meetings.json
+
+  cron:
+    if: github.event.schedule != '0 8 * * *'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+      - run: pip install -r requirements.txt
+      - run: |
+          if [ ! -f meetings.json ]; then
+            python scripts/online_fetch_zeturf.py --mode planning --out meetings.json --sources config/sources.yml
+          fi
+          python scripts/cron_decider.py --meetings meetings.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cron-data
+          path: |
+            meetings.json
+            data
