@@ -4,8 +4,20 @@ import runner_chain
 def test_validate_exotics_with_simwrapper_filters_and_alert(monkeypatch):
     def fake_eval(tickets, bankroll, allow_heuristic=True):
         if tickets[0]['id'] == 'fail':
-            return {'ev_ratio': 0.1, 'payout_expected': 5.0, 'notes': [], 'requirements': []}
-        return {'ev_ratio': 0.6, 'payout_expected': 25.0, 'notes': [], 'requirements': []}
+            return {
+                'ev_ratio': 0.1,
+                'roi': 0.05,
+                'payout_expected': 5.0,
+                'notes': [],
+                'requirements': []
+            }
+        return {
+            'ev_ratio': 0.6,
+            'roi': 0.8,
+            'payout_expected': 25.0,
+            'notes': [],
+            'requirements': []
+        }
 
     monkeypatch.setattr(runner_chain, 'evaluate_combo', fake_eval)
 
@@ -22,8 +34,8 @@ def test_validate_exotics_with_simwrapper_filters_and_alert(monkeypatch):
 
 def test_validate_exotics_with_simwrapper_caps_best_and_alert(monkeypatch):
     results = {
-        'a': {'ev_ratio': 0.6, 'payout_expected': 30.0, 'notes': [], 'requirements': []},
-        'b': {'ev_ratio': 0.8, 'payout_expected': 35.0, 'notes': [], 'requirements': []},
+        'a': {'ev_ratio': 0.6, 'roi': 0.7, 'payout_expected': 30.0, 'notes': [], 'requirements': []},
+        'b': {'ev_ratio': 0.8, 'roi': 0.9, 'payout_expected': 35.0, 'notes': [], 'requirements': []},
     }
 
     def fake_eval(tickets, bankroll, allow_heuristic=True):
