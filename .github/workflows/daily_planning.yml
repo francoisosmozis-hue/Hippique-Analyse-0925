@@ -17,6 +17,8 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
       - name: Install deps
@@ -33,6 +35,7 @@ jobs:
         run: |
           git config user.name "github-actions"
           git config user.email "actions@users.noreply.github.com"
+          git pull --rebase origin main
           git add data/planning/*.json
           git commit -m "planning: $(date +%F)" || echo "No changes"
           git push
