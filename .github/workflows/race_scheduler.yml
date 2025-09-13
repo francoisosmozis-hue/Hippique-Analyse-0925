@@ -48,6 +48,8 @@ jobs:
           git config user.name "github-actions"
           git config user.email "actions@users.noreply.github.com"
           git pull --rebase origin main
+          PREV_SHA=$(git rev-parse HEAD)
+          echo "PREV_SHA=$PREV_SHA" >> $GITHUB_ENV
           git add -A data/snapshots data/analyses
           git diff --cached --quiet || git commit -m "snap/analysis: $(date +%F' '%T)"
           git push
@@ -56,6 +58,9 @@ jobs:
           DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
           GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
         run: |
-          if [ -n "$(git diff --name-only HEAD~1 HEAD | grep '^data/')" ]; then
-            python scripts/drive_sync.py               --folder-id "${DRIVE_FOLDER_ID}"               --credentials-json "${GOOGLE_CREDENTIALS_JSON}"               --upload-glob "data/analyses/**/*.json"               --upload-glob "data/snapshots/**/*.json"
-          fi
+          if [ -n "$(git diff --name-only $PREV_SHA HEAD | grep '^data/')" ]; then
+            python scripts/drive_sync.py \
+              --folder-id "${DRIVE_FOLDER_ID}" \
+              --credentials-json "${GOOGLE_CREDENTIALS_JSON}" \
+              --upload-glob "data/analyses/**/*.json" \
+              --upload-glob "data/snapshots/**/*.json"
