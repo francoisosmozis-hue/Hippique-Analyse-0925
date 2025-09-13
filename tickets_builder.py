@@ -47,6 +47,10 @@ def allow_combo(ev_global: float, roi_global: float, payout_est: float) -> bool:
 def apply_ticket_policy(
     runners: Iterable[Dict[str, Any]],
     combo_candidates: Iterable[List[Dict[str, Any]]],
+    *,
+    ev_threshold: float = EV_MIN_COMBO,
+    roi_threshold: float = 0.0,
+    payout_threshold: float = PAYOUT_MIN_COMBO,
 ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     """Allocate SP and combo tickets using the project defaults.
 
@@ -58,6 +62,12 @@ def apply_ticket_policy(
     combo_candidates:
         Iterable of candidate combination tickets evaluated via
         :func:`runner_chain.validate_exotics_with_simwrapper`.
+    ev_threshold:
+        Minimum EV ratio required for a combo ticket.
+    roi_threshold:
+        Minimum ROI required for a combo ticket.
+    payout_threshold:
+        Minimum expected payout (EUR) for a combo ticket.
 
     Returns
     -------
@@ -83,23 +93,13 @@ def apply_ticket_policy(
     info: Dict[str, Any] = {"notes": [], "flags": {}}
 
     if combo_candidates:
-        prev_ev = os.getenv("EV_MIN_GLOBAL")
-        prev_payout = os.getenv("MIN_PAYOUT_COMBOS")
-        os.environ["EV_MIN_GLOBAL"] = str(EV_MIN_COMBO)
-        os.environ["MIN_PAYOUT_COMBOS"] = str(PAYOUT_MIN_COMBO)
-        try:
-            combo_tickets, info = validate_exotics_with_simwrapper(
-                combo_candidates, bankroll=BUDGET_CAP_EUR * COMBO_SHARE
-            )
-        finally:
-            if prev_ev is None:
-                os.environ.pop("EV_MIN_GLOBAL", None)
-            else:
-                os.environ["EV_MIN_GLOBAL"] = prev_ev
-            if prev_payout is None:
-                os.environ.pop("MIN_PAYOUT_COMBOS", None)
-            else:
-                os.environ["MIN_PAYOUT_COMBOS"] = prev_payout
+        combo_tickets, info = validate_exotics_with_simwrapper(
+            combo_candidates,
+            bankroll=BUDGET_CAP_EUR * COMBO_SHARE,
+            ev_min=ev_threshold,
+            roi_min=roi_threshold,
+            payout_min=payout_threshold,
+        )
         combo_tickets = combo_tickets[:1]
 
     tickets = sp_tickets + combo_tickets
