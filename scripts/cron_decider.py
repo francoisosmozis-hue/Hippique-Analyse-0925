@@ -17,6 +17,8 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, Iterable
 
+from config.env_utils import get_env
+
 try:  # Python 3.9+
     from zoneinfo import ZoneInfo
 except ImportError:  # pragma: no cover - Python <3.9 fallback
@@ -78,7 +80,7 @@ def _invoke_runner(reunion: str, course: str, phase: str) -> None:
         phase,
     ]
     env = os.environ.copy()
-    env["ALLOW_HEURISTIC"] = "0"
+    env["ALLOW_HEURISTIC"] = get_env("ALLOW_HEURISTIC", "0")
     subprocess.run(cmd, check=True, env=env)
 
 
