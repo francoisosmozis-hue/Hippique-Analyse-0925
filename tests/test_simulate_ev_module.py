@@ -93,6 +93,26 @@ def test_allocate_dutching_sp_min_stake_filter():
 
 
 
+def test_allocate_dutching_sp_skips_invalid():
+    cfg = {
+        "BUDGET_TOTAL": 10.0,
+        "SP_RATIO": 1.0,
+        "MAX_VOL_PAR_CHEVAL": 0.60,
+        "KELLY_FRACTION": 0.5,
+        "MIN_STAKE_SP": 0.1,
+        "ROUND_TO_SP": 0.1,
+    }
+    runners = [
+        {"id": "1", "name": "A", "odds": 2.0, "p": 0.6},
+        {"id": "2", "name": "B", "odds": 1.0, "p": 0.3},  # invalid odds
+        {"id": "3", "name": "C", "odds": 5.0, "p": 1.2},  # invalid probability
+    ]
+    tickets, ev_sp = allocate_dutching_sp(cfg, runners)
+    assert [t["id"] for t in tickets] == ["1"]
+    expected_ev = tickets[0]["stake"] * (0.6 * (2.0 - 1.0) - (1.0 - 0.6))
+    assert math.isclose(ev_sp, expected_ev)
+
+
 def test_gate_ev_thresholds():
     cfg = {
         "BUDGET_TOTAL": 100.0,
