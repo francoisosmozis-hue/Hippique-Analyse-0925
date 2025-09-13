@@ -37,17 +37,32 @@ def allocate_dutching_sp(cfg: Dict[str, float], runners: List[Dict[str, Any]]) -
     budget = float(cfg.get("BUDGET_TOTAL", 0.0)) * float(cfg.get("SP_RATIO", 1.0))
     cap = float(cfg.get("MAX_VOL_PAR_CHEVAL", 0.60))
 
-    total_kelly = sum(kelly_fraction(p, o, lam=1.0, cap=1.0) for p, o in zip(probs, odds)) or 1.0
+    valid: List[tuple[Dict[str, Any], float, float]] = []
+    total_kelly = 0.0
+    for runner, p, o in zip(runners, probs, odds):
+        try:
+            k = kelly_fraction(p, o, lam=1.0, cap=1.0)
+        except ValueError:
+            continue
+        total_kelly += k
+        valid.append((runner, p, o))
+    if not valid:
+        return [], 0.0
+    total_kelly = total_kelly or 1.0
     kelly_coef = float(cfg.get("KELLY_FRACTION", 0.5))
     raw_total = budget * kelly_coef
     step = float(cfg.get("ROUND_TO_SP", 0.10))
+    min_stake = float(cfg.get("MIN_STAKE_SP", 0.1))
 
     tickets: List[Dict[str, Any]] = []
     ev_sp = 0.0
-    for runner, p, o in zip(runners, probs, odds):
-        frac = kelly_fraction(p, o, lam=kelly_coef / total_kelly, cap=cap)
+    for runner, p, o in valid:
+        try:
+            frac = kelly_fraction(p, o, lam=kelly_coef / total_kelly, cap=cap)
+        except ValueError:
+            continue
         stake = round(budget * frac / step) * step
-        if stake <= 0 or stake < float(cfg["MIN_STAKE_SP"]):
+        if stake <= 0 or stake < min_stake:
             continue
         ev_ticket = stake * (p * (o - 1.0) - (1.0 - p))
         ticket = {
@@ -67,7 +82,7 @@ def allocate_dutching_sp(cfg: Dict[str, float], runners: List[Dict[str, Any]]) -
         if diff:
             best = max(tickets, key=lambda t: t["ev_ticket"])
             new_stake = min(best["stake"] + diff, budget * cap)
-            if new_stake >= float(cfg["MIN_STAKE_SP"]):
+            if new_stake >= min_stake:
                 best["stake"] = new_stake
                 best["ev_ticket"] = new_stake * (
                     best["p"] * (best["odds"] - 1.0) - (1.0 - best["p"])
