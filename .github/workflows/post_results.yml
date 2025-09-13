@@ -24,11 +24,11 @@ jobs:
           pip install -r requirements.txt
       - name: Fetch results + prepare Excel update commands
         run: |
-         python scripts/get_arrivee_geny.py \
+         python get_arrivee_geny.py \
             --planning data/planning/$(date +%F).json \
             --out data/results/$(date +%F)_arrivees.json
             
-          python scripts/p_finale_export.py \
+          python p_finale_export.py \
             --arrivees data/results/$(date +%F)_arrivees.json \
             --analyses-dir data/analyses \
             --excel excel/modele_suivi_courses_hippiques.xlsx \
@@ -36,7 +36,7 @@ jobs:
 
       - name: Update Excel with results
         run: |
-          python scripts/update_excel_with_results.py \
+          python update_excel_with_results.py \
             --excel excel/modele_suivi_courses_hippiques.xlsx \
             --arrivees data/results/$(date +%F)_arrivees.json \
             --analyses-dir data/analyses \
@@ -45,12 +45,13 @@ jobs:
 
       - name: Commit results + updated Excel
         run: |
-          git config user.name "github-actions"
-          git config user.email "actions@users.noreply.github.com"
-          git add data/results/** excel/*.xlsx
-          git commit -m "results+excel: $(date +%F' '%T)" || echo "No changes"
-          git push
-
+            git config user.name "github-actions"
+            git config user.email "actions@users.noreply.github.com"
+            git pull --rebase origin main
+            git add data/results/** excel/*.xlsx
+            git commit -m "results+excel: $(date +%F' '%T)" || echo "No changes"
+            git push
+            
       - name: Upload results + Excel to Drive
         env:
           DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
