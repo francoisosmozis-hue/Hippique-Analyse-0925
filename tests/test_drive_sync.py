@@ -1,8 +1,9 @@
+import pytest
+pytest.importorskip("googleapiclient")
+
 import io
 import json
 from unittest.mock import MagicMock, patch, ANY
-
-import pytest
 from googleapiclient.errors import HttpError
 from httplib2 import Response
 
