@@ -28,9 +28,12 @@ analyse-hippique/
 ├─ README.md
 ├─ requirements.txt
 ├─ .env.example
-├─ config/
-│  ├─ gpi_v51.yml
+├─ gpi_v51.yml
+├─ calibration/
 │  ├─ payout_calibration.yaml
+│  ├─ probabilities.yaml
+│  └─ calibrate_simulator.py
+├─ config/
 │  └─ sources.yml
 ├─ data/
 │  ├─ planning/          # programmes du jour (JSON)
@@ -73,6 +76,12 @@ pip install -r requirements.txt
 > **SciPy facultatif** : si `scipy` n'est pas installé, `optimize_stake_allocation` utilisera un optimiseur de secours plus simple.
 
 3) Variables locales : dupliquez `.env.example` en `.env` et ajustez si besoin.
+
+Variables disponibles :
+
+| Variable | Défaut | Description |
+| --- | --- | --- |
+| `ALLOW_HEURISTIC` | `0` | désactive les heuristiques de backup (`1` pour les autoriser). |
 
 ---
 
@@ -169,6 +178,20 @@ python pipeline_run.py analyse --ev-global 0.4 --roi-global 0.4 --min-payout 10
 **SP Dutching (placé)** : EV(€) par jambe = `stake * [ p*(odds-1) − (1−p) ]` 
 **Combinés (CP/Trio/ZE4)** : via `simulate_wrapper` + calibration `payout_calibration.yaml`.
 
+### ♻️ Recalibrage des payouts
+
+Le script `recalibrate_payouts_pro.py` met à jour `calibration/payout_calibration.yaml`
+à partir de rapports JSON (champ `abs_error_pct`) collectés après les courses.
+
+```bash
+python recalibrate_payouts_pro.py --history data/results/*.json \
+  --out calibration/payout_calibration.yaml
+```
+
+Si l'erreur moyenne dépasse **15 %** pour les combinés (CP/TRIO/ZE4), le
+champ `PAUSE_EXOTIQUES` est positionné à `true` afin de bloquer les paris
+combinés jusqu'à la prochaine calibration.
+
 ### 📊 Closing Line Value (CLV)
 
 Chaque ticket conserve maintenant la cote d'ouverture et la cote de clôture
@@ -237,7 +260,7 @@ python scripts/runner_chain.py --reunion R1 --course C3 --phase H30 --ttl-hours 
 ### Lancer l’analyse H‑5
 ```bash
 python scripts/runner_chain.py --reunion R1 --course C3 --phase H5 \
-  --budget 5 --calibration config/payout_calibration.yaml
+  --budget 5 --calibration calibration/payout_calibration.yaml
 ```
 
 ### Post‑course : arrivée + MAJ Excel
@@ -345,7 +368,7 @@ Extrait `analysis_H5.json` :
 - **Les workflows ne se déclenchent pas** → vérifier le dossier **`.github/workflows/`** (orthographe) et la branche par défaut.  
 - **Arrivées non trouvées** → voir logs `get_arrivee_geny.py`, parfois page retardée ; relancer manuellement `post_results.yml`.  
 - **Drive non uploadé** → secrets manquants (`DRIVE_FOLDER_ID` / `GOOGLE_CREDENTIALS_JSON`) ou quota Google.  
-- **EV combinés = insufficient_data** → calibration absente/vides (`config/payout_calibration.yaml`) ou p_place non enrichies.  
+- **EV combinés = insufficient_data** → calibration absente/vides (`calibration/payout_calibration.yaml`) ou p_place non enrichies.  
 - **Excel non mis à jour** → chemin `--excel` correct ? vérifier permissions du runner (commit autorisé).  
 
 ---
