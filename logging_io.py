@@ -1,3 +1,4 @@
+import csv
 import json
 from pathlib import Path
 from typing import Iterable, Mapping
@@ -37,11 +38,11 @@ def append_csv_line(path: str, data: Mapping[str, object], header: Iterable[str]
     file_path = Path(path)
     file_path.parent.mkdir(parents=True, exist_ok=True)
     is_new = not file_path.exists()
-    with file_path.open("a", encoding="utf-8") as fh:
+    with file_path.open("a", encoding="utf-8", newline="") as fh:
+        writer = csv.writer(fh, delimiter=";")
         if is_new:
-            fh.write(";".join(header) + "\n")
-        line = ";".join(str(data.get(col, "")) for col in header)
-        fh.write(line + "\n")
+            writer.writerow(header)
+        writer.writerow([str(data.get(col, "")) for col in header])
 
 
 def append_json(path: str, data: object) -> None:
