@@ -14,18 +14,12 @@ optional ``ALERTE_VALUE`` column when the alert flag is present.
 """
 
 from typing import Any, Dict, Iterable, List, Mapping, Tuple
-import os
+
+from config.env_utils import get_env
 
 from simulate_wrapper import evaluate_combo
 from logging_io import append_csv_line, CSV_HEADER
 
-
-def _get_env_float(name: str, default: float) -> float:
-    """Return ``name`` from the environment as ``float`` with fallback."""
-    try:
-        return float(os.getenv(name, str(default)))
-    except ValueError:
-        return default
 
 
 def validate_exotics_with_simwrapper(
@@ -54,8 +48,8 @@ def validate_exotics_with_simwrapper(
         exotic ticket and ``info`` exposes ``notes`` and ``flags`` gathered
         during validation.
     """
-    ev_min = _get_env_float("EV_MIN_GLOBAL", 0.0)
-    payout_min = _get_env_float("MIN_PAYOUT_COMBOS", 0.0)
+    ev_min = get_env("EV_MIN_GLOBAL", 0.0, cast=float)
+    payout_min = get_env("MIN_PAYOUT_COMBOS", 0.0, cast=float)
 
     validated: List[Dict[str, Any]] = []
     notes: List[str] = []
