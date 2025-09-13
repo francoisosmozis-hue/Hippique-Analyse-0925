@@ -42,7 +42,7 @@ def allocate_dutching_sp(cfg: Dict[str, float], runners: List[Dict[str, Any]]) -
     for runner, p, o in zip(runners, probs, odds):
         try:
             k = kelly_fraction(p, o, lam=1.0, cap=1.0)
-        except ValueError:
+        except (ValueError, TypeError):
             continue
         total_kelly += k
         valid.append((runner, p, o))
@@ -59,7 +59,7 @@ def allocate_dutching_sp(cfg: Dict[str, float], runners: List[Dict[str, Any]]) -
     for runner, p, o in valid:
         try:
             frac = kelly_fraction(p, o, lam=kelly_coef / total_kelly, cap=cap)
-        except ValueError:
+        except (ValueError, TypeError):
             continue
         stake = round(budget * frac / step) * step
         if stake <= 0 or stake < min_stake:
