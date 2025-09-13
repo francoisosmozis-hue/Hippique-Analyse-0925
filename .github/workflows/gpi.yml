@@ -28,28 +28,22 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+      - name: Inject course ID into source URL
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          cid="${{ github.event.inputs.course_id }}"
+          test -n "$cid"
+          sed -i "s/{course_id}/$cid/" config/sources.yml
       - name: Fetch H-30 odds
         if: github.event_name == 'schedule' && github.event.schedule == '25 15 * * *'
         run: |
           python online_fetch_zeturf.py --mode h30 --out data/h30.json
       - name: Fetch H-5 odds
         if: github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && github.event.schedule == '55 15 * * *')
-        run: |
-          COURSE_ID="${{ github.event.inputs.course_id }}"
-          if [ -n "$COURSE_ID" ]; then
-            python online_fetch_zeturf.py --mode h5 --out data/h5.json --course-id "$COURSE_ID"
-          else
-            python online_fetch_zeturf.py --mode h5 --out data/h5.json
-          fi
+        run: python online_fetch_zeturf.py --mode h5 --out data/h5.json
       - name: Compute diff
         if: github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && github.event.schedule == '55 15 * * *')
-        run: |
-          COURSE_ID="${{ github.event.inputs.course_id }}"
-          if [ -n "$COURSE_ID" ]; then
-            python online_fetch_zeturf.py --mode diff --out data/diff.json --course-id "$COURSE_ID"
-          else
-            python online_fetch_zeturf.py --mode diff --out data/diff.json
-          fi
+        run: python online_fetch_zeturf.py --mode diff --out data/diff.json
       - name: Run tests
         if: github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && github.event.schedule == '55 15 * * *')
         run: pytest -q
