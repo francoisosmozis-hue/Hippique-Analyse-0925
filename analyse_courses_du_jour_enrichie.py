@@ -10,6 +10,7 @@ any) of the script.
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import re
 import subprocess
@@ -72,6 +73,80 @@ def _upload_jsons(base_dir: Path) -> None:
             print(f"[WARN] Failed to upload {json_file}: {exc}")
 
 
+def _snap_prefix(rc_dir: Path) -> str | None:
+    """Return the stem of the H-5 snapshot if available."""
+
+    snap = next(rc_dir.glob("*_H-5.json"), None)
+    return snap.stem if snap else None
+
+
+def _check_enrich_outputs(rc_dir: Path) -> None:
+    """Ensure enrich_h5 produced required CSV artefacts."""
+
+    snap = _snap_prefix(rc_dir)
+    je_csv = rc_dir / f"{snap}_je.csv" if snap else None
+    chronos_csv = rc_dir / "chronos.csv"
+    missing = []
+    if not je_csv or not je_csv.exists():
+        missing.append(f"{snap}_je.csv" if snap else "*_je.csv")
+    if not chronos_csv.exists():
+        missing.append("chronos.csv")
+    if missing:
+        print(
+            "[ERROR] fichiers manquants après enrich_h5: " + ", ".join(missing),
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
+
+
+def export_per_horse_csv(rc_dir: Path) -> Path:
+    """Export a per-horse report aggregating probabilities and J/E stats."""
+
+    snap = _snap_prefix(rc_dir)
+    if snap is None:
+        raise FileNotFoundError("Snapshot H-5 introuvable dans rc_dir")
+    je_path = rc_dir / f"{snap}_je.csv"
+    chronos_path = rc_dir / "chronos.csv"
+    p_finale_path = rc_dir / "p_finale.json"
+
+    # Load data sources
+    data = json.loads(p_finale_path.read_text(encoding="utf-8"))
+    p_true = {str(k): float(v) for k, v in data.get("p_true", {}).items()}
+    id2name = data.get("meta", {}).get("id2name", {})
+
+    def _read_csv(path: Path) -> list[dict[str, str]]:
+        text = path.read_text(encoding="utf-8")
+        delim = ";" if ";" in text.splitlines()[0] else ","
+        return list(csv.DictReader(text.splitlines(), delimiter=delim))
+
+    je_rows = _read_csv(je_path)
+    chrono_rows = _read_csv(chronos_path)
+    chrono_ok = {
+        str(row.get("num") or row.get("id"))
+        for row in chrono_rows
+        if any(v.strip() for k, v in row.items() if k not in {"num", "id"} and v)
+    }
+
+    out_path = rc_dir / "per_horse_report.csv"
+    with out_path.open("w", newline="", encoding="utf-8") as fh:
+        writer = csv.writer(fh)
+        writer.writerow(["num", "nom", "p_finale", "j_rate", "e_rate", "chrono_ok"])
+        for row in je_rows:
+            num = str(row.get("num") or row.get("id") or "")
+            nom = row.get("nom") or row.get("name") or id2name.get(num, "")
+            writer.writerow(
+                [
+                    num,
+                    nom,
+                    p_true.get(num, ""),
+                    row.get("j_rate"),
+                    row.get("e_rate"),
+                    str(num in chrono_ok),
+                ]
+            )
+    return out_path
+
+
 # ---------------------------------------------------------------------------
 # CLI entry point
 # ---------------------------------------------------------------------------
@@ -109,9 +184,12 @@ def _process_reunion(
         write_snapshot_from_geny(course_id, phase, rc_dir)
         if phase.upper() == "H5":
             enrich_h5(rc_dir, budget=budget, kelly=kelly)
+            _check_enrich_outputs(rc_dir)
             build_p_finale(rc_dir, budget=budget, kelly=kelly)
             run_pipeline(rc_dir, budget=budget, kelly=kelly)
             build_prompt_from_meta(rc_dir, budget=budget, kelly=kelly)
+            csv_path = export_per_horse_csv(rc_dir)
+            print(f"[INFO] per-horse report écrit: {csv_path}")
         _upload_jsons(rc_dir)
 
 
@@ -202,9 +280,12 @@ def main() -> None:
                 write_snapshot_from_geny(course_id, "H30", rc_dir)
                 write_snapshot_from_geny(course_id, "H5", rc_dir)
                 enrich_h5(rc_dir, budget=args.budget, kelly=args.kelly)
+                _check_enrich_outputs(rc_dir)
                 build_p_finale(rc_dir, budget=args.budget, kelly=args.kelly)
                 run_pipeline(rc_dir, budget=args.budget, kelly=args.kelly)
                 build_prompt_from_meta(rc_dir, budget=args.budget, kelly=args.kelly)
+                csv_path = export_per_horse_csv(rc_dir)
+                print(f"[INFO] per-horse report écrit: {csv_path}")
                 _upload_jsons(rc_dir)
         print("[DONE] from-geny-today pipeline terminé.")
         return
