@@ -87,7 +87,7 @@ def test_single_reunion(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, phase: 
 
     assert [(c, p) for c, p, _ in snaps] == [("123", phase), ("456", phase)]
     if expect_pipeline:
-         assert len(enrich_calls) == 2
+        assert len(enrich_calls) == 2
         assert len(pipeline_calls) == 6  # 3 funcs * 2 courses
         assert len(csv_calls) == 2
     else:
@@ -200,3 +200,25 @@ def test_export_per_horse_csv(tmp_path: Path) -> None:
     lines = out.read_text(encoding="utf-8").strip().splitlines()
     assert lines[0] == "num,nom,p_finale,j_rate,e_rate,chrono_ok"
     assert lines[1].startswith("1,A,0.5,0.1,0.2,True")
+
+
+def test_export_per_horse_csv_missing_je(tmp_path: Path) -> None:
+    snap = tmp_path / "snap_H-5.json"
+    snap.write_text("{}", encoding="utf-8")
+    (tmp_path / "chronos.csv").write_text("num,chrono\n1,1.0\n", encoding="utf-8")
+    data = {"p_true": {"1": 0.5}, "meta": {"id2name": {"1": "A"}}}
+    (tmp_path / "p_finale.json").write_text(json.dumps(data), encoding="utf-8")
+    with pytest.raises(FileNotFoundError):
+        acde.export_per_horse_csv(tmp_path)
+
+
+def test_export_per_horse_csv_missing_chronos(tmp_path: Path) -> None:
+    snap = tmp_path / "snap_H-5.json"
+    snap.write_text("{}", encoding="utf-8")
+    (tmp_path / f"{snap.stem}_je.csv").write_text(
+        "num,nom,j_rate,e_rate\n1,A,0.1,0.2\n", encoding="utf-8"
+    )
+    data = {"p_true": {"1": 0.5}, "meta": {"id2name": {"1": "A"}}}
+    (tmp_path / "p_finale.json").write_text(json.dumps(data), encoding="utf-8")
+    with pytest.raises(FileNotFoundError):
+        acde.export_per_horse_csv(tmp_path)
