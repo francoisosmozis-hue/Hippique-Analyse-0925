@@ -10,6 +10,8 @@ from pathlib import Path
 import os
 import sys
 
+from config.env_utils import get_env
+
 try:
     from dotenv import load_dotenv
 except Exception:  # pragma: no cover - optional dependency
@@ -72,6 +74,7 @@ def load_yaml(path: str) -> dict:
     cfg.setdefault("ROI_MIN_GLOBAL", 0.0)
     cfg.setdefault("ROR_MAX", 0.05)
     cfg.setdefault("SHARPE_MIN", 0.0)
+    cfg["BUDGET_TOTAL"] = get_env("BUDGET_TOTAL", cfg.get("BUDGET_TOTAL"), cast=float)
     missing = [k for k in REQ_KEYS if k not in cfg]
     if missing:
         raise RuntimeError(f"Config incomplète: clés manquantes {missing}")
