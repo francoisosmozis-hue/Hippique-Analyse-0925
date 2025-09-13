@@ -14,14 +14,16 @@ env:
   TZ: Europe/Paris
   PYTHONUTF8: "1"
   # Paramètres GPI v5.1
+  # Budget total 5 € réparti entre SP et combinés
   BUDGET_TOTAL: "5"
-  SP_RATIO: "0.6"
-  COMBO_RATIO: "0.4"
+  SSP_RATIO: "0.6"      # 60% pour les paris simples
+  COMBO_RATIO: "0.4"   # 40% pour les combinés
+  # Seuils EV/ROI et autres garde-fous
   EV_MIN_SP: "0.20"
   EV_MIN_GLOBAL: "0.40"
   ROI_MIN_GLOBAL: "0.40"
   MAX_VOL_PAR_CHEVAL: "0.60"
-  MIN_PAYOUT_COMBOS: "10.0"
+  MIN_PAYOUT_COMBOS: "10.0"  # payout attendu minimal en €
   ALLOW_JE_NA: "false"
 
 jobs:
