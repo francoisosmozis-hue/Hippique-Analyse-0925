@@ -1,5 +1,8 @@
 name: Python tests (GPI v5.1)
 
+permissions:
+  contents: read
+  
 on:
   push:
   pull_request:
