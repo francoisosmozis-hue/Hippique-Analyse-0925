@@ -5,6 +5,7 @@ on:
     inputs:
       meeting: { description: "Réunion ex: R1", required: false }
       race:    { description: "Course ex: C5", required: false }
+      course_id: { description: "Identifiant numérique de la course", required: true }
   schedule:
     # Paris (été) : 16:25 ≈ H-30 ; 16:55 ≈ H-5  (adapte si besoin)
     - cron: "25 15 * * *"
@@ -46,6 +47,13 @@ jobs:
         run: |
           echo "MEETING=${{ github.event.inputs.meeting || '' }}" >> $GITHUB_OUTPUT
           echo "RACE=${{ github.event.inputs.race || '' }}" >> $GITHUB_OUTPUT
+          echo "COURSE_ID=${{ github.event.inputs.course_id }}" >> $GITHUB_OUTPUT
+
+      - name: Inject course ID into source URL
+        run: |
+          cid="${{ steps.in.outputs.COURSE_ID }}"
+          test -n "$cid"
+          sed -i "s/{course_id}/$cid/" config/sources.yml
 
       # H-30 SNAPHOT
       - name: H-30 snapshot (meetings + odds)
