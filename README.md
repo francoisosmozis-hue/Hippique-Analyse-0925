@@ -265,7 +265,7 @@ python calibration/calibrate_simulator.py --results data/results.csv
 #### Usage
 
 ```bash
-python fetch_reunions_geny.py --date 2025-09-12 --out data/reunions.json
+python fetch_reunions_geny.py --date YYYY-MM-DD --out data/reunions.json
 python analyse_courses_du_jour_enrichie.py --reunions-file data/reunions.json --budget <B> --kelly <K>
 ```
 
