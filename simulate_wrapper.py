@@ -15,8 +15,9 @@ from __future__ import annotations
 
 from collections import OrderedDict
 from pathlib import Path
-from typing import Dict, Iterable
+from typing import Dict, Iterable, List, Any
 
+import os
 import yaml
 
 CALIBRATION_PATH = Path("calibration/probabilities.yaml")
@@ -97,4 +98,74 @@ def simulate_wrapper(legs: Iterable[object]) -> float:
     while len(_calibration_cache) > MAX_CACHE_SIZE:
         _calibration_cache.popitem(last=False)
     return prob
+
+
+def evaluate_combo(
+    tickets: List[Dict[str, Any]],
+    bankroll: float,
+    *,
+    calibration: str | os.PathLike[str] = "payout_calibration.yaml",
+    allow_heuristic: bool | None = None,
+) -> Dict[str, Any]:
+    """Return EV ratio and expected payout for combined ``tickets``.
+
+    Parameters
+    ----------
+    tickets:
+        List of ticket mappings understood by :func:`ev_calculator.compute_ev_roi`.
+    bankroll:
+        Bankroll used for EV ratio computation.
+    calibration:
+        Path to ``payout_calibration.yaml``.  When absent and ``allow_heuristic``
+        is ``False`` the evaluation is skipped.
+    allow_heuristic:
+        Optional override.  When ``True`` evaluation proceeds even if the
+        calibration file is missing.
+
+    Returns
+    -------
+    dict
+        Mapping with keys ``status``, ``ev_ratio``, ``payout_expected``,
+        ``notes`` and ``requirements``.
+    """
+
+    if allow_heuristic is None:
+        allow_heuristic = os.getenv("ALLOW_HEURISTIC", "").lower() in {
+            "1",
+            "true",
+            "yes",
+        }
+
+    calib_path = Path(calibration)
+    notes: List[str] = []
+    requirements: List[str] = []
+    if not calib_path.exists():
+        notes.append("no_calibration_yaml")
+        requirements.append(str(calib_path))
+        if not allow_heuristic:
+            return {
+                "status": "insufficient_data",
+                "ev_ratio": 0.0,
+                "payout_expected": 0.0,
+                "notes": notes,
+                "requirements": requirements,
+            }
+
+    from ev_calculator import compute_ev_roi
+
+    stats = compute_ev_roi(
+        [dict(t) for t in tickets],
+        budget=bankroll,
+        simulate_fn=simulate_wrapper,
+        kelly_cap=1.0,
+        round_to=0.0,
+    )
+
+    return {
+        "status": "ok",
+        "ev_ratio": float(stats.get("ev_ratio", 0.0)),
+        "payout_expected": float(stats.get("combined_expected_payout", 0.0)),
+        "notes": notes,
+        "requirements": requirements,
+    }
 
