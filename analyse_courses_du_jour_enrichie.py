@@ -70,7 +70,10 @@ def build_prompt_from_meta(rc_dir: Path, *, budget: float, kelly: float) -> None
 
 
 def _upload_artifacts(rc_dir: Path, *, drive_folder_id: str | None) -> None:
-    """Upload ``rc_dir`` contents to Drive under a race-specific subfolder."""
+     """Upload ``rc_dir`` contents to Drive under a race-specific subfolder.
+
+    The helper is a no-op when ``drive_folder_id`` is falsy.
+    """
 
 
     if not drive_folder_id:
@@ -200,7 +203,8 @@ def _process_reunion(
             build_prompt_from_meta(rc_dir, budget=budget, kelly=kelly)
             csv_path = export_per_horse_csv(rc_dir)
             print(f"[INFO] per-horse report écrit: {csv_path}")
-        _upload_artifacts(rc_dir, drive_folder_id=drive_folder_id)
+        if drive_folder_id:
+            _upload_artifacts(rc_dir, drive_folder_id=drive_folder_id)
 
 
 def main() -> None:
@@ -296,13 +300,15 @@ def main() -> None:
                 build_prompt_from_meta(rc_dir, budget=args.budget, kelly=args.kelly)
                 csv_path = export_per_horse_csv(rc_dir)
                 print(f"[INFO] per-horse report écrit: {csv_path}")
-                _upload_artifacts(rc_dir, drive_folder_id=drive_folder_id)
+                if drive_folder_id:
+                    _upload_artifacts(rc_dir, drive_folder_id=drive_folder_id)
         print("[DONE] from-geny-today pipeline terminé.")
         return
 
     # Fall back to original behaviour: simply run the pipeline on ``data_dir``
     run_pipeline(Path(args.data_dir), budget=args.budget, kelly=args.kelly)
-    _upload_artifacts(Path(args.data_dir), drive_folder_id=drive_folder_id)
+    if drive_folder_id:
+        _upload_artifacts(Path(args.data_dir), drive_folder_id=drive_folder_id)
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point
