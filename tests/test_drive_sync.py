@@ -98,3 +98,98 @@ def test_download_file_permission_error(tmp_path):
     service.files.return_value.get_media.side_effect = _http_error()
     with pytest.raises(HttpError):
         drive_sync.download_file("ID", dest, service=service)
+
+
+def test_find_item_queries_drive():
+    service = MagicMock()
+    service.files.return_value.list.return_value.execute.return_value = {
+        "files": [{"id": "ABC"}]
+    }
+    file_id = drive_sync.find_item(
+        "name", parent="PARENT", service=service, mime_type="type"
+    )
+    service.files.return_value.list.assert_called_once()
+    args, kwargs = service.files.return_value.list.call_args
+    assert "name = 'name'" in kwargs["q"]
+    assert "'PARENT' in parents" in kwargs["q"]
+    assert "mimeType = 'type'" in kwargs["q"]
+    assert file_id == "ABC"
+
+
+def test_find_item_missing_returns_none():
+    service = MagicMock()
+    service.files.return_value.list.return_value.execute.return_value = {
+        "files": []
+    }
+    assert drive_sync.find_item("x", parent="PARENT", service=service) is None
+
+
+def test_ensure_folder_creates_when_missing():
+    service = MagicMock()
+    with patch("scripts.drive_sync.find_item", return_value=None), patch(
+        "scripts.drive_sync._build_service", return_value=service
+    ):
+        service.files.return_value.create.return_value.execute.return_value = {
+            "id": "NEW"
+        }
+        folder_id = drive_sync.ensure_folder("sub", parent="PARENT")
+    service.files.return_value.create.assert_called_once()
+    body = service.files.return_value.create.call_args.kwargs["body"]
+    assert body["name"] == "sub" and body["parents"] == ["PARENT"]
+    assert body["mimeType"] == drive_sync.FOLDER_MIME
+    assert folder_id == "NEW"
+
+
+def test_ensure_folder_returns_existing():
+    service = MagicMock()
+    with patch(
+        "scripts.drive_sync.find_item", return_value="EXIST"
+    ), patch("scripts.drive_sync._build_service", return_value=service):
+        folder_id = drive_sync.ensure_folder("sub", parent="PARENT")
+    service.files.return_value.create.assert_not_called()
+    assert folder_id == "EXIST"
+
+
+def test_upload_or_update_updates_existing(tmp_path):
+    path = tmp_path / "file.txt"
+    path.write_text("data", encoding="utf-8")
+    service = MagicMock()
+    with patch(
+        "scripts.drive_sync.find_item", return_value="ID"
+    ), patch("scripts.drive_sync.MediaFileUpload") as media_mock:
+        drive_sync.upload_or_update(path, folder_id="FOLDER", service=service)
+    service.files.return_value.update.assert_called_once_with(
+        fileId="ID", media_body=ANY
+    )
+    media_mock.assert_called_once_with(str(path), resumable=True)
+
+
+def test_upload_or_update_creates_when_missing(tmp_path):
+    path = tmp_path / "file.txt"
+    path.write_text("data", encoding="utf-8")
+    service = MagicMock()
+    service.files.return_value.create.return_value.execute.return_value = {"id": "NEW"}
+    with patch(
+        "scripts.drive_sync.find_item", return_value=None
+    ), patch("scripts.drive_sync.MediaFileUpload"):
+        new_id = drive_sync.upload_or_update(path, folder_id="FOLDER", service=service)
+    service.files.return_value.create.assert_called_once()
+    assert new_id == "NEW"
+
+
+def test_push_tree_walks_structure(tmp_path):
+    (tmp_path / "sub").mkdir()
+    (tmp_path / "root.txt").write_text("r", encoding="utf-8")
+    (tmp_path / "sub" / "child.txt").write_text("c", encoding="utf-8")
+
+    ensure_mock = MagicMock(return_value="SUBID")
+    upload_mock = MagicMock()
+    with patch("scripts.drive_sync.ensure_folder", ensure_mock), patch(
+        "scripts.drive_sync.upload_or_update", upload_mock
+    ):
+        drive_sync.push_tree(tmp_path, folder_id="ROOT", service="svc")
+
+    ensure_mock.assert_called_once_with("sub", parent="ROOT", service="svc")
+    calls = upload_mock.call_args_list
+    assert calls[0].kwargs["folder_id"] == "ROOT"
+    assert calls[1].kwargs["folder_id"] == "SUBID"
