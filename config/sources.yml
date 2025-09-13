@@ -1,6 +1,6 @@
 zeturf:
-  # Primary endpoint for Zeturf meetings
-  url: "https://www.zeturf.fr/rest/api/meetings/today"
+  # Race snapshot endpoint; replace {course_id} before requesting
+  url: "https://www.zeturf.fr/rest/api/race/{course_id}"
 geny:
   # Fallback endpoint scraped when Zeturf is unavailable
   url: "https://www.geny.com/reunions-courses-pmu"
