@@ -70,11 +70,10 @@ def build_prompt_from_meta(rc_dir: Path, *, budget: float, kelly: float) -> None
 
 
 def _upload_artifacts(rc_dir: Path, *, drive_folder_id: str | None) -> None:
-     """Upload ``rc_dir`` contents to Drive under a race-specific subfolder.
+    """Upload ``rc_dir`` contents to Drive under a race-specific subfolder.
 
     The helper is a no-op when ``drive_folder_id`` is falsy.
     """
-
 
     if not drive_folder_id:
         return
