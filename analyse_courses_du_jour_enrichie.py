@@ -26,6 +26,12 @@ except Exception:  # pragma: no cover - used when optional deps are missing
     def write_snapshot_from_geny(*args: Any, **kwargs: Any) -> None:
         raise RuntimeError("write_snapshot_from_geny is unavailable")
 
+try:  # pragma: no cover - optional dependency in tests
+    from scripts.drive_sync import upload_file
+except Exception:  # pragma: no cover - used when optional deps are missing
+    def upload_file(*args: Any, **kwargs: Any) -> None:
+        raise RuntimeError("upload_file is unavailable")
+
 
 # ---------------------------------------------------------------------------
 # Helper stubs - these functions are expected to be provided elsewhere in the
@@ -54,6 +60,16 @@ def run_pipeline(rc_dir: Path, *, budget: float, kelly: float) -> None:  # pragm
 
 def build_prompt_from_meta(rc_dir: Path, *, budget: float, kelly: float) -> None:  # pragma: no cover - stub
     return None
+
+
+def _upload_jsons(base_dir: Path) -> None:
+    """Upload all JSON files under ``base_dir`` to Google Drive."""
+
+    for json_file in base_dir.rglob("*.json"):
+        try:
+            upload_file(json_file)
+        except Exception as exc:  # pragma: no cover - best effort
+            print(f"[WARN] Failed to upload {json_file}: {exc}")
 
 
 # ---------------------------------------------------------------------------
@@ -96,6 +112,7 @@ def _process_reunion(
             build_p_finale(rc_dir, budget=budget, kelly=kelly)
             run_pipeline(rc_dir, budget=budget, kelly=kelly)
             build_prompt_from_meta(rc_dir, budget=budget, kelly=kelly)
+        _upload_jsons(rc_dir)
 
 
 def main() -> None:
@@ -188,11 +205,13 @@ def main() -> None:
                 build_p_finale(rc_dir, budget=args.budget, kelly=args.kelly)
                 run_pipeline(rc_dir, budget=args.budget, kelly=args.kelly)
                 build_prompt_from_meta(rc_dir, budget=args.budget, kelly=args.kelly)
+                _upload_jsons(rc_dir)
         print("[DONE] from-geny-today pipeline terminé.")
         return
 
     # Fall back to original behaviour: simply run the pipeline on ``data_dir``
     run_pipeline(Path(args.data_dir), budget=args.budget, kelly=args.kelly)
+    _upload_jsons(Path(args.data_dir))
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point
