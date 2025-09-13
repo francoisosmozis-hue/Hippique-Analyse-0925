@@ -57,6 +57,32 @@ def test_fetch_meetings_fallback_on_404(monkeypatch: pytest.MonkeyPatch) -> None
     assert data == {"meetings": [{"id": "R1", "name": "Meeting A", "date": today}]}
 
 
+def test_fetch_runners_fallback_on_404(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``fetch_runners`` should fallback to Geny on a 404."""
+    url = "https://www.zeturf.fr/rest/api/race/12345"
+    seen: list[str] = []
+
+    def fake_get(u: str, timeout: int = 10) -> DummyResp:
+        seen.append(u)
+        return DummyResp(404, None)
+
+    monkeypatch.setattr(ofz.requests, "get", fake_get)
+
+    called: dict[str, Any] = {}
+
+    def fake_fetch(id_course: str) -> dict:
+        called["id"] = id_course
+        return {"id_course": id_course}
+
+    monkeypatch.setattr(ofz, "fetch_from_geny_idcourse", fake_fetch)
+
+    data = ofz.fetch_runners(url)
+
+    assert seen == [url]
+    assert called["id"] == "12345"
+    assert data["id_course"] == "12345"
+
+
 def test_compute_diff_top_lists() -> None:
     """``compute_diff`` should expose top steams and drifts."""
 
