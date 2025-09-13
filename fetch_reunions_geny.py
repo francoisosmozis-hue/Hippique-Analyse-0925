@@ -46,9 +46,13 @@ def _fetch_reunions() -> List[Dict[str, str]]:
         # Extract Geny link even if not used later
         link_el = section.select_one("h2 a")
         geny_link = link_el.get("href", "") if link_el else ""
-        _ = geny_link  # satisfy extraction requirement
-
-        reunions.append({"label": label, "hippodrome": hippo})
+        reunions.append(
+            {
+                "label": label,
+                "hippodrome": hippo,
+                "url_geny": geny_link,
+            }
+        )
 
     return reunions
 
@@ -72,6 +76,7 @@ def main() -> None:
             {
                 "label": reunion["label"],
                 "hippodrome": reunion["hippodrome"],
+                "url_geny": reunion["url_geny"],
                 "url_zeturf": url_zeturf,
             }
         )
