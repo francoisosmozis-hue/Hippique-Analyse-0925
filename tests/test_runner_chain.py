@@ -20,6 +20,30 @@ def test_validate_exotics_with_simwrapper_filters_and_alert(monkeypatch):
     assert info['flags']['combo'] is True
 
 
+def test_validate_exotics_with_simwrapper_caps_best_and_alert(monkeypatch):
+    results = {
+        'a': {'ev_ratio': 0.6, 'payout_expected': 30.0, 'notes': [], 'requirements': []},
+        'b': {'ev_ratio': 0.8, 'payout_expected': 35.0, 'notes': [], 'requirements': []},
+    }
+
+    def fake_eval(tickets, bankroll, allow_heuristic=True):
+        return results[tickets[0]['id']]
+
+    monkeypatch.setattr(runner_chain, 'evaluate_combo', fake_eval)
+
+    exotics = [
+        [{'id': 'a', 'p': 0.5, 'odds': 2.0, 'stake': 1.0}],
+        [{'id': 'b', 'p': 0.5, 'odds': 2.0, 'stake': 1.0}],
+    ]
+
+    tickets, info = runner_chain.validate_exotics_with_simwrapper(exotics, bankroll=5)
+    assert len(tickets) == 1
+    assert tickets[0]['legs'] == ['b']
+    assert tickets[0]['flags'] == ['ALERTE_VALUE']
+    assert info['flags']['combo'] is True
+    assert info['flags']['ALERTE_VALUE'] is True
+
+
 def test_export_tracking_csv_line(tmp_path):
     path = tmp_path / 'track.csv'
     meta = {'reunion': 'R1', 'course': 'C1', 'hippodrome': 'X', 'date': '2024-01-01', 'discipline': 'plat', 'partants': 8}
