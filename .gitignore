@@ -53,6 +53,7 @@ data/*
 results/
 out_*/
 *.json
+!config/meetings.json
 !data/planning/*.json
 *.csv
 *.parquet
@@ -73,6 +74,7 @@ excel/
 *.bak
 *.tmp
 *.old
+
 
 
 
