@@ -7,6 +7,16 @@ from simulate_wrapper import evaluate_combo
 TICKETS = [{"legs": ["a", "b"], "odds": 10.0, "stake": 1.0}]
 
 
+def test_default_path_missing(monkeypatch, tmp_path):
+    """When calibration file is absent and no override, evaluation is gated."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("ALLOW_HEURISTIC", raising=False)
+    res = evaluate_combo(TICKETS, bankroll=10.0)
+    assert res["status"] == "insufficient_data"
+    assert "no_calibration_yaml" in res["notes"]
+    assert str(Path("payout_calibration.yaml")) in res["requirements"]
+
+
 def test_gates_when_calibration_missing(tmp_path, monkeypatch):
     calib = tmp_path / "payout_calibration.yaml"
     if calib.exists():
