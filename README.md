@@ -155,6 +155,20 @@ Plusieurs motifs `--upload-glob` peuvent être fournis.  Pour télécharger un
 fichier par identifiant : `python scripts/drive_sync.py --download FILE_ID
 destination.xlsx`.
 
+### Récupérer les données archivées
+
+Pour rapatrier les fichiers `snapshot_*.json` et `analysis*.json` d'une date
+précise, utilisez :
+
+```bash
+export DRIVE_FOLDER_ID="<drive-folder-id>"
+export GOOGLE_CREDENTIALS_JSON="$(cat credentials.json)"
+python scripts/restore_from_drive.py --date YYYY-MM-DD --dest dossier_sortie
+```
+
+Les fichiers correspondants sont téléchargés dans le dossier indiqué par
+`--dest`.
+
 ---
 
 ## 🧮 Règles EV/ROI (GPI v5.1)
