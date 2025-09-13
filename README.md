@@ -63,6 +63,25 @@ analyse-hippique/
    └─ post_results.yml
 ```
 
+### Configuration des sources
+
+Le fichier `config/sources.yml` pointe vers l'API de snapshot Zeturf :
+
+```yaml
+zeturf:
+  url: "https://www.zeturf.fr/rest/api/race/{course_id}"
+```
+
+Remplacez `{course_id}` par l'identifiant numérique de la course avant d'appeler
+`scripts/online_fetch_zeturf.py --mode h30` ou `--mode h5`.
+Le workflow `gpi_v51.yml` fait cette substitution automatiquement via son entrée
+`course_id`. Pour un test local :
+
+```bash
+COURSE_ID=123456 sed -i "s/{course_id}/$COURSE_ID/" config/sources.yml
+python scripts/online_fetch_zeturf.py --mode h30 --out data/h30/h30.json
+```
+
 ---
 
 ## ⚙️ Installation locale
