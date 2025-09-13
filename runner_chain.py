@@ -15,8 +15,6 @@ optional ``ALERTE_VALUE`` column when the alert flag is present.
 
 from typing import Any, Dict, Iterable, List, Mapping, Tuple
 
-from config.env_utils import get_env
-
 from simulate_wrapper import evaluate_combo
 from logging_io import append_csv_line, CSV_HEADER
 
@@ -26,6 +24,9 @@ def validate_exotics_with_simwrapper(
     exotics: Iterable[List[Dict[str, Any]]],
     bankroll: float,
     *,
+    ev_min: float = 0.0,
+    roi_min: float = 0.0,
+    payout_min: float = 0.0,
     allow_heuristic: bool = True,
 ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     """Validate exotic ticket candidates using :func:`evaluate_combo`.
@@ -37,6 +38,12 @@ def validate_exotics_with_simwrapper(
         list of leg tickets compatible with ``compute_ev_roi``.
     bankroll:
         Bankroll used for EV ratio computation.
+    ev_min:
+        Minimum EV ratio required for a candidate to be retained.
+    roi_min:
+        Minimum ROI required for a candidate to be retained.
+    payout_min:
+        Minimum expected payout required for a candidate to be retained.
     allow_heuristic:
         Passed through to :func:`evaluate_combo` to allow evaluation without
         calibration data.
@@ -48,9 +55,6 @@ def validate_exotics_with_simwrapper(
         exotic ticket and ``info`` exposes ``notes`` and ``flags`` gathered
         during validation.
     """
-    ev_min = get_env("EV_MIN_GLOBAL", 0.0, cast=float)
-    payout_min = get_env("MIN_PAYOUT_COMBOS", 0.0, cast=float)
-
     validated: List[Dict[str, Any]] = []
     notes: List[str] = []
     reasons: List[str] = []
@@ -59,18 +63,23 @@ def validate_exotics_with_simwrapper(
     for candidate in exotics:
         stats = evaluate_combo(candidate, bankroll, allow_heuristic=allow_heuristic)
         ev_ratio = float(stats.get("ev_ratio", 0.0))
+        roi = float(stats.get("roi", 0.0))
         payout = float(stats.get("payout_expected", 0.0))
         if ev_ratio < ev_min:
             reasons.append("ev_ratio_below_threshold")
             continue
-        if payout < payout_min:
-            reasons.append("payout_expected_below_threshold")
+        if roi < roi_min:
+            reasons.append("roi_below_threshold")
             continue
         ticket = {
             "id": f"CP{len(validated) + 1}",
             "type": "CP",
             "legs": [t.get("id") for t in candidate],
-            "ev_check": {"ev_ratio": ev_ratio, "payout_expected": payout},
+            "ev_check": {
+                "ev_ratio": ev_ratio,
+                "roi": roi,
+                "payout_expected": payout,
+            },
         }
         if payout > 20 and ev_ratio > 0.5:
             ticket.setdefault("flags", []).append("ALERTE_VALUE")
