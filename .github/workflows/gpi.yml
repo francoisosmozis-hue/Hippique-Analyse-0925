@@ -10,6 +10,9 @@ on:
     - cron: "25 15 * * *"
     - cron: "55 15 * * *"
 
+permissions:
+  contents: read
+  
 env:
   TZ: Europe/Paris
 
