@@ -104,10 +104,15 @@ Dans **Settings → Secrets and variables → Actions** du repo, créer :
 
 ### ☁️ Synchronisation Google Drive
 
+1. Créez un **compte de service** dans la console Google Cloud et partagez le
+   dossier Drive cible avec l'adresse mail de ce compte.
+2. Définissez les variables d'environnement `GOOGLE_CREDENTIALS_JSON` (contenu
+   intégral du `credentials.json`) et `DRIVE_FOLDER_ID` (identifiant du dossier
+   de destination).
+
 Le module `scripts/drive_sync.py` expose les fonctions `upload_file` et
-`download_file` basées sur `google-api-python-client`.  Il s'appuie sur les
-variables d'environnement `DRIVE_FOLDER_ID` et `GOOGLE_CREDENTIALS_JSON` (contenu
-du `credentials.json` du compte de service).
+`download_file` basées sur `google-api-python-client`.  Elles s'appuient sur les
+variables d'environnement ci‑dessus.
 
 ```bash
 python scripts/drive_sync.py \
