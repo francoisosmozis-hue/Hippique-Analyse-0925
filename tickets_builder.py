@@ -39,7 +39,10 @@ def allow_combo(ev_global: float, roi_global: float, payout_est: float) -> bool:
     """Decide if a combo ticket can be issued based on EV, ROI and payout."""
     ev_min = _get_env_float("EV_MIN_GLOBAL", EV_MIN_COMBO)
     roi_min = _get_env_float("ROI_MIN_GLOBAL", 0.0)
-    min_payout = _get_env_float("MIN_PAYOUT_COMBOS", PAYOUT_MIN_COMBO)
+    min_payout = _get_env_float(
+        "MIN_PAYOUT_COMBOS",
+        _get_env_float("EXOTIC_MIN_PAYOUT", PAYOUT_MIN_COMBO),
+    )
     if ev_global < ev_min or roi_global < roi_min or payout_est < min_payout:
         return False
     return True
