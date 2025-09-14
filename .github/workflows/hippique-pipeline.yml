@@ -35,7 +35,7 @@ jobs:
     env:
       ZETURF_LOGIN: ${{ secrets.ZETURF_LOGIN }}
       ZETURF_PASSWORD: ${{ secrets.ZETURF_PASSWORD }}
-      GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
+      GOOGLE_CREDENTIALS_B64: ${{ secrets.GOOGLE_CREDENTIALS_B64 }}
       DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
       GENY_COOKIE: ${{ secrets.GENY_COOKIE }}
       PYPI_EXTRA_INDEX: ${{ secrets.PYPI_EXTRA_INDEX }}
