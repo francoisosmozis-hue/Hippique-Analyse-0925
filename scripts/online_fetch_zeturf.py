@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import os
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -204,7 +205,12 @@ def normalize_snapshot(payload: Dict[str, Any]) -> Dict[str, Any]:
     meta.update({"runners": runners, "id2name": id2name})
     return meta
 
-def compute_diff(h30: Dict[str, Any], h5: Dict[str, Any]) -> Dict[str, List[Dict[str, Any]]]:
+def compute_diff(
+    h30: Dict[str, Any],
+    h5: Dict[str, Any],
+    top_n: int = 5,
+    min_delta: float = 0.8,
+) -> Dict[str, List[Dict[str, Any]]]:
     """Compute steams and drifts between two snapshots."""
     odds30 = {str(r["id"]): float(r.get("odds", 0)) for r in h30.get("runners", [])}
     odds05 = {str(r["id"]): float(r.get("odds", 0)) for r in h5.get("runners", [])}
@@ -215,13 +221,13 @@ def compute_diff(h30: Dict[str, Any], h5: Dict[str, Any]) -> Dict[str, List[Dict
     steams = [
         {"id": cid, "delta": d}
         for cid, d in sorted(deltas.items(), key=lambda x: x[1], reverse=True)
-        if d > 0
-    ][:5]
+        if d > min_delta
+    ][:top_n]
     drifts = [
         {"id": cid, "delta": d}
         for cid, d in sorted(deltas.items(), key=lambda x: x[1])
-        if d < 0
-    ][:5]
+        if d < -min_delta
+    ][:top_n]
     return {"top_steams": steams, "top_drifts": drifts}
 
 
@@ -282,11 +288,15 @@ def main() -> None:  # pragma: no cover - minimal CLI wrapper
     else:  # diff mode
         out_path = Path(args.out)
         root = out_path.parent.parent
-        h30_path = root / "h30" / "h30.json"
-        h5_path = root / "h5" / "h5.json"
+        snaps = os.getenv("SNAPSHOTS", "H30,H5").split(",")
+        h30_name, h5_name = [s.strip().lower() for s in snaps[:2]]
+        h30_path = root / h30_name / f"{h30_name}.json"
+        h5_path = root / h5_name / f"{h5_name}.json"
         h30 = json.loads(h30_path.read_text(encoding="utf-8"))
         h5 = json.loads(h5_path.read_text(encoding="utf-8"))
-        res = compute_diff(h30, h5)
+        top_n = int(os.getenv("DRIFT_TOP_N", "5"))
+        min_delta = float(os.getenv("DRIFT_MIN_DELTA", "0.8"))
+        res = compute_diff(h30, h5, top_n=top_n, min_delta=min_delta)
         out_data = {
             "steams": [
                 {"id_cheval": r["id"], "delta": r["delta"]}
