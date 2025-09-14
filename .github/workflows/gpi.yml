@@ -51,3 +51,8 @@ jobs:
         if: github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && github.event.schedule == '55 15 * * *')
         run: |
           python pipeline_run.py
+      - name: Sync data to Drive
+        run: python scripts/drive_sync.py --push data
+        env:
+          GOOGLE_CREDENTIALS_B64: ${{ secrets.GOOGLE_CREDENTIALS_B64 }}
+          DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
