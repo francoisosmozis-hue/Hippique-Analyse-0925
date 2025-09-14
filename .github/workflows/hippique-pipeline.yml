@@ -65,7 +65,12 @@ jobs:
           RACE="${{ github.event.inputs.race }}"
           RUN_DIR="runs/${DATE}/${MEETING}${RACE}"
           mkdir -p "$RUN_DIR"
-          echo "RUN_DIR=$RUN_DIR" >> $GITHUB_ENV
+          {
+            echo "DATE=$DATE"
+            echo "MEETING=$MEETING"
+            echo "RACE=$RACE"
+            echo "RUN_DIR=$RUN_DIR"
+          } >> $GITHUB_ENV
 
       - name: Phase H-30
         if: github.event.inputs.mode == 'h30'
