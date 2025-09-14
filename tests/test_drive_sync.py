@@ -8,6 +8,7 @@ HttpError = errors.HttpError
 
 import io
 import json
+import base64
 from unittest.mock import MagicMock, patch, ANY
 from httplib2 import Response
 
@@ -67,7 +68,8 @@ def test_upload_file_missing_folder(tmp_path, monkeypatch):
 
 def test_build_service_env(monkeypatch):
     creds_data = {"type": "service_account"}
-    monkeypatch.setenv("GOOGLE_CREDENTIALS_JSON", json.dumps(creds_data))
+    encoded = base64.b64encode(json.dumps(creds_data).encode()).decode()
+    monkeypatch.setenv("GOOGLE_CREDENTIALS_B64", encoded)
     with patch("scripts.drive_sync.service_account.Credentials.from_service_account_info") as cred_mock, patch("scripts.drive_sync.build") as build_mock:
         cred_mock.return_value = "creds"
         build_mock.return_value = "service"
@@ -78,6 +80,7 @@ def test_build_service_env(monkeypatch):
 
 
 def test_build_service_missing_env(monkeypatch):
+    monkeypatch.delenv("GOOGLE_CREDENTIALS_B64", raising=False)
     monkeypatch.delenv("GOOGLE_CREDENTIALS_JSON", raising=False)
     with pytest.raises(EnvironmentError):
         drive_sync._build_service()
