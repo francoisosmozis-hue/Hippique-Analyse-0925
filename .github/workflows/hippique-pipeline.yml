@@ -1,0 +1,113 @@
+name: Hippique Pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Phase à exécuter (h30|h5|post|upload|archive)"
+        required: true
+      meeting:
+        description: "Réunion ex: R1"
+        required: true
+      race:
+        description: "Course ex: C5"
+        required: true
+      date:
+        description: "Date au format YYYY-MM-DD"
+        required: true
+      hippodrome:
+        description: "Nom de l'hippodrome"
+        required: true
+      discipline:
+        description: "Discipline"
+        required: true
+      course_id:
+        description: "Identifiant numérique de la course"
+        required: true
+
+env:
+  TZ: Europe/Paris
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    env:
+      ZETURF_LOGIN: ${{ secrets.ZETURF_LOGIN }}
+      ZETURF_PASSWORD: ${{ secrets.ZETURF_PASSWORD }}
+      GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
+      DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
+      GENY_COOKIE: ${{ secrets.GENY_COOKIE }}
+      PYPI_EXTRA_INDEX: ${{ secrets.PYPI_EXTRA_INDEX }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -n "$PYPI_EXTRA_INDEX" ]; then
+            pip install -r requirements.txt --extra-index-url "$PYPI_EXTRA_INDEX"
+          else
+            pip install -r requirements.txt
+          fi
+
+      - name: Préparer le contexte
+        id: prep
+        run: |
+          DATE="${{ github.event.inputs.date }}"
+          MEETING="${{ github.event.inputs.meeting }}"
+          RACE="${{ github.event.inputs.race }}"
+          RUN_DIR="runs/${DATE}/${MEETING}${RACE}"
+          mkdir -p "$RUN_DIR"
+          echo "RUN_DIR=$RUN_DIR" >> $GITHUB_ENV
+
+      - name: Phase H-30
+        if: github.event.inputs.mode == 'h30'
+        run: |
+          mkdir -p "$RUN_DIR/h30"
+          python scripts/online_fetch_zeturf.py --mode h30 --out "$RUN_DIR/h30/h30.json"
+          python pipeline_run.py snapshot \
+            --when h30 \
+            --meeting "${{ github.event.inputs.meeting }}" \
+            --race "${{ github.event.inputs.race }}" \
+            --outdir "$RUN_DIR/h30"
+
+      - name: Phase H-5
+        if: github.event.inputs.mode == 'h5'
+        run: |
+          mkdir -p "$RUN_DIR/h5" "$RUN_DIR/diff" "$RUN_DIR/out"
+          python scripts/online_fetch_zeturf.py --mode h5 --out "$RUN_DIR/h5/h5.json"
+          python scripts/online_fetch_zeturf.py --mode diff --out "$RUN_DIR/diff/diff_drift.json"
+          python pipeline_run.py analyse \
+            --h30 "$RUN_DIR/h30/h30.json" \
+            --h5 "$RUN_DIR/h5/h5.json" \
+            --diff "$RUN_DIR/diff/diff_drift.json" \
+            --stats-je "$RUN_DIR/h5/h5.json" \
+            --partants "$RUN_DIR/h5/h5.json" \
+            --gpi config/gpi_v51.yml \
+            --outdir "$RUN_DIR/out"
+
+      - name: Phase post-course
+        if: github.event.inputs.mode == 'post'
+        run: |
+          mkdir -p "$RUN_DIR/post"
+          python post_course.py \
+            --arrivee "$RUN_DIR/post/arrivee.json" \
+            --tickets "$RUN_DIR/out/p_finale.json" \
+            --outdir "$RUN_DIR/post"
+
+      - name: Upload vers Google Drive
+        if: github.event.inputs.mode == 'upload'
+        run: |
+          python scripts/drive_sync.py --upload-glob "$RUN_DIR/**/*.json"
+
+      - name: Archivage
+        if: github.event.inputs.mode == 'archive'
+        uses: actions/upload-artifact@v4
+        with:
+          name: "${{ github.event.inputs.date }}_${{ github.event.inputs.meeting }}${{ github.event.inputs.race }}"
+          path: "$RUN_DIR"
