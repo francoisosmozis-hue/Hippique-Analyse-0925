@@ -63,7 +63,10 @@ def load_yaml(path: str) -> dict:
         cfg = yaml.safe_load(fh) or {}
     cfg.setdefault("REQUIRE_DRIFT_LOG", True)
     cfg.setdefault("REQUIRE_ODDS_WINDOWS", [30, 5])
-    cfg.setdefault("MIN_PAYOUT_COMBOS", 10.0)
+    if "EXOTIC_MIN_PAYOUT" in cfg:
+        cfg["MIN_PAYOUT_COMBOS"] = cfg["EXOTIC_MIN_PAYOUT"]
+    else:
+        cfg.setdefault("MIN_PAYOUT_COMBOS", 10.0)
     cfg.setdefault("MAX_TICKETS_SP", 2)
     cfg.setdefault("DRIFT_COEF", 0.05)
     cfg.setdefault("JE_BONUS_COEF", 0.001)
@@ -75,6 +78,9 @@ def load_yaml(path: str) -> dict:
     cfg.setdefault("ROR_MAX", 0.05)
     cfg.setdefault("SHARPE_MIN", 0.0)
     cfg["BUDGET_TOTAL"] = get_env("BUDGET_TOTAL", cfg.get("BUDGET_TOTAL"), cast=float)
+    exotic_min = get_env("EXOTIC_MIN_PAYOUT", cfg.get("MIN_PAYOUT_COMBOS"), cast=float)
+    cfg["MIN_PAYOUT_COMBOS"] = exotic_min
+    cfg.setdefault("EXOTIC_MIN_PAYOUT", exotic_min)
     missing = [k for k in REQ_KEYS if k not in cfg]
     if missing:
         raise RuntimeError(f"Config incomplète: clés manquantes {missing}")
