@@ -110,13 +110,17 @@ Un planning réel peut être généré via `python scripts/fetch_schedule.py --o
 
 ---
 
-## 🔐 Secrets GitHub (obligatoires)
+## 🔐 Secrets GitHub
 
 Dans **Settings → Secrets and variables → Actions** du repo, créer :
 - `DRIVE_FOLDER_ID` → dossier Drive de destination
 - `GOOGLE_CREDENTIALS_JSON` → contenu intégral du `credentials.json` (Service Account)
+- `ZETURF_LOGIN` → identifiant pour la connexion Zeturf
+- `ZETURF_PASSWORD` → mot de passe pour la connexion Zeturf
+- `PYPI_EXTRA_INDEX` *(optionnel)* → URL d'un dépôt PyPI privé
+- `GENY_COOKIE` *(optionnel)* → cookie d'accès pour récupérer les données Geny
 
-> ⚠️ **Ne pas** committer `credentials.json` en clair.
+> ⚠️ **Sécurité :** ne commitez jamais `credentials.json` ni la valeur de ces secrets et évitez toute fuite (logs, issues, captures d'écran).
 
 ---
 
