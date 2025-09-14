@@ -56,11 +56,10 @@ jobs:
       - name: Upload to Drive (if any new files)
         env:
           DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
-          GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
+          GOOGLE_CREDENTIALS_B64: ${{ secrets.GOOGLE_CREDENTIALS_B64 }}
         run: |
           if [ -n "$(git diff --name-only $PREV_SHA HEAD | grep '^data/')" ]; then
             python scripts/drive_sync.py \
-              --folder-id "${DRIVE_FOLDER_ID}" \
-              --credentials-json "${GOOGLE_CREDENTIALS_JSON}" \
+              --folder-id "${DRIVE_FOLDER_ID}" \              
               --upload-glob "data/analyses/**/*.json" \
               --upload-glob "data/snapshots/**/*.json"
