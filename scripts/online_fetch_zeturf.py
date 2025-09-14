@@ -68,15 +68,16 @@ def filter_today(meetings: Any) -> List[Dict[str, Any]]:
 
 def fetch_runners(url: str) -> Dict[str, Any]:
     """Fetch raw runners data from ``url``."""
+    match = re.search(r"/race/(\d+)", url)
+    course_id = match.group(1) if match else None
+    
     try:
         resp = requests.get(url, timeout=10)
         resp.raise_for_status()
     except requests.HTTPError as exc:  # pragma: no cover - exercised via tests
         status = exc.response.status_code if exc.response is not None else None
-        if status == 404:
-            match = re.search(r"(\d+)(?!.*\d)", url)
-            if match:
-                return fetch_from_geny_idcourse(match.group(1))
+        if status == 404 and course_id:
+            return fetch_from_geny_idcourse(course_id)            
         raise
     return resp.json()
 
