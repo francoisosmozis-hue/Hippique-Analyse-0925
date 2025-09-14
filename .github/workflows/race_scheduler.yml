@@ -53,6 +53,7 @@ jobs:
           git add -A data/snapshots data/analyses
           git diff --cached --quiet || git commit -m "snap/analysis: $(date +%F' '%T)"
           git push
+          
       - name: Upload to Drive (if any new files)
         env:
           DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
@@ -63,3 +64,10 @@ jobs:
               --folder-id "${DRIVE_FOLDER_ID}" \              
               --upload-glob "data/analyses/**/*.json" \
               --upload-glob "data/snapshots/**/*.json"
+            fi
+
+      - name: Sync data to Drive
+        run: python scripts/drive_sync.py --push data
+        env:
+          GOOGLE_CREDENTIALS_B64: ${{ secrets.GOOGLE_CREDENTIALS_B64 }}
+          DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
