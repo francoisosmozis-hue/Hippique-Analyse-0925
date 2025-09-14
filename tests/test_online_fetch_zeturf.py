@@ -57,9 +57,15 @@ def test_fetch_meetings_fallback_on_404(monkeypatch: pytest.MonkeyPatch) -> None
     assert data == {"meetings": [{"id": "R1", "name": "Meeting A", "date": today}]}
 
 
-def test_fetch_runners_fallback_on_404(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://www.zeturf.fr/rest/api/race/12345",
+        "https://www.zeturf.fr/rest/api/race/12345?foo=bar",
+        "https://www.zeturf.fr/rest/api/race/12345/details",
+    ],
+)
     """``fetch_runners`` should fallback to Geny on a 404."""
-    url = "https://www.zeturf.fr/rest/api/race/12345"
     seen: list[str] = []
 
     def fake_get(u: str, timeout: int = 10) -> DummyResp:
