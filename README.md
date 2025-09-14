@@ -218,10 +218,14 @@ Les fichiers correspondants sont téléchargés dans le dossier indiqué par
 | `COMBO_RATIO` | Part du budget dédiée aux combinés. |
 | `EV_MIN_SP` | EV minimale requise pour les tickets SP (ratio du budget SP). |
 | `EV_MIN_GLOBAL` | EV minimale globale pour valider l'émission des combinés. |
-| `ROI_MIN_GLOBAL` | ROI minimal global attendu pour les combinés. |
+| `ROI_MIN_GLOBAL` | ROI minimal global attendu pour les combinés (20 % par défaut). |
 | `MAX_VOL_PAR_CHEVAL` | Fraction maximale du budget sur un seul cheval. |
 | `MIN_PAYOUT_COMBOS` | Gain minimal attendu pour autoriser un ticket combiné. |
+| `EXOTIC_MIN_PAYOUT` | Alias de `MIN_PAYOUT_COMBOS` pour compatibilité. |
 | `ALLOW_JE_NA` | Autorise l'absence de stats jockey/entraîneur lors de l'analyse. |
+| `SNAPSHOTS` | Phases de collecte des cotes pour le drift (ex. `H30,H5`). |
+| `DRIFT_TOP_N` | Nombre maximal de steams/drifts conservés. |
+| `DRIFT_MIN_DELTA` | Variation minimale de cote pour être retenue comme drift/steam. |
 
 Ces seuils peuvent être surchargés lors de l'exécution du pipeline avec les
 options `--ev-global`, `--roi-global` et `--min-payout` :
