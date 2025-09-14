@@ -1,4 +1,6 @@
 name: Hippique Pipeline
+permissions:
+  contents: read
 
 on:
   workflow_dispatch:
