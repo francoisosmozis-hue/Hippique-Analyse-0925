@@ -2,13 +2,15 @@
 
 This module provides :func:`upload_file` and :func:`download_file` helpers
 relying on ``google-api-python-client``.  Credentials are expected in the
-``GOOGLE_CREDENTIALS_JSON`` environment variable (the full service account JSON)
-and the target folder is read from ``DRIVE_FOLDER_ID``.
+``GOOGLE_CREDENTIALS_B64`` environment variable (the base64‑encoded service
+account JSON) and the target folder is read from ``DRIVE_FOLDER_ID``.  For
+backwards compatibility the plain ``GOOGLE_CREDENTIALS_JSON`` variable is also
+accepted.
 
 Example usage from the command line::
 
     export DRIVE_FOLDER_ID="<drive-folder-id>"
-    export GOOGLE_CREDENTIALS_JSON="$(cat credentials.json)"
+    export GOOGLE_CREDENTIALS_B64="$(base64 -w0 credentials.json)"
     python scripts/drive_sync.py --upload-glob "data/results/*.json"
 
 The CLI accepts multiple ``--upload-glob`` patterns.  Files matching each
@@ -24,6 +26,7 @@ import json
 import os
 from pathlib import Path
 from typing import Iterable, Optional
+import base64
 
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
@@ -44,12 +47,17 @@ def _build_service(credentials_json: Optional[str] = None):
     ----------
     credentials_json:
         Service account credentials as a JSON string.  If omitted, the
-        ``GOOGLE_CREDENTIALS_JSON`` environment variable is used.
+        ``GOOGLE_CREDENTIALS_B64`` environment variable is decoded (falling back
+        to ``GOOGLE_CREDENTIALS_JSON`` if present).
     """
 
     info = credentials_json or os.environ.get("GOOGLE_CREDENTIALS_JSON")
     if not info:
-        raise EnvironmentError("GOOGLE_CREDENTIALS_JSON is not set")
+        b64 = os.environ.get("GOOGLE_CREDENTIALS_B64")
+        if b64:
+            info = base64.b64decode(b64).decode()
+    if not info:
+        raise EnvironmentError("GOOGLE_CREDENTIALS_B64 is not set")
     data = json.loads(info)
     creds = service_account.Credentials.from_service_account_info(
         data, scopes=SCOPES
@@ -196,7 +204,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Upload/download files to Drive")
     parser.add_argument("--folder-id", default=os.environ.get("DRIVE_FOLDER_ID"))
     parser.add_argument(
-        "--credentials-json", default=os.environ.get("GOOGLE_CREDENTIALS_JSON")
+        "--credentials-json",
+        help="Service account credentials JSON string (defaults to"
+        " GOOGLE_CREDENTIALS_B64/JSON env vars)",
     )
     parser.add_argument(
         "--upload-glob",
