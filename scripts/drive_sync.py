@@ -222,9 +222,18 @@ def main() -> None:
         default=[],
         help="Download FILE_ID into DEST",
     )
+    parser.add_argument(
+        "--push",
+        action="append",
+        default=[],
+        help="Répertoire à envoyer sur Drive",
+    )
     args = parser.parse_args()
 
     service = _build_service(args.credentials_json)
+
+    for base in args.push:
+        push_tree(base, folder_id=args.folder_id, service=service)
 
     for path in _iter_uploads(args.upload_glob):
         upload_or_update(path, folder_id=args.folder_id, service=service)
