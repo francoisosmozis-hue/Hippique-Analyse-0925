@@ -83,6 +83,18 @@ def test_drift_missing_snapshots():
     assert set(res["missing_h5"]) == {"1"}
 
 
+def test_drift_filtering_topn(tmp_path):
+    """Drifts should be filtered by ``top_n`` and ``min_delta``."""
+    h30 = {"1": 2.0, "2": 5.0, "3": 4.0, "4": 10.0}
+    h5 = {"1": 4.0, "2": 2.0, "3": 5.0, "4": 8.0}
+    id2name = {"1": "A", "2": "B", "3": "C", "4": "D"}
+    res = compute_drift_dict(h30, h5, id2name, top_n=1, min_delta=1.5)
+    diff = res["drift"]
+    assert len(diff) == 2
+    assert any(r["delta"] > 0 for r in diff)
+    assert any(r["delta"] < 0 for r in diff)
+    assert all(abs(r["delta"]) >= 1.5 for r in diff)
+
 def test_snapshot_cli(tmp_path):
     """Ensure snapshot subcommand renames snapshot files correctly."""
     src = tmp_path / "h30.json"
@@ -168,6 +180,13 @@ def test_smoke_run(tmp_path):
     assert (outdir / "cmd_update_excel.txt").exists()
 
     data = json.loads((outdir / "p_finale.json").read_text(encoding="utf-8"))
+    assert data["meta"]["snapshots"] == "H30,H5"
+    assert data["meta"]["drift_top_n"] == 5
+    assert data["meta"]["drift_min_delta"] == 0.8
+    diff_params = json.loads(
+        (outdir / "diff_drift.json").read_text(encoding="utf-8")
+    )["params"]
+    assert diff_params == {"snapshots": "H30,H5", "top_n": 5, "min_delta": 0.8}
     tickets = data["tickets"]
     assert len(tickets) <= 1
     stake_total = sum(t.get("stake", 0) for t in tickets)
