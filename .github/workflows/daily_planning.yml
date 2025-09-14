@@ -39,3 +39,8 @@ jobs:
           git add data/planning/*.json
           git commit -m "planning: $(date +%F)" || echo "No changes"
           git push
+      - name: Sync data to Drive
+        run: python scripts/drive_sync.py --push data
+        env:
+          GOOGLE_CREDENTIALS_B64: ${{ secrets.GOOGLE_CREDENTIALS_B64 }}
+          DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
