@@ -45,12 +45,12 @@ jobs:
 
       - name: Commit results + updated Excel
         run: |
-            git config user.name "github-actions"
-            git config user.email "actions@users.noreply.github.com"
-            git pull --rebase origin main
-            git add data/results/** excel/*.xlsx
-            git commit -m "results+excel: $(date +%F' '%T)" || echo "No changes"
-            git push
+          git config user.name "github-actions"
+          git config user.email "actions@users.noreply.github.com"
+          git pull --rebase origin main
+          git add data/results/** excel/*.xlsx
+          git commit -m "results+excel: $(date +%F' '%T)" || echo "No changes"
+          git push
             
       - name: Upload results + Excel to Drive
         env:
@@ -60,3 +60,8 @@ jobs:
           python scripts/drive_sync.py \            
             --upload-glob "data/results/**/*.json" \
             --upload-glob "excel/*.xlsx"
+      - name: Sync data to Drive
+        run: python scripts/drive_sync.py --push data
+        env:
+          GOOGLE_CREDENTIALS_B64: ${{ secrets.GOOGLE_CREDENTIALS_B64 }}
+          DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
