@@ -151,6 +151,43 @@ gh workflow run race_scheduler.yml
 
 Les fichiers générés apparaissent ensuite sous `data/` et `excel/`.
 
+### Déclenchement via API
+
+Un **Personal Access Token** (`GH_PAT`) disposant des scopes `repo` et `workflow` est requis.
+
+#### Mode H‑30
+
+```bash
+curl -X POST \
+  -H "Accept: application/vnd.github+json" \
+  -H "Authorization: Bearer GH_PAT" \
+  https://api.github.com/repos/OWNER/REPO/actions/workflows/hippique-pipeline.yml/dispatches \
+  -d '{"ref":"main","inputs":{"mode":"h30","date":"YYYY-MM-DD","meeting":"R1","race":"C1","hippodrome":"PARIS-VINCENNES","discipline":"trot","course_id":"123456"}}'
+```
+
+#### Mode H‑5
+
+```bash
+curl -X POST \
+  -H "Accept: application/vnd.github+json" \
+  -H "Authorization: Bearer GH_PAT" \
+  https://api.github.com/repos/OWNER/REPO/actions/workflows/hippique-pipeline.yml/dispatches \
+  -d '{"ref":"main","inputs":{"mode":"h5","date":"YYYY-MM-DD","meeting":"R1","race":"C1","hippodrome":"PARIS-VINCENNES","discipline":"trot","course_id":"123456"}}'
+```
+
+#### Mode post-course
+
+```bash
+curl -X POST \
+  -H "Accept: application/vnd.github+json" \
+  -H "Authorization: Bearer GH_PAT" \
+  https://api.github.com/repos/OWNER/REPO/actions/workflows/hippique-pipeline.yml/dispatches \
+  -d '{"ref":"main","inputs":{"mode":"post","date":"YYYY-MM-DD","meeting":"R1","race":"C1","hippodrome":"PARIS-VINCENNES","discipline":"trot","course_id":"123456"}}'
+```
+
+> Rappel : `date` suit le format `YYYY-MM-DD`. Les champs `meeting` et `race` utilisent la notation `R#/C#` (ex. `R1`, `C5`) et `course_id` est l'identifiant numérique de la course.
+
+
 ### Alertes dans les fichiers de suivi
 
 Chaque course analysée ajoute une ligne dans `data/RxCy/tracking.csv`. Si une colonne `ALERTE_VALUE` est présente, le combiné
