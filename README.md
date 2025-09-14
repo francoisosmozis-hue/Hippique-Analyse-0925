@@ -110,15 +110,21 @@ Un planning réel peut être généré via `python scripts/fetch_schedule.py --o
 
 ---
 
-## 🔐 Secrets GitHub
+## 🔐 Secrets & Variables GitHub
 
 Dans **Settings → Secrets and variables → Actions** du repo, créer :
+
+**Secrets**
 - `DRIVE_FOLDER_ID` → dossier Drive de destination
-- `GOOGLE_CREDENTIALS_JSON` → contenu intégral du `credentials.json` (Service Account)
+- `GOOGLE_CREDENTIALS_B64` → `credentials.json` encodé en base64 (Service Account)
 - `ZETURF_LOGIN` → identifiant pour la connexion Zeturf
 - `ZETURF_PASSWORD` → mot de passe pour la connexion Zeturf
 - `PYPI_EXTRA_INDEX` *(optionnel)* → URL d'un dépôt PyPI privé
 - `GENY_COOKIE` *(optionnel)* → cookie d'accès pour récupérer les données Geny
+
+**Variables**
+- `MEETING_URLS` → réunions du jour pour H‑30
+- `COURSES_URLS` → cours supplémentaires pour H‑5
 
 > ⚠️ **Sécurité :** ne commitez jamais `credentials.json` ni la valeur de ces secrets et évitez toute fuite (logs, issues, captures d'écran).
 
@@ -197,8 +203,8 @@ associé affiche un EV > 0.5 et un payout attendu > 20 € et mérite une vérif
 
 1. Créez un **compte de service** dans la console Google Cloud et partagez le
    dossier Drive cible avec l'adresse mail de ce compte.
-2. Définissez les variables d'environnement `GOOGLE_CREDENTIALS_JSON` (contenu
-   intégral du `credentials.json`) et `DRIVE_FOLDER_ID` (identifiant du dossier
+2. Définissez les variables d'environnement `GOOGLE_CREDENTIALS_B64` (contenu
+   base64 du `credentials.json`) et `DRIVE_FOLDER_ID` (identifiant du dossier
    de destination).
 
 Le module `scripts/drive_sync.py` expose les fonctions `upload_file` et
@@ -222,7 +228,7 @@ précise, utilisez :
 
 ```bash
 export DRIVE_FOLDER_ID="<drive-folder-id>"
-export GOOGLE_CREDENTIALS_JSON="$(cat credentials.json)"
+export GOOGLE_CREDENTIALS_B64="$(base64 -w0 credentials.json)"
 python scripts/restore_from_drive.py --date YYYY-MM-DD --dest dossier_sortie
 ```
 
@@ -469,7 +475,7 @@ colonnes listées ci-dessus.
 
 1. Pousser la structure de dépôt ci‑dessus.  
 2. Ajouter **`requirements.txt`** et installer en local (facultatif).  
-3. Créer les **Secrets** `DRIVE_FOLDER_ID` & `GOOGLE_CREDENTIALS_JSON`.  
+3. Créer les **Secrets** `DRIVE_FOLDER_ID` & `GOOGLE_CREDENTIALS_B64`. 
 4. Vérifier que les scripts sous `scripts/` existent bien aux bons chemins.  
 5. Laisser tourner les 3 workflows (planning, scheduler, results).  
 6. Contrôler sur **Actions** les logs d’exécution et la création des JSON/Excel.  
@@ -480,7 +486,7 @@ colonnes listées ci-dessus.
 
 - **Les workflows ne se déclenchent pas** → vérifier le dossier **`.github/workflows/`** (orthographe) et la branche par défaut.  
 - **Arrivées non trouvées** → voir logs `get_arrivee_geny.py`, parfois page retardée ; relancer manuellement `post_results.yml`.  
-- **Drive non uploadé** → secrets manquants (`DRIVE_FOLDER_ID` / `GOOGLE_CREDENTIALS_JSON`) ou quota Google.  
+- **Drive non uploadé** → secrets manquants (`DRIVE_FOLDER_ID` / `GOOGLE_CREDENTIALS_B64`) ou quota Google.  
 - **EV combinés = insufficient_data** → calibration absente/vides (`calibration/payout_calibration.yaml`) ou p_place non enrichies.  
 - **Excel non mis à jour** → chemin `--excel` correct ? vérifier permissions du runner (commit autorisé).  
 
