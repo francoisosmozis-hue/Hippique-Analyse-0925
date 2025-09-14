@@ -77,6 +77,16 @@ def load_yaml(path: str) -> dict:
     cfg.setdefault("ROI_MIN_GLOBAL", 0.0)
     cfg.setdefault("ROR_MAX", 0.05)
     cfg.setdefault("SHARPE_MIN", 0.0)
+    cfg.setdefault("SNAPSHOTS", "H30,H5")
+    cfg.setdefault("DRIFT_TOP_N", 5)
+    cfg.setdefault("DRIFT_MIN_DELTA", 0.8)
+    cfg["SNAPSHOTS"] = get_env("SNAPSHOTS", cfg.get("SNAPSHOTS"))
+    cfg["DRIFT_TOP_N"] = get_env(
+        "DRIFT_TOP_N", cfg.get("DRIFT_TOP_N"), cast=int
+    )
+    cfg["DRIFT_MIN_DELTA"] = get_env(
+        "DRIFT_MIN_DELTA", cfg.get("DRIFT_MIN_DELTA"), cast=float
+    )
     cfg["BUDGET_TOTAL"] = get_env("BUDGET_TOTAL", cfg.get("BUDGET_TOTAL"), cast=float)
     exotic_min = get_env("EXOTIC_MIN_PAYOUT", cfg.get("MIN_PAYOUT_COMBOS"), cast=float)
     cfg["MIN_PAYOUT_COMBOS"] = exotic_min
@@ -104,7 +114,14 @@ def save_text(path: Path, txt: str) -> None:
     path.write_text(txt, encoding="utf-8")
 
 
-def compute_drift_dict(h30: dict, h5: dict, id2name: dict) -> dict:
+def compute_drift_dict(
+    h30: dict,
+    h5: dict,
+    id2name: dict,
+    *,
+    top_n: int | None = None,
+    min_delta: float = 0.0,
+) -> dict:
     """Compute odds drift between two snapshots.
 
     Parameters
@@ -113,6 +130,10 @@ def compute_drift_dict(h30: dict, h5: dict, id2name: dict) -> dict:
         Mapping of ``id`` -> cote at H-30 and H-5 respectively.
     id2name : dict
         Mapping ``id`` -> human readable name.
+    top_n : int, optional
+        Number of top steams/drifts to retain on each side.
+    min_delta : float
+        Minimum absolute odds variation required to be kept.
 
     Returns
     -------
@@ -124,6 +145,8 @@ def compute_drift_dict(h30: dict, h5: dict, id2name: dict) -> dict:
     diff = []
     for cid in set(h30) & set(h5):
         delta = float(h5[cid]) - float(h30[cid])
+        if abs(delta) < float(min_delta):
+            continue
         diff.append(
             {
                 "id": cid,
@@ -134,6 +157,10 @@ def compute_drift_dict(h30: dict, h5: dict, id2name: dict) -> dict:
             }
         )
     diff.sort(key=lambda r: r["delta"])
+    if top_n is not None:
+        neg = [r for r in diff if r["delta"] < 0][: int(top_n)]
+        pos = [r for r in reversed(diff) if r["delta"] > 0][: int(top_n)]
+        diff = sorted(neg + pos, key=lambda r: r["delta"])
     for rank, row in enumerate(diff, start=1):
         row["rank_delta"] = rank
         
@@ -191,7 +218,13 @@ def export(
             },
         },
     )
-    save_json(outdir / "diff_drift.json", drift)
+    drift_out = dict(drift)
+    drift_out["params"] = {
+        "snapshots": cfg.get("SNAPSHOTS"),
+        "top_n": cfg.get("DRIFT_TOP_N"),
+        "min_delta": cfg.get("DRIFT_MIN_DELTA"),
+    }
+    save_json(outdir / "diff_drift.json", drift_out)
     total = sum(t.get("stake", 0) for t in tickets)
     ligne = (
         f'{meta.get("rc", "R?C?")};{meta.get("hippodrome", "")};'
@@ -257,6 +290,9 @@ def cmd_analyse(args: argparse.Namespace) -> None:
         "date": partants_data.get("date", dt.date.today().isoformat()),
         "discipline": partants_data.get("discipline", ""),
         "model": cfg.get("MODEL", ""),
+        "snapshots": cfg.get("SNAPSHOTS"),
+        "drift_top_n": cfg.get("DRIFT_TOP_N"),
+        "drift_min_delta": cfg.get("DRIFT_MIN_DELTA"),
     }
 
     # Validation
@@ -266,7 +302,13 @@ def cmd_analyse(args: argparse.Namespace) -> None:
     if args.diff:
         drift = load_json(args.diff)
     else:
-        drift = compute_drift_dict(odds_h30, odds_h5, id2name)
+        drift = compute_drift_dict(
+            odds_h30,
+            odds_h5,
+            id2name,
+            top_n=int(cfg.get("DRIFT_TOP_N", 0)),
+            min_delta=float(cfg.get("DRIFT_MIN_DELTA", 0.0)),
+        )
     p_true = build_p_true(cfg, partants, odds_h5, odds_h30, stats_je)
 
     # Tickets allocation
