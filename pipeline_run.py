@@ -3,6 +3,7 @@
 """Minimal pipeline for computing EV and exporting artefacts."""
 
 import argparse
+import copy
 import datetime as dt
 import json
 from pathlib import Path
@@ -20,7 +21,7 @@ except Exception:  # pragma: no cover - optional dependency
 import yaml
 
 from simulate_ev import allocate_dutching_sp, gate_ev, simulate_ev_batch
-from tickets_builder import allow_combo
+from tickets_builder import allow_combo, apply_ticket_policy
 from validator_ev import validate_inputs
 from logging_io import append_csv_line, append_json, CSV_HEADER
 
@@ -56,6 +57,24 @@ REQ_KEYS = [
     "ROUND_TO_SP",
     "JE_BONUS_COEF",
 ]
+
+
+METRIC_KEYS = {"kelly_stake", "ev", "roi", "variance", "clv"}
+
+
+def simulate_with_metrics(tickets: list[dict], bankroll: float) -> dict:
+    """Run :func:`simulate_ev_batch` on a copy and merge metrics into ``tickets``."""
+
+    if not tickets:
+        return {"ev": 0.0, "roi": 0.0}
+
+    sim_input = [copy.deepcopy(t) for t in tickets]
+    stats = simulate_ev_batch(sim_input, bankroll=bankroll)
+    for original, simulated in zip(tickets, sim_input):
+        for key in METRIC_KEYS:
+            if key in simulated:
+                original[key] = simulated[key]
+    return stats
 
 
 def load_yaml(path: str) -> dict:
@@ -198,6 +217,8 @@ def export(
     roi_global: float,
     risk_of_ruin: float,
     clv_moyen: float,
+    variance: float,
+    combined_payout: float,
     p_true: dict,
     drift: dict,
     cfg: dict,
@@ -215,6 +236,8 @@ def export(
                 "roi_global": roi_global,
                 "risk_of_ruin": risk_of_ruin,
                 "clv_moyen": clv_moyen,
+                "variance": variance,
+                "combined_expected_payout": combined_payout,
             },
         },
     )
@@ -323,81 +346,112 @@ def cmd_analyse(args: argparse.Namespace) -> None:
                 "p": float(p_true[cid]),
             })
 
-    tickets, ev_sp = allocate_dutching_sp(cfg, runners)
-    
-    # Prioritize tickets by individual EV before truncating
-    tickets.sort(key=lambda t: t.get("ev_ticket", 0), reverse=True)
-    
-    # Limit number of tickets
-    tickets = tickets[: int(cfg["MAX_TICKETS_SP"])]
+    sp_tickets, combo_templates, _combo_info = apply_ticket_policy(
+        cfg,
+        runners,
+        combos_source=partants_data,
+    )
 
-    # Recompute EV/ROI after truncation
-    ev_sp = sum(t.get("ev_ticket", 0.0) for t in tickets)
-    total_stake_sp = sum(t.get("stake", 0.0) for t in tickets)
+    ev_sp = sum(t.get("ev_ticket", 0.0) for t in sp_tickets)
+    total_stake_sp = sum(t.get("stake", 0.0) for t in sp_tickets)
     roi_sp = ev_sp / total_stake_sp if total_stake_sp > 0 else 0.0
 
-    # Global EV/ROI using simulations
-    stats_ev = simulate_ev_batch(tickets, bankroll=float(cfg.get("BUDGET_TOTAL", 0.0))) if tickets else {"ev": 0.0}
+    combo_budget = float(cfg.get("BUDGET_TOTAL", 0.0)) * float(cfg.get("COMBO_RATIO", 0.0))
+    combo_tickets: list[dict] = []
+    if combo_templates and combo_budget > 0:
+        weights = [max(float(t.get("stake", 0.0)), 0.0) for t in combo_templates]
+        total_weight = sum(weights)
+        if total_weight <= 0:
+            weights = [1.0] * len(combo_templates)
+            total_weight = float(len(combo_templates))
+        for template, weight in zip(combo_templates, weights):
+            ticket = dict(template)
+            ticket["stake"] = combo_budget * (weight / total_weight)
+            combo_tickets.append(ticket)
+
+    proposed_pack = sp_tickets + combo_tickets
+    bankroll = float(cfg.get("BUDGET_TOTAL", 0.0))
+    stats_ev = simulate_with_metrics(proposed_pack, bankroll=bankroll)
     ev_global = float(stats_ev.get("ev", 0.0))
     roi_global = float(stats_ev.get("roi", 0.0))
+    combined_payout = float(stats_ev.get("combined_expected_payout", 0.0))
+    risk_of_ruin = float(stats_ev.get("risk_of_ruin", 0.0))
+    ev_over_std = float(stats_ev.get("ev_over_std", 0.0))
 
-    # Gating before emitting tickets
     flags = gate_ev(
         cfg,
         ev_sp,
         ev_global,
         roi_sp,
         roi_global,
-        stats_ev.get("combined_expected_payout", 0.0),
-        stats_ev.get("risk_of_ruin", 0.0),
-        stats_ev.get("ev_over_std", 0.0),
+        combined_payout,
+        risk_of_ruin,
+        ev_over_std,
     )
 
-    # If combinés are blocked but SP is valid, reallocate the combo budget to SP
-    if flags.get("sp") and not flags.get("combo"):
+    combos_allowed = bool(combo_tickets) and flags.get("sp") and flags.get("combo")
+    if combos_allowed:
+        combos_allowed = allow_combo(ev_global, roi_global, combined_payout)
+        if not combos_allowed:
+            flags.setdefault("reasons", {}).setdefault("combo", []).append("ALLOW_COMBO")
+
+    final_combo_tickets = combo_tickets if combos_allowed else []
+
+    combo_budget_reassign = bool(combo_tickets) and not final_combo_tickets
+    no_combo_available = (
+        not combo_tickets
+        and flags.get("sp")
+        and not flags.get("combo")
+        and float(cfg.get("COMBO_RATIO", 0.0)) > 0.0
+    )
+
+    if not flags.get("sp"):
+        sp_tickets = []
+        final_combo_tickets = []
+        ev_sp = 0.0
+        roi_sp = 0.0
+        stats_ev = {"ev": 0.0, "roi": 0.0}
+        ev_global = 0.0
+        roi_global = 0.0
+        combined_payout = 0.0
+        risk_of_ruin = 0.0
+        ev_over_std = 0.0
+    elif combo_budget_reassign or no_combo_available:
         cfg_sp = dict(cfg)
-        cfg_sp["SP_RATIO"] = float(cfg.get("SP_RATIO", 0.0)) + float(
-            cfg.get("COMBO_RATIO", 0.0)
-        )
-        tickets, ev_sp = allocate_dutching_sp(cfg_sp, runners)
-        tickets.sort(key=lambda t: t.get("ev_ticket", 0), reverse=True)
-        tickets = tickets[: int(cfg["MAX_TICKETS_SP"])]
-        ev_sp = sum(t.get("ev_ticket", 0.0) for t in tickets)
-        total_stake_sp = sum(t.get("stake", 0.0) for t in tickets)
+        cfg_sp["SP_RATIO"] = float(cfg.get("SP_RATIO", 0.0)) + float(cfg.get("COMBO_RATIO", 0.0))
+        cfg_sp["COMBO_RATIO"] = 0.0
+        sp_tickets, _ = allocate_dutching_sp(cfg_sp, runners)
+        sp_tickets.sort(key=lambda t: t.get("ev_ticket", 0.0), reverse=True)
+        sp_tickets = sp_tickets[: int(cfg_sp.get("MAX_TICKETS_SP", cfg.get("MAX_TICKETS_SP", len(sp_tickets))))]
+        ev_sp = sum(t.get("ev_ticket", 0.0) for t in sp_tickets)
+        total_stake_sp = sum(t.get("stake", 0.0) for t in sp_tickets)
         roi_sp = ev_sp / total_stake_sp if total_stake_sp > 0 else 0.0
-        stats_ev = (
-            simulate_ev_batch(tickets, bankroll=float(cfg.get("BUDGET_TOTAL", 0.0)))
-            if tickets
-            else {"ev": 0.0}
-        )
+            stats_ev = simulate_with_metrics(sp_tickets, bankroll=bankroll)
         ev_global = float(stats_ev.get("ev", 0.0))
         roi_global = float(stats_ev.get("roi", 0.0))
+        combined_payout = float(stats_ev.get("combined_expected_payout", 0.0))
+        risk_of_ruin = float(stats_ev.get("risk_of_ruin", 0.0))
+        ev_over_std = float(stats_ev.get("ev_over_std", 0.0))        
         flags = gate_ev(
             cfg_sp,
             ev_sp,
             ev_global,
             roi_sp,
             roi_global,
-            stats_ev.get("combined_expected_payout", 0.0),
-            stats_ev.get("risk_of_ruin", 0.0),
-            stats_ev.get("ev_over_std", 0.0),
+            combined_payout,
+            risk_of_ruin,
+            ev_over_std,
         )
-    combo = None
-    if flags.get("sp") and flags.get("combo") and allow_combo(
-        ev_global, roi_global, stats_ev.get("combined_expected_payout", 0.0)
-    ):
-        combo = {
-            "id": "CP1",
-            "type": "CP",
-            "legs": [t.get("id") for t in tickets],
-            "ev_check": {
-                "ev_ratio": ev_global,
-                "payout_expected": stats_ev.get(
-                    "combined_expected_payout", 0.0
-                ),
-            },
-        }
-        tickets.append(combo)
+    elif proposed_pack != sp_tickets + final_combo_tickets:
+        final_pack = sp_tickets + final_combo_tickets
+        stats_ev = simulate_with_metrics(final_pack, bankroll=bankroll)
+        ev_global = float(stats_ev.get("ev", 0.0))
+        roi_global = float(stats_ev.get("roi", 0.0))
+        combined_payout = float(stats_ev.get("combined_expected_payout", 0.0))
+        risk_of_ruin = float(stats_ev.get("risk_of_ruin", 0.0))
+        ev_over_std = float(stats_ev.get("ev_over_std", 0.0))
+
+    tickets = sp_tickets + final_combo_tickets
 
     if flags.get("reasons", {}).get("sp"):
         print(
@@ -416,6 +470,8 @@ def cmd_analyse(args: argparse.Namespace) -> None:
 
     risk_of_ruin = float(stats_ev.get("risk_of_ruin", 0.0)) if tickets else 0.0
     clv_moyen = float(stats_ev.get("clv", 0.0)) if tickets else 0.0
+    combined_payout = float(stats_ev.get("combined_expected_payout", 0.0)) if tickets else 0.0
+    variance_total = float(stats_ev.get("variance", 0.0)) if tickets else 0.0
 
     # Hard budget stop
     total_stake = sum(t.get("stake", 0) for t in tickets)
@@ -461,6 +517,8 @@ def cmd_analyse(args: argparse.Namespace) -> None:
         roi_global,
         risk_of_ruin,
         clv_moyen,
+        variance_total,
+        combined_payout,
         p_true,
         drift,
         cfg,
