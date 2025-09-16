@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import logging
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -22,6 +23,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from simulate_ev import simulate_ev_batch
 from validator_ev import ValidationError, validate_ev
 from scripts.drive_sync import upload_file
+
+
+logger = logging.getLogger(__name__)
 
 
 def _load_planning(path: Path) -> List[Dict[str, Any]]:
@@ -60,7 +64,10 @@ def _write_snapshot(race_id: str, window: str, base: Path) -> None:
     path = dest / f"snapshot_{window}.json"
     with path.open("w", encoding="utf-8") as fh:
         json.dump(payload, fh, ensure_ascii=False, indent=2)
-    upload_file(path)
+    try:
+        upload_file(path)
+    except EnvironmentError as exc:
+        logger.warning("Skipping Drive upload for %s: %s", path, exc)
 
 
 def _write_analysis(
@@ -90,7 +97,10 @@ def _write_analysis(
     path = dest / "analysis.json"
     with path.open("w", encoding="utf-8") as fh:
         json.dump(payload, fh, ensure_ascii=False, indent=2)
-    upload_file(path)
+    try:
+        upload_file(path)
+    except EnvironmentError as exc:
+        logger.warning("Skipping Drive upload for %s: %s", path, exc)
 
 
 def main() -> None:
