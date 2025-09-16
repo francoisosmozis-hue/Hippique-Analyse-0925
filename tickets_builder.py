@@ -213,7 +213,10 @@ def apply_ticket_policy(
     if bool(cfg.get("PAUSE_EXOTIQUES")):
         return sp_tickets, [], info
 
-    combo_candidates = _build_combo_candidates(combos_source)
+    if combo_candidates is None:
+        combo_candidates = _build_combo_candidates(combos_source)
+    else:
+        combo_candidates = list(combo_candidates)
     if not combo_candidates:
         return sp_tickets, [], info
 
