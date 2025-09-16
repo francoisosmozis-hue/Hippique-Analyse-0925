@@ -18,7 +18,11 @@ jobs:
       - run: python -m pip install --upgrade pip
       - run: pip install -r requirements.txt
       - run: pytest -q
+      - name: Skip Drive sync (missing credentials)
+        if: ${{ secrets.GOOGLE_CREDENTIALS_B64 == '' }}
+        run: echo "Skipping Drive sync because GOOGLE_CREDENTIALS_B64 secret is not available."
       - name: Sync data to Drive
+        if: ${{ secrets.GOOGLE_CREDENTIALS_B64 != '' }}
         run: python scripts/drive_sync.py --push data
         env:
           GOOGLE_CREDENTIALS_B64: ${{ secrets.GOOGLE_CREDENTIALS_B64 }}
