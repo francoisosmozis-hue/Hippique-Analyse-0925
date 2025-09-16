@@ -244,11 +244,12 @@ def apply_ticket_policy(
         if not candidate:
             continue
         base = dict(candidate[0])
+        base_legs = [str(leg) for leg in base.get("legs", [])]
+        base["legs"] = list(base_legs)
         key = (
             str(base.get("type", "CP")),
-            tuple(sorted(str(leg) for leg in base.get("legs", [])))
+            tuple(sorted(base_legs)),
         )
-        combo_tickets = combo_tickets[:1]
         lookup[key] = base
 
     combo_tickets: List[Dict[str, Any]] = []
