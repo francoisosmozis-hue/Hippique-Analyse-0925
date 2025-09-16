@@ -1,66 +1,84 @@
 import json
 import sys
-import os
 
+import pytest
+
+import pipeline_run
+import tickets_builder
 from test_pipeline_smoke import (
-    partants_sample,
+    GPI_YML,
     odds_h30,
     odds_h5,
-    stats_sample,
-    GPI_YML,
+    partants_sample,
+    stats_sample,    
 )
-import tickets_builder
-import pipeline_run
 
 
-def test_pipeline_creates_single_combo(tmp_path, monkeypatch):
-    # Patch allow_combo to always allow combined bets
-    monkeypatch.setattr(tickets_builder, "allow_combo", lambda e, r, p: True)
-    monkeypatch.setattr(pipeline_run, "allow_combo", lambda e, r, p: True)
+def _with_exotics(partants: dict) -> dict:
+    combos = {
+        "CP": [
+            {"id": "cp-alpha", "legs": ["1", "2"], "odds": 6.0, "stake": 1.0},
+        ],
+        "TRIO": [
+            {"id": "trio-beta", "legs": ["1", "2", "3"], "odds": 15.0, "stake": 1.0},
+        ],
+    }
+    enriched = dict(partants)
+    enriched["exotics"] = combos
+    return enriched
+
+def _write_inputs(tmp_path, partants):
+    h30_path = tmp_path / "h30.json"
+    h5_path = tmp_path / "h5.json"
+    stats_path = tmp_path / "stats.json"
+    partants_path = tmp_path / "partants.json"
+    gpi_path = tmp_path / "gpi.yml"
+    diff_path = tmp_path / "diff.json"
+
+    h30_path.write_text(json.dumps(odds_h30()), encoding="utf-8")
+    h5_path.write_text(json.dumps(odds_h5()), encoding="utf-8")
+    stats_path.write_text(json.dumps(stats_sample()), encoding="utf-8")
+    partants_path.write_text(json.dumps(partants), encoding="utf-8")
+    partants_path.write_text(json.dumps(partants), encoding="utf-8")
     
-    partants = partants_sample()
-    h30 = odds_h30()
-    h5 = odds_h5()
-    stats = stats_sample()
-
-    h30_path = tmp_path / "h30.json"
-    h5_path = tmp_path / "h5.json"
-    stats_path = tmp_path / "stats.json"
-    partants_path = tmp_path / "partants.json"
-    gpi_path = tmp_path / "gpi.yml"
-    outdir = tmp_path / "out"
-
-    h30_path.write_text(json.dumps(h30), encoding="utf-8")
-    h5_path.write_text(json.dumps(h5), encoding="utf-8")
-    stats_path.write_text(json.dumps(stats), encoding="utf-8")
-    partants_path.write_text(json.dumps(partants), encoding="utf-8")
     gpi_txt = (
-        GPI_YML.replace("EV_MIN_GLOBAL: 0.40", "EV_MIN_GLOBAL: 0.0")
+        GPI_YML
+        .replace("EV_MIN_GLOBAL: 0.40", "EV_MIN_GLOBAL: 0.0")
         .replace("EV_MIN_SP: 0.20", "EV_MIN_SP: 0.0")
         + "MIN_PAYOUT_COMBOS: 0.0\nROR_MAX: 1.0\n"
     )
     gpi_path.write_text(gpi_txt, encoding="utf-8")
-
-    diff_path = tmp_path / "diff.json"
     diff_path.write_text("{}", encoding="utf-8")
 
+    return {
+        "h30": h30_path,
+        "h5": h5_path,
+        "stats": stats_path,
+        "partants": partants_path,
+        "gpi": gpi_path,
+        "diff": diff_path,
+    }
+
+
+def _run_pipeline(tmp_path, inputs):
+    outdir = tmp_path / "out"
     argv = [
         "pipeline_run.py",
         "analyse",
         "--h30",
-        str(h30_path),
+        str(inputs["h30"]),
         "--h5",
-        str(h5_path),
+        str(inputs["h5"]),
         "--stats-je",
         str(stats_path),
         "--partants",
-        str(partants_path),
+        str(inputs["partants"]),
         "--gpi",
-        str(gpi_path),
+        str(inputs["gpi"]),
         "--outdir",
         str(outdir),
         "--diff",
-        str(diff_path),
+        str(inputs["diff"]),
         "--budget",
         "5",
         "--ev-global",
@@ -71,172 +89,130 @@ def test_pipeline_creates_single_combo(tmp_path, monkeypatch):
         "0.60",
         "--allow-je-na",
     ]
+    monkeypatch = pytest.MonkeyPatch()
     monkeypatch.setattr(sys, "argv", argv)
-    pipeline_run.main()
-
-    data = json.loads((outdir / "p_finale.json").read_text(encoding="utf-8"))
-    combo_tickets = [t for t in data["tickets"] if t.get("type") == "CP"]
-    assert len(combo_tickets) <= 1
-    assert combo_tickets, "combo ticket should be created"
-
-
-def test_pipeline_blocks_combo_on_low_roi(tmp_path, monkeypatch):
-    # Patch allow_combo to always allow combined bets so ROI threshold is decisive
-    monkeypatch.setattr(tickets_builder, "allow_combo", lambda e, r, p: True)
-    monkeypatch.setattr(pipeline_run, "allow_combo", lambda e, r, p: True)
-
-    # Force EV/ROI simulation to return a poor ROI
-    monkeypatch.setattr(
-        pipeline_run,
-        "simulate_ev_batch",
-        lambda tickets, bankroll: {
-            "ev": 0.0,
-            "roi": 0.0,
-            "combined_expected_payout": 0.0,
-            "risk_of_ruin": 0.0,
-        },
-    )
-
-    partants = partants_sample()
-    h30 = odds_h30()
-    h5 = odds_h5()
-    stats = stats_sample()
-
-    h30_path = tmp_path / "h30.json"
-    h5_path = tmp_path / "h5.json"
-    stats_path = tmp_path / "stats.json"
-    partants_path = tmp_path / "partants.json"
-    gpi_path = tmp_path / "gpi.yml"
-    outdir = tmp_path / "out"
-
-    h30_path.write_text(json.dumps(h30), encoding="utf-8")
-    h5_path.write_text(json.dumps(h5), encoding="utf-8")
-    stats_path.write_text(json.dumps(stats), encoding="utf-8")
-    partants_path.write_text(json.dumps(partants), encoding="utf-8")
-    gpi_txt = (
-        GPI_YML.replace("EV_MIN_GLOBAL: 0.40", "EV_MIN_GLOBAL: 0.0")
-        .replace("EV_MIN_SP: 0.20", "EV_MIN_SP: 0.0")
-        + "MIN_PAYOUT_COMBOS: 0.0\nROR_MAX: 1.0\n"
-    )
-    gpi_path.write_text(gpi_txt, encoding="utf-8")
-
-    diff_path = tmp_path / "diff.json"
-    diff_path.write_text("{}", encoding="utf-8")
-
-    argv = [
-        "pipeline_run.py",
-        "analyse",
-        "--h30",
-        str(h30_path),
-        "--h5",
-        str(h5_path),
-        "--stats-je",
-        str(stats_path),
-        "--partants",
-        str(partants_path),
-        "--gpi",
-        str(gpi_path),
-        "--outdir",
-        str(outdir),
-        "--diff",
-        str(diff_path),
-        "--budget",
-        "5",
-        "--ev-global",
-        "0.0",
-        "--roi-global",
-        "0.5",
-        "--max-vol",
-        "0.60",
-        "--allow-je-na",
-    ]
-    monkeypatch.setattr(sys, "argv", argv)
-    pipeline_run.main()
-
-    data = json.loads((outdir / "p_finale.json").read_text(encoding="utf-8"))
-    combo_tickets = [t for t in data["tickets"] if t.get("type") == "CP"]
-    assert not combo_tickets, "combo ticket should be blocked when ROI too low"
+    try:
+        pipeline_run.main()
+    finally:
+        monkeypatch.undo()
+    return outdir
 
 
-def test_pipeline_abstains_on_low_global_roi(tmp_path, monkeypatch):
-    # Patch allow_combo to always allow combined bets and simulate poor ROI
-    monkeypatch.setattr(tickets_builder, "allow_combo", lambda e, r, p: True)
-    monkeypatch.setattr(pipeline_run, "allow_combo", lambda e, r, p: True)
-    monkeypatch.setattr(
-        pipeline_run,
-        "simulate_ev_batch",
-        lambda tickets, bankroll: {
-            "ev": 0.0,
-            "roi": 0.0,
-            "combined_expected_payout": 0.0,
-            "risk_of_ruin": 0.0,
-        },
-    )
+def test_pipeline_allocates_combo_budget(tmp_path, monkeypatch):
+    partants = _with_exotics(partants_sample())
+    inputs = _write_inputs(tmp_path, partants)
 
-    def fake_gate_ev(cfg, ev_sp, ev_global, roi_sp, roi_global, payout, ror, sharpe):
+    def fake_validate(candidates, bankroll, **kwargs):
+        validated = []
+        for idx, candidate in enumerate(candidates, start=1):
+            ticket = candidate[0]
+            validated.append(
+                {
+                    "id": f"{ticket['type']}{idx}",
+                    "type": ticket["type"],
+                    "legs": ticket["legs"],
+                    "ev_check": {
+                        "ev_ratio": 0.5,
+                        "roi": 0.5,
+                        "payout_expected": 40.0,
+                    },
+                }
+            )
+        return validated, {"notes": [], "flags": {"combo": True}}
+
+    monkeypatch.setattr(tickets_builder, "validate_exotics_with_simwrapper", fake_validate)
+    monkeypatch.setattr(pipeline_run, "allow_combo", lambda *args, **kwargs: True)
+
+    calls = []
+
+    def fake_simulate(tickets, bankroll):
+        calls.append([dict(t) for t in tickets])
+        total = sum(t.get("stake", 0.0) for t in tickets)
         return {
-            "sp": False,
-            "combo": False,
-            "reasons": {"sp": ["ROI_MIN_GLOBAL"], "combo": ["ROI_MIN_GLOBAL"]},
+            "ev": total * 0.2,
+            "roi": 0.2,
+            "combined_expected_payout": total * 3.0,
+            "risk_of_ruin": 0.1,
+            "ev_over_std": 0.5,
+            "variance": 1.2,
+            "clv": 0.0,
         }
 
-    monkeypatch.setattr(pipeline_run, "gate_ev", fake_gate_ev)
-
-    partants = partants_sample()
-    h30 = odds_h30()
-    h5 = odds_h5()
-    stats = stats_sample()
-
-    h30_path = tmp_path / "h30.json"
-    h5_path = tmp_path / "h5.json"
-    stats_path = tmp_path / "stats.json"
-    partants_path = tmp_path / "partants.json"
-    gpi_path = tmp_path / "gpi.yml"
-    outdir = tmp_path / "out"
-
-    h30_path.write_text(json.dumps(h30), encoding="utf-8")
-    h5_path.write_text(json.dumps(h5), encoding="utf-8")
-    stats_path.write_text(json.dumps(stats), encoding="utf-8")
-    partants_path.write_text(json.dumps(partants), encoding="utf-8")
-    gpi_txt = (
-        GPI_YML.replace("EV_MIN_GLOBAL: 0.40", "EV_MIN_GLOBAL: 0.0")
-        .replace("EV_MIN_SP: 0.20", "EV_MIN_SP: 0.0")
-        + "MIN_PAYOUT_COMBOS: 0.0\nROR_MAX: 1.0\n"
+    monkeypatch.setattr(pipeline_run, "simulate_ev_batch", fake_simulate)
+    monkeypatch.setattr(
+        pipeline_run,
+        "gate_ev",
+        lambda *args, **kwargs: {"sp": True, "combo": True, "reasons": {"sp": [], "combo": []}},
     )
-    gpi_path.write_text(gpi_txt, encoding="utf-8")
+    outdir = _run_pipeline(tmp_path, inputs)
 
-    diff_path = tmp_path / "diff.json"
-    diff_path.write_text("{}", encoding="utf-8")
-
-    argv = [
-        "pipeline_run.py",
-        "analyse",
-        "--h30",
-        str(h30_path),
-        "--h5",
-        str(h5_path),
-        "--stats-je",
-        str(stats_path),
-        "--partants",
-        str(partants_path),
-        "--gpi",
-        str(gpi_path),
-        "--outdir",
-        str(outdir),
-        "--diff",
-        str(diff_path),
-        "--budget",
-        "5",
-        "--ev-global",
-        "0.0",
-        "--roi-global",
-        "0.5",
-        "--max-vol",
-        "0.60",
-        "--allow-je-na",
-    ]
-    monkeypatch.setattr(sys, "argv", argv)
-    pipeline_run.main()
+    assert calls, "simulate_ev_batch should be called"
+    final_call = calls[-1]
+    combo_stakes = [t["stake"] for t in final_call if t.get("type") in {"CP", "TRIO", "ZE4"}]
+    assert len(combo_stakes) == 2
+    combo_budget = 5 * 0.4
+    assert sum(combo_stakes) == pytest.approx(combo_budget)
+    assert all(stake == pytest.approx(combo_budget / 2) for stake in combo_stakes)
 
     data = json.loads((outdir / "p_finale.json").read_text(encoding="utf-8"))
-    assert not data["tickets"], "pipeline should abstain when ROI global too low"
+    combo_ids = [t["id"] for t in data["tickets"] if t.get("type") in {"CP", "TRIO"}]
+    assert combo_ids and {"CP1", "TRIO2"}.issuperset(combo_ids)
+    assert data["ev"]["global"] == pytest.approx(sum(t["stake"] for t in final_call) * 0.2)
+    assert data["ev"]["variance"] == pytest.approx(1.2)
+    assert data["ev"]["combined_expected_payout"] == pytest.approx(sum(t["stake"] for t in final_call) * 3.0)
+
+
+def test_pipeline_recomputes_after_combo_rejection(tmp_path, monkeypatch):
+    partants = _with_exotics(partants_sample())
+    inputs = _write_inputs(tmp_path, partants)
+
+    def fake_validate(candidates, bankroll, **kwargs):
+        validated = []
+        for idx, candidate in enumerate(candidates, start=1):
+            ticket = candidate[0]
+            validated.append(
+                {
+                    "id": f"{ticket['type']}{idx}",
+                    "type": ticket["type"],
+                    "legs": ticket["legs"],
+                    "ev_check": {
+                        "ev_ratio": 0.5,
+                        "roi": 0.5,
+                        "payout_expected": 40.0,
+                    },
+                }
+            )
+        return validated, {"notes": [], "flags": {"combo": True}}
+
+    monkeypatch.setattr(tickets_builder, "validate_exotics_with_simwrapper", fake_validate)
+    monkeypatch.setattr(pipeline_run, "allow_combo", lambda *args, **kwargs: True)
+
+    calls = []
+
+    def fake_simulate(tickets, bankroll):
+        calls.append([dict(t) for t in tickets])
+        total = sum(t.get("stake", 0.0) for t in tickets)
+        return {
+            "ev": total * 0.1,
+            "roi": 0.1,
+            "combined_expected_payout": total * 2.0,
+            "risk_of_ruin": 0.05,
+            "ev_over_std": 0.4,
+            "variance": 0.8,
+            "clv": 0.0,
+
+    monkeypatch.setattr(pipeline_run, "simulate_ev_batch", fake_simulate)
+    def fake_gate(cfg, *args, **kwargs):
+        return {"sp": True, "combo": False, "reasons": {"sp": [], "combo": ["ROI_MIN_GLOBAL"]}}
+
+    monkeypatch.setattr(pipeline_run, "gate_ev", fake_gate)
+
+    outdir = _run_pipeline(tmp_path, inputs)
+
+    assert calls, "simulate_ev_batch should be called at least once"
+    data = json.loads((outdir / "p_finale.json").read_text(encoding="utf-8"))
+    combo_tickets = [t for t in data["tickets"] if t.get("type") != "SP"]
+    assert not combo_tickets
+    final_total = sum(t.get("stake", 0.0) for t in data["tickets"])
+    assert data["ev"]["global"] == pytest.approx(final_total * 0.1)
+    assert data["ev"]["combined_expected_payout"] == pytest.approx(final_total * 2.0)
