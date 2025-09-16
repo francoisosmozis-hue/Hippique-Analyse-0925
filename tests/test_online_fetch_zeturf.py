@@ -65,7 +65,9 @@ def test_fetch_meetings_fallback_on_404(monkeypatch: pytest.MonkeyPatch) -> None
         "https://www.zeturf.fr/rest/api/race/12345/details",
     ],
 )
+def test_fetch_runners_fallback(monkeypatch: pytest.MonkeyPatch, url: str) -> None:
     """``fetch_runners`` should fallback to Geny on a 404."""
+    
     seen: list[str] = []
 
     def fake_get(u: str, timeout: int = 10) -> DummyResp:
