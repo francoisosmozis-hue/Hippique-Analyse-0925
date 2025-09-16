@@ -383,6 +383,7 @@ def cmd_analyse(args: argparse.Namespace) -> None:
     sp_tickets, combo_templates, _combo_info = apply_ticket_policy(
         cfg,
         runners,
+        combo_candidates=None,
         combos_source=partants_data,
     )
 
@@ -493,10 +494,10 @@ def cmd_analyse(args: argparse.Namespace) -> None:
             ", ".join(flags["reasons"]["sp"]),
         )
     if flags.get("reasons", {}).get("combo"):
-        logger.warning(
-            "Blocage combinés dû aux seuils: %s",
-            ", ".join(flags["reasons"]["combo"]),
-        )
+        combo_reasons = ", ".join(flags["reasons"]["combo"])
+        message = f"Blocage combinés dû aux seuils: {combo_reasons}"
+        logger.warning(message)
+        print(message)
     if not flags.get("sp", False):
         tickets = []
         ev_sp = ev_global = 0.0
