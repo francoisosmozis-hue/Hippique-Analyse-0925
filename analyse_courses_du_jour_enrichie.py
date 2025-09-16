@@ -54,19 +54,19 @@ def ensure_dir(path: Path) -> Path:
 
 
 def enrich_h5(rc_dir: Path, *, budget: float, kelly: float) -> None:  # pragma: no cover - stub
-    return None
+    raise NotImplementedError("enrich_h5 must be provided by the host application")
 
 
 def build_p_finale(rc_dir: Path, *, budget: float, kelly: float) -> None:  # pragma: no cover - stub
-    return None
+    raise NotImplementedError("build_p_finale must be provided by the host application")
 
 
 def run_pipeline(rc_dir: Path, *, budget: float, kelly: float) -> None:  # pragma: no cover - stub
-    return None
+    raise NotImplementedError("run_pipeline must be provided by the host application")
 
 
 def build_prompt_from_meta(rc_dir: Path, *, budget: float, kelly: float) -> None:  # pragma: no cover - stub
-    return None
+    raise NotImplementedError("build_prompt_from_meta must be provided by the host application")
 
 
 def _upload_artifacts(rc_dir: Path, *, drive_folder_id: str | None) -> None:
