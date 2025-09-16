@@ -1,5 +1,5 @@
 import os
-from typing import Any, Dict, Iterable, List, Tuple
+from typing import Any, Dict, Iterable, List, Mapping, Sequence, Tuple
 
 from simulate_ev import allocate_dutching_sp
 from runner_chain import validate_exotics_with_simwrapper
@@ -47,70 +47,231 @@ def allow_combo(ev_global: float, roi_global: float, payout_est: float) -> bool:
         return False
     return True
 
+def _normalise_legs(value: Any) -> List[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        if "|" in value:
+            parts = [v.strip() for v in value.split("|") if v.strip()]
+        else:
+            parts = [v.strip() for v in value.split(",") if v.strip()]
+        return [str(p) for p in parts]
+    if isinstance(value, Sequence) and not isinstance(value, (bytes, bytearray, str)):
+        return [str(v) for v in value]
+    if isinstance(value, Mapping):
+        return [str(v) for v in value.values()]
+    return []
+
+
+def _extract_combo_entries(source: Any) -> List[Tuple[str, Dict[str, Any]]]:
+    """Return ``(type, data)`` entries describing exotic combinations."""
+
+    if not source:
+        return []
+
+    entries: List[Tuple[str, Dict[str, Any]]] = []
+    if isinstance(source, Mapping):
+        # Common container keys mapping to nested structures (``exotics`` …)
+        for key in ("exotics", "combinaisons", "combos"):
+            if key in source:
+                entries.extend(_extract_combo_entries(source[key]))
+
+        for combo_type, data in source.items():
+            if combo_type in {"exotics", "combinaisons", "combos"}:
+                continue
+            if isinstance(data, Mapping):
+                if not any(
+                    key in data
+                    for key in ("legs", "participants", "runners", "combination", "combinaison")
+                ):
+                    continue
+                item = dict(data)
+                item.setdefault("type", combo_type)
+                entries.append((str(item.get("type", combo_type)).upper(), item))
+            elif isinstance(data, Sequence) and not isinstance(data, (str, bytes, bytearray)):
+                for item in data:
+                    if not isinstance(item, Mapping):
+                        continue
+                    if not any(
+                        key in item
+                        for key in ("legs", "participants", "runners", "combination", "combinaison")
+                    ):
+                        continue
+                    obj = dict(item)
+                    obj.setdefault("type", combo_type)
+                    entries.append((str(obj.get("type", combo_type)).upper(), obj))
+    elif isinstance(source, Sequence) and not isinstance(source, (str, bytes, bytearray)):
+        for item in source:
+            if not isinstance(item, Mapping):
+                continue
+            combo_type = (
+                item.get("type")
+                or item.get("bet_type")
+                or item.get("kind")
+                or item.get("category")
+                or "CP"
+            )
+            if not any(
+                key in item
+                for key in ("legs", "participants", "runners", "combination", "combinaison")
+            ):
+                continue
+            entries.append((str(combo_type).upper(), dict(item)))
+    return entries
+
+
+def _build_combo_candidates(combos_source: Any) -> List[List[Dict[str, Any]]]:
+    """Normalise combo definitions from ``combos_source`` into candidates."""
+
+    candidates: List[List[Dict[str, Any]]] = []
+    for combo_type, raw in _extract_combo_entries(combos_source):
+        legs = _normalise_legs(
+            raw.get("legs")
+            or raw.get("participants")
+            or raw.get("runners")
+            or raw.get("combination")
+            or raw.get("combinaison")
+        )
+        if not legs:
+            continue
+        odds = raw.get("odds") or raw.get("cote") or raw.get("expected_odds") or raw.get("payout")
+        try:
+            odds_val = float(odds)
+        except (TypeError, ValueError):
+            continue
+        stake = raw.get("stake") or raw.get("mise") or raw.get("amount")
+        try:
+            stake_val = float(stake) if stake is not None else 1.0
+        except (TypeError, ValueError):
+            stake_val = 1.0
+        ticket = {
+            "id": raw.get("id") or raw.get("name") or "|".join(legs),
+            "type": combo_type,
+            "legs": legs,
+            "odds": odds_val,
+            "stake": stake_val,
+        }
+        if "p" in raw:
+            try:
+                ticket["p"] = float(raw.get("p"))
+            except (TypeError, ValueError):  # pragma: no cover - defensive
+                pass
+        candidates.append([ticket])
+    return candidates
+
+
 def apply_ticket_policy(
+    cfg: Mapping[str, Any],
     runners: Iterable[Dict[str, Any]],
     combo_candidates: Iterable[List[Dict[str, Any]]],
     *,
-    ev_threshold: float = EV_MIN_COMBO,
-    roi_threshold: float = 0.0,
-    payout_threshold: float = PAYOUT_MIN_COMBO,
-) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
-    """Allocate SP and combo tickets using the project defaults.
-
+    combos_source: Any | None = None,
+    ev_threshold: float | None = None,
+    roi_threshold: float | None = None,
+    payout_threshold: float | None = None,
+    allow_heuristic: bool | None = None,
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], Dict[str, Any]]:
+    """Allocate SP tickets and normalised combo templates.
     Parameters
     ----------
+    cfg:
+        Configuration mapping providing budget ratios and gating thresholds.
     runners:
-        Iterable of runner mappings ``{'id', 'name', 'odds', 'p'}`` used for SP
-        dutching.
-    combo_candidates:
-        Iterable of candidate combination tickets evaluated via
-        :func:`runner_chain.validate_exotics_with_simwrapper`.
-    ev_threshold:
-        Minimum EV ratio required for a combo ticket.
-    roi_threshold:
-        Minimum ROI required for a combo ticket.
-    payout_threshold:
-        Minimum expected payout (EUR) for a combo ticket.
+        Iterable of runner mappings ``{"id", "name", "odds", "p"}`` used for SP
+        dutching allocation.
+    combos_source:
+        Raw exotic definitions sourced from ``partants`` JSON.
+    ev_threshold, roi_threshold, payout_threshold:
+        Optional overrides for validation thresholds. When ``None`` the values
+        are read from ``cfg``.
+    allow_heuristic:
+        Forwarded to :func:`runner_chain.validate_exotics_with_simwrapper`.
 
     Returns
     -------
     tuple
-        ``(tickets, info)`` where ``tickets`` contains at most one SP ticket
-        and one combo ticket. ``info`` aggregates notes and flags from combo
-        validation (including ``ALERTE_VALUE`` when applicable).
+        ``(sp_tickets, combo_templates, info)`` where ``sp_tickets`` is the
+        list of SP dutching bets, ``combo_templates`` contains validated exotic
+        tickets with calibration metadata and ``info`` bubbles up notes/flags
+        from the validation chain..
     """
 
-    cfg_sp = {
-        "BUDGET_TOTAL": BUDGET_CAP_EUR,
-        "SP_RATIO": SP_SHARE,
-        "MAX_VOL_PAR_CHEVAL": 0.60,
-        "MIN_STAKE_SP": 0.10,
-        "ROUND_TO_SP": 0.10,
-        "KELLY_FRACTION": 0.5,
-    }
-    sp_tickets, _ = allocate_dutching_sp(cfg_sp, list(runners))
+    cfg = dict(cfg)
+    budget_total = float(cfg.get("BUDGET_TOTAL", BUDGET_CAP_EUR))
+    cfg.setdefault("SP_RATIO", SP_SHARE)
+    cfg.setdefault("COMBO_RATIO", COMBO_SHARE)
+    cfg.setdefault("MAX_TICKETS_SP", MAX_TICKETS)
+
+    # --- SP tickets -----------------------------------------------------
+    sp_tickets, _ = allocate_dutching_sp(cfg, list(runners))
     sp_tickets.sort(key=lambda t: t.get("ev_ticket", 0.0), reverse=True)
-    sp_tickets = sp_tickets[:1]
+    max_tickets = int(cfg.get("MAX_TICKETS_SP", len(sp_tickets)))
+    sp_tickets = sp_tickets[:max_tickets]
 
-    combo_tickets: List[Dict[str, Any]] = []
+    # --- Combo templates ------------------------------------------------
     info: Dict[str, Any] = {"notes": [], "flags": {}}
+    if bool(cfg.get("PAUSE_EXOTIQUES")):
+        return sp_tickets, [], info
 
-    if combo_candidates:
-        combo_tickets, info = validate_exotics_with_simwrapper(
-            combo_candidates,
-            bankroll=BUDGET_CAP_EUR * COMBO_SHARE,
-            ev_min=ev_threshold,
-            roi_min=roi_threshold,
-            payout_min=payout_threshold,
+    combo_candidates = _build_combo_candidates(combos_source)
+    if not combo_candidates:
+        return sp_tickets, [], info
+
+    combo_budget = budget_total * float(cfg.get("COMBO_RATIO", COMBO_SHARE))
+    ev_threshold = float(cfg.get("EV_MIN_GLOBAL", EV_MIN_COMBO)) if ev_threshold is None else ev_threshold
+    roi_threshold = float(cfg.get("ROI_MIN_GLOBAL", 0.0)) if roi_threshold is None else roi_threshold
+    payout_threshold = (
+        float(cfg.get("MIN_PAYOUT_COMBOS", PAYOUT_MIN_COMBO))
+        if payout_threshold is None
+        else payout_threshold
+    )
+
+    validated, info = validate_exotics_with_simwrapper(
+        combo_candidates,
+        bankroll=combo_budget,
+        ev_min=ev_threshold,
+        roi_min=roi_threshold,
+        payout_min=payout_threshold,
+        allow_heuristic=allow_heuristic,
+    )
+
+    if not validated:
+        return sp_tickets, [], info
+
+    # Build a lookup to merge calibration metadata back into validated tickets.
+    lookup: Dict[Tuple[str, Tuple[str, ...]], Dict[str, Any]] = {}
+    for candidate in combo_candidates:
+        if not candidate:
+            continue
+        base = dict(candidate[0])
+        key = (
+            str(base.get("type", "CP")),
+            tuple(sorted(str(leg) for leg in base.get("legs", [])))
         )
         combo_tickets = combo_tickets[:1]
+        lookup[key] = base
 
-    tickets = sp_tickets + combo_tickets
-    if len(tickets) > MAX_TICKETS:
-        tickets = tickets[:MAX_TICKETS]
+    combo_tickets: List[Dict[str, Any]] = []
+    for ticket in validated:
+        key = (
+            str(ticket.get("type", "CP")),
+            tuple(sorted(str(leg) for leg in ticket.get("legs", []))),
+        )
+        base = lookup.get(key)
+        if base is None:
+            continue
+        merged = dict(base)
+        merged.update({k: v for k, v in ticket.items() if k not in {"legs"}})
+        merged["id"] = ticket.get("id", merged.get("id"))
+        merged["type"] = ticket.get("type", merged.get("type"))
+        merged["legs"] = list(map(str, ticket.get("legs", merged.get("legs", []))))
+        merged["ev_check"] = ticket.get("ev_check", {})
+        if "flags" in ticket:
+            merged["flags"] = list(ticket.get("flags", []))
+        combo_tickets.append(merged)
 
-    return tickets, info
 
+    return sp_tickets, combo_tickets, info
 
 # Provide a convenient alias
 build_tickets = apply_ticket_policy
