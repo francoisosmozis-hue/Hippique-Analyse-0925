@@ -163,7 +163,7 @@ def _build_combo_candidates(combos_source: Any) -> List[List[Dict[str, Any]]]:
 def apply_ticket_policy(
     cfg: Mapping[str, Any],
     runners: Iterable[Dict[str, Any]],
-    combo_candidates: Iterable[List[Dict[str, Any]]],
+    combo_candidates: Iterable[List[Dict[str, Any]]] | None = None,
     *,
     combos_source: Any | None = None,
     ev_threshold: float | None = None,
@@ -179,6 +179,9 @@ def apply_ticket_policy(
     runners:
         Iterable of runner mappings ``{"id", "name", "odds", "p"}`` used for SP
         dutching allocation.
+    combo_candidates:
+        Optional iterable of pre-built combination candidates. When ``None``
+        the candidates are generated from ``combos_source``.
     combos_source:
         Raw exotic definitions sourced from ``partants`` JSON.
     ev_threshold, roi_threshold, payout_threshold:
