@@ -6,6 +6,7 @@ import argparse
 import copy
 import datetime as dt
 import json
+import logging
 from pathlib import Path
 
 import os
@@ -24,6 +25,39 @@ from simulate_ev import allocate_dutching_sp, gate_ev, simulate_ev_batch
 from tickets_builder import allow_combo, apply_ticket_policy
 from validator_ev import validate_inputs
 from logging_io import append_csv_line, append_json, CSV_HEADER
+
+logger = logging.getLogger(__name__)
+LOG_LEVEL_ENV_VAR = "PIPELINE_LOG_LEVEL"
+
+
+def configure_logging(level: str | int | None = None) -> None:
+    """Configure root logging based on CLI or environment settings."""
+
+    resolved = level if level is not None else os.getenv(LOG_LEVEL_ENV_VAR, "INFO")
+    numeric_level: int | None
+    invalid_level = False
+
+    if isinstance(resolved, int):
+        numeric_level = resolved
+    else:
+        resolved_str = str(resolved).upper()
+        if resolved_str.isdigit():
+            numeric_level = int(resolved_str)
+        else:
+            numeric_level = getattr(logging, resolved_str, None)
+            if not isinstance(numeric_level, int):
+                numeric_level = logging.INFO
+                invalid_level = True
+
+    logging.basicConfig(
+        level=numeric_level,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    )
+
+    if invalid_level:
+        logger.warning(
+            "Invalid log level %r, defaulting to INFO", resolved
+        )
 
 load_dotenv()
         
@@ -426,7 +460,7 @@ def cmd_analyse(args: argparse.Namespace) -> None:
         ev_sp = sum(t.get("ev_ticket", 0.0) for t in sp_tickets)
         total_stake_sp = sum(t.get("stake", 0.0) for t in sp_tickets)
         roi_sp = ev_sp / total_stake_sp if total_stake_sp > 0 else 0.0
-            stats_ev = simulate_with_metrics(sp_tickets, bankroll=bankroll)
+        stats_ev = simulate_with_metrics(sp_tickets, bankroll=bankroll)
         ev_global = float(stats_ev.get("ev", 0.0))
         roi_global = float(stats_ev.get("roi", 0.0))
         combined_payout = float(stats_ev.get("combined_expected_payout", 0.0))
@@ -454,14 +488,14 @@ def cmd_analyse(args: argparse.Namespace) -> None:
     tickets = sp_tickets + final_combo_tickets
 
     if flags.get("reasons", {}).get("sp"):
-        print(
-            "Blocage SP dû aux seuils: "
-            + ", ".join(flags["reasons"]["sp"])
+        logger.warning(
+            "Blocage SP dû aux seuils: %s",
+            ", ".join(flags["reasons"]["sp"]),
         )
     if flags.get("reasons", {}).get("combo"):
-        print(
-            "Blocage combinés dû aux seuils: "
-            + ", ".join(flags["reasons"]["combo"])
+        logger.warning(
+            "Blocage combinés dû aux seuils: %s",
+            ", ".join(flags["reasons"]["combo"]),
         )
     if not flags.get("sp", False):
         tickets = []
@@ -523,7 +557,7 @@ def cmd_analyse(args: argparse.Namespace) -> None:
         drift,
         cfg,
     )
-    print(f"OK: analyse exportée dans {outdir}")
+    logger.info("OK: analyse exportée dans %s", outdir)
 
 
 def cmd_snapshot(args: argparse.Namespace) -> None:
@@ -535,11 +569,19 @@ def cmd_snapshot(args: argparse.Namespace) -> None:
     rc = f"{args.meeting}{args.race}"
     dest = base / f"{rc}-{args.when}.json"
     save_json(dest, data)
-    print(f"Snapshot écrit: {dest}")
+    logger.info("Snapshot écrit: %s", dest)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="GPI v5.1 pipeline")
+    parser.add_argument(
+        "--log-level",
+        default=None,
+        help=(
+            "Logging level (DEBUG, INFO, WARNING, ERROR). "
+            f"Can also be set via {LOG_LEVEL_ENV_VAR}."
+        ),
+    )
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     snap = sub.add_parser("snapshot", help="Renommer un snapshot h30/h5")
@@ -566,6 +608,9 @@ def main() -> None:
     ana.set_defaults(func=cmd_analyse)
 
     args = parser.parse_args()
+    
+    configure_logging(args.log_level)
+    
     args.func(args)
 
 
