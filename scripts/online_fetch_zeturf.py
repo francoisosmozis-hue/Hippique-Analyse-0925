@@ -68,6 +68,10 @@ def filter_today(meetings: Any) -> List[Dict[str, Any]]:
 
 def fetch_runners(url: str) -> Dict[str, Any]:
     """Fetch raw runners data from ``url``."""
+    if "{course_id}" in url:
+        raise ValueError(
+            "Zeturf source URL still contains '{course_id}'. Inject a real course_id before fetching."
+        )
     match = re.search(r"/race/(\d+)", url)
     course_id = match.group(1) if match else None
     
