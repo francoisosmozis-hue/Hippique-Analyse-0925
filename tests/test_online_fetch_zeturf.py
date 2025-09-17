@@ -57,6 +57,13 @@ def test_fetch_meetings_fallback_on_404(monkeypatch: pytest.MonkeyPatch) -> None
     assert data == {"meetings": [{"id": "R1", "name": "Meeting A", "date": today}]}
 
 
+def test_fetch_runners_placeholder_url() -> None:
+    """The fetcher should fail fast when the course_id placeholder is still present."""
+
+    with pytest.raises(ValueError, match="course_id"):
+        ofz.fetch_runners("https://m.zeeturf.fr/rest/api/2/race/{course_id}")
+
+
 @pytest.mark.parametrize(
     "url",
     [
