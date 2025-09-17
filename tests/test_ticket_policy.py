@@ -1,13 +1,10 @@
 import os
 import sys
 
-import pytest
-
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from simulate_ev import allocate_dutching_sp
-from tickets_builder import allow_combo
-
+from tickets_builder import PAYOUT_MIN_COMBO, allow_combo
 
 def test_max_two_tickets():
     cfg = {
@@ -31,23 +28,36 @@ def test_max_two_tickets():
 
 
 
-def test_combo_thresholds(monkeypatch):
-    monkeypatch.delenv("EV_MIN_GLOBAL", raising=False)
-    monkeypatch.delenv("ROI_MIN_GLOBAL", raising=False)
-    monkeypatch.delenv("MIN_PAYOUT_COMBOS", raising=False)
+def test_combo_thresholds_cfg():
+    cfg = {
+        "EV_MIN_GLOBAL": 0.0,
+        "ROI_MIN_GLOBAL": 0.0,
+        "MIN_PAYOUT_COMBOS": PAYOUT_MIN_COMBO,
+    }
 
-    # default MIN_PAYOUT_COMBOS is 10.0
-    assert not allow_combo(ev_global=0.5, roi_global=0.5, payout_est=9.9)
-    assert allow_combo(ev_global=0.5, roi_global=0.5, payout_est=10.0)
+    # default threshold from cfg keeps the 10€ combo and rejects below
+    assert not allow_combo(ev_global=0.5, roi_global=0.5, payout_est=9.9, cfg=cfg)
+    assert allow_combo(ev_global=0.5, roi_global=0.5, payout_est=10.0, cfg=cfg)
 
-    monkeypatch.setenv("MIN_PAYOUT_COMBOS", "15.0")
-    assert not allow_combo(ev_global=0.5, roi_global=0.5, payout_est=14.9)
-    assert allow_combo(ev_global=0.5, roi_global=0.5, payout_est=15.0)
+    # increasing payout threshold via cfg rejects lower payouts
+    cfg["MIN_PAYOUT_COMBOS"] = 15.0
+    assert not allow_combo(ev_global=0.5, roi_global=0.5, payout_est=14.9, cfg=cfg)
+    assert allow_combo(ev_global=0.5, roi_global=0.5, payout_est=15.0, cfg=cfg)
 
-    monkeypatch.setenv("EV_MIN_GLOBAL", "0.6")
-    assert not allow_combo(ev_global=0.5, roi_global=0.5, payout_est=20.0)
+    # raising EV and ROI thresholds filters out combos accordingly
+    cfg["EV_MIN_GLOBAL"] = 0.6
+    assert not allow_combo(ev_global=0.5, roi_global=0.5, payout_est=20.0, cfg=cfg)
 
-    monkeypatch.setenv("EV_MIN_GLOBAL", "0.0")
-    monkeypatch.setenv("ROI_MIN_GLOBAL", "0.3")
-    assert not allow_combo(ev_global=0.5, roi_global=0.2, payout_est=20.0)
-    assert allow_combo(ev_global=0.5, roi_global=0.3, payout_est=20.0)
+    cfg["EV_MIN_GLOBAL"] = 0.0
+    cfg["ROI_MIN_GLOBAL"] = 0.3
+    assert not allow_combo(ev_global=0.5, roi_global=0.2, payout_est=20.0, cfg=cfg)
+    assert allow_combo(ev_global=0.5, roi_global=0.3, payout_est=20.0, cfg=cfg)
+
+    def test_combo_thresholds_lower_payout_cfg():
+    cfg = {
+        "EV_MIN_GLOBAL": 0.0,
+        "ROI_MIN_GLOBAL": 0.0,
+        "MIN_PAYOUT_COMBOS": 5.0,
+    }
+
+    assert allow_combo(ev_global=0.5, roi_global=0.5, payout_est=5.0, cfg=cfg)
