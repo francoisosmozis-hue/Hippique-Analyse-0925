@@ -427,6 +427,12 @@ def cmd_analyse(args: argparse.Namespace) -> None:
     combos_allowed = bool(combo_tickets) and flags.get("sp") and flags.get("combo")
     if combos_allowed:
         combos_allowed = allow_combo(ev_global, roi_global, combined_payout)
+        combos_allowed = allow_combo(
+            ev_global,
+            roi_global,
+            combined_payout,
+            cfg=cfg,
+        )
         if not combos_allowed:
             flags.setdefault("reasons", {}).setdefault("combo", []).append("ALLOW_COMBO")
 
