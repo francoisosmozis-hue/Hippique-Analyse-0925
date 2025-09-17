@@ -1,4 +1,3 @@
-import os
 from typing import Any, Dict, Iterable, List, Mapping, Sequence, Tuple
 
 from simulate_ev import allocate_dutching_sp
@@ -27,23 +26,54 @@ PAYOUT_MIN_COMBO: float = 10.0
 MAX_TICKETS: int = 2
 """Maximum number of tickets emitted (1 SP + 1 combo)."""
 
-def _get_env_float(name: str, default: float) -> float:
-    """Return a float from environment or the provided default."""
-    try:
-        return float(os.getenv(name, str(default)))
-    except ValueError:
+def allow_combo(
+    ev_global: float,
+    roi_global: float,
+    payout_est: float,
+    *,
+    ev_min: float | None = None,
+    roi_min: float | None = None,
+    payout_min: float | None = None,
+    cfg: Mapping[str, Any] | None = None,
+) -> bool:
+    """Decide if a combo ticket can be issued based on EV, ROI and payout.
+
+    Parameters
+    ----------
+    ev_global, roi_global, payout_est:
+        Metrics returned by the EV simulation for the proposed ticket pack.
+    ev_min, roi_min, payout_min:
+        Optional thresholds overriding configuration defaults. When omitted,
+        the values are resolved from ``cfg`` or fall back to module constants.
+    cfg:
+        Optional configuration mapping providing the thresholds used by the
+        analysis pipeline.
+    """
+    def _resolve(value: float | None, default: float, keys: Tuple[str, ...] = ()) -> float:
+        if value is not None:
+            return float(value)
+        if cfg is not None:
+            for key in keys:
+                if key in cfg:
+                    try:
+                        return float(cfg[key])
+                    except (TypeError, ValueError):  # pragma: no cover - defensive
+                        continue
         return default
 
-
-def allow_combo(ev_global: float, roi_global: float, payout_est: float) -> bool:
-    """Decide if a combo ticket can be issued based on EV, ROI and payout."""
-    ev_min = _get_env_float("EV_MIN_GLOBAL", EV_MIN_COMBO)
-    roi_min = _get_env_float("ROI_MIN_GLOBAL", 0.0)
-    min_payout = _get_env_float(
-        "MIN_PAYOUT_COMBOS",
-        _get_env_float("EXOTIC_MIN_PAYOUT", PAYOUT_MIN_COMBO),
+resolved_ev = _resolve(ev_min, EV_MIN_COMBO, ("EV_MIN_GLOBAL",))
+    resolved_roi = _resolve(roi_min, 0.0, ("ROI_MIN_GLOBAL",))
+    resolved_payout = _resolve(
+        payout_min,
+        PAYOUT_MIN_COMBO,
+        ("MIN_PAYOUT_COMBOS", "EXOTIC_MIN_PAYOUT"),
     )
-    if ev_global < ev_min or roi_global < roi_min or payout_est < min_payout:
+
+    if ev_global < resolved_ev:
+        return False
+    if roi_global < resolved_roi:
+        return False
+    if payout_est < resolved_payout:
         return False
     return True
 
