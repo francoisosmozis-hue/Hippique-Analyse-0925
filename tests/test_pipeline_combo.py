@@ -70,7 +70,7 @@ def _run_pipeline(tmp_path, inputs):
         "--h5",
         str(inputs["h5"]),
         "--stats-je",
-        str(stats_path),
+        str(inputs["stats"]),
         "--partants",
         str(inputs["partants"]),
         "--gpi",
@@ -200,6 +200,7 @@ def test_pipeline_recomputes_after_combo_rejection(tmp_path, monkeypatch):
             "ev_over_std": 0.4,
             "variance": 0.8,
             "clv": 0.0,
+        }
 
     monkeypatch.setattr(pipeline_run, "simulate_ev_batch", fake_simulate)
     def fake_gate(cfg, *args, **kwargs):
