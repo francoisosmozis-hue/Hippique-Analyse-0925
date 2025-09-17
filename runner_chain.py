@@ -71,6 +71,9 @@ def validate_exotics_with_simwrapper(
         if roi < roi_min:
             reasons.append("roi_below_threshold")
             continue
+        if payout < payout_min:
+            reasons.append("payout_below_threshold")
+            continue
         ticket = {
             "id": f"CP{len(validated) + 1}",
             "type": "CP",
