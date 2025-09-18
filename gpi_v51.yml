@@ -234,7 +234,7 @@ jobs:
           python pipeline_run.py analyse \
             --h30 data/h30/odds.json \
             --h5  data/h5/odds.json \
-            --stats-je data/h5/h5.json \
+            --stats-je data/h5/stats_je.json \
             --partants data/h5/h5.json \
             --gpi config/gpi.yml \
             --outdir data/out \
