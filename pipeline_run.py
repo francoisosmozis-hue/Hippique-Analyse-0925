@@ -29,6 +29,7 @@ from calibration.p_true_model import (
 )
 
 from simulate_ev import allocate_dutching_sp, gate_ev, simulate_ev_batch
+import simulate_wrapper as sw
 from tickets_builder import allow_combo, apply_ticket_policy
 from validator_ev import validate_inputs
 from logging_io import append_csv_line, append_json, CSV_HEADER
@@ -335,8 +336,7 @@ def enforce_ror_threshold(
                 break
         
             reduction_applied = True
-            adjustments += 1
-            continuescale_factor_total *= factor
+            scale_factor_total *= factor
             effective_cap = cap * scale_factor_total
             for ticket in pack:
                 _scale_ticket_metrics(ticket, factor)
@@ -402,6 +402,12 @@ def load_yaml(path: str) -> dict:
     cfg.setdefault("DRIFT_MIN_DELTA", 0.8)
     cfg["SNAPSHOTS"] = get_env("SNAPSHOTS", cfg.get("SNAPSHOTS"))
     cfg["DRIFT_TOP_N"] = get_env(
+    if "correlation_penalty" in cfg:
+        try:
+            cfg["CORRELATION_PENALTY"] = float(cfg["correlation_penalty"])
+        except (TypeError, ValueError):  # pragma: no cover - defensive
+            pass
+    cfg.setdefault("CORRELATION_PENALTY", 0.85)
         "DRIFT_TOP_N", cfg.get("DRIFT_TOP_N"), cast=int
     )
     cfg["DRIFT_MIN_DELTA"] = get_env(
@@ -413,6 +419,11 @@ def load_yaml(path: str) -> dict:
     cfg["ROI_MIN_SP"] = get_env("ROI_MIN_SP", cfg.get("ROI_MIN_SP"), cast=float)
     cfg["ROI_MIN_GLOBAL"] = get_env("ROI_MIN_GLOBAL", cfg.get("ROI_MIN_GLOBAL"), cast=float)
     cfg["ROR_MAX"] = get_env("ROR_MAX_TARGET", cfg.get("ROR_MAX"), cast=float)
+    cfg["CORRELATION_PENALTY"] = get_env(
+        "CORRELATION_PENALTY",
+        cfg.get("CORRELATION_PENALTY"),
+        cast=float,
+    )
     exotic_min = get_env("EXOTIC_MIN_PAYOUT", cfg.get("MIN_PAYOUT_COMBOS"), cast=float)
     cfg["MIN_PAYOUT_COMBOS"] = exotic_min
     cfg.setdefault("EXOTIC_MIN_PAYOUT", exotic_min)
@@ -668,6 +679,8 @@ def cmd_analyse(args: argparse.Namespace) -> None:
         cfg["MIN_PAYOUT_COMBOS"] = args.min_payout
     if args.allow_je_na:
         cfg["ALLOW_JE_NA"] = True
+
+    sw.set_correlation_penalty(cfg.get("CORRELATION_PENALTY"))
 
     outdir = Path(args.outdir or cfg["OUTDIR_DEFAULT"])
 
