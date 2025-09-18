@@ -93,6 +93,79 @@ def _normalise_legs(value: Any) -> List[str]:
     return []
 
 
+def _leg_lookup_key(leg: Any) -> str:
+    if isinstance(leg, Mapping):
+        for key in ("id", "code", "runner", "participant", "num", "name"):
+            if key in leg and leg[key] not in (None, ""):
+                return str(leg[key])
+    return str(leg)
+
+
+def _format_meeting(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip().upper()
+    if not text:
+        return None
+    if not text.startswith("R") and text[0].isdigit():
+        text = f"R{text}"
+    return text
+
+
+def _format_race(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip().upper()
+    if not text:
+        return None
+    if not text.startswith("C") and text[0].isdigit():
+        text = f"C{text}"
+    return text
+
+
+def _extract_course_context(*sources: Mapping[str, Any]) -> Dict[str, str]:
+    context: Dict[str, str] = {}
+    for source in sources:
+        if not isinstance(source, Mapping):
+            continue
+        meeting = source.get("meeting") or source.get("reunion")
+        race = source.get("race") or source.get("course") or source.get("epreuve")
+        rc = source.get("rc") or source.get("race_code")
+        course_id = source.get("course_id") or source.get("id_course")
+        if meeting and "meeting" not in context:
+            formatted = _format_meeting(meeting)
+            if formatted:
+                context["meeting"] = formatted
+        if race and "race" not in context:
+            formatted_race = _format_race(race)
+            if formatted_race:
+                context["race"] = formatted_race
+        if rc and "rc" not in context:
+            text = str(rc).replace(" ", "").upper()
+            if text:
+                context["rc"] = text
+        if course_id and "course_id" not in context:
+            cid = str(course_id).strip()
+            if cid:
+                context["course_id"] = cid
+
+    meeting = context.get("meeting")
+    race = context.get("race")
+    if meeting and race and "rc" not in context:
+        context["rc"] = f"{meeting}{race}"
+    return context
+
+
+def _build_leg_details(
+    leg_id: str,
+    *sources: Mapping[str, Any],
+) -> Dict[str, Any]:
+    details = {"id": leg_id}
+    context = _extract_course_context(*sources)
+    details.update(context)
+    return details
+
+
 def _extract_combo_entries(source: Any) -> List[Tuple[str, Dict[str, Any]]]:
     """Return ``(type, data)`` entries describing exotic combinations."""
 
@@ -150,7 +223,11 @@ def _extract_combo_entries(source: Any) -> List[Tuple[str, Dict[str, Any]]]:
     return entries
 
 
-def _build_combo_candidates(combos_source: Any) -> List[List[Dict[str, Any]]]:
+def _build_combo_candidates(
+    combos_source: Any,
+    *,
+    course_context: Mapping[str, Any] | None = None,
+) -> List[List[Dict[str, Any]]]:
     """Normalise combo definitions from ``combos_source`` into candidates."""
 
     candidates: List[List[Dict[str, Any]]] = []
@@ -181,6 +258,16 @@ def _build_combo_candidates(combos_source: Any) -> List[List[Dict[str, Any]]]:
             "odds": odds_val,
             "stake": stake_val,
         }
+        context_sources: List[Mapping[str, Any]] = []
+        if isinstance(raw, Mapping):
+            context_sources.append(raw)
+        if isinstance(course_context, Mapping):
+            context_sources.append(course_context)
+        if context_sources:
+            ticket["legs_details"] = [
+                _build_leg_details(leg_id, *context_sources)
+                for leg_id in legs
+            ]
         if "p" in raw:
             try:
                 ticket["p"] = float(raw.get("p"))
@@ -247,7 +334,11 @@ def apply_ticket_policy(
         return sp_tickets, [], info
 
     if combo_candidates is None:
-        combo_candidates = _build_combo_candidates(combos_source)
+        base_context = combos_source if isinstance(combos_source, Mapping) else None
+        combo_candidates = _build_combo_candidates(
+            combos_source,
+            course_context=base_context,
+        )
     else:
         combo_candidates = list(combo_candidates)
     if not combo_candidates:
@@ -280,7 +371,19 @@ def apply_ticket_policy(
         if not candidate:
             continue
         base = dict(candidate[0])
-        base_legs = [str(leg) for leg in base.get("legs", [])]
+        leg_details = base.get("legs_details")
+        if isinstance(leg_details, list):
+            base["legs_details"] = [
+                dict(ld) if isinstance(ld, Mapping) else {"id": str(ld)}
+                for ld in leg_details
+            ]
+            base_legs = [_leg_lookup_key(ld) for ld in base["legs_details"]]
+        else:
+            base_legs = [_leg_lookup_key(leg) for leg in base.get("legs", [])]
+            if base_legs:
+                base["legs_details"] = [
+                    {"id": leg_id} for leg_id in base_legs
+                ]
         base["legs"] = list(base_legs)
         key = (
             str(base.get("type", "CP")),
@@ -298,10 +401,23 @@ def apply_ticket_policy(
         if base is None:
             continue
         merged = dict(base)
+        if isinstance(base.get("legs_details"), list):
+            merged["legs_details"] = [dict(ld) for ld in base["legs_details"]]
         merged.update({k: v for k, v in ticket.items() if k not in {"legs"}})
+        if isinstance(ticket.get("legs_details"), list):
+            merged["legs_details"] = [
+                dict(ld) if isinstance(ld, Mapping) else {"id": _leg_lookup_key(ld)}
+                for ld in ticket.get("legs_details", [])
+            ]
         merged["id"] = ticket.get("id", merged.get("id"))
         merged["type"] = ticket.get("type", merged.get("type"))
-        merged["legs"] = list(map(str, ticket.get("legs", merged.get("legs", []))))
+        if isinstance(merged.get("legs_details"), list) and merged["legs_details"]:
+            merged["legs"] = [_leg_lookup_key(ld) for ld in merged["legs_details"]]
+        else:
+            merged["legs"] = [
+                _leg_lookup_key(leg)
+                for leg in ticket.get("legs", merged.get("legs", []))
+            ]
         merged["ev_check"] = ticket.get("ev_check", {})
         if "flags" in ticket:
             merged["flags"] = list(ticket.get("flags", []))
