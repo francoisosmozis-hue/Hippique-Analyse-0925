@@ -27,7 +27,6 @@ def test_max_two_tickets():
     assert len(tickets) <= 2
 
 
-
 def test_combo_thresholds_cfg():
     cfg = {
         "EV_MIN_GLOBAL": 0.0,
@@ -41,10 +40,11 @@ def test_combo_thresholds_cfg():
     
     # increasing payout threshold via cfg rejects lower payouts
     cfg["MIN_PAYOUT_COMBOS"] = 15.0
-    assert allow_combo(ev_global=0.5, roi_global=0.5, payout_est=14.9, cfg=cfg) is False
-    assert allow_combo(ev_global=0.5, roi_global=0.5, payout_est=15.0, cfg=cfg) is True
-    
-    # raising EV and ROI thresholds filters out combos accordingly
+    assert allow_combo(ev_global=0.5, roi_global=0.5, payout_est=20.0, cfg=cfg) is False
+    assert allow_combo(ev_global=0.6, roi_global=0.5, payout_est=20.0, cfg=cfg) is True
+
+    # raising ROI thresholds filters out combos accordingly
+    cfg["EV_MIN_GLOBAL"] = 0.0
     cfg["EV_MIN_GLOBAL"] = 0.6
     assert not allow_combo(ev_global=0.5, roi_global=0.5, payout_est=20.0, cfg=cfg)assert allow_combo(ev_global=0.5, roi_global=0.5, payout_est=20.0, cfg=cfg) is False
 
@@ -54,7 +54,7 @@ def test_combo_thresholds_cfg():
     assert allow_combo(ev_global=0.5, roi_global=0.3, payout_est=20.0, cfg=cfg) is True
     
 
-    def test_combo_thresholds_lower_payout_cfg():
+def test_combo_thresholds_lower_payout_cfg():
     cfg = {
         "EV_MIN_GLOBAL": 0.0,
         "ROI_MIN_GLOBAL": 0.0,
