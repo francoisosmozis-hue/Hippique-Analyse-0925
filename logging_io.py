@@ -13,6 +13,7 @@ CSV_HEADER = [
     "partants",
     "nb_tickets",
     "total_stake",
+    "total_optimized_stake",
     "ev_sp",
     "ev_global",
     "roi_sp",
