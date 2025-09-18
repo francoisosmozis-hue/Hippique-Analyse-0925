@@ -199,6 +199,29 @@ def sample_snapshot() -> dict:
     }
 
 
+def test_normalize_snapshot_with_program_numbers() -> None:
+    """``normalize_snapshot`` should fallback to program numbers and deduplicate."""
+
+    payload = {
+        "rc": "R1C1",
+        "hippodrome": "Test",
+        "date": "2025-09-10",
+        "discipline": "trot",
+        "runners": [
+            {"num": 1, "name": "Alpha", "odds": "5"},
+            {"number": "2", "name": "Bravo", "odds": 7},
+            {"num": "1", "name": "Ghost", "odds": 10},
+        ],
+    }
+
+    normalized = ofz.normalize_snapshot(payload)
+
+    ids = [runner["id"] for runner in normalized["runners"]]
+    assert ids == ["1", "2"]
+    assert normalized["id2name"] == {"1": "Alpha", "2": "Bravo"}
+    assert len(ids) == len(set(ids)) == len(normalized["id2name"])
+
+
 @pytest.mark.parametrize("mode", ["h30", "h5"])
 def test_main_snapshot_modes(mode: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """CLI should normalise snapshots for h30/h5 modes."""
