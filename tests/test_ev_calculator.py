@@ -15,6 +15,8 @@ from ev_calculator import (
     compute_ev_roi,
     risk_of_ruin,
 )
+from pipeline_run import enforce_ror_threshold
+from simulate_ev import allocate_dutching_sp, simulate_ev_batch
 import inspect
 
 SIG = inspect.signature(compute_ev_roi)
@@ -237,6 +239,78 @@ def test_average_clv_from_closing_odds() -> None:
     assert math.isclose(tickets[0]["clv"], clv1)
     assert math.isclose(tickets[1]["clv"], clv2)
     assert math.isclose(res["clv"], (clv1 + clv2) / 2)
+
+
+def test_enforce_ror_threshold_reduces_high_risk_pack() -> None:
+    """High-risk packs should be trimmed below the configured ROR target."""
+
+    cfg = {
+        "BUDGET_TOTAL": 20.0,
+        "SP_RATIO": 1.0,
+        "COMBO_RATIO": 0.0,
+        "KELLY_FRACTION": 1.0,
+        "MAX_VOL_PAR_CHEVAL": 0.9,
+        "ROUND_TO_SP": 0.1,
+        "MIN_STAKE_SP": 0.1,
+        "MAX_TICKETS_SP": 2,
+        "ROR_MAX": 0.01,
+    }
+    runners = [
+        {"id": "1", "name": "A", "odds": 2.0, "p": 0.52},
+        {"id": "2", "name": "B", "odds": 3.5, "p": 0.30},
+    ]
+
+    baseline, _ = allocate_dutching_sp(cfg, runners)
+    baseline_stake = sum(t["stake"] for t in baseline)
+
+    sp_tickets, stats, info = enforce_ror_threshold(cfg, runners, [], bankroll=cfg["BUDGET_TOTAL"])
+
+    assert info["applied"] is True
+    assert info["initial_ror"] > info["target"]
+    assert info["final_ror"] <= info["target"] + 1e-9
+    assert stats["risk_of_ruin"] == pytest.approx(info["final_ror"])
+
+    final_stake = sum(t["stake"] for t in sp_tickets)
+    assert final_stake < baseline_stake
+
+
+def test_enforce_ror_threshold_preserves_safe_pack() -> None:
+    """When the pack is safe, stakes should remain unchanged."""
+
+    cfg = {
+        "BUDGET_TOTAL": 20.0,
+        "SP_RATIO": 1.0,
+        "COMBO_RATIO": 0.0,
+        "KELLY_FRACTION": 0.1,
+        "MAX_VOL_PAR_CHEVAL": 0.3,
+        "ROUND_TO_SP": 0.1,
+        "MIN_STAKE_SP": 0.1,
+        "MAX_TICKETS_SP": 2,
+        "ROR_MAX": 0.01,
+    }
+    runners = [
+        {"id": "1", "name": "A", "odds": 2.0, "p": 0.52},
+        {"id": "2", "name": "B", "odds": 3.5, "p": 0.30},
+    ]
+
+    baseline, _ = allocate_dutching_sp(cfg, runners)
+    baseline_sim = [dict(ticket) for ticket in baseline]
+    simulate_ev_batch(
+        baseline_sim,
+        bankroll=cfg["BUDGET_TOTAL"],
+        kelly_cap=cfg["MAX_VOL_PAR_CHEVAL"],
+    )
+    sp_tickets, stats, info = enforce_ror_threshold(cfg, runners, [], bankroll=cfg["BUDGET_TOTAL"])
+
+    assert info["applied"] is False
+    assert info["initial_ror"] <= info["target"]
+    assert stats["risk_of_ruin"] == pytest.approx(info["initial_ror"])
+
+    expected = sorted((t["id"], t.get("stake", 0.0)) for t in baseline_sim)
+    result = sorted((t["id"], t["stake"]) for t in sp_tickets)
+    assert [rid for rid, _ in result] == [rid for rid, _ in expected]
+    for (_, stake_expected), (_, stake_actual) in zip(expected, result):
+        assert stake_actual == pytest.approx(stake_expected)
 
 
 def test_risk_of_ruin_decreases_with_lower_variance() -> None:
