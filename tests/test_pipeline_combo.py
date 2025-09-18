@@ -228,7 +228,7 @@ def test_pipeline_uses_capped_stake_in_exports(tmp_path, monkeypatch):
     tracking_path.unlink(missing_ok=True)
 
     
-    def test_pipeline_optimization_preserves_ev_and_budget(tmp_path, monkeypatch):
+def test_pipeline_optimization_preserves_ev_and_budget(tmp_path, monkeypatch):
     partants = partants_sample()
     inputs = _write_inputs(tmp_path, partants, combo_ratio=0.0)
 
