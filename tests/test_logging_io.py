@@ -6,7 +6,8 @@ def test_csv_header_and_columns(tmp_path):
     content = path.read_text(encoding="utf-8").strip().splitlines()
     header = content[0].split(";")
     assert header == CSV_HEADER
-    assert len(header) == 15
+    assert len(header) == 16
+    assert "total_optimized_stake" in header
     row = content[1].split(";")
     assert row[header.index("reunion")] == "R1"
     assert row[header.index("course")] == "C1"
