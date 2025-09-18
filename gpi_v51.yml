@@ -73,9 +73,7 @@ jobs:
 
       - name: Critical dependency check
         run: python -c "import pandas, googleapiclient"
-
-          pip install requests beautifulsoup4 pyyaml python-dotenv pytest
-
+         
       - name: Resolve inputs
         id: in
         run: |
