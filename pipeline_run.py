@@ -7,6 +7,7 @@ import copy
 import datetime as dt
 import json
 import logging
+import math
 from pathlib import Path
 
 import os
@@ -143,6 +144,122 @@ def simulate_with_metrics(
     return stats
 
 
+def _scale_ticket_metrics(ticket: dict, factor: float) -> None:
+    """Scale stake-dependent metrics of ``ticket`` in-place."""
+
+    if not math.isfinite(factor):
+        return
+
+    for key in ("stake", "kelly_stake", "max_stake", "optimized_stake", "ev", "ev_ticket"):
+        if key in ticket and ticket.get(key) is not None:
+            ticket[key] = float(ticket[key]) * factor
+
+    if "variance" in ticket and ticket.get("variance") is not None:
+        ticket["variance"] = float(ticket["variance"]) * factor * factor
+
+
+def _compute_scale_factor(
+    ev: float,
+    variance: float,
+    target: float,
+    bankroll: float,
+) -> float | None:
+    """Return the multiplicative factor required to reach ``target`` risk."""
+
+    if bankroll <= 0 or ev <= 0 or variance <= 0 or not (0.0 < target < 1.0):
+        return None
+
+    ln_target = math.log(target)
+    if not math.isfinite(ln_target) or ln_target >= 0.0:
+        return None
+
+    denominator = variance * ln_target
+    if denominator == 0.0:
+        return None
+
+    factor = (-2.0 * ev * bankroll) / denominator
+    if not math.isfinite(factor) or factor <= 0.0:
+        return None
+
+    return min(1.0, factor)
+
+
+def _resolve_effective_cap(info: dict | None, cfg: dict) -> float:
+    """Return the effective Kelly cap extracted from ``info`` or defaults."""
+
+    cap_default = float(cfg.get("MAX_VOL_PAR_CHEVAL", 0.60))
+    if not isinstance(info, dict):
+        return cap_default
+
+    for key in ("effective_cap", "max_vol_par_cheval", "initial_cap"):
+        value = info.get(key)
+        if isinstance(value, (int, float)) and value > 0:
+            return float(value)
+
+    return cap_default
+
+
+def _summarize_optimization(
+    tickets: list[dict],
+    bankroll: float,
+    kelly_cap: float,
+) -> dict | None:
+    """Return a normalized summary of the optimization run for ``tickets``."""
+
+    if not tickets or bankroll <= 0:
+        return None
+
+    pack = [copy.deepcopy(t) for t in tickets]
+    stats_opt = simulate_ev_batch(
+        pack,
+        bankroll=bankroll,
+        kelly_cap=kelly_cap,
+        optimize=True,
+    )
+
+    if not isinstance(stats_opt, dict):
+        return None
+
+    optimized_stakes = [float(x) for x in stats_opt.get("optimized_stakes", [])]
+    metrics_before = stats_opt.get("ticket_metrics_individual") or []
+    stake_before_val = sum(float(m.get("stake", 0.0)) for m in metrics_before)
+    if stake_before_val <= 0:
+        stake_before_val = sum(float(t.get("stake", 0.0)) for t in tickets)
+    stake_before = float(stake_before_val)
+    stake_after_val = sum(optimized_stakes) if optimized_stakes else stake_before
+    stake_after = float(stake_after_val)
+
+    applied = False
+    if optimized_stakes and metrics_before:
+        for opt, metrics in zip(optimized_stakes, metrics_before):
+            if abs(opt - float(metrics.get("stake", 0.0))) > 1e-6:
+                applied = True
+                break
+
+    summary: dict[str, object] = {
+        "applied": applied,
+        "ev_before": float(stats_opt.get("ev_individual", stats_opt.get("ev", 0.0))),
+        "ev_after": float(stats_opt.get("ev", stats_opt.get("ev_individual", 0.0))),
+        "roi_before": float(
+            stats_opt.get("roi_individual", stats_opt.get("roi", 0.0))
+        ),
+        "roi_after": float(stats_opt.get("roi", stats_opt.get("roi_individual", 0.0))),
+        "stake_before": stake_before,
+        "stake_after": stake_after,
+        "risk_after": float(stats_opt.get("risk_of_ruin", 0.0)),
+        "green": bool(stats_opt.get("green", False)),
+    }
+
+    if optimized_stakes:
+        summary["optimized_stakes"] = optimized_stakes
+
+    failure_reasons = stats_opt.get("failure_reasons")
+    if failure_reasons:
+        summary["failure_reasons"] = list(failure_reasons)
+
+    return summary
+
+
 def enforce_ror_threshold(
     cfg: dict,
     runners: list[dict],
@@ -151,99 +268,114 @@ def enforce_ror_threshold(
     *,
     max_iterations: int = 48,
 ) -> tuple[list[dict], dict, dict]:
-    """Return SP tickets and EV metrics after enforcing the ROR threshold.
+    """Return SP tickets and EV metrics after enforcing the ROR threshold."""
 
-    Stakes are recomputed with progressively smaller ``KELLY_FRACTION`` and
-    ``MAX_VOL_PAR_CHEVAL`` values while ``risk_of_ruin`` exceeds the
-    configured ``ROR_MAX`` target.  The function reports the adjusted SP
-    tickets, EV metrics and a metadata dictionary describing the reduction.
-    """
+    try:
+        max_iterations = max(1, int(max_iterations))
+    except (TypeError, ValueError):
+        max_iterations = 1
 
     cfg_iter = dict(cfg)
     target = float(cfg_iter.get("ROR_MAX", 0.0))
-    initial_kelly = float(cfg_iter.get("KELLY_FRACTION", 0.5))
-    initial_cap = float(cfg_iter.get("MAX_VOL_PAR_CHEVAL", 0.60))
+    cap = float(cfg_iter.get("MAX_VOL_PAR_CHEVAL", 0.60))
 
-    min_kelly = 0.01 if initial_kelly > 0.01 else max(0.0, initial_kelly)
-    min_cap = initial_cap if initial_cap < 0.05 else 0.05
+    sp_tickets, _ = allocate_dutching_sp(cfg_iter, runners)
+    sp_tickets.sort(key=lambda t: t.get("ev_ticket", 0.0), reverse=True)
+    try:
+        max_count = int(cfg_iter.get("MAX_TICKETS_SP", len(sp_tickets)))
+    except (TypeError, ValueError):
+        max_count = len(sp_tickets)
+    if max_count >= 0:
+        sp_tickets = sp_tickets[:max_count]
 
-    current_kelly = initial_kelly
-    current_cap = initial_cap
+    pack = sp_tickets + combo_tickets
+    if not pack:
+        stats_ev = {"ev": 0.0, "roi": 0.0, "risk_of_ruin": 0.0, "variance": 0.0}
+        info = {
+            "applied": False,
+            "initial_ror": 0.0,
+            "final_ror": 0.0,
+            "target": target,
+            "scale_factor": 1.0,
+            "initial_ev": 0.0,
+            "final_ev": 0.0,
+            "initial_variance": 0.0,
+            "final_variance": 0.0,
+            "initial_total_stake": 0.0,
+            "final_total_stake": 0.0,
+        }
+        return sp_tickets, stats_ev, info
 
-    max_iterations = max(1, int(max_iterations))
+    stats_ev = simulate_with_metrics(pack, bankroll=bankroll, kelly_cap=cap)
+
+    initial_risk = float(stats_ev.get("risk_of_ruin", 0.0))
+    initial_ev = float(stats_ev.get("ev", 0.0))
+    initial_variance = float(stats_ev.get("variance", 0.0))
+    initial_total_stake = sum(float(t.get("stake", 0.0)) for t in pack)
 
     reduction_applied = False
-    adjustments = 0
+    scale_factor_total = 1.0
+    stats_current = stats_ev
+    effective_cap = cap
 
-    sp_result: list[dict] = []
-    stats_ev: dict = {"ev": 0.0, "roi": 0.0}
-    initial_risk: float | None = None
-    final_risk: float | None = None
+    iterations = 0
+    if initial_risk > target and bankroll > 0:
+        while iterations < max_iterations:
+            current_risk = float(stats_current.get("risk_of_ruin", 0.0))
+            if current_risk <= target + 1e-9:
+                break
 
-    for _ in range(max_iterations):
-        cfg_iter["KELLY_FRACTION"] = current_kelly
-        cfg_iter["MAX_VOL_PAR_CHEVAL"] = current_cap
-
-        sp_tickets, _ = allocate_dutching_sp(cfg_iter, runners)
-        sp_tickets.sort(key=lambda t: t.get("ev_ticket", 0.0), reverse=True)
-        try:
-            max_count = int(cfg_iter.get("MAX_TICKETS_SP", len(sp_tickets)))
-        except (TypeError, ValueError):
-            max_count = len(sp_tickets)
-        if max_count >= 0:
-            sp_tickets = sp_tickets[:max_count]
-
-        sp_result = sp_tickets
-        pack = sp_tickets + combo_tickets
-        stats_ev = simulate_with_metrics(pack, bankroll=bankroll, kelly_cap=current_cap)
-
-        risk = float(stats_ev.get("risk_of_ruin", 0.0))
-        if initial_risk is None:
-            initial_risk = risk
-        final_risk = risk
-
-        if (
-            risk <= target
-            or target <= 0.0
-            or bankroll <= 0
-            or (not sp_tickets and not combo_tickets)
-        ):
-            break
-
-        next_kelly = max(min_kelly, current_kelly * 0.8)
-        if next_kelly < current_kelly - 1e-9:
-            current_kelly = next_kelly
+            factor = _compute_scale_factor(
+                float(stats_current.get("ev", 0.0)),
+                float(stats_current.get("variance", 0.0)),
+                target,
+                bankroll,
+            )
+            if factor is None or factor >= 1.0 - 1e-9:
+                break
+        
             reduction_applied = True
             adjustments += 1
-            continue
+            continuescale_factor_total *= factor
+            effective_cap = cap * scale_factor_total
+            for ticket in pack:
+                _scale_ticket_metrics(ticket, factor)
 
-        next_cap = max(min_cap, current_cap * 0.9)
-        if next_cap < current_cap - 1e-9:
-            current_cap = next_cap
-            reduction_applied = True
-            adjustments += 1
-            continue
+            stats_current = simulate_with_metrics(
+                pack,
+                bankroll=bankroll,
+                kelly_cap=effective_cap,
+            )
 
-        break
+            iterations += 1
+            if factor <= 1e-6:
+                break
 
-    if initial_risk is None:
-        initial_risk = final_risk if final_risk is not None else 0.0
-    if final_risk is None:
-        final_risk = initial_risk
+        stats_ev = stats_current
+
+    final_risk = float(stats_ev.get("risk_of_ruin", initial_risk))
+    final_ev = float(stats_ev.get("ev", initial_ev))
+    final_variance = float(stats_ev.get("variance", initial_variance))
+    final_total_stake = sum(float(t.get("stake", 0.0)) for t in pack)
 
     info = {
-        "applied": reduction_applied,
-        "iterations": adjustments,
+        "applied": reduction_applied,        
         "initial_ror": float(initial_risk),
         "final_ror": float(final_risk),
         "target": target,
-        "initial_kelly_fraction": initial_kelly,
-        "kelly_fraction": current_kelly,
-        "initial_max_vol": initial_cap,
-        "max_vol_par_cheval": current_cap,
+        "scale_factor": scale_factor_total,
+        "initial_ev": initial_ev,
+        "final_ev": final_ev,
+        "initial_variance": initial_variance,
+        "final_variance": final_variance,
+        "initial_total_stake": initial_total_stake,
+        "final_total_stake": final_total_stake,
+        "initial_cap": cap,
+        "effective_cap": effective_cap,
+        "iterations": iterations,
     }
 
-    return sp_result, stats_ev, info
+    return sp_tickets, stats_ev, info
 
 
 def load_yaml(path: str) -> dict:
@@ -432,6 +564,7 @@ def export(
     *,
     stake_reduction_applied: bool = False,
     stake_reduction_details: dict | None = None,
+    optimization_details: dict | None = None,
 ) -> None:
     save_json(
         outdir / "p_finale.json",
@@ -451,17 +584,43 @@ def export(
                 "stake_reduction_applied": bool(stake_reduction_applied),
                 "stake_reduction": {
                     "applied": bool(stake_reduction_applied),
-                    "kelly_fraction": (
-                        stake_reduction_details.get("kelly_fraction")
+                    "scale_factor": (
+                        stake_reduction_details.get("scale_factor")
                         if stake_reduction_details
                         else None
                     ),
-                    "max_vol_par_cheval": (
-                        stake_reduction_details.get("max_vol_par_cheval")
+                    "target": (
+                        stake_reduction_details.get("target")
                         if stake_reduction_details
                         else None
+                    ),
+                    "initial_cap": (
+                        stake_reduction_details.get("initial_cap")
+                        if stake_reduction_details
+                        else None
+                    ),
+                    "effective_cap": (
+                        stake_reduction_details.get("effective_cap")
+                        if stake_reduction_details
+                        else None
+                    ),
+                    "iterations": (
+                        stake_reduction_details.get("iterations")
+                        if stake_reduction_details
+                        else None
+                    ),
+                    "initial": (
+                        stake_reduction_details.get("initial")
+                        if stake_reduction_details
+                        else {}
+                    ),
+                    "final": (
+                        stake_reduction_details.get("final")
+                        if stake_reduction_details
+                        else {}
                     ),
                 },
+                "optimization": optimization_details,
             },
         },
     )
@@ -616,17 +775,21 @@ def cmd_analyse(args: argparse.Namespace) -> None:
     def log_reduction(info: dict) -> None:
         logger.warning(
             (
-                "Risk of ruin %.2f%% > %.2f%%: réduction des mises "
-                "(Kelly %.3f→%.3f, cap %.2f→%.2f, risque final %.2f%%, %d itérations)"
+                "Risk of ruin %.2f%% > %.2f%%: réduction globale s=%.3f "
+                "(mise %.2f→%.2f, variance %.2f→%.2f, cap %.2f→%.2f, "
+                "risque final %.2f%%, %d itérations)"
             ),
             info.get("initial_ror", 0.0) * 100.0,
             info.get("target", 0.0) * 100.0,
-            info.get("initial_kelly_fraction", 0.0),
-            info.get("kelly_fraction", 0.0),
-            info.get("initial_max_vol", 0.0),
-            info.get("max_vol_par_cheval", 0.0),
+            info.get("scale_factor", 1.0),
+            info.get("initial_total_stake", 0.0),
+            info.get("final_total_stake", 0.0),
+            info.get("initial_variance", 0.0),
+            info.get("final_variance", 0.0),
+            info.get("initial_cap", 0.0),
+            info.get("effective_cap", 0.0),
             info.get("final_ror", 0.0) * 100.0,
-            info.get("iterations", 0),
+            int(info.get("iterations", 0)),
         )
 
     def adjust_pack(cfg_local: dict, combos_local: list[dict]) -> tuple[list[dict], dict, dict]:
@@ -697,7 +860,19 @@ def cmd_analyse(args: argparse.Namespace) -> None:
         risk_of_ruin = 0.0
         ev_over_std = 0.0
         total_stake_sp = 0.0
-        last_reduction_info = {"applied": False}
+        last_reduction_info = {
+            "applied": False,
+            "scale_factor": 1.0,
+            "initial_ror": 0.0,
+            "final_ror": 0.0,
+            "target": float(cfg.get("ROR_MAX", 0.0)),
+            "initial_ev": 0.0,
+            "final_ev": 0.0,
+            "initial_variance": 0.0,
+            "final_variance": 0.0,
+            "initial_total_stake": 0.0,
+            "final_total_stake": 0.0,
+        }
     elif combo_budget_reassign or no_combo_available:
         cfg_sp = dict(cfg)
         cfg_sp["SP_RATIO"] = float(cfg.get("SP_RATIO", 0.0)) + float(cfg.get("COMBO_RATIO", 0.0))
@@ -723,12 +898,7 @@ def cmd_analyse(args: argparse.Namespace) -> None:
         )
     elif proposed_pack != sp_tickets + final_combo_tickets:
         final_pack = sp_tickets + final_combo_tickets
-        current_cap = float(
-            last_reduction_info.get(
-                "max_vol_par_cheval",
-                cfg.get("MAX_VOL_PAR_CHEVAL", 0.60),
-            )
-        )
+        current_cap = _resolve_effective_cap(last_reduction_info, cfg)
         stats_ev = simulate_with_metrics(
             final_pack,
             bankroll=bankroll,
@@ -763,6 +933,15 @@ def cmd_analyse(args: argparse.Namespace) -> None:
     combined_payout = float(stats_ev.get("combined_expected_payout", 0.0)) if tickets else 0.0
     variance_total = float(stats_ev.get("variance", 0.0)) if tickets else 0.0
 
+    optimization_summary = None
+    if tickets:
+        effective_cap = _resolve_effective_cap(last_reduction_info, cfg)
+        optimization_summary = _summarize_optimization(
+            tickets,
+            bankroll=bankroll,
+            kelly_cap=effective_cap,
+        )
+
     # Hard budget stop
     total_stake = sum(t.get("stake", 0) for t in tickets)
     if total_stake > float(cfg.get("BUDGET_TOTAL", 0.0)) + 1e-6:
@@ -780,6 +959,11 @@ def cmd_analyse(args: argparse.Namespace) -> None:
             "partants": len(partants),
             "nb_tickets": len(tickets),
             "total_stake": total_stake,
+            "total_optimized_stake": (
+                optimization_summary.get("stake_after")
+                if optimization_summary
+                else total_stake
+            ),
             "ev_sp": ev_sp,
             "ev_global": ev_global,
             "roi_sp": roi_sp,
@@ -797,15 +981,27 @@ def cmd_analyse(args: argparse.Namespace) -> None:
 
 
     outdir.mkdir(parents=True, exist_ok=True)
-    stake_reduction_flag = bool(last_reduction_info.get("applied") and tickets)
-    stake_reduction_details = None
-    if last_reduction_info:
-        details = {
-            "kelly_fraction": last_reduction_info.get("kelly_fraction"),
-            "max_vol_par_cheval": last_reduction_info.get("max_vol_par_cheval"),
-        }
-        if any(value is not None for value in details.values()):
-            stake_reduction_details = details    
+    stake_reduction_info = last_reduction_info or {}
+    stake_reduction_flag = bool(stake_reduction_info.get("applied"))
+    stake_reduction_details = {
+        "scale_factor": stake_reduction_info.get("scale_factor", 1.0),
+        "target": stake_reduction_info.get("target"),
+        "initial_cap": stake_reduction_info.get("initial_cap"),
+        "effective_cap": stake_reduction_info.get("effective_cap"),
+        "iterations": stake_reduction_info.get("iterations"),
+        "initial": {
+            "risk_of_ruin": stake_reduction_info.get("initial_ror"),
+            "ev": stake_reduction_info.get("initial_ev"),
+            "variance": stake_reduction_info.get("initial_variance"),
+            "total_stake": stake_reduction_info.get("initial_total_stake"),
+        },
+        "final": {
+            "risk_of_ruin": stake_reduction_info.get("final_ror"),
+            "ev": stake_reduction_info.get("final_ev"),
+            "variance": stake_reduction_info.get("final_variance"),
+            "total_stake": stake_reduction_info.get("final_total_stake"),
+        },
+    }    
     export(
         outdir,
         meta,
@@ -823,6 +1019,7 @@ def cmd_analyse(args: argparse.Namespace) -> None:
         cfg,
         stake_reduction_applied=stake_reduction_flag,
         stake_reduction_details=stake_reduction_details,
+        optimization_details=optimization_summary,
     )
     logger.info("OK: analyse exportée dans %s", outdir)
 
