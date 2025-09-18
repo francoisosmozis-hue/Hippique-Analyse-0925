@@ -257,19 +257,22 @@ def compute_ev_roi(
         p = t.get("p")
         if p is None:
             legs = t.get("legs")
-            if legs is not None:
+            legs_for_sim = t.get("legs_details") or legs
+            if legs_for_sim is not None:
                 if simulate_fn is None:
                     raise ValueError(
                         "simulate_fn must be provided when tickets include 'legs'"
                     )
                 if cache_simulations:
-                    key: Tuple[Any, ...] = tuple(_make_hashable(leg) for leg in legs)
+                    key: Tuple[Any, ...] = tuple(
+                        _make_hashable(leg) for leg in legs_for_sim
+                    )
                     p = cache.get(key)
                     if p is None:
-                        p = simulate_fn(legs)
+                        p = simulate_fn(legs_for_sim)
                         cache[key] = p
                 else:
-                    p = simulate_fn(legs)
+                    p = simulate_fn(legs_for_sim)
                 t["p"] = p
             else:
                 raise ValueError("Ticket must include probability 'p'")
@@ -308,7 +311,7 @@ def compute_ev_roi(
                 "clv": clv,
             }
         )
-        if "legs" in t:
+        if "legs" in t or "legs_details" in t:
             has_combined = True
 
     total_stake = sum(d["stake"] for d in processed)
