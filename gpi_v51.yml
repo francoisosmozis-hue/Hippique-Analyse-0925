@@ -219,7 +219,7 @@ jobs:
         run: |
           python scripts/fetch_je_stats.py \
             --course-id "${{ steps.in.outputs.COURSE_ID }}" \
-            --stats-je data/h5/stats_je.json \
+            --h5 data/h5/h5.json \
             --out data/h5/stats_je.json
 
       - name: Analyse H-5
