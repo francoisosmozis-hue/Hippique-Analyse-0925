@@ -3,6 +3,7 @@ import sys
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+from ev_calculator import compute_ev_roi
 from simulate_ev import allocate_dutching_sp
 from tickets_builder import PAYOUT_MIN_COMBO, allow_combo
 
@@ -63,3 +64,16 @@ def test_combo_thresholds_lower_payout_cfg():
     }
 
     assert allow_combo(ev_global=0.5, roi_global=0.5, payout_est=5.0, cfg=cfg) is True
+
+
+def test_optimization_never_decreases_ev_and_respects_budget():
+    tickets = [
+        {"p": 0.55, "odds": 2.4, "stake": 1.5},
+        {"p": 0.35, "odds": 3.4, "stake": 1.0},
+        {"p": 0.2, "odds": 6.0, "stake": 0.5},
+    ]
+
+    result = compute_ev_roi(tickets, budget=5.0, optimize=True, round_to=0.10)
+
+    assert result["ev"] >= result.get("ev_individual", 0.0) - 1e-9
+    assert sum(result.get("optimized_stakes", [])) <= 5.0 + 1e-9
