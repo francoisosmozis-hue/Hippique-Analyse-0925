@@ -1,5 +1,6 @@
 import json
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -27,7 +28,7 @@ def _with_exotics(partants: dict) -> dict:
     enriched["exotics"] = combos
     return enriched
 
-def _write_inputs(tmp_path, partants):
+def _write_inputs(tmp_path, partants, *, combo_ratio: float = 0.4):
     h30_path = tmp_path / "h30.json"
     h5_path = tmp_path / "h5.json"
     stats_path = tmp_path / "stats.json"
@@ -45,6 +46,7 @@ def _write_inputs(tmp_path, partants):
         GPI_YML
         .replace("EV_MIN_GLOBAL: 0.40", "EV_MIN_GLOBAL: 0.0")
         .replace("EV_MIN_SP: 0.20", "EV_MIN_SP: 0.0")
+        .replace("COMBO_RATIO: 0.4", f"COMBO_RATIO: {combo_ratio}")
         + "MIN_PAYOUT_COMBOS: 0.0\nROR_MAX: 1.0\n"
     )
     gpi_path.write_text(gpi_txt, encoding="utf-8")
@@ -217,3 +219,100 @@ def test_pipeline_recomputes_after_combo_rejection(tmp_path, monkeypatch):
     final_total = sum(t.get("stake", 0.0) for t in data["tickets"])
     assert data["ev"]["global"] == pytest.approx(final_total * 0.1)
     assert data["ev"]["combined_expected_payout"] == pytest.approx(final_total * 2.0)
+
+def test_pipeline_uses_capped_stake_in_exports(tmp_path, monkeypatch):
+    partants = partants_sample()
+    inputs = _write_inputs(tmp_path, partants, combo_ratio=0.0)
+
+    tracking_path = Path("modele_suivi_courses_hippiques_clean.csv")
+    tracking_path.unlink(missing_ok=True)
+
+    capped: dict[str, object] = {}
+
+    base_ticket = {
+        "type": "SP",
+        "id": "sp-1",
+        "stake": 4.0,
+        "ev_ticket": 0.8,
+        "odds": 2.0,
+        "p": 0.6,
+    }
+
+    monkeypatch.setattr(
+        pipeline_run,
+        "apply_ticket_policy",
+        lambda *args, **kwargs: ([dict(base_ticket)], [], None),
+    )
+
+    def fake_simulate(tickets, bankroll):
+        total = 0.0
+        capped_id = capped.get("id")
+        desired = capped.get("capped")
+        for ticket in tickets:
+            stake = float(ticket.get("stake", 0.0))
+            ticket["kelly_stake"] = stake
+            if ticket.get("type") == "SP":
+                if capped_id is None:
+                    capped_id = ticket.get("id")
+                    desired = stake / 2
+                    capped["id"] = capped_id
+                    capped["original"] = stake
+                    capped["capped"] = desired
+                if ticket.get("id") == capped_id and desired is not None:
+                    stake = min(stake, float(desired))
+                    ticket["stake"] = stake
+            else:
+                ticket["stake"] = stake
+            total += stake
+            ticket["ev"] = stake * 0.2
+            ticket["roi"] = 0.2 if stake else 0.0
+            ticket["variance"] = 0.0
+            ticket["clv"] = 0.0
+        roi_total = 0.2 if total else 0.0
+        return {
+            "ev": total * 0.2,
+            "roi": roi_total,
+            "combined_expected_payout": total * 3.0,
+            "risk_of_ruin": 0.05,
+            "ev_over_std": 0.4,
+            "variance": 0.5,
+            "clv": 0.0,
+        }
+
+    monkeypatch.setattr(pipeline_run, "simulate_ev_batch", fake_simulate)
+    monkeypatch.setattr(
+        pipeline_run,
+        "gate_ev",
+        lambda *args, **kwargs: {"sp": True, "combo": True, "reasons": {"sp": [], "combo": []}},
+    )
+
+    outdir = _run_pipeline(tmp_path, inputs)
+
+    assert capped, "fake_simulate should adjust at least one stake"
+    data = json.loads((outdir / "p_finale.json").read_text(encoding="utf-8"))
+    tickets = data["tickets"]
+    capped_ticket = next(t for t in tickets if t.get("id") == capped["id"])
+    assert capped_ticket["stake"] == pytest.approx(capped["capped"])
+
+    total_stake = sum(float(t.get("stake", 0.0)) for t in tickets)
+    sp_tickets = [t for t in tickets if t.get("type") == "SP"]
+    sp_stake = sum(float(t.get("stake", 0.0)) for t in sp_tickets)
+    sp_ev = sum(float(t.get("ev", 0.0)) for t in sp_tickets)
+
+    assert data["ev"]["global"] == pytest.approx(total_stake * 0.2)
+    assert data["ev"]["sp"] == pytest.approx(sp_ev)
+    if sp_stake:
+        assert data["ev"]["roi_sp"] == pytest.approx(sp_ev / sp_stake)
+    else:
+        assert data["ev"]["roi_sp"] == 0.0
+
+    tracking_lines = tracking_path.read_text(encoding="utf-8").strip().splitlines()
+    header = tracking_lines[0].split(";")
+    values = tracking_lines[-1].split(";")
+    tracking = dict(zip(header, values))
+
+    assert float(tracking["total_stake"]) == pytest.approx(total_stake)
+    assert float(tracking["roi_sp"]) == pytest.approx(data["ev"]["roi_sp"])
+    assert float(tracking["roi_global"]) == pytest.approx(data["ev"]["roi_global"])
+
+    tracking_path.unlink(missing_ok=True)
