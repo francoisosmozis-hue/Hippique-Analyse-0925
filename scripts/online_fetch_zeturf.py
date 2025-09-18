@@ -201,12 +201,32 @@ def normalize_snapshot(payload: Dict[str, Any]) -> Dict[str, Any]:
     }
     runners = []
     id2name: Dict[str, str] = {}
+    seen_ids: set[str] = set()
     for r in payload.get("runners", []):
-        cid = str(r.get("id"))
-        name = r.get("name", cid)
-        odds = float(r.get("odds", 0.0))
+        cid = ""
+        for key in ("id", "runner_id", "num", "number"):
+            raw_val = r.get(key)
+            if raw_val is None:
+                continue
+            if isinstance(raw_val, str):
+                raw_val = raw_val.strip()
+            if raw_val == "":
+                continue
+            cid = str(raw_val)
+            if cid:
+                break
+        if not cid or cid in seen_ids:
+            continue
+        seen_ids.add(cid)
+
+        name = r.get("name") or cid
+        odds_val = r.get("odds", 0.0)
+        try:
+            odds = float(odds_val)
+        except (TypeError, ValueError):
+            odds = 0.0
         runners.append({"id": cid, "name": name, "odds": odds})
-        id2name[cid] = name
+        id2name.setdefault(cid, name)
     meta.update({"runners": runners, "id2name": id2name})
     return meta
 
