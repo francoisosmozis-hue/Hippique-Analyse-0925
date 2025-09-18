@@ -227,6 +227,56 @@ def test_pipeline_uses_capped_stake_in_exports(tmp_path, monkeypatch):
     tracking_path = Path("modele_suivi_courses_hippiques_clean.csv")
     tracking_path.unlink(missing_ok=True)
 
+    
+    def test_pipeline_optimization_preserves_ev_and_budget(tmp_path, monkeypatch):
+    partants = partants_sample()
+    inputs = _write_inputs(tmp_path, partants, combo_ratio=0.0)
+
+    base_tickets = [
+        {
+            "type": "SP",
+            "id": "sp-a",
+            "stake": 2.0,
+            "odds": 2.4,
+            "p": 0.55,
+        },
+        {
+            "type": "SP",
+            "id": "sp-b",
+            "stake": 1.5,
+            "odds": 3.2,
+            "p": 0.38,
+        },
+    ]
+
+    monkeypatch.setattr(
+        pipeline_run,
+        "apply_ticket_policy",
+        lambda *args, **kwargs: ([dict(t) for t in base_tickets], [], None),
+    )
+    monkeypatch.setattr(pipeline_run, "allow_combo", lambda *args, **kwargs: False)
+
+    tracking_path = Path("modele_suivi_courses_hippiques_clean.csv")
+    tracking_path.unlink(missing_ok=True)
+
+    outdir = _run_pipeline(tmp_path, inputs)
+
+    data = json.loads((outdir / "p_finale.json").read_text(encoding="utf-8"))
+    ev_info = data["ev"]
+    optimization = ev_info.get("optimization")
+    assert optimization, "optimization summary should be exported"
+    assert ev_info["global"] >= optimization.get("ev_before", 0.0) - 1e-9
+    total_stake = sum(float(t.get("stake", 0.0)) for t in data["tickets"])
+    assert total_stake <= 5.0 + 1e-9
+
+    tracking_lines = tracking_path.read_text(encoding="utf-8").strip().splitlines()
+    header = tracking_lines[0].split(";")
+    values = tracking_lines[-1].split(";")
+    tracking = dict(zip(header, values))
+    assert float(tracking["total_optimized_stake"]) >= 0.0
+
+    tracking_path.unlink(missing_ok=True)
+
     capped: dict[str, object] = {}
 
     base_ticket = {
