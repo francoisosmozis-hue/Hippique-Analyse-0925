@@ -124,7 +124,8 @@ def gate_ev(
         reasons["combo"].append("MIN_PAYOUT_COMBOS")
 
     ror_max = float(cfg.get("ROR_MAX", 1.0))
-    if risk_of_ruin > ror_max:
+    epsilon = 1e-9
+    if risk_of_ruin > ror_max + epsilon:
         reasons["sp"].append("ROR_MAX")
         reasons["combo"].append("ROR_MAX")
 
