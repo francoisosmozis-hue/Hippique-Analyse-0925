@@ -40,13 +40,14 @@ def test_combo_thresholds_cfg():
     
     # increasing payout threshold via cfg rejects lower payouts
     cfg["MIN_PAYOUT_COMBOS"] = 15.0
-    assert allow_combo(ev_global=0.5, roi_global=0.5, payout_est=20.0, cfg=cfg) is False
+    assert allow_combo(ev_global=0.5, roi_global=0.5, payout_est=14.0, cfg=cfg) is False
     assert allow_combo(ev_global=0.6, roi_global=0.5, payout_est=20.0, cfg=cfg) is True
 
     # raising ROI thresholds filters out combos accordingly
     cfg["EV_MIN_GLOBAL"] = 0.0
     cfg["EV_MIN_GLOBAL"] = 0.6
-    assert not allow_combo(ev_global=0.5, roi_global=0.5, payout_est=20.0, cfg=cfg)assert allow_combo(ev_global=0.5, roi_global=0.5, payout_est=20.0, cfg=cfg) is False
+    assert not allow_combo(ev_global=0.5, roi_global=0.5, payout_est=20.0, cfg=cfg)
+    assert allow_combo(ev_global=0.5, roi_global=0.5, payout_est=20.0, cfg=cfg) is False
 
     cfg["EV_MIN_GLOBAL"] = 0.0
     cfg["ROI_MIN_GLOBAL"] = 0.3
