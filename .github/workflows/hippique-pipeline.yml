@@ -89,11 +89,15 @@ jobs:
           mkdir -p "$RUN_DIR/h5" "$RUN_DIR/diff" "$RUN_DIR/out"
           python scripts/online_fetch_zeturf.py --mode h5 --out "$RUN_DIR/h5/h5.json"
           python scripts/online_fetch_zeturf.py --mode diff --out "$RUN_DIR/diff/diff_drift.json"
+          python scripts/fetch_je_stats.py \
+            --course-id "${{ github.event.inputs.course_id }}" \
+            --h5 "$RUN_DIR/h5/h5.json" \
+            --out "$RUN_DIR/h5/stats_je.json"
           python pipeline_run.py analyse \
             --h30 "$RUN_DIR/h30/h30.json" \
             --h5 "$RUN_DIR/h5/h5.json" \
             --diff "$RUN_DIR/diff/diff_drift.json" \
-            --stats-je "$RUN_DIR/h5/h5.json" \
+            --stats-je "$RUN_DIR/h5/stats_je.json" \
             --partants "$RUN_DIR/h5/h5.json" \
             --gpi config/gpi.yml \
             --outdir "$RUN_DIR/out"
