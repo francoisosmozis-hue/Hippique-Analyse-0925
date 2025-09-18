@@ -4,3 +4,10 @@ EMA_ABS_ERROR_PCT:
   CP: 12.5
   TRIO: 14.0
   ZE4: 13.0
+correlations:
+  default:
+    penalty: 0.85
+  meeting_course:
+    penalty: 0.7
+    rho: -0.35
+    samples: 5000
