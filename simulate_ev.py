@@ -144,6 +144,7 @@ def simulate_ev_batch(
     bankroll: float,
     *,
     kelly_cap: float | None = None,
+    optimize: bool = False,
 ) -> Dict[str, Any]:
     """Return EV/ROI statistics for ``tickets`` given a ``bankroll``.
 
@@ -153,6 +154,8 @@ def simulate_ev_batch(
     kwargs: Dict[str, Any] = {}
     if kelly_cap is not None:
         kwargs["kelly_cap"] = kelly_cap
+    if optimize:
+        kwargs["optimize"] = True
     stats = compute_ev_roi(
         tickets,
         budget=bankroll,
