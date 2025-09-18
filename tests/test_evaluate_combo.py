@@ -3,6 +3,7 @@ from collections import OrderedDict
 from pathlib import Path
 
 import simulate_wrapper as sw
+
 from simulate_wrapper import evaluate_combo
 
 
@@ -16,7 +17,7 @@ def test_default_path_missing(monkeypatch, tmp_path):
     res = evaluate_combo(TICKETS, bankroll=10.0)
     assert res["status"] == "insufficient_data"
     assert "no_calibration_yaml" in res["notes"]
-    assert str(Path("payout_calibration.yaml")) in res["requirements"
+    assert str(Path("payout_calibration.yaml")) in res["requirements"]
 
 
 def test_gates_when_calibration_missing(tmp_path, monkeypatch):
