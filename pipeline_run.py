@@ -99,7 +99,16 @@ REQ_KEYS = [
 ]
 
 
-METRIC_KEYS = {"kelly_stake", "ev", "roi", "variance", "clv", "stake", "max_stake"}
+METRIC_KEYS = {
+    "kelly_stake",
+    "ev",
+    "roi",
+    "variance",
+    "clv",
+    "stake",
+    "max_stake",
+    "optimized_stake",
+}
 
 
 def summarize_sp_tickets(sp_tickets: list[dict]) -> tuple[float, float, float]:
