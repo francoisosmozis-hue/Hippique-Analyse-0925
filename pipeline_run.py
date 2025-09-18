@@ -141,6 +141,10 @@ def load_yaml(path: str) -> dict:
         "DRIFT_MIN_DELTA", cfg.get("DRIFT_MIN_DELTA"), cast=float
     )
     cfg["BUDGET_TOTAL"] = get_env("BUDGET_TOTAL", cfg.get("BUDGET_TOTAL"), cast=float)
+    cfg["EV_MIN_SP"] = get_env("EV_MIN_SP", cfg.get("EV_MIN_SP"), cast=float)
+    cfg["EV_MIN_GLOBAL"] = get_env("EV_MIN_GLOBAL", cfg.get("EV_MIN_GLOBAL"), cast=float)
+    cfg["ROI_MIN_SP"] = get_env("ROI_MIN_SP", cfg.get("ROI_MIN_SP"), cast=float)
+    cfg["ROI_MIN_GLOBAL"] = get_env("ROI_MIN_GLOBAL", cfg.get("ROI_MIN_GLOBAL"), cast=float)
     exotic_min = get_env("EXOTIC_MIN_PAYOUT", cfg.get("MIN_PAYOUT_COMBOS"), cast=float)
     cfg["MIN_PAYOUT_COMBOS"] = exotic_min
     cfg.setdefault("EXOTIC_MIN_PAYOUT", exotic_min)
