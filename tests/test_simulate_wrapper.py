@@ -11,6 +11,42 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 import simulate_wrapper as sw
 
 
+def test_calibration_details_expose_metadata(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    """Cached calibrations should expose decay metadata within details."""
+
+    cal = tmp_path / "probabilities.yaml"
+    cal.write_text(
+        """
+__meta__:
+  decay: 0.98
+  half_life: 34.65735902799726
+  generated_at: "2024-01-01T00:00:00+00:00"
+a|b:
+  alpha: 10
+  beta: 5
+  p: 0.6666666666666666
+  weight: 15
+  updated_at: "2024-02-01T12:00:00+00:00"
+        """.strip()
+    )
+
+    monkeypatch.setattr(sw, "CALIBRATION_PATH", cal)
+    monkeypatch.setattr(sw, "_calibration_cache", OrderedDict())
+    monkeypatch.setattr(sw, "_calibration_mtime", 0.0)
+    monkeypatch.setattr(sw, "_calibration_metadata", {})
+
+    prob = sw.simulate_wrapper(["a", "b"])
+    assert prob == pytest.approx(10 / 15)
+
+    cache_entry = sw._calibration_cache["a|b"]
+    details = cache_entry.get("details") or {}
+    cal_detail = details.get("__calibration__") or {}
+    assert cal_detail.get("weight") == pytest.approx(15)
+    assert cal_detail.get("updated_at") == "2024-02-01T12:00:00+00:00"
+    assert cal_detail.get("decay") == pytest.approx(0.98)
+    assert cal_detail.get("half_life") == pytest.approx(34.65735902799726)
+
+
 def test_beta_binomial_fallback() -> None:
     """Missing combinations use a Beta-Binomial estimate."""
     prob = sw.simulate_wrapper(["a", "b"])
