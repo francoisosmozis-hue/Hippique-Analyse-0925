@@ -202,6 +202,15 @@ jobs:
           dest.write_text(json.dumps(odds, ensure_ascii=False, indent=2), encoding="utf-8")
           print(f"Extracted {len(odds)} H-5 odds entries to {dest}")
           PY
+      - name: Fetch J/E stats from Geny
+        if: steps.course.outputs.course_id != '' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && github.event.schedule == '55 15 * * *'))
+        env:
+          GENY_COOKIE: ${{ secrets.GENY_COOKIE }}
+        run: |
+          python scripts/fetch_je_stats.py \
+            --course-id "${{ steps.course.outputs.course_id }}" \
+            --h5 data/h5/h5.json \
+            --out data/h5/stats_je.json
       - name: Ensure pipeline inputs are available
         if: steps.course.outputs.course_id != '' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && github.event.schedule == '55 15 * * *'))
         run: |
@@ -209,6 +218,7 @@ jobs:
           test -s data/h30/odds.json
           test -s data/h5/h5.json
           test -s data/h5/odds.json
+          test -s data/h5/stats_je.json
           test -s data/diff/diff_drift.json
       - name: Check GPI configuration
         if: github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && github.event.schedule == '55 15 * * *')
@@ -298,7 +308,7 @@ jobs:
           python pipeline_run.py analyse \
             --h30 data/h30/odds.json \
             --h5 data/h5/odds.json \
-            --stats-je data/h5/h5.json \
+            --stats-je data/h5/stats_je.json \
             --partants data/h5/h5.json \
             --gpi "$GPI_CONFIG_PATH" \
             --outdir "$GPI_OUTDIR" \
@@ -309,6 +319,11 @@ jobs:
             --max-vol "$MAX_VOL_PAR_CHEVAL" \
             --min-payout "$MIN_PAYOUT_COMBOS" \
             $extra_flags
+      - name: Sync data to Drive
+        run: python scripts/drive_sync.py --push data
+        env:
+          GOOGLE_CREDENTIALS_B64: ${{ secrets.GOOGLE_CREDENTIALS_B64 }}
+          DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
       - name: Sync data to Drive
         run: python scripts/drive_sync.py --push data
         env:
