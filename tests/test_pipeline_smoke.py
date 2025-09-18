@@ -202,14 +202,27 @@ def test_smoke_run(tmp_path):
     stake_reduction = data["ev"].get("stake_reduction", {})
     assert data["ev"].get("stake_reduction_applied") is False
     assert stake_reduction.get("applied") is False
-    assert set(stake_reduction).issuperset({"applied", "kelly_fraction", "max_vol_par_cheval"})
+    scale_factor = stake_reduction.get("scale_factor")
+    if scale_factor is not None:
+        assert scale_factor == pytest.approx(1.0)
+    assert set(stake_reduction).issuperset({"applied", "initial", "final"})
+
+    initial_metrics = stake_reduction.get("initial", {})
+    final_metrics = stake_reduction.get("final", {})
+    assert "risk_of_ruin" in initial_metrics
+    assert "risk_of_ruin" in final_metrics
+    if stake_reduction.get("initial_cap") is not None:
+        assert stake_reduction["initial_cap"] == pytest.approx(0.60, abs=1e-6)
+    if stake_reduction.get("effective_cap") is not None:
+        assert stake_reduction["effective_cap"] == pytest.approx(
+            stake_reduction.get("initial_cap", stake_reduction["effective_cap"])
+        )
+    if stake_reduction.get("iterations") is not None:
+        assert stake_reduction["iterations"] in (0,)
+
     
     if tickets:
-        simulate_kwargs = {}
-        cap = stake_reduction.get("max_vol_par_cheval")
-        if cap is not None:
-            simulate_kwargs["kelly_cap"] = cap
-        stats_ev = simulate_ev_batch(tickets, bankroll=5, **simulate_kwargs)
+        stats_ev = simulate_ev_batch(tickets, bankroll=5)
     else:
         stats_ev = {"ev": 0.0, "roi": 0.0, "risk_of_ruin": 0.0, "clv": 0.0}
     assert data["ev"]["global"] == pytest.approx(stats_ev.get("ev", 0.0))
@@ -482,17 +495,155 @@ def test_high_risk_pack_is_trimmed(tmp_path, monkeypatch):
     stake_reduction = data["ev"]["stake_reduction"]
     assert data["ev"]["stake_reduction_applied"] is True
     assert stake_reduction["applied"] is True
-    assert stake_reduction["kelly_fraction"] < cfg_loaded["KELLY_FRACTION"]
-    assert stake_reduction["max_vol_par_cheval"] < cfg_loaded["MAX_VOL_PAR_CHEVAL"]
+    assert stake_reduction["scale_factor"] < 1.0
+    assert stake_reduction["effective_cap"] < stake_reduction["initial_cap"]
+    assert stake_reduction["iterations"] >= 1
+
+    initial_metrics = stake_reduction["initial"]
+    final_metrics = stake_reduction["final"]
+    target_ror = stake_reduction.get("target") or cfg_loaded["ROR_MAX"]
+    assert initial_metrics["risk_of_ruin"] > target_ror
+    assert final_metrics["risk_of_ruin"] <= target_ror + 1e-9
+
+    current_cap = stake_reduction.get("effective_cap")
+    if not current_cap:
+        current_cap = cfg_loaded.get("MAX_VOL_PAR_CHEVAL", 0.60)
 
     stats_ev = simulate_ev_batch(
         tickets,
         bankroll=cfg_loaded["BUDGET_TOTAL"],
-        kelly_cap=stake_reduction["max_vol_par_cheval"],
+        kelly_cap=current_cap,
     )
     assert data["ev"]["risk_of_ruin"] == pytest.approx(stats_ev["risk_of_ruin"])
     assert stats_ev["risk_of_ruin"] <= cfg_loaded["ROR_MAX"] + 1e-9
 
+
+def test_combo_pack_scaled_not_removed(tmp_path, monkeypatch):
+    partants = partants_sample()
+    h30 = odds_h30()
+    h5 = odds_h5()
+    stats = stats_sample()
+
+    h30_path = tmp_path / "h30.json"
+    h5_path = tmp_path / "h5.json"
+    stats_path = tmp_path / "stats.json"
+    partants_path = tmp_path / "partants.json"
+    gpi_path = tmp_path / "gpi.yml"
+    diff_path = tmp_path / "diff.json"
+    outdir = tmp_path / "out"
+
+    h30_path.write_text(json.dumps(h30), encoding="utf-8")
+    h5_path.write_text(json.dumps(h5), encoding="utf-8")
+    stats_path.write_text(json.dumps(stats), encoding="utf-8")
+    partants_path.write_text(json.dumps(partants), encoding="utf-8")
+
+    gpi_txt = (
+        GPI_YML
+        .replace("BUDGET_TOTAL: 5", "BUDGET_TOTAL: 100")
+        .replace("SP_RATIO: 0.6", "SP_RATIO: 0.5")
+        .replace("COMBO_RATIO: 0.4", "COMBO_RATIO: 0.5")
+        .replace("EV_MIN_SP: 0.20", "EV_MIN_SP: 0.0")
+        .replace("EV_MIN_GLOBAL: 0.40", "EV_MIN_GLOBAL: 0.0")
+        .replace("ROI_MIN_GLOBAL: 0.20", "ROI_MIN_GLOBAL: 0.0")
+        .replace("MIN_PAYOUT_COMBOS: 10.0", "MIN_PAYOUT_COMBOS: 0.0")
+        .replace("ROR_MAX: 0.05", "ROR_MAX: 0.02")
+        .replace("MAX_VOL_PAR_CHEVAL: 0.60", "MAX_VOL_PAR_CHEVAL: 0.90")
+    )
+    gpi_path.write_text(gpi_txt, encoding="utf-8")
+    diff_path.write_text("{}", encoding="utf-8")
+
+    monkeypatch.setattr("pipeline_run.allow_combo", lambda *a, **k: True)
+    monkeypatch.setattr("pipeline_run.build_p_true", lambda *a, **k: {str(i): 1 / 6 for i in range(1, 7)})
+
+    cfg_loaded = load_yaml(str(gpi_path))
+
+    sp_ticket = {
+        "type": "SP",
+        "id": "1",
+        "name": "A",
+        "odds": 2.0,
+        "p": 0.55,
+        "stake": 50.0,
+        "ev_ticket": 50.0 * (0.55 * (2.0 - 1.0) - (1.0 - 0.55)),
+    }
+    combo_template = {
+        "type": "CP",
+        "id": "combo1",
+        "p": 0.21,
+        "odds": 5.0,
+        "stake": 1.0,
+        "ev_ticket": 1.0 * (0.21 * (5.0 - 1.0) - (1.0 - 0.21)),
+    }
+
+    def stub_apply_ticket_policy(cfg, runners, combo_candidates=None, combos_source=None):
+        return [dict(sp_ticket)], [dict(combo_template)], {"notes": [], "flags": {}}
+
+    monkeypatch.setattr("pipeline_run.apply_ticket_policy", stub_apply_ticket_policy)
+
+    args = argparse.Namespace(
+        h30=str(h30_path),
+        h5=str(h5_path),
+        stats_je=str(stats_path),
+        partants=str(partants_path),
+        gpi=str(gpi_path),
+        outdir=str(outdir),
+        diff=str(diff_path),
+        budget=None,
+        ev_global=None,
+        roi_global=None,
+        max_vol=None,
+        min_payout=None,
+        allow_je_na=True,
+    )
+
+    pipeline_run.cmd_analyse(args)
+
+    data = json.loads((outdir / "p_finale.json").read_text(encoding="utf-8"))
+    tickets = data["tickets"]
+
+    assert len(tickets) == 2
+    assert any(t.get("type") != "SP" for t in tickets), "combo ticket should remain"
+
+    stake_reduction = data["ev"]["stake_reduction"]
+    assert data["ev"]["stake_reduction_applied"] is True
+    assert stake_reduction["applied"] is True
+
+    final_ror = data["ev"]["risk_of_ruin"]
+    target_ror = stake_reduction.get("target") or 0.02
+    assert final_ror <= target_ror + 1e-9
+
+    scale_factor = stake_reduction["scale_factor"]
+    assert scale_factor < 1.0
+    assert stake_reduction["effective_cap"] < stake_reduction["initial_cap"]
+    assert stake_reduction["iterations"] >= 1
+
+    initial_metrics = stake_reduction["initial"]
+    final_metrics = stake_reduction["final"]
+    assert initial_metrics["risk_of_ruin"] > target_ror
+    assert final_metrics["risk_of_ruin"] == pytest.approx(final_ror)
+
+    sp_stake_total = sum(t["stake"] for t in tickets if t.get("type") == "SP")
+    combo_stake_total = sum(t["stake"] for t in tickets if t.get("type") != "SP")
+    assert sp_stake_total > 0.0
+    assert combo_stake_total > 0.0
+
+    final_total = sp_stake_total + combo_stake_total
+    assert final_total == pytest.approx(stake_reduction["final"]["total_stake"])
+
+    initial_total = stake_reduction["initial"]["total_stake"]
+    assert initial_total > final_total
+    assert final_total == pytest.approx(initial_total * scale_factor, rel=1e-2)
+
+    current_cap = stake_reduction.get("effective_cap")
+    if not current_cap:
+        current_cap = cfg_loaded.get("MAX_VOL_PAR_CHEVAL", 0.60)
+    stats_ev = simulate_ev_batch(
+        tickets,
+        bankroll=cfg_loaded["BUDGET_TOTAL"],
+        kelly_cap=current_cap,
+    )
+    assert data["ev"]["risk_of_ruin"] == pytest.approx(stats_ev["risk_of_ruin"])
+    assert stats_ev["risk_of_ruin"] <= target_ror + 1e-9
 def test_drift_coef_sensitivity(monkeypatch):
     partants = partants_sample()["runners"]
     h30 = odds_h30()
