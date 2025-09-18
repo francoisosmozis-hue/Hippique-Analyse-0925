@@ -95,7 +95,7 @@ jobs:
             --diff "$RUN_DIR/diff/diff_drift.json" \
             --stats-je "$RUN_DIR/h5/h5.json" \
             --partants "$RUN_DIR/h5/h5.json" \
-            --gpi config/gpi_v51.yml \
+            --gpi config/gpi.yml \
             --outdir "$RUN_DIR/out"
 
       - name: Phase post-course
