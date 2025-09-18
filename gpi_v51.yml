@@ -27,6 +27,7 @@ env:
   MAX_VOL_PAR_CHEVAL: "0.60"
   MIN_PAYOUT_COMBOS: "10.0"  # payout attendu minimal en €
   EXOTIC_MIN_PAYOUT: "10.0"
+  correlation_penalty: "0.85"
   ALLOW_JE_NA: "false"
   SNAPSHOTS: "H30,H5"
   DRIFT_TOP_N: "5"
