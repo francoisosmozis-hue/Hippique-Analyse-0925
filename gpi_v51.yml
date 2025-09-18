@@ -70,16 +70,155 @@ jobs:
             python pipeline_run.py snapshot --when h30 --meeting "${{ steps.in.outputs.MEETING }}" --race "${{ steps.in.outputs.RACE }}" --outdir data/h30
           fi
 
+      - name: Extraire les cotes H-30
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && contains('25 15 * * *', github.event.schedule))
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          src = Path("data/h30/h30.json")
+          dest = Path("data/h30/odds.json")
+          if not src.exists():
+              raise SystemExit("Fichier H-30 manquant : data/h30/h30.json")
+
+          try:
+              payload = json.loads(src.read_text(encoding="utf-8"))
+          except json.JSONDecodeError as exc:
+              raise SystemExit(f"JSON invalide dans {src}: {exc}")
+
+          odds: dict[str, float] = {}
+          for runner in payload.get("runners", []):
+              cid = runner.get("id")
+              if cid is None:
+                  continue
+              value = runner.get("odds")
+              if value in (None, "", "-"):
+                  continue
+              try:
+                  odds[str(cid)] = float(value)
+              except (TypeError, ValueError):
+                  continue
+
+          dest.write_text(json.dumps(odds, ensure_ascii=False, indent=2), encoding="utf-8")
+          print(f"{len(odds)} entrées extraites vers {dest}")
+          PY
+
       # H-5 ANALYSE + DIFF
-      - name: H-5 snapshot + diff + analyse
+      - name: H-5 snapshot
         if: github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && contains('55 15 * * *', github.event.schedule))
         run: |
           mkdir -p data/h5 data/diff data/out
           python scripts/online_fetch_zeturf.py --mode h5 --out data/h5/h5.json
+
+      - name: Extraire les cotes H-5
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && contains('55 15 * * *', github.event.schedule))
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          src = Path("data/h5/h5.json")
+          dest = Path("data/h5/odds.json")
+          if not src.exists():
+              raise SystemExit("Fichier H-5 manquant : data/h5/h5.json")
+
+          try:
+              payload = json.loads(src.read_text(encoding="utf-8"))
+          except json.JSONDecodeError as exc:
+              raise SystemExit(f"JSON invalide dans {src}: {exc}")
+
+          odds: dict[str, float] = {}
+          for runner in payload.get("runners", []):
+              cid = runner.get("id")
+              if cid is None:
+                  continue
+              value = runner.get("odds")
+              if value in (None, "", "-"):
+                  continue
+              try:
+                  odds[str(cid)] = float(value)
+              except (TypeError, ValueError):
+                  continue
+
+          dest.write_text(json.dumps(odds, ensure_ascii=False, indent=2), encoding="utf-8")
+          print(f"{len(odds)} entrées extraites vers {dest}")
+          PY
+
+      - name: Diff H-5
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && contains('55 15 * * *', github.event.schedule))
+        run: |
           python scripts/online_fetch_zeturf.py --mode diff --out data/diff/diff_drift.json
+
+      
+      - name: Contrôle identifiants
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && contains('55 15 * * *', github.event.schedule))
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          from pipeline_run import compute_drift_dict
+
+          h30_path = Path("data/h30/odds.json")
+          h5_path = Path("data/h5/odds.json")
+          partants_path = Path("data/h5/h5.json")
+
+          for path in (h30_path, h5_path, partants_path):
+              if not path.exists():
+                  raise SystemExit(f"Fichier manquant: {path}")
+
+          odds_h30 = json.loads(h30_path.read_text(encoding="utf-8"))
+          odds_h5 = json.loads(h5_path.read_text(encoding="utf-8"))
+          partants_data = json.loads(partants_path.read_text(encoding="utf-8"))
+
+          partants = partants_data.get("runners", [])
+          id2name = partants_data.get(
+              "id2name",
+              {
+                  str(p.get("id")): p.get("name", str(p.get("id")))
+                  for p in partants
+                  if p.get("id") is not None
+              },
+          )
+
+          drift = compute_drift_dict(
+              odds_h30,
+              odds_h5,
+              id2name,
+              top_n=int(os.getenv("DRIFT_TOP_N", "5")),
+              min_delta=float(os.getenv("DRIFT_MIN_DELTA", "0.8")),
+          )
+
+          print("IDs drift:", [row["id"] for row in drift.get("drift", [])])
+          ticket_ids = [
+              str(p.get("id"))
+              for p in partants
+              if p.get("id") is not None and str(p.get("id")) in odds_h5
+          ]
+          print("IDs tickets:", ticket_ids)
+
+          missing = sorted(
+              {
+                  str(p.get("id"))
+                  for p in partants
+                  if p.get("id") is not None
+              }
+              - set(odds_h5)
+          )
+          if missing:
+              print("::warning::Cotes manquantes pour:", ",".join(missing))
+          else:
+              print("Toutes les cotes H-5 sont présentes.")
+          PY
+
+      - name: Analyse H-5
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && contains('55 15 * * *', github.event.schedule))
+        run: |
           python pipeline_run.py analyse \
-            --h30 data/h30/h30.json \
-            --h5  data/h5/h5.json \
+            --h30 data/h30/odds.json \
+            --h5  data/h5/odds.json \
             --stats-je data/h5/h5.json \
             --partants data/h5/h5.json \
             --allow-je-na=${ALLOW_JE_NA} \
