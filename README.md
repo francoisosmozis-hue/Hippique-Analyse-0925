@@ -265,6 +265,7 @@ Les fichiers correspondants sont téléchargés dans le dossier indiqué par
 | `COMBO_RATIO` | Part du budget dédiée aux combinés. |
 | `EV_MIN_SP` | EV minimale requise pour les tickets SP (ratio du budget SP). |
 | `EV_MIN_GLOBAL` | EV minimale globale pour valider l'émission des combinés. |
+| `ROI_MIN_SP` | ROI minimal attendu pour les tickets simples (20 % par défaut). |
 | `ROI_MIN_GLOBAL` | ROI minimal global attendu pour les combinés (20 % par défaut). |
 | `MAX_VOL_PAR_CHEVAL` | Fraction maximale du budget sur un seul cheval. |
 | `MIN_PAYOUT_COMBOS` | Gain minimal attendu pour autoriser un ticket combiné. |
