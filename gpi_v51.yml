@@ -225,6 +225,12 @@ jobs:
       - name: Analyse H-5
         if: github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && contains('55 15 * * *', github.event.schedule))
         run: |
+          extra_flags=""
+          case "$ALLOW_JE_NA" in
+            1|true|TRUE|True|yes|YES)
+              extra_flags="--allow-je-na"
+              ;;
+          esac
           python pipeline_run.py analyse \
             --h30 data/h30/odds.json \
             --h5  data/h5/odds.json \
@@ -232,12 +238,13 @@ jobs:
             --partants data/h5/h5.json \
             --gpi config/gpi.yml \
             --outdir data/out \
-            --allow-je-na=${ALLOW_JE_NA} \
             --budget=${BUDGET_TOTAL} \
             --ev-global=${EV_MIN_GLOBAL} \
             --roi-global=${ROI_MIN_GLOBAL} \
             --max-vol=${MAX_VOL_PAR_CHEVAL} \
-            --min-payout=${MIN_PAYOUT_COMBOS}
+            --min-payout=${MIN_PAYOUT_COMBOS} \
+            $extra_flags
+
 
       - name: Tests unitaires essentiels
         run: pytest -q
