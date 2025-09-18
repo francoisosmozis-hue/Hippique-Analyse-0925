@@ -57,14 +57,26 @@ def validate_exotics_with_simwrapper(
     """
     validated: List[Dict[str, Any]] = []
     notes: List[str] = []
+    notes_seen: set[str] = set()
     reasons: List[str] = []
     alerte = False
 
+    def add_note(label: str) -> None:
+        if label not in notes_seen:
+            notes.append(label)
+            notes_seen.add(label)
+            
     for candidate in exotics:
         stats = evaluate_combo(candidate, bankroll, allow_heuristic=allow_heuristic)
         ev_ratio = float(stats.get("ev_ratio", 0.0))
         roi = float(stats.get("roi", 0.0))
         payout = float(stats.get("payout_expected", 0.0))
+        stats_notes = [str(n) for n in stats.get("notes", [])]
+        for note in stats_notes:
+            add_note(note)
+        if "combo_probabilities_unreliable" in stats_notes:
+            reasons.append("probabilities_unreliable")
+            continue
         if ev_ratio < ev_min:
             reasons.append("ev_ratio_below_threshold")
             continue
@@ -86,7 +98,7 @@ def validate_exotics_with_simwrapper(
         }
         if payout > 20 and ev_ratio > 0.5:
             ticket.setdefault("flags", []).append("ALERTE_VALUE")
-            notes.append("ALERTE_VALUE")
+            add_note("ALERTE_VALUE")
             alerte = True
         validated.append(ticket)
 
