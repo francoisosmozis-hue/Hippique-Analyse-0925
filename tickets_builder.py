@@ -61,7 +61,7 @@ def allow_combo(
                         continue
         return default
 
-resolved_ev = _resolve(ev_min, EV_MIN_COMBO, ("EV_MIN_GLOBAL",))
+    resolved_ev = _resolve(ev_min, EV_MIN_COMBO, ("EV_MIN_GLOBAL",))
     resolved_roi = _resolve(roi_min, 0.0, ("ROI_MIN_GLOBAL",))
     resolved_payout = _resolve(
         payout_min,
