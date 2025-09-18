@@ -3,8 +3,10 @@ import math
 import os
 import sys
 from collections import OrderedDict
+from typing import Any, Dict
 
 import pytest
+import yaml
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -151,3 +153,66 @@ def test_fallback_uses_implied_odds(monkeypatch: pytest.MonkeyPatch, tmp_path) -
     assert math.isclose(prob, expected)
     key = sw._combo_key(legs)
     assert sw._calibration_cache[key]["sources"] == ["implied_odds"]
+
+
+def test_correlation_penalty_reduces_probability_and_ev(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    """Legs from the same meeting should trigger correlation penalties."""
+
+    cal = tmp_path / "probabilities.yaml"
+    cal.write_text("")
+    monkeypatch.setattr(sw, "CALIBRATION_PATH", cal)
+    monkeypatch.setattr(sw, "_calibration_cache", OrderedDict())
+    monkeypatch.setattr(sw, "_calibration_mtime", 0.0)
+    monkeypatch.setattr(sw, "_calibration_metadata", {})
+
+    payout = tmp_path / "payout_calibration.yaml"
+    monkeypatch.setattr(sw, "PAYOUT_CALIBRATION_PATH", payout)
+    monkeypatch.setattr(sw, "_correlation_settings", {})
+    monkeypatch.setattr(sw, "_correlation_mtime", 0.0)
+
+    legs = [
+        {"id": "L1", "p": 0.6, "meeting": "R1", "race": "C1", "rc": "R1C1"},
+        {"id": "L2", "p": 0.55, "meeting": "R1", "race": "C1", "rc": "R1C1"},
+    ]
+
+    def run_scenario(penalty: float, rho: float | None = None) -> tuple[float, float, list[dict]]:
+        payload: Dict[str, Any] = {"correlations": {"meeting_course": {"penalty": penalty}}}
+        if rho is not None:
+            payload["correlations"]["meeting_course"]["rho"] = rho
+            payload["correlations"]["meeting_course"]["samples"] = 4000
+        payout.write_text(yaml.safe_dump(payload), encoding="utf-8")
+        monkeypatch.setattr(sw, "_correlation_mtime", 0.0)
+        monkeypatch.setattr(sw, "_correlation_settings", {})
+        monkeypatch.setattr(sw, "_calibration_cache", OrderedDict())
+        sw.set_correlation_penalty(penalty)
+        prob = sw.simulate_wrapper(legs)
+        entry = sw._calibration_cache[sw._combo_key(legs)]
+        detail = entry.get("details") or {}
+        corr_info = detail.get("__correlation__", [])
+        from ev_calculator import compute_ev_roi
+
+        ticket = {
+            "odds": 4.0,
+            "stake": 1.0,
+            "legs": [leg["id"] for leg in legs],
+            "legs_details": [dict(item) for item in legs],
+        }
+        stats = compute_ev_roi(
+            [ticket],
+            budget=10.0,
+            simulate_fn=sw.simulate_wrapper,
+            cache_simulations=False,
+            round_to=0.0,
+        )
+        return prob, float(stats.get("ev", 0.0)), corr_info
+
+    prob_neutral, ev_neutral, corr_neutral = run_scenario(1.0)
+    assert corr_neutral, "Correlation metadata should be recorded even without penalty"
+
+    prob_penalized, ev_penalized, corr_penalized = run_scenario(0.6, rho=-0.45)
+    assert corr_penalized and corr_penalized[0]["method"] in {"penalty", "monte_carlo"}
+    assert prob_penalized < prob_neutral
+    assert ev_penalized < ev_neutral
