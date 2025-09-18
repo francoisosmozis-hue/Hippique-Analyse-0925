@@ -212,6 +212,15 @@ jobs:
           else:
               print("Toutes les cotes H-5 sont présentes.")
           PY
+      - name: Stats J/E Geny
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && contains('55 15 * * *', github.event.schedule))
+        env:
+          GENY_COOKIE: ${{ secrets.GENY_COOKIE }}
+        run: |
+          python scripts/fetch_je_stats.py \
+            --course-id "${{ steps.in.outputs.COURSE_ID }}" \
+            --stats-je data/h5/stats_je.json \
+            --out data/h5/stats_je.json
 
       - name: Analyse H-5
         if: github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && contains('55 15 * * *', github.event.schedule))
