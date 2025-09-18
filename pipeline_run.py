@@ -93,7 +93,16 @@ REQ_KEYS = [
 ]
 
 
-METRIC_KEYS = {"kelly_stake", "ev", "roi", "variance", "clv"}
+METRIC_KEYS = {"kelly_stake", "ev", "roi", "variance", "clv", "stake", "max_stake"}
+
+
+def summarize_sp_tickets(sp_tickets: list[dict]) -> tuple[float, float, float]:
+    """Return EV, ROI and total stake for SP tickets using updated metrics."""
+
+    total_stake = sum(float(t.get("stake", 0.0)) for t in sp_tickets)
+    ev_sp = sum(float(t.get("ev", t.get("ev_ticket", 0.0))) for t in sp_tickets)
+    roi_sp = ev_sp / total_stake if total_stake > 0 else 0.0
+    return ev_sp, roi_sp, total_stake
 
 
 def simulate_with_metrics(tickets: list[dict], bankroll: float) -> dict:
@@ -408,9 +417,9 @@ def cmd_analyse(args: argparse.Namespace) -> None:
         combos_source=partants_data,
     )
 
-    ev_sp = sum(t.get("ev_ticket", 0.0) for t in sp_tickets)
-    total_stake_sp = sum(t.get("stake", 0.0) for t in sp_tickets)
-    roi_sp = ev_sp / total_stake_sp if total_stake_sp > 0 else 0.0
+    ev_sp = 0.0
+    total_stake_sp = 0.0
+    roi_sp = 0.0
 
     combo_budget = float(cfg.get("BUDGET_TOTAL", 0.0)) * float(cfg.get("COMBO_RATIO", 0.0))
     combo_tickets: list[dict] = []
@@ -428,6 +437,7 @@ def cmd_analyse(args: argparse.Namespace) -> None:
     proposed_pack = sp_tickets + combo_tickets
     bankroll = float(cfg.get("BUDGET_TOTAL", 0.0))
     stats_ev = simulate_with_metrics(proposed_pack, bankroll=bankroll)
+    ev_sp, roi_sp, total_stake_sp = summarize_sp_tickets(sp_tickets)
     ev_global = float(stats_ev.get("ev", 0.0))
     roi_global = float(stats_ev.get("roi", 0.0))
     combined_payout = float(stats_ev.get("combined_expected_payout", 0.0))
@@ -478,17 +488,16 @@ def cmd_analyse(args: argparse.Namespace) -> None:
         combined_payout = 0.0
         risk_of_ruin = 0.0
         ev_over_std = 0.0
+        total_stake_sp = 0.0
     elif combo_budget_reassign or no_combo_available:
         cfg_sp = dict(cfg)
         cfg_sp["SP_RATIO"] = float(cfg.get("SP_RATIO", 0.0)) + float(cfg.get("COMBO_RATIO", 0.0))
         cfg_sp["COMBO_RATIO"] = 0.0
         sp_tickets, _ = allocate_dutching_sp(cfg_sp, runners)
         sp_tickets.sort(key=lambda t: t.get("ev_ticket", 0.0), reverse=True)
-        sp_tickets = sp_tickets[: int(cfg_sp.get("MAX_TICKETS_SP", cfg.get("MAX_TICKETS_SP", len(sp_tickets))))]
-        ev_sp = sum(t.get("ev_ticket", 0.0) for t in sp_tickets)
-        total_stake_sp = sum(t.get("stake", 0.0) for t in sp_tickets)
-        roi_sp = ev_sp / total_stake_sp if total_stake_sp > 0 else 0.0
+        sp_tickets = sp_tickets[: int(cfg_sp.get("MAX_TICKETS_SP", cfg.get("MAX_TICKETS_SP", len(sp_tickets))))]        
         stats_ev = simulate_with_metrics(sp_tickets, bankroll=bankroll)
+        ev_sp, roi_sp, total_stake_sp = summarize_sp_tickets(sp_tickets)
         ev_global = float(stats_ev.get("ev", 0.0))
         roi_global = float(stats_ev.get("roi", 0.0))
         combined_payout = float(stats_ev.get("combined_expected_payout", 0.0))
@@ -507,6 +516,7 @@ def cmd_analyse(args: argparse.Namespace) -> None:
     elif proposed_pack != sp_tickets + final_combo_tickets:
         final_pack = sp_tickets + final_combo_tickets
         stats_ev = simulate_with_metrics(final_pack, bankroll=bankroll)
+        ev_sp, roi_sp, total_stake_sp = summarize_sp_tickets(sp_tickets)
         ev_global = float(stats_ev.get("ev", 0.0))
         roi_global = float(stats_ev.get("roi", 0.0))
         combined_payout = float(stats_ev.get("combined_expected_payout", 0.0))
