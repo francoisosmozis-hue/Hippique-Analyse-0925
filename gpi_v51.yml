@@ -80,8 +80,8 @@ jobs:
           python pipeline_run.py analyse \
             --h30 data/h30/h30.json \
             --h5  data/h5/h5.json \
-            --diff data/diff/diff_drift.json \
-            --outdir data/out \
+            --stats-je data/h5/h5.json \
+            --partants data/h5/h5.json \
             --allow-je-na=${ALLOW_JE_NA} \
             --budget=${BUDGET_TOTAL} \
             --ev-global=${EV_MIN_GLOBAL} \
