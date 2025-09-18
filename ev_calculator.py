@@ -8,6 +8,7 @@ recommended stake (60% by default).
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Hashable, Mapping, Sequence
 import math
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
@@ -23,6 +24,18 @@ try:  # pragma: no cover - optional dependency
     from simulate_wrapper import simulate_wrapper  # type: ignore
 except Exception:  # pragma: no cover - handled gracefully
     simulate_wrapper = None  # type: ignore
+
+
+def _make_hashable(value: Any) -> Any:
+    """Return a hashable representation of ``value`` for caching purposes."""
+
+    if isinstance(value, Hashable):
+        return value
+    if isinstance(value, Mapping):
+        return tuple(sorted((k, _make_hashable(v)) for k, v in value.items()))
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+        return tuple(_make_hashable(v) for v in value)
+    return repr(value)
 
 
 def _kelly_fraction(p: float, odds: float) -> float:
@@ -250,7 +263,7 @@ def compute_ev_roi(
                         "simulate_fn must be provided when tickets include 'legs'"
                     )
                 if cache_simulations:
-                    key: Tuple[Any, ...] = tuple(legs)
+                    key: Tuple[Any, ...] = tuple(_make_hashable(leg) for leg in legs)
                     p = cache.get(key)
                     if p is None:
                         p = simulate_fn(legs)
