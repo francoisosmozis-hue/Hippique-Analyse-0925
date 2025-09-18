@@ -21,6 +21,12 @@ except Exception:  # pragma: no cover - optional dependency
         return None
 import yaml
 
+from calibration.p_true_model import (
+    compute_runner_features,
+    load_p_true_model,
+    predict_probability,
+)
+
 from simulate_ev import allocate_dutching_sp, gate_ev, simulate_ev_batch
 from tickets_builder import allow_combo, apply_ticket_policy
 from validator_ev import validate_inputs
@@ -236,7 +242,7 @@ def compute_drift_dict(
     return {"drift": diff, "missing_h30": missing_h30, "missing_h5": missing_h5}
 
 
-def build_p_true(cfg, partants, odds_h5, odds_h30, stats_je) -> dict:
+def _heuristic_p_true(cfg, partants, odds_h5, odds_h30, stats_je) -> dict:
     weights = {}
     for p in partants:
         cid = str(p["id"])
@@ -252,6 +258,39 @@ def build_p_true(cfg, partants, odds_h5, odds_h30, stats_je) -> dict:
         weights[cid] = max(weight, 0.0)
     total = sum(weights.values()) or 1.0
     return {cid: w / total for cid, w in weights.items()}
+
+
+def build_p_true(cfg, partants, odds_h5, odds_h30, stats_je) -> dict:
+    model = None
+    try:
+        model = load_p_true_model()
+    except Exception as exc:  # pragma: no cover - corrupted file
+        logger.warning("Impossible de charger le modèle p_true: %s", exc)
+        model = None
+
+    if model is not None:
+        probs = {}
+        for p in partants:
+            cid = str(p.get("id"))
+            if cid not in odds_h5:
+                continue
+            try:
+                features = compute_runner_features(
+                    float(odds_h5[cid]),
+                    float(odds_h30.get(cid, odds_h5[cid])) if odds_h30 else None,
+                    stats_je.get(cid) if stats_je else None,
+                )
+            except (ValueError, TypeError):
+                continue
+            prob = predict_probability(model, features)
+            probs[cid] = prob
+
+        total = sum(probs.values())
+        if total > 0:
+            return {cid: prob / total for cid, prob in probs.items()}
+        logger.info("Calibration p_true indisponible, retour à l'heuristique")
+
+    return _heuristic_p_true(cfg, partants, odds_h5, odds_h30, stats_je)
 
 
 def export(
