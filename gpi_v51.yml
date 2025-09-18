@@ -230,6 +230,8 @@ jobs:
             --h5  data/h5/odds.json \
             --stats-je data/h5/h5.json \
             --partants data/h5/h5.json \
+            --gpi config/gpi.yml \
+            --outdir data/out \
             --allow-je-na=${ALLOW_JE_NA} \
             --budget=${BUDGET_TOTAL} \
             --ev-global=${EV_MIN_GLOBAL} \
