@@ -139,11 +139,24 @@ def gate_ev(
     return {"sp": sp_ok, "combo": combo_ok, "reasons": reasons}
 
 
-def simulate_ev_batch(tickets: List[Dict[str, Any]], bankroll: float) -> Dict[str, Any]:
+def simulate_ev_batch(
+    tickets: List[Dict[str, Any]],
+    bankroll: float,
+    *,
+    kelly_cap: float | None = None,
+) -> Dict[str, Any]:
     """Return EV/ROI statistics for ``tickets`` given a ``bankroll``.
 
     This is a thin wrapper around :func:`compute_ev_roi` that also hooks into
     :func:`simulate_wrapper` to estimate probabilities of combined bets.
     """
-    stats = compute_ev_roi(tickets, budget=bankroll, simulate_fn=simulate_wrapper)
+    kwargs: Dict[str, Any] = {}
+    if kelly_cap is not None:
+        kwargs["kelly_cap"] = kelly_cap
+    stats = compute_ev_roi(
+        tickets,
+        budget=bankroll,
+        simulate_fn=simulate_wrapper,
+        **kwargs,
+    )
     return stats
