@@ -269,6 +269,11 @@ def test_enforce_ror_threshold_reduces_high_risk_pack() -> None:
     assert info["initial_ror"] > info["target"]
     assert info["final_ror"] <= info["target"] + 1e-9
     assert stats["risk_of_ruin"] == pytest.approx(info["final_ror"])
+    assert info["scale_factor"] < 1.0
+    assert info["initial_total_stake"] > info["final_total_stake"]
+    assert info["initial_variance"] >= info["final_variance"]
+    assert info["effective_cap"] < info["initial_cap"]
+    assert info["iterations"] >= 1
 
     final_stake = sum(t["stake"] for t in sp_tickets)
     assert final_stake < baseline_stake
@@ -305,6 +310,9 @@ def test_enforce_ror_threshold_preserves_safe_pack() -> None:
     assert info["applied"] is False
     assert info["initial_ror"] <= info["target"]
     assert stats["risk_of_ruin"] == pytest.approx(info["initial_ror"])
+    assert info["scale_factor"] == pytest.approx(1.0)
+    assert info["initial_total_stake"] == pytest.approx(info["final_total_stake"])
+    assert info["effective_cap"] == pytest.approx(info["initial_cap"])
 
     expected = sorted((t["id"], t.get("stake", 0.0)) for t in baseline_sim)
     result = sorted((t["id"], t["stake"]) for t in sp_tickets)
