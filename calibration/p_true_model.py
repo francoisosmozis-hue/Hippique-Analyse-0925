@@ -1,0 +1,129 @@
+"""Loader and inference helpers for the :math:`p_true` calibration model."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Mapping
+
+import math
+import threading
+
+import yaml
+
+
+MODEL_PATH = Path("calibration/p_true_model.yaml")
+_EPSILON = 1e-9
+
+_MODEL_LOCK = threading.Lock()
+_MODEL_CACHE: tuple[Path, float, "PTrueModel"] | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class PTrueModel:
+    """Representation of the serialized logistic regression."""
+
+    features: tuple[str, ...]
+    intercept: float
+    coefficients: dict[str, float]
+    metadata: dict
+
+    def predict(self, features: Mapping[str, float]) -> float:
+        score = float(self.intercept)
+        for name in self.features:
+            coef = float(self.coefficients.get(name, 0.0))
+            value = float(features.get(name, 0.0))
+            score += coef * value
+        return _sigmoid(score)
+
+
+def _sigmoid(value: float) -> float:
+    if value >= 0:
+        z = math.exp(-value)
+        return 1.0 / (1.0 + z)
+    z = math.exp(value)
+    return z / (1.0 + z)
+
+
+def _ensure_probability(prob: float) -> float:
+    if prob <= 0.0:
+        return _EPSILON
+    if prob >= 1.0:
+        return 1.0 - _EPSILON
+    return prob
+
+
+def load_p_true_model(path: Path | None = None) -> PTrueModel | None:
+    """Return cached :class:`PTrueModel` when available on disk."""
+
+    path = Path(path or MODEL_PATH)
+
+    try:
+        mtime = path.stat().st_mtime
+    except FileNotFoundError:
+        return None
+
+    global _MODEL_CACHE
+    with _MODEL_LOCK:
+        if _MODEL_CACHE and _MODEL_CACHE[0] == path and _MODEL_CACHE[1] == mtime:
+            return _MODEL_CACHE[2]
+
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        features = tuple(str(f) for f in data.get("features", ()))
+        intercept = float(data.get("intercept", 0.0))
+        coeffs_raw = data.get("coefficients", {})
+        coefficients = {str(k): float(v) for k, v in coeffs_raw.items()}
+        metadata = dict(data.get("metadata", {}))
+
+        if not features:
+            raise ValueError("calibration model does not define any feature")
+
+        for name in features:
+            coefficients.setdefault(name, 0.0)
+
+        model = PTrueModel(
+            features=features,
+            intercept=intercept,
+            coefficients=coefficients,
+            metadata=metadata,
+        )
+        _MODEL_CACHE = (path, mtime, model)
+        return model
+
+
+def compute_runner_features(
+    odds_h5: float,
+    odds_h30: float | None,
+    stats: Mapping[str, float] | None,
+) -> dict[str, float]:
+    """Return the feature mapping expected by the logistic regression."""
+
+    o5 = max(float(odds_h5 or 0.0), 0.0)
+    if not math.isfinite(o5) or o5 <= 1.0:
+        raise ValueError("odds_h5 must be > 1 and finite")
+
+    o30 = float(odds_h30) if odds_h30 not in (None, "") else o5
+    if not math.isfinite(o30) or o30 <= 1.0:
+        o30 = o5
+
+    stats = stats or {}
+    j_win = float(stats.get("j_win", 0.0))
+    e_win = float(stats.get("e_win", 0.0))
+    je_total = j_win + e_win
+
+    return {
+        "log_odds": math.log(max(o5, 1.0 + _EPSILON)),
+        "drift": o5 - o30,
+        "je_total": je_total,
+        "implied_prob": 1.0 / o5,
+    }
+
+
+def predict_probability(
+    model: PTrueModel,
+    features: Mapping[str, float],
+) -> float:
+    """Return calibrated probability clipped to ``(0, 1)``."""
+
+    prob = model.predict(features)
+    return _ensure_probability(prob)
