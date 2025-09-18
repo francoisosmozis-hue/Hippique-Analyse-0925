@@ -1,3 +1,4 @@
+import argparse
 import json
 import subprocess
 import sys
@@ -8,6 +9,7 @@ import pytest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+import pipeline_run
 from simulate_ev import allocate_dutching_sp, gate_ev, simulate_ev_batch
 from pipeline_run import build_p_true, compute_drift_dict, load_yaml
 
@@ -197,8 +199,17 @@ def test_smoke_run(tmp_path):
     roi_sp = ev_sum / stake_total if stake_total else 0.0
     assert data["ev"]["roi_sp"] == pytest.approx(roi_sp)
 
+    stake_reduction = data["ev"].get("stake_reduction", {})
+    assert data["ev"].get("stake_reduction_applied") is False
+    assert stake_reduction.get("applied") is False
+    assert set(stake_reduction).issuperset({"applied", "kelly_fraction", "max_vol_par_cheval"})
+    
     if tickets:
-        stats_ev = simulate_ev_batch(tickets, bankroll=5)
+        simulate_kwargs = {}
+        cap = stake_reduction.get("max_vol_par_cheval")
+        if cap is not None:
+            simulate_kwargs["kelly_cap"] = cap
+        stats_ev = simulate_ev_batch(tickets, bankroll=5, **simulate_kwargs)
     else:
         stats_ev = {"ev": 0.0, "roi": 0.0, "risk_of_ruin": 0.0, "clv": 0.0}
     assert data["ev"]["global"] == pytest.approx(stats_ev.get("ev", 0.0))
@@ -369,6 +380,119 @@ def test_reallocate_combo_budget_to_sp(tmp_path):
     assert tickets[0]["ev_ticket"] == pytest.approx(exp_tickets[0]["ev_ticket"])
 
 
+def test_high_risk_pack_is_trimmed(tmp_path, monkeypatch):
+    partants = {
+        "rc": "R1C1",
+        "hippodrome": "Test",
+        "date": "2025-09-10",
+        "discipline": "trot",
+        "runners": [
+            {"id": "1", "name": "Alpha"},
+            {"id": "2", "name": "Bravo"},
+            {"id": "3", "name": "Charlie"},
+            {"id": "4", "name": "Delta"},
+            {"id": "5", "name": "Echo"},
+            {"id": "6", "name": "Foxtrot"},
+        ],
+    }
+    h30 = {str(i): 2.0 + 0.4 * i for i in range(1, 7)}
+    h5 = {str(i): 2.0 + 0.5 * i for i in range(1, 7)}
+    stats = {str(i): {"j_win": 0, "e_win": 0} for i in range(1, 7)}
+
+    gpi_txt = (
+        GPI_YML
+        .replace("BUDGET_TOTAL: 5", "BUDGET_TOTAL: 100")
+        .replace("SP_RATIO: 0.6", "SP_RATIO: 1.0")
+        .replace("COMBO_RATIO: 0.4", "COMBO_RATIO: 0.0")
+        .replace("EV_MIN_SP: 0.20", "EV_MIN_SP: 0.0")
+        .replace("EV_MIN_GLOBAL: 0.40", "EV_MIN_GLOBAL: 0.0")
+        .replace("ROI_MIN_GLOBAL: 0.20", "ROI_MIN_GLOBAL: 0.0")
+        .replace("ROR_MAX: 0.05", "ROR_MAX: 0.01")
+        .replace("MAX_VOL_PAR_CHEVAL: 0.60", "MAX_VOL_PAR_CHEVAL: 0.90")
+        .replace("KELLY_FRACTION: 0.5", "KELLY_FRACTION: 1.0")
+    )
+
+    h30_path = tmp_path / "h30.json"
+    h5_path = tmp_path / "h5.json"
+    stats_path = tmp_path / "stats.json"
+    partants_path = tmp_path / "partants.json"
+    gpi_path = tmp_path / "gpi.yml"
+    diff_path = tmp_path / "diff.json"
+    outdir = tmp_path / "out"
+
+    h30_path.write_text(json.dumps(h30), encoding="utf-8")
+    h5_path.write_text(json.dumps(h5), encoding="utf-8")
+    stats_path.write_text(json.dumps(stats), encoding="utf-8")
+    partants_path.write_text(json.dumps(partants), encoding="utf-8")
+    gpi_path.write_text(gpi_txt, encoding="utf-8")
+    diff_path.write_text("{}", encoding="utf-8")
+
+    p_stub = {"1": 0.55, "2": 0.1, "3": 0.1, "4": 0.1, "5": 0.1, "6": 0.05}
+
+    monkeypatch.setattr("pipeline_run.build_p_true", lambda *a, **k: dict(p_stub))
+
+    def fake_apply_ticket_policy(cfg, runners, combo_candidates=None, combos_source=None):
+        tickets, _ = allocate_dutching_sp(cfg, runners)
+        return tickets, [], None
+
+    monkeypatch.setattr("pipeline_run.apply_ticket_policy", fake_apply_ticket_policy)
+
+    cfg_loaded = load_yaml(str(gpi_path))
+    runners = [
+        {
+            "id": str(runner["id"]),
+            "name": runner["name"],
+            "odds": float(h5[str(runner["id"])]) if str(runner["id"]) in h5 else 0.0,
+            "p": p_stub[str(runner["id"])],
+        }
+        for runner in partants["runners"]
+    ]
+    baseline_tickets, _ = allocate_dutching_sp(cfg_loaded, runners)
+    baseline_stake = sum(t["stake"] for t in baseline_tickets)
+    assert baseline_tickets, "expected baseline allocation"
+    baseline_by_id = {t["id"]: t["stake"] for t in baseline_tickets}
+
+    args = argparse.Namespace(
+        h30=str(h30_path),
+        h5=str(h5_path),
+        stats_je=str(stats_path),
+        partants=str(partants_path),
+        gpi=str(gpi_path),
+        outdir=str(outdir),
+        diff=str(diff_path),
+        budget=None,
+        ev_global=None,
+        roi_global=None,
+        max_vol=None,
+        min_payout=None,
+        allow_je_na=True,
+    )
+
+    pipeline_run.cmd_analyse(args)
+
+    data = json.loads((outdir / "p_finale.json").read_text(encoding="utf-8"))
+    tickets = data["tickets"]
+    assert tickets, "expected trimmed SP tickets"
+
+    final_stake = sum(t["stake"] for t in tickets)
+    assert final_stake < baseline_stake
+    for ticket in tickets:
+        assert ticket["stake"] < baseline_by_id.get(ticket["id"], float("inf"))
+
+    stake_reduction = data["ev"]["stake_reduction"]
+    assert data["ev"]["stake_reduction_applied"] is True
+    assert stake_reduction["applied"] is True
+    assert stake_reduction["kelly_fraction"] < cfg_loaded["KELLY_FRACTION"]
+    assert stake_reduction["max_vol_par_cheval"] < cfg_loaded["MAX_VOL_PAR_CHEVAL"]
+
+    stats_ev = simulate_ev_batch(
+        tickets,
+        bankroll=cfg_loaded["BUDGET_TOTAL"],
+        kelly_cap=stake_reduction["max_vol_par_cheval"],
+    )
+    assert data["ev"]["risk_of_ruin"] == pytest.approx(stats_ev["risk_of_ruin"])
+    assert stats_ev["risk_of_ruin"] <= cfg_loaded["ROR_MAX"] + 1e-9
+
 def test_drift_coef_sensitivity(monkeypatch):
     partants = partants_sample()["runners"]
     h30 = odds_h30()
@@ -424,3 +548,21 @@ def test_invalid_config_ratio(tmp_path):
     cfg_path.write_text(bad_yml, encoding="utf-8")
     with pytest.raises(RuntimeError):
         load_yaml(str(cfg_path))
+
+
+def test_load_yaml_ror_defaults_and_env(tmp_path, monkeypatch):
+    cfg_txt = GPI_YML.replace("ROR_MAX: 0.05\n", "")
+    cfg_path = tmp_path / "gpi.yml"
+    cfg_path.write_text(cfg_txt, encoding="utf-8")
+
+    cfg = load_yaml(str(cfg_path))
+    assert cfg["ROR_MAX"] == pytest.approx(0.01)
+
+    monkeypatch.setenv("ROR_MAX_TARGET", "0.123")
+    cfg_env = load_yaml(str(cfg_path))
+    assert cfg_env["ROR_MAX"] == pytest.approx(0.123)
+
+    cfg_override_path = tmp_path / "gpi_override.yml"
+    cfg_override_path.write_text(GPI_YML.replace("ROR_MAX: 0.05", "ROR_MAX: 0.02"), encoding="utf-8")
+    cfg_override = load_yaml(str(cfg_override_path))
+    assert cfg_override["ROR_MAX"] == pytest.approx(0.123)
