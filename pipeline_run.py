@@ -352,6 +352,23 @@ def cmd_analyse(args: argparse.Namespace) -> None:
         "drift_min_delta": cfg.get("DRIFT_MIN_DELTA"),
     }
 
+    if not isinstance(stats_je, dict):
+        stats_je = {}
+    if "coverage" not in stats_je:
+        runner_ids = {
+            str(p.get("id"))
+            for p in partants
+            if p.get("id") is not None
+        }
+        stats_ids = {
+            str(cid)
+            for cid, payload in stats_je.items()
+            if cid != "coverage" and isinstance(payload, dict)
+        }
+        total = len(runner_ids)
+        matched = len(runner_ids & stats_ids)
+        stats_je["coverage"] = round(100.0 * matched / total, 2) if total else 0.0
+
     # Validation
     validate_inputs(cfg, partants, odds_h5, stats_je)
 
