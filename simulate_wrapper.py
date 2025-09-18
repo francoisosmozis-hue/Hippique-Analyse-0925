@@ -30,6 +30,7 @@ MAX_CACHE_SIZE = 500
 
 _calibration_cache: OrderedDict[str, Dict[str, Any]] = OrderedDict()
 _calibration_mtime: float = 0.0
+_calibration_metadata: Dict[str, Any] = {}
 
 _EPSILON = 1e-6
 
@@ -84,8 +85,8 @@ def _combo_key(legs: Sequence[Any]) -> str:
     return "|".join(identifiers)
 
 
-def _extract_leg_probability(leg: Any) -> Tuple[float, str, str]:
-    """Return ``(probability, source, identifier)`` for ``leg``."""
+def _extract_leg_probability(leg: Any) -> Tuple[float, str, str, Dict[str, Any]]:
+    """Return ``(probability, source, identifier, extras)`` for ``leg``."""
 
     identifier = _leg_identifier(leg)
 
@@ -93,11 +94,11 @@ def _extract_leg_probability(leg: Any) -> Tuple[float, str, str]:
         for field in ("p", "probability"):
             prob = _coerce_probability(leg.get(field))
             if prob is not None:
-                return prob, "leg_p", identifier
+                return prob, "leg_p", identifier, {}
         prob = _coerce_probability(leg.get("p_true"))
         if prob is not None:
-            return prob, "leg_p_true", identifier
-
+            return prob, "leg_p_true", identifier, {}
+            
     entry = _calibration_cache.get(identifier)
     if entry:
         prob = _coerce_probability(entry.get("p"))
@@ -114,7 +115,12 @@ def _extract_leg_probability(leg: Any) -> Tuple[float, str, str]:
                 source = str(next(iter(sources), "calibration"))
             else:
                 source = "calibration"
-            return prob, source, identifier
+            extras = {}
+            if "updated_at" in entry:
+                extras["updated_at"] = entry["updated_at"]
+            if "weight" in entry:
+                extras["weight"] = entry["weight"]
+            return prob, source, identifier, extras
 
     odds_value = None
     if isinstance(leg, Mapping):
@@ -129,26 +135,38 @@ def _extract_leg_probability(leg: Any) -> Tuple[float, str, str]:
     if odds is not None:
         implied = 1.0 / odds
         implied = max(min(implied, 1.0 - _EPSILON), _EPSILON)
-        return implied, "implied_odds", identifier
+        return implied, "implied_odds", identifier, {}
 
-    return 0.5, "default", identifier
+    return 0.5, "default", identifier, {}
 
 
 def _load_calibration() -> None:
     """Reload calibration file if it has changed on disk."""
-    global _calibration_cache, _calibration_mtime
+    global _calibration_cache, _calibration_mtime, _calibration_metadata
+    try:
     try:
         mtime = CALIBRATION_PATH.stat().st_mtime
     except FileNotFoundError:
         _calibration_cache = OrderedDict()
         _calibration_mtime = 0.0
+        _calibration_metadata = {}
         return
     if mtime <= _calibration_mtime:
         return
     with CALIBRATION_PATH.open("r", encoding="utf-8") as fh:
         data = yaml.safe_load(fh) or {}
+        metadata = data.get("__meta__") if isinstance(data, Mapping) else {}
+        if isinstance(metadata, Mapping):
+            _calibration_metadata.clear()
+            _calibration_metadata.update(metadata)
+        else:
+            _calibration_metadata.clear()
         parsed: OrderedDict[str, Dict[str, Any]] = OrderedDict()
         for k, v in data.items():
+            if k.startswith("__"):
+                continue
+            if not isinstance(v, Mapping):
+                continue
             key = "|".join(sorted(k.split("|")))
             alpha = float(v.get("alpha", 1.0))
             beta = float(v.get("beta", 1.0))
@@ -158,7 +176,27 @@ def _load_calibration() -> None:
                     f"Invalid calibration for {k}: alpha={alpha}, beta={beta}, p={p}"
                 )
             source = "calibration_combo" if "|" in key else "calibration_leg"
-            parsed[key] = {"alpha": alpha, "beta": beta, "p": p, "sources": [source]}
+            weight = float(v.get("weight", alpha + beta))
+            updated_at = v.get("updated_at")
+            details_entry: Dict[str, Any] = {"weight": weight}
+            if updated_at:
+                details_entry["updated_at"] = updated_at
+            decay_val = _calibration_metadata.get("decay")
+            if decay_val is not None:
+                details_entry["decay"] = decay_val
+            half_life = _calibration_metadata.get("half_life")
+            if half_life is not None:
+                details_entry["half_life"] = half_life
+            parsed[key] = {
+                "alpha": alpha,
+                "beta": beta,
+                "p": p,
+                "sources": [source],
+                "weight": weight,
+                "details": {"__calibration__": details_entry},
+            }
+            if updated_at:
+                parsed[key]["updated_at"] = updated_at
         _calibration_cache = parsed
         while len(_calibration_cache) > MAX_CACHE_SIZE:
             _calibration_cache.popitem(last=False)
@@ -201,10 +239,22 @@ def simulate_wrapper(legs: Iterable[object]) -> float:
     sources: List[str] = []
     details: Dict[str, Dict[str, Any]] = {}
     for leg in legs_list:
-        leg_prob, source, identifier = _extract_leg_probability(leg)
+        leg_prob, source, identifier, extras = _extract_leg_probability(leg)
         prob *= leg_prob
         sources.append(source)
-        details[identifier] = {"p": leg_prob, "source": source}
+        detail_entry = {"p": leg_prob, "source": source}
+        if extras:
+            detail_entry.update(extras)
+        details[identifier] = detail_entry
+
+    if _calibration_metadata:
+        meta_detail = {
+            key: _calibration_metadata[key]
+            for key in ("decay", "half_life", "generated_at")
+            if key in _calibration_metadata
+        }
+        if meta_detail:
+            details["__calibration__"] = meta_detail
 
     prob = max(min(prob, 1.0 - _EPSILON), _EPSILON)
 
