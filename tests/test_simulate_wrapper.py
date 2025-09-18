@@ -62,7 +62,7 @@ def test_cache_prevents_recomputation(monkeypatch: pytest.MonkeyPatch, tmp_path)
     legs = CountingIterable(["x", "y"])
 
     sw.simulate_wrapper(legs)
-    assert counter["iters"] == 2
+    assert counter["iters"] == 1
 
     counter["iters"] = 0
     sw.simulate_wrapper(legs)
@@ -74,6 +74,7 @@ def test_cache_eviction(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     cal = tmp_path / "probabilities.yaml"
     cal.write_text("")
     monkeypatch.setattr(sw, "CALIBRATION_PATH", cal)
+    monkeypatch.setattr(sw, "_calibration_cache", OrderedDict())
     monkeypatch.setattr(sw, "_calibration_mtime", 0.0)
     monkeypatch.setattr(sw, "MAX_CACHE_SIZE", 2)
 
@@ -83,3 +84,34 @@ def test_cache_eviction(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
 
     sw.simulate_wrapper(["c"])  # should evict "a"
     assert list(sw._calibration_cache.keys()) == ["b", "c"]
+
+
+def test_fallback_uses_leg_probabilities(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    """Probabilities provided on legs override calibration and odds."""
+    cal = tmp_path / "probabilities.yaml"
+    cal.write_text("")
+    monkeypatch.setattr(sw, "CALIBRATION_PATH", cal)
+    monkeypatch.setattr(sw, "_calibration_cache", OrderedDict())
+    monkeypatch.setattr(sw, "_calibration_mtime", 0.0)
+
+    legs = [{"id": "L1", "p": 0.2}, {"id": "L2", "p_true": 0.3}]
+    prob = sw.simulate_wrapper(legs)
+    assert math.isclose(prob, 0.2 * 0.3)
+    key = sw._combo_key(legs)
+    assert set(sw._calibration_cache[key]["sources"]) == {"leg_p", "leg_p_true"}
+
+
+def test_fallback_uses_implied_odds(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    """When no probabilities exist, implied odds provide a conservative floor."""
+    cal = tmp_path / "probabilities.yaml"
+    cal.write_text("")
+    monkeypatch.setattr(sw, "CALIBRATION_PATH", cal)
+    monkeypatch.setattr(sw, "_calibration_cache", OrderedDict())
+    monkeypatch.setattr(sw, "_calibration_mtime", 0.0)
+
+    legs = [{"id": "L1", "odds": 5.0}, {"id": "L2", "odds": 4.0}]
+    prob = sw.simulate_wrapper(legs)
+    expected = (1 / 5.0) * (1 / 4.0)
+    assert math.isclose(prob, expected)
+    key = sw._combo_key(legs)
+    assert sw._calibration_cache[key]["sources"] == ["implied_odds"]
