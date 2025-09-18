@@ -44,6 +44,36 @@ jobs:
         run: |
           python -m pip install -U pip
           pip install -r requirements.txt || true
+          python - <<'PY'
+          from pathlib import Path
+
+          req_path = Path("requirements.txt")
+          base, optional = [], []
+          optional_markers = ("scipy",)
+
+          for raw_line in req_path.read_text(encoding="utf-8").splitlines():
+              line = raw_line.strip()
+              if not line or line.startswith("#"):
+                  continue
+
+              target = optional if line.lower().startswith(optional_markers) else base
+              target.append(line)
+
+          Path("requirements-base.txt").write_text("\n".join(base), encoding="utf-8")
+          Path("requirements-optional.txt").write_text("\n".join(optional), encoding="utf-8")
+          PY
+          pip install -r requirements-base.txt
+          if [ -s requirements-optional.txt ]; then
+            while read -r pkg; do
+              pip install "$pkg" || echo "::warning::Optional dependency $pkg failed to install"
+            done < requirements-optional.txt
+          fi
+          pip install requests beautifulsoup4 pyyaml python-dotenv pytest
+          rm -f requirements-base.txt requirements-optional.txt
+
+      - name: Critical dependency check
+        run: python -c "import pandas, googleapiclient"
+
           pip install requests beautifulsoup4 pyyaml python-dotenv pytest
 
       - name: Resolve inputs
