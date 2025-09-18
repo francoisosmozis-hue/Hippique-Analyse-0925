@@ -127,7 +127,7 @@ def test_pipeline_allocates_combo_budget(tmp_path, monkeypatch):
 
     calls = []
 
-    def fake_simulate(tickets, bankroll):
+    def fake_simulate(tickets, bankroll, **kwargs):
         calls.append([dict(t) for t in tickets])
         total = sum(t.get("stake", 0.0) for t in tickets)
         return {
@@ -191,7 +191,7 @@ def test_pipeline_recomputes_after_combo_rejection(tmp_path, monkeypatch):
 
     calls = []
 
-    def fake_simulate(tickets, bankroll):
+    def fake_simulate(tickets, bankroll, **kwargs):
         calls.append([dict(t) for t in tickets])
         total = sum(t.get("stake", 0.0) for t in tickets)
         return {
@@ -244,7 +244,7 @@ def test_pipeline_uses_capped_stake_in_exports(tmp_path, monkeypatch):
         lambda *args, **kwargs: ([dict(base_ticket)], [], None),
     )
 
-    def fake_simulate(tickets, bankroll):
+    def fake_simulate(tickets, bankroll, **kwargs):
         total = 0.0
         capped_id = capped.get("id")
         desired = capped.get("capped")
