@@ -111,19 +111,130 @@ def summarize_sp_tickets(sp_tickets: list[dict]) -> tuple[float, float, float]:
     return ev_sp, roi_sp, total_stake
 
 
-def simulate_with_metrics(tickets: list[dict], bankroll: float) -> dict:
+def simulate_with_metrics(
+    tickets: list[dict],
+    bankroll: float,
+    *,
+    kelly_cap: float | None = None,
+) -> dict:
     """Run :func:`simulate_ev_batch` on a copy and merge metrics into ``tickets``."""
 
     if not tickets:
         return {"ev": 0.0, "roi": 0.0}
 
     sim_input = [copy.deepcopy(t) for t in tickets]
-    stats = simulate_ev_batch(sim_input, bankroll=bankroll)
+    if kelly_cap is None:
+        stats = simulate_ev_batch(sim_input, bankroll=bankroll)
+    else:
+        stats = simulate_ev_batch(sim_input, bankroll=bankroll, kelly_cap=kelly_cap)
     for original, simulated in zip(tickets, sim_input):
         for key in METRIC_KEYS:
             if key in simulated:
                 original[key] = simulated[key]
     return stats
+
+
+def enforce_ror_threshold(
+    cfg: dict,
+    runners: list[dict],
+    combo_tickets: list[dict],
+    bankroll: float,
+    *,
+    max_iterations: int = 48,
+) -> tuple[list[dict], dict, dict]:
+    """Return SP tickets and EV metrics after enforcing the ROR threshold.
+
+    Stakes are recomputed with progressively smaller ``KELLY_FRACTION`` and
+    ``MAX_VOL_PAR_CHEVAL`` values while ``risk_of_ruin`` exceeds the
+    configured ``ROR_MAX`` target.  The function reports the adjusted SP
+    tickets, EV metrics and a metadata dictionary describing the reduction.
+    """
+
+    cfg_iter = dict(cfg)
+    target = float(cfg_iter.get("ROR_MAX", 0.0))
+    initial_kelly = float(cfg_iter.get("KELLY_FRACTION", 0.5))
+    initial_cap = float(cfg_iter.get("MAX_VOL_PAR_CHEVAL", 0.60))
+
+    min_kelly = 0.01 if initial_kelly > 0.01 else max(0.0, initial_kelly)
+    min_cap = initial_cap if initial_cap < 0.05 else 0.05
+
+    current_kelly = initial_kelly
+    current_cap = initial_cap
+
+    max_iterations = max(1, int(max_iterations))
+
+    reduction_applied = False
+    adjustments = 0
+
+    sp_result: list[dict] = []
+    stats_ev: dict = {"ev": 0.0, "roi": 0.0}
+    initial_risk: float | None = None
+    final_risk: float | None = None
+
+    for _ in range(max_iterations):
+        cfg_iter["KELLY_FRACTION"] = current_kelly
+        cfg_iter["MAX_VOL_PAR_CHEVAL"] = current_cap
+
+        sp_tickets, _ = allocate_dutching_sp(cfg_iter, runners)
+        sp_tickets.sort(key=lambda t: t.get("ev_ticket", 0.0), reverse=True)
+        try:
+            max_count = int(cfg_iter.get("MAX_TICKETS_SP", len(sp_tickets)))
+        except (TypeError, ValueError):
+            max_count = len(sp_tickets)
+        if max_count >= 0:
+            sp_tickets = sp_tickets[:max_count]
+
+        sp_result = sp_tickets
+        pack = sp_tickets + combo_tickets
+        stats_ev = simulate_with_metrics(pack, bankroll=bankroll, kelly_cap=current_cap)
+
+        risk = float(stats_ev.get("risk_of_ruin", 0.0))
+        if initial_risk is None:
+            initial_risk = risk
+        final_risk = risk
+
+        if (
+            risk <= target
+            or target <= 0.0
+            or bankroll <= 0
+            or (not sp_tickets and not combo_tickets)
+        ):
+            break
+
+        next_kelly = max(min_kelly, current_kelly * 0.8)
+        if next_kelly < current_kelly - 1e-9:
+            current_kelly = next_kelly
+            reduction_applied = True
+            adjustments += 1
+            continue
+
+        next_cap = max(min_cap, current_cap * 0.9)
+        if next_cap < current_cap - 1e-9:
+            current_cap = next_cap
+            reduction_applied = True
+            adjustments += 1
+            continue
+
+        break
+
+    if initial_risk is None:
+        initial_risk = final_risk if final_risk is not None else 0.0
+    if final_risk is None:
+        final_risk = initial_risk
+
+    info = {
+        "applied": reduction_applied,
+        "iterations": adjustments,
+        "initial_ror": float(initial_risk),
+        "final_ror": float(final_risk),
+        "target": target,
+        "initial_kelly_fraction": initial_kelly,
+        "kelly_fraction": current_kelly,
+        "initial_max_vol": initial_cap,
+        "max_vol_par_cheval": current_cap,
+    }
+
+    return sp_result, stats_ev, info
 
 
 def load_yaml(path: str) -> dict:
@@ -143,7 +254,7 @@ def load_yaml(path: str) -> dict:
     cfg.setdefault("ROUND_TO_SP", 0.10)
     cfg.setdefault("ROI_MIN_SP", 0.0)
     cfg.setdefault("ROI_MIN_GLOBAL", 0.0)
-    cfg.setdefault("ROR_MAX", 0.05)
+    cfg.setdefault("ROR_MAX", 0.01)
     cfg.setdefault("SHARPE_MIN", 0.0)
     cfg.setdefault("SNAPSHOTS", "H30,H5")
     cfg.setdefault("DRIFT_TOP_N", 5)
@@ -160,6 +271,7 @@ def load_yaml(path: str) -> dict:
     cfg["EV_MIN_GLOBAL"] = get_env("EV_MIN_GLOBAL", cfg.get("EV_MIN_GLOBAL"), cast=float)
     cfg["ROI_MIN_SP"] = get_env("ROI_MIN_SP", cfg.get("ROI_MIN_SP"), cast=float)
     cfg["ROI_MIN_GLOBAL"] = get_env("ROI_MIN_GLOBAL", cfg.get("ROI_MIN_GLOBAL"), cast=float)
+    cfg["ROR_MAX"] = get_env("ROR_MAX_TARGET", cfg.get("ROR_MAX"), cast=float)
     exotic_min = get_env("EXOTIC_MIN_PAYOUT", cfg.get("MIN_PAYOUT_COMBOS"), cast=float)
     cfg["MIN_PAYOUT_COMBOS"] = exotic_min
     cfg.setdefault("EXOTIC_MIN_PAYOUT", exotic_min)
@@ -308,6 +420,9 @@ def export(
     p_true: dict,
     drift: dict,
     cfg: dict,
+    *,
+    stake_reduction_applied: bool = False,
+    stake_reduction_details: dict | None = None,
 ) -> None:
     save_json(
         outdir / "p_finale.json",
@@ -324,6 +439,20 @@ def export(
                 "clv_moyen": clv_moyen,
                 "variance": variance,
                 "combined_expected_payout": combined_payout,
+                "stake_reduction_applied": bool(stake_reduction_applied),
+                "stake_reduction": {
+                    "applied": bool(stake_reduction_applied),
+                    "kelly_fraction": (
+                        stake_reduction_details.get("kelly_fraction")
+                        if stake_reduction_details
+                        else None
+                    ),
+                    "max_vol_par_cheval": (
+                        stake_reduction_details.get("max_vol_par_cheval")
+                        if stake_reduction_details
+                        else None
+                    ),
+                },
             },
         },
     )
@@ -473,15 +602,46 @@ def cmd_analyse(args: argparse.Namespace) -> None:
             ticket["stake"] = combo_budget * (weight / total_weight)
             combo_tickets.append(ticket)
 
-    proposed_pack = sp_tickets + combo_tickets
     bankroll = float(cfg.get("BUDGET_TOTAL", 0.0))
-    stats_ev = simulate_with_metrics(proposed_pack, bankroll=bankroll)
+    
+    def log_reduction(info: dict) -> None:
+        logger.warning(
+            (
+                "Risk of ruin %.2f%% > %.2f%%: réduction des mises "
+                "(Kelly %.3f→%.3f, cap %.2f→%.2f, risque final %.2f%%, %d itérations)"
+            ),
+            info.get("initial_ror", 0.0) * 100.0,
+            info.get("target", 0.0) * 100.0,
+            info.get("initial_kelly_fraction", 0.0),
+            info.get("kelly_fraction", 0.0),
+            info.get("initial_max_vol", 0.0),
+            info.get("max_vol_par_cheval", 0.0),
+            info.get("final_ror", 0.0) * 100.0,
+            info.get("iterations", 0),
+        )
+
+    def adjust_pack(cfg_local: dict, combos_local: list[dict]) -> tuple[list[dict], dict, dict]:
+        sp_adj, stats_local, info_local = enforce_ror_threshold(
+            cfg_local,
+            runners,
+            combos_local,
+            bankroll=bankroll,
+        )
+        if info_local.get("applied"):
+            log_reduction(info_local)
+        return sp_adj, stats_local, info_local
+
+    sp_tickets, stats_ev, reduction_info = adjust_pack(cfg, combo_tickets)
+    last_reduction_info = reduction_info
+
     ev_sp, roi_sp, total_stake_sp = summarize_sp_tickets(sp_tickets)
     ev_global = float(stats_ev.get("ev", 0.0))
     roi_global = float(stats_ev.get("roi", 0.0))
     combined_payout = float(stats_ev.get("combined_expected_payout", 0.0))
     risk_of_ruin = float(stats_ev.get("risk_of_ruin", 0.0))
     ev_over_std = float(stats_ev.get("ev_over_std", 0.0))
+
+    proposed_pack = sp_tickets + combo_tickets
 
     flags = gate_ev(
         cfg,
@@ -528,14 +688,14 @@ def cmd_analyse(args: argparse.Namespace) -> None:
         risk_of_ruin = 0.0
         ev_over_std = 0.0
         total_stake_sp = 0.0
+        last_reduction_info = {"applied": False}
     elif combo_budget_reassign or no_combo_available:
         cfg_sp = dict(cfg)
         cfg_sp["SP_RATIO"] = float(cfg.get("SP_RATIO", 0.0)) + float(cfg.get("COMBO_RATIO", 0.0))
         cfg_sp["COMBO_RATIO"] = 0.0
         sp_tickets, _ = allocate_dutching_sp(cfg_sp, runners)
-        sp_tickets.sort(key=lambda t: t.get("ev_ticket", 0.0), reverse=True)
-        sp_tickets = sp_tickets[: int(cfg_sp.get("MAX_TICKETS_SP", cfg.get("MAX_TICKETS_SP", len(sp_tickets))))]        
-        stats_ev = simulate_with_metrics(sp_tickets, bankroll=bankroll)
+        sp_tickets, stats_ev, reduction_info = adjust_pack(cfg_sp, [])
+        last_reduction_info = reduction_info
         ev_sp, roi_sp, total_stake_sp = summarize_sp_tickets(sp_tickets)
         ev_global = float(stats_ev.get("ev", 0.0))
         roi_global = float(stats_ev.get("roi", 0.0))
@@ -554,7 +714,17 @@ def cmd_analyse(args: argparse.Namespace) -> None:
         )
     elif proposed_pack != sp_tickets + final_combo_tickets:
         final_pack = sp_tickets + final_combo_tickets
-        stats_ev = simulate_with_metrics(final_pack, bankroll=bankroll)
+        current_cap = float(
+            last_reduction_info.get(
+                "max_vol_par_cheval",
+                cfg.get("MAX_VOL_PAR_CHEVAL", 0.60),
+            )
+        )
+        stats_ev = simulate_with_metrics(
+            final_pack,
+            bankroll=bankroll,
+            kelly_cap=current_cap,
+        )
         ev_sp, roi_sp, total_stake_sp = summarize_sp_tickets(sp_tickets)
         ev_global = float(stats_ev.get("ev", 0.0))
         roi_global = float(stats_ev.get("roi", 0.0))
@@ -617,7 +787,16 @@ def cmd_analyse(args: argparse.Namespace) -> None:
     )
 
 
-    outdir.mkdir(parents=True, exist_ok=True)    
+    outdir.mkdir(parents=True, exist_ok=True)
+    stake_reduction_flag = bool(last_reduction_info.get("applied") and tickets)
+    stake_reduction_details = None
+    if last_reduction_info:
+        details = {
+            "kelly_fraction": last_reduction_info.get("kelly_fraction"),
+            "max_vol_par_cheval": last_reduction_info.get("max_vol_par_cheval"),
+        }
+        if any(value is not None for value in details.values()):
+            stake_reduction_details = details    
     export(
         outdir,
         meta,
@@ -633,6 +812,8 @@ def cmd_analyse(args: argparse.Namespace) -> None:
         p_true,
         drift,
         cfg,
+        stake_reduction_applied=stake_reduction_flag,
+        stake_reduction_details=stake_reduction_details,
     )
     logger.info("OK: analyse exportée dans %s", outdir)
 
