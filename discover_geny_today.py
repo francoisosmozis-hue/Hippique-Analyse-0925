@@ -42,7 +42,7 @@ def _is_fr_meeting(hippo: str) -> bool:
 
 def main() -> None:
     """Fetch the Geny page and print meetings as JSON."""
-    resp = requests.get(URL, headers={"User-Agent": "Mozilla/5.0"})
+    resp = requests.get(URL, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
     resp.raise_for_status()
     soup = BeautifulSoup(resp.text, "html.parser")
 
