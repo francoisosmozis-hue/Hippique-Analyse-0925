@@ -207,6 +207,13 @@ def test_ticket_metrics_and_std_dev() -> None:
     assert math.isclose(metrics[0]["ev"], ev1)
     assert math.isclose(metrics[0]["variance"], var1)
     assert math.isclose(metrics[0]["clv"], clv1)
+    assert math.isclose(metrics[0]["expected_payout"], tickets[0]["p"] * metrics[0]["stake"] * tickets[0]["odds"])
+    assert math.isclose(
+        metrics[0]["sharpe"],
+        metrics[0]["ev"] / math.sqrt(metrics[0]["variance"]) if metrics[0]["variance"] > 0 else 0.0,
+        rel_tol=1e-9,
+        abs_tol=1e-12,
+    )
 
     k2 = _kelly_fraction(0.4, 3.0) * 100
     s2 = min(k2, k2 * KELLY_CAP)
@@ -218,11 +225,21 @@ def test_ticket_metrics_and_std_dev() -> None:
     assert math.isclose(metrics[1]["ev"], ev2)
     assert math.isclose(metrics[1]["variance"], var2)
     assert math.isclose(metrics[1]["clv"], clv2)
+    assert math.isclose(metrics[1]["expected_payout"], tickets[1]["p"] * metrics[1]["stake"] * tickets[1]["odds"])
+    assert math.isclose(
+        metrics[1]["sharpe"],
+        metrics[1]["ev"] / math.sqrt(metrics[1]["variance"]) if metrics[1]["variance"] > 0 else 0.0,
+        rel_tol=1e-9,
+        abs_tol=1e-12,
+    )
 
     expected_std = math.sqrt(var1 + var2)
     expected_ratio = (ev1 + ev2) / expected_std
     assert math.isclose(res["std_dev"], expected_std)
     assert math.isclose(res["ev_over_std"], expected_ratio)
+    assert math.isclose(res["sharpe"], expected_ratio)
+    total_expected = sum(t["p"] * t["stake"] * t["odds"] for t in tickets)
+    assert math.isclose(res["calibrated_expected_payout"], total_expected)
 
 
 def test_average_clv_from_closing_odds() -> None:
@@ -352,11 +369,18 @@ def test_optimized_allocation_respects_budget_and_improves_ev() -> None:
         assert math.isclose(
             metrics["roi"], metrics["ev"] / metrics["stake"] if metrics["stake"] else 0.0
         )
+        assert "expected_payout" in metrics
+        assert "sharpe" in metrics
     for metrics in res["ticket_metrics_individual"]:
         assert "roi" in metrics
         assert math.isclose(
             metrics["roi"], metrics["ev"] / metrics["stake"] if metrics["stake"] else 0.0
         )
+        assert "expected_payout" in metrics
+        assert "sharpe" in metrics
+    assert "calibrated_expected_payout" in res
+    assert "calibrated_expected_payout_individual" in res
+    assert math.isclose(res["sharpe"], res["ev_over_std"])
 
 
 
