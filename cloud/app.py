@@ -8,7 +8,8 @@ from pathlib import Path
 from typing import Any, Mapping
 
 ROOT = Path(__file__).resolve().parent.parent
-SCRIPT = ROOT / "analyse_courses_du_jour_enrichie.py"
+SVALIDATOR_SCRIPT = ROOT / "validator_ev.py"
+DATA_ROOT = ROOT / "data"
 _VALID_PHASES = {"H30", "H5"}
 
 
@@ -106,18 +107,17 @@ def _normalise_phase(value: Any) -> str:
 
 
 def _build_command(payload: Mapping[str, Any]) -> list[str]:
-    """Translate ``payload`` into the CLI call for the analyser script."""
+    """Translate ``payload`` into the CLI call for the validation CLI."""
 
     reunion = _normalise_label(_extract_key(payload, "R", "reunion"), "R")
     course = _normalise_label(_extract_key(payload, "C", "course"), "C")
     phase = _normalise_phase(_extract_key(payload, "when", "phase"))
+    artefacts_dir = DATA_ROOT / f"{reunion}{course}"
     return [
         sys.executable,
-        str(SCRIPT),
-        "--reunion",
-        reunion,
-        "--course",
-        course,
+        str(VALIDATOR_SCRIPT),
+        "--artefacts",
+        str(artefacts_dir),
         "--phase",
         phase,
     ]
