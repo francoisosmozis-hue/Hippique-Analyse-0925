@@ -275,6 +275,13 @@ Les fichiers correspondants sont téléchargés dans le dossier indiqué par
 | `DRIFT_TOP_N` | Nombre maximal de steams/drifts conservés. |
 | `DRIFT_MIN_DELTA` | Variation minimale de cote pour être retenue comme drift/steam. |
 
+> ℹ️ Le pipeline accepte également certains alias conviviaux : `TotalBudget`,
+> `simpleShare`, `comboShare` ou `maxStakePerHorse` (et leurs équivalents en
+> variables d'environnement `TOTAL_BUDGET`, `SIMPLE_RATIO`, `COMBO_SHARE`,
+> `MAX_STAKE_PER_HORSE`) sont automatiquement convertis vers les clés
+> officielles `BUDGET_TOTAL`, `SP_RATIO`, `COMBO_RATIO` et `MAX_VOL_PAR_CHEVAL`.
+
+
 Ces seuils peuvent être surchargés lors de l'exécution du pipeline avec les
 options `--ev-global`, `--roi-global` et `--min-payout` :
 
