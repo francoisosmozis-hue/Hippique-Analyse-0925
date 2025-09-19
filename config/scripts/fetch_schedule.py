@@ -67,9 +67,10 @@ def main() -> None:
 
     with open(args.sources, "r", encoding="utf-8") as fh:
         cfg = yaml.safe_load(fh) or {}
-    url = cfg.get("zeturf", {}).get("url")
-    if not url:
-        raise SystemExit("No Zeturf source URL configured in sources.yml")
+    try:
+        url = ofz.resolve_source_url(cfg, "planning")
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
 
     raw = ofz.fetch_meetings(url)
     meetings = ofz.filter_today(raw)
