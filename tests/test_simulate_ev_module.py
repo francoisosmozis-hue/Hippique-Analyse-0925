@@ -117,11 +117,11 @@ def test_gate_ev_thresholds():
     cfg = {
         "BUDGET_TOTAL": 100.0,
         "SP_RATIO": 0.5,
-        "EV_MIN_SP": 0.2,
-        "EV_MIN_GLOBAL": 0.4,
+        "EV_MIN_SP": 0.15,
+        "EV_MIN_GLOBAL": 0.35,
         "ROI_MIN_SP": 0.1,
-        "ROI_MIN_GLOBAL": 0.2,
-        "MIN_PAYOUT_COMBOS": 10.0,
+        "ROI_MIN_GLOBAL": 0.25,
+        "MIN_PAYOUT_COMBOS": 12.0,
     }
     res = gate_ev(
         cfg,
@@ -156,13 +156,28 @@ def test_gate_ev_thresholds():
         ev_global=50.0,
         roi_sp=0.5,
         roi_global=0.3,
-        min_payout_combos=5.0,
+        min_payout_combos=6.0,
         risk_of_ruin=0.01,
         ev_over_std=1.0,
     )
     assert res["sp"] and not res["combo"]
     assert res["reasons"]["sp"] == []
     assert res["reasons"]["combo"] == ["MIN_PAYOUT_COMBOS"]
+
+    cfg_homo = dict(cfg)
+    cfg_homo["EV_MIN_SP_HOMOGENEOUS"] = 0.05
+    res = gate_ev(
+        cfg_homo,
+        ev_sp=4.0,
+        ev_global=50.0,
+        roi_sp=0.2,
+        roi_global=0.3,
+        min_payout_combos=20.0,
+        ev_over_std=1.0,
+        homogeneous_field=True,
+    )
+    assert res["sp"] and res["combo"]
+    assert res["reasons"] == {"sp": [], "combo": []}
 
     # Exceeding risk of ruin should block both types and record ROR_MAX
     cfg_ror = {
