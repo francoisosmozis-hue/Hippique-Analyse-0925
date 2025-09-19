@@ -44,9 +44,10 @@ def _write_inputs(tmp_path, partants, *, combo_ratio: float = 0.4):
     
     gpi_txt = (
         GPI_YML
-        .replace("EV_MIN_GLOBAL: 0.40", "EV_MIN_GLOBAL: 0.0")
-        .replace("EV_MIN_SP: 0.20", "EV_MIN_SP: 0.0")
+        .replace("EV_MIN_GLOBAL: 0.35", "EV_MIN_GLOBAL: 0.0")
+        .replace("EV_MIN_SP: 0.15", "EV_MIN_SP: 0.0")
         .replace("COMBO_RATIO: 0.4", f"COMBO_RATIO: {combo_ratio}")
+        .replace("SHARPE_MIN: 0.5", "SHARPE_MIN: 0.0")
         + "MIN_PAYOUT_COMBOS: 0.0\nROR_MAX: 1.0\n"
     )
     gpi_path.write_text(gpi_txt, encoding="utf-8")
