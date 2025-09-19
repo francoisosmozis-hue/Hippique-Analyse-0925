@@ -1,6 +1,7 @@
 """Utilities for simple SP dutching and EV simulations."""
 from __future__ import annotations
 
+import math
 from typing import Any, Dict, Iterable, List, Sequence
 
 from ev_calculator import compute_ev_roi
@@ -29,11 +30,35 @@ def allocate_dutching_sp(cfg: Dict[str, float], runners: List[Dict[str, Any]]) -
     if not runners:
         return [], 0.0
 
-    odds = [float(r["odds"]) for r in runners]
+    odds: List[float] = []
+    for runner in runners:
+        try:
+            odds.append(float(runner.get("odds", 0.0)))
+        except (TypeError, ValueError):
+            odds.append(0.0)
     if all("p" in r for r in runners):
-        probs = [float(r["p"]) for r in runners]
+        probs = []
+        for runner in runners:
+            try:
+                probs.append(float(runner.get("p", 0.0)))
+            except (TypeError, ValueError):
+                probs.append(0.0)
     else:
-        probs = implied_probs(odds)
+        fallback: List[float] = []
+        for runner in runners:
+            raw = runner.get("p_imp_h5", runner.get("p_imp"))
+            try:
+                prob = float(raw)
+            except (TypeError, ValueError):
+                prob = 0.0
+            if not math.isfinite(prob) or prob < 0:
+                prob = 0.0
+            fallback.append(prob)
+        total_fallback = sum(fallback)
+        if total_fallback > 0:
+            probs = [prob / total_fallback for prob in fallback]
+        else:
+            probs = implied_probs(odds)
     budget = float(cfg.get("BUDGET_TOTAL", 0.0)) * float(cfg.get("SP_RATIO", 1.0))
     cap = float(cfg.get("MAX_VOL_PAR_CHEVAL", 0.60))
 
