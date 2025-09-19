@@ -3,6 +3,8 @@ import os
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from simulate_ev import (
@@ -111,6 +113,46 @@ def test_allocate_dutching_sp_skips_invalid():
     assert [t["id"] for t in tickets] == ["1"]
     expected_ev = tickets[0]["stake"] * (0.6 * (2.0 - 1.0) - (1.0 - 0.6))
     assert math.isclose(ev_sp, expected_ev)
+
+
+def test_allocate_dutching_sp_uses_precomputed_implied_probs():
+    cfg = {
+        "BUDGET_TOTAL": 10.0,
+        "SP_RATIO": 1.0,
+        "MAX_VOL_PAR_CHEVAL": 0.60,
+        "KELLY_FRACTION": 0.5,
+        "MIN_STAKE_SP": 0.1,
+        "ROUND_TO_SP": 0.1,
+    }
+    runners = [
+        {"id": "1", "name": "A", "odds": 2.0, "p_imp_h5": 0.6},
+        {"id": "2", "name": "B", "odds": 5.0, "p_imp_h5": 0.4},
+    ]
+    tickets, _ = allocate_dutching_sp(cfg, runners)
+    assert {t["id"] for t in tickets} == {"1", "2"}
+    p_by_id = {t["id"]: t["p"] for t in tickets}
+    assert p_by_id["1"] == pytest.approx(0.6)
+    assert p_by_id["2"] == pytest.approx(0.4)
+
+
+def test_allocate_dutching_sp_fallbacks_when_probabilities_invalid():
+    cfg = {
+        "BUDGET_TOTAL": 10.0,
+        "SP_RATIO": 1.0,
+        "MAX_VOL_PAR_CHEVAL": 0.60,
+        "KELLY_FRACTION": 0.5,
+        "MIN_STAKE_SP": 0.1,
+        "ROUND_TO_SP": 0.1,
+    }
+    runners = [
+        {"id": "1", "name": "A", "odds": 2.0, "p_imp_h5": 0.0},
+        {"id": "2", "name": "B", "odds": 4.0, "p_imp_h5": -1.0},
+    ]
+    tickets, _ = allocate_dutching_sp(cfg, runners)
+    probs = implied_probs([2.0, 4.0])
+    p_by_id = {t["id"]: t["p"] for t in tickets}
+    assert p_by_id["1"] == pytest.approx(probs[0])
+    assert p_by_id["2"] == pytest.approx(probs[1])
 
 
 def test_gate_ev_thresholds():
