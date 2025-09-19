@@ -48,13 +48,13 @@ def run_hminus(payload: dict = Body(...)):
     ])
 
     return {
-        "ok": (rc1 == 0 and rc2 == 0),
-        "R": R,
-        "C": C,
-        "phase": when,
-        "rc_analysis": rc1,
-        "rc_validator": rc2
-    }
+    "ok": (rc1 == 0 and rc2 == 0),
+    "reunion": R,
+    "course": C,
+    "phase": when,
+    "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+}
+
 
 if __name__ == "__main__":
     import uvicorn
