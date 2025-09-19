@@ -8,6 +8,7 @@ import datetime as dt
 import json
 import logging
 import math
+import re
 from pathlib import Path
 
 import os
@@ -99,6 +100,86 @@ REQ_KEYS = [
     "ROUND_TO_SP",
     "JE_BONUS_COEF",
 ]
+
+
+OPTIONAL_KEYS = {
+    "CORRELATION_PENALTY",
+    "DRIFT_MIN_DELTA",
+    "DRIFT_TOP_N",
+    "EXOTIC_MIN_PAYOUT",
+    "KELLY_FRACTION",
+    "MIN_PAYOUT_COMBOS",
+    "SNAPSHOTS",
+}
+
+_ENV_ALIASES: dict[str, tuple[str, ...]] = {
+    "BUDGET_TOTAL": ("TOTAL_BUDGET", "BUDGET", "BUDGET_TOTAL_EUR", "TOTAL_BUDGET_EUR"),
+    "SP_RATIO": ("SP_BUDGET_RATIO", "SIMPLE_RATIO", "SINGLES_RATIO", "SIMPLE_SHARE"),
+    "COMBO_RATIO": ("COMBO_BUDGET_RATIO", "COMBO_SHARE", "COMBINED_RATIO"),
+    "MAX_VOL_PAR_CHEVAL": (
+        "MAX_VOL_PER_HORSE",
+        "MAX_VOL_PER_CHEVAL",
+        "MAX_STAKE_PER_HORSE",
+        "MAX_STAKE_PAR_CHEVAL",
+    ),
+    "MIN_PAYOUT_COMBOS": ("EXOTIC_MIN_PAYOUT",),
+    "CORRELATION_PENALTY": ("correlation_penalty",),
+    "ROR_MAX": ("ROR_MAX_TARGET",),
+}
+
+_TRUE_VALUES = {"1", "true", "t", "yes", "y", "on"}
+_FALSE_VALUES = {"0", "false", "f", "no", "n", "off"}
+
+
+def _normalize_key(name: str) -> str:
+    return re.sub(r"[^A-Z0-9]+", "", name.upper())
+
+
+def _build_config_alias_map() -> dict[str, str]:
+    alias_map = {_normalize_key(key): key for key in set(REQ_KEYS) | OPTIONAL_KEYS}
+    for canonical, aliases in _ENV_ALIASES.items():
+        for alias in aliases:
+            alias_map[_normalize_key(alias)] = canonical
+    alias_map[_normalize_key("EXOTIC_MIN_PAYOUT")] = "EXOTIC_MIN_PAYOUT"
+    return alias_map
+
+
+_CONFIG_KEY_MAP = _build_config_alias_map()
+
+
+def _resolve_config_key(name: str) -> str | None:
+    return _CONFIG_KEY_MAP.get(_normalize_key(name))
+
+
+def _apply_aliases(raw_cfg: dict) -> dict:
+    resolved: dict[str, object] = {}
+    for key, value in raw_cfg.items():
+        canonical = _resolve_config_key(key)
+        if canonical:
+            if canonical in resolved and canonical != key:
+                continue
+            resolved[canonical] = value
+        else:
+            resolved[key] = value
+    return resolved
+
+
+def _env_aliases(name: str) -> tuple[str, ...]:
+    return tuple(_ENV_ALIASES.get(name, ()))
+
+
+def _as_bool(value: object) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in _TRUE_VALUES:
+            return True
+        if normalized in _FALSE_VALUES:
+            return False
+    raise ValueError(f"Cannot interpret {value!r} as boolean")  # pragma: no cover - defensive
 
 
 METRIC_KEYS = {
@@ -380,13 +461,15 @@ def enforce_ror_threshold(
 
 def load_yaml(path: str) -> dict:
     with open(path, "r", encoding="utf-8") as fh:
-        cfg = yaml.safe_load(fh) or {}
+        raw_cfg = yaml.safe_load(fh) or {}
+
+    cfg = _apply_aliases(raw_cfg)
+
+    cfg.setdefault("ALLOW_JE_NA", False)
+    cfg.setdefault("PAUSE_EXOTIQUES", False)
+    cfg.setdefault("MAX_VOL_PAR_CHEVAL", 0.60)
     cfg.setdefault("REQUIRE_DRIFT_LOG", True)
     cfg.setdefault("REQUIRE_ODDS_WINDOWS", [30, 5])
-    if "EXOTIC_MIN_PAYOUT" in cfg:
-        cfg["MIN_PAYOUT_COMBOS"] = cfg["EXOTIC_MIN_PAYOUT"]
-    else:
-        cfg.setdefault("MIN_PAYOUT_COMBOS", 10.0)
     cfg.setdefault("MAX_TICKETS_SP", 2)
     cfg.setdefault("DRIFT_COEF", 0.05)
     cfg.setdefault("JE_BONUS_COEF", 0.001)
@@ -400,33 +483,84 @@ def load_yaml(path: str) -> dict:
     cfg.setdefault("SNAPSHOTS", "H30,H5")
     cfg.setdefault("DRIFT_TOP_N", 5)
     cfg.setdefault("DRIFT_MIN_DELTA", 0.8)
-    cfg["SNAPSHOTS"] = get_env("SNAPSHOTS", cfg.get("SNAPSHOTS"))
+    
+    payout_default = cfg.get("EXOTIC_MIN_PAYOUT", cfg.get("MIN_PAYOUT_COMBOS"))
+    if payout_default is None:
+        payout_default = 10.0
+    cfg["MIN_PAYOUT_COMBOS"] = payout_default
+    cfg["EXOTIC_MIN_PAYOUT"] = payout_default
+
+    cfg["SNAPSHOTS"] = get_env("SNAPSHOTS", cfg.get("SNAPSHOTS"), aliases=_env_aliases("SNAPSHOTS"))
     cfg["DRIFT_TOP_N"] = get_env(
-    if "correlation_penalty" in cfg:
-        try:
-            cfg["CORRELATION_PENALTY"] = float(cfg["correlation_penalty"])
-        except (TypeError, ValueError):  # pragma: no cover - defensive
-            pass
-    cfg.setdefault("CORRELATION_PENALTY", 0.85)
-        "DRIFT_TOP_N", cfg.get("DRIFT_TOP_N"), cast=int
+        "DRIFT_TOP_N",
+        cfg.get("DRIFT_TOP_N"),
+        cast=int,
     )
     cfg["DRIFT_MIN_DELTA"] = get_env(
-        "DRIFT_MIN_DELTA", cfg.get("DRIFT_MIN_DELTA"), cast=float
+        "DRIFT_MIN_DELTA",
+        cfg.get("DRIFT_MIN_DELTA"),
+        cast=float,
     )
-    cfg["BUDGET_TOTAL"] = get_env("BUDGET_TOTAL", cfg.get("BUDGET_TOTAL"), cast=float)
+    cfg["BUDGET_TOTAL"] = get_env(
+        "BUDGET_TOTAL",
+        cfg.get("BUDGET_TOTAL"),
+        cast=float,
+        aliases=_env_aliases("BUDGET_TOTAL"),
+    )
+    cfg["SP_RATIO"] = get_env(
+        "SP_RATIO",
+        cfg.get("SP_RATIO"),
+        cast=float,
+        aliases=_env_aliases("SP_RATIO"),
+    )
+    cfg["COMBO_RATIO"] = get_env(
+        "COMBO_RATIO",
+        cfg.get("COMBO_RATIO"),
+        cast=float,
+        aliases=_env_aliases("COMBO_RATIO"),
+    )
+    cfg["MAX_VOL_PAR_CHEVAL"] = get_env(
+        "MAX_VOL_PAR_CHEVAL",
+        cfg.get("MAX_VOL_PAR_CHEVAL"),
+        cast=float,
+        aliases=_env_aliases("MAX_VOL_PAR_CHEVAL"),
+    )  
     cfg["EV_MIN_SP"] = get_env("EV_MIN_SP", cfg.get("EV_MIN_SP"), cast=float)
     cfg["EV_MIN_GLOBAL"] = get_env("EV_MIN_GLOBAL", cfg.get("EV_MIN_GLOBAL"), cast=float)
     cfg["ROI_MIN_SP"] = get_env("ROI_MIN_SP", cfg.get("ROI_MIN_SP"), cast=float)
     cfg["ROI_MIN_GLOBAL"] = get_env("ROI_MIN_GLOBAL", cfg.get("ROI_MIN_GLOBAL"), cast=float)
-    cfg["ROR_MAX"] = get_env("ROR_MAX_TARGET", cfg.get("ROR_MAX"), cast=float)
+    cfg["ROR_MAX"] = get_env(
+        "ROR_MAX",
+        cfg.get("ROR_MAX"),
+        cast=float,
+        aliases=_env_aliases("ROR_MAX"),
+    )
+    cfg["SHARPE_MIN"] = get_env("SHARPE_MIN", cfg.get("SHARPE_MIN"), cast=float)
+    cfg["MAX_TICKETS_SP"] = get_env("MAX_TICKETS_SP", cfg.get("MAX_TICKETS_SP"), cast=int)
+    cfg["MIN_STAKE_SP"] = get_env("MIN_STAKE_SP", cfg.get("MIN_STAKE_SP"), cast=float)
+    cfg["DRIFT_COEF"] = get_env("DRIFT_COEF", cfg.get("DRIFT_COEF"), cast=float)
+    cfg["ROUND_TO_SP"] = get_env("ROUND_TO_SP", cfg.get("ROUND_TO_SP"), cast=float)
+    cfg["JE_BONUS_COEF"] = get_env("JE_BONUS_COEF", cfg.get("JE_BONUS_COEF"), cast=float)
+    cfg["KELLY_FRACTION"] = get_env("KELLY_FRACTION", cfg.get("KELLY_FRACTION"), cast=float)
+    cfg["ALLOW_JE_NA"] = get_env("ALLOW_JE_NA", cfg.get("ALLOW_JE_NA"), cast=_as_bool)
+    cfg["PAUSE_EXOTIQUES"] = get_env("PAUSE_EXOTIQUES", cfg.get("PAUSE_EXOTIQUES"), cast=_as_bool)
+    cfg["REQUIRE_DRIFT_LOG"] = get_env("REQUIRE_DRIFT_LOG", cfg.get("REQUIRE_DRIFT_LOG"), cast=_as_bool)
+    cfg["MIN_PAYOUT_COMBOS"] = get_env(
+        "MIN_PAYOUT_COMBOS",
+        cfg.get("MIN_PAYOUT_COMBOS"),
+        cast=float,
+        aliases=_env_aliases("MIN_PAYOUT_COMBOS"),
+    )
+    cfg["EXOTIC_MIN_PAYOUT"] = cfg["MIN_PAYOUT_COMBOS"]
+
+    corr_default = cfg.get("CORRELATION_PENALTY", 0.85)
     cfg["CORRELATION_PENALTY"] = get_env(
         "CORRELATION_PENALTY",
-        cfg.get("CORRELATION_PENALTY"),
+        corr_default,
         cast=float,
+        aliases=_env_aliases("CORRELATION_PENALTY"),
     )
-    exotic_min = get_env("EXOTIC_MIN_PAYOUT", cfg.get("MIN_PAYOUT_COMBOS"), cast=float)
-    cfg["MIN_PAYOUT_COMBOS"] = exotic_min
-    cfg.setdefault("EXOTIC_MIN_PAYOUT", exotic_min)
+    
     missing = [k for k in REQ_KEYS if k not in cfg]
     if missing:
         raise RuntimeError(f"Config incomplète: clés manquantes {missing}")
