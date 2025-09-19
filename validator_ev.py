@@ -2,12 +2,38 @@
 # -*- coding: utf-8 -*-
 
 import os
+from collections.abc import Callable
 from typing import Dict
 
 
 class ValidationError(Exception):
-    """Raised when EV metrics do not meet required thresholds."""
-    
+    """Raised when EV metrics do not meet required thresholds."""    
+
+
+def summarise_validation(*validators: Callable[[], object]) -> dict[str, bool | str]:
+    """Run validators and return a structured summary of the outcome.
+
+    Parameters
+    ----------
+    validators:
+        Callables executing validation logic. They should raise an exception
+        when the validation fails and return a truthy value otherwise.
+
+    Returns
+    -------
+    dict
+        A dictionary with two keys:
+        ``ok`` (bool) indicating whether all validators passed and
+        ``reason`` (str) containing the first failure message or ``""``.
+    """
+
+    for check in validators:
+        try:
+            check()
+        except Exception as exc:
+            return {"ok": False, "reason": str(exc)}
+    return {"ok": True, "reason": ""}
+
 
 def must_have(value, msg):
     """Raise ``RuntimeError`` if ``value`` is falsy."""
