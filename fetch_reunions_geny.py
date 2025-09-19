@@ -26,7 +26,9 @@ def _slugify(value: str) -> str:
 
 def _fetch_reunions() -> List[Dict[str, str]]:
     """Download Geny page and extract reunion data."""
-    resp = requests.get(GENY_URL, headers={"User-Agent": "Mozilla/5.0"})
+    resp = requests.get(
+        GENY_URL, headers={"User-Agent": "Mozilla/5.0"}, timeout=10
+    )
     resp.raise_for_status()
     soup = BeautifulSoup(resp.text, "html.parser")
 
