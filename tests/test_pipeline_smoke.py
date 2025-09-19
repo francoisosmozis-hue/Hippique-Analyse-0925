@@ -10,6 +10,7 @@ import pytest
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import pipeline_run
+import validator_ev
 from simulate_ev import allocate_dutching_sp, gate_ev, simulate_ev_batch
 from pipeline_run import build_p_true, compute_drift_dict, load_yaml
 
@@ -183,6 +184,7 @@ def test_smoke_run(tmp_path):
     assert (outdir / "cmd_update_excel.txt").exists()
 
     data = json.loads((outdir / "p_finale.json").read_text(encoding="utf-8"))
+    assert data["meta"].get("validation") == {"ok": True, "reason": ""}
     assert data["meta"]["snapshots"] == "H30,H5"
     assert data["meta"]["drift_top_n"] == 5
     assert data["meta"]["drift_min_delta"] == 0.8
@@ -303,6 +305,56 @@ def test_smoke_run(tmp_path):
     assert not flags_ror["sp"]
     assert not flags_ror["combo"]
 
+
+
+def test_pipeline_validation_failure_reports_summary(tmp_path, monkeypatch):
+    invalid_partants = partants_sample()
+    invalid_partants["runners"] = invalid_partants["runners"][:5]
+
+    h30_path = tmp_path / "h30.json"
+    h5_path = tmp_path / "h5.json"
+    stats_path = tmp_path / "stats_je.json"
+    partants_path = tmp_path / "partants.json"
+    gpi_path = tmp_path / "gpi.yml"
+
+    h30_path.write_text(json.dumps(odds_h30()), encoding="utf-8")
+    h5_path.write_text(json.dumps(odds_h5()), encoding="utf-8")
+    stats_path.write_text(json.dumps(stats_sample()), encoding="utf-8")
+    partants_path.write_text(json.dumps(invalid_partants), encoding="utf-8")
+    gpi_path.write_text(GPI_YML, encoding="utf-8")
+
+    captured_summary: dict[str, object] = {}
+    real_summary = validator_ev.summarise_validation
+
+    def recording_summary(*validators):
+        result = real_summary(*validators)
+        captured_summary.clear()
+        captured_summary.update(result)
+        return result
+
+    monkeypatch.setattr(pipeline_run, "summarise_validation", recording_summary)
+
+    args = argparse.Namespace(
+        h30=str(h30_path),
+        h5=str(h5_path),
+        stats_je=str(stats_path),
+        partants=str(partants_path),
+        gpi=str(gpi_path),
+        outdir=str(tmp_path / "out"),
+        diff=None,
+        budget=None,
+        ev_global=None,
+        roi_global=None,
+        max_vol=None,
+        min_payout=None,
+        allow_je_na=False,
+    )
+
+    with pytest.raises(validator_ev.ValidationError, match="Nombre de partants"):
+        pipeline_run.cmd_analyse(args)
+
+    assert captured_summary.get("ok") is False
+    assert "partants" in str(captured_summary.get("reason", "")).lower()
 
 
 def test_reallocate_combo_budget_to_sp(tmp_path):
