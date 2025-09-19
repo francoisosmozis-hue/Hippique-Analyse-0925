@@ -1,58 +1,55 @@
 # cloud/app.py
-import os
-import subprocess
+import os, json, glob, subprocess
 from datetime import datetime
 from typing import Dict, Optional
 
-from fastapi import FastAPI, Body, HTTPException, Header
+from fastapi import FastAPI, Body, HTTPException
 from dotenv import load_dotenv
 
-# Charge le .env monté depuis Secret Manager
 ENV_PATH = "/secrets/.env"
 if os.path.exists(ENV_PATH):
     load_dotenv(ENV_PATH)
 
-# --- timezone util ---
-def now_paris_iso() -> str:
+app = FastAPI()
+
+def now_fr():
     try:
-        # Python 3.9+ : zoneinfo
         from zoneinfo import ZoneInfo
         return datetime.now(ZoneInfo("Europe/Paris")).isoformat(timespec="seconds")
     except Exception:
-        # Fallback UTC si tz absente
-        return datetime.utcnow().isoformat(timespec="seconds") + "Z"
+        return datetime.utcnow().isoformat(timespec="seconds")+"Z"
 
-app = FastAPI()
+def run_cmd(args: list[str]) -> int:
+    print(">>", " ".join(args), flush=True)
+    return subprocess.call(args, cwd="/app")
+
+def find_latest_json() -> Optional[str]:
+    """
+    Cherche un fichier JSON de pronostics produit par le pipeline.
+    Adapte les motifs selon ton projet si besoin.
+    """
+    candidates = []
+    # exemples de fichiers présents dans ton dépôt
+    patterns = [
+        "/app/*.json",
+        "/app/out/*.json",
+        "/app/results/*.json",
+        "/app/p_finale*.json",
+    ]
+    for p in patterns:
+        candidates.extend(glob.glob(p))
+    if not candidates:
+        return None
+    candidates.sort(key=lambda p: os.path.getmtime(p), reverse=True)
+    return candidates[0]
 
 @app.get("/health")
 def health():
     return {"ok": True, "budget": os.getenv("GPI_BUDGET", "5")}
 
-def run_cmd(args: list[str]) -> tuple[int, str, str]:
-    """Exécute un script et renvoie (code, stdout, stderr)."""
-    print(">>", " ".join(args), flush=True)
-    p = subprocess.run(args, cwd="/app", capture_output=True, text=True)
-    # log court en sortie serveur
-    if p.stdout:
-        print(p.stdout[-1200:], flush=True)
-    if p.stderr:
-        print("STDERR:", p.stderr[-1200:], flush=True)
-    return p.returncode, (p.stdout or ""), (p.stderr or "")
-
-def tail(text: str, n_chars: int = 800) -> str:
-    return text[-n_chars:] if text else ""
-
 @app.post("/run/hminus")
-def run_hminus(
-    payload: Dict = Body(...),
-    x_api_key: Optional[str] = Header(None)  # active si tu as mis API_KEY dans .env
-):
-    # Sécurité simple optionnelle
-    api_key = os.getenv("API_KEY")
-    if api_key and x_api_key != api_key:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-
-    # Paramètres reçus
+def run_hminus(payload: Dict = Body(...)):
+    """Lance l'analyse + export JSON, puis renvoie un résumé + chemin du fichier."""
     R = payload.get("R") or payload.get("reunion")
     C = payload.get("C") or payload.get("course")
     when = payload.get("when", "H-5")
@@ -63,50 +60,52 @@ def run_hminus(
     if not (R and C) and not (course_url or reunion_url):
         raise HTTPException(status_code=400, detail="R/C ou course_url/reunion_url requis")
 
-    # 1) Analyse enrichie
+    # 1) Analyse
     cmd = ["python", "analyse_courses_du_jour_enrichie.py", "--phase", when, "--budget", budget]
-    if R and C:
-        cmd += ["--reunion", R, "--course", C]
-    if course_url:
-        cmd += ["--course-url", course_url]
-    if reunion_url:
-        cmd += ["--reunion-url", reunion_url]
+    if R and C: cmd += ["--reunion", R, "--course", C]
+    if course_url: cmd += ["--course-url", course_url]
+    if reunion_url: cmd += ["--reunion-url", reunion_url]
+    rc1 = run_cmd(cmd)
 
-    rc1, out1, err1 = run_cmd(cmd)
+    # 2) Validation
+    rc2 = run_cmd(["python", "validator_ev.py",
+                   "--reunion", R or "", "--course", C or "", "--rules", "gpi_v51.yml"])
 
-    # 2) Validation EV/ROI
-    rc2, out2, err2 = run_cmd([
-        "python", "validator_ev.py",
-        "--reunion", R or "", "--course", C or "", "--rules", "gpi_v51.yml"
-    ])
+    # 3) Export JSON (si ton projet l’utilise ; sinon commente cette ligne)
+    # Beaucoup de setups exportent un JSON final ici :
+    if os.path.exists("/app/p_finale_export.py"):
+        _ = run_cmd(["python", "p_finale_export.py"])
 
-    ok = (rc1 == 0 and rc2 == 0)
-
-    # Sauvegarde d’un mini récap dans /tmp (utile si tu veux une route /last)
+    latest = find_latest_json()
     summary = {
-        "ok": ok,
-        "timestamp": now_paris_iso(),
+        "ok": (rc1 == 0 and rc2 == 0),
+        "timestamp": now_fr(),
         "reunion": R, "course": C, "phase": when,
         "course_url": course_url, "reunion_url": reunion_url,
         "rc_analysis": rc1, "rc_validator": rc2,
-        "log_excerpt": tail(out1 or err1 or "")  # extrait court pour voir la course traitée
+        "json_path": latest
     }
+    # On garde un mémo du dernier run
     try:
-        import json
         with open("/tmp/last_run.json", "w", encoding="utf-8") as f:
             json.dump(summary, f, ensure_ascii=False)
     except Exception:
         pass
-
     return summary
 
 @app.get("/last")
 def last():
-    """Retourne le dernier récap /run/hminus enregistré."""
+    """
+    Renvoie le DERNIER pronostic complet (JSON) trouvé sur le disque.
+    Idéal pour affichage direct sur Android.
+    """
+    latest = find_latest_json()
+    if not latest:
+        raise HTTPException(status_code=404, detail="Aucun fichier JSON de pronostic trouvé.")
     try:
-        import json
-        with open("/tmp/last_run.json", "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        raise HTTPException(status_code=404, detail="Aucun run enregistré pour le moment.")
-etenv("PORT", "8080")))
+        with open(latest, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        # tu peux ici filtrer/renommer des champs si besoin
+        return {"file": latest, "data": data}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Impossible de lire {latest}: {e}")
