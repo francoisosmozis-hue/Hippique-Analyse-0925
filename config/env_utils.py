@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Callable, TypeVar, Optional
+from typing import Callable, Optional, Sequence, TypeVar
 
 T = TypeVar("T")
 
@@ -24,6 +24,7 @@ def get_env(
     *,
     cast: Callable[[str], T] = lambda x: x,  # type: ignore[assignment]
     required: bool = False,
+    aliases: Sequence[str] | None = None,
 ) -> T:
     """Fetch *name* from the environment with validation.
 
@@ -43,12 +44,27 @@ def get_env(
     T
         The environment variable converted to the desired type or ``default``.
     """
-    raw = os.getenv(name)
-    if raw is None or raw == "":
+    keys = [name]
+    if aliases:
+        keys.extend(aliases)
+
+    raw: str | None = None
+    source = name
+    for candidate in keys:
+        candidate_val = os.getenv(candidate)
+        if candidate_val is None or candidate_val == "":
+            continue
+        raw = candidate_val
+        source = candidate
+        break
+
+    if raw is None:
         if required:
             raise RuntimeError(f"Missing required environment variable '{name}'")
         if default is not None:
-            logger.warning("Environment variable %s not set, using default %r", name, default)
+            logger.info("Environment variable %s=%r overrides default %r", source, value, default)
+    elif source != name:
+        logger.info("Environment variable %s=%r used as alias for %s", source, value, name)
             return default
         logger.warning("Environment variable %s not set", name)
         return default  # type: ignore[return-value]
