@@ -104,14 +104,23 @@ def gate_ev(
     min_payout_combos: float,
     risk_of_ruin: float = 0.0,
     ev_over_std: float = 0.0,
+    homogeneous_field: bool = False,
 ) -> Dict[str, Any]:
-    """Return activation flags and failure reasons for SP and combinés."""
+    """Return activation flags and failure reasons for SP and combinés.
+
+    When ``homogeneous_field`` is true the SP EV threshold falls back to
+    ``EV_MIN_SP_HOMOGENEOUS`` when provided in the configuration.
+    """
 
     reasons = {"sp": [], "combo": []}
     
     sp_budget = float(cfg.get("BUDGET_TOTAL", 0.0)) * float(cfg.get("SP_RATIO", 1.0))
     
-    if ev_sp < float(cfg.get("EV_MIN_SP", 0.0)) * sp_budget:
+    ev_min_sp_ratio = float(cfg.get("EV_MIN_SP", 0.0))
+    if homogeneous_field:
+        ev_min_sp_ratio = float(cfg.get("EV_MIN_SP_HOMOGENEOUS", ev_min_sp_ratio))
+
+    if ev_sp < ev_min_sp_ratio * sp_budget:
         reasons["sp"].append("EV_MIN_SP")
     if roi_sp < float(cfg.get("ROI_MIN_SP", 0.0)):
         reasons["sp"].append("ROI_MIN_SP")
