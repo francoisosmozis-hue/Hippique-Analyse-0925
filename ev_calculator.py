@@ -174,8 +174,8 @@ def compute_ev_roi(
     simulate_fn: Optional[Callable[[Iterable[Any]], float]] = None,
     *,
     cache_simulations: bool = True,
-    ev_threshold: float = 0.40,
-    roi_threshold: float = 0.20,
+     ev_threshold: float = 0.35,
+    roi_threshold: float = 0.25,
     kelly_cap: float = 0.60,
     round_to: float = 0.10,
     optimize: bool = False,
@@ -506,8 +506,8 @@ def compute_ev_roi(
             reasons.append(f"EV ratio below {ev_threshold:.2f}")
         if roi_opt < roi_threshold:
             reasons.append(f"ROI below {roi_threshold:.2f}")
-        if has_combined and opt_combined_payout <= 10:
-            reasons.append("expected payout for combined bets ≤ 10€")
+        if has_combined and opt_combined_payout <= 12:
+            reasons.append("expected payout for combined bets ≤ 12€")
         if variance_exceeded_opt:
             reasons.append(f"variance above {variance_cap:.2f} * bankroll^2")
 
@@ -543,8 +543,8 @@ def compute_ev_roi(
         reasons.append(f"EV ratio below {ev_threshold:.2f}")
     if roi_total < roi_threshold:
         reasons.append(f"ROI below {roi_threshold:.2f}")
-    if has_combined and combined_expected_payout <= 10:
-        reasons.append("expected payout for combined bets ≤ 10€")
+    if has_combined and combined_expected_payout <= 12:
+        reasons.append("expected payout for combined bets ≤ 12€")
     if variance_exceeded:
         reasons.append(f"variance above {variance_cap:.2f} * bankroll^2")
 
