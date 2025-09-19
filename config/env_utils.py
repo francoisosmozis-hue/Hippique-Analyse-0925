@@ -1,16 +1,10 @@
-"""Helpers for reading environment variables with validation.
-
-This module provides :func:`get_env` which retrieves an environment
-variable with optional type casting and default values. When the variable
-is missing a warning is emitted; when a value is provided it logs that the
-configuration has been overridden.
-"""
+"""Utilities for reading environment-backed configuration values."""
 
 from __future__ import annotations
 
 import logging
 import os
-from typing import Callable, Optional, Sequence, TypeVar
+from typing import Callable, Sequence, TypeVar
 
 T = TypeVar("T")
 
@@ -18,62 +12,64 @@ T = TypeVar("T")
 logger = logging.getLogger(__name__)
 
 
+def _iter_candidates(name: str, aliases: Sequence[str] | None) -> list[str]:
+    """Return the ordered list of environment variable names to inspect."""
+
+    if not aliases:
+        return [name]
+    return [name, *aliases]
+
 def get_env(
     name: str,
-    default: Optional[T] = None,
+    default: T | None = None,
     *,
     cast: Callable[[str], T] = lambda x: x,  # type: ignore[assignment]
     required: bool = False,
     aliases: Sequence[str] | None = None,
 ) -> T:
-    """Fetch *name* from the environment with validation.
+    """Fetch an environment variable and coerce it to the desired type.
 
     Parameters
     ----------
     name:
-        Name of the environment variable.
+        Canonical name of the environment variable to resolve.
     default:
-        Fallback value when the variable is missing.
+        Fallback value returned when the variable is not present.
     cast:
-        Callable used to convert the raw string to the expected type.
+        Callable used to convert the raw string value to ``T``.
     required:
         When ``True`` a missing variable triggers a ``RuntimeError``.
 
-    Returns
-    -------
-    T
-        The environment variable converted to the desired type or ``default``.
+    aliases:
+        Optional iterable of alternative environment variable names.
     """
-    keys = [name]
-    if aliases:
-        keys.extend(aliases)
-
-    raw: str | None = None
+    
+    raw_value: str | None = None
     source = name
-    for candidate in keys:
+    for candidate in _iter_candidates(name, aliases):
         candidate_val = os.getenv(candidate)
-        if candidate_val is None or candidate_val == "":
+        if candidate_val in (None, ""):
             continue
-        raw = candidate_val
+        raw_value = candidate_val
         source = candidate
         break
 
-    if raw is None:
+    if raw_value is None:
         if required:
             raise RuntimeError(f"Missing required environment variable '{name}'")
-        if default is not None:
-            logger.info("Environment variable %s=%r overrides default %r", source, value, default)
-    elif source != name:
-        logger.info("Environment variable %s=%r used as alias for %s", source, value, name)
-            return default
-        logger.warning("Environment variable %s not set", name)
+        logger.warning("Environment variable %s not set; using default %r", name, default)
         return default  # type: ignore[return-value]
+        
     try:
-        value = cast(raw)
+        value = cast(raw_value)
     except Exception as exc:  # pragma: no cover - defensive
         raise RuntimeError(
-            f"Invalid value for environment variable '{name}': {raw!r}"
+            f"Invalid value for environment variable '{name}': {raw_value!r}"
         ) from exc
+
+    if source != name:
+        logger.info("Environment variable %s=%r used as alias for %s", source, value, name)
+        
     if default is not None and value != default:
-        logger.info("Environment variable %s=%r overrides default %r", name, value, default)
+        logger.info("Environment variable %s=%r overrides default %r", source, value, default)
     return value
