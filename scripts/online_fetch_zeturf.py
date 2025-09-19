@@ -55,6 +55,8 @@ def fetch_meetings(url: str) -> Any:
             return _fetch_from_geny()
             
         raise
+    except requests.RequestException:
+        return _fetch_from_geny()
 
 
 def filter_today(meetings: Any) -> List[Dict[str, Any]]:
