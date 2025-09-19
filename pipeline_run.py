@@ -192,6 +192,10 @@ METRIC_KEYS = {
     "stake",
     "max_stake",
     "optimized_stake",
+    "expected_payout",
+    "optimized_expected_payout",
+    "sharpe",
+    "optimized_sharpe",
 }
 
 
