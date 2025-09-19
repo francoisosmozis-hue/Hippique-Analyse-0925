@@ -30,7 +30,7 @@ def test_main_parses_geny_page(monkeypatch: pytest.MonkeyPatch, capsys: pytest.C
     </section>
     """
 
-    def fake_get(url: str, headers: dict[str, str]) -> DummyResp:
+    def fake_get(url: str, headers: dict[str, str], **kwargs) -> DummyResp:
         assert url == dgt.URL
         return DummyResp(html)
 
