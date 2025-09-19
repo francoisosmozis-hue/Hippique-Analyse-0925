@@ -416,7 +416,7 @@ def test_green_flag_true_when_thresholds_met() -> None:
         (
             [{"p": 0.8, "odds": 2.5, "legs": ["leg1", "leg2"]}],
             10,
-            ["expected payout for combined bets ≤ 10€"],
+            ["expected payout for combined bets ≤ 12€"],
         ),
     ],
 )
