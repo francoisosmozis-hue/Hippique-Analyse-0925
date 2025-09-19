@@ -1,6 +1,9 @@
+import json
 import os
+import subprocess
 import sys
 from functools import partial
+from pathlib import Path
 
 import pytest
  
@@ -128,3 +131,27 @@ def test_summarise_validation_failure_returns_reason():
     assert "partants" in summary["reason"].lower()
     with pytest.raises(ValidationError):
         validate_inputs(cfg, partants, odds, stats)
+
+
+def test_validator_cli_returns_non_zero_on_failure(tmp_path):
+    script = Path(__file__).resolve().parents[1] / "validator_ev.py"
+    artefacts_dir = tmp_path
+
+    partants = {"runners": _sample_partants(5)}
+    odds = {str(i): float(i + 1) for i in range(1, 6)}
+    stats = {"coverage": 90}
+
+    (artefacts_dir / "partants.json").write_text(json.dumps(partants), encoding="utf-8")
+    (artefacts_dir / "h5.json").write_text(json.dumps(odds), encoding="utf-8")
+    (artefacts_dir / "stats_je.json").write_text(json.dumps(stats), encoding="utf-8")
+
+    result = subprocess.run(
+        [sys.executable, str(script), "--artefacts", str(artefacts_dir)],
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    summary = json.loads(result.stdout.strip())
+    assert summary.get("ok") is False
+    assert "partants" in summary.get("reason", "").lower()
