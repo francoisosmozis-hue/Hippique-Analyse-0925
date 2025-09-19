@@ -54,14 +54,14 @@ def test_validate_policy_fail_roi():
 
 
 def test_validate_combos_pass():
-    # Defaults to a minimum payout of 10.0
-    assert validate_combos(expected_payout=12.0)
+    # Defaults to a minimum payout of 12.0
+    assert validate_combos(expected_payout=13.0)
 
 
 def test_validate_combos_fail_default():
-    # When no minimum payout is provided the default (10.0) is applied
+    # When no minimum payout is provided the default (12.0) is applied
     with pytest.raises(ValidationError):
-        validate_combos(expected_payout=8.0)
+        validate_combos(expected_payout=11.0)
 
 
 def _sample_partants(n=6):
