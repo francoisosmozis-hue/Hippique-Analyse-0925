@@ -247,6 +247,7 @@ def compute_ev_roi(
     total_variance = 0.0
     total_stake = 0.0
     combined_expected_payout = 0.0
+    ev_calculator.py
     has_combined = False
     total_clv = 0.0
     clv_count = 0
@@ -359,18 +360,25 @@ def compute_ev_roi(
         ev = stake * (p * (odds - 1) - (1 - p))
         variance = p * (stake * (odds - 1)) ** 2 + (1 - p) * (-stake) ** 2 - ev ** 2
         roi = ev / stake if stake else 0.0
+        expected_payout = p * stake * odds
+        ticket_variance = max(variance, 0.0)
+        ticket_std = math.sqrt(ticket_variance)
+        sharpe_ticket = ev / ticket_std if ticket_std else 0.0
         metrics = {
             "kelly_stake": d["kelly_stake"],
             "stake": stake,
             "ev": ev,
             "roi": roi,
-            "variance": variance,
+            "variance": ticket_variance,
             "clv": d["clv"],
+            "expected_payout": expected_payout,
+            "sharpe": sharpe_ticket,
         }
         t.update(metrics)
         ticket_metrics.append(metrics)
         total_ev += ev
-        total_variance += variance
+        total_variance += ticket_variance
+        total_expected_payout += expected_payout
         if "legs" in t:
             combined_expected_payout += p * stake * odds
 
@@ -384,12 +392,15 @@ def compute_ev_roi(
             metrics["stake"] *= scale
             metrics["ev"] *= scale
             metrics["variance"] *= scale ** 2
+            t["expected_payout"] *= scale
+            metrics["expected_payout"] *= scale
             t["roi"] = t["ev"] / t["stake"] if t["stake"] else 0.0
             metrics["roi"] = t["roi"]
         total_ev *= scale
         combined_expected_payout *= scale
         total_variance *= scale ** 2
         total_stake_normalized = budget
+        total_expected_payout *= scale
 
     variance_exceeded = False
     var_limit = variance_cap * budget ** 2 if variance_cap is not None else None
@@ -403,12 +414,15 @@ def compute_ev_roi(
             metrics["stake"] *= scale
             metrics["ev"] *= scale
             metrics["variance"] *= scale ** 2
+            t["expected_payout"] *= scale
+            metrics["expected_payout"] *= scale
             t["roi"] = t["ev"] / t["stake"] if t["stake"] else 0.0
             metrics["roi"] = t["roi"]
         total_ev *= scale
         combined_expected_payout *= scale
         total_variance *= scale ** 2
         total_stake_normalized *= scale
+        total_expected_payout *= scale
 
     roi_total = total_ev / total_stake_normalized if total_stake_normalized else 0.0
     ev_ratio = total_ev / budget if budget else 0.0
@@ -427,6 +441,7 @@ def compute_ev_roi(
         opt_stake_sum = 0.0
         opt_combined_payout = 0.0
         optimized_metrics: List[Dict[str, float]] = []
+        opt_expected_payout = 0.0
         for t, stake_opt in zip(tickets, optimized_stakes):
             p = t["p"]
             odds = t["odds"]
@@ -437,19 +452,28 @@ def compute_ev_roi(
                 - ev ** 2
             )
             roi = ev / stake_opt if stake_opt else 0.0
+            expected_payout = p * stake_opt * odds
+            ticket_variance = max(variance, 0.0)
+            ticket_std = math.sqrt(ticket_variance)
+            sharpe_ticket = ev / ticket_std if ticket_std else 0.0
             metrics = {
                 "kelly_stake": _kelly_fraction(p, odds) * budget,
                 "stake": stake_opt,
                 "ev": ev,
                 "roi": roi,
-                "variance": variance,
+                "variance": ticket_variance,
                 "clv": t.get("clv", 0.0),
+                "expected_payout": expected_payout,
+                "sharpe": sharpe_ticket,
             }
             optimized_metrics.append(metrics)
             t["optimized_stake"] = stake_opt
+            t["optimized_expected_payout"] = expected_payout
+            t["optimized_sharpe"] = sharpe_ticket
             opt_ev += ev
-            opt_variance += variance
+            opt_variance += ticket_variance
             opt_stake_sum += stake_opt
+            opt_expected_payout += expected_payout
             if "legs" in t:
                 opt_combined_payout += p * stake_opt * odds
 
@@ -463,10 +487,13 @@ def compute_ev_roi(
                 metrics["variance"] *= scale ** 2
                 stake_scaled = stake_opt * scale
                 t["optimized_stake"] = stake_scaled
+                metrics["expected_payout"] *= scale
+                t["optimized_expected_payout"] *= scale
             opt_ev *= scale
             opt_variance *= scale ** 2
             opt_stake_sum *= scale
             opt_combined_payout *= scale
+            opt_expected_payout *= scale
 
         roi_opt = opt_ev / opt_stake_sum if opt_stake_sum else 0.0
         ev_ratio_opt = opt_ev / budget if budget else 0.0
@@ -502,6 +529,10 @@ def compute_ev_roi(
             "ticket_metrics_individual": baseline_metrics,
             "optimized_stakes": optimized_stakes,
             "combined_expected_payout": opt_combined_payout,
+            "calibrated_expected_payout": opt_expected_payout,
+            "calibrated_expected_payout_individual": total_expected_payout,
+            "sharpe": ev_over_std_opt,
+            "sharpe_individual": ev_over_std,
         }
         if not green_flag:
             result["failure_reasons"] = reasons
@@ -532,6 +563,8 @@ def compute_ev_roi(
         "variance": total_variance,
         "ticket_metrics": ticket_metrics,
         "combined_expected_payout": combined_expected_payout,
+        "calibrated_expected_payout": total_expected_payout,
+        "sharpe": ev_over_std,
     }
     if not green_flag:
         result["failure_reasons"] = reasons
