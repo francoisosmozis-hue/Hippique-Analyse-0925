@@ -33,8 +33,8 @@ def test_run_hminus_invokes_script(monkeypatch):
     assert recorded["cwd"] == str(cloud_app.ROOT)
     cmd = recorded["cmd"]
     assert cmd[0] == sys.executable
-    assert cmd[1] == str(cloud_app.SCRIPT)
-    assert cmd[2:] == ["--reunion", "R1", "--course", "C2", "--phase", "H5"]
+    assert cmd[1] == str(cloud_app.VALIDATOR_SCRIPT)
+    assert cmd[2:] == ["--artefacts", str(cloud_app.DATA_ROOT / "R1C2"), "--phase", "H5"]
 
 
 @pytest.mark.parametrize(
