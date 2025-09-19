@@ -42,7 +42,7 @@ jobs:
       GENY_COOKIE: ${{ secrets.GENY_COOKIE }}
       PYPI_EXTRA_INDEX: ${{ secrets.PYPI_EXTRA_INDEX }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: actions/setup-python@v5
         with:
