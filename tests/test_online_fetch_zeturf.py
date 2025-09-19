@@ -274,6 +274,11 @@ def test_normalize_snapshot_with_program_numbers() -> None:
     assert ids == ["1", "2"]
     assert normalized["id2name"] == {"1": "Alpha", "2": "Bravo"}
     assert len(ids) == len(set(ids)) == len(normalized["id2name"])
+    assert normalized["odds"] == {"1": 5.0, "2": 7.0}
+    assert set(normalized["p_imp"]) == {"1", "2"}
+    expected = (1 / 5.0) / ((1 / 5.0) + (1 / 7.0))
+    assert normalized["runners"][0]["p_imp"] == pytest.approx(expected)
+    assert sum(normalized["p_imp"].values()) == pytest.approx(1.0)
 
 
 @pytest.mark.parametrize("mode", ["h30", "h5"])
@@ -300,6 +305,8 @@ def test_main_snapshot_modes(mode: str, tmp_path: Path, monkeypatch: pytest.Monk
     assert data["rc"] == "R1C1"
     assert data["runners"][0]["odds"] == 5.0
     assert data["id2name"]["1"] == "A"
+    assert data["runners"][0]["p_imp"] > 0
+    assert sum(data["p_imp"].values()) == pytest.approx(1.0)
 
 
 def test_main_diff_mode(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
