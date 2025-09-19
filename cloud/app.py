@@ -160,3 +160,28 @@ if Flask is not None:  # pragma: no cover - exercised in production
     app = flask_app
 else:  # pragma: no cover - exported for consistency
     app = None
+
+from fastapi import Body
+import subprocess, os
+
+@app.post("/run/hminus")
+def run_hminus(payload: dict = Body(...)):
+    # Extraire les paramètres
+    course_url = payload.get("course_url")
+    reunion_url = payload.get("reunion_url")
+    phase = payload.get("when", "H5")  # par défaut H5
+
+    budget = os.getenv("GPI_BUDGET", "5")
+
+    if not course_url and not reunion_url:
+        return {"ok": False, "error": "course_url ou reunion_url requis"}
+
+    cmd = ["python", "analyse_courses_du_jour_enrichie.py", "--phase", phase, "--budget", budget]
+    if course_url:
+        cmd += ["--course-url", course_url]
+    if reunion_url:
+        cmd += ["--reunion-url", reunion_url]
+
+    rc = subprocess.call(cmd)
+    return {"ok": rc == 0, "phase": phase, "url": course_url or reunion_url}
+
