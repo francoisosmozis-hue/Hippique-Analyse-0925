@@ -18,12 +18,14 @@ GPI_YML = """\
 BUDGET_TOTAL: 5
 SP_RATIO: 0.6
 COMBO_RATIO: 0.4
-EV_MIN_SP: 0.20
-EV_MIN_GLOBAL: 0.40
-ROI_MIN_GLOBAL: 0.20
+EV_MIN_SP: 0.15
+EV_MIN_SP_HOMOGENEOUS: 0.10
+EV_MIN_GLOBAL: 0.35
+ROI_MIN_SP: 0.10
+ROI_MIN_GLOBAL: 0.25
 ROR_MAX: 0.05
 MAX_VOL_PAR_CHEVAL: 0.60
-MIN_PAYOUT_COMBOS: 10.0
+MIN_PAYOUT_COMBOS: 12.0
 correlation_penalty: 0.85
 MAX_TICKETS_SP: 1
 ALLOW_JE_NA: true
@@ -36,7 +38,7 @@ JE_BONUS_COEF: 0.001
 MIN_STAKE_SP: 0.10
 ROUND_TO_SP: 0.10
 KELLY_FRACTION: 0.5
-SHARPE_MIN: 0.0
+SHARPE_MIN: 0.5
 MODEL: "GPI v5.1"
 """
 
@@ -167,9 +169,9 @@ def test_smoke_run(tmp_path):
         "--budget",
         "5",
         "--ev-global",
-        "0.40",
+        "0.35",
         "--roi-global",
-        "0.40",
+        "0.25",
         "--max-vol",
         "0.60",
         "--allow-je-na",
@@ -238,7 +240,10 @@ def test_smoke_run(tmp_path):
     assert cfg_full["MIN_STAKE_SP"] == 0.10
     assert cfg_full["ROUND_TO_SP"] == 0.10
     assert cfg_full["KELLY_FRACTION"] == 0.5
-    assert cfg_full["SHARPE_MIN"] == 0.0
+    assert cfg_full["EV_MIN_SP_HOMOGENEOUS"] == 0.10
+    assert cfg_full["ROI_MIN_SP"] == 0.10
+    assert cfg_full["ROI_MIN_GLOBAL"] == 0.25
+    assert cfg_full["SHARPE_MIN"] == 0.5
     # Ensure selected ticket has the highest individual EV
     cfg_full = yaml.safe_load(GPI_YML)
     cfg_full["MIN_STAKE_SP"] = 0.1
@@ -267,7 +272,7 @@ def test_smoke_run(tmp_path):
         "EV_MIN_GLOBAL": 0.0,
         "ROI_MIN_SP": 0.5,
         "ROI_MIN_GLOBAL": 0.5,
-        "MIN_PAYOUT_COMBOS": 10.0,
+        "MIN_PAYOUT_COMBOS": 12.0,
         "ROR_MAX": 1.0,
     }
     stats_ev = simulate_ev_batch(tickets, bankroll=cfg["BUDGET_TOTAL"])
@@ -377,8 +382,8 @@ def test_reallocate_combo_budget_to_sp(tmp_path):
     partants_path.write_text(json.dumps(partants), encoding="utf-8")
 
     gpi_txt = (
-        GPI_YML.replace("EV_MIN_SP: 0.20", "EV_MIN_SP: 0.0")
-        .replace("EV_MIN_GLOBAL: 0.40", "EV_MIN_GLOBAL: 10.0")
+        GPI_YML.replace("EV_MIN_SP: 0.15", "EV_MIN_SP: 0.0")
+        .replace("EV_MIN_GLOBAL: 0.35", "EV_MIN_GLOBAL: 10.0")
         .replace("ROR_MAX: 0.05", "ROR_MAX: 1.0")
     )
     gpi_path.write_text(gpi_txt, encoding="utf-8")
@@ -409,7 +414,7 @@ def test_reallocate_combo_budget_to_sp(tmp_path):
         "--ev-global",
         "10.0",
         "--roi-global",
-        "0.40",
+        "0.25",
         "--max-vol",
         "0.60",
         "--allow-je-na",
@@ -427,7 +432,10 @@ def test_reallocate_combo_budget_to_sp(tmp_path):
     assert cfg_full["MIN_STAKE_SP"] == 0.10
     assert cfg_full["ROUND_TO_SP"] == 0.10
     assert cfg_full["KELLY_FRACTION"] == 0.5
-    assert cfg_full["SHARPE_MIN"] == 0.0
+    assert cfg_full["EV_MIN_SP_HOMOGENEOUS"] == 0.10
+    assert cfg_full["ROI_MIN_SP"] == 0.10
+    assert cfg_full["ROI_MIN_GLOBAL"] == 0.25
+    assert cfg_full["SHARPE_MIN"] == 0.5
     p_true = build_p_true(cfg_full, partants["runners"], h5, h30, stats)
     runners = [
         {
@@ -470,11 +478,12 @@ def test_high_risk_pack_is_trimmed(tmp_path, monkeypatch):
         .replace("BUDGET_TOTAL: 5", "BUDGET_TOTAL: 100")
         .replace("SP_RATIO: 0.6", "SP_RATIO: 1.0")
         .replace("COMBO_RATIO: 0.4", "COMBO_RATIO: 0.0")
-        .replace("EV_MIN_SP: 0.20", "EV_MIN_SP: 0.0")
-        .replace("EV_MIN_GLOBAL: 0.40", "EV_MIN_GLOBAL: 0.0")
-        .replace("ROI_MIN_GLOBAL: 0.20", "ROI_MIN_GLOBAL: 0.0")
+        .replace("EV_MIN_SP: 0.15", "EV_MIN_SP: 0.0")
+        .replace("EV_MIN_GLOBAL: 0.35", "EV_MIN_GLOBAL: 0.0")
+        .replace("ROI_MIN_GLOBAL: 0.25", "ROI_MIN_GLOBAL: 0.0")
         .replace("ROR_MAX: 0.05", "ROR_MAX: 0.01")
         .replace("MAX_VOL_PAR_CHEVAL: 0.60", "MAX_VOL_PAR_CHEVAL: 0.90")
+        .replace("SHARPE_MIN: 0.5", "SHARPE_MIN: 0.0")
         .replace("KELLY_FRACTION: 0.5", "KELLY_FRACTION: 1.0")
     )
 
@@ -595,12 +604,13 @@ def test_combo_pack_scaled_not_removed(tmp_path, monkeypatch):
         .replace("BUDGET_TOTAL: 5", "BUDGET_TOTAL: 100")
         .replace("SP_RATIO: 0.6", "SP_RATIO: 0.5")
         .replace("COMBO_RATIO: 0.4", "COMBO_RATIO: 0.5")
-        .replace("EV_MIN_SP: 0.20", "EV_MIN_SP: 0.0")
-        .replace("EV_MIN_GLOBAL: 0.40", "EV_MIN_GLOBAL: 0.0")
-        .replace("ROI_MIN_GLOBAL: 0.20", "ROI_MIN_GLOBAL: 0.0")
-        .replace("MIN_PAYOUT_COMBOS: 10.0", "MIN_PAYOUT_COMBOS: 0.0")
+        .replace("EV_MIN_SP: 0.15", "EV_MIN_SP: 0.0")
+        .replace("EV_MIN_GLOBAL: 0.35", "EV_MIN_GLOBAL: 0.0")
+        .replace("ROI_MIN_GLOBAL: 0.25", "ROI_MIN_GLOBAL: 0.0")
+        .replace("MIN_PAYOUT_COMBOS: 12.0", "MIN_PAYOUT_COMBOS: 0.0")
         .replace("ROR_MAX: 0.05", "ROR_MAX: 0.02")
         .replace("MAX_VOL_PAR_CHEVAL: 0.60", "MAX_VOL_PAR_CHEVAL: 0.90")
+        .replace("SHARPE_MIN: 0.5", "SHARPE_MIN: 0.0")
     )
     gpi_path.write_text(gpi_txt, encoding="utf-8")
     diff_path.write_text("{}", encoding="utf-8")
