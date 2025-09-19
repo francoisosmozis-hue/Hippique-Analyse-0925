@@ -220,3 +220,6 @@ def test_simulate_ev_batch_uses_simulate_wrapper():
     # threshold, ``compute_ev_roi`` reports the condition in failure reasons.
     assert "expected payout for combined bets" in " ".join(res.get("failure_reasons", []))
     assert "risk_of_ruin" in res
+    assert math.isclose(res.get("sharpe", 0.0), res.get("ev_over_std", 0.0))
+    assert res.get("calibrated_expected_payout", 0.0) >= 0.0
+    assert all("expected_payout" in t for t in tickets)
