@@ -9,6 +9,7 @@ import json
 import logging
 import math
 import re
+from functools import partial
 from pathlib import Path
 
 import os
@@ -32,7 +33,7 @@ from calibration.p_true_model import (
 from simulate_ev import allocate_dutching_sp, gate_ev, simulate_ev_batch
 import simulate_wrapper as sw
 from tickets_builder import allow_combo, apply_ticket_policy
-from validator_ev import validate_inputs
+from validator_ev import summarise_validation, validate_inputs
 from logging_io import append_csv_line, append_json, CSV_HEADER
 
 logger = logging.getLogger(__name__)
@@ -866,7 +867,12 @@ def cmd_analyse(args: argparse.Namespace) -> None:
         stats_je["coverage"] = round(100.0 * matched / total, 2) if total else 0.0
 
     # Validation
-    validate_inputs(cfg, partants, odds_h5, stats_je)
+    validate_inputs_call = partial(validate_inputs, cfg, partants, odds_h5, stats_je)
+    validation_summary = summarise_validation(validate_inputs_call)
+    meta["validation"] = dict(validation_summary)
+    if not validation_summary["ok"]:
+        logger.error("Validation failed: %s", validation_summary["reason"])
+        validate_inputs_call()
 
     # Drift & p_true
     if args.diff:
