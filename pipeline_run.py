@@ -30,7 +30,7 @@ from calibration.p_true_model import (
     predict_probability,
 )
 
-from simulate_ev import allocate_dutching_sp, gate_ev, simulate_ev_batch
+from simulate_ev import allocate_dutching_sp, gate_ev, simulate_ev_batch, implied_probs
 import simulate_wrapper as sw
 from tickets_builder import allow_combo, apply_ticket_policy
 from validator_ev import summarise_validation, validate_inputs
@@ -589,6 +589,137 @@ def save_text(path: Path, txt: str) -> None:
     path.write_text(txt, encoding="utf-8")
 
 
+def _coerce_odds(value) -> float:
+    try:
+        odds = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+    if not math.isfinite(odds):
+        return 0.0
+    return max(odds, 0.0)
+
+
+def _coerce_probability(value) -> float:
+    try:
+        prob = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+    if not math.isfinite(prob):
+        return 0.0
+    return max(prob, 0.0)
+
+
+def _normalize_probability_map(prob_map: dict[str, float], ids: list[str]) -> dict[str, float]:
+    sanitized = {cid: _coerce_probability(prob_map.get(cid, 0.0)) for cid in ids}
+    total = sum(sanitized.values())
+    if total <= 0:
+        return {cid: 0.0 for cid in ids}
+    return {cid: value / total for cid, value in sanitized.items()}
+
+
+def _implied_from_odds_map(odds_map: dict[str, float]) -> dict[str, float]:
+    if not odds_map:
+        return {}
+    ids = list(odds_map.keys())
+    values = [_coerce_odds(odds_map[cid]) for cid in ids]
+    probs = implied_probs(values)
+    implied = {}
+    for cid, odds, prob in zip(ids, values, probs):
+        implied[cid] = prob if odds > 0 else 0.0
+    for cid in ids:
+        implied.setdefault(cid, 0.0)
+    return implied
+
+
+def _snapshot_odds_and_probs(snapshot) -> tuple[dict[str, float], dict[str, float]]:
+    odds_map: dict[str, float] = {}
+    implied: dict[str, float] = {}
+
+    if isinstance(snapshot, dict):
+        raw_odds = None
+        for key in ("odds", "odds_map", "cotes"):
+            raw_odds = snapshot.get(key)
+            if isinstance(raw_odds, dict):
+                break
+        if isinstance(raw_odds, dict):
+            for cid, value in raw_odds.items():
+                odds_map[str(cid)] = _coerce_odds(value)
+        runners = snapshot.get("runners")
+        if isinstance(runners, list):
+            for runner in runners:
+                if not isinstance(runner, dict):
+                    continue
+                cid = runner.get("id")
+                if cid is None:
+                    continue
+                cid_str = str(cid)
+                odds_map[cid_str] = _coerce_odds(runner.get("odds"))
+                if "p_imp" in runner:
+                    implied[cid_str] = _coerce_probability(runner.get("p_imp"))
+                elif "p_implied" in runner:
+                    implied[cid_str] = _coerce_probability(runner.get("p_implied"))
+        if not odds_map:
+            for cid, value in snapshot.items():
+                if isinstance(value, (dict, list)):
+                    continue
+                try:
+                    odds = float(value)
+                except (TypeError, ValueError):
+                    continue
+                if not math.isfinite(odds):
+                    continue
+                odds_map[str(cid)] = max(odds, 0.0)
+        raw_probs = None
+        for key in ("p_imp", "implied_probabilities", "implied", "probabilities"):
+            candidate = snapshot.get(key)
+            if isinstance(candidate, dict):
+                raw_probs = candidate
+                break
+        if isinstance(raw_probs, dict):
+            for cid, value in raw_probs.items():
+                implied[str(cid)] = _coerce_probability(value)
+    elif isinstance(snapshot, list):
+        for runner in snapshot:
+            if not isinstance(runner, dict):
+                continue
+            cid = runner.get("id")
+            if cid is None:
+                continue
+            cid_str = str(cid)
+            odds_map[cid_str] = _coerce_odds(runner.get("odds"))
+            if "p_imp" in runner:
+                implied[cid_str] = _coerce_probability(runner.get("p_imp"))
+            elif "p_implied" in runner:
+                implied[cid_str] = _coerce_probability(runner.get("p_implied"))
+
+    ids = list(odds_map.keys())
+    if not ids:
+        return {}, {}
+
+    if implied:
+        implied = _normalize_probability_map(implied, ids)
+    else:
+        implied = _implied_from_odds_map({cid: odds_map[cid] for cid in ids})
+
+    # Ensure odds_map includes sanitized floats aligned with ids order
+    odds_map = {cid: _coerce_odds(odds_map[cid]) for cid in ids}
+    implied = {cid: implied.get(cid, 0.0) for cid in ids}
+    return odds_map, implied
+
+
+def _as_recent_form_flag(value) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return float(value) != 0.0
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if not normalized:
+            return False
+        return normalized in {"1", "true", "yes", "y", "oui", "o", "vrai", "top3", "top 3"}
+    return False
+
+
 def compute_drift_dict(
     h30: dict,
     h5: dict,
@@ -823,8 +954,10 @@ def cmd_analyse(args: argparse.Namespace) -> None:
 
     outdir = Path(args.outdir or cfg["OUTDIR_DEFAULT"])
 
-    odds_h30 = load_json(args.h30)
-    odds_h5 = load_json(args.h5)
+    raw_h30 = load_json(args.h30)
+    odds_h30, p_imp_h30 = _snapshot_odds_and_probs(raw_h30)
+    raw_h5 = load_json(args.h5)
+    odds_h5, p_imp_h5 = _snapshot_odds_and_probs(raw_h5)
     stats_je = load_json(args.stats_je)
     partants_data = load_json(args.partants)
 
@@ -896,12 +1029,24 @@ def cmd_analyse(args: argparse.Namespace) -> None:
     for p in partants:
         cid = str(p["id"])
         if cid in odds_h5 and cid in p_true:
-            runners.append({
+            p_imp5 = _coerce_probability(p_imp_h5.get(cid, 0.0)) if p_imp_h5 else 0.0
+            p_imp30 = _coerce_probability(p_imp_h30.get(cid, 0.0)) if p_imp_h30 else 0.0
+            if p_imp30 <= 0.0:
+                p_imp30 = p_imp5
+            drift_score = float(odds_h5[cid]) - float(odds_h30.get(cid, odds_h5[cid])) if odds_h30 else 0.0
+            raw_stats = stats_je.get(cid) if isinstance(stats_je, dict) else None
+            je_stats = raw_stats if isinstance(raw_stats, dict) else {}
+            runner = {
                 "id": cid,
                 "name": p.get("name", cid),
                 "odds": float(odds_h5[cid]),
                 "p": float(p_true[cid]),
-            })
+                "p_imp_h5": p_imp5,
+                "p_imp_h30": p_imp30,
+                "drift_score": drift_score,
+                "last2_top3": _as_recent_form_flag(je_stats.get("last2_top3")),
+            }
+            runners.append(runner)
 
     sp_tickets, combo_templates, _combo_info = apply_ticket_policy(
         cfg,
