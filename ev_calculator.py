@@ -247,7 +247,7 @@ def compute_ev_roi(
     total_variance = 0.0
     total_stake = 0.0
     combined_expected_payout = 0.0
-    ev_calculator.py
+    total_expected_payout = 0.0
     has_combined = False
     total_clv = 0.0
     clv_count = 0
