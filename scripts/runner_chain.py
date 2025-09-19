@@ -115,8 +115,8 @@ def main() -> None:
     parser.add_argument("--snap-dir", default="data/snapshots")
     parser.add_argument("--analysis-dir", default="data/analyses")
     parser.add_argument("--budget", type=float, default=5.0)
-    parser.add_argument("--ev-min", type=float, default=0.40)
-    parser.add_argument("--roi-min", type=float, default=0.20)
+    parser.add_argument("--ev-min", type=float, default=0.35)
+    parser.add_argument("--roi-min", type=float, default=0.25)
     parser.add_argument("--pastille-rule", default="", help="Unused placeholder")
     parser.add_argument("--gpi-config", default="", help="Path to GPI config (unused)")
     parser.add_argument(
