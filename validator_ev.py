@@ -1,9 +1,21 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+from __future__ import annotations
+
+import argparse
+import json
 import os
+import sys
 from collections.abc import Callable
+from functools import partial
+from pathlib import Path
 from typing import Dict
+
+try:  # pragma: no cover - optional dependency
+    import yaml
+except Exception:  # pragma: no cover - yaml is optional for the CLI
+    yaml = None  # type: ignore
 
 
 class ValidationError(Exception):
@@ -182,3 +194,234 @@ def validate_combos(expected_payout: float, min_payout: float = 10.0) -> bool:
     if expected_payout <= min_payout:
         raise ValidationError("expected payout for combined bets below threshold")
     return True
+
+
+# ---------------------------------------------------------------------------
+# CLI helpers
+# ---------------------------------------------------------------------------
+
+
+_PARTANTS_CANDIDATES = (
+    "partants.json",
+    "partants_h5.json",
+    "partants_H5.json",
+)
+
+_STATS_CANDIDATES = (
+    "stats_je.json",
+    "je_stats.json",
+    "stats.json",
+)
+
+_ODDS_CANDIDATES = {
+    "H5": (
+        "odds_h5.json",
+        "h5.json",
+        "snapshot_H5.json",
+        "snapshot_H-5.json",
+    ),
+    "H30": (
+        "odds_h30.json",
+        "h30.json",
+        "snapshot_H30.json",
+        "snapshot_H-30.json",
+    ),
+}
+
+_CONFIG_CANDIDATES = (
+    "gpi.yml",
+    "gpi.yaml",
+    "config.yml",
+    "config.yaml",
+)
+
+
+def _normalise_phase(phase: str | None) -> str:
+    if not phase:
+        return "H5"
+    cleaned = phase.strip().upper().replace("-", "")
+    if cleaned not in {"H5", "H30"}:
+        raise ValueError(f"Phase inconnue: {phase!r} (attendu H5 ou H30)")
+    return "H5" if cleaned == "H5" else "H30"
+
+
+def _load_json_payload(path: Path) -> object:
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _find_first_existing(directory: Path, candidates: tuple[str, ...]) -> Path | None:
+    for name in candidates:
+        candidate = directory / name
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def _load_partants(path: Path) -> list[dict]:
+    payload = _load_json_payload(path)
+    if isinstance(payload, list):
+        return [p for p in payload if isinstance(p, dict)]
+    if isinstance(payload, dict):
+        runners = payload.get("runners")
+        if isinstance(runners, list):
+            return [p for p in runners if isinstance(p, dict)]
+    raise ValueError(f"Format partants invalide dans {path}")
+
+
+def _odds_from_runner(runner: dict) -> tuple[str | None, float | None]:
+    cid = runner.get("id") or runner.get("ID") or runner.get("runner_id")
+    num = runner.get("num") or runner.get("number") or runner.get("programmeNumber")
+    odds = runner.get("odds") or runner.get("cote") or runner.get("rapport")
+    if isinstance(odds, str):
+        odds = odds.replace(",", ".")
+    try:
+        val = float(odds) if odds is not None else None
+    except (TypeError, ValueError):
+        val = None
+    identifier: str | None = None
+    if cid is not None:
+        identifier = str(cid)
+    elif num is not None:
+        identifier = str(num)
+    return identifier, val
+
+
+def _load_odds(path: Path) -> dict[str, float]:
+    payload = _load_json_payload(path)
+    odds_map: dict[str, float] = {}
+    if isinstance(payload, dict):
+        runners = payload.get("runners") if isinstance(payload.get("runners"), list) else None
+        if runners is not None:
+            for runner in runners:
+                if not isinstance(runner, dict):
+                    continue
+                identifier, value = _odds_from_runner(runner)
+                if identifier is None or value is None:
+                    continue
+                odds_map[str(identifier)] = float(value)
+        else:
+            for key, value in payload.items():
+                try:
+                    odds_map[str(key)] = float(value)
+                except (TypeError, ValueError):
+                    continue
+    elif isinstance(payload, list):
+        for runner in payload:
+            if not isinstance(runner, dict):
+                continue
+            identifier, value = _odds_from_runner(runner)
+            if identifier is None or value is None:
+                continue
+            odds_map[str(identifier)] = float(value)
+
+    if not odds_map:
+        raise ValueError(f"Impossible d'extraire les cotes depuis {path}")
+    return odds_map
+
+
+def _load_stats(path: Path) -> dict:
+    payload = _load_json_payload(path)
+    if isinstance(payload, dict):
+        return payload
+    raise ValueError(f"Format stats invalide dans {path}")
+
+
+def _load_config(path: Path | None) -> dict:
+    if path is None or not path.exists():
+        return {}
+    if path.suffix.lower() in {".yml", ".yaml"} and yaml is not None:
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+        return data or {}
+    if path.suffix.lower() in {".json"}:
+        payload = _load_json_payload(path)
+        if isinstance(payload, dict):
+            return payload
+    return {}
+
+
+def _resolve_rc_directory(
+    artefacts_dir: str | None,
+    base_dir: str | None,
+    reunion: str | None,
+    course: str | None,
+) -> Path:
+    if artefacts_dir:
+        return Path(artefacts_dir)
+    if reunion and course:
+        root = Path(base_dir) if base_dir else Path("data")
+        return root / f"{reunion}{course}"
+    raise ValueError("Impossible de déterminer le dossier artefacts (fournir --artefacts ou --reunion/--course)")
+
+
+def _discover_file(rc_dir: Path, candidates: tuple[str, ...], *, required: bool = True) -> Path | None:
+    path = _find_first_existing(rc_dir, candidates)
+    if path is None and required:
+        names = ", ".join(candidates)
+        raise FileNotFoundError(f"Aucun fichier trouvé dans {rc_dir} parmi: {names}")
+    return path
+
+
+def _prepare_validation_inputs(args: argparse.Namespace) -> tuple[dict, list[dict], dict[str, float], dict]:
+    phase = _normalise_phase(args.phase)
+    rc_dir = _resolve_rc_directory(args.artefacts, args.base_dir, args.reunion, args.course)
+
+    partants_path = Path(args.partants) if args.partants else _discover_file(rc_dir, _PARTANTS_CANDIDATES)
+    stats_path = Path(args.stats_je) if args.stats_je else _discover_file(rc_dir, _STATS_CANDIDATES, required=False)
+    odds_candidates = _ODDS_CANDIDATES.get(phase, _ODDS_CANDIDATES["H5"])
+    odds_path = Path(args.odds) if args.odds else _discover_file(rc_dir, odds_candidates)
+    config_path: Path | None
+    if args.config:
+        config_path = Path(args.config)
+    else:
+        config_path = _discover_file(rc_dir, _CONFIG_CANDIDATES, required=False)
+
+    cfg = _load_config(config_path)
+    if args.allow_je_na:
+        cfg = dict(cfg)
+        cfg["ALLOW_JE_NA"] = True
+
+    partants = _load_partants(partants_path)
+    odds = _load_odds(odds_path)
+    stats = _load_stats(stats_path) if stats_path else {}
+    return cfg, partants, odds, stats
+
+
+def _cli(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        description="Valide les artefacts d'une course via validate_inputs.",
+    )
+    parser.add_argument("--artefacts", help="Dossier contenant les artefacts de course")
+    parser.add_argument("--base-dir", help="Dossier racine où trouver R?C?", default=None)
+    parser.add_argument("--reunion", help="Identifiant réunion (ex: R1)")
+    parser.add_argument("--course", help="Identifiant course (ex: C3)")
+    parser.add_argument("--phase", help="Phase (H5 ou H30)", default="H5")
+    parser.add_argument("--partants", help="Chemin explicite vers partants.json")
+    parser.add_argument("--odds", help="Chemin explicite vers les cotes")
+    parser.add_argument("--stats-je", help="Chemin explicite vers stats_je.json")
+    parser.add_argument("--config", help="Chemin configuration GPI (YAML/JSON)")
+    parser.add_argument(
+        "--allow-je-na",
+        action="store_true",
+        help="Force ALLOW_JE_NA dans la configuration",
+    )
+
+    try:
+        cfg, partants, odds, stats = _prepare_validation_inputs(parser.parse_args(argv))
+    except FileNotFoundError as exc:
+        parser.error(str(exc))
+    except ValueError as exc:
+        parser.error(str(exc))
+    except Exception as exc:  # pragma: no cover - defensive
+        parser.error(f"Erreur inattendue: {exc}")
+
+    summary = summarise_validation(partial(validate_inputs, cfg, partants, odds, stats))
+    print(json.dumps(summary, ensure_ascii=False))
+    return 0 if summary.get("ok") else 1
+
+
+def main(argv: list[str] | None = None) -> int:
+    return _cli(argv)
+
+
+if __name__ == "__main__":  # pragma: no cover - CLI entry point
+    sys.exit(main())
