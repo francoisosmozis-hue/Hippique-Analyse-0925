@@ -127,4 +127,4 @@ def test_summarise_validation_failure_returns_reason():
     assert summary["ok"] is False
     assert "partants" in summary["reason"].lower()
     with pytest.raises(ValidationError):
-        validate_inputs(cfg, partants, odds, stats
+        validate_inputs(cfg, partants, odds, stats)
