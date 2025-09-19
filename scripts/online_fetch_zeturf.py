@@ -290,6 +290,34 @@ def write_snapshot_from_geny(id_course: str, phase: str, out_dir: Path) -> Path:
     return dest
 
 
+def _compute_implied_probabilities(runners: Sequence[Dict[str, Any]]) -> Dict[str, float]:
+    """Return implied win probabilities for ``runners`` based on their odds."""
+
+    implied: Dict[str, float] = {}
+    total = 0.0
+    for runner in runners:
+        cid = runner.get("id")
+        if cid is None:
+            continue
+        cid_str = str(cid)
+        odds_val = runner.get("odds", 0.0)
+        try:
+            odds = float(odds_val)
+        except (TypeError, ValueError):
+            odds = 0.0
+        if odds > 0:
+            inv = 1.0 / odds
+        else:
+            inv = 0.0
+        implied[cid_str] = inv
+        total += inv
+
+    if total <= 0:
+        return {cid: 0.0 for cid in implied}
+
+    return {cid: value / total for cid, value in implied.items()}
+
+
 def normalize_snapshot(payload: Dict[str, Any]) -> Dict[str, Any]:
     """Return a normalized snapshot of runners with metadata."""
     rc = payload.get("rc", "")
@@ -327,7 +355,18 @@ def normalize_snapshot(payload: Dict[str, Any]) -> Dict[str, Any]:
             odds = 0.0
         runners.append({"id": cid, "name": name, "odds": odds})
         id2name.setdefault(cid, name)
-    meta.update({"runners": runners, "id2name": id2name})
+    implied = _compute_implied_probabilities(runners)
+    for runner in runners:
+        runner["p_imp"] = implied.get(runner["id"], 0.0)
+
+    odds_map = {runner["id"]: runner["odds"] for runner in runners}
+
+    meta.update({
+        "runners": runners,
+        "id2name": id2name,
+        "odds": odds_map,
+        "p_imp": implied,
+    })
     return meta
 
 def compute_diff(
