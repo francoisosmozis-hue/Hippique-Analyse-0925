@@ -1,4 +1,4 @@
-#"""Lightweight HTTP entry points for the cloud runner.
+"""Lightweight HTTP entry points for the cloud runner.
 
 The production project historically exposed a small Flask application used by
 Google Cloud Functions.  The original entry point returned the same JSON tuple
