@@ -57,6 +57,33 @@ def test_fetch_meetings_fallback_on_404(monkeypatch: pytest.MonkeyPatch) -> None
     assert data == {"meetings": [{"id": "R1", "name": "Meeting A", "date": today}]}
 
 
+def test_fetch_meetings_fallback_on_connection_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Network failures should trigger the Geny fallback."""
+
+    primary = "https://www.zeturf.fr/rest/api/meetings/today"
+    fallback_payload = {"meetings": [{"id": "GENY", "name": "Fallback", "date": "today"}]}
+    called: dict[str, int] = {"fallback": 0}
+
+    def fake_get(url: str, timeout: int = 10) -> DummyResp:
+        if url == primary:
+            raise ofz.requests.ConnectionError("boom")
+        raise AssertionError("Unexpected URL")
+
+    def fake_fallback() -> dict:
+        called["fallback"] += 1
+        return fallback_payload
+
+    monkeypatch.setattr(ofz.requests, "get", fake_get)
+    monkeypatch.setattr(ofz, "_fetch_from_geny", fake_fallback)
+
+    data = ofz.fetch_meetings(primary)
+
+    assert called["fallback"] == 1
+    assert data is fallback_payload
+
+
 def test_fetch_runners_placeholder_url() -> None:
     """The fetcher should fail fast when the course_id placeholder is still present."""
 
