@@ -11,14 +11,26 @@ openpyxl>=3.1.2
 numpy>=1.26.0
 pytest
 joblib>=1.3.2
+touch requirements.txt
 grep -q '^fastapi' requirements.txt || echo 'fastapi' >> requirements.txt
 grep -q '^uvicorn\[standard\]' requirements.txt || echo 'uvicorn[standard]' >> requirements.txt
 grep -q '^python-dotenv' requirements.txt || echo 'python-dotenv' >> requirements.txt
+
+# (souvent utiles dans ton projet)
+grep -q '^requests' requirements.txt || echo 'requests' >> requirements.txt
+grep -q '^pandas' requirements.txt || echo 'pandas' >> requirements.txt
+grep -q '^openpyxl' requirements.txt || echo 'openpyxl' >> requirements.txt
+grep -q '^PyYAML' requirements.txt || echo 'PyYAML' >> requirements.txt
+grep -q '^google-cloud-secret-manager' requirements.txt || echo 'google-cloud-secret-manager' >> requirements.txt
+grep -q '^google-auth' requirements.txt || echo 'google-auth' >> requirements.txt
+grep -q '^google-auth-oauthlib' requirements.txt || echo 'google-auth-oauthlib' >> requirements.txt
+
 
 
 # Optional dependencies
 # SciPy enables advanced stake optimisation; a simple fallback is used otherwise.
 scipy>=1.13.0
+
 
 
 
