@@ -1,5 +1,6 @@
 import os
 import sys
+from functools import partial
 
 import pytest
  
@@ -11,6 +12,7 @@ from validator_ev import (
     validate_inputs,
     validate_policy,
     validate_combos,
+    summarise_validation,
 )
 
 def test_validate_ev_passes_with_defaults(monkeypatch):
@@ -101,3 +103,28 @@ def test_validate_inputs_couverture():
 
     cfg = {"ALLOW_JE_NA": True}
     assert validate_inputs(cfg, partants, odds, stats)
+
+
+def test_summarise_validation_success():
+    cfg = {}
+    partants = _sample_partants()
+    odds = _sample_odds()
+    stats = {"coverage": 90}
+    summary = summarise_validation(
+        partial(validate_inputs, cfg, partants, odds, stats)
+    )
+    assert summary == {"ok": True, "reason": ""}
+
+
+def test_summarise_validation_failure_returns_reason():
+    cfg = {}
+    partants = _sample_partants(5)
+    odds = _sample_odds(5)
+    stats = {"coverage": 85}
+    summary = summarise_validation(
+        partial(validate_inputs, cfg, partants, odds, stats)
+    )
+    assert summary["ok"] is False
+    assert "partants" in summary["reason"].lower()
+    with pytest.raises(ValidationError):
+        validate_inputs(cfg, partants, odds, stats
