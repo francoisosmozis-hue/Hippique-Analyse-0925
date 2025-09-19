@@ -20,13 +20,15 @@ env:
   SP_RATIO: "0.6"      # 60% pour les paris simples
   COMBO_RATIO: "0.4"   # 40% pour les combinés
   # Seuils EV/ROI et autres garde-fous
-  EV_MIN_SP: "0.20"
-  EV_MIN_GLOBAL: "0.40"
-  ROI_MIN_SP: "0.20"
-  ROI_MIN_GLOBAL: "0.20"
+  EV_MIN_SP: "0.15"
+  EV_MIN_SP_HOMOGENEOUS: "0.10"
+  EV_MIN_GLOBAL: "0.35"
+  ROI_MIN_SP: "0.10"
+  ROI_MIN_GLOBAL: "0.25"
+  SHARPE_MIN: "0.5"
   MAX_VOL_PAR_CHEVAL: "0.60"
-  MIN_PAYOUT_COMBOS: "10.0"  # payout attendu minimal en €
-  EXOTIC_MIN_PAYOUT: "10.0"
+  MIN_PAYOUT_COMBOS: "12.0"  # payout attendu minimal en €
+  EXOTIC_MIN_PAYOUT: "12.0"
   correlation_penalty: "0.85"
   ALLOW_JE_NA: "false"
   SNAPSHOTS: "H30,H5"
