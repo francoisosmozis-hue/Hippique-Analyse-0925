@@ -147,8 +147,8 @@ def validate_ev(ev_sp: float, ev_global: float | None, need_combo: bool = True) 
         If any required EV is below its threshold.
     """
 
-    min_sp = float(os.getenv("EV_MIN_SP", 0.20))
-    min_global = float(os.getenv("EV_MIN_GLOBAL", 0.40))
+    min_sp = float(os.getenv("EV_MIN_SP", 0.15))
+    min_global = float(os.getenv("EV_MIN_GLOBAL", 0.35))
 
     if ev_sp < min_sp:
         raise ValidationError("EV SP below threshold")
@@ -181,7 +181,7 @@ def validate_budget(stakes: Dict[str, float], budget_cap: float, max_vol_per_hor
     return True
 
 
-def validate_combos(expected_payout: float, min_payout: float = 10.0) -> bool:
+def validate_combos(expected_payout: float, min_payout: float = 12.0) -> bool:
     """Validate that combined expected payout exceeds the minimum required.
 
     Parameters
@@ -189,7 +189,7 @@ def validate_combos(expected_payout: float, min_payout: float = 10.0) -> bool:
     expected_payout:
         Expected payout from the combined tickets.
     min_payout:
-        Minimum acceptable payout. Defaults to ``10.0`` (euros).
+        Minimum acceptable payout. Defaults to ``12.0`` (euros).
     """
     if expected_payout <= min_payout:
         raise ValidationError("expected payout for combined bets below threshold")
