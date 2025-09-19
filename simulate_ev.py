@@ -163,4 +163,9 @@ def simulate_ev_batch(
         simulate_fn=simulate_wrapper,
         **kwargs,
     )
+    stats.setdefault("sharpe", stats.get("ev_over_std", 0.0))
+    if "calibrated_expected_payout" not in stats:
+        stats["calibrated_expected_payout"] = sum(
+            float(ticket.get("expected_payout", 0.0)) for ticket in tickets
+        )
     return stats
