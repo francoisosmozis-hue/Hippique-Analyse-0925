@@ -718,3 +718,38 @@ def test_load_yaml_ror_defaults_and_env(tmp_path, monkeypatch):
     cfg_override_path.write_text(GPI_YML.replace("ROR_MAX: 0.05", "ROR_MAX: 0.02"), encoding="utf-8")
     cfg_override = load_yaml(str(cfg_override_path))
     assert cfg_override["ROR_MAX"] == pytest.approx(0.123)
+
+
+def test_load_yaml_config_aliases(tmp_path):
+    cfg_txt = (
+        GPI_YML.replace("BUDGET_TOTAL", "TotalBudget")
+        .replace("SP_RATIO", "simpleShare")
+        .replace("COMBO_RATIO", "comboShare")
+        .replace("MAX_VOL_PAR_CHEVAL", "maxStakePerHorse")
+    )
+    cfg_path = tmp_path / "gpi_alias.yml"
+    cfg_path.write_text(cfg_txt, encoding="utf-8")
+
+    cfg_alias = load_yaml(str(cfg_path))
+    assert cfg_alias["BUDGET_TOTAL"] == pytest.approx(5.0)
+    assert cfg_alias["SP_RATIO"] == pytest.approx(0.6)
+    assert cfg_alias["COMBO_RATIO"] == pytest.approx(0.4)
+    assert cfg_alias["MAX_VOL_PAR_CHEVAL"] == pytest.approx(0.60)
+
+
+def test_load_yaml_env_aliases(tmp_path, monkeypatch):
+    cfg_path = tmp_path / "gpi.yml"
+    cfg_path.write_text(GPI_YML, encoding="utf-8")
+
+    monkeypatch.setenv("TOTAL_BUDGET", "12")
+    monkeypatch.setenv("SIMPLE_RATIO", "0.55")
+    monkeypatch.setenv("COMBO_SHARE", "0.45")
+    monkeypatch.setenv("MAX_STAKE_PER_HORSE", "0.7")
+    monkeypatch.setenv("EXOTIC_MIN_PAYOUT", "15")
+
+    cfg_alias = load_yaml(str(cfg_path))
+    assert cfg_alias["BUDGET_TOTAL"] == pytest.approx(12.0)
+    assert cfg_alias["SP_RATIO"] == pytest.approx(0.55)
+    assert cfg_alias["COMBO_RATIO"] == pytest.approx(0.45)
+    assert cfg_alias["MAX_VOL_PAR_CHEVAL"] == pytest.approx(0.7)
+    assert cfg_alias["MIN_PAYOUT_COMBOS"] == pytest.approx(15.0)
