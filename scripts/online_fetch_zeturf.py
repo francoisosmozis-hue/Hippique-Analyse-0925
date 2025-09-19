@@ -7,7 +7,7 @@ import datetime as dt
 import json
 import os
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Sequence
 
 import requests
 import yaml
@@ -19,6 +19,104 @@ GENY_BASE = "https://www.geny.com"
 HDRS = {"User-Agent": "Mozilla/5.0 (+EV; GPI v5.1)"}
 GENY_FALLBACK_URL = f"{GENY_BASE}/reunions-courses-pmu"
 
+_URL_FIELDS: Sequence[str] = ("url", "endpoint", "href")
+_MODE_HINTS: Dict[str, Sequence[str]] = {
+    "planning": ("planning", "meetings", "schedule"),
+    "h30": ("h30", "prestart", "snapshots", "snapshot", "race", "runners", "course"),
+    "h5": ("h5", "final", "snapshots", "snapshot", "race", "runners", "course"),
+}
+_PROVIDER_PRIORITY: Dict[str, Sequence[str]] = {
+    "planning": ("geny", "pmu", "zeturf"),
+    "h30": ("pmu", "geny", "zeturf"),
+    "h5": ("pmu", "geny", "zeturf"),
+}
+_DEFAULT_PROVIDER_ORDER: Sequence[str] = ("geny", "pmu", "zeturf")
+
+
+def _resolve_from_provider(section: Any, hints: Sequence[str]) -> str | None:
+    """Return the first URL found in ``section`` matching ``hints``."""
+
+    def _search(value: Any, visited: set[int]) -> str | None:
+        if value is None:
+            return None
+        if isinstance(value, str):
+            trimmed = value.strip()
+            return trimmed or None
+        if not isinstance(value, dict):
+            return None
+
+        obj_id = id(value)
+        if obj_id in visited:
+            return None
+        visited.add(obj_id)
+
+        for field in _URL_FIELDS:
+            raw = value.get(field)
+            if isinstance(raw, str) and raw.strip():
+                return raw.strip()
+
+        for hint in hints:
+            for key in (hint, f"{hint}_url", f"{hint}_endpoint"):
+                if key in value:
+                    url = _search(value[key], visited)
+                    if url:
+                        return url
+
+        for key, nested in value.items():
+            if key in _URL_FIELDS:
+                continue
+            if isinstance(nested, (dict, str)):
+                url = _search(nested, visited)
+                if url:
+                    return url
+
+        return None
+
+    return _search(section, set())
+
+
+def resolve_source_url(config: Dict[str, Any], mode: str) -> str:
+    """Resolve the endpoint for ``mode`` from ``config``.
+
+    The resolver understands both the legacy ``zeturf.url`` layout and the
+    newer provider-focused structure exposing Geny/PMU endpoints.
+    """
+
+    if not isinstance(config, dict):
+        raise ValueError("Invalid sources configuration: expected a mapping")
+
+    mode_key = mode.lower()
+    hints = _MODE_HINTS.get(mode_key, ())
+    provider_order = _PROVIDER_PRIORITY.get(mode_key, _DEFAULT_PROVIDER_ORDER)
+
+    search_roots: List[Dict[str, Any]] = []
+    online = config.get("online")
+    if isinstance(online, dict):
+        search_roots.append(online)
+    search_roots.append(config)
+
+    for root in search_roots:
+        for provider in provider_order:
+            section = root.get(provider)
+            url = _resolve_from_provider(section, hints)
+            if url:
+                return url
+
+        mode_section = root.get(mode_key)
+        if isinstance(mode_section, dict):
+            for provider in provider_order:
+                url = _resolve_from_provider(mode_section.get(provider), hints)
+                if url:
+                    return url
+        url = _resolve_from_provider(mode_section, hints)
+        if url:
+            return url
+
+    fallback = _resolve_from_provider(config.get("zeturf"), hints or ("url",))
+    if fallback:
+        return fallback
+
+    raise ValueError(f"No source URL configured for mode '{mode}'")
 
 def _fetch_from_geny() -> Dict[str, Any]:
     """Scrape meetings from Geny when the Zeturf API is unavailable."""
@@ -283,6 +381,7 @@ __all__ = [
     "normalize_snapshot",
     "compute_diff",
     "make_diff",
+    "resolve_source_url",
     "main",
 ]
 
@@ -299,9 +398,10 @@ def main() -> None:  # pragma: no cover - minimal CLI wrapper
     if args.mode in {"planning", "h30", "h5"}:
         with open(args.sources, "r", encoding="utf-8") as fh:
             config = yaml.safe_load(fh) or {}
-        url = config.get("zeturf", {}).get("url")
-        if not url:
-            raise ValueError("No Zeturf source URL configured in sources.yml")
+        try:
+            url = resolve_source_url(config, args.mode)
+        except ValueError as exc:  # pragma: no cover - defensive branch
+            raise ValueError(str(exc)) from exc
         if args.mode == "planning":
             meetings = fetch_meetings(url)
             data = filter_today(meetings)
