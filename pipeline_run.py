@@ -481,17 +481,17 @@ def load_yaml(path: str) -> dict:
     cfg.setdefault("KELLY_FRACTION", 0.5)
     cfg.setdefault("MIN_STAKE_SP", 0.1)
     cfg.setdefault("ROUND_TO_SP", 0.10)
-    cfg.setdefault("ROI_MIN_SP", 0.0)
-    cfg.setdefault("ROI_MIN_GLOBAL", 0.0)
+    cfg.setdefault("ROI_MIN_SP", 0.10)
+    cfg.setdefault("ROI_MIN_GLOBAL", 0.25)
     cfg.setdefault("ROR_MAX", 0.01)
-    cfg.setdefault("SHARPE_MIN", 0.0)
+    cfg.setdefault("SHARPE_MIN", 0.5)
     cfg.setdefault("SNAPSHOTS", "H30,H5")
     cfg.setdefault("DRIFT_TOP_N", 5)
     cfg.setdefault("DRIFT_MIN_DELTA", 0.8)
     
     payout_default = cfg.get("EXOTIC_MIN_PAYOUT", cfg.get("MIN_PAYOUT_COMBOS"))
     if payout_default is None:
-        payout_default = 10.0
+        payout_default = 12.0
     cfg["MIN_PAYOUT_COMBOS"] = payout_default
     cfg["EXOTIC_MIN_PAYOUT"] = payout_default
 
@@ -972,6 +972,12 @@ def cmd_analyse(args: argparse.Namespace) -> None:
 
     proposed_pack = sp_tickets + combo_tickets
 
+    homogeneous_field = bool(
+        cfg.get("HOMOGENEOUS_FIELD")
+        or cfg.get("homogeneous_field")
+        or stats_ev.get("homogeneous_field", False)
+    )
+
     flags = gate_ev(
         cfg,
         ev_sp,
@@ -981,6 +987,7 @@ def cmd_analyse(args: argparse.Namespace) -> None:
         combined_payout,
         risk_of_ruin,
         ev_over_std,
+        homogeneous_field=homogeneous_field,
     )
 
     combos_allowed = bool(combo_tickets) and flags.get("sp") and flags.get("combo")
