@@ -32,6 +32,33 @@ class DummyResp:
         return self._payload
 
 
+def test_resolve_source_url_new_structure() -> None:
+    """The resolver should pick Geny/PMU entries from the new layout."""
+
+    cfg = {
+        "online": {
+            "geny": {"planning": {"url": "https://geny/planning"}},
+            "pmu": {
+                "h30": {"url": "https://pmu/h30"},
+                "h5": {"endpoint": "https://pmu/h5"},
+            },
+        }
+    }
+
+    assert ofz.resolve_source_url(cfg, "planning") == "https://geny/planning"
+    assert ofz.resolve_source_url(cfg, "h30") == "https://pmu/h30"
+    assert ofz.resolve_source_url(cfg, "h5") == "https://pmu/h5"
+
+
+def test_resolve_source_url_legacy_shape() -> None:
+    """Legacy ``zeturf.url`` entries should remain supported."""
+
+    cfg = {"zeturf": {"url": "https://legacy"}}
+
+    assert ofz.resolve_source_url(cfg, "planning") == "https://legacy"
+    assert ofz.resolve_source_url(cfg, "h5") == "https://legacy"
+
+
 def test_fetch_meetings_fallback_on_404(monkeypatch: pytest.MonkeyPatch) -> None:
     """A 404 from the primary endpoint should trigger the Geny fallback."""
     primary = "https://www.zeturf.fr/rest/api/meetings/today"
@@ -258,7 +285,10 @@ def test_main_snapshot_modes(mode: str, tmp_path: Path, monkeypatch: pytest.Monk
 
     monkeypatch.setattr(ofz.requests, "get", fake_get)
     sources = tmp_path / "src.yml"
-    sources.write_text("zeturf:\n  url: 'http://x'\n", encoding="utf-8")
+    sources.write_text(
+        "pmu:\n  h30:\n    url: 'http://x'\n  h5:\n    url: 'http://x'\n",
+        encoding="utf-8",
+    )
     out = tmp_path / f"{mode}.json"
     monkeypatch.setattr(
         sys,
@@ -314,7 +344,10 @@ def test_main_planning_mode(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
 
     monkeypatch.setattr(ofz.requests, "get", fake_get)
     sources = tmp_path / "src.yml"
-    sources.write_text("zeturf:\n  url: 'http://x'\n", encoding="utf-8")
+    sources.write_text(
+        "geny:\n  planning:\n    url: 'http://x'\n",
+        encoding="utf-8",
+    )
     out = tmp_path / "planning.json"
     monkeypatch.setattr(
         sys,
