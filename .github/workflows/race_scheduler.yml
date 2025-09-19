@@ -3,7 +3,40 @@ name: GPI v5.1 - Scheduler (H-30 / H-5)
 on:
   schedule:
     - cron: "*/5 * * * *"
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Snapshot mode to fetch before running the scheduler (skip|planning|h30|h5)"
+        required: false
+        default: skip
+      course_id:
+        description: "Identifiant numérique de la course (requis pour h30/h5)"
+        required: false
+        default: ""
+      date:
+        description: "Date (YYYY-MM-DD) pour ranger les captures manuelles"
+        required: false
+        default: ""
+      meeting:
+        description: "Réunion (ex: R1)"
+        required: false
+        default: ""
+      race:
+        description: "Course (ex: C3)"
+        required: false
+        default: ""
+      hippodrome:
+        description: "Nom de l'hippodrome"
+        required: false
+        default: ""
+      discipline:
+        description: "Discipline pour la course"
+        required: false
+        default: ""
+
+concurrency:
+  group: race-scheduler-${{ github.event_name }}-${{ github.event.inputs.course_id || 'auto' }}
+  cancel-in-progress: false
 
 env:
   TZ: Europe/Paris
@@ -28,6 +61,96 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+      - name: Préparer le contexte manuel (optionnel)
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          MODE="${{ github.event.inputs.mode }}"
+          COURSE_ID="${{ github.event.inputs.course_id }}"
+          DATE_INPUT="${{ github.event.inputs.date }}"
+          MEETING="${{ github.event.inputs.meeting }}"
+          RACE="${{ github.event.inputs.race }}"
+          HIPPO="${{ github.event.inputs.hippodrome }}"
+          DISCIPLINE="${{ github.event.inputs.discipline }}"
+
+          case "$MODE" in
+            ""|skip)
+              echo "MANUAL_MODE=skip" >> $GITHUB_ENV
+              exit 0
+              ;;
+            planning)
+              ;;
+            h30|h5)
+              if [ -z "$COURSE_ID" ]; then
+                echo "::error::course_id input is required when mode is '$MODE'"
+                exit 1
+              fi
+              ;;
+            diff)
+              echo "::error::Mode 'diff' requires existing snapshots and is not supported ici"
+              exit 1
+              ;;
+            *)
+              echo "::error::Unsupported mode '$MODE'"
+              exit 1
+              ;;
+          esac
+
+          SOURCES="config/sources.manual.yml"
+          cp config/sources.yml "$SOURCES"
+          if [ -n "$COURSE_ID" ]; then
+            sed -i "s/{course_id}/$COURSE_ID/" "$SOURCES"
+          fi
+
+          OUT_ROOT="data/manual"
+          if [ -n "$DATE_INPUT" ]; then
+            OUT_ROOT="$OUT_ROOT/$DATE_INPUT"
+          fi
+          if [ -n "$MEETING$RACE" ]; then
+            OUT_ROOT="$OUT_ROOT/${MEETING}${RACE}"
+          fi
+          mkdir -p "$OUT_ROOT"
+
+          OUT_PATH="$OUT_ROOT/${MODE}.json"
+          CONTEXT_PATH="$OUT_ROOT/context.json"
+
+          {
+            echo "MANUAL_MODE=$MODE"
+            echo "MANUAL_SOURCES=$SOURCES"
+            echo "MANUAL_OUT=$OUT_PATH"
+            echo "MANUAL_CONTEXT=$CONTEXT_PATH"
+          } >> $GITHUB_ENV
+
+          export MANUAL_MODE="$MODE"
+          export MANUAL_CONTEXT="$CONTEXT_PATH"
+          export COURSE_ID="$COURSE_ID"
+          export INPUT_DATE="$DATE_INPUT"
+          export INPUT_MEETING="$MEETING"
+          export INPUT_RACE="$RACE"
+          export INPUT_HIPPODROME="$HIPPO"
+          export INPUT_DISCIPLINE="$DISCIPLINE"
+
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          context = {
+              "mode": os.environ.get("MANUAL_MODE", ""),
+              "course_id": os.environ.get("COURSE_ID", ""),
+              "date": os.environ.get("INPUT_DATE", ""),
+              "meeting": os.environ.get("INPUT_MEETING", ""),
+              "race": os.environ.get("INPUT_RACE", ""),
+              "hippodrome": os.environ.get("INPUT_HIPPODROME", ""),
+              "discipline": os.environ.get("INPUT_DISCIPLINE", ""),
+          }
+          path = Path(os.environ["MANUAL_CONTEXT"])
+          path.write_text(json.dumps(context, ensure_ascii=False, indent=2), encoding="utf-8")
+          PY
+      - name: Télécharger un snapshot manuel (optionnel)
+        if: github.event_name == 'workflow_dispatch' && env.MANUAL_MODE != '' && env.MANUAL_MODE != 'skip'
+        run: |
+          mkdir -p "$(dirname "$MANUAL_OUT")"
+          python scripts/online_fetch_zeturf.py --mode "$MANUAL_MODE" --sources "$MANUAL_SOURCES" --out "$MANUAL_OUT"
       - name: Run scheduler windows (H-30/H-5)
         env:
           GOOGLE_CREDENTIALS_B64: ${{ secrets.GOOGLE_CREDENTIALS_B64 }}
