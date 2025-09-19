@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 import pipeline_run
 import validator_ev
-from simulate_ev import allocate_dutching_sp, gate_ev, simulate_ev_batch
+from simulate_ev import allocate_dutching_sp, gate_ev, simulate_ev_batch, implied_probs
 from pipeline_run import build_p_true, compute_drift_dict, load_yaml
 
 GPI_YML = """\
@@ -310,6 +310,103 @@ def test_smoke_run(tmp_path):
     assert not flags_ror["sp"]
     assert not flags_ror["combo"]
 
+
+def test_cmd_analyse_enriches_runners(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    partants = partants_sample()
+    h30 = odds_h30()
+    h5 = odds_h5()
+    stats = stats_sample()
+    stats["1"]["last2_top3"] = 1
+    stats["2"]["last2_top3"] = False
+
+    h30_path = tmp_path / "h30.json"
+    h5_path = tmp_path / "h5.json"
+    stats_path = tmp_path / "stats.json"
+    partants_path = tmp_path / "partants.json"
+    gpi_path = tmp_path / "gpi.yml"
+    diff_path = tmp_path / "diff.json"
+    outdir = tmp_path / "out"
+
+    h30_path.write_text(json.dumps(h30), encoding="utf-8")
+    h5_path.write_text(json.dumps(h5), encoding="utf-8")
+    stats_path.write_text(json.dumps(stats), encoding="utf-8")
+    partants_path.write_text(json.dumps(partants), encoding="utf-8")
+    gpi_path.write_text(GPI_YML, encoding="utf-8")
+    diff_path.write_text("{}", encoding="utf-8")
+
+    ids = [str(runner["id"]) for runner in partants["runners"]]
+    probs_h5 = implied_probs([h5[cid] for cid in ids])
+    probs_h30 = implied_probs([h30[cid] for cid in ids])
+    expected_h5 = dict(zip(ids, probs_h5))
+    expected_h30 = dict(zip(ids, probs_h30))
+
+    monkeypatch.setattr(
+        "pipeline_run.build_p_true", lambda *a, **k: {cid: 1 / len(ids) for cid in ids}
+    )
+
+    captured: dict[str, list[dict]] = {}
+
+    def stub_apply_ticket_policy(cfg, runners, combo_candidates=None, combos_source=None):
+        captured["apply"] = [dict(r) for r in runners]
+        return [], [], {}
+
+    def stub_enforce(cfg, runners, combo_tickets, bankroll, **kwargs):
+        captured["enforce"] = [dict(r) for r in runners]
+        stats_stub = {
+            "ev": 0.0,
+            "roi": 0.0,
+            "risk_of_ruin": 0.0,
+            "combined_expected_payout": 0.0,
+            "ev_over_std": 0.0,
+            "variance": 0.0,
+            "clv": 0.0,
+            "green": False,
+        }
+        return [], stats_stub, {"applied": False}
+
+    monkeypatch.setattr("pipeline_run.apply_ticket_policy", stub_apply_ticket_policy)
+    monkeypatch.setattr("pipeline_run.enforce_ror_threshold", stub_enforce)
+    monkeypatch.setattr("pipeline_run.append_csv_line", lambda *a, **k: None)
+    monkeypatch.setattr("pipeline_run.append_json", lambda *a, **k: None)
+
+    args = argparse.Namespace(
+        h30=str(h30_path),
+        h5=str(h5_path),
+        stats_je=str(stats_path),
+        partants=str(partants_path),
+        gpi=str(gpi_path),
+        outdir=str(outdir),
+        diff=str(diff_path),
+        budget=None,
+        ev_global=None,
+        roi_global=None,
+        max_vol=None,
+        min_payout=None,
+        allow_je_na=True,
+    )
+
+    pipeline_run.cmd_analyse(args)
+
+    assert "apply" in captured and "enforce" in captured
+    runners_apply = captured["apply"]
+    runners_enforce = captured["enforce"]
+    assert runners_apply == runners_enforce
+
+    assert runners_apply, "expected runners to be passed to allocation"
+    for runner in runners_apply:
+        cid = runner["id"]
+        assert "p_imp_h5" in runner
+        assert "p_imp_h30" in runner
+        assert "drift_score" in runner
+        assert "last2_top3" in runner
+        assert runner["p_imp_h5"] == pytest.approx(expected_h5[cid])
+        assert runner["p_imp_h30"] == pytest.approx(expected_h30.get(cid, expected_h5[cid]))
+        drift_expected = h5[cid] - h30.get(cid, h5[cid])
+        assert runner["drift_score"] == pytest.approx(drift_expected)
+
+    last2_flags = {runner["id"]: runner["last2_top3"] for runner in runners_apply}
+    assert last2_flags["1"] is True
+    assert last2_flags["3"] is False
 
 
 def test_pipeline_validation_failure_reports_summary(tmp_path, monkeypatch):
