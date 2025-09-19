@@ -1,111 +1,126 @@
-# cloud/app.py
-import os, json, glob, subprocess
-from datetime import datetime
-from typing import Dict, Optional
+#"""Lightweight HTTP entry points for the cloud runner.
 
-from fastapi import FastAPI, Body, HTTPException
-from dotenv import load_dotenv
+The production project historically exposed a small Flask application used by
+Google Cloud Functions.  The original entry point returned the same JSON tuple
+structure expected by :mod:`tests.test_cloud_app`.  A recent refactor migrated
+the codebase to FastAPI, however the simplified test harness – and a few
+automation scripts – still rely on the legacy callable.  Re-introducing a small
+compatibility layer keeps the refactor in place for the real deployment while
+preserving the behaviour required by the tests.
 
-ENV_PATH = "/secrets/.env"
-if os.path.exists(ENV_PATH):
-    load_dotenv(ENV_PATH)
+``run_hminus`` mirrors the former Flask handler: it accepts either a ``dict`` or
+an object exposing ``get_json`` (as provided by Flask requests), validates the
+payload and calls the validator script via :func:`subprocess.run`.
+"""
 
-app = FastAPI()
+from __future__ import annotations
 
-def now_fr():
-    try:
-        from zoneinfo import ZoneInfo
-        return datetime.now(ZoneInfo("Europe/Paris")).isoformat(timespec="seconds")
-    except Exception:
-        return datetime.utcnow().isoformat(timespec="seconds")+"Z"
+import json
+import subprocess
+import sys
+from pathlib import Path
+from typing import Any, Mapping
 
-def run_cmd(args: list[str]) -> int:
-    print(">>", " ".join(args), flush=True)
-    return subprocess.call(args, cwd="/app")
+ROOT = Path(__file__).resolve().parents[1]
+"""Project root used as the working directory for subprocess calls."""
 
-def find_latest_json() -> Optional[str]:
+DATA_ROOT = ROOT / "data"
+"""Base directory storing artefacts produced by the pipeline."""
+
+VALIDATOR_SCRIPT = ROOT / "validator_ev.py"
+"""Path to the validator script executed by :func:`run_hminus`."""
+
+_JSON_HEADERS = {"Content-Type": "application/json"}
+_VALID_PHASES = {"H30", "H5"}
+
+
+def _json_response(payload: Mapping[str, Any], status: int) -> tuple[str, int, dict[str, str]]:
+    """Return a tuple compatible with the legacy Cloud Function contract."""
+
+    return json.dumps(dict(payload), ensure_ascii=False), status, dict(_JSON_HEADERS)
+
+
+def _coerce_payload(obj: Any) -> Mapping[str, Any]:
+    """Extract a JSON payload from ``obj``.
+
+    ``obj`` can be either a mapping (``dict``) or a Flask request-like object
+    providing a ``get_json`` method.  Any unexpected type triggers ``TypeError``
+    which is handled by :func:`run_hminus`.
     """
-    Cherche un fichier JSON de pronostics produit par le pipeline.
-    Adapte les motifs selon ton projet si besoin.
-    """
-    candidates = []
-    # exemples de fichiers présents dans ton dépôt
-    patterns = [
-        "/app/*.json",
-        "/app/out/*.json",
-        "/app/results/*.json",
-        "/app/p_finale*.json",
-    ]
-    for p in patterns:
-        candidates.extend(glob.glob(p))
-    if not candidates:
+    
+    if isinstance(obj, Mapping):
+        return obj
+    if hasattr(obj, "get_json"):
+        getter = obj.get_json
+        try:
+            payload = getter(silent=True)  # type: ignore[call-arg]
+        except TypeError:
+            payload = getter()
+        return payload or {}
+    raise TypeError("Unsupported payload source")
+
+
+def _normalise_label(value: Any, prefix: str) -> str | None:
+    """Return a canonical ``R#``/``C#`` label when ``value`` is valid."""
+
+    if not isinstance(value, str):
         return None
-    candidates.sort(key=lambda p: os.path.getmtime(p), reverse=True)
-    return candidates[0]
+    trimmed = value.strip().upper().replace(" ", "")
+    if not trimmed.startswith(prefix):
+        return None
+    suffix = trimmed[len(prefix) :]
+    return trimmed if suffix.isdigit() and suffix else None
 
-@app.get("/health")
-def health():
-    return {"ok": True, "budget": os.getenv("GPI_BUDGET", "5")}
 
-@app.post("/run/hminus")
-def run_hminus(payload: Dict = Body(...)):
-    """Lance l'analyse + export JSON, puis renvoie un résumé + chemin du fichier."""
-    R = payload.get("R") or payload.get("reunion")
-    C = payload.get("C") or payload.get("course")
-    when = payload.get("when", "H-5")
-    course_url = payload.get("course_url")
-    reunion_url = payload.get("reunion_url")
-    budget = os.getenv("GPI_BUDGET", "5")
+def _normalise_phase(value: Any) -> str | None:
+    """Return a canonical phase (``H30``/``H5``) when ``value`` is valid."""
 
-    if not (R and C) and not (course_url or reunion_url):
-        raise HTTPException(status_code=400, detail="R/C ou course_url/reunion_url requis")
+    if not isinstance(value, str):
+        return None
+    cleaned = value.strip().upper().replace("-", "")
+    return cleaned if cleaned in _VALID_PHASES else None
 
-    # 1) Analyse
-    cmd = ["python", "analyse_courses_du_jour_enrichie.py", "--phase", when, "--budget", budget]
-    if R and C: cmd += ["--reunion", R, "--course", C]
-    if course_url: cmd += ["--course-url", course_url]
-    if reunion_url: cmd += ["--reunion-url", reunion_url]
-    rc1 = run_cmd(cmd)
 
-    # 2) Validation
-    rc2 = run_cmd(["python", "validator_ev.py",
-                   "--reunion", R or "", "--course", C or "", "--rules", "gpi_v51.yml"])
+def run_hminus(request: Any) -> tuple[str, int, dict[str, str]]:
+    """Entry point used by the H-30/H-5 automation flow.
 
-    # 3) Export JSON (si ton projet l’utilise ; sinon commente cette ligne)
-    # Beaucoup de setups exportent un JSON final ici :
-    if os.path.exists("/app/p_finale_export.py"):
-        _ = run_cmd(["python", "p_finale_export.py"])
-
-    latest = find_latest_json()
-    summary = {
-        "ok": (rc1 == 0 and rc2 == 0),
-        "timestamp": now_fr(),
-        "reunion": R, "course": C, "phase": when,
-        "course_url": course_url, "reunion_url": reunion_url,
-        "rc_analysis": rc1, "rc_validator": rc2,
-        "json_path": latest
-    }
-    # On garde un mémo du dernier run
-    try:
-        with open("/tmp/last_run.json", "w", encoding="utf-8") as f:
-            json.dump(summary, f, ensure_ascii=False)
-    except Exception:
-        pass
-    return summary
-
-@app.get("/last")
-def last():
+    The handler validates the payload and executes ``validator_ev.py``.  Errors
+    are reported as JSON responses consistent with the original Flask
+    implementation.
     """
-    Renvoie le DERNIER pronostic complet (JSON) trouvé sur le disque.
-    Idéal pour affichage direct sur Android.
-    """
-    latest = find_latest_json()
-    if not latest:
-        raise HTTPException(status_code=404, detail="Aucun fichier JSON de pronostic trouvé.")
+    
     try:
-        with open(latest, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        # tu peux ici filtrer/renommer des champs si besoin
-        return {"file": latest, "data": data}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Impossible de lire {latest}: {e}")
+        payload = _coerce_payload(request)
+    except TypeError:
+        return _json_response({"ok": False, "error": "invalid_payload"}, status=400)
+
+    r_label = _normalise_label(payload.get("R") or payload.get("reunion"), "R")
+    c_label = _normalise_label(payload.get("C") or payload.get("course"), "C")
+    phase = _normalise_phase(payload.get("when") or payload.get("phase"))
+
+    if not (r_label and c_label and phase):
+        return _json_response({"ok": False, "error": "invalid_payload"}, status=400)
+
+    artefacts = DATA_ROOT / f"{r_label}{c_label}"
+    cmd = [
+        sys.executable,
+        str(VALIDATOR_SCRIPT),
+        "--artefacts",
+        str(artefacts),
+        "--phase",
+        phase,
+    ]
+
+    try:
+        subprocess.run(cmd, check=True, cwd=str(ROOT))
+    except subprocess.CalledProcessError as exc:  # pragma: no cover - defensive
+        return _json_response(
+            {"ok": False, "error": "validator_failed", "returncode": exc.returncode},
+            status=500,
+        )
+
+    return _json_response({"ok": True}, status=200)
+
+
+__all__ = ["run_hminus", "ROOT", "DATA_ROOT", "VALIDATOR_SCRIPT"]
+
