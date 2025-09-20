@@ -338,6 +338,74 @@ def test_enforce_ror_threshold_preserves_safe_pack() -> None:
         assert stake_actual == pytest.approx(stake_expected)
 
 
+def test_enforce_ror_threshold_respects_minimum_after_scaling(monkeypatch) -> None:
+    """Scaled tickets falling below ``MIN_STAKE_SP`` must be removed."""
+
+    cfg = {
+        "BUDGET_TOTAL": 50.0,
+        "SP_RATIO": 1.0,
+        "COMBO_RATIO": 0.0,
+        "KELLY_FRACTION": 1.0,
+        "MAX_VOL_PAR_CHEVAL": 1.0,
+        "ROUND_TO_SP": 0.1,
+        "MIN_STAKE_SP": 0.1,
+        "MAX_TICKETS_SP": 3,
+        "ROR_MAX": 1e-3,
+    }
+
+    sp_templates = [
+        {
+            "type": "SP",
+            "id": "A",
+            "stake": 1.2,
+            "ev_ticket": 0.2,
+        },
+        {
+            "type": "SP",
+            "id": "B",
+            "stake": 0.9,
+            "ev_ticket": 0.18,
+        },
+    ]
+
+    combo_template = {
+        "type": "CP",
+        "id": "combo",
+        "stake": 1.5,
+        "ev_ticket": 0.3,
+    }
+
+    def fake_allocate(cfg_local, runners):
+        return [dict(ticket) for ticket in sp_templates], 0.0
+
+    monkeypatch.setattr("pipeline_run.allocate_dutching_sp", fake_allocate)
+
+    call_count = {"value": 0}
+
+    def fake_simulate_with_metrics(tickets, bankroll, *, kelly_cap=None):
+        call_count["value"] += 1
+        total_stake = sum(float(t.get("stake", 0.0)) for t in tickets)
+        total_ev = sum(float(t.get("ev_ticket", 0.0)) for t in tickets)
+        variance = sum(float(t.get("stake", 0.0)) ** 2 for t in tickets) or 1e-9
+        risk = 0.5 if call_count["value"] == 1 else 0.0
+        for ticket in tickets:
+            ticket["ev"] = float(ticket.get("ev_ticket", 0.0))
+            ticket["variance"] = float(ticket.get("stake", 0.0)) ** 2
+        roi = total_ev / total_stake if total_stake > 0 else 0.0
+        return {"ev": total_ev, "roi": roi, "variance": variance, "risk_of_ruin": risk}
+
+    monkeypatch.setattr("pipeline_run.simulate_with_metrics", fake_simulate_with_metrics)
+    monkeypatch.setattr("pipeline_run._compute_scale_factor", lambda *_, **__: 0.05)
+
+    combo_tickets = [dict(combo_template)]
+    sp_tickets, stats, info = enforce_ror_threshold(cfg, [], combo_tickets, bankroll=cfg["BUDGET_TOTAL"])
+
+    assert info["applied"] is True
+    assert stats["risk_of_ruin"] <= cfg["ROR_MAX"] + 1e-9
+
+    remaining = sp_tickets + combo_tickets
+    assert remaining == []
+
 def test_risk_of_ruin_decreases_with_lower_variance() -> None:
     """Risk of ruin should drop as variance decreases for the same EV."""
     ev = 2.0
