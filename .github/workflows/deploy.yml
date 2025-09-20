@@ -2,46 +2,32 @@ name: Deploy to Cloud Run
 
 on:
   push:
-    branches: [ main ]
+    branches: [ "main" ]
 
 jobs:
-  build-deploy:
+  deploy:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    env:
-      PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-      REGION: ${{ secrets.GCP_REGION }}
-      SERVICE: ${{ secrets.SERVICE_NAME }}
-      IMAGE: europe-west1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/hippiques/${{ secrets.SERVICE_NAME }}:${{ github.sha }}
+
     steps:
-      - uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v4
 
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
+    - name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: ${{ secrets.GCP_CREDENTIALS }}
 
-      - name: Set up gcloud
-        uses: google-github-actions/setup-gcloud@v2
+    - name: Set up gcloud
+      uses: google-github-actions/setup-gcloud@v2
 
-      - name: Ensure Artifact Registry repo
-        run: |
-          gcloud artifacts repositories create hippiques \
-            --repository-format=DOCKER --location=${REGION} \
-            --description="Hippiques images" || true
-          gcloud auth configure-docker ${REGION}-docker.pkg.dev --quiet
+    - name: Build and push Docker image
+      run: |
+        gcloud builds submit --tag gcr.io/${{ secrets.GCP_PROJECT }}/hippique-analyse:latest
 
-      - name: Build & Push image
-        run: |
-          docker build -t $IMAGE .
-          docker push $IMAGE
-
-      - name: Deploy to Cloud Run
-        run: >
-          gcloud run deploy ${SERVICE}
-          --image ${IMAGE}
-          --region ${REGION}
+    - name: Deploy to Cloud Run
+      run: |
+        gcloud run deploy hippique-analyse \
+          --image gcr.io/${{ secrets.GCP_PROJECT }}/hippique-analyse:latest \
+          --region europe-west1 \
+          --platform managed \
           --allow-unauthenticated
-          --platform managed
-          --set-env-vars DEFAULT_BUDGET=5.0,MIN_EV_SP=0.20,MIN_EV_COMBO=0.40,MAX_VOLAT_PER_HORSE=0.60,DATA_MODE=web
