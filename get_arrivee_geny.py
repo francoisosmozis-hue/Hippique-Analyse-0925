@@ -555,5 +555,3 @@ __all__ = [
     "write_arrivals",
     "PlanningEntry",
 ]
-tests/test_get_arrivee_geny.py
-Nouveau
