@@ -1,12 +1,4 @@
-fastapi
-uvicorn
-requests
-beautifulsoup4
-lxml
-pandas
-openpyxl
-pyyaml
-google-api-python-client
-google-auth
+fastapi==0.112.2
+uvicorn[standard]==0.30.6
 
 
