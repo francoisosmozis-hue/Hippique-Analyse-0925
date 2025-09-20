@@ -1,18 +1,20 @@
-from fastapi import FastAPI
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, Query, HTTPException
+import subprocess, json
 
-app = FastAPI(title="Arrivee API")
+# Désactive les redirections automatiques /healthz <-> /healthz/
+app = FastAPI(title="Arrivee API", redirect_slashes=False)
 
 @app.get("/", tags=["meta"])
 def root():
     return {"service":"get-arrivee-geny","docs":"/docs","health":"/healthz"}
 
+# Expose les DEUX chemins explicitement (sans redir)
 @app.get("/healthz", tags=["meta"])
-@app.get("/healthz/", include_in_schema=False)
-def healthz():
+def healthz_no_slash():
     return {"ok": True}
 
-# WILDCARD: attrape tout le reste pour diagnostiquer (retourne 200)
-@app.api_route("/{full_path:path}", methods=["GET","HEAD","POST","PUT","PATCH","DELETE"])
-def catch_all(full_path: str):
-    return JSONResponse({"path": f"/{full_path}", "note": "wildcard handler"}, status_code=200)
+@app.get("/healthz/", include_in_schema=False)
+def healthz_with_slash():
+    return {"ok": True}
+
+# Tu pourras remettre /arrivee ensuite (on stabilise /healthz d'abord)
