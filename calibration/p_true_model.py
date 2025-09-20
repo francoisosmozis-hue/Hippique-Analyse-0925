@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Mapping
+from typing import Any, Mapping
 
 import math
 import threading
@@ -36,7 +36,11 @@ class PTrueModel:
             score += coef * value
         return _sigmoid(score)
 
+    def get_metadata(self) -> dict[str, Any]:
+        """Return a shallow copy of the calibration metadata."""
 
+        return get_model_metadata(self)
+        
 def _sigmoid(value: float) -> float:
     if value >= 0:
         z = math.exp(-value)
@@ -89,6 +93,31 @@ def load_p_true_model(path: Path | None = None) -> PTrueModel | None:
         )
         _MODEL_CACHE = (path, mtime, model)
         return model
+
+
+def get_model_metadata(model: PTrueModel | None) -> dict[str, Any]:
+    """Return sanitized calibration metadata for ``model``.
+
+    Only scalar values (``str``/``int``/``float``/``bool``) are exposed in the
+    returned mapping to avoid leaking nested structures. When ``model`` is
+    ``None`` or metadata is missing, an empty dictionary is returned.
+    """
+
+    if model is None:
+        return {}
+
+    meta: Mapping[str, Any] | None = None
+    if isinstance(model.metadata, Mapping):
+        meta = model.metadata
+
+    if meta is None:
+        return {}
+
+    sanitized: dict[str, Any] = {}
+    for key, value in meta.items():
+        if isinstance(value, (str, int, float, bool)):
+            sanitized[str(key)] = value
+    return dict(sanitized)
 
 
 def compute_runner_features(
