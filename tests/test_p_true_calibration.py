@@ -102,8 +102,11 @@ def test_train_and_predict_roundtrip(tmp_path, monkeypatch):
     p_fav = predict_probability(model, fav_features)
     p_outsider = predict_probability(model, outsider_features)
 
+    assert 0.0 < p_outsider < 1.0
+    assert p_fav > p_outsider
 
-    def test_get_model_metadata_returns_copy() -> None:
+
+def test_get_model_metadata_returns_copy() -> None:
     model = p_true_model.PTrueModel(
         features=("log_odds",),
         intercept=0.0,
@@ -147,5 +150,4 @@ def test_build_p_true_downgrades_to_heuristic_when_history_short(
     assert result == heur_expected
     assert "Calibration p_true ignorée" in caplog.text
 
-    assert 0.0 < p_outsider < 1.0
-    assert p_fav > p_outsider
+    
