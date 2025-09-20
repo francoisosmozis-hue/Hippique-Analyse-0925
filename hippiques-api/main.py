@@ -1,73 +1,34 @@
-"""Application FastAPI exposant des endpoints de santé et d'arrivée."""
-from __future__ import annotations
+from fastapi import FastAPI, HTTPException, Query
 
-from pathlib import Path
-from typing import Any, Dict, Optional
-
-import sys
-
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel, Field
-
-# Rendez accessible le dossier racine du dépôt pour importer les utilitaires existants.
-ROOT_DIR = Path(__file__).resolve().parent.parent
-if str(ROOT_DIR) not in sys.path:
-    sys.path.append(str(ROOT_DIR))
-
-try:  # pragma: no cover - l'import peut échouer hors du dépôt complet.
-    from get_arrivee_geny import PlanningEntry, fetch_arrival
-except ModuleNotFoundError:  # pragma: no cover - route neutralisée lorsqu'absente.
-    PlanningEntry = None  # type: ignore[assignment]
-    fetch_arrival = None  # type: ignore[assignment]
-
-app = FastAPI(title="Hippiques API", version="0.1.0", description="API légère pour les flux hippiques")
+app = FastAPI(title="Arrivee API")
 
 
-class ArriveeRequest(BaseModel):
-    """Payload attendu par l'endpoint /arrivee."""
+@app.get("/")
+async def root() -> dict[str, str]:
+    """Point d'entrée par défaut pour confirmer que l'API est joignable."""
+    return {"message": "Bienvenue sur l'Arrivee API"}
+    
 
-    rc: str = Field(..., description="Identifiant de type R#C#")
-    reunion: Optional[str] = Field(None, description="Numéro de réunion")
-    course: Optional[str] = Field(None, description="Numéro de course")
-    course_id: Optional[str] = Field(None, description="Identifiant Geny")
-    url_geny: Optional[str] = Field(None, description="URL directe de la course sur Geny")
-
-
-@app.get("/healthz", tags=["monitoring"])
-async def healthz() -> Dict[str, str]:
-    """Endpoint de santé simple pour vérifier que l'API répond."""
-
+@app.get("/healthz")
+async def healthz() -> dict[str, str]:
+    """Endpoint de santé très simple."""
     return {"status": "ok"}
 
 
-@app.post("/arrivee", tags=["arrivees"])
-async def arrivee(payload: ArriveeRequest) -> Dict[str, Any]:
-    """Retourne les informations d'arrivée pour la course demandée."""
-
-    if PlanningEntry is None or fetch_arrival is None:
-        raise HTTPException(
-            status_code=503,
-            detail="Endpoint temporairement désactivé (dépendance manquante).",
-        )
-
-    entry = PlanningEntry(
-        rc=payload.rc,
-        reunion=payload.reunion,
-        course=payload.course,
-        course_id=payload.course_id,
-        url_geny=payload.url_geny,
-    )
-    result = fetch_arrival(entry)
-
-    # Normalise la structure pour éviter les surprises côté client.
+@app.get("/arrivee")
+async def arrivee(rc: str = Query(..., description="Identifiant de type R#C#")) -> dict[str, object]:
+    """Endpoint temporaire renvoyant une charge JSON factice."""
+    # from get_arrivee_geny import get_arrivee  # type: ignore[import-not-found]
+    #
+    # try:
+    #     return get_arrivee(rc=rc)
+    # except Exception as exc:
+    #     raise HTTPException(status_code=500, detail=str(exc)) from exc    
+   
     return {
-        "rc": result.get("rc", entry.rc),
-        "status": result.get("status", "unknown"),
-        "result": result.get("result"),
-        "url": result.get("url"),
-        "retrieved_at": result.get("retrieved_at"),
-        "error": result.get("error"),
+        "rc": rc,
+        "arrivee": [],
+        "message": "Stub de réponse - à remplacer par get_arrivee_geny.get_arrivee",
     }
 
 
-__all__ = ["app"]
