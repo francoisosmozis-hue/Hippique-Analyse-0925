@@ -26,6 +26,7 @@ import yaml
 
 from calibration.p_true_model import (
     compute_runner_features,
+    get_model_metadata,
     load_p_true_model,
     predict_probability,
 )
@@ -111,6 +112,7 @@ OPTIONAL_KEYS = {
     "KELLY_FRACTION",
     "MIN_PAYOUT_COMBOS",
     "SNAPSHOTS",
+    "P_TRUE_MIN_SAMPLES",
 }
 
 _ENV_ALIASES: dict[str, tuple[str, ...]] = {
@@ -579,6 +581,7 @@ def load_yaml(path: str) -> dict:
     cfg.setdefault("SNAPSHOTS", "H30,H5")
     cfg.setdefault("DRIFT_TOP_N", 5)
     cfg.setdefault("DRIFT_MIN_DELTA", 0.8)
+    cfg.setdefault("P_TRUE_MIN_SAMPLES", 0)
     
     payout_default = cfg.get("EXOTIC_MIN_PAYOUT", cfg.get("MIN_PAYOUT_COMBOS"))
     if payout_default is None:
@@ -595,6 +598,11 @@ def load_yaml(path: str) -> dict:
     cfg["DRIFT_MIN_DELTA"] = get_env(
         "DRIFT_MIN_DELTA",
         cfg.get("DRIFT_MIN_DELTA"),
+        cast=float,
+    )
+    cfg["P_TRUE_MIN_SAMPLES"] = get_env(
+        "P_TRUE_MIN_SAMPLES",
+        cfg.get("P_TRUE_MIN_SAMPLES"),
         cast=float,
     )
     cfg["BUDGET_TOTAL"] = get_env(
@@ -885,6 +893,22 @@ def _heuristic_p_true(cfg, partants, odds_h5, odds_h30, stats_je) -> dict:
     return {cid: w / total for cid, w in weights.items()}
 
 
+ _coerce_positive_count(value) -> float | None:
+    if isinstance(value, (int, float)):
+        if not math.isfinite(value) or value < 0:
+            return None
+        return float(value)
+    if isinstance(value, str):
+        try:
+            parsed = float(value)
+        except (TypeError, ValueError):
+            return None
+        if not math.isfinite(parsed) or parsed < 0:
+            return None
+        return float(parsed)
+    return None
+
+
 def build_p_true(cfg, partants, odds_h5, odds_h30, stats_je) -> dict:
     model = None
     try:
@@ -894,6 +918,22 @@ def build_p_true(cfg, partants, odds_h5, odds_h30, stats_je) -> dict:
         model = None
 
     if model is not None:
+        min_samples = float(cfg.get("P_TRUE_MIN_SAMPLES", 0) or 0)
+        if min_samples > 0:
+            metadata = get_model_metadata(model)
+            sample_count = _coerce_positive_count(metadata.get("n_samples"))
+            race_count = _coerce_positive_count(metadata.get("n_races"))
+            too_few_samples = sample_count is None or sample_count < min_samples
+            too_few_races = race_count is None or race_count < min_samples
+            if too_few_samples or too_few_races:
+                logger.warning(
+                    "Calibration p_true ignorée: n_samples=%s n_races=%s (seuil=%s)",
+                    "n/a" if sample_count is None else sample_count,
+                    "n/a" if race_count is None else race_count,
+                    min_samples,
+                )
+                return _heuristic_p_true(cfg, partants, odds_h5, odds_h30, stats_je)
+
         probs = {}
         for p in partants:
             cid = str(p.get("id"))
