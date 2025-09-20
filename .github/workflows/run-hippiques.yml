@@ -72,14 +72,30 @@ jobs:
       # H5 : snapshot + JE + Chronos + p_finale + pipeline + prompt
       - name: Run analyse_courses_du_jour_enrichie.py
         run: |
-          set -e
+          set -euo pipefail
           PHASE="${{ inputs.phase }}"
           COURSE_URL="${{ inputs.course_url }}"
           if [ -z "$COURSE_URL" ]; then
             echo "No course_url provided (manual run) — skipping"; exit 1
           fi
           echo "Phase=$PHASE  Course=$COURSE_URL"
-          python analyse_courses_du_jour_enrichie.py --course-url "$COURSE_URL" --phase "$PHASE" --budget 5.0 --kelly-frac 0.4
+          
+          PARSED=$(printf '%s\n' "$COURSE_URL" | sed -nE 's#.*/(R[0-9]+)C([0-9]+).*#\1 C\2#p' | head -n1)
+          if [ -z "$PARSED" ]; then
+            echo "Unable to determine reunion/course identifiers from URL '$COURSE_URL' (expected pattern R?C?)." >&2
+            exit 1
+          fi
+
+          REUNION=$(printf '%s\n' "$PARSED" | awk '{print $1}')
+          COURSE=$(printf '%s\n' "$PARSED" | awk '{print $2}')
+          echo "Reunion=$REUNION  Course=$COURSE"
+
+          python analyse_courses_du_jour_enrichie.py \
+            --phase "$PHASE" \
+            --reunion "$REUNION" \
+            --course "$COURSE" \
+            --budget 5.0 \
+            --kelly 0.4
 
       # (Optionnel) Lancer runner_chain directement si tu préfères, ex:
       # - name: Runner H-5 direct (exemple)
