@@ -34,6 +34,7 @@ env:
   SNAPSHOTS: "H30,H5"
   DRIFT_TOP_N: "5"
   DRIFT_MIN_DELTA: "0.8"
+  P_TRUE_MIN_SAMPLES: "100"
 
 jobs:
   gpi:
