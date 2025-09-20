@@ -1,5 +1,4 @@
 name: Deploy to Cloud Run
-
 on:
   push:
     branches: [ "main" ]
@@ -9,25 +8,45 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+    - uses: actions/checkout@v4
 
-    - name: Authenticate to Google Cloud
+    - name: Auth GCP (Service Account JSON)
       uses: google-github-actions/auth@v2
       with:
+        # <-- ADAPTE le nom DU SECRET ICI
         credentials_json: ${{ secrets.GCP_CREDENTIALS }}
 
     - name: Set up gcloud
       uses: google-github-actions/setup-gcloud@v2
+      with:
+        project_id: analyse-hippique
 
-    - name: Build and push Docker image
+    - name: Sanity check auth
       run: |
-        gcloud builds submit --tag gcr.io/${{ secrets.GCP_PROJECT }}/hippique-analyse:latest
+        gcloud auth list
+        gcloud projects describe analyse-hippique --format="value(projectNumber)"
+
+    - name: Build & Push (Artifact Registry)
+      env:
+        REGION: europe-west1
+        IMAGE: europe-west1-docker.pkg.dev/analyse-hippique/hippiques/hippique-app:${{ github.sha }}
+      run: |
+        gcloud artifacts repositories create hippiques \
+          --repository-format=DOCKER --location=$REGION --description="Hippiques" || true
+        gcloud auth configure-docker $REGION-docker.pkg.dev --quiet
+        docker build -t $IMAGE .
+        docker push $IMAGE
 
     - name: Deploy to Cloud Run
+      env:
+        REGION: europe-west1
+        IMAGE: europe-west1-docker.pkg.dev/analyse-hippique/hippiques/hippique-app:${{ github.sha }}
       run: |
-        gcloud run deploy hippique-analyse \
-          --image gcr.io/${{ secrets.GCP_PROJECT }}/hippique-analyse:latest \
-          --region europe-west1 \
+        gcloud run deploy hippique-app \
+          --image $IMAGE \
+          --region $REGION \
+          --platform managed \
+          --allow-unauthenticated \
+          --set-env-vars DEFAULT_BUDGET=5.0,MIN_EV_SP=0.20,MIN_EV_COMBO=0.40,MAX_VOLA
           --platform managed \
           --allow-unauthenticated
