@@ -13,30 +13,11 @@ RUN apt-get update \
 
 COPY requirements.txt ./
 
-RUN python - <<'PY'
-from pathlib import Path
-source = Path('requirements.txt')
-target = Path('requirements.clean.txt')
-lines = []
-for raw in source.read_text().splitlines():
-    stripped = raw.strip()
-    if not stripped or stripped.startswith('#'):
-        continue
-    if stripped.startswith('touch ') or stripped.startswith('grep -q'):
-        continue
-    lines.append(stripped)
-if lines:
-    target.write_text('\n'.join(lines) + '\n')
-else:
-    target.write_text('')
-PY
-
 RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir -r requirements.clean.txt \
-    && pip install --no-cache-dir 'functions-framework==3.*'
+    && pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
 EXPOSE 8080
 
-CMD ["functions-framework", "--target", "run_hminus", "--source", "cloud/app.py", "--port", "8080"]
+CMD ["uvicorn","main:app","--host","0.0.0.0","--port","8080","--log-level","info"]
