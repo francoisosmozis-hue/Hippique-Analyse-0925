@@ -245,6 +245,74 @@ def _scale_ticket_metrics(ticket: dict, factor: float) -> None:
         ticket["variance"] = float(ticket["variance"]) * factor * factor
 
 
+def _normalize_ticket_stakes(
+    tickets: list[dict],
+    *,
+    round_step: float,
+    min_stake: float,
+) -> bool:
+    """Ensure stakes respect ``round_step``/``min_stake``; return True when changed."""
+
+    if not tickets:
+        return False
+
+    try:
+        step = float(round_step)
+    except (TypeError, ValueError):  # pragma: no cover - defensive
+        step = 0.0
+    if not math.isfinite(step) or step < 0.0:
+        step = 0.0
+
+    try:
+        floor = float(min_stake)
+    except (TypeError, ValueError):  # pragma: no cover - defensive
+        floor = 0.0
+    if not math.isfinite(floor) or floor < 0.0:
+        floor = 0.0
+
+    changed = False
+    sanitized: list[dict] = []
+    epsilon = 1e-12 if step <= 0 else step * 1e-6
+
+    for ticket in tickets:
+        try:
+            stake_raw = float(ticket.get("stake", 0.0))
+        except (TypeError, ValueError):
+            stake_raw = 0.0
+
+        if not math.isfinite(stake_raw) or stake_raw <= 0.0:
+            changed = True
+            continue
+
+        new_stake = stake_raw
+        if step > 0.0:
+            new_stake = math.floor((stake_raw + epsilon) / step) * step
+
+        if new_stake < floor - 1e-12 or new_stake <= 0.0:
+            changed = True
+            continue
+
+        ratio = new_stake / stake_raw if stake_raw else 0.0
+        if not math.isfinite(ratio) or ratio <= 0.0:
+            changed = True
+            continue
+
+        if abs(ratio - 1.0) > 1e-9:
+            _scale_ticket_metrics(ticket, ratio)
+            ticket["stake"] = float(new_stake)
+            changed = True
+        else:
+            ticket["stake"] = float(new_stake)
+
+        sanitized.append(ticket)
+
+    if len(sanitized) != len(tickets):
+        changed = True
+
+    tickets[:] = sanitized
+    return changed
+
+
 def _compute_scale_factor(
     ev: float,
     variance: float,
@@ -365,6 +433,14 @@ def enforce_ror_threshold(
     cfg_iter = dict(cfg)
     target = float(cfg_iter.get("ROR_MAX", 0.0))
     cap = float(cfg_iter.get("MAX_VOL_PAR_CHEVAL", 0.60))
+    try:
+        round_step = float(cfg_iter.get("ROUND_TO_SP", 0.0))
+    except (TypeError, ValueError):  # pragma: no cover - defensive
+        round_step = 0.0
+    try:
+        min_stake = float(cfg_iter.get("MIN_STAKE_SP", 0.0))
+    except (TypeError, ValueError):  # pragma: no cover - defensive
+        min_stake = 0.0
 
     sp_tickets, _ = allocate_dutching_sp(cfg_iter, runners)
     sp_tickets.sort(key=lambda t: t.get("ev_ticket", 0.0), reverse=True)
@@ -375,6 +451,8 @@ def enforce_ror_threshold(
     if max_count >= 0:
         sp_tickets = sp_tickets[:max_count]
 
+    _normalize_ticket_stakes(sp_tickets, round_step=round_step, min_stake=min_stake)
+    _normalize_ticket_stakes(combo_tickets, round_step=round_step, min_stake=min_stake)
     pack = sp_tickets + combo_tickets
     if not pack:
         stats_ev = {"ev": 0.0, "roi": 0.0, "risk_of_ruin": 0.0, "variance": 0.0}
@@ -427,6 +505,13 @@ def enforce_ror_threshold(
             for ticket in pack:
                 _scale_ticket_metrics(ticket, factor)
 
+            _normalize_ticket_stakes(sp_tickets, round_step=round_step, min_stake=min_stake)
+            _normalize_ticket_stakes(combo_tickets, round_step=round_step, min_stake=min_stake)
+            pack = sp_tickets + combo_tickets
+            if not pack:
+                stats_current = {"ev": 0.0, "roi": 0.0, "risk_of_ruin": 0.0, "variance": 0.0}
+                break
+
             stats_current = simulate_with_metrics(
                 pack,
                 bankroll=bankroll,
@@ -442,14 +527,20 @@ def enforce_ror_threshold(
     final_risk = float(stats_ev.get("risk_of_ruin", initial_risk))
     final_ev = float(stats_ev.get("ev", initial_ev))
     final_variance = float(stats_ev.get("variance", initial_variance))
+    pack = sp_tickets + combo_tickets
     final_total_stake = sum(float(t.get("stake", 0.0)) for t in pack)
+    scale_factor_effective = scale_factor_total
+    if initial_total_stake > 0.0:
+        computed_scale = final_total_stake / initial_total_stake
+        if math.isfinite(computed_scale) and computed_scale >= 0.0:
+            scale_factor_effective = computed_scale
 
     info = {
         "applied": reduction_applied,        
         "initial_ror": float(initial_risk),
         "final_ror": float(final_risk),
         "target": target,
-        "scale_factor": scale_factor_total,
+        "scale_factor": scale_factor_effective,
         "initial_ev": initial_ev,
         "final_ev": final_ev,
         "initial_variance": initial_variance,
@@ -1220,7 +1311,55 @@ def cmd_analyse(args: argparse.Namespace) -> None:
         risk_of_ruin = float(stats_ev.get("risk_of_ruin", 0.0))
         ev_over_std = float(stats_ev.get("ev_over_std", 0.0))
 
+    
+    step_export = cfg.get("ROUND_TO_SP", 0.0)
+    min_stake_export = cfg.get("MIN_STAKE_SP", 0.0)
+    sp_changed = _normalize_ticket_stakes(
+        sp_tickets,
+        round_step=step_export,
+        min_stake=min_stake_export,
+    )
+    combo_changed = _normalize_ticket_stakes(
+        final_combo_tickets,
+        round_step=step_export,
+        min_stake=min_stake_export,
+    )
+
     tickets = sp_tickets + final_combo_tickets
+
+    if sp_changed or combo_changed:
+        current_cap = _resolve_effective_cap(last_reduction_info, cfg)
+        stats_ev = simulate_with_metrics(
+            tickets,
+            bankroll=bankroll,
+            kelly_cap=current_cap,
+        )
+        ev_sp, roi_sp, total_stake_sp = summarize_sp_tickets(sp_tickets)
+        ev_global = float(stats_ev.get("ev", 0.0))
+        roi_global = float(stats_ev.get("roi", 0.0))
+        combined_payout = float(stats_ev.get("combined_expected_payout", 0.0))
+        risk_of_ruin = float(stats_ev.get("risk_of_ruin", 0.0))
+        ev_over_std = float(stats_ev.get("ev_over_std", 0.0))
+        if isinstance(last_reduction_info, dict):
+            updated_info = dict(last_reduction_info)
+            updated_info["final_total_stake"] = sum(
+                float(t.get("stake", 0.0)) for t in tickets
+            )
+            updated_info["final_ev"] = ev_global
+            updated_info["final_variance"] = float(stats_ev.get("variance", 0.0))
+            updated_info["final_ror"] = risk_of_ruin
+            if (
+                updated_info.get("initial_total_stake")
+                and updated_info["final_total_stake"] >= 0.0
+            ):
+                try:
+                    updated_info["scale_factor"] = (
+                        updated_info["final_total_stake"]
+                        / float(updated_info.get("initial_total_stake", 1.0))
+                    )
+                except (TypeError, ValueError, ZeroDivisionError):  # pragma: no cover
+                    pass
+            last_reduction_info = updated_info
 
     if flags.get("reasons", {}).get("sp"):
         logger.warning(
