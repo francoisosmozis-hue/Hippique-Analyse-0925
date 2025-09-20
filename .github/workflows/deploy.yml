@@ -2,44 +2,26 @@ name: Deploy to Cloud Run
 
 on:
   push:
-    branches: [ "main" ]
-
-permissions:
-  id-token: write
-  contents: read
+    branches: ["main"]
   
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
     steps:
-    - name: Checkout repo
-      uses: actions/checkout@v4
-      
-    - name: Authenticate to Google Cloud
+    - uses: actions/checkout@v3
+
+    - name: Auth GCP
       uses: google-github-actions/auth@v2
       with:
-        workload_identity_provider: ${{ secrets.WORKLOAD_IDENTITY_PROVIDER }}
-        service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
-        access_token_scopes: https://www.googleapis.com/auth/cloud-platform
-        create_credentials_file: true
-        export_environment_variables: true
-        cleanup_credentials: true
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
 
 
-    - name: Set up gcloud
-      uses: google-github-actions/setup-gcloud@v2
+    - name: Build & Push
+      uses: google-github-actions/build-push-docker@v2
       with:
-        project_id: ${{ secrets.GCP_PROJECT }}
-        
-    - name: Build and Push Container
-      run: |
-        gcloud builds submit --tag gcr.io/${{ secrets.GCP_PROJECT }}/hippique-analyse
+        push: true
+        tags: gcr.io/${{ secrets.GCP_PROJECT }}/hippique-analyse:latest
 
     - name: Deploy to Cloud Run
-      run: |
-        gcloud run deploy hippique-analyse \
-          --image gcr.io/${{ secrets.GCP_PROJECT }}/hippique-analyse \
-          --platform managed \
-          --region europe-west1 \
-          --allow-unauthenticated
+      push: true
+        tags: gcr.io/${{ secrets.GCP_PROJECT }}/hippique-analyse:latest
