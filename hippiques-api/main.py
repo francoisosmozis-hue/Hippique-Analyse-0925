@@ -13,7 +13,7 @@ def healthz_no_slash(): return {"ok": True}
 @app.get("/healthz/", include_in_schema=False)
 def healthz_with_slash(): return {"ok": True}
 
-# 1) STUB pour valider la route
+# --- STUB pour valider la route ---
 @app.get("/arrivee", tags=["arrivee"])
 def arrivee(race_id: str = Query(..., description="ID de course Geny")):
     return {"race_id": race_id, "status": "stub OK"}
