@@ -12,13 +12,17 @@ jobs:
     - name: Checkout repo
       uses: actions/checkout@v3
 
+    - name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@v1
+      with:
+        credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+
+
     - name: Set up gcloud
       uses: google-github-actions/setup-gcloud@v2
       with:
         project_id: ${{ secrets.GCP_PROJECT }}
-        service_account_key: ${{ secrets.GCP_CREDENTIALS }}
-        export_default_credentials: true
-
+        
     - name: Build and Push Container
       run: |
         gcloud builds submit --tag gcr.io/${{ secrets.GCP_PROJECT }}/hippique-analyse
