@@ -275,6 +275,7 @@ Les fichiers correspondants sont téléchargés dans le dossier indiqué par
 | `SNAPSHOTS` | Phases de collecte des cotes pour le drift (ex. `H30,H5`). |
 | `DRIFT_TOP_N` | Nombre maximal de steams/drifts conservés. |
 | `DRIFT_MIN_DELTA` | Variation minimale de cote pour être retenue comme drift/steam. |
+| `P_TRUE_MIN_SAMPLES` | Historique minimal (échantillons/courses) pour activer le modèle `p_true`. |
 
 > ℹ️ Le pipeline accepte également certains alias conviviaux : `TotalBudget`,
 > `simpleShare`, `comboShare` ou `maxStakePerHorse` (et leurs équivalents en
@@ -298,6 +299,9 @@ python pipeline_run.py analyse --ev-global 0.35 --roi-global 0.25 --min-payout 1
 - Les fichiers `calibration/payout_calibration.yaml` et `calibration/probabilities.yaml` doivent être présents avant toute
   analyse. Ils calibrent respectivement les gains des combinés et les probabilités de base. Mettre ces fichiers à jour
   régulièrement avec `calibrate_simulator.py` ou `recalibrate_payouts_pro.py`.
+- La calibration `calibration/p_true_model.yaml` n'est utilisée que si `n_samples` et `n_races` dépassent `P_TRUE_MIN_SAMPLES`.
+  Tant que ce seuil n'est pas atteint, le pipeline revient sur l'heuristique interne : réalimenter le modèle avec davantage de
+  courses avant de réactiver la calibration.
 - Le budget total (`BUDGET_TOTAL`) est réparti entre paris simples et combinés selon `SP_RATIO` et `COMBO_RATIO`
   (par défaut **60 % / 40 %**). Modifier ces variables pour ajuster la répartition.
 - Lorsqu'une combinaison présente à la fois un EV élevé et un payout attendu important, un drapeau `ALERTE_VALUE` est posé
