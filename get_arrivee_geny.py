@@ -437,20 +437,41 @@ def _resolve_course_url_from_meeting(url: str, entry: PlanningEntry) -> str | No
     soup = BeautifulSoup(resp.text, "html.parser")
     course_key = (entry.course or "").replace(" ", "").upper()
 
-    for attr in ("data-course", "data-course-id", "data-idcourse", "data-id-course"):
-        node = soup.find(attrs={attr: True})
-        if node and entry.course_id and str(node.get(attr)) == entry.course_id:
-            href = node.get("href")
-            if href:
-                return urljoin(url, href)
+    if entry.course_id:
+        for attr in ("data-course", "data-course-id", "data-idcourse", "data-id-course"):
+            for node in soup.find_all(attrs={attr: True}):
+                value = node.get(attr)
+                if not value or str(value) != entry.course_id:
+                    continue
+                href = node.get("href")
+                if not href and hasattr(node, "find"):
+                    link = node.find("a", href=True)
+                    if link:
+                        href = link.get("href")
+                if href:
+                    return urljoin(url, href)
 
+    fallback_urls: list[str] = []
+    seen_urls: set[str] = set()
     for link in soup.find_all("a", href=True):
-        text = link.get_text(" ", strip=True).replace(" ", "").upper()
-        data_course = link.get("data-course") or link.get("data-course-id") or link.get("data-idcourse")
+        data_course = (
+            link.get("data-course")
+            or link.get("data-course-id")
+            or link.get("data-idcourse")
+            or link.get("data-id-course")
+        )
         if entry.course_id and data_course and str(data_course) == entry.course_id:
             return urljoin(url, link["href"])
-        if course_key and course_key in text:
-            return urljoin(url, link["href"])
+        if course_key:
+            text = link.get_text(" ", strip=True).replace(" ", "").upper()
+            if course_key in text:
+                candidate = urljoin(url, link["href"])
+                if candidate not in seen_urls:
+                    fallback_urls.append(candidate)
+                    seen_urls.add(candidate)
+
+    for candidate in fallback_urls:
+        return candidate
 
     return None
 
