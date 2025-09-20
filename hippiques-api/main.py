@@ -15,5 +15,9 @@ def healthz_with_slash(): return {"ok": True}
 
 @app.get("/arrivee", tags=["arrivee"])
 def arrivee(race_id: str = Query(..., description="ID de course Geny")):
-    # STUB : on valide la route avant de brancher le script
-    return {"race_id": race_id, "status": "stub OK"}
+    try:
+        out = subprocess.check_output(["python","get_arrivee_geny.py","--race",race_id],
+                                      text=True, timeout=35).strip()
+        return json.loads(out) if out.startswith("{") else {"race_id": race_id, "raw": out}
+    except subprocess.CalledProcessError as e:
+        raise HTTPException(status_code=500, detail=e.output or "script error")
