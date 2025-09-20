@@ -36,18 +36,18 @@ jobs:
 
       # Déploiement Cloud Run (note: la liste d'ENV est ENTIEREMENT entre guillemets)
       - name: Deploy to Cloud Run
-        env:
-          REGION: europe-west1
-          IMAGE: europe-west1-docker.pkg.dev/analyse-hippique/hippiques/hippique-app:${{ github.sha }}
-          DEFAULT_BUDGET: "5.0"
-          MIN_EV_SP: "0.20"
-          MIN_EV_COMBO: "0.40"
-          MAX_VOLAT_PER_HORSE: "0.60"
-          DATA_MODE: "web"
-        run: |
-          gcloud run deploy hippique-app \
-            --image "$IMAGE" \
-            --region "$REGION" \
-            --platform managed \
-            --allow-unauthenticated \
-            --set-env-vars "DEFAULT_BUDGET=${DEFAULT_BUDGET},MIN_EV_SP=${MIN_EV_SP},MIN_EV_COMBO=${MIN_EV_COMBO},MAX_VOLAT_PER_HORSE=${MAX_VOLAT_PER_HORSE},DATA_MODE=${DATA_MODE}"
+  env:
+    REGION: europe-west1
+    IMAGE: europe-west1-docker.pkg.dev/analyse-hippique/hippiques/hippique-app:${{ github.sha }}
+    DEFAULT_BUDGET: "5.0"
+    MIN_EV_SP: "0.20"
+    MIN_EV_COMBO: "0.40"
+    MAX_VOLAT_PER_HORSE: "0.60"
+    DATA_MODE: "web"
+  run: |
+    gcloud run deploy hippique-app \
+      --image "$IMAGE" \
+      --region "$REGION" \
+      --platform managed \
+      --allow-unauthenticated \
+      --set-env-vars "DEFAULT_BUDGET=${DEFAULT_BUDGET},MIN_EV_SP=${MIN_EV_SP},MIN_EV_COMBO=${MIN_EV_COMBO},MAX_VOLAT_PER_HORSE=${MAX_VOLAT_PER_HORSE},DATA_MODE=${DATA_MODE}"
