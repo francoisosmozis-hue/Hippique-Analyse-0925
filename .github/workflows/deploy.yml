@@ -1,52 +1,53 @@
 name: Deploy to Cloud Run
+
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Auth GCP (Service Account JSON)
-      uses: google-github-actions/auth@v2
-      with:
-        # <-- ADAPTE le nom DU SECRET ICI
-        credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+      # Auth via Service Account JSON stocké dans le secret GCP_CREDENTIALS
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
 
-    - name: Set up gcloud
-      uses: google-github-actions/setup-gcloud@v2
-      with:
-        project_id: analyse-hippique
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: analyse-hippique
 
-    - name: Sanity check auth
-      run: |
-        gcloud auth list
-        gcloud projects describe analyse-hippique --format="value(projectNumber)"
+      # Build & push vers Artifact Registry
+      - name: Build and Push image
+        env:
+          REGION: europe-west1
+          IMAGE: europe-west1-docker.pkg.dev/analyse-hippique/hippiques/hippique-app:${{ github.sha }}
+        run: |
+          gcloud artifacts repositories create hippiques \
+            --repository-format=DOCKER --location=$REGION --description="Hippiques" || true
+          gcloud auth configure-docker $REGION-docker.pkg.dev --quiet
+          docker build -t "$IMAGE" .
+          docker push "$IMAGE"
 
-    - name: Build & Push (Artifact Registry)
-      env:
-        REGION: europe-west1
-        IMAGE: europe-west1-docker.pkg.dev/analyse-hippique/hippiques/hippique-app:${{ github.sha }}
-      run: |
-        gcloud artifacts repositories create hippiques \
-          --repository-format=DOCKER --location=$REGION --description="Hippiques" || true
-        gcloud auth configure-docker $REGION-docker.pkg.dev --quiet
-        docker build -t $IMAGE .
-        docker push $IMAGE
-
-    - name: Deploy to Cloud Run
-      env:
-        REGION: europe-west1
-        IMAGE: europe-west1-docker.pkg.dev/analyse-hippique/hippiques/hippique-app:${{ github.sha }}
-      run: |
-        gcloud run deploy hippique-app \
-          --image $IMAGE \
-          --region $REGION \
-          --platform managed \
-          --allow-unauthenticated \
-          --set-env-vars DEFAULT_BUDGET=5.0,MIN_EV_SP=0.20,MIN_EV_COMBO=0.40,MAX_VOLA
-          --platform managed \
-          --allow-unauthenticated
+      # Déploiement Cloud Run (note: la liste d'ENV est ENTIEREMENT entre guillemets)
+      - name: Deploy to Cloud Run
+        env:
+          REGION: europe-west1
+          IMAGE: europe-west1-docker.pkg.dev/analyse-hippique/hippiques/hippique-app:${{ github.sha }}
+          DEFAULT_BUDGET: "5.0"
+          MIN_EV_SP: "0.20"
+          MIN_EV_COMBO: "0.40"
+          MAX_VOLAT_PER_HORSE: "0.60"
+          DATA_MODE: "web"
+        run: |
+          gcloud run deploy hippique-app \
+            --image "$IMAGE" \
+            --region "$REGION" \
+            --platform managed \
+            --allow-unauthenticated \
+            --set-env-vars "DEFAULT_BUDGET=${DEFAULT_BUDGET},MIN_EV_SP=${MIN_EV_SP},MIN_EV_COMBO=${MIN_EV_COMBO},MAX_VOLAT_PER_HORSE=${MAX_VOLAT_PER_HORSE},DATA_MODE=${DATA_MODE}"
