@@ -3,4 +3,10 @@ uvicorn
 requests
 beautifulsoup4
 lxml
+pandas
+openpyxl
+pyyaml
+google-api-python-client
+google-auth
+
 
