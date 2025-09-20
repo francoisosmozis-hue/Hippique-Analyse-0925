@@ -893,7 +893,7 @@ def _heuristic_p_true(cfg, partants, odds_h5, odds_h30, stats_je) -> dict:
     return {cid: w / total for cid, w in weights.items()}
 
 
- _coerce_positive_count(value) -> float | None:
+ def _coerce_positive_count(value) -> float | None:
     if isinstance(value, (int, float)):
         if not math.isfinite(value) or value < 0:
             return None
