@@ -1,6 +1,6 @@
 # Analyse Hippique – GPI v5.1 (Budget 5€ / EV+)
 
-Pipeline **pro** pour planifier, capturer H‑30 / H‑5, analyser et consigner chaque course (tickets, EV/ROI, pastille verte/rouge) avec export Drive + mise à jour Excel.
+Pipeline **pro** pour planifier, capturer H‑30 / H‑5, analyser et consigner chaque course (tickets, EV/ROI, pastille verte/rouge) avec export Google Cloud Storage + mise à jour Excel.
 
 ---
 
@@ -8,7 +8,7 @@ Pipeline **pro** pour planifier, capturer H‑30 / H‑5, analyser et consigner 
 
 - **09:00 Paris** : génération du **planning du jour** (réunions, courses, horaires, URLs).
 - **Scheduler (*/5 min)** : déclenche auto les fenêtres **H‑30** (snapshots cotes + stats) et **H‑5** (analyse GPI v5.1 + tickets).
-- **Post‑results (*/15 min)** : récupération **arrivées officielles**, **mise à jour Excel** (ROI réel), **upload Drive**.
+- **Post‑results (*/15 min)** : récupération **arrivées officielles**, **mise à jour Excel** (ROI réel), **upload GCS**.
 
 **Standards verrouillés** (GPI v5.1) :
 - Budget **max 5 €** / course, **2 tickets max** (SP + 1 combiné éventuel, configurable via `MAX_TICKETS_SP`).
@@ -115,14 +115,16 @@ Un planning réel peut être généré via `python scripts/fetch_schedule.py --o
 Dans **Settings → Secrets and variables → Actions** du repo, créer :
 
 **Secrets**
-- `DRIVE_FOLDER_ID` → dossier Drive de destination
-- `GOOGLE_CREDENTIALS_B64` → `credentials.json` encodé en base64 (Service Account)
+- `GCS_SERVICE_KEY_B64` → clé de service Google Cloud encodée en base64 (`credentials.json`)
 - `ZETURF_LOGIN` → identifiant pour la connexion Zeturf
 - `ZETURF_PASSWORD` → mot de passe pour la connexion Zeturf
 - `PYPI_EXTRA_INDEX` *(optionnel)* → URL d'un dépôt PyPI privé
 - `GENY_COOKIE` *(optionnel)* → cookie d'accès pour récupérer les données Geny
 
 **Variables**
+- `GCS_BUCKET` → bucket Google Cloud Storage de destination
+- `GCS_PREFIX` *(optionnel)* → préfixe appliqué aux objets uploadés (ex: `hippiques/prod`)
+- `GOOGLE_CLOUD_PROJECT` *(optionnel)* → projet GCP utilisé pour l'authentification
 - `MEETING_URLS` → réunions du jour pour H‑30
 - `COURSES_URLS` → cours supplémentaires pour H‑5
 
@@ -139,12 +141,12 @@ Dans **Settings → Secrets and variables → Actions** du repo, créer :
 ### 2) `race_scheduler.yml` — toutes les 5 min
 - Appelle `scripts/runner_chain.py` avec fenêtres **H‑30** puis **H‑5**.
 - **H‑30** : snapshots cotes + stats (JSON).  
-- **H‑5** : enrichissement J/E + chronos (si dispo) → **pipeline** (tickets, EV/ROI) → **pastille** (VERT/ROUGE) → export JSON/CSV → **upload Drive**.
+-- **H‑5** : enrichissement J/E + chronos (si dispo) → **pipeline** (tickets, EV/ROI) → **pastille** (VERT/ROUGE) → export JSON/CSV → **upload GCS**.
 
 ### 3) `post_results.yml` — toutes les 15 min
 - `get_arrivee_geny.py` → `data/results/ARRIVEES.json`
 - `update_excel_with_results.py` → met à jour `excel/modele_suivi_courses_hippiques.xlsx`
-- Upload Excel + résultats sur Drive
+- Upload Excel + résultats sur GCS
 
 ### Lancer les workflows manuellement
 
@@ -199,17 +201,21 @@ curl -X POST \
 Chaque course analysée ajoute une ligne dans `data/RxCy/tracking.csv`. Si une colonne `ALERTE_VALUE` est présente, le combiné
 associé affiche un EV > 0.5 et un payout attendu > 20 € et mérite une vérification manuelle.
 
-### ☁️ Synchronisation Google Drive
+### ☁️ Synchronisation Google Cloud Storage
 
-1. Créez un **compte de service** dans la console Google Cloud et partagez le
-   dossier Drive cible avec l'adresse mail de ce compte.
-2. Définissez les variables d'environnement `GOOGLE_CREDENTIALS_B64` (contenu
-   base64 du `credentials.json`) et `DRIVE_FOLDER_ID` (identifiant du dossier
-   de destination).
+1. Créez un **compte de service** dans la console Google Cloud et donnez-lui
+   l'accès en écriture au bucket cible.
+2. Définissez les variables d'environnement suivantes :
+   - `GCS_BUCKET` (obligatoire) → nom du bucket de destination ;
+   - `GCS_SERVICE_KEY_B64` (obligatoire) → contenu base64 du `credentials.json`
+     du compte de service ;
+   - `GCS_PREFIX` *(optionnel)* → sous-dossier virtuel (préfixe) où ranger les
+     artefacts ;
+   - `GOOGLE_CLOUD_PROJECT` *(optionnel)* → projet GCP pour journaliser les
+     accès.
 
-Le module `scripts/drive_sync.py` expose les fonctions `upload_file` et
-`download_file` basées sur `google-api-python-client`.  Elles s'appuient sur les
-variables d'environnement ci‑dessus.
+Le module `scripts/drive_sync.py` expose `upload_file`, `download_file` et
+`push_tree` basés sur `google-cloud-storage`.
 
 ```bash
 python scripts/drive_sync.py \
@@ -218,8 +224,7 @@ python scripts/drive_sync.py \
 ```
 
 Plusieurs motifs `--upload-glob` peuvent être fournis.  Pour télécharger un
-fichier par identifiant : `python scripts/drive_sync.py --download FILE_ID
-destination.xlsx`.
+objet : `python scripts/drive_sync.py --download chemin/objet.json destination.json`.
 
 ### Récupérer les données archivées
 
@@ -227,13 +232,13 @@ Pour rapatrier les fichiers `snapshot_*.json` et `analysis*.json` d'une date
 précise, utilisez :
 
 ```bash
-export DRIVE_FOLDER_ID="<drive-folder-id>"
-export GOOGLE_CREDENTIALS_B64="$(base64 -w0 credentials.json)"
+export GCS_BUCKET="<bucket>"
+export GCS_SERVICE_KEY_B64="$(base64 -w0 credentials.json)"
 python scripts/restore_from_drive.py --date YYYY-MM-DD --dest dossier_sortie
 ```
 
-Les fichiers correspondants sont téléchargés dans le dossier indiqué par
-`--dest`.
+Ajoutez éventuellement `GCS_PREFIX` pour cibler un sous-dossier. Les fichiers
+correspondants sont téléchargés dans le dossier indiqué par `--dest`.
 
 ---
 
@@ -488,18 +493,18 @@ colonnes listées ci-dessus.
 
 1. Pousser la structure de dépôt ci‑dessus.  
 2. Ajouter **`requirements.txt`** et installer en local (facultatif).  
-3. Créer les **Secrets** `DRIVE_FOLDER_ID` & `GOOGLE_CREDENTIALS_B64`. 
+3. Créer le **Secret** `GCS_SERVICE_KEY_B64` et les **Variables** `GCS_BUCKET` / `GCS_PREFIX` (optionnelle) / `GOOGLE_CLOUD_PROJECT` (optionnelle).
 4. Vérifier que les scripts sous `scripts/` existent bien aux bons chemins.  
 5. Laisser tourner les 3 workflows (planning, scheduler, results).  
-6. Contrôler sur **Actions** les logs d’exécution et la création des JSON/Excel.  
-
+6. Contrôler sur **Actions** les logs d’exécution et la création des JSON/Excel.
+7. Tester la synchro GCS : `python scripts/drive_sync.py --upload-glob "data/**/*.json"` puis un `--download` vers un dossier temporaire.
 ---
 
 ## 🛠️ Dépannage (FAQ)
 
 - **Les workflows ne se déclenchent pas** → vérifier le dossier **`.github/workflows/`** (orthographe) et la branche par défaut.  
 - **Arrivées non trouvées** → voir logs `get_arrivee_geny.py`, parfois page retardée ; relancer manuellement `post_results.yml`.  
-- **Drive non uploadé** → secrets manquants (`DRIVE_FOLDER_ID` / `GOOGLE_CREDENTIALS_B64`) ou quota Google.  
+- **Upload GCS manquant** → secrets/variables absents (`GCS_SERVICE_KEY_B64`, `GCS_BUCKET`, `GCS_PREFIX`/`GOOGLE_CLOUD_PROJECT`) ou droits insuffisants sur le bucket. 
 - **EV combinés = insufficient_data** → calibration absente/vides (`calibration/payout_calibration.yaml`) ou p_place non enrichies.  
 - **Excel non mis à jour** → chemin `--excel` correct ? vérifier permissions du runner (commit autorisé).  
 
@@ -508,7 +513,7 @@ colonnes listées ci-dessus.
 ## 🔒 Bonnes pratiques
 
 - Ne **jamais** committer de secrets (`credentials.json`, `.env`).  
-- En prod GitHub, préférer des **dossiers persistants** (artifacts/Drive) car le runner est éphémère.  
+- En prod GitHub, préférer des **dossiers persistants** (artifacts/GCS) car le runner est éphémère.  
 - Ajouter une **tempo** (0.5–1s) dans les fetchs pour éviter un blocage des sites sources.  
 
 ---
