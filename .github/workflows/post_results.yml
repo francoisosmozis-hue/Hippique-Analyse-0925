@@ -52,16 +52,20 @@ jobs:
           git commit -m "results+excel: $(date +%F' '%T)" || echo "No changes"
           git push
             
-      - name: Upload results + Excel to Drive
+      - name: Upload results + Excel to GCS
         env:
-          DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
-          GOOGLE_CREDENTIALS_B64: ${{ secrets.GOOGLE_CREDENTIALS_B64 }}
+          GCS_SERVICE_KEY_B64: ${{ secrets.GCS_SERVICE_KEY_B64 }}
+          GCS_BUCKET: ${{ vars.GCS_BUCKET }}
+          GCS_PREFIX: ${{ vars.GCS_PREFIX || '' }}
+          GOOGLE_CLOUD_PROJECT: ${{ vars.GOOGLE_CLOUD_PROJECT }}
         run: |
           python scripts/drive_sync.py \            
             --upload-glob "data/results/**/*.json" \
             --upload-glob "excel/*.xlsx"
-      - name: Sync data to Drive
+      - name: Sync data to GCS
         run: python scripts/drive_sync.py --push data
         env:
-          GOOGLE_CREDENTIALS_B64: ${{ secrets.GOOGLE_CREDENTIALS_B64 }}
-          DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
+          GCS_SERVICE_KEY_B64: ${{ secrets.GCS_SERVICE_KEY_B64 }}
+          GCS_BUCKET: ${{ vars.GCS_BUCKET }}
+          GCS_PREFIX: ${{ vars.GCS_PREFIX || '' }}
+          GOOGLE_CLOUD_PROJECT: ${{ vars.GOOGLE_CLOUD_PROJECT }}
