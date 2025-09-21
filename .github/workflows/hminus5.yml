@@ -1,0 +1,88 @@
+name: H-5 analyse (no Drive)
+
+on:
+  workflow_dispatch:
+    inputs:
+      course_url:
+        description: "URL Geny/ZEturf de la course"
+        required: true
+      rc_id:
+        description: "Identifiant R?C? (ex: R4C3)"
+        required: true
+  repository_dispatch:
+    types: [hminus5]
+  schedule:
+    - cron: "*/15 8-20 * * *"  # optionnel – scan toutes 15 min heures FR
+
+env:
+  PYTHONUTF8: "1"
+  TZ: "Europe/Paris"
+  USE_DRIVE: "false"              # <— coupe Drive partout
+  OUTPUT_DIR: out/hminus5         # <— dossier de sortie local
+  EV_MIN_GLOBAL: "0.40"           # seuils GPI v5.1
+  ROI_MIN_ESTIME: "0.20"
+  BANKROLL_CAP: "5"               # plafond € / course
+
+jobs:
+  build-run:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt || true
+
+      - name: Run H-5 analysis (no Drive)
+        env:
+          COURSE_URL: ${{ github.event.inputs.course_url || '' }}
+          RC_ID: ${{ github.event.inputs.rc_id || '' }}
+        run: |
+          mkdir -p "${OUTPUT_DIR}"
+          echo "→ H-5 run for ${RC_ID} ${COURSE_URL}"
+          # 1) analyse & tickets (respect GPI v5.1 / budget 5€)
+          python /mnt/data/analyse_courses_du_jour_enrichie.py \
+            --mode hminus5 \
+            --course "${COURSE_URL}" \
+            --rc "${RC_ID}" \
+            --budget 5 \
+            --ev-min ${EV_MIN_GLOBAL} \
+            --roi-min ${ROI_MIN_ESTIME} \
+            --output "${OUTPUT_DIR}"
+
+          # 2) simulate EV (optionnel, rapide)
+          python /mnt/data/simulate_ev.py \
+            --inputs "${OUTPUT_DIR}" \
+            --out "${OUTPUT_DIR}/ev_report.json" || true
+
+          # 3) exporter JSON/CSV standardisés (post-course ready)
+          python /mnt/data/p_finale_export.py \
+            --in "${OUTPUT_DIR}" \
+            --out-json "${OUTPUT_DIR}/p_finale.json" \
+            --out-csv  "${OUTPUT_DIR}/p_finale.csv"
+
+      - name: Upload artifacts (JSON, CSV, DOCX, logs)
+        uses: actions/upload-artifact@v4
+        with:
+          name: hminus5-${{ github.run_id }}
+          path: |
+            out/hminus5/**
+            !**/__pycache__/**
+
+      # OPTION A — Commit sur branche data (sans Drive)
+      - name: Commit to data branch
+        if: ${{ github.ref == 'refs/heads/main' }}
+        uses: EndBug/add-and-commit@v9
+        with:
+          add: "out/hminus5"
+          message: "H-5: export sans Drive (${{ github.run_id }})"
+          new_branch: "data-hminus5"
+          push: true
