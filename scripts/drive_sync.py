@@ -14,6 +14,9 @@ Cloud Storage client that relies on the following environment variables:
 ``GCS_SERVICE_KEY_B64`` / ``GCS_SERVICE_KEY_JSON`` (optional)
     Service account credentials, either as base64 or raw JSON string.  When
     omitted, the default credentials chain is used.
+``USE_GCS`` (optional)
+    Controls whether uploads are enabled.  Defaults to ``true``.  For
+    backwards compatibility ``USE_DRIVE=false`` still disables the sync.
 
 Example usage from the command line::
 
@@ -41,6 +44,11 @@ from typing import Iterable, Optional
 from google.cloud import storage
 from google.oauth2 import service_account
 
+try:  # pragma: no cover - fallback when executed from within scripts/
+    from scripts.gcs_utils import disabled_reason, is_gcs_enabled
+except ImportError:  # pragma: no cover
+    from gcs_utils import disabled_reason, is_gcs_enabled
+    
 SCOPES = ("https://www.googleapis.com/auth/devstorage.read_write",)
 BUCKET_ENV = "GCS_BUCKET"
 PREFIX_ENV = "GCS_PREFIX"
@@ -186,9 +194,11 @@ def push_tree(
 
 
 def main() -> int | None:
-    use_drive = os.getenv("USE_DRIVE", "false").lower() == "true"
-    if not use_drive:
-        print("[drive_sync] USE_DRIVE=false → skipping Google Cloud Storage upload.")
+    if not is_gcs_enabled():
+        reason = disabled_reason() or "USE_GCS"
+        print(
+            f"[drive_sync] {reason}=false → skipping Google Cloud Storage synchronisation."
+        )
         return 0
 
     parser = argparse.ArgumentParser(
