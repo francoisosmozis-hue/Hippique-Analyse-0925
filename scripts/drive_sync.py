@@ -222,6 +222,7 @@ def main() -> int | None:
         "--upload-glob",
         action="append",
         default=[],
+        metavar="PATTERN",
         help="Glob pattern of files to upload",
     )
     parser.add_argument(
