@@ -69,13 +69,14 @@ jobs:
 
       - name: Run scheduler windows (H-30/H-5)
         run: |
-          mkdir -p "${OUTPUT_DIR}"
+          mkdir -p "${OUTPUT_DIR}/analyses"
           python scripts/runner_chain.py \
             --planning "data/planning/$(date +%F).json" \
             --h30-window-min 27 --h30-window-max 33 \
             --h5-window-min 3 --h5-window-max 7 \
             --snap-dir data/snapshots \
             --analysis-dir "${OUTPUT_DIR}/analyses" \
+            --output "${OUTPUT_DIR}/analyses" \
             --budget "${GPI_BUDGET}" \
             --ev-min "${EV_MIN}" \
             --roi-min "${ROI_MIN}" \
@@ -101,7 +102,7 @@ jobs:
             python "${GITHUB_WORKSPACE}/p_finale_export.py" \
               --outputs-dir "${dir}"
             found=1
-          done < <(find "${analysis_root}" -maxdepth 2 -type f -name 'p_finale.json' 2>/dev/null || true)
+          done < <(find "${analysis_root}" -type f -name 'p_finale.json' 2>/dev/null || true)
 
           if [ "${found}" -eq 0 ]; then
             echo "[WARN] Aucun p_finale.json détecté sous ${analysis_root}" >&2
