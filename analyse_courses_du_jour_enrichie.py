@@ -22,23 +22,31 @@ from typing import Any
 import requests
 from bs4 import BeautifulSoup
 
+USE_DRIVE = os.getenv("USE_DRIVE", "false").lower() == "true"
+
 try:  # pragma: no cover - optional dependency in tests
     from scripts.online_fetch_zeturf import write_snapshot_from_geny
 except Exception:  # pragma: no cover - used when optional deps are missing
     def write_snapshot_from_geny(*args: Any, **kwargs: Any) -> None:
         raise RuntimeError("write_snapshot_from_geny is unavailable")
 
-try:  # pragma: no cover - optional dependency in tests
-    from scripts.drive_sync import (
-        ensure_folder as drive_ensure_folder,
-        push_tree,
-    )
-except Exception:  # pragma: no cover - used when optional deps are missing
-    def drive_ensure_folder(*args: Any, **kwargs: Any) -> str:
-        raise RuntimeError("drive_ensure_folder is unavailable")
-
-    def push_tree(*args: Any, **kwargs: Any) -> None:
-        raise RuntimeError("push_tree is unavailable")
+if USE_DRIVE:
+    try:  # pragma: no cover - optional dependency in tests
+        from scripts.drive_sync import (
+            ensure_folder as drive_ensure_folder,
+            push_tree,
+        )
+    except Exception as exc:  # pragma: no cover - used when optional deps are missing
+        print(
+            f"[WARN] Drive sync indisponible ({exc}), bascule en mode local.",
+            file=sys.stderr,
+        )
+        USE_DRIVE = False
+        drive_ensure_folder = None  # type: ignore[assignment]
+        push_tree = None  # type: ignore[assignment]
+else:  # pragma: no cover - Drive explicitly disabled
+    drive_ensure_folder = None  # type: ignore[assignment]
+    push_tree = None  # type: ignore[assignment]
 
 # ---------------------------------------------------------------------------
 # Helper stubs - these functions are expected to be provided elsewhere in the
@@ -76,6 +84,12 @@ def _upload_artifacts(rc_dir: Path, *, drive_folder_id: str | None) -> None:
     """
 
     if not drive_folder_id:
+        return
+    if not USE_DRIVE or not drive_ensure_folder or not push_tree:
+        print(
+            f"[drive] Upload ignoré pour {rc_dir} (USE_DRIVE={USE_DRIVE})",
+            file=sys.stderr,
+        )
         return
     try:
         sub_id = drive_ensure_folder(rc_dir.name, parent=drive_folder_id)
