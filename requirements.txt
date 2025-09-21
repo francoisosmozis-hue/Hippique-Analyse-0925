@@ -1,22 +1,29 @@
-# API
+# --- Core scraping / parsing ---
+requests>=2.31.0
+beautifulsoup4>=4.12.2
+lxml>=5.2.1
+tenacity>=8.3.0
+tqdm>=4.66.4
+
+# --- Data / fichiers ---
+pandas>=2.2.2
+numpy>=1.26.4
+openpyxl>=3.1.2
+
+# --- YAML / calibration EV ---
+PyYAML>=6.0.1
+
+# --- API / web ---
 fastapi==0.112.2
 uvicorn[standard]==0.30.6
 
-# Pipeline / scraping / data
-requests>=2.32.0
-beautifulsoup4>=4.12.3
-lxml>=5.2.2
-pandas>=2.2.2
-numpy>=1.26.4
-PyYAML>=6.0.1
-tqdm>=4.66.4
-tenacity>=8.3.0
-
-# Excel / I/O
-openpyxl>=3.1.5
-
-# (optionnel – seulement si tu pushes vers Google Drive/Sheets depuis le conteneur)
-google-api-python-client>=2.141.0
-google-auth>=2.34.0
+# --- Google Drive (utilisé par drive_sync.py) ---
+google-api-python-client>=2.131.0
+google-auth>=2.29.0
+google-auth-httplib2>=0.2.0
 google-auth-oauthlib>=1.2.1
+httplib2>=0.22.0
+
+# --- Robustesse encodages ---
+charset-normalizer>=3.3.2
 
