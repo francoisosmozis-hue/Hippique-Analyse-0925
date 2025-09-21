@@ -31,11 +31,12 @@ if USE_DRIVE:
     try:
         from scripts.drive_sync import upload_file
     except Exception as exc:  # pragma: no cover - optional dependency guards
-        logger.warning("Drive sync unavailable, disabling uploads: %s", exc)
+        logger.warning("Cloud storage sync unavailable, disabling uploads: %s", exc)
         upload_file = None  # type: ignore[assignment]
         USE_DRIVE = False
 else:  # pragma: no cover - simple fallback when Drive is disabled
     upload_file = None  # type: ignore[assignment]
+
 
 def _load_planning(path: Path) -> List[Dict[str, Any]]:
     """Return planning entries from ``path``.
@@ -77,9 +78,9 @@ def _write_snapshot(race_id: str, window: str, base: Path) -> None:
         try:
             upload_file(path)
         except EnvironmentError as exc:
-            logger.warning("Skipping Drive upload for %s: %s", path, exc)
+            logger.warning("Skipping cloud upload for %s: %s", path, exc)
     else:
-        logger.info("[drive] Skipping upload for %s (USE_DRIVE disabled)", path)
+        logger.info("[gcs] Skipping upload for %s (USE_DRIVE disabled)", path)
 
 
 def _write_analysis(
@@ -115,9 +116,9 @@ def _write_analysis(
         try:
             upload_file(path)
         except EnvironmentError as exc:
-            logger.warning("Skipping Drive upload for %s: %s", path, exc)
+            logger.warning("Skipping cloud upload for %s: %s", path, exc)
     else:
-        logger.info("[drive] Skipping upload for %s (USE_DRIVE disabled)", path)
+        logger.info("[gcs] Skipping upload for %s (USE_DRIVE disabled)", path)
 
 
 def main() -> None:
@@ -139,7 +140,9 @@ def main() -> None:
     parser.add_argument(
         "--payout-calib", default="", help="Path to payout calibration (unused)"
     )
-    parser.add_argument("--mode", default="hminus5", help="Mode de traitement (log only)")
+    parser.add_argument(
+        "--mode", default="hminus5", help="Mode de traitement (log only)"
+    )
     parser.add_argument(
         "--output",
         default=None,
@@ -155,7 +158,9 @@ def main() -> None:
     analysis_dir = Path(analysis_root)
 
     for entry in planning:
-        race_id = entry.get("id") or f"{entry.get('meeting', '')}{entry.get('race', '')}"
+        race_id = (
+            entry.get("id") or f"{entry.get('meeting', '')}{entry.get('race', '')}"
+        )
         start = entry.get("start")
         if not race_id or not start:
             continue
