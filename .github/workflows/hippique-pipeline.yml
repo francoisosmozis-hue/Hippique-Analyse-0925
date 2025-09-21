@@ -65,18 +65,23 @@ jobs:
           DATE="${{ github.event.inputs.date }}"
           MEETING="${{ github.event.inputs.meeting }}"
           RACE="${{ github.event.inputs.race }}"
+          RC_ID="${MEETING}${RACE}"
           RUN_DIR="runs/${DATE}/${MEETING}${RACE}"
+          RUN_REMOTE_PREFIX="runs/${DATE}/${RC_ID}"
           mkdir -p "$RUN_DIR"
           {
             echo "DATE=$DATE"
             echo "MEETING=$MEETING"
             echo "RACE=$RACE"
+            echo "RC_ID=$RC_ID"
             echo "RUN_DIR=$RUN_DIR"
+            echo "RUN_REMOTE_PREFIX=$RUN_REMOTE_PREFIX"
           } >> $GITHUB_ENV
 
       - name: Phase H-30
         if: github.event.inputs.mode == 'h30'
         run: |
+          set -euo pipefail
           mkdir -p "$RUN_DIR/h30"
           python scripts/online_fetch_zeturf.py --mode h30 --out "$RUN_DIR/h30/h30.json"
           python pipeline_run.py snapshot \
@@ -84,11 +89,42 @@ jobs:
             --meeting "${{ github.event.inputs.meeting }}" \
             --race "${{ github.event.inputs.race }}" \
             --outdir "$RUN_DIR/h30"
+          if [ -n "${GCS_BUCKET:-}" ]; then
+            REMOTE_BASE="${GCS_PREFIX:+$GCS_PREFIX/}${RUN_REMOTE_PREFIX}/h30"
+            python scripts/drive_sync.py \
+              --prefix "$REMOTE_BASE" \
+              --upload-glob "$RUN_DIR/h30/*.json"
+          fi
 
       - name: Phase H-5
         if: github.event.inputs.mode == 'h5'
         run: |
-          mkdir -p "$RUN_DIR/h5" "$RUN_DIR/diff" "$RUN_DIR/out"
+          set -euo pipefail
+          mkdir -p "$RUN_DIR/h5" "$RUN_DIR/diff" "$RUN_DIR/out" "$RUN_DIR/h30"
+          REMOTE_BASE="${GCS_PREFIX:+$GCS_PREFIX/}${RUN_REMOTE_PREFIX}/h30"
+          if [ -n "${GCS_BUCKET:-}" ]; then
+            echo "Tentative de récupération du snapshot H-30 depuis le stockage..."
+            if ! python scripts/drive_sync.py \
+              --download "$REMOTE_BASE/h30.json" "$RUN_DIR/h30/h30.json" \
+              --download "$REMOTE_BASE/${RC_ID}-h30.json" "$RUN_DIR/h30/${RC_ID}-h30.json"
+            then
+              echo "Echec du téléchargement ou snapshot indisponible, régénération locale."
+              rm -f "$RUN_DIR/h30/h30.json" "$RUN_DIR/h30/${RC_ID}-h30.json"
+            fi
+          fi
+          if [ ! -s "$RUN_DIR/h30/h30.json" ]; then
+            python scripts/online_fetch_zeturf.py --mode h30 --out "$RUN_DIR/h30/h30.json"
+          fi
+          python pipeline_run.py snapshot \
+            --when h30 \
+            --meeting "${{ github.event.inputs.meeting }}" \
+            --race "${{ github.event.inputs.race }}" \
+            --outdir "$RUN_DIR/h30"
+          if [ -n "${GCS_BUCKET:-}" ]; then
+            python scripts/drive_sync.py \
+              --prefix "$REMOTE_BASE" \
+              --upload-glob "$RUN_DIR/h30/*.json"
+          fi
           python scripts/online_fetch_zeturf.py --mode h5 --out "$RUN_DIR/h5/h5.json"
           python scripts/online_fetch_zeturf.py --mode diff --out "$RUN_DIR/diff/diff_drift.json"
           python scripts/fetch_je_stats.py \
