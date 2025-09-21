@@ -97,6 +97,23 @@ def _read_json_if_exists(p: Path) -> Optional[dict]:
     return None
 
 
+def _format_subprocess_failure(label: str, proc: subprocess.CompletedProcess) -> str:
+    """Format stdout/stderr from a subprocess failure for easier debugging."""
+    parts: List[str] = [f"{label} (code {proc.returncode})."]
+    if proc.stdout:
+        parts.append("STDOUT:")
+        parts.append(proc.stdout.strip())
+    if proc.stderr:
+        parts.append("STDERR:")
+        parts.append(proc.stderr.strip())
+
+    detail = "\n".join(parts)
+    max_len = 12_000
+    if len(detail) > max_len:
+        detail = detail[:max_len] + "\n… (truncated)"
+    return detail
+
+
 @app.post("/analyse", response_model=AnalyseResult)
 def analyse(body: AnalyseParams):
     """
@@ -154,9 +171,8 @@ def analyse(body: AnalyseParams):
             logs += [f"[stderr] {l}" for l in proc.stderr.splitlines() if l.strip()]
 
         if proc.returncode != 0:
-            raise HTTPException(
-                status_code=500,
-                detail=f"analyse_courses_du_jour_enrichie.py a échoué (code {proc.returncode}). Consulte logs."
+            detail = _format_subprocess_failure(
+                "analyse_courses_du_jour_enrichie.py a échoué", proc
             )
     except subprocess.TimeoutExpired:
         raise HTTPException(status_code=504, detail="Timeout pipeline analyse (12 min).")
@@ -186,6 +202,13 @@ def analyse(body: AnalyseParams):
                 logs += [l for l in proc2.stdout.splitlines() if l.strip()]
             if proc2.stderr:
                 logs += [f"[stderr] {l}" for l in proc2.stderr.splitlines() if l.strip()]
+
+            if proc2.returncode != 0:
+                detail = _format_subprocess_failure(
+                    "p_finale_export.py a échoué", proc2
+                )
+                raise HTTPException(status_code=500, detail=detail)
+
 
             # Convention: le script export crée p_finale.json et tickets.json dans outputs_dir
             p_finale = _read_json_if_exists(outputs_dir / "p_finale.json")
