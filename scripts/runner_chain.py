@@ -127,11 +127,46 @@ def _write_analysis(
         logger.info("[gcs] Skipping upload for %s (%s)", path, detail)
 
 
+def _trigger_phase(
+    race_id: str,
+    phase: str,
+    *,
+    snap_dir: Path,
+    analysis_dir: Path,
+    budget: float,
+    ev_min: float,
+    roi_min: float,
+    mode: str,
+) -> None:
+    """Run snapshot and/or analysis tasks for ``phase``."""
+
+    phase_norm = phase.strip().upper()
+    if phase_norm == "H30":
+        _write_snapshot(race_id, "H30", snap_dir)
+        return
+    if phase_norm == "H5":
+        _write_snapshot(race_id, "H5", snap_dir)
+        _write_analysis(
+            race_id,
+            analysis_dir,
+            budget=budget,
+            ev_min=ev_min,
+            roi_min=roi_min,
+            mode=mode,
+        )
+        return
+
+    logger.info("No handler registered for phase %s (race %s)", phase_norm, race_id)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Run H-30 and H-5 windows from planning information"
     )
-    parser.add_argument("--planning", required=True, help="Path to planning JSON file")
+    parser.add_argument("--planning", help="Path to planning JSON file")
+    parser.add_argument("--reunion", help="Reunion identifier (e.g. R1)")
+    parser.add_argument("--course", help="Course identifier (e.g. C3)")
+    parser.add_argument("--phase", help="Phase to execute (H30 or H5)")
     parser.add_argument("--h30-window-min", type=int, default=27)
     parser.add_argument("--h30-window-max", type=int, default=33)
     parser.add_argument("--h5-window-min", type=int, default=3)
@@ -155,39 +190,72 @@ def main() -> None:
         help="Répertoire de sortie prioritaire (fallback vers $OUTPUT_DIR puis --analysis-dir)",
     )
     args = parser.parse_args()
-
-    planning = _load_planning(Path(args.planning))
-    now = dt.datetime.now()
-
+    
     snap_dir = Path(args.snap_dir)
     analysis_root = args.output or os.getenv("OUTPUT_DIR") or args.analysis_dir
     analysis_dir = Path(analysis_root)
 
-    for entry in planning:
-        race_id = (
-            entry.get("id") or f"{entry.get('meeting', '')}{entry.get('race', '')}"
-        )
-        start = entry.get("start")
-        if not race_id or not start:
-            continue
-        try:
-            start_time = dt.datetime.fromisoformat(start)
-        except ValueError:
-            continue
-        delta = (start_time - now).total_seconds() / 60
-        if args.h30_window_min <= delta <= args.h30_window_max:
-            _write_snapshot(race_id, "H30", snap_dir)
-        if args.h5_window_min <= delta <= args.h5_window_max:
-            _write_snapshot(race_id, "H5", snap_dir)
-            _write_analysis(
-                race_id,
-                analysis_dir,
-                budget=args.budget,
-                ev_min=args.ev_min,
-                roi_min=args.roi_min,
-                mode=args.mode,
-            )
+    if args.planning:
+        if any(getattr(args, name) for name in ("reunion", "course", "phase")):
+            parser.error("--planning cannot be combined with --reunion/--course/--phase")
 
+        planning = _load_planning(Path(args.planning))
+        now = dt.datetime.now()
+
+        for entry in planning:
+            race_id = (
+                entry.get("id") or f"{entry.get('meeting', '')}{entry.get('race', '')}"
+            )
+            start = entry.get("start")
+            if not race_id or not start:
+                continue
+            try:
+                start_time = dt.datetime.fromisoformat(start)
+            except ValueError:
+                continue
+            delta = (start_time - now).total_seconds() / 60
+            if args.h30_window_min <= delta <= args.h30_window_max:
+                _trigger_phase(
+                    race_id,
+                    "H30",
+                    snap_dir=snap_dir,
+                    analysis_dir=analysis_dir,
+                    budget=args.budget,
+                    ev_min=args.ev_min,
+                    roi_min=args.roi_min,
+                    mode=args.mode,
+                )
+            if args.h5_window_min <= delta <= args.h5_window_max:
+                _trigger_phase(
+                    race_id,
+                    "H5",
+                    snap_dir=snap_dir,
+                    analysis_dir=analysis_dir,
+                    budget=args.budget,
+                    ev_min=args.ev_min,
+                    roi_min=args.roi_min,
+                    mode=args.mode,
+                )
+        return
+
+    missing = [name for name in ("reunion", "course", "phase") if not getattr(args, name)]
+    if missing:
+        parser.error(
+            "Missing required options for single-race mode: " + ", ".join(f"--{m}" for m in missing)
+        )
+
+    race_id = f"{args.reunion}{args.course}"
+    _trigger_phase(
+        race_id,
+        args.phase,
+        snap_dir=snap_dir,
+        analysis_dir=analysis_dir,
+        budget=args.budget,
+        ev_min=args.ev_min,
+        roi_min=args.roi_min,
+        mode=args.mode,
+    )
+            
 
 if __name__ == "__main__":
     main()
