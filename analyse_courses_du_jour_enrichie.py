@@ -27,25 +27,27 @@ USE_DRIVE = os.getenv("USE_DRIVE", "false").lower() == "true"
 try:  # pragma: no cover - optional dependency in tests
     from scripts.online_fetch_zeturf import write_snapshot_from_geny
 except Exception:  # pragma: no cover - used when optional deps are missing
+    
     def write_snapshot_from_geny(*args: Any, **kwargs: Any) -> None:
         raise RuntimeError("write_snapshot_from_geny is unavailable")
+
 
 if USE_DRIVE:
     try:  # pragma: no cover - optional dependency in tests
         from scripts.drive_sync import (
-            ensure_folder as drive_ensure_folder,
+            build_remote_path as gcs_build_remote_path,
             push_tree,
         )
     except Exception as exc:  # pragma: no cover - used when optional deps are missing
         print(
-            f"[WARN] Drive sync indisponible ({exc}), bascule en mode local.",
+            f"[WARN] Synchronisation GCS indisponible ({exc}), bascule en mode local.",
             file=sys.stderr,
         )
         USE_DRIVE = False
-        drive_ensure_folder = None  # type: ignore[assignment]
+        gcs_build_remote_path = None  # type: ignore[assignment]
         push_tree = None  # type: ignore[assignment]
-else:  # pragma: no cover - Drive explicitly disabled
-    drive_ensure_folder = None  # type: ignore[assignment]
+else:  # pragma: no cover - Cloud sync explicitly disabled
+    gcs_build_remote_path = None  # type: ignore[assignment]
     push_tree = None  # type: ignore[assignment]
 
 # ---------------------------------------------------------------------------
@@ -61,39 +63,51 @@ def ensure_dir(path: Path) -> Path:
     return path
 
 
-def enrich_h5(rc_dir: Path, *, budget: float, kelly: float) -> None:  # pragma: no cover - stub
+def enrich_h5(
+    rc_dir: Path, *, budget: float, kelly: float
+) -> None:  # pragma: no cover - stub
     raise NotImplementedError("enrich_h5 must be provided by the host application")
 
 
-def build_p_finale(rc_dir: Path, *, budget: float, kelly: float) -> None:  # pragma: no cover - stub
+def build_p_finale(
+    rc_dir: Path, *, budget: float, kelly: float
+) -> None:  # pragma: no cover - stub
     raise NotImplementedError("build_p_finale must be provided by the host application")
 
 
-def run_pipeline(rc_dir: Path, *, budget: float, kelly: float) -> None:  # pragma: no cover - stub
+def run_pipeline(
+    rc_dir: Path, *, budget: float, kelly: float
+) -> None:  # pragma: no cover - stub
     raise NotImplementedError("run_pipeline must be provided by the host application")
 
 
-def build_prompt_from_meta(rc_dir: Path, *, budget: float, kelly: float) -> None:  # pragma: no cover - stub
-    raise NotImplementedError("build_prompt_from_meta must be provided by the host application")
+def build_prompt_from_meta(
+    rc_dir: Path, *, budget: float, kelly: float
+) -> None:  # pragma: no cover - stub
+    raise NotImplementedError(
+        "build_prompt_from_meta must be provided by the host application"
+    )
 
 
-def _upload_artifacts(rc_dir: Path, *, drive_folder_id: str | None) -> None:
-    """Upload ``rc_dir`` contents to Drive under a race-specific subfolder.
+def _upload_artifacts(rc_dir: Path, *, gcs_prefix: str | None) -> None:
+    """Upload ``rc_dir`` contents to Google Cloud Storage."""
 
-    The helper is a no-op when ``drive_folder_id`` is falsy.
-    """
-
-    if not drive_folder_id:
+    if gcs_prefix is None:
         return
-    if not USE_DRIVE or not drive_ensure_folder or not push_tree:
+    if not USE_DRIVE or not push_tree:
         print(
-            f"[drive] Upload ignoré pour {rc_dir} (USE_DRIVE={USE_DRIVE})",
+            f"[gcs] Upload ignoré pour {rc_dir} (USE_DRIVE={USE_DRIVE})",
             file=sys.stderr,
         )
         return
     try:
-        sub_id = drive_ensure_folder(rc_dir.name, parent=drive_folder_id)
-        push_tree(rc_dir, folder_id=sub_id)
+        if gcs_build_remote_path:
+            prefix = gcs_build_remote_path(gcs_prefix, rc_dir.name)
+        else:  # pragma: no cover - best effort fallback
+            prefix = "/".join(
+                p for p in ((gcs_prefix or "").rstrip("/"), rc_dir.name) if p
+            )
+        push_tree(rc_dir, folder_id=prefix)
     except Exception as exc:  # pragma: no cover - best effort
         print(f"[WARN] Failed to upload {rc_dir}: {exc}")
 
@@ -260,7 +274,7 @@ def _process_single_course(
     *,
     budget: float,
     kelly: float,
-    drive_folder_id: str | None,
+    gcs_prefix: str | None,
 ) -> None:
     """Fetch and analyse a specific course designated by ``reunion``/``course``."""
 
@@ -276,8 +290,8 @@ def _process_single_course(
         build_prompt_from_meta(rc_dir, budget=budget, kelly=kelly)
         csv_path = export_per_horse_csv(rc_dir)
         print(f"[INFO] per-horse report écrit: {csv_path}")
-    if drive_folder_id:
-        _upload_artifacts(rc_dir, drive_folder_id=drive_folder_id)
+    if gcs_prefix is not None:
+        _upload_artifacts(rc_dir, gcs_prefix=gcs_prefix)
 
 
 # ---------------------------------------------------------------------------
@@ -292,7 +306,7 @@ def _process_reunion(
     *,
     budget: float,
     kelly: float,
-    drive_folder_id: str | None,
+    gcs_prefix: str | None,
 ) -> None:
     """Fetch ``url`` and run the pipeline for each course of the meeting."""
 
@@ -324,15 +338,18 @@ def _process_reunion(
             build_prompt_from_meta(rc_dir, budget=budget, kelly=kelly)
             csv_path = export_per_horse_csv(rc_dir)
             print(f"[INFO] per-horse report écrit: {csv_path}")
-        if drive_folder_id:
-            _upload_artifacts(rc_dir, drive_folder_id=drive_folder_id)
+        if gcs_prefix is not None:
+            _upload_artifacts(rc_dir, gcs_prefix=gcs_prefix)
 
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="Analyse courses du jour enrichie")
-    ap.add_argument("--data-dir", default="data", help="Répertoire racine pour les sorties")
+    ap.add_argument(
+        "--data-dir", default="data", help="Répertoire racine pour les sorties"
+    )
     ap.add_argument("--budget", type=float, default=100.0, help="Budget à utiliser")
-    ap.add_argument("--kelly", type=float, default=1.0, help="Fraction de Kelly à appliquer")
+    ap.add_argument(
+        "--kelly", type=float, default=1.0, help="Fraction de Kelly à appliquer"
     ap.add_argument(
         "--from-geny-today",
         action="store_true",
@@ -351,21 +368,34 @@ def main() -> None:
         help="Fichier JSON listant les réunions à traiter (mode batch)",
     )
     ap.add_argument(
+        "--upload-gcs",
+        action="store_true",
+        help="Upload des artefacts générés sur Google Cloud Storage",
+    )
+    ap.add_argument(
         "--upload-drive",
         action="store_true",
-        help="Upload des artefacts générés sur Google Drive",
+        help=argparse.SUPPRESS,
+    )
+    ap.add_argument(
+        "--gcs-prefix",
+        help="Préfixe GCS racine pour les uploads",
     )
     ap.add_argument(
         "--drive-folder-id",
-        help="Identifiant du dossier Drive racine pour les uploads",
+        dest="gcs_prefix",
+        help=argparse.SUPPRESS,
     )
     args = ap.parse_args()
 
-    drive_folder_id = None
-    if args.upload_drive:
-        drive_folder_id = args.drive_folder_id or os.environ.get("DRIVE_FOLDER_ID")
-        if not drive_folder_id:
-            print("[WARN] drive-folder-id manquant, envoi vers Drive ignoré")
+    gcs_prefix = None
+    if args.upload_gcs or args.upload_drive:
+        if args.gcs_prefix is not None:
+            gcs_prefix = args.gcs_prefix
+        else:
+            gcs_prefix = os.environ.get("GCS_PREFIX")
+        if gcs_prefix is None:
+            print("[WARN] gcs-prefix manquant, envoi vers GCS ignoré")
 
     if args.reunions_file:
         script = Path(__file__).resolve()
@@ -389,8 +419,9 @@ def main() -> None:
                     "--kelly",
                     str(args.kelly),
                 ]
-                if drive_folder_id:
-                    cmd.extend(["--upload-drive", "--drive-folder-id", drive_folder_id])
+                if gcs_prefix is not None:
+                    cmd.append("--upload-gcs")
+                    cmd.extend(["--gcs-prefix", gcs_prefix])
                 subprocess.run(cmd, check=True)
         return
 
@@ -414,7 +445,7 @@ def main() -> None:
             Path(args.data_dir),
             budget=args.budget,
             kelly=args.kelly,
-            drive_folder_id=drive_folder_id,
+            gcs_prefix=gcs_prefix,
         )
         return
 
@@ -425,7 +456,7 @@ def main() -> None:
             Path(args.data_dir),
             budget=args.budget,
             kelly=args.kelly,
-            drive_folder_id=drive_folder_id,
+            gcs_prefix=gcs_prefix,
         )
         return
 
@@ -450,15 +481,15 @@ def main() -> None:
                 build_prompt_from_meta(rc_dir, budget=args.budget, kelly=args.kelly)
                 csv_path = export_per_horse_csv(rc_dir)
                 print(f"[INFO] per-horse report écrit: {csv_path}")
-                if drive_folder_id:
-                    _upload_artifacts(rc_dir, drive_folder_id=drive_folder_id)
+                if gcs_prefix is not None:
+                    _upload_artifacts(rc_dir, gcs_prefix=gcs_prefix)
         print("[DONE] from-geny-today pipeline terminé.")
         return
 
     # Fall back to original behaviour: simply run the pipeline on ``data_dir``
     run_pipeline(Path(args.data_dir), budget=args.budget, kelly=args.kelly)
-    if drive_folder_id:
-        _upload_artifacts(Path(args.data_dir), drive_folder_id=drive_folder_id)
+    if gcs_prefix is not None:
+        _upload_artifacts(Path(args.data_dir), gcs_prefix=gcs_prefix)
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point
