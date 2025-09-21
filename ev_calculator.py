@@ -501,6 +501,28 @@ def compute_ev_roi(
         std_dev_opt = math.sqrt(opt_variance)
         ev_over_std_opt = opt_ev / std_dev_opt if std_dev_opt else 0.0
 
+        if opt_ev + 1e-9 < baseline_ev:
+            # Optimisation should never deteriorate the EV – fall back to the
+            # baseline allocation when the optimiser converges to a worse
+            # configuration (may happen when the budget is already close to the
+            # Kelly cap or when rounding effects dominate).
+            opt_ev = baseline_ev
+            roi_opt = baseline_roi
+            ev_ratio_opt = baseline_ev / budget if budget else 0.0
+            ruin_risk_opt = ruin_risk
+            std_dev_opt = math.sqrt(total_variance)
+            ev_over_std_opt = ev_over_std
+            opt_variance = total_variance
+            opt_stake_sum = total_stake_normalized
+            opt_combined_payout = combined_expected_payout
+            opt_expected_payout = total_expected_payout
+            optimized_metrics = baseline_metrics
+            optimized_stakes = [metrics.get("stake", 0.0) for metrics in baseline_metrics]
+            for ticket, metrics in zip(tickets, baseline_metrics):
+                ticket["optimized_stake"] = metrics.get("stake")
+                ticket["optimized_expected_payout"] = metrics.get("expected_payout")
+                ticket["optimized_sharpe"] = metrics.get("sharpe")
+
         reasons = []
         if ev_ratio_opt < ev_threshold:
             reasons.append(f"EV ratio below {ev_threshold:.2f}")
