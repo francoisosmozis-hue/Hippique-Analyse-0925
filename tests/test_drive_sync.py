@@ -61,7 +61,7 @@ def test_download_file_calls_blob(tmp_path, monkeypatch):
 
     result = drive_sync.download_file("object/name.json", dest, service=client)
 
-assert result == dest
+    assert result == dest
     assert dest.parent.exists()
     bucket.blob.assert_called_once_with("object/name.json")
     blob.download_to_filename.assert_called_once_with(str(dest))
