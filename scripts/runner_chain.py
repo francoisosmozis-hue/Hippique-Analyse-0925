@@ -24,16 +24,18 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from simulate_ev import simulate_ev_batch
 from validator_ev import ValidationError, validate_ev
 
+from scripts.gcs_utils import disabled_reason, is_gcs_enabled
+
 logger = logging.getLogger(__name__)
 
-USE_DRIVE = os.getenv("USE_DRIVE", "false").lower() == "true"
-if USE_DRIVE:
+USE_GCS = is_gcs_enabled()
+if USE_GCS:
     try:
         from scripts.drive_sync import upload_file
     except Exception as exc:  # pragma: no cover - optional dependency guards
         logger.warning("Cloud storage sync unavailable, disabling uploads: %s", exc)
         upload_file = None  # type: ignore[assignment]
-        USE_DRIVE = False
+        USE_GCS = False
 else:  # pragma: no cover - simple fallback when Drive is disabled
     upload_file = None  # type: ignore[assignment]
 
@@ -74,13 +76,15 @@ def _write_snapshot(race_id: str, window: str, base: Path) -> None:
     path = dest / f"snapshot_{window}.json"
     with path.open("w", encoding="utf-8") as fh:
         json.dump(payload, fh, ensure_ascii=False, indent=2)
-    if USE_DRIVE and upload_file:
+    if USE_GCS and upload_file:
         try:
             upload_file(path)
         except EnvironmentError as exc:
             logger.warning("Skipping cloud upload for %s: %s", path, exc)
     else:
-        logger.info("[gcs] Skipping upload for %s (USE_DRIVE disabled)", path)
+        reason = disabled_reason()
+        detail = f"{reason}=false" if reason else "USE_GCS disabled"
+        logger.info("[gcs] Skipping upload for %s (%s)", path, detail)
 
 
 def _write_analysis(
@@ -112,13 +116,15 @@ def _write_analysis(
     path = dest / "analysis.json"
     with path.open("w", encoding="utf-8") as fh:
         json.dump(payload, fh, ensure_ascii=False, indent=2)
-    if USE_DRIVE and upload_file:
+    if USE_GCS and upload_file:    
         try:
             upload_file(path)
         except EnvironmentError as exc:
             logger.warning("Skipping cloud upload for %s: %s", path, exc)
     else:
-        logger.info("[gcs] Skipping upload for %s (USE_DRIVE disabled)", path)
+        reason = disabled_reason()
+        detail = f"{reason}=false" if reason else "USE_GCS disabled"
+        logger.info("[gcs] Skipping upload for %s (%s)", path, detail)
 
 
 def main() -> None:
