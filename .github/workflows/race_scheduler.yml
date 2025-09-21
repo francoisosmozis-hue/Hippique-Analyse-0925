@@ -55,7 +55,8 @@ jobs:
 
       - name: Export normalized JSON/CSV
         run: |
-          python scripts/p_finale_export.py \
+          mkdir -p "${OUTPUT_DIR}"
+          python "${GITHUB_WORKSPACE}/p_finale_export.py" \
             --in "${OUTPUT_DIR}/analyses" \
             --out-json "${OUTPUT_DIR}/p_finale.json" \
             --out-csv "${OUTPUT_DIR}/p_finale.csv"
