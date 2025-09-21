@@ -106,7 +106,7 @@ def _remote_path(*parts: str | os.PathLike[str] | None) -> str:
 def build_remote_path(*parts: str | os.PathLike[str] | None) -> str:
     """Public helper exposing :func:`_remote_path` for reuse in other modules."""
 
-return _remote_path(*parts)
+    return _remote_path(*parts)
 
 
 def _iter_uploads(patterns: Iterable[str]) -> Iterable[Path]:
