@@ -16,11 +16,11 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-      REGION: ${{ vars.GCP_REGION }}
-      REPO: ${{ vars.GAR_REPO }}
-      SERVICE: ${{ vars.SERVICE_NAME }}
-      IMAGE: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.GAR_REPO }}/${{ vars.SERVICE_NAME }}:${{ github.sha }}
+      PROJECT_ID: ${{ vars.GCP_PROJECT_ID || secrets.GCP_PROJECT_ID || 'analyse-hippique' }}
+      REGION: ${{ vars.GCP_REGION || secrets.GCP_REGION || 'europe-west1' }}
+      REPO: ${{ vars.GAR_REPO || secrets.GAR_REPO || 'hippique-analyse' }}
+      SERVICE: ${{ vars.SERVICE_NAME || secrets.SERVICE_NAME || 'hippique-analyse' }}
+      IMAGE: ${{ format('{0}-docker.pkg.dev/{1}/{2}/{3}:{4}', vars.GCP_REGION || secrets.GCP_REGION || 'europe-west1', vars.GCP_PROJECT_ID || secrets.GCP_PROJECT_ID || 'analyse-hippique', vars.GAR_REPO || secrets.GAR_REPO || 'hippique-analyse', vars.SERVICE_NAME || secrets.SERVICE_NAME || 'hippique-analyse', github.sha) }}
       # Variables métier (modifiables dans "Repository variables")
       DEFAULT_BUDGET: ${{ vars.DEFAULT_BUDGET || '5.0' }}
       MIN_EV_SP: ${{ vars.MIN_EV_SP || '0.20' }}
@@ -52,8 +52,16 @@ jobs:
 
       - name: Configure Docker to push to Artifact Registry
         run: |
-          gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
-
+          if [[ -z "${IMAGE}" ]]; then
+            echo "::error::IMAGE env var is empty. Please configure the workflow variables (GCP_REGION, GCP_PROJECT_ID, GAR_REPO, SERVICE_NAME)."
+            exit 1
+          fi
+          REGISTRY_HOST="${IMAGE%%/*}"
+          if [[ -z "${REGISTRY_HOST}" || "${REGISTRY_HOST}" == "${IMAGE}" || "${REGISTRY_HOST}" == -* ]]; then
+            echo "::error::Unable to determine Artifact Registry host from IMAGE='${IMAGE}'."
+            exit 1
+          fi
+          gcloud auth configure-docker "${REGISTRY_HOST}" --quiet
       - name: Build & Push image
         run: |
           docker build -t "${IMAGE}" .
