@@ -55,11 +55,29 @@ jobs:
 
       - name: Export normalized JSON/CSV
         run: |
+          set -euo pipefail
           mkdir -p "${OUTPUT_DIR}"
-          python "${GITHUB_WORKSPACE}/p_finale_export.py" \
-            --in "${OUTPUT_DIR}/analyses" \
-            --out-json "${OUTPUT_DIR}/p_finale.json" \
-            --out-csv "${OUTPUT_DIR}/p_finale.csv"
+          
+          analysis_root="${OUTPUT_DIR}/analyses"
+          mkdir -p "${analysis_root}"
+          found=0
+
+          while IFS= read -r pfinale; do
+            [ -n "${pfinale}" ] || continue
+            if [ ! -f "${pfinale}" ]; then
+              continue
+            fi
+            dir=$(dirname "${pfinale}")
+            echo "[export] Traitement de ${dir}"
+            python "${GITHUB_WORKSPACE}/p_finale_export.py" \
+              --outputs-dir "${dir}"
+            found=1
+          done < <(find "${analysis_root}" -maxdepth 2 -type f -name 'p_finale.json' 2>/dev/null || true)
+
+          if [ "${found}" -eq 0 ]; then
+            echo "[WARN] Aucun p_finale.json détecté sous ${analysis_root}" >&2
+          fi
+
 
       - name: Upload artifacts (H-30/H-5)
         uses: actions/upload-artifact@v4
