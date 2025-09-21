@@ -222,3 +222,104 @@ def test_export_per_horse_csv_missing_chronos(tmp_path: Path) -> None:
     (tmp_path / "p_finale.json").write_text(json.dumps(data), encoding="utf-8")
     with pytest.raises(FileNotFoundError):
         acde.export_per_horse_csv(tmp_path)
+
+
+
+def test_h5_pipeline_produces_outputs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    meeting_payload = {
+        "meetings": [
+            {
+                "r": "R1",
+                "courses": [
+                    {
+                        "c": "C1",
+                        "id_course": "COURSE42",
+                    }
+                ],
+            }
+        ]
+    }
+    monkeypatch.setattr(acde, "_load_geny_today_payload", lambda: meeting_payload)
+
+    base_meta = {
+        "id_course": "COURSE42",
+        "rc": "R1C1",
+        "hippodrome": "TestVille",
+        "date": "2025-09-10",
+        "discipline": "plat",
+        "r_label": "R1",
+    }
+    h30_runners = [
+        {"id": str(idx), "name": name, "odds": odds}
+        for idx, (name, odds) in enumerate(
+            [
+                ("Alpha", 2.0),
+                ("Bravo", 3.0),
+                ("Charlie", 4.0),
+                ("Delta", 6.0),
+                ("Echo", 8.5),
+                ("Foxtrot", 10.0),
+            ],
+            start=1,
+        )
+    ]
+    h5_runners = [
+        dict(runner, odds=runner["odds"] * 1.05) for runner in h30_runners
+    ]
+
+    h30_payload = dict(base_meta)
+    h30_payload["runners"] = h30_runners
+    h5_payload = dict(base_meta)
+    h5_payload["runners"] = h5_runners
+
+    h30_filename = "20250910T150000_R1C1_H-30.json"
+    h5_filename = "20250910T155000_R1C1_H-5.json"
+
+    def fake_write_snapshot(course_id: str, phase: str, rc_dir: Path) -> Path:
+        rc_dir.mkdir(parents=True, exist_ok=True)
+        if phase.upper() == "H30":
+            dest = rc_dir / h30_filename
+            dest.write_text(json.dumps(h30_payload), encoding="utf-8")
+            return dest
+        if phase.upper() == "H5":
+            # Ensure the H-30 snapshot is present so the enrich step can load it.
+            h30_dest = rc_dir / h30_filename
+            if not h30_dest.exists():
+                h30_dest.write_text(json.dumps(h30_payload), encoding="utf-8")
+            dest = rc_dir / h5_filename
+            dest.write_text(json.dumps(h5_payload), encoding="utf-8")
+            return dest
+        raise AssertionError("unexpected phase")
+
+    monkeypatch.setattr(acde, "write_snapshot_from_geny", fake_write_snapshot)
+
+    stats_map = {
+        str(idx): {"j_win": 20 + idx, "e_win": 15 + idx}
+        for idx in range(1, 7)
+    }
+    monkeypatch.setattr(acde, "collect_stats", lambda *args, **kwargs: (100.0, stats_map))
+
+    argv = [
+        "analyse_courses_du_jour_enrichie.py",
+        "--reunion",
+        "R1",
+        "--course",
+        "C1",
+        "--phase",
+        "H5",
+        "--data-dir",
+        str(tmp_path),
+    ]
+    monkeypatch.setattr(sys, "argv", argv)
+    acde.main()
+
+    rc_dir = tmp_path / "R1C1"
+    p_finale_path = rc_dir / "p_finale.json"
+    assert p_finale_path.exists()
+    data = json.loads(p_finale_path.read_text(encoding="utf-8"))
+    assert data.get("meta", {}).get("rc") == "R1C1"
+    assert (rc_dir / f"{Path(h5_filename).stem}_je.csv").exists()
+    assert (rc_dir / "chronos.csv").exists()
+    assert (rc_dir / "prompts" / "prompt.txt").exists()
