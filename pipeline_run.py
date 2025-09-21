@@ -71,10 +71,13 @@ def configure_logging(level: str | int | None = None) -> None:
         )
 
 load_dotenv()
-        
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+OUTPUT_DIR = os.getenv("OUTPUT_DIR", "out/hminus5")
+Path(OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
 
 REQ_KEYS = [
     "BUDGET_TOTAL",
@@ -1068,6 +1071,8 @@ def export(
 
 def cmd_analyse(args: argparse.Namespace) -> None:
     cfg = load_yaml(args.gpi)
+    cfg["OUTDIR_DEFAULT"] = OUTPUT_DIR
+    print(f"[pipeline] Export local only → {OUTPUT_DIR}")
     if args.budget is not None:
         cfg["BUDGET_TOTAL"] = args.budget
     if args.ev_global is not None:
