@@ -1,36 +1,56 @@
-name: GPI v5.1 - Daily Planning
+name: Planning ZEturf Fetch
 
 on:
+  workflow_dispatch:
   schedule:
-    - cron: "0 6 * * *"  # 06:00 UTC = 08:00 Europe/Paris (été)
-    - cron: "0 7 * * *"  # 07:00 UTC = 08:00 Europe/Paris (hiver)
-  workflow_dispatch: {}
-
-env:
-  TZ: Europe/Paris
-  PYTHONUNBUFFERED: "1"
+    - cron: '0 6 * * *'  # 06:00 CET
 
 jobs:
   planning:
     runs-on: ubuntu-latest
+    env:
+      TZ: Europe/Paris
+      PYTHONUNBUFFERED: '1'
     permissions:
       contents: write
+      
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: actions/setup-python@v5
-        with: { python-version: "3.12" }
+          
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
       - name: Install deps
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-      - name: Generate today's planning (meetings + races + hours)
+          
+      - name: Ensure scripts package
+        run: |
+          mkdir -p scripts
+          [ -f scripts/__init__.py ] || touch scripts/__init__.py
+
+      - name: Run planning fetch
+        env:
+          PYTHONPATH: .
         run: |
           python online_fetch_zeturf.py \
             --mode planning \
             --out data/planning/$(date +%F).json \
             --sources config/sources.yml
+            
       - name: Commit planning
         run: |
           git config user.name "github-actions"
