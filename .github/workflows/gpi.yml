@@ -115,7 +115,14 @@ jobs:
           test -n "$cid"
           sed -i "s/{course_id}/$cid/" config/sources.yml
       - name: Fetch H-30 snapshot
-        if: steps.course.outputs.course_id != '' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && github.event.schedule == '25 15 * * *'))
+        if: >
+          steps.course.outputs.course_id != '' && (
+            github.event_name == 'workflow_dispatch' ||
+            (
+              github.event_name == 'schedule' &&
+              (github.event.schedule == '25 15 * * *' || github.event.schedule == '55 15 * * *')
+            )
+          )
         run: |
           mkdir -p data/h30
           python scripts/online_fetch_zeturf.py --mode h30 --out data/h30/h30.json
@@ -131,7 +138,14 @@ jobs:
             python pipeline_run.py snapshot --when h30 --meeting "$meeting_input" --race "$race_input" --outdir data/h30
           fi
       - name: Extract H-30 odds map
-        if: steps.course.outputs.course_id != '' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && github.event.schedule == '25 15 * * *'))
+        if: >
+          steps.course.outputs.course_id != '' && (
+            github.event_name == 'workflow_dispatch' ||
+            (
+              github.event_name == 'schedule' &&
+              (github.event.schedule == '25 15 * * *' || github.event.schedule == '55 15 * * *')
+            )
+          )
         run: |
           python - <<'PY'
           import json
@@ -214,12 +228,24 @@ jobs:
       - name: Ensure pipeline inputs are available
         if: steps.course.outputs.course_id != '' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && github.event.schedule == '55 15 * * *'))
         run: |
-          test -s data/h30/h30.json
-          test -s data/h30/odds.json
-          test -s data/h5/h5.json
-          test -s data/h5/odds.json
-          test -s data/h5/stats_je.json
-          test -s data/diff/diff_drift.json
+          set -euo pipefail
+          missing=()
+          for path in \
+            data/h30/h30.json \
+            data/h30/odds.json \
+            data/h5/h5.json \
+            data/h5/odds.json \
+            data/h5/stats_je.json \
+            data/diff/diff_drift.json; do
+            if [ ! -s "$path" ]; then
+              echo "::error::Missing pipeline input: $path" >&2
+              missing+=("$path")
+            fi
+          done
+          if [ "${#missing[@]}" -ne 0 ]; then
+            echo "Found ${#missing[@]} missing inputs." >&2
+            exit 1
+          fi
       - name: Check GPI configuration
         if: github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && github.event.schedule == '55 15 * * *')
         run: |
