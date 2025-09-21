@@ -77,7 +77,7 @@ jobs:
           rm -f requirements-base.txt requirements-optional.txt
 
       - name: Critical dependency check
-        run: python -c "import pandas, googleapiclient"
+        run: python -c "import pandas, google.cloud.storage"
          
       - name: Resolve inputs
         id: in
