@@ -1,81 +1,81 @@
- name: GPI v5.1 - Scheduler (H-30 / H-5)
-@@
- jobs:
-   schedule-runner:
-     runs-on: ubuntu-latest
-     permissions:
--      contents: write
-+      contents: write
-     steps:
-       - uses: actions/checkout@v4
-         with:
-           fetch-depth: 0
-       - uses: actions/setup-python@v5
-         with: { python-version: "3.12" }
-       - name: Install deps
-         run: |
-           python -m pip install --upgrade pip
-           pip install -r requirements.txt
-@@
--      - name: Run scheduler windows (H-30/H-5)
--        env:
--          GOOGLE_CREDENTIALS_B64: ${{ secrets.GOOGLE_CREDENTIALS_B64 }}
--          DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
--          GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
--        run: |
--          python scripts/runner_chain.py \
--            --planning data/planning/$(date +%F).json \
--            --h30-window-min 27 --h30-window-max 33 \
--            --h5-window-min 3 --h5-window-max 7 \
--            --snap-dir data/snapshots \
--            --analysis-dir data/analyses \
--            --budget ${GPI_BUDGET} \
--            --ev-min ${EV_MIN} \
--            --roi-min ${ROI_MIN} \
--            --pastille-rule "${PASTILLE_RULE}" \
--            --gpi-config config/gpi_v51.yml
-+      - name: Run scheduler windows (H-30/H-5) — NO DRIVE
-+        env:
-+          USE_DRIVE: "false"
-+          OUTPUT_DIR: "out/hminus"            # racines locales
-+        run: |
-+          mkdir -p "${OUTPUT_DIR}"
-+          python scripts/runner_chain.py \
-+            --planning data/planning/$(date +%F).json \
-+            --h30-window-min 27 --h30-window-max 33 \
-+            --h5-window-min 3 --h5-window-max 7 \
-+            --snap-dir data/snapshots \
-+            --analysis-dir "${OUTPUT_DIR}/analyses" \
-+            --budget ${GPI_BUDGET} \
-+            --ev-min ${EV_MIN} \
-+            --roi-min ${ROI_MIN} \
-+            --pastille-rule "${PASTILLE_RULE}" \
-+            --gpi-config config/gpi_v51.yml
-+
-+      - name: Export JSON/CSV normalisés
-+        run: |
-+          python scripts/p_finale_export.py \
-+            --in "${OUTPUT_DIR}/analyses" \
-+            --out-json "${OUTPUT_DIR}/p_finale.json" \
-+            --out-csv  "${OUTPUT_DIR}/p_finale.csv"
-+
-+      - name: Upload artifacts (H-30/H-5)
-+        uses: actions/upload-artifact@v4
-+        with:
-+          name: hminus-${{ github.run_id }}
-+          path: |
-+            out/hminus/**
-+            data/snapshots/**
-+            !**/__pycache__/**
-+
-+      # (Optionnel) commit sur branche data-hminus
-+      - name: Commit results to data branch
-+        if: ${{ github.ref == 'refs/heads/main' }}
-+        uses: EndBug/add-and-commit@v9
-+        with:
-+          add: |
-+            out/hminus
-+            data/snapshots
-+          message: "Scheduler H-30/H-5: export sans Drive (${{ github.run_id }})"
-+          new_branch: "data-hminus"
-+          push: true
+name: GPI v5.1 - Scheduler (H-30 / H-5)
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/10 7-21 * * *"
+
+permissions:
+  contents: write
+
+env:
+  PYTHONUTF8: "1"
+  TZ: Europe/Paris
+  USE_DRIVE: "false"
+  OUTPUT_DIR: out/hminus
+  GPI_BUDGET: ${{ vars.SCHEDULER_GPI_BUDGET || '5' }}
+  EV_MIN: ${{ vars.SCHEDULER_EV_MIN || '0.35' }}
+  ROI_MIN: ${{ vars.SCHEDULER_ROI_MIN || '0.25' }}
+  PASTILLE_RULE: ${{ vars.SCHEDULER_PASTILLE_RULE || '' }}
+
+jobs:
+  schedule-runner:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run scheduler windows (H-30/H-5)
+        run: |
+          mkdir -p "${OUTPUT_DIR}"
+          python scripts/runner_chain.py \
+            --planning "data/planning/$(date +%F).json" \
+            --h30-window-min 27 --h30-window-max 33 \
+            --h5-window-min 3 --h5-window-max 7 \
+            --snap-dir data/snapshots \
+            --analysis-dir "${OUTPUT_DIR}/analyses" \
+            --budget "${GPI_BUDGET}" \
+            --ev-min "${EV_MIN}" \
+            --roi-min "${ROI_MIN}" \
+            --pastille-rule "${PASTILLE_RULE}" \
+            --gpi-config config/gpi_v51.yml
+
+      - name: Export normalized JSON/CSV
+        run: |
+          python scripts/p_finale_export.py \
+            --in "${OUTPUT_DIR}/analyses" \
+            --out-json "${OUTPUT_DIR}/p_finale.json" \
+            --out-csv "${OUTPUT_DIR}/p_finale.csv"
+
+      - name: Upload artifacts (H-30/H-5)
+        uses: actions/upload-artifact@v4
+        with:
+          name: hminus-${{ github.run_id }}
+          path: |
+            out/hminus/**
+            data/snapshots/**
+            !**/__pycache__/**
+
+      - name: Commit results to data branch
+        if: ${{ github.ref == 'refs/heads/main' }}
+        uses: EndBug/add-and-commit@v9
+        with:
+          add: |
+            out/hminus
+            data/snapshots
+          message: "Scheduler H-30/H-5: export sans Drive (${{ github.run_id }})"
+          new_branch: data-hminus
+          push: true
