@@ -22,7 +22,7 @@ EXTRA_DEPENDENCIES = (
     "PyYAML",
     "google-cloud-secret-manager",
     "google-auth",
-    "google-auth-oauthlib",
+    "google-cloud-storage",
 )
 
 
