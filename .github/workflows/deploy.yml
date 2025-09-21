@@ -62,6 +62,7 @@ jobs:
             exit 1
           fi
           gcloud auth configure-docker "${REGISTRY_HOST}" --quiet
+          
       - name: Build & Push image
         run: |
           docker build -t "${IMAGE}" .
