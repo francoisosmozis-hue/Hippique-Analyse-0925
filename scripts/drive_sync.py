@@ -216,7 +216,7 @@ def main() -> int | None:
         "--upload-glob",
         action="append",
         default=[],
-        elp="Glob pattern of files to upload",
+        help="Glob pattern of files to upload",
     )
     parser.add_argument(
         "--download",
