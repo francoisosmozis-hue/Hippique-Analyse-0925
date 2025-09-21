@@ -24,7 +24,7 @@ jobs:
           pip install -r requirements.txt
       - name: Fetch results + prepare Excel update commands
         run: |
-         python get_arrivee_geny.py \
+          python get_arrivee_geny.py \
             --planning data/planning/$(date +%F).json \
             --out data/results/$(date +%F)_arrivees.json
             
@@ -34,14 +34,33 @@ jobs:
             --excel excel/modele_suivi_courses_hippiques.xlsx \
             --out-dir data/results
 
+
       - name: Update Excel with results
         run: |
-          python update_excel_with_results.py \
-            --excel excel/modele_suivi_courses_hippiques.xlsx \
-            --arrivees data/results/$(date +%F)_arrivees.json \
-            --analyses-dir data/analyses \
-            --results-dir data/results \
-            --save
+          set -euo pipefail
+          RESULTS_BASE="data/results/$(date +%F)"
+          if [ ! -d "$RESULTS_BASE" ]; then
+            echo "No race exports in $RESULTS_BASE"
+            exit 0
+          fi
+
+          if ! compgen -G "$RESULTS_BASE/*" > /dev/null; then
+            echo "No race directories under $RESULTS_BASE"
+            exit 0
+          fi
+
+          for race_dir in "$RESULTS_BASE"/*; do
+            if [ -d "$race_dir" ] \
+              && [ -f "$race_dir/arrivee_officielle.json" ] \
+              && [ -f "$race_dir/tickets.json" ]; then
+              python update_excel_with_results.py \
+                --excel excel/modele_suivi_courses_hippiques.xlsx \
+                --arrivee "$race_dir/arrivee_officielle.json" \
+                --tickets "$race_dir/tickets.json"
+            fi
+          done
+
+
 
       - name: Commit results + updated Excel
         run: |
