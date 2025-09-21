@@ -13,6 +13,7 @@ import argparse
 import datetime as dt
 import json
 import logging
+import os
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -22,11 +23,19 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from simulate_ev import simulate_ev_batch
 from validator_ev import ValidationError, validate_ev
-from scripts.drive_sync import upload_file
-
 
 logger = logging.getLogger(__name__)
 
+USE_DRIVE = os.getenv("USE_DRIVE", "false").lower() == "true"
+if USE_DRIVE:
+    try:
+        from scripts.drive_sync import upload_file
+    except Exception as exc:  # pragma: no cover - optional dependency guards
+        logger.warning("Drive sync unavailable, disabling uploads: %s", exc)
+        upload_file = None  # type: ignore[assignment]
+        USE_DRIVE = False
+else:  # pragma: no cover - simple fallback when Drive is disabled
+    upload_file = None  # type: ignore[assignment]
 
 def _load_planning(path: Path) -> List[Dict[str, Any]]:
     """Return planning entries from ``path``.
@@ -64,10 +73,13 @@ def _write_snapshot(race_id: str, window: str, base: Path) -> None:
     path = dest / f"snapshot_{window}.json"
     with path.open("w", encoding="utf-8") as fh:
         json.dump(payload, fh, ensure_ascii=False, indent=2)
-    try:
-        upload_file(path)
-    except EnvironmentError as exc:
-        logger.warning("Skipping Drive upload for %s: %s", path, exc)
+    if USE_DRIVE and upload_file:
+        try:
+            upload_file(path)
+        except EnvironmentError as exc:
+            logger.warning("Skipping Drive upload for %s: %s", path, exc)
+    else:
+        logger.info("[drive] Skipping upload for %s (USE_DRIVE disabled)", path)
 
 
 def _write_analysis(
@@ -77,10 +89,12 @@ def _write_analysis(
     budget: float,
     ev_min: float,
     roi_min: float,
+    mode: str,
 ) -> None:
     """Compute a dummy EV/ROI analysis and write it to disk."""
     dest = base / race_id
     dest.mkdir(parents=True, exist_ok=True)
+    print(f"[runner] Mode={mode} RC={race_id} → {dest}")
 
     tickets = [{"p": 0.5, "odds": 2.0, "stake": 1.0}]
     stats = simulate_ev_batch(tickets, bankroll=budget)
@@ -97,10 +111,13 @@ def _write_analysis(
     path = dest / "analysis.json"
     with path.open("w", encoding="utf-8") as fh:
         json.dump(payload, fh, ensure_ascii=False, indent=2)
-    try:
-        upload_file(path)
-    except EnvironmentError as exc:
-        logger.warning("Skipping Drive upload for %s: %s", path, exc)
+    if USE_DRIVE and upload_file:
+        try:
+            upload_file(path)
+        except EnvironmentError as exc:
+            logger.warning("Skipping Drive upload for %s: %s", path, exc)
+    else:
+        logger.info("[drive] Skipping upload for %s (USE_DRIVE disabled)", path)
 
 
 def main() -> None:
@@ -122,13 +139,20 @@ def main() -> None:
     parser.add_argument(
         "--payout-calib", default="", help="Path to payout calibration (unused)"
     )
+    parser.add_argument("--mode", default="hminus5", help="Mode de traitement (log only)")
+    parser.add_argument(
+        "--output",
+        default=None,
+        help="Répertoire de sortie prioritaire (fallback vers $OUTPUT_DIR puis --analysis-dir)",
+    )
     args = parser.parse_args()
 
     planning = _load_planning(Path(args.planning))
     now = dt.datetime.now()
 
     snap_dir = Path(args.snap_dir)
-    analysis_dir = Path(args.analysis_dir)
+    analysis_root = args.output or os.getenv("OUTPUT_DIR") or args.analysis_dir
+    analysis_dir = Path(analysis_root)
 
     for entry in planning:
         race_id = entry.get("id") or f"{entry.get('meeting', '')}{entry.get('race', '')}"
@@ -144,7 +168,14 @@ def main() -> None:
             _write_snapshot(race_id, "H30", snap_dir)
         if args.h5_window_min <= delta <= args.h5_window_max:
             _write_snapshot(race_id, "H5", snap_dir)
-            _write_analysis(race_id, analysis_dir, budget=args.budget, ev_min=args.ev_min, roi_min=args.roi_min)
+            _write_analysis(
+                race_id,
+                analysis_dir,
+                budget=args.budget,
+                ev_min=args.ev_min,
+                roi_min=args.roi_min,
+                mode=args.mode,
+            )
 
 
 if __name__ == "__main__":
