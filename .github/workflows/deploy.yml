@@ -4,50 +4,72 @@ on:
   push:
     branches: ["main"]
 
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
-    steps:
-      - uses: actions/checkout@v4
+    env:
+      PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      REGION: ${{ vars.GCP_REGION }}
+      REPO: ${{ vars.GAR_REPO }}
+      SERVICE: ${{ vars.SERVICE_NAME }}
+      IMAGE: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.GAR_REPO }}/${{ vars.SERVICE_NAME }}:${{ github.sha }}
+      # Variables métier (modifiables dans "Repository variables")
+      DEFAULT_BUDGET: ${{ vars.DEFAULT_BUDGET || '5.0' }}
+      MIN_EV_SP: ${{ vars.MIN_EV_SP || '0.20' }}
+      MIN_EV_COMBO: ${{ vars.MIN_EV_COMBO || '0.40' }}
+      MAX_VOLAT_PER_HORSE: ${{ vars.MAX_VOLAT_PER_HORSE || '0.60' }}
+      DATA_MODE: ${{ vars.DATA_MODE || 'web' }}
 
-      # Auth via Service Account JSON stocké dans le secret GCP_CREDENTIALS
-      - name: Authenticate to Google Cloud
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Auth via clé JSON stockée dans le secret GCP_CREDENTIALS
+      - name: Auth to Google Cloud
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_CREDENTIALS }}
 
-      - name: Set up gcloud
+      - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v2
         with:
-          project_id: analyse-hippique
+          project_id: ${{ env.PROJECT_ID }}
 
-      # Build & push vers Artifact Registry
-      - name: Build and Push image
-        env:
-          REGION: europe-west1
-          IMAGE: europe-west1-docker.pkg.dev/analyse-hippique/hippiques/hippique-app:${{ github.sha }}
+      - name: Ensure Artifact Registry repo exists
         run: |
-          gcloud artifacts repositories create hippiques \
-            --repository-format=DOCKER --location=$REGION --description="Hippiques" || true
-          gcloud auth configure-docker $REGION-docker.pkg.dev --quiet
-          docker build -t "$IMAGE" .
-          docker push "$IMAGE"
+          gcloud artifacts repositories create "${REPO}" \
+            --repository-format=DOCKER \
+            --location="${REGION}" \
+            --description="Images hippiques" || true
 
-      # Déploiement Cloud Run
-      - name: Deploy to Cloud Run
-        env:
-          REGION: europe-west1
-          IMAGE: europe-west1-docker.pkg.dev/analyse-hippique/hippiques/hippique-app:${{ github.sha }}
-          DEFAULT_BUDGET: "5.0"
-          MIN_EV_SP: "0.20"
-          MIN_EV_COMBO: "0.40"
-          MAX_VOLAT_PER_HORSE: "0.60"
-          DATA_MODE: "web"
+      - name: Configure Docker to push to Artifact Registry
         run: |
-          gcloud run deploy hippique-app \
-            --image "$IMAGE" \
-            --region "$REGION" \
+          gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+
+      - name: Build & Push image
+        run: |
+          docker build -t "${IMAGE}" .
+          docker push "${IMAGE}"
+
+      - name: Deploy to Cloud Run        
+        run: |
+          gcloud run deploy "${SERVICE}" \
+            --image "${IMAGE}" \
+            --region "${REGION}" \
+            --platform managed \
+            --allow-unauthenticated \
+            --timeout 600 \
+            --set-env-vars "DEFAULT_BUDGET=${DEFAULT_BUDGET},MIN_EV_SP=${MIN_EV_SP},MIN_EV_COMBO=${MIN_EV_COMBO},MAX_VOLAT_PER_HORSE=${MAX_VOLAT_PER_HORSE},DATA_MODE=${DATA_MODE}"
+          URL="$(gcloud run services describe "${SERVICE}" --region "${REGION}" --format='value(status.url)')"
+          echo "Service URL: ${URL}"
             --platform managed \
             --allow-unauthenticated \
             --set-env-vars "DEFAULT_BUDGET=${DEFAULT_BUDGET},MIN_EV_SP=${MIN_EV_SP},MIN_EV_COMBO=${MIN_EV_COMBO},MAX_VOLAT_PER_HORSE=${MAX_VOLAT_PER_HORSE},DATA_MODE=${DATA_MODE}"
