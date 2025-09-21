@@ -1,11 +1,12 @@
 import os
+import re
 import json
 import tempfile
 import subprocess
 from pathlib import Path
-from typing import Optional, List, Literal
+from typing import Optional, List, Literal, Tuple
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 # =========================
@@ -30,6 +31,14 @@ class AnalyseParams(BaseModel):
     meeting: Optional[str] = Field(
         default=None,
         description="Identifiant réunion/courses (si utilisé par tes scripts, ex: 'R1C3')."
+    )
+    reunion: Optional[str] = Field(
+        default=None,
+        description="Identifiant de la réunion (ex: 'R1').",
+    )
+    course: Optional[str] = Field(
+        default=None,
+        description="Identifiant de la course (ex: 'C3').",
     )
     course_url: Optional[str] = Field(
         default=None,
@@ -114,6 +123,53 @@ def _format_subprocess_failure(label: str, proc: subprocess.CompletedProcess) ->
     return detail
 
 
+def _normalise_rc_component(value: str, prefix: str) -> str:
+    text = str(value).strip().upper().replace(" ", "")
+    if not text:
+        raise ValueError(f"Identifiant {prefix} vide")
+    if text.startswith(prefix):
+        text = text[len(prefix) :]
+    if not text.isdigit():
+        raise ValueError(f"Identifiant {prefix} invalide: {value!r}")
+    number = int(text)
+    if number <= 0:
+        raise ValueError(f"Identifiant {prefix} invalide: {value!r}")
+    return f"{prefix}{number}"
+
+
+def _split_meeting_label(value: str) -> Tuple[str, str]:
+    cleaned = value.strip().upper().replace(" ", "").replace("-", "")
+    match = re.fullmatch(r"R(?P<reunion>\d+)C(?P<course>\d+)", cleaned)
+    if not match:
+        raise ValueError("Paramètre meeting doit suivre le format 'R<num>C<num>' (ex: 'R1C3').")
+    reunion = _normalise_rc_component(match.group("reunion"), "R")
+    course = _normalise_rc_component(match.group("course"), "C")
+    return reunion, course
+
+
+def _resolve_reunion_course(params: AnalyseParams) -> Tuple[Optional[str], Optional[str]]:
+    meeting_reunion: Optional[str] = None
+    meeting_course: Optional[str] = None
+    if params.meeting:
+        meeting_reunion, meeting_course = _split_meeting_label(params.meeting)
+
+    reunion = _normalise_rc_component(params.reunion, "R") if params.reunion else None
+    course = _normalise_rc_component(params.course, "C") if params.course else None
+
+    if meeting_reunion:
+        if reunion and reunion != meeting_reunion:
+            raise ValueError("Le champ meeting ne correspond pas à la réunion fournie.")
+        if course and course != meeting_course:
+            raise ValueError("Le champ meeting ne correspond pas à la course fournie.")
+        reunion = meeting_reunion
+        course = meeting_course
+
+    if (reunion is None) != (course is None):
+        raise ValueError("Fournir reunion et course ensemble (ou utiliser meeting).")
+
+    return reunion, course
+
+
 @app.post("/analyse", response_model=AnalyseResult)
 def analyse(body: AnalyseParams):
     """
@@ -149,10 +205,15 @@ def analyse(body: AnalyseParams):
         "python", "-u", "analyse_courses_du_jour_enrichie.py",
         "--phase", body.phase,
     ]
-    if body.meeting:
-        cmd += ["--meeting", body.meeting]
+    try:
+        reunion_label, course_label = _resolve_reunion_course(body)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+    if reunion_label and course_label:
+        cmd += ["--reunion", reunion_label, "--course", course_label]
     if body.course_url:
-        cmd += ["--course-url", body.course_url]
+        cmd += ["--reunion-url", body.course_url]
 
     # Exécution du pipeline principal
     try:
