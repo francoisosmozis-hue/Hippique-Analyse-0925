@@ -223,7 +223,7 @@ def main() -> int | None:
         action="append",
         default=[],
         metavar="PATTERN",
-        help="Glob pattern of files to upload",
+        help="Glob pattern of files to upload (may be repeated)",
     )
     parser.add_argument(
         "--download",
