@@ -206,8 +206,14 @@ def main() -> int | None:
     )
     parser.add_argument("--bucket", default=os.environ.get(BUCKET_ENV))
     parser.add_argument("--project", default=os.environ.get(PROJECT_ENV))
-    parser.add_argument("--prefix", default=os.environ.get(PREFIX_ENV))
-    parser.add_argument("--folder-id", dest="prefix", help=argparse.SUPPRESS)
+    parser.add_argument("--prefix")
+    parser.add_argument(
+        "--folder-id",
+        dest="prefix",
+        default=argparse.SUPPRESS,
+        help=argparse.SUPPRESS,
+    )
+    parser.set_defaults(prefix=os.environ.get(PREFIX_ENV))
     parser.add_argument(
         "--credentials-json",
         help="Service account credentials JSON string (defaults to GCS_SERVICE_KEY_* env vars)",
