@@ -1,3 +1,22 @@
+# API
 fastapi==0.112.2
 uvicorn[standard]==0.30.6
-pydantic==2.9.2
+
+# Pipeline / scraping / data
+requests>=2.32.0
+beautifulsoup4>=4.12.3
+lxml>=5.2.2
+pandas>=2.2.2
+numpy>=1.26.4
+PyYAML>=6.0.1
+tqdm>=4.66.4
+tenacity>=8.3.0
+
+# Excel / I/O
+openpyxl>=3.1.5
+
+# (optionnel – seulement si tu pushes vers Google Drive/Sheets depuis le conteneur)
+google-api-python-client>=2.141.0
+google-auth>=2.34.0
+google-auth-oauthlib>=1.2.1
+
