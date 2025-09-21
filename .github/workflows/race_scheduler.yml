@@ -2,8 +2,37 @@ name: GPI v5.1 - Scheduler (H-30 / H-5)
 
 on:
   workflow_dispatch:
+    inputs:
+      mode:
+        description: "Phase à déclencher (h30 ou h5)"
+        required: true
+        default: "h5"
+      course_id:
+        description: "Identifiant numérique de la course"
+        required: true
+      date:
+        description: "Date de la réunion (YYYY-MM-DD)"
+        required: true
+      meeting:
+        description: "Identifiant réunion (ex: R1)"
+        required: true
+      race:
+        description: "Identifiant course (ex: C3)"
+        required: true
+      hippodrome:
+        description: "Hippodrome concerné"
+        required: false
+        default: ""
+      discipline:
+        description: "Discipline (plat, trot, obstacle)"
+        required: false
+        default: ""
   schedule:
     - cron: "*/10 7-21 * * *"
+
+concurrency:
+  group: hminus-${{ github.event.inputs.course_id || github.run_id }}
+  cancel-in-progress: false
 
 permissions:
   contents: write
