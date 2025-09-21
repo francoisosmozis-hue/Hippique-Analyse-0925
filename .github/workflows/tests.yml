@@ -18,13 +18,15 @@ jobs:
       - run: python -m pip install --upgrade pip
       - run: pip install -r requirements.txt
       - run: pytest -q
-      - name: Skip Drive sync (missing credentials)
-        if: ${{ secrets.GOOGLE_CREDENTIALS_B64 == '' }}
-        run: echo "Skipping Drive sync because GOOGLE_CREDENTIALS_B64 secret is not available."
-      - name: Sync data to Drive
-        if: ${{ secrets.GOOGLE_CREDENTIALS_B64 != '' }}
+      - name: Skip GCS sync (missing credentials)
+        if: ${{ secrets.GCS_SERVICE_KEY_B64 == '' }}
+        run: echo "Skipping GCS sync because GCS_SERVICE_KEY_B64 secret is not available."
+      - name: Sync data to GCS
+        if: ${{ secrets.GCS_SERVICE_KEY_B64 != '' }}
         run: python scripts/drive_sync.py --push data
         env:
-          GOOGLE_CREDENTIALS_B64: ${{ secrets.GOOGLE_CREDENTIALS_B64 }}
-          DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
+          GCS_SERVICE_KEY_B64: ${{ secrets.GCS_SERVICE_KEY_B64 }}
+          GCS_BUCKET: ${{ vars.GCS_BUCKET }}
+          GCS_PREFIX: ${{ vars.GCS_PREFIX || '' }}
+          GOOGLE_CLOUD_PROJECT: ${{ vars.GOOGLE_CLOUD_PROJECT }}
 
