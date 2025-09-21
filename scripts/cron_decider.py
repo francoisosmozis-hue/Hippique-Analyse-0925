@@ -81,6 +81,15 @@ def _invoke_runner(reunion: str, course: str, phase: str) -> None:
         "--phase",
         phase,
     ]
+    snap_dir = os.getenv("RUNNER_SNAP_DIR")
+    if snap_dir:
+        cmd.extend(["--snap-dir", snap_dir])
+    analysis_dir = os.getenv("RUNNER_ANALYSIS_DIR")
+    if analysis_dir:
+        cmd.extend(["--analysis-dir", analysis_dir])
+    output_override = os.getenv("RUNNER_OUTPUT_DIR")
+    if output_override:
+        cmd.extend(["--output", output_override])
     env = os.environ.copy()
     env["ALLOW_HEURISTIC"] = get_env("ALLOW_HEURISTIC", "0")
     subprocess.run(cmd, check=True, env=env)
