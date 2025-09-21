@@ -1,196 +1,112 @@
-"""Synchronise local files with Google Drive.
+"""Synchronise local files with Google Cloud Storage.
 
-This module provides :func:`upload_file` and :func:`download_file` helpers
-relying on ``google-api-python-client``.  Credentials are expected in the
-``GOOGLE_CREDENTIALS_B64`` environment variable (the base64‑encoded service
-account JSON) and the target folder is read from ``DRIVE_FOLDER_ID``.  For
-backwards compatibility the plain ``GOOGLE_CREDENTIALS_JSON`` variable is also
-accepted.
+This module exposes :func:`upload_file`, :func:`download_file` and
+:func:`push_tree` helpers built on top of ``google-cloud-storage``.  The
+previous Google Drive implementation has been replaced by a simpler Google
+Cloud Storage client that relies on the following environment variables:
+
+``GCS_BUCKET``
+    Name of the destination bucket.
+``GCS_PREFIX`` (optional)
+    Common prefix applied to every uploaded object.
+``GOOGLE_CLOUD_PROJECT`` (optional)
+    Project used to instantiate the storage client.
+``GCS_SERVICE_KEY_B64`` / ``GCS_SERVICE_KEY_JSON`` (optional)
+    Service account credentials, either as base64 or raw JSON string.  When
+    omitted, the default credentials chain is used.
 
 Example usage from the command line::
 
-    export DRIVE_FOLDER_ID="<drive-folder-id>"
-    export GOOGLE_CREDENTIALS_B64="$(base64 -w0 credentials.json)"
+    export GCS_BUCKET="<bucket-name>"
+    export GCS_SERVICE_KEY_B64="$(base64 -w0 credentials.json)"
     python scripts/drive_sync.py --upload-glob "data/results/*.json"
 
 The CLI accepts multiple ``--upload-glob`` patterns.  Files matching each
-pattern are uploaded to the configured Drive folder.  ``--download FILE_ID
-DEST`` pairs may be provided to retrieve files.
+pattern are uploaded to the configured bucket under the configured prefix.
+``--download OBJECT DEST`` pairs may be provided to retrieve specific objects,
+while ``--push DIR`` recursively uploads an entire directory tree.
 """
+
 from __future__ import annotations
 
 import argparse
+import base64
 import glob
-import io
 import json
 import os
 import sys
 from pathlib import Path
 from typing import Iterable, Optional
-import base64
 
+from google.cloud import storage
 from google.oauth2 import service_account
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
 
-SCOPES = [
-    "https://www.googleapis.com/auth/drive.file",
-    "https://www.googleapis.com/auth/drive.metadata.readonly",
-]
-
-FOLDER_MIME = "application/vnd.google-apps.folder"
+SCOPES = ("https://www.googleapis.com/auth/devstorage.read_write",)
+BUCKET_ENV = "GCS_BUCKET"
+PREFIX_ENV = "GCS_PREFIX"
+PROJECT_ENV = "GOOGLE_CLOUD_PROJECT"
+SERVICE_KEY_JSON_ENV = "GCS_SERVICE_KEY_JSON"
+SERVICE_KEY_B64_ENV = "GCS_SERVICE_KEY_B64"
 
 
-def _build_service(credentials_json: Optional[str] = None):
-    """Return an authenticated Drive service using ``credentials_json``.
+def _load_credentials(credentials_json: Optional[str] = None):
+    """Return service account credentials when available.
 
-    Parameters
-    ----------
-    credentials_json:
-        Service account credentials as a JSON string.  If omitted, the
-        ``GOOGLE_CREDENTIALS_B64`` environment variable is decoded (falling back
-        to ``GOOGLE_CREDENTIALS_JSON`` if present).
+    ``credentials_json`` may contain the raw JSON payload.  When omitted, the
+    helper falls back to ``GCS_SERVICE_KEY_JSON`` then
+    ``GCS_SERVICE_KEY_B64`` (base64-encoded JSON).  As a last resort the
+    ``GOOGLE_APPLICATION_CREDENTIALS`` file is considered.  ``None`` is
+    returned if no credentials are provided so the default client logic can
+    apply (ADC, workload identity, …).
     """
 
-    info = credentials_json or os.environ.get("GOOGLE_CREDENTIALS_JSON")
+    info = credentials_json or os.environ.get(SERVICE_KEY_JSON_ENV)
     if not info:
-        b64 = os.environ.get("GOOGLE_CREDENTIALS_B64")
-        if b64:
-            info = base64.b64decode(b64).decode()
-    if not info:
-        raise EnvironmentError("GOOGLE_CREDENTIALS_B64 is not set")
-    data = json.loads(info)
-    creds = service_account.Credentials.from_service_account_info(
-        data, scopes=SCOPES
-    )
-    return build("drive", "v3", credentials=creds)
+        encoded = os.environ.get(SERVICE_KEY_B64_ENV)
+        if encoded:
+            info = base64.b64decode(encoded).decode()
+    if info:
+        data = json.loads(info)
+        return service_account.Credentials.from_service_account_info(
+            data, scopes=SCOPES
+        )
+    key_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+    if key_path:
+        return service_account.Credentials.from_service_account_file(
+            key_path, scopes=SCOPES
+        )
+    return None
 
 
-def upload_file(
-    path: str | Path,
-    *,
-    folder_id: Optional[str] = None,
-    service=None,
-) -> str:
-    """Upload ``path`` to Drive and return the file id."""
+def _build_service(
+    credentials_json: Optional[str] = None, *, project: Optional[str] = None
+) -> storage.Client:
+    """Instantiate and return a ``storage.Client``."""
 
-    srv = service or _build_service()
-    dest = folder_id or os.environ.get("DRIVE_FOLDER_ID")
-    if not dest:
-        raise EnvironmentError("DRIVE_FOLDER_ID is not set")
-    file_metadata = {"name": Path(path).name, "parents": [dest]}
-    media = MediaFileUpload(str(path), resumable=True)
-    created = (
-        srv.files().create(body=file_metadata, media_body=media, fields="id").execute()
-    )
-    return created.get("id")
+    creds = _load_credentials(credentials_json)
+    project_id = project or os.environ.get(PROJECT_ENV)
+    if creds is None:
+        return storage.Client(project=project_id)
+    return storage.Client(project=project_id, credentials=creds)
 
 
-def download_file(
-    file_id: str,
-    dest: str | Path,
-    *,
-    service=None,
-) -> Path:
-    """Download ``file_id`` from Drive into ``dest`` and return the path."""
+def _remote_path(*parts: str | os.PathLike[str] | None) -> str:
+    """Join ``parts`` using ``/`` while stripping empty segments."""
 
-    srv = service or _build_service()
-    request = srv.files().get_media(fileId=file_id)
-    fh = io.FileIO(dest, "wb")
-    downloader = MediaIoBaseDownload(fh, request)
-    done = False
-    while not done:
-        _, done = downloader.next_chunk()
-    return Path(dest)
-
-
-def find_item(
-    name: str,
-    *,
-    parent: str,
-    service=None,
-    mime_type: Optional[str] = None,
-) -> Optional[str]:
-    """Return the id of ``name`` under ``parent`` if it exists."""
-
-    srv = service or _build_service()
-    query = [f"name = '{name}'", f"'{parent}' in parents", "trashed = false"]
-    if mime_type:
-        query.append(f"mimeType = '{mime_type}'")
-    result = (
-        srv.files()
-        .list(q=" and ".join(query), fields="files(id, name)")
-        .execute()
-    )
-    files = result.get("files", [])
-    return files[0]["id"] if files else None
-
-
-def ensure_folder(
-    path: str | Path,
-    *,
-    parent: str,
-    service=None,
-) -> str:
-    """Ensure that ``path`` exists under ``parent`` and return its id."""
-
-    srv = service or _build_service()
-    current = parent
-    parts = [p for p in Path(path).parts if p not in ("", ".")]
+    cleaned: list[str] = []
     for part in parts:
-        existing = find_item(part, parent=current, service=srv, mime_type=FOLDER_MIME)
-        if existing:
-            current = existing
-        else:
-            metadata = {"name": part, "parents": [current], "mimeType": FOLDER_MIME}
-            current = (
-                srv.files().create(body=metadata, fields="id").execute()["id"]
-            )
-    return current
+        if part is None:
+            continue
+        text = str(part).strip("/")
+        if text:
+            cleaned.append(text.replace("\\", "/"))
+    return "/".join(cleaned)
 
 
-def upload_or_update(
-    path: str | Path,
-    *,
-    folder_id: str,
-    service=None,
-) -> str:
-    """Upload ``path`` or update the existing remote file."""
+def build_remote_path(*parts: str | os.PathLike[str] | None) -> str:
+    """Public helper exposing :func:`_remote_path` for reuse in other modules."""
 
-    srv = service or _build_service()
-    name = Path(path).name
-    file_id = find_item(name, parent=folder_id, service=srv)
-    media = MediaFileUpload(str(path), resumable=True)
-    if file_id:
-        srv.files().update(fileId=file_id, media_body=media).execute()
-        return file_id
-    metadata = {"name": name, "parents": [folder_id]}
-    created = srv.files().create(body=metadata, media_body=media, fields="id").execute()
-    return created.get("id")
-
-
-def push_tree(
-    base: str | Path,
-    *,
-    folder_id: Optional[str] = None,
-    service=None,
-) -> None:
-    """Recursively upload ``base`` into ``folder_id`` on Drive."""
-
-    srv = service or _build_service()
-    dest = folder_id or os.environ.get("DRIVE_FOLDER_ID")
-    if not dest:
-        raise EnvironmentError("DRIVE_FOLDER_ID is not set")
-    root = Path(base)
-    known: dict[Path, str] = {root: dest}
-    for path in sorted(root.rglob("*")):
-        if path.is_dir():
-            parent_id = known[path.parent]
-            folder = ensure_folder(path.name, parent=parent_id, service=srv)
-            known[path] = folder
-        else:
-            parent_id = known[path.parent]
-            upload_or_update(path, folder_id=parent_id, service=srv)
+return _remote_path(*parts)
 
 
 def _iter_uploads(patterns: Iterable[str]) -> Iterable[Path]:
@@ -201,52 +117,126 @@ def _iter_uploads(patterns: Iterable[str]) -> Iterable[Path]:
                 yield p
 
 
+def _require_bucket(bucket: Optional[str] = None) -> str:
+    name = bucket or os.environ.get(BUCKET_ENV)
+    if not name:
+        raise EnvironmentError(f"{BUCKET_ENV} is not set")
+    return name
+    
+
+def upload_file(
+    path: str | Path,
+    *,
+    folder_id: Optional[str] = None,
+    bucket: Optional[str] = None,
+    service: storage.Client | None = None,
+) -> str:
+    """Upload ``path`` to the configured bucket and return the object name."""
+
+    client = service or _build_service()
+    bucket_name = _require_bucket(bucket)
+    prefix = folder_id or os.environ.get(PREFIX_ENV)
+    blob_name = _remote_path(prefix, Path(path).name)
+    if not blob_name:
+        blob_name = Path(path).name
+    blob = client.bucket(bucket_name).blob(blob_name)
+    blob.upload_from_filename(str(path))
+    return blob.name
+
+
+def download_file(
+    object_name: str,
+    dest: str | Path,
+    *,
+    bucket: Optional[str] = None,
+    service: storage.Client | None = None,
+) -> Path:
+    """Download ``object_name`` from the bucket into ``dest`` and return the path."""
+
+    client = service or _build_service()
+    bucket_name = _require_bucket(bucket)
+    dest_path = Path(dest)
+    dest_path.parent.mkdir(parents=True, exist_ok=True)
+    blob = client.bucket(bucket_name).blob(object_name)
+    blob.download_to_filename(str(dest_path))
+    return dest_path
+
+
+def push_tree(
+    base: str | Path,
+    *,
+    folder_id: Optional[str] = None,
+    bucket: Optional[str] = None,
+    service: storage.Client | None = None,
+) -> None:
+    """Recursively upload ``base`` into ``folder_id`` (treated as prefix)."""
+
+    client = service or _build_service()
+    bucket_name = _require_bucket(bucket)
+    prefix = folder_id or os.environ.get(PREFIX_ENV)
+    root = Path(base)
+    bucket_obj = client.bucket(bucket_name)
+    for path in sorted(root.rglob("*")):
+        if not path.is_file():
+            continue
+        rel = path.relative_to(root).as_posix()
+        blob_name = _remote_path(prefix, rel)
+        blob = bucket_obj.blob(blob_name)
+        blob.upload_from_filename(str(path))
+
+
 def main() -> int | None:
     use_drive = os.getenv("USE_DRIVE", "false").lower() == "true"
     if not use_drive:
-        print("[drive_sync] USE_DRIVE=false → skipping Google Drive upload.")
+        print("[drive_sync] USE_DRIVE=false → skipping Google Cloud Storage upload.")
         return 0
 
-    parser = argparse.ArgumentParser(description="Upload/download files to Drive")
-    parser.add_argument("--folder-id", default=os.environ.get("DRIVE_FOLDER_ID"))
+    parser = argparse.ArgumentParser(
+        description="Upload/download files to Google Cloud Storage"
+    )
+    parser.add_argument("--bucket", default=os.environ.get(BUCKET_ENV))
+    parser.add_argument("--project", default=os.environ.get(PROJECT_ENV))
+    parser.add_argument("--prefix", default=os.environ.get(PREFIX_ENV))
+    parser.add_argument("--folder-id", dest="prefix", help=argparse.SUPPRESS)
     parser.add_argument(
         "--credentials-json",
-        help="Service account credentials JSON string (defaults to"
-        " GOOGLE_CREDENTIALS_B64/JSON env vars)",
+        help="Service account credentials JSON string (defaults to GCS_SERVICE_KEY_* env vars)",
     )
     parser.add_argument(
         "--upload-glob",
         action="append",
         default=[],
-        help="Glob pattern of files to upload or update",
+        elp="Glob pattern of files to upload",
     )
     parser.add_argument(
         "--download",
         nargs=2,
-        metavar=("FILE_ID", "DEST"),
+        metavar=("OBJECT", "DEST"),
         action="append",
         default=[],
-        help="Download FILE_ID into DEST",
+        help="Download OBJECT into DEST",
     )
     parser.add_argument(
         "--push",
         action="append",
         default=[],
-        help="Répertoire à envoyer sur Drive",
+        help="Répertoire à envoyer sur GCS",
     )
     args = parser.parse_args()
 
-    service = _build_service(args.credentials_json)
+    client = _build_service(args.credentials_json, project=args.project)
 
     for base in args.push:
-        push_tree(base, folder_id=args.folder_id, service=service)
+        push_tree(base, folder_id=args.prefix, bucket=args.bucket, service=client)
 
     for path in _iter_uploads(args.upload_glob):
-        upload_or_update(path, folder_id=args.folder_id, service=service)
+        upload_file(path, folder_id=args.prefix, bucket=args.bucket, service=client)
 
-    for file_id, dest in args.download:
-        download_file(file_id, dest, service=service)
+    for object_name, dest in args.download:
+        download_file(object_name, dest, bucket=args.bucket, service=client)
 
     return 0
+
+
 if __name__ == "__main__":
     sys.exit(main() or 0)
