@@ -17,7 +17,7 @@ on:
 env:
   PYTHONUTF8: "1"
   TZ: "Europe/Paris"
-  USE_DRIVE: "false"              # <— coupe Drive partout
+  USE_GCS: "false"                # <— coupe GCS partout
   OUTPUT_DIR: out/hminus5         # <— dossier de sortie local
   EV_MIN_GLOBAL: "0.40"           # seuils GPI v5.1
   ROI_MIN_ESTIME: "0.20"
