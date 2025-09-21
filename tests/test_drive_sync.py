@@ -1,5 +1,6 @@
 import base64
 import json
+import sys
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -89,6 +90,27 @@ def test_push_tree_uploads_all_files(tmp_path, monkeypatch):
     assert set(created) == {"prefix/root.txt", "prefix/sub/child.txt"}
     for blob in created.values():
         blob.upload_from_filename.assert_called_once()
+
+
+def test_main_honours_env_prefix(monkeypatch):
+    monkeypatch.setenv("GCS_BUCKET", "bucket")
+    monkeypatch.setenv("GCS_PREFIX", "env/prefix")
+    monkeypatch.setattr(drive_sync, "is_gcs_enabled", lambda: True)
+    client = MagicMock(name="client")
+    monkeypatch.setattr(drive_sync, "_build_service", lambda *a, **k: client)
+    push_mock = MagicMock()
+    monkeypatch.setattr(drive_sync, "push_tree", push_mock)
+    monkeypatch.setattr(drive_sync, "upload_file", MagicMock())
+    monkeypatch.setattr(drive_sync, "download_file", MagicMock())
+    monkeypatch.setattr(drive_sync, "_iter_uploads", lambda patterns: [])
+    monkeypatch.setattr(sys, "argv", ["drive_sync.py", "--push", "data"])
+
+    result = drive_sync.main()
+
+    assert result == 0
+    push_mock.assert_called_once_with(
+        "data", folder_id="env/prefix", bucket="bucket", service=client
+    )
 
 
 def test_build_service_env(monkeypatch):
