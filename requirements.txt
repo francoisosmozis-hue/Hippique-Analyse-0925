@@ -17,13 +17,11 @@ PyYAML>=6.0.1
 fastapi==0.112.2
 uvicorn[standard]==0.30.6
 
-# --- Google Drive (utilisé par drive_sync.py) ---
-google-api-python-client>=2.131.0
+# --- Google Cloud Storage (utilisé par drive_sync.py) ---
+google-cloud-storage>=2.18.0
 google-auth>=2.29.0
-google-auth-httplib2>=0.2.0
-google-auth-oauthlib>=1.2.1
-httplib2>=0.22.0
 
 # --- Robustesse encodages ---
 charset-normalizer>=3.3.2
+
 
