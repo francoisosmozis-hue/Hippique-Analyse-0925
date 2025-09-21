@@ -32,6 +32,36 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Normalize deployment variables
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          REGION="${REGION:-europe-west1}"
+          PROJECT_ID="${PROJECT_ID:-analyse-hippique}"
+          REPO="${REPO:-hippique-analyse}"
+          SERVICE="${SERVICE:-hippique-analyse}"
+
+          if [[ -z "${REGION}" || -z "${PROJECT_ID}" || -z "${REPO}" || -z "${SERVICE}" ]]; then
+            echo "::error::Deployment variables must not be empty after normalization."
+            exit 1
+          fi
+
+          IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/${SERVICE}:${GITHUB_SHA}"
+
+          if [[ -z "${IMAGE}" ]]; then
+            echo "::error::Failed to compute IMAGE value."
+            exit 1
+          fi
+
+          {
+            echo "REGION=${REGION}"
+            echo "PROJECT_ID=${PROJECT_ID}"
+            echo "REPO=${REPO}"
+            echo "SERVICE=${SERVICE}"
+            echo "IMAGE=${IMAGE}"
+          } >> "${GITHUB_ENV}"
+
       # Auth via clé JSON stockée dans le secret GCP_CREDENTIALS
       - name: Auth to Google Cloud
         uses: google-github-actions/auth@v2
@@ -59,6 +89,10 @@ jobs:
           REGISTRY_HOST="${IMAGE%%/*}"
           if [[ -z "${REGISTRY_HOST}" || "${REGISTRY_HOST}" == "${IMAGE}" || "${REGISTRY_HOST}" == -* ]]; then
             echo "::error::Unable to determine Artifact Registry host from IMAGE='${IMAGE}'."
+            exit 1
+          fi
+          if [[ "${REGISTRY_HOST}" != "${REGION}-docker.pkg.dev" ]]; then
+            echo "::error::Artifact Registry host '${REGISTRY_HOST}' does not match expected '${REGION}-docker.pkg.dev'."
             exit 1
           fi
           gcloud auth configure-docker "${REGISTRY_HOST}" --quiet
