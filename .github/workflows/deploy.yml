@@ -70,6 +70,4 @@ jobs:
             --set-env-vars "DEFAULT_BUDGET=${DEFAULT_BUDGET},MIN_EV_SP=${MIN_EV_SP},MIN_EV_COMBO=${MIN_EV_COMBO},MAX_VOLAT_PER_HORSE=${MAX_VOLAT_PER_HORSE},DATA_MODE=${DATA_MODE}"
           URL="$(gcloud run services describe "${SERVICE}" --region "${REGION}" --format='value(status.url)')"
           echo "Service URL: ${URL}"
-            --platform managed \
-            --allow-unauthenticated \
-            --set-env-vars "DEFAULT_BUDGET=${DEFAULT_BUDGET},MIN_EV_SP=${MIN_EV_SP},MIN_EV_COMBO=${MIN_EV_COMBO},MAX_VOLAT_PER_HORSE=${MAX_VOLAT_PER_HORSE},DATA_MODE=${DATA_MODE}"
+            
