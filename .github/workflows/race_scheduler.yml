@@ -11,7 +11,7 @@ permissions:
 env:
   PYTHONUTF8: "1"
   TZ: Europe/Paris
-  USE_DRIVE: "false"
+  USE_GCS: "false"
   OUTPUT_DIR: out/hminus
   GPI_BUDGET: ${{ vars.SCHEDULER_GPI_BUDGET || '5' }}
   EV_MIN: ${{ vars.SCHEDULER_EV_MIN || '0.35' }}
