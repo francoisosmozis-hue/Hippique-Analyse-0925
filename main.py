@@ -204,6 +204,7 @@ def analyse(body: AnalyseParams):
     cmd = [
         "python", "-u", "analyse_courses_du_jour_enrichie.py",
         "--phase", body.phase,
+        "--data-dir", str(outputs_dir),
     ]
     try:
         reunion_label, course_label = _resolve_reunion_course(body)
