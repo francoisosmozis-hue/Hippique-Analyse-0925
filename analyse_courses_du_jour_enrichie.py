@@ -16,13 +16,18 @@ import os
 import re
 import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
 import requests
 from bs4 import BeautifulSoup
 
 from scripts.gcs_utils import disabled_reason, is_gcs_enabled
+from scripts.online_fetch_zeturf import normalize_snapshot
+from scripts.fetch_je_stats import collect_stats
+
+import pipeline_run
 
 USE_GCS = is_gcs_enabled()
 
@@ -67,29 +72,327 @@ def ensure_dir(path: Path) -> Path:
 
 def enrich_h5(
     rc_dir: Path, *, budget: float, kelly: float
-) -> None:  # pragma: no cover - stub
-    raise NotImplementedError("enrich_h5 must be provided by the host application")
+) -> None:
+    """Prepare all artefacts required for the H-5 pipeline.
+
+    The function normalises the latest H-30/H-5 snapshots, extracts odds maps,
+    fetches jockey/entraineur statistics and materialises CSV companions used
+    by downstream tooling.  When the H-30 snapshot is unavailable the H-5 odds
+    are reused as a conservative fallback which still allows the analysis to
+    run (the drift will simply be null).
+    """
+
+    rc_dir = ensure_dir(Path(rc_dir))
+
+    def _latest_snapshot(tag: str) -> Path | None:
+        pattern = f"*_{{tag}}.json".replace("{tag}", tag)
+        candidates = sorted(rc_dir.glob(pattern))
+        if not candidates:
+            return None
+        # ``glob`` returns in alphabetical order which correlates with the
+        # timestamp prefix we use for snapshots.  The most recent file is the
+        # last one.
+        return candidates[-1]
+
+    def _load_snapshot(path: Path) -> dict[str, Any]:
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"Snapshot invalide: {path} ({exc})") from exc
+
+    def _normalise_snapshot(payload: dict[str, Any]) -> dict[str, Any]:
+        normalised = normalize_snapshot(payload)
+        # Preserve a few metadata fields expected by downstream consumers.
+        for key in [
+            "id_course",
+            "course_id",
+            "source",
+            "rc",
+            "r_label",
+            "meeting",
+            "reunion",
+            "race",
+        ]:
+            value = payload.get(key)
+            if value is not None and key not in normalised:
+                normalised[key] = value
+        return normalised
+
+    h5_raw_path = _latest_snapshot("H-5")
+    if h5_raw_path is None:
+        raise FileNotFoundError("Aucun snapshot H-5 trouvé pour l'analyse")
+    h5_payload = _load_snapshot(h5_raw_path)
+    h5_normalised = _normalise_snapshot(h5_payload)
+
+    h30_raw_path = _latest_snapshot("H-30")
+    h30_payload: dict[str, Any]
+    if h30_raw_path is not None:
+        h30_payload = _load_snapshot(h30_raw_path)
+        h30_normalised = _normalise_snapshot(h30_payload)
+    else:
+        # Without H-30 we reuse H-5 odds so the pipeline can still proceed.
+        print(
+            f"[WARN] Snapshot H-30 manquant dans {rc_dir}, réutilisation des cotes H-5",
+            file=sys.stderr,
+        )
+        h30_payload = dict(h5_payload)
+        h30_normalised = dict(h5_normalised)
+
+    def _odds_map(snapshot: dict[str, Any]) -> dict[str, float]:
+        odds = snapshot.get("odds")
+        if isinstance(odds, dict):
+            return {str(k): float(v) for k, v in odds.items() if _is_number(v)}
+        runners = snapshot.get("runners")
+        if isinstance(runners, list):
+            mapping: dict[str, float] = {}
+            for runner in runners:
+                if not isinstance(runner, dict):
+                    continue
+                cid = runner.get("id")
+                odds_val = runner.get("odds")
+                if cid is None or not _is_number(odds_val):
+                    continue
+                mapping[str(cid)] = float(odds_val)
+            return mapping
+        return {}
+
+    odds_h5 = _odds_map(h5_normalised)
+    odds_h30 = _odds_map(h30_normalised)
+    if not odds_h30:
+        odds_h30 = dict(odds_h5)
+
+    def _write_json(path: Path, payload: Any) -> None:
+        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    _write_json(rc_dir / "normalized_h5.json", h5_normalised)
+    _write_json(rc_dir / "normalized_h30.json", h30_normalised)
+    _write_json(rc_dir / "h5.json", odds_h5)
+    _write_json(rc_dir / "h30.json", odds_h30)
+
+    partants_payload = {
+        "rc": h5_normalised.get("rc") or rc_dir.name,
+        "hippodrome": h5_normalised.get("hippodrome") or h5_payload.get("hippodrome"),
+        "date": h5_normalised.get("date") or h5_payload.get("date"),
+        "discipline": h5_normalised.get("discipline") or h5_payload.get("discipline"),
+        "runners": h5_normalised.get("runners", []),
+        "id2name": h5_normalised.get("id2name", {}),
+        "course_id": h5_payload.get("id_course")
+        or h5_payload.get("course_id")
+        or h5_payload.get("id"),
+    }
+    _write_json(rc_dir / "partants.json", partants_payload)
+
+    stats_path = rc_dir / "stats_je.json"
+    course_id = str(partants_payload.get("course_id") or "").strip()
+    if not course_id:
+        raise ValueError("Impossible de déterminer l'identifiant course pour les stats J/E")
+    coverage, mapped = collect_stats(course_id, h5_path=rc_dir / "normalized_h5.json")
+    stats_payload: dict[str, Any] = {"coverage": coverage}
+    stats_payload.update(mapped)
+    _write_json(stats_path, stats_payload)
+
+    snap_stem = h5_raw_path.stem
+    je_csv_path = rc_dir / f"{snap_stem}_je.csv"
+    with je_csv_path.open("w", newline="", encoding="utf-8") as fh:
+        writer = csv.writer(fh)
+        writer.writerow(["num", "nom", "j_rate", "e_rate"])
+        id2name = partants_payload.get("id2name", {})
+        for cid, name in sorted(id2name.items(), key=lambda item: item[0]):
+            stats = mapped.get(cid, {}) if isinstance(mapped, dict) else {}
+            writer.writerow(
+                [
+                    cid,
+                    name,
+                    stats.get("j_win", ""),
+                    stats.get("e_win", ""),
+                ]
+            )
+
+    chronos_path = rc_dir / "chronos.csv"
+    _write_chronos_csv(chronos_path, partants_payload.get("runners", []))
 
 
 def build_p_finale(
     rc_dir: Path, *, budget: float, kelly: float
-) -> None:  # pragma: no cover - stub
-    raise NotImplementedError("build_p_finale must be provided by the host application")
+) -> None:
+    """Run the ticket allocation pipeline and persist ``p_finale.json``."""
+
+    rc_dir = Path(rc_dir)
+    _run_single_pipeline(rc_dir, budget=budget)
 
 
 def run_pipeline(
     rc_dir: Path, *, budget: float, kelly: float
-) -> None:  # pragma: no cover - stub
-    raise NotImplementedError("run_pipeline must be provided by the host application")
+) -> None:
+    """Execute the analysis pipeline for ``rc_dir`` or its subdirectories."""
+
+    rc_dir = Path(rc_dir)
+
+    # If ``rc_dir`` already holds a freshly generated ``p_finale.json`` we do
+    # not run the pipeline again – this is the case when ``build_p_finale`` was
+    # just invoked on the directory.
+    if (rc_dir / "p_finale.json").exists():
+        return
+
+    inputs_available = any(
+        rc_dir.joinpath(name).exists()
+        for name in ("h5.json", "partants.json", "stats_je.json")
+    )
+    if inputs_available:
+        _run_single_pipeline(rc_dir, budget=budget)
+        return
+
+    ran_any = False
+    for subdir in sorted(p for p in rc_dir.iterdir() if p.is_dir()):
+        try:
+            build_p_finale(subdir, budget=budget, kelly=kelly)
+        except FileNotFoundError:
+            continue
+        ran_any = True
+    if not ran_any:
+        raise FileNotFoundError(f"Aucune donnée pipeline détectée dans {rc_dir}")
 
 
 def build_prompt_from_meta(
     rc_dir: Path, *, budget: float, kelly: float
-) -> None:  # pragma: no cover - stub
-    raise NotImplementedError(
-        "build_prompt_from_meta must be provided by the host application"
+) -> None:
+    """Generate a human-readable prompt from ``p_finale.json`` metadata."""
+
+    rc_dir = Path(rc_dir)
+    p_finale_path = rc_dir / "p_finale.json"
+    if not p_finale_path.exists():
+        raise FileNotFoundError(f"p_finale.json introuvable dans {rc_dir}")
+    data = json.loads(p_finale_path.read_text(encoding="utf-8"))
+    meta = data.get("meta", {})
+    ev = data.get("ev", {})
+    tickets = data.get("tickets", [])
+
+    prompt_lines = [
+        f"Course {meta.get('rc', rc_dir.name)} – {meta.get('hippodrome', '')}".strip(),
+        f"Date : {meta.get('date', '')} | Discipline : {meta.get('discipline', '')}",
+        f"Budget : {budget:.2f} € | Fraction de Kelly : {kelly:.2f}",
+    ]
+
+    if isinstance(ev, dict) and ev:
+        global_ev = ev.get("global")
+        roi = ev.get("roi_global")
+        prompt_lines.append(
+            "EV globale : "
+            + (f"{float(global_ev):.2f}" if isinstance(global_ev, (int, float)) else "n/a")
+            + " | ROI estimé : "
+            + (f"{float(roi):.2f}" if isinstance(roi, (int, float)) else "n/a")
+        )
+
+    def _format_ticket(ticket: dict[str, Any]) -> str:
+        label = ticket.get("type") or ticket.get("id") or "Ticket"
+        stake = ticket.get("stake")
+        odds = ticket.get("odds")
+        parts = [str(label)]
+        if _is_number(stake):
+            parts.append(f"mise {float(stake):.2f}€")
+        if _is_number(odds):
+            parts.append(f"cote {float(odds):.2f}")
+        legs = ticket.get("legs") or ticket.get("selection")
+        if isinstance(legs, Iterable) and not isinstance(legs, (str, bytes)):
+            legs_fmt = ", ".join(str(l) for l in legs)
+            if legs_fmt:
+                parts.append(f"legs: {legs_fmt}")
+        return " – ".join(parts)
+
+    if tickets:
+        prompt_lines.append("Tickets proposés :")
+        for ticket in tickets:
+            if isinstance(ticket, dict):
+                prompt_lines.append(f"  - {_format_ticket(ticket)}")
+
+    prompt_dir = rc_dir / "prompts"
+    prompt_dir.mkdir(parents=True, exist_ok=True)
+    prompt_text_path = prompt_dir / "prompt.txt"
+    prompt_text_path.write_text("\n".join(prompt_lines) + "\n", encoding="utf-8")
+
+    prompt_payload = {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "budget": budget,
+        "kelly_fraction": kelly,
+        "meta": meta,
+        "ev": ev,
+        "tickets": tickets,
+        "text_path": str(prompt_text_path),
+    }
+    (prompt_dir / "prompt.json").write_text(
+        json.dumps(prompt_payload, ensure_ascii=False, indent=2),
+        encoding="utf-8",
     )
 
+
+def _is_number(value: Any) -> bool:
+    try:
+        float(value)
+    except (TypeError, ValueError):
+        return False
+    return True
+
+
+def _write_chronos_csv(path: Path, runners: Iterable[Any]) -> None:
+    """Persist a chronos CSV placeholder using runner identifiers."""
+
+    with path.open("w", newline="", encoding="utf-8") as fh:
+        writer = csv.writer(fh)
+        writer.writerow(["num", "chrono"])
+        for runner in runners or []:
+            if not isinstance(runner, dict):
+                continue
+            cid = runner.get("id") or runner.get("num") or runner.get("number")
+            if cid is None:
+                continue
+            chrono = runner.get("chrono") or runner.get("time") or ""
+            writer.writerow([cid, chrono])
+
+
+def _run_single_pipeline(rc_dir: Path, *, budget: float) -> None:
+    """Execute :func:`pipeline_run.cmd_analyse` for ``rc_dir``."""
+
+    rc_dir = ensure_dir(rc_dir)
+    required = {"h30.json", "h5.json", "partants.json", "stats_je.json"}
+    missing = [name for name in required if not (rc_dir / name).exists()]
+    if missing:
+        raise FileNotFoundError(
+            f"Fichiers manquants pour l'analyse dans {rc_dir}: {', '.join(missing)}"
+        )
+
+    stats_payload = json.loads((rc_dir / "stats_je.json").read_text(encoding="utf-8"))
+    allow_je_na = False
+    if isinstance(stats_payload, dict):
+        coverage = stats_payload.get("coverage")
+        allow_je_na = isinstance(coverage, (int, float)) and coverage < 100
+
+    gpi_candidates = [
+        rc_dir / "gpi.yml",
+        rc_dir / "gpi.yaml",
+        Path("config/gpi.yml"),
+        Path("config/gpi.yaml"),
+    ]
+    gpi_path = next((path for path in gpi_candidates if path.exists()), None)
+    if gpi_path is None:
+        raise FileNotFoundError("Configuration GPI introuvable (gpi.yml)")
+
+    args = argparse.Namespace(
+        h30=str(rc_dir / "h30.json"),
+        h5=str(rc_dir / "h5.json"),
+        stats_je=str(rc_dir / "stats_je.json"),
+        partants=str(rc_dir / "partants.json"),
+        gpi=str(gpi_path),
+        outdir=str(rc_dir),
+        diff=None,
+        budget=float(budget),
+        ev_global=None,
+        roi_global=None,
+        max_vol=None,
+        min_payout=None,
+        allow_je_na=allow_je_na,
+    )
+    pipeline_run.cmd_analyse(args)
+    
 
 def _upload_artifacts(rc_dir: Path, *, gcs_prefix: str | None) -> None:
     """Upload ``rc_dir`` contents to Google Cloud Storage."""
