@@ -87,6 +87,12 @@ jobs:
             --out "${analysis_dir}/ev_report.json" || true
 
           # 3) exporter JSON/CSV standardisés (post-course ready)
+          if [ ! -f "${analysis_dir}/p_finale.json" ]; then
+            echo "[ERROR] p_finale.json introuvable dans ${analysis_dir}" >&2
+            ls -al "${analysis_dir}" || true
+            exit 1
+          fi
+
           python "${GITHUB_WORKSPACE}/p_finale_export.py" \
             --outputs-dir "${analysis_dir}"
 
