@@ -22,7 +22,9 @@ from typing import Any
 import requests
 from bs4 import BeautifulSoup
 
-USE_DRIVE = os.getenv("USE_DRIVE", "false").lower() == "true"
+from scripts.gcs_utils import disabled_reason, is_gcs_enabled
+
+USE_GCS = is_gcs_enabled()
 
 try:  # pragma: no cover - optional dependency in tests
     from scripts.online_fetch_zeturf import write_snapshot_from_geny
@@ -32,7 +34,7 @@ except Exception:  # pragma: no cover - used when optional deps are missing
         raise RuntimeError("write_snapshot_from_geny is unavailable")
 
 
-if USE_DRIVE:
+if USE_GCS:
     try:  # pragma: no cover - optional dependency in tests
         from scripts.drive_sync import (
             build_remote_path as gcs_build_remote_path,
@@ -43,7 +45,7 @@ if USE_DRIVE:
             f"[WARN] Synchronisation GCS indisponible ({exc}), bascule en mode local.",
             file=sys.stderr,
         )
-        USE_DRIVE = False
+        USE_GCS = False
         gcs_build_remote_path = None  # type: ignore[assignment]
         push_tree = None  # type: ignore[assignment]
 else:  # pragma: no cover - Cloud sync explicitly disabled
@@ -94,11 +96,13 @@ def _upload_artifacts(rc_dir: Path, *, gcs_prefix: str | None) -> None:
 
     if gcs_prefix is None:
         return
-    if not USE_DRIVE or not push_tree:
-        print(
-            f"[gcs] Upload ignoré pour {rc_dir} (USE_DRIVE={USE_DRIVE})",
-            file=sys.stderr,
-        )
+    if not USE_GCS or not push_tree:
+        reason = disabled_reason()
+        if reason:
+            detail = f"{reason}=false"
+        else:
+            detail = f"USE_GCS={USE_GCS}"
+        print(f"[gcs] Upload ignoré pour {rc_dir} ({detail})", file=sys.stderr)
         return
     try:
         if gcs_build_remote_path:
@@ -350,6 +354,7 @@ def main() -> None:
     ap.add_argument("--budget", type=float, default=100.0, help="Budget à utiliser")
     ap.add_argument(
         "--kelly", type=float, default=1.0, help="Fraction de Kelly à appliquer"
+    )
     ap.add_argument(
         "--from-geny-today",
         action="store_true",
