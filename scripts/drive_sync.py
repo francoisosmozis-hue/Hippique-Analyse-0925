@@ -24,6 +24,7 @@ import glob
 import io
 import json
 import os
+import sys
 from pathlib import Path
 from typing import Iterable, Optional
 import base64
@@ -200,7 +201,12 @@ def _iter_uploads(patterns: Iterable[str]) -> Iterable[Path]:
                 yield p
 
 
-def main() -> None:
+def main() -> int | None:
+    use_drive = os.getenv("USE_DRIVE", "false").lower() == "true"
+    if not use_drive:
+        print("[drive_sync] USE_DRIVE=false → skipping Google Drive upload.")
+        return 0
+
     parser = argparse.ArgumentParser(description="Upload/download files to Drive")
     parser.add_argument("--folder-id", default=os.environ.get("DRIVE_FOLDER_ID"))
     parser.add_argument(
@@ -241,6 +247,6 @@ def main() -> None:
     for file_id, dest in args.download:
         download_file(file_id, dest, service=service)
 
-
+    return 0
 if __name__ == "__main__":
-    main()
+    sys.exit(main() or 0)
