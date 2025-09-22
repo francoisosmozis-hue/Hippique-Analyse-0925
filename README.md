@@ -19,6 +19,14 @@ Pipeline **pro** pour planifier, capturer H‑30 / H‑5, analyser et consigner 
 - **ROUND_TO_SP = 0.10** : arrondi des mises SP à 0,10 €; utiliser `0` pour désactiver l'arrondi sans provoquer de crash tout en conservant le calcul EV/ROI.
 - **SHARPE_MIN = 0.5** : seuil minimal de ratio EV/σ; filtre les paris à variance trop élevée.
 
+### API `/analyse`
+
+L'API FastAPI expose un endpoint `POST /analyse` (voir `main.py`).
+
+- Le champ optionnel `course_url` permet de transmettre une URL de réunion à scraper.
+- Seules les URLs en **HTTPS** et dont le domaine appartient à la liste blanche `zeturf.fr` / `geny.com` (y compris sous-domaines) sont acceptées.
+- Toute URL hors de cette liste retourne une erreur **422** avec un message explicite.
+
 ---
 
 ## 🗂️ Arborescence
