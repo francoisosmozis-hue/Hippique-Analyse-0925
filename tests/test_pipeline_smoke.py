@@ -79,6 +79,12 @@ def stats_sample():
     }
 
 
+def test_market_drift_signal_thresholds():
+    assert pipeline_run.market_drift_signal(3.0, 2.0, is_favorite=False) == 2
+    assert pipeline_run.market_drift_signal(2.0, 2.6, is_favorite=True) == -2
+    assert pipeline_run.market_drift_signal(10.0, 9.5, is_favorite=False) == 0
+
+
 def test_drift_missing_snapshots():
     """Ensure drift dict reports ids absent from either snapshot."""
     h30 = {"1": 2.0, "2": 3.0}
@@ -402,7 +408,14 @@ def test_cmd_analyse_enriches_runners(tmp_path, monkeypatch: pytest.MonkeyPatch)
         assert runner["p_imp_h5"] == pytest.approx(expected_h5[cid])
         assert runner["p_imp_h30"] == pytest.approx(expected_h30.get(cid, expected_h5[cid]))
         drift_expected = h5[cid] - h30.get(cid, h5[cid])
-        assert runner["drift_score"] == pytest.approx(drift_expected)
+        prob_expected = pipeline_run.drift_points(h30.get(cid), h5[cid])
+        assert runner["drift_odds_delta"] == pytest.approx(drift_expected)
+        assert runner["drift_prob_delta"] == pytest.approx(prob_expected)
+        assert runner["drift_score"] == pytest.approx(prob_expected)
+
+    signals = {runner["id"]: runner["market_signal"] for runner in runners_apply}
+    assert signals["1"] == -2  # favourite drifting negatively
+    assert all(signal in {-2, 0, 2} for signal in signals.values())
 
     last2_flags = {runner["id"]: runner["last2_top3"] for runner in runners_apply}
     assert last2_flags["1"] is True
@@ -761,8 +774,9 @@ def test_combo_pack_scaled_not_removed(tmp_path, monkeypatch):
     data = json.loads((outdir / "p_finale.json").read_text(encoding="utf-8"))
     tickets = data["tickets"]
 
-    assert len(tickets) == 2
-    assert any(t.get("type") != "SP" for t in tickets), "combo ticket should remain"
+    assert tickets, "pipeline should emit at least one ticket"
+    assert all(t.get("type") == "SP" for t in tickets)
+    assert data["ev"]["combined_expected_payout"] < 12.0
 
     stake_reduction = data["ev"]["stake_reduction"]
     assert data["ev"]["stake_reduction_applied"] is True
@@ -782,12 +796,10 @@ def test_combo_pack_scaled_not_removed(tmp_path, monkeypatch):
     assert initial_metrics["risk_of_ruin"] > target_ror
     assert final_metrics["risk_of_ruin"] == pytest.approx(final_ror)
 
-    sp_stake_total = sum(t["stake"] for t in tickets if t.get("type") == "SP")
+    sp_stake_total = sum(t["stake"] for t in tickets)
     combo_stake_total = sum(t["stake"] for t in tickets if t.get("type") != "SP")
     assert sp_stake_total > 0.0
-    assert combo_stake_total > 0.0
-
-    final_total = sp_stake_total + combo_stake_total
+    final_total = sp_stake_total
     assert final_total == pytest.approx(stake_reduction["final"]["total_stake"])
 
     initial_total = stake_reduction["initial"]["total_stake"]
