@@ -121,6 +121,73 @@ def test_analyse_export_discovers_p_finale(monkeypatch, tmp_path):
     assert export_cmd[export_dir_index + 1] == str(outputs_dir)
 
 
+def test_fastapi_analyse_returns_500_on_pipeline_failure(monkeypatch):
+    def _failing_run(cmd, **kwargs):
+        return subprocess.CompletedProcess(
+            cmd,
+            1,
+            stdout="info\n",
+            stderr="boom\n",
+        )
+
+    monkeypatch.setattr(main.subprocess, "run", _failing_run)
+
+    async def post_analyse_async(payload: dict) -> tuple[int, list[tuple[bytes, bytes]], bytes]:
+        body_bytes = json.dumps(payload).encode("utf-8")
+        events = [
+            {"type": "http.request", "body": body_bytes, "more_body": False},
+        ]
+
+        async def receive() -> dict:
+            if events:
+                return events.pop(0)
+            return {"type": "http.disconnect"}
+
+        messages: list[dict] = []
+
+        async def send(message: dict) -> None:
+            messages.append(message)
+
+        scope = {
+            "type": "http",
+            "asgi": {"version": "3.0", "spec_version": "2.3"},
+            "http_version": "1.1",
+            "method": "POST",
+            "scheme": "http",
+            "path": "/analyse",
+            "raw_path": b"/analyse",
+            "headers": [
+                (b"host", b"testserver"),
+                (b"content-type", b"application/json"),
+                (b"content-length", str(len(body_bytes)).encode("latin-1")),
+            ],
+            "query_string": b"",
+            "root_path": "",
+            "client": ("testclient", 50000),
+            "server": ("testserver", 80),
+            "state": {},
+        }
+
+        await main.app(scope, receive, send)
+
+        start_message = next(msg for msg in messages if msg["type"] == "http.response.start")
+        status_code = start_message["status"]
+        headers = start_message.get("headers", [])
+        body_chunks = [msg.get("body", b"") for msg in messages if msg["type"] == "http.response.body"]
+        return status_code, headers, b"".join(body_chunks)
+
+    def post_analyse(payload: dict) -> tuple[int, list[tuple[bytes, bytes]], bytes]:
+        return anyio.run(post_analyse_async, payload, backend="asyncio")
+
+    status_code, _, body = post_analyse({"phase": "H5", "run_export": False})
+
+    assert status_code == 500
+    payload = json.loads(body.decode("utf-8"))
+    assert "detail" in payload
+    assert "analyse_courses_du_jour_enrichie.py a échoué" in payload["detail"]
+    assert "STDERR" in payload["detail"]
+
+
 def test_fastapi_analyse_accepts_declared_phases(monkeypatch, tmp_path):
     phase_field = main.AnalyseParams.model_fields["phase"]
     declared_phases = list(get_args(phase_field.annotation))
