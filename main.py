@@ -44,9 +44,9 @@ class AnalyseParams(BaseModel):
         default=None,
         description="URL ZEturf/Geny pour scrap (si DATA_MODE='web')."
     )
-    phase: Literal["H30", "H5", "RACE"] = Field(
+    phase: Literal["H30", "H5"] = Field(
         default="H5",
-        description="Phase d’analyse (H30 ou H5 ou RACE/post)."
+        description="Phase d’analyse (H30 ou H5)."
     )
 
     # Overrides facultatifs
