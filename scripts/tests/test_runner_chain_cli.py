@@ -129,3 +129,32 @@ def test_planning_mode_remains_functional(tmp_path, monkeypatch, runner_chain_mo
 
     assert (snap_dir / "R1C2" / "snapshot_H5.json").exists()
     assert (analysis_dir / "R1C2" / "analysis.json").exists()
+
+
+def test_planning_mode_errors_when_file_missing(
+    tmp_path, monkeypatch, runner_chain_module, capsys
+):
+    missing = tmp_path / "plan.json"
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "runner_chain.py",
+            "--planning",
+            str(missing),
+        ],
+    )
+
+    with pytest.raises(SystemExit) as excinfo:
+        runner_chain_module.main()
+
+    assert excinfo.value.code == 2
+
+    err = capsys.readouterr().err
+    assert "Planning file" in err
+    assert str(missing) in err
+    assert (
+        "python scripts/online_fetch_zeturf.py --mode planning --out "
+        "data/planning/<date>.json" in err
+    )
