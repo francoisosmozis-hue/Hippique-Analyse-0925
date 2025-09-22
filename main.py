@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 # =========================
 # Config via variables d'env
 # =========================
-DEFAULT_BUDGET = float(os.getenv("DEFAULT_BUDGET", "5.0"))
+DEFAULT_BUDGET = float(os.getenv("BUDGET_TOTAL", os.getenv("DEFAULT_BUDGET", "5.0")))
 MIN_EV_SP = float(os.getenv("MIN_EV_SP", "0.20"))
 MIN_EV_COMBO = float(os.getenv("MIN_EV_COMBO", "0.40"))
 MAX_VOLAT_PER_HORSE = float(os.getenv("MAX_VOLAT_PER_HORSE", "0.60"))
@@ -192,7 +192,7 @@ def analyse(body: AnalyseParams):
 
     # Prépare l’environnement pour les scripts Python appelés
     env = os.environ.copy()
-    env["DEFAULT_BUDGET"] = str(eff_default_budget)
+    eenv["BUDGET_TOTAL"] = str(eff_default_budget)
     env["MIN_EV_SP"] = str(eff_min_ev_sp)
     env["MIN_EV_COMBO"] = str(eff_min_ev_combo)
     env["MAX_VOLAT_PER_HORSE"] = str(eff_max_volat)
@@ -205,7 +205,11 @@ def analyse(body: AnalyseParams):
         "python", "-u", "analyse_courses_du_jour_enrichie.py",
         "--phase", body.phase,
         "--data-dir", str(outputs_dir),
+        "--budget", str(eff_default_budget),
     ]
+    kelly_fraction = env.get("KELLY_FRACTION")
+    if kelly_fraction:
+        cmd += ["--kelly", str(kelly_fraction)]    
     try:
         reunion_label, course_label = _resolve_reunion_course(body)
     except ValueError as exc:
