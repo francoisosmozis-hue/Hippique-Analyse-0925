@@ -9,8 +9,11 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Hashable, Mapping, Sequence
+import itertools
+import logging
 import math
-from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
+import sys
+from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
 try:  # pragma: no cover - SciPy is optional
     from scipy.optimize import minimize
@@ -24,6 +27,13 @@ try:  # pragma: no cover - optional dependency
     from simulate_wrapper import simulate_wrapper  # type: ignore
 except Exception:  # pragma: no cover - handled gracefully
     simulate_wrapper = None  # type: ignore
+
+_COPULA_MONTE_CARLO = None
+if "simulate_wrapper" in sys.modules:  # pragma: no cover - optional dependency
+    module = sys.modules.get("simulate_wrapper")
+    _COPULA_MONTE_CARLO = getattr(module, "_monte_carlo_joint_probability", None)
+
+_LOGGER = logging.getLogger(__name__)
 
 
 def _make_hashable(value: Any) -> Any:
@@ -75,6 +85,257 @@ def _apply_dutching(tickets: Iterable[Dict[str, Any]]) -> None:
         for t, w in zip(valid_tickets, weights):
             t["stake"] = total * w / weight_sum
             
+
+def _ticket_label(ticket: Mapping[str, Any], index: int) -> str:
+    """Return a readable identifier for ``ticket`` when logging covariance."""
+
+    for key in ("id", "name", "label", "selection", "runner"):
+        value = ticket.get(key)
+        if value not in (None, ""):
+            return str(value)
+    return f"ticket_{index + 1}"
+
+
+def _clone_leg(leg: Any) -> Any:
+    if isinstance(leg, Mapping):
+        return {k: v for k, v in leg.items()}
+    if isinstance(leg, Sequence) and not isinstance(leg, (str, bytes)):
+        return [_clone_leg(item) for item in leg]
+    return leg
+
+
+def _prepare_legs_for_covariance(
+    ticket: Mapping[str, Any],
+    legs_for_probability: Optional[Iterable[Any]],
+) -> Tuple[Any, ...]:
+    """Return legs usable for covariance estimation for ``ticket``."""
+
+    legs_iterable: Iterable[Any] | None = None
+    if legs_for_probability:
+        legs_iterable = legs_for_probability
+    else:
+        payload = ticket.get("legs_details") or ticket.get("legs")
+        if isinstance(payload, Iterable) and not isinstance(payload, (str, bytes)):
+            legs_iterable = payload
+
+    legs: List[Any] = []
+    if legs_iterable is not None:
+        for leg in legs_iterable:
+            legs.append(_clone_leg(leg))
+    else:
+        for key in ("id", "selection_id", "runner_id", "horse_id"):
+            value = ticket.get(key)
+            if value not in (None, ""):
+                legs.append({"id": value})
+                break
+    return tuple(legs)
+
+
+def _ticket_dependency_keys(ticket: Mapping[str, Any], legs: Sequence[Any]) -> frozenset[str]:
+    """Return dependency identifiers extracted from ``ticket`` and ``legs``."""
+
+    exposures: set[str] = set()
+    for key in ("id", "selection_id", "runner_id", "horse_id"):
+        value = ticket.get(key)
+        if value not in (None, ""):
+            exposures.add(f"id:{value}")
+
+    for leg in legs:
+        identifier: Optional[str] = None
+        if isinstance(leg, Mapping):
+            for leg_key in ("id", "runner", "participant", "num", "name", "code"):
+                data = leg.get(leg_key) if isinstance(leg, Mapping) else None
+                if data not in (None, ""):
+                    identifier = str(data)
+                    break
+        else:
+            identifier = str(leg)
+        if identifier:
+            exposures.add(f"leg:{identifier}")
+    return frozenset(exposures)
+
+
+def _prepare_ticket_dependencies(
+    ticket: Mapping[str, Any], legs_for_probability: Optional[Iterable[Any]]
+) -> Dict[str, Any]:
+    legs = _prepare_legs_for_covariance(ticket, legs_for_probability)
+    exposures = _ticket_dependency_keys(ticket, legs)
+    return {"legs": legs, "exposures": exposures}
+
+
+def _rho_for_shared_exposures(shared: frozenset[str]) -> float:
+    if not shared:
+        return 0.0
+    if any(key.startswith("id:") for key in shared):
+        return 0.85
+    if any(key.startswith("leg:") for key in shared):
+        return 0.60
+    return 0.40
+
+
+def _approx_joint_probability(p_i: float, p_j: float, rho: float) -> float:
+    rho = max(min(rho, 0.99), -0.99)
+    independence = p_i * p_j
+    if rho == 0.0:
+        return independence
+    term = rho * math.sqrt(max(p_i * (1 - p_i), 0.0) * max(p_j * (1 - p_j), 0.0))
+    lower = max(0.0, p_i + p_j - 1.0)
+    upper = min(p_i, p_j)
+    estimate = independence + term
+    estimate = max(lower, min(upper, estimate))
+    return max(independence, estimate)
+
+
+def _merge_legs(a: Sequence[Any], b: Sequence[Any]) -> List[Any]:
+    merged: List[Any] = []
+    seen: set[Any] = set()
+    for source in (a, b):
+        for leg in source:
+            key = _make_hashable(leg)
+            if key in seen:
+                continue
+            seen.add(key)
+            merged.append(_clone_leg(leg))
+    return merged
+
+
+def _simulate_joint_probability(
+    legs: Sequence[Any],
+    simulate_fn: Optional[Callable[[Iterable[Any]], float]],
+    cache: Optional[Dict[Tuple[Any, ...], float]],
+) -> Optional[float]:
+    if not simulate_fn or not legs:
+        return None
+
+    key = tuple(_make_hashable(leg) for leg in legs)
+    if cache is not None and key in cache:
+        return cache[key]
+
+    try:
+        value = float(simulate_fn(legs))
+    except Exception:  # pragma: no cover - defensive
+        return None
+
+    if cache is not None:
+        cache[key] = value
+    return value
+
+
+def _estimate_joint_probability(
+    info_i: Dict[str, Any],
+    info_j: Dict[str, Any],
+    simulate_fn: Optional[Callable[[Iterable[Any]], float]],
+    cache: Optional[Dict[Tuple[Any, ...], float]],
+) -> float:
+    shared: frozenset[str] = info_i["exposures"] & info_j["exposures"]
+    rho = _rho_for_shared_exposures(shared)
+    joint: Optional[float] = None
+
+    legs_i: Sequence[Any] = info_i.get("legs_for_sim", ())
+    legs_j: Sequence[Any] = info_j.get("legs_for_sim", ())
+    merged = _merge_legs(legs_i, legs_j)
+    joint = _simulate_joint_probability(merged, simulate_fn, cache)
+
+    if joint is None and callable(_COPULA_MONTE_CARLO):  # pragma: no cover - optional
+        try:
+            mc = _COPULA_MONTE_CARLO([info_i["p"], info_j["p"]], rho)
+        except Exception:  # pragma: no cover - defensive
+            mc = None
+        if mc is not None:
+            joint = float(mc)
+
+    if joint is None:
+        joint = _approx_joint_probability(info_i["p"], info_j["p"], rho)
+
+    lower = max(0.0, info_i["p"] + info_j["p"] - 1.0)
+    upper = min(info_i["p"], info_j["p"])
+    independence = info_i["p"] * info_j["p"]
+    joint = max(lower, min(upper, float(joint)))
+    return max(independence, joint)
+
+
+def _covariance_from_joint(info_i: Dict[str, Any], info_j: Dict[str, Any], joint: float) -> float:
+    win_i = info_i["win_value"]
+    loss_i = info_i["loss_value"]
+    win_j = info_j["win_value"]
+    loss_j = info_j["loss_value"]
+
+    p_i = info_i["p"]
+    p_j = info_j["p"]
+    joint = max(0.0, min(joint, min(p_i, p_j)))
+
+    p_i_only = max(0.0, p_i - joint)
+    p_j_only = max(0.0, p_j - joint)
+    p_none = max(0.0, 1.0 - p_i - p_j + joint)
+
+    total = joint + p_i_only + p_j_only + p_none
+    if total <= 0:
+        return 0.0
+
+    joint /= total
+    p_i_only /= total
+    p_j_only /= total
+    p_none /= total
+
+    expected_product = (
+        joint * win_i * win_j
+        + p_i_only * win_i * loss_j
+        + p_j_only * loss_i * win_j
+        + p_none * loss_i * loss_j
+    )
+    return expected_product - info_i["ev"] * info_j["ev"]
+
+
+def compute_joint_moments(
+    ticket_infos: Sequence[Dict[str, Any]],
+    *,
+    simulate_fn: Optional[Callable[[Iterable[Any]], float]] = None,
+    cache: Optional[Dict[Tuple[Any, ...], float]] = None,
+) -> Tuple[float, List[Dict[str, Any]]]:
+    """Return covariance adjustment and detailed pairs for correlated tickets."""
+
+    if len(ticket_infos) < 2:
+        return 0.0, []
+
+    exposure_map: Dict[str, List[int]] = defaultdict(list)
+    for idx, info in enumerate(ticket_infos):
+        for key in info.get("exposures", frozenset()):
+            exposure_map[key].append(idx)
+
+    candidate_pairs: set[Tuple[int, int]] = set()
+    for indices in exposure_map.values():
+        if len(indices) < 2:
+            continue
+        for i, j in itertools.combinations(sorted(set(indices)), 2):
+            candidate_pairs.add((i, j))
+
+    if not candidate_pairs:
+        return 0.0, []
+
+    adjustment = 0.0
+    details: List[Dict[str, Any]] = []
+    for i, j in sorted(candidate_pairs):
+        info_i = ticket_infos[i]
+        info_j = ticket_infos[j]
+        shared = info_i["exposures"] & info_j["exposures"]
+        if not shared:
+            continue
+        joint = _estimate_joint_probability(info_i, info_j, simulate_fn, cache)
+        covariance = _covariance_from_joint(info_i, info_j, joint)
+        if abs(covariance) < 1e-12:
+            continue
+        adjustment += 2.0 * covariance
+        details.append(
+            {
+                "tickets": (info_i.get("label"), info_j.get("label")),
+                "shared": sorted(shared),
+                "joint_probability": joint,
+                "covariance": covariance,
+            }
+        )
+
+    return adjustment, details
+
 
 def optimize_stake_allocation(
     tickets: List[Dict[str, Any]],
@@ -156,15 +417,23 @@ def optimize_stake_allocation(
     return [max(0.0, budget * f) for f in fractions]
 
 
-def risk_of_ruin(total_ev: float, total_variance: float, bankroll: float) -> float:
+def risk_of_ruin(
+    total_ev: float,
+    total_variance: float,
+    bankroll: float,
+    *,
+    baseline_variance: Optional[float] = None,
+) -> float:
     """Return the gambler's ruin approximation for a given EV and variance."""
- 
+    
     if bankroll <= 0:
         raise ValueError("bankroll must be > 0")
     if total_ev <= 0:
         return 1.0
     if total_variance <= 0:
         return 0.0
+    if baseline_variance is not None and baseline_variance < 0:
+        baseline_variance = None
     return math.exp(-2 * total_ev * bankroll / total_variance)
 
 
@@ -256,9 +525,9 @@ def compute_ev_roi(
     processed: List[Dict[str, Any]] = []
     for t in tickets:
         p = t.get("p")
+        legs_for_probability = t.get("legs_details") or t.get("legs")
         if p is None:
-            legs = t.get("legs")
-            legs_for_sim = t.get("legs_details") or legs
+            legs_for_sim = legs_for_probability
             if legs_for_sim is not None:
                 if simulate_fn is None:
                     raise ValueError(
@@ -300,6 +569,8 @@ def compute_ev_roi(
         if round_to > 0:
             stake = round(stake / round_to) * round_to
 
+        dependencies = _prepare_ticket_dependencies(t, legs_for_probability)
+        
         processed.append(
             {
                 "ticket": t,
@@ -310,6 +581,7 @@ def compute_ev_roi(
                 "max_stake": max_stake,
                 "capped": capped,
                 "clv": clv,
+                "dependencies": dependencies,
             }
         )
         if "legs" in t or "legs_details" in t:
@@ -351,6 +623,8 @@ def compute_ev_roi(
                         break
             total_stake = budget - remaining
 
+    covariance_inputs: List[Dict[str, Any]] = []
+    
     for d in processed:
         t = d["ticket"]
         stake = d["stake"]
@@ -382,6 +656,31 @@ def compute_ev_roi(
         if "legs" in t:
             combined_expected_payout += p * stake * odds
 
+        dependencies = d.get("dependencies", {})
+        covariance_inputs.append(
+            {
+                "p": p,
+                "ev": ev,
+                "win_value": stake * (odds - 1),
+                "loss_value": -stake,
+                "exposures": dependencies.get("exposures", frozenset()),
+                "legs_for_sim": dependencies.get("legs", ()),
+                "label": _ticket_label(t, len(covariance_inputs)),
+            }
+        )
+
+    total_variance_naive = total_variance
+    covariance_adjustment = 0.0
+    covariance_details: List[Dict[str, Any]] = []
+    joint_cache = cache if cache_simulations else None
+    if covariance_inputs:
+        covariance_adjustment, covariance_details = compute_joint_moments(
+            covariance_inputs,
+            simulate_fn=simulate_fn,
+            cache=joint_cache,
+        )
+        total_variance = max(0.0, total_variance_naive + covariance_adjustment)
+
     total_stake_normalized = total_stake
     if total_stake > budget:
         scale = budget / total_stake
@@ -399,6 +698,10 @@ def compute_ev_roi(
         total_ev *= scale
         combined_expected_payout *= scale
         total_variance *= scale ** 2
+        total_variance_naive *= scale ** 2
+        covariance_adjustment *= scale ** 2
+        for detail in covariance_details:
+            detail["covariance"] *= scale ** 2
         total_stake_normalized = budget
         total_expected_payout *= scale
 
@@ -421,12 +724,25 @@ def compute_ev_roi(
         total_ev *= scale
         combined_expected_payout *= scale
         total_variance *= scale ** 2
+        total_variance_naive *= scale ** 2
+        covariance_adjustment *= scale ** 2
+        for detail in covariance_details:
+            detail["covariance"] *= scale ** 2
         total_stake_normalized *= scale
         total_expected_payout *= scale
 
+    final_variance_naive = total_variance_naive
+    final_covariance_adjustment = covariance_adjustment
+    final_covariance_details = covariance_details
+    
     roi_total = total_ev / total_stake_normalized if total_stake_normalized else 0.0
     ev_ratio = total_ev / budget if budget else 0.0
-    ruin_risk = risk_of_ruin(total_ev, total_variance, budget)
+    ruin_risk = risk_of_ruin(
+        total_ev,
+        total_variance,
+        budget,
+        baseline_variance=total_variance_naive,
+    )
     std_dev = math.sqrt(total_variance)
     ev_over_std = total_ev / std_dev if std_dev else 0.0
 
@@ -434,6 +750,9 @@ def compute_ev_roi(
         baseline_metrics = ticket_metrics
         baseline_ev = total_ev
         baseline_roi = roi_total
+        baseline_variance_naive = total_variance_naive
+        baseline_covariance_adjustment = covariance_adjustment
+        baseline_covariance_details = [dict(detail) for detail in covariance_details]
         optimized_stakes = optimize_stake_allocation(tickets, budget, kelly_cap)
 
         opt_ev = 0.0
@@ -442,7 +761,8 @@ def compute_ev_roi(
         opt_combined_payout = 0.0
         optimized_metrics: List[Dict[str, float]] = []
         opt_expected_payout = 0.0
-        for t, stake_opt in zip(tickets, optimized_stakes):
+        opt_covariance_inputs: List[Dict[str, Any]] = []
+        for idx, (t, stake_opt) in enumerate(zip(tickets, optimized_stakes)):
             p = t["p"]
             odds = t["odds"]
             ev = stake_opt * (p * (odds - 1) - (1 - p))
@@ -477,6 +797,30 @@ def compute_ev_roi(
             if "legs" in t:
                 opt_combined_payout += p * stake_opt * odds
 
+            dependencies_opt = processed[idx].get("dependencies", {})
+            opt_covariance_inputs.append(
+                {
+                    "p": p,
+                    "ev": ev,
+                    "win_value": stake_opt * (odds - 1),
+                    "loss_value": -stake_opt,
+                    "exposures": dependencies_opt.get("exposures", frozenset()),
+                    "legs_for_sim": dependencies_opt.get("legs", ()),
+                    "label": _ticket_label(t, len(opt_covariance_inputs)),
+                }
+            )
+
+        opt_variance_naive = opt_variance
+        opt_covariance_adjustment = 0.0
+        opt_covariance_details: List[Dict[str, Any]] = []
+        if opt_covariance_inputs:
+            opt_covariance_adjustment, opt_covariance_details = compute_joint_moments(
+                opt_covariance_inputs,
+                simulate_fn=simulate_fn,
+                cache=joint_cache,
+            )
+            opt_variance = max(0.0, opt_variance_naive + opt_covariance_adjustment)
+
         variance_exceeded_opt = False
         if var_limit is not None and opt_variance > var_limit:
             variance_exceeded_opt = True
@@ -491,13 +835,22 @@ def compute_ev_roi(
                 t["optimized_expected_payout"] *= scale
             opt_ev *= scale
             opt_variance *= scale ** 2
+            opt_variance_naive *= scale ** 2
+            opt_covariance_adjustment *= scale ** 2
+            for detail in opt_covariance_details:
+                detail["covariance"] *= scale ** 2
             opt_stake_sum *= scale
             opt_combined_payout *= scale
             opt_expected_payout *= scale
 
         roi_opt = opt_ev / opt_stake_sum if opt_stake_sum else 0.0
         ev_ratio_opt = opt_ev / budget if budget else 0.0
-        ruin_risk_opt = risk_of_ruin(opt_ev, opt_variance, budget)
+        ruin_risk_opt = risk_of_ruin(
+            opt_ev,
+            opt_variance,
+            budget,
+            baseline_variance=opt_variance_naive,
+        )
         std_dev_opt = math.sqrt(opt_variance)
         ev_over_std_opt = opt_ev / std_dev_opt if std_dev_opt else 0.0
 
@@ -513,6 +866,9 @@ def compute_ev_roi(
             std_dev_opt = math.sqrt(total_variance)
             ev_over_std_opt = ev_over_std
             opt_variance = total_variance
+            opt_variance_naive = baseline_variance_naive
+            opt_covariance_adjustment = baseline_covariance_adjustment
+            opt_covariance_details = [dict(detail) for detail in baseline_covariance_details]
             opt_stake_sum = total_stake_normalized
             opt_combined_payout = combined_expected_payout
             opt_expected_payout = total_expected_payout
@@ -523,6 +879,10 @@ def compute_ev_roi(
                 ticket["optimized_expected_payout"] = metrics.get("expected_payout")
                 ticket["optimized_sharpe"] = metrics.get("sharpe")
 
+        final_variance_naive = opt_variance_naive
+        final_covariance_adjustment = opt_covariance_adjustment
+        final_covariance_details = opt_covariance_details
+        
         reasons = []
         if ev_ratio_opt < ev_threshold:
             reasons.append(f"EV ratio below {ev_threshold:.2f}")
@@ -545,10 +905,16 @@ def compute_ev_roi(
             "std_dev": std_dev_opt,
             "ev_over_std": ev_over_std_opt,
             "variance": opt_variance,
+            "variance_naive": opt_variance_naive,
+            "covariance_adjustment": opt_covariance_adjustment,
+            "covariance_pairs": opt_covariance_details,
             "ticket_metrics": optimized_metrics,
             "ev_individual": baseline_ev,
             "roi_individual": baseline_roi,
             "ticket_metrics_individual": baseline_metrics,
+            "variance_naive_individual": baseline_variance_naive,
+            "covariance_adjustment_individual": baseline_covariance_adjustment,
+            "covariance_pairs_individual": baseline_covariance_details,
             "optimized_stakes": optimized_stakes,
             "combined_expected_payout": opt_combined_payout,
             "calibrated_expected_payout": opt_expected_payout,
@@ -583,6 +949,9 @@ def compute_ev_roi(
         "std_dev": std_dev,
         "ev_over_std": ev_over_std,
         "variance": total_variance,
+        "variance_naive": final_variance_naive,
+        "covariance_adjustment": final_covariance_adjustment,
+        "covariance_pairs": final_covariance_details,
         "ticket_metrics": ticket_metrics,
         "combined_expected_payout": combined_expected_payout,
         "calibrated_expected_payout": total_expected_payout,
