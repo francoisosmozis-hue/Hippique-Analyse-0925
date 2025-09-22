@@ -127,14 +127,14 @@ def set_correlation_penalty(value: Any) -> None:
 
 
 
-    def _coerce_str(value: Any) -> str | None:
+def _coerce_str(value: Any) -> str | None:
     if value is None:
         return None
     text = str(value).strip()
     return text or None
 
 
-    def _normalise_meeting(value: str | None) -> str | None:
+def _normalise_meeting(value: str | None) -> str | None:
     if value is None:
         return None
     meeting = value.strip().upper()
