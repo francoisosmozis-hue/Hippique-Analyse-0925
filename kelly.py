@@ -2,7 +2,7 @@ from __future__ import annotations
 
 
 def kelly_fraction(p: float, odds: float, lam: float = 1.0, cap: float = 1.0) -> float:
-     """Return a capped Kelly fraction for the given probability and odds."""
+    """Return a capped Kelly fraction for the given probability and odds."""
 
     try:
         probability = float(p)
