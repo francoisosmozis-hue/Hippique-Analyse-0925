@@ -16,7 +16,7 @@ Pipeline **pro** pour planifier, capturer H‑30 / H‑5, analyser et consigner 
 - Combinés uniquement si **payout attendu > 12 €** (calibration).
 - **KELLY_FRACTION = 0.5** : moitié de Kelly pour réduire la variance au prix d'une EV moindre; cap 60 % par cheval.
 - **MIN_STAKE_SP = 0.10** : mise minimale par ticket SP, évite les micro-mises (réduit variance) mais peut bloquer un peu d'EV.
-- **ROUND_TO_SP = 0.10** : pas d'arrondi des mises SP; l'arrondi peut rogner légèrement l'EV tout en limitant la variance.
+- **ROUND_TO_SP = 0.10** : arrondi des mises SP à 0,10 €; utiliser `0` pour désactiver l'arrondi sans provoquer de crash tout en conservant le calcul EV/ROI.
 - **SHARPE_MIN = 0.5** : seuil minimal de ratio EV/σ; filtre les paris à variance trop élevée.
 
 ---
@@ -255,7 +255,7 @@ correspondants sont téléchargés dans le dossier indiqué par `--dest`.
 | ROI estimé global | **≥ +25 %** |
 | Payout min combinés | **> 12 €** |
 | Mise minimale SP (`MIN_STAKE_SP`) | **0.10 €** |
-| Arrondi mise SP (`ROUND_TO_SP`) | **0.10 €** |
+| Arrondi mise SP (`ROUND_TO_SP`) | **0.10 €** (`0` désactive l'arrondi sans provoquer d'erreur) |
 | Sharpe min (`SHARPE_MIN`) | **0.5** |
 | Coefficient de drift des cotes (`DRIFT_COEF`) | **0.05** |
 | Coefficient bonus J/E (`JE_BONUS_COEF`) | **0.001** |
