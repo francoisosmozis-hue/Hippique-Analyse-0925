@@ -26,8 +26,7 @@ Notes
 - Prévu pour des **cotes décimales** de type **placé**.
 - Si vous passez des cotes gagnant, fournissez des `probs` adaptées (p_win).
 """
-from typing import List, Optional, Sequence, Callable
-import math
+from typing import Callable, Optional, Sequence
 import pandas as pd
 
 from kelly import kelly_fraction
