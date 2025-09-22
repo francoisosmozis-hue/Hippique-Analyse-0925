@@ -17,7 +17,7 @@ SP_SHARE: float = 0.60
 COMBO_SHARE: float = 0.40
 """Fraction of the budget dedicated to combination tickets."""
 
-EV_MIN_COMBO: float = 0.35
+EV_MIN_COMBO: float = 0.40
 """Minimum EV ratio required for a combination ticket to be considered."""
 
 PAYOUT_MIN_COMBO: float = 12.0
