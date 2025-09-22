@@ -2,10 +2,12 @@
 
 import os
 import sys
+import builtins
 import datetime as dt
 from typing import Any
 from pathlib import Path
 import json
+import importlib.util
 
 import pytest
 
@@ -30,6 +32,38 @@ class DummyResp:
 
     def json(self) -> Any:  # pragma: no cover - trivial accessor
         return self._payload
+
+
+def test_import_guard_when_requests_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Importing the module without ``requests`` should raise a helpful error."""
+
+    module_path = Path(__file__).resolve().parents[1] / "scripts" / "online_fetch_zeturf.py"
+    spec = importlib.util.spec_from_file_location(
+        "_scripts_online_fetch_zeturf_import_guard", module_path
+    )
+    assert spec is not None and spec.loader is not None
+
+    monkeypatch.delitem(sys.modules, "requests", raising=False)
+
+    original_import = builtins.__import__
+
+    def fake_import(name: str, *args: Any, **kwargs: Any):
+        if name == "requests":
+            raise ModuleNotFoundError("No module named 'requests'")
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+
+    module = importlib.util.module_from_spec(spec)
+
+    with pytest.raises(RuntimeError) as excinfo:
+        spec.loader.exec_module(module)
+
+    sys.modules.pop(spec.name, None)
+
+    message = str(excinfo.value)
+    assert "pip install requests" in message
+    assert "urllib" in message
 
 
 def test_resolve_source_url_new_structure() -> None:
