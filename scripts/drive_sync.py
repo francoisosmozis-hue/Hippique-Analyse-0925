@@ -41,7 +41,7 @@ import sys
 from pathlib import Path
 from typing import Iterable, Optional
 
-from google.cloud import storage
+from google.auth.exceptions import DefaultCredentialsErrorfrom google.cloud import storage
 from google.oauth2 import service_account
 
 try:  # pragma: no cover - fallback when executed from within scripts/
@@ -241,7 +241,13 @@ def main() -> int | None:
     )
     args = parser.parse_args()
 
-    client = _build_service(args.credentials_json, project=args.project)
+    try:
+        client = _build_service(args.credentials_json, project=args.project)
+    except DefaultCredentialsError:
+        print(
+            "[drive_sync] no Google Cloud credentials detected → skipping Google Cloud Storage synchronisation."
+        )
+        return 0
 
     for base in args.push:
         push_tree(base, folder_id=args.prefix, bucket=args.bucket, service=client)
