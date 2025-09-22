@@ -8,7 +8,9 @@ import pytest
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from simulate_ev import (
-    implied_probs,    
+    implied_prob,
+    implied_probs,
+    normalize_overround,    
     allocate_dutching_sp,
     gate_ev,
     simulate_ev_batch,
@@ -22,6 +24,13 @@ def test_implied_probs_normalizes():
     assert math.isclose(sum(probs), 1.0)
     expected = (1 / 2) / ((1 / 2) + (1 / 4))
     assert math.isclose(probs[0], expected)
+
+
+def test_normalize_overround_balances_dict():
+    raw = {"1": 0.6, "2": 0.9, "3": 0.3}
+    normalised = normalize_overround(raw)
+    assert math.isclose(sum(normalised.values()), 1.0)
+    assert all(value >= 0.0 for value in normalised.values())
 
 
 def test_kelly_fraction_basic():
