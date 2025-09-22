@@ -274,9 +274,11 @@ def analyse(body: AnalyseParams):
             check=False,
         )
         if proc.stdout:
-            logs += [l for l in proc.stdout.splitlines() if l.strip()]
+            logs += [line for line in proc.stdout.splitlines() if line.strip()]
         if proc.stderr:
-            logs += [f"[stderr] {l}" for l in proc.stderr.splitlines() if l.strip()]
+            logs += [
+                f"[stderr] {line}" for line in proc.stderr.splitlines() if line.strip()
+            ]
 
         if proc.returncode != 0:
             detail = _format_subprocess_failure(
@@ -308,9 +310,13 @@ def analyse(body: AnalyseParams):
                 check=False,
             )
             if proc2.stdout:
-                logs += [l for l in proc2.stdout.splitlines() if l.strip()]
+                logs += [line for line in proc2.stdout.splitlines() if line.strip()]
             if proc2.stderr:
-                logs += [f"[stderr] {l}" for l in proc2.stderr.splitlines() if l.strip()]
+                logs += [
+                    f"[stderr] {line}"
+                    for line in proc2.stderr.splitlines()
+                    if line.strip()
+                ]
 
             if proc2.returncode != 0:
                 detail = _format_subprocess_failure(
