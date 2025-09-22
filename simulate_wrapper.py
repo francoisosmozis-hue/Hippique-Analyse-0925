@@ -411,20 +411,6 @@ def _estimate_group_probability(
 
     adjusted = max(min(adjusted, base), _EPSILON)
     return adjusted, method, float(penalty)
-def set_correlation_penalty(value: Any) -> None:
-    """Configure :data:`CORRELATION_PENALTY` from configuration values."""
-
-    global CORRELATION_PENALTY
-    if value is None:
-        return
-    try:
-        penalty = float(value)
-    except (TypeError, ValueError):  # pragma: no cover - defensive
-        return
-    if penalty <= 0:
-        CORRELATION_PENALTY = 0.0
-    else:
-        CORRELATION_PENALTY = min(penalty, 1.0)
 
 
 def _coerce_str(value: Any) -> str | None:
