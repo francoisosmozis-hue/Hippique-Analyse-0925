@@ -419,6 +419,24 @@ def test_risk_of_ruin_decreases_with_lower_variance() -> None:
     assert risk_low < risk_high
 
 
+def test_covariance_increases_ror_for_shared_runner() -> None:
+    """Tickets sharing the same runner should increase risk via covariance."""
+
+    budget = 100.0
+    tickets = [
+        {"id": "H1", "p": 0.55, "odds": 2.2, "stake": 10.0},
+        {"id": "H1", "p": 0.55, "odds": 3.0, "stake": 5.0},
+    ]
+
+    res = compute_ev_roi(tickets, budget=budget, round_to=0)
+
+    assert res["variance"] >= res["variance_naive"]
+    assert res["covariance_adjustment"] >= 0.0
+
+    naive_risk = risk_of_ruin(res["ev"], res["variance_naive"], budget)
+    assert res["risk_of_ruin"] >= naive_risk
+
+
 def test_optimized_allocation_respects_budget_and_improves_ev() -> None:
     """Optimisation should keep stakes within budget and increase EV."""
     tickets = [
