@@ -557,6 +557,15 @@ def main(argv: Sequence[str] | None = None) -> None:
     args = parser.parse_args(argv)
 
     planning_path = Path(args.planning)
+    if not planning_path.exists():
+        message = (
+            "Planning file "
+            f"{planning_path} not found. "
+            "Generate it with: python scripts/online_fetch_zeturf.py --mode planning --out "
+            "data/planning/<date>.json"
+        )
+        raise SystemExit(message)
+
     entries = load_planning(planning_path)
     if not entries:
         raise SystemExit(f"No valid races found in planning {planning_path}")
