@@ -31,10 +31,16 @@ from calibration.p_true_model import (
     predict_probability,
 )
 
-from simulate_ev import allocate_dutching_sp, gate_ev, simulate_ev_batch, implied_probs
+from simulate_ev import (
+    allocate_dutching_sp,
+    gate_ev,
+    implied_prob,
+    implied_probs,
+    simulate_ev_batch,
+)
 import simulate_wrapper as sw
 from tickets_builder import allow_combo, apply_ticket_policy
-from validator_ev import summarise_validation, validate_inputs
+from validator_ev import combos_allowed as combos_ev_gate, summarise_validation, validate_inputs
 from logging_io import append_csv_line, append_json, CSV_HEADER
 
 logger = logging.getLogger(__name__)
@@ -117,6 +123,31 @@ OPTIONAL_KEYS = {
     "SNAPSHOTS",
     "P_TRUE_MIN_SAMPLES",
 }
+
+STEAM_UP = 0.03
+STEAM_DOWN = -0.03
+
+
+def drift_points(odds_h30: float | None, odds_h5: float | None) -> float:
+    """Return the change in implied probability between H-30 and H-5."""
+
+    return implied_prob(odds_h5) - implied_prob(odds_h30)
+
+
+def market_drift_signal(
+    odds_h30: float | None,
+    odds_h5: float | None,
+    *,
+    is_favorite: bool,
+) -> int:
+    """Return a market drift score based on probability delta thresholds."""
+
+    delta = drift_points(odds_h30, odds_h5)
+    if delta >= STEAM_UP:
+        return 2
+    if is_favorite and delta <= STEAM_DOWN:
+        return -2
+    return 0
 
 _ENV_ALIASES: dict[str, tuple[str, ...]] = {
     "BUDGET_TOTAL": ("TOTAL_BUDGET", "BUDGET", "BUDGET_TOTAL_EUR", "TOTAL_BUDGET_EUR"),
@@ -1190,6 +1221,24 @@ def cmd_analyse(args: argparse.Namespace) -> None:
     p_true = build_p_true(cfg, partants, odds_h5, odds_h30, stats_je)
 
     # Tickets allocation
+    favorite_ids: set[str] = set()
+    if odds_h5:
+        try:
+            odds_pairs = [
+                (str(cid), float(val))
+                for cid, val in odds_h5.items()
+                if val not in (None, "")
+            ]
+            odds_pairs = [pair for pair in odds_pairs if pair[1] > 0.0]
+        except (TypeError, ValueError):
+            odds_pairs = []
+        if odds_pairs:
+            min_odds = min(price for _, price in odds_pairs)
+            tolerance = 1e-6
+            favorite_ids = {
+                cid for cid, price in odds_pairs if price <= min_odds + tolerance
+            }
+
     runners = []
     for p in partants:
         cid = str(p["id"])
@@ -1198,18 +1247,36 @@ def cmd_analyse(args: argparse.Namespace) -> None:
             p_imp30 = _coerce_probability(p_imp_h30.get(cid, 0.0)) if p_imp_h30 else 0.0
             if p_imp30 <= 0.0:
                 p_imp30 = p_imp5
-            drift_score = float(odds_h5[cid]) - float(odds_h30.get(cid, odds_h5[cid])) if odds_h30 else 0.0
+            odds_current = float(odds_h5[cid])
+            prev_raw = odds_h30.get(cid) if odds_h30 else None
+            try:
+                odds_prev = float(prev_raw) if prev_raw not in (None, "") else None
+            except (TypeError, ValueError):
+                odds_prev = None
+            if odds_prev is None:
+                odds_prev = odds_current
+            prob_delta = drift_points(odds_prev, odds_current)
+            drift_score = market_drift_signal(
+                odds_prev,
+                odds_current,
+                is_favorite=cid in favorite_ids,
+            )
+            raw_drift_odds = odds_current - odds_prev
             raw_stats = stats_je.get(cid) if isinstance(stats_je, dict) else None
             je_stats = raw_stats if isinstance(raw_stats, dict) else {}
             runner = {
                 "id": cid,
                 "name": p.get("name", cid),
-                "odds": float(odds_h5[cid]),
+                "odds": odds_current,
                 "p": float(p_true[cid]),
                 "p_imp_h5": p_imp5,
                 "p_imp_h30": p_imp30,
-                "drift_score": drift_score,
+                "drift_prob_delta": prob_delta,
+                "drift_odds_delta": raw_drift_odds,
+                "market_signal": drift_score,
+                "drift_score": prob_delta,
                 "last2_top3": _as_recent_form_flag(je_stats.get("last2_top3")),
+                "is_favorite": cid in favorite_ids,
             }
             runners.append(runner)
 
@@ -1300,19 +1367,29 @@ def cmd_analyse(args: argparse.Namespace) -> None:
         homogeneous_field=homogeneous_field,
     )
 
-    combos_allowed = bool(combo_tickets) and flags.get("sp") and flags.get("combo")
-    if combos_allowed:
-        combos_allowed = allow_combo(ev_global, roi_global, combined_payout)
-        combos_allowed = allow_combo(
+    combo_ok = bool(combo_tickets) and flags.get("sp") and flags.get("combo")
+    if combo_ok:
+        strict_ev = max(0.40, float(cfg.get("EV_MIN_GLOBAL", 0.0)))
+        strict_payout = max(12.0, float(cfg.get("MIN_PAYOUT_COMBOS", 0.0)))
+        combo_ok = combos_ev_gate(
+            ev_global,
+            combined_payout,
+            min_ev=strict_ev,
+            min_payout=strict_payout,
+        )
+    if combo_ok:
+        combo_ok = allow_combo(ev_global, roi_global, combined_payout)
+    if combo_ok:
+        combo_ok = allow_combo(
             ev_global,
             roi_global,
             combined_payout,
             cfg=cfg,
         )
-        if not combos_allowed:
-            flags.setdefault("reasons", {}).setdefault("combo", []).append("ALLOW_COMBO")
+        if combo_ok is False and combo_tickets:
+        flags.setdefault("reasons", {}).setdefault("combo", []).append("ALLOW_COMBO")
 
-    final_combo_tickets = combo_tickets if combos_allowed else []
+    final_combo_tickets = combo_tickets if combo_ok else []
 
     combo_budget_reassign = bool(combo_tickets) and not final_combo_tickets
     no_combo_available = (
