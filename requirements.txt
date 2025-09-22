@@ -25,3 +25,10 @@ google-auth>=2.29.0
 charset-normalizer>=3.3.2
 
 
+
+# --- Tests ---
+pytest>=7.4
+
+
+
+
