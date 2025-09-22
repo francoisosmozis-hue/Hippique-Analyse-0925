@@ -6,6 +6,7 @@ import csv
 import datetime as dt
 import json
 import re
+from urllib.parse import parse_qs, urlparse
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Iterator, Optional
@@ -59,6 +60,38 @@ def _extract_course_id(url: str | None) -> str | None:
     match = re.search(r"/race/(\d+)", url)
     if match:
         return match.group(1)
+
+    parsed = urlparse(url)
+
+    # The new Zeturf website exposes course pages under ``/fr/course/...``.
+    # These links often contain the numeric course identifier either as the
+    # final path segment or embedded in the slug. Extract the most relevant
+    # digit sequence located after ``/course/`` while skipping date segments
+    # such as ``2024-01-01``.
+    segments = [segment for segment in parsed.path.split("/") if segment]
+    if "course" in segments:
+        course_index = segments.index("course")
+        tail_segments = segments[course_index + 1 :]
+        candidates: list[tuple[int, int, str]] = []
+        for segment_index, segment in enumerate(tail_segments):
+            if re.fullmatch(r"\d{4}-\d{2}-\d{2}", segment):
+                continue
+            for match in re.finditer(r"\d+", segment):
+                candidates.append((segment_index, match.start(), match.group(0)))
+        if candidates:
+            _, _, value = max(candidates, key=lambda item: (len(item[2]), item[0], item[1]))
+            if value:
+                return value
+
+    # Fallback to query parameters if present (e.g. ``?courseId=123456``).
+    if parsed.query:
+        query_params = parse_qs(parsed.query)
+        for key in ("course_id", "courseId", "id_course", "idcourse", "id"):
+            for candidate in query_params.get(key, []):
+                match = re.search(r"\d+", candidate)
+                if match:
+                    return match.group(0)
+
     return None
 
 
