@@ -8,48 +8,128 @@ import datetime as dt
 import json
 import logging
 import math
-import re
-from functools import partial
-from pathlib import Path
-
 import os
-import sys
+import re
+from functools import lru_cache, partial
+from pathlib import Path
+from typing import Any, Callable, Dict, cast
 
 from config.env_utils import get_env
 
-try:
-    from dotenv import load_dotenv
-except Exception:  # pragma: no cover - optional dependency
-    def load_dotenv(*args, **kwargs):  # type: ignore
-        return None
-import yaml
-
-from calibration.p_true_model import (
-    compute_runner_features,
-    get_model_metadata,
-    load_p_true_model,
-    predict_probability,
-)
-
-from simulate_ev import (
-    allocate_dutching_sp,
-    gate_ev,
-    implied_prob,
-    implied_probs,
-    simulate_ev_batch,
-)
-import simulate_wrapper as sw
-from tickets_builder import allow_combo, apply_ticket_policy
-from validator_ev import combos_allowed as combos_ev_gate, summarise_validation, validate_inputs
-from logging_io import append_csv_line, append_json, CSV_HEADER
-
 logger = logging.getLogger(__name__)
 LOG_LEVEL_ENV_VAR = "PIPELINE_LOG_LEVEL"
+DEFAULT_OUTPUT_DIR = "out/hminus5"
+
+
+def _maybe_load_dotenv() -> None:
+    """Load environment variables from a .env file when available."""
+
+    try:
+        from dotenv import load_dotenv  # type: ignore
+    except Exception:  # pragma: no cover - optional dependency
+        return
+    load_dotenv()
+
+
+@lru_cache(maxsize=1)
+def _load_simulate_ev() -> Dict[str, Callable[..., Any]]:
+    """Import heavy simulation helpers lazily."""
+
+    from simulate_ev import (
+        allocate_dutching_sp,
+        gate_ev,
+        implied_prob,
+        implied_probs,
+        simulate_ev_batch,
+    )
+
+    return {
+        "allocate_dutching_sp": allocate_dutching_sp,
+        "gate_ev": gate_ev,
+        "implied_prob": implied_prob,
+        "implied_probs": implied_probs,
+        "simulate_ev_batch": simulate_ev_batch,
+    }
+
+
+@lru_cache(maxsize=1)
+def _load_p_true_helpers() -> Dict[str, Callable[..., Any]]:
+    """Import calibration helpers lazily."""
+
+    from calibration.p_true_model import (
+        compute_runner_features,
+        get_model_metadata,
+        load_p_true_model,
+        predict_probability,
+    )
+
+    return {
+        "compute_runner_features": compute_runner_features,
+        "get_model_metadata": get_model_metadata,
+        "load_p_true_model": load_p_true_model,
+        "predict_probability": predict_probability,
+    }
+
+
+def _resolve_output_dir() -> str:
+    """Return the configured output directory, loading .env if required."""
+
+    _maybe_load_dotenv()
+    return os.getenv("OUTPUT_DIR", DEFAULT_OUTPUT_DIR)
+
+
+def __getattr__(name: str) -> Any:
+    """Provide backward-compatible lazy access to heavy dependencies."""
+
+    simulate_helpers = _load_simulate_ev()
+    if name in simulate_helpers:
+        return simulate_helpers[name]
+
+    p_true_helpers = _load_p_true_helpers()
+    if name in p_true_helpers:
+        return p_true_helpers[name]
+
+    if name in {"allow_combo", "apply_ticket_policy"}:
+        from tickets_builder import allow_combo, apply_ticket_policy
+
+        mapping: Dict[str, Any] = {
+            "allow_combo": allow_combo,
+            "apply_ticket_policy": apply_ticket_policy,
+        }
+        return mapping[name]
+
+    if name in {"combos_allowed", "summarise_validation", "validate_inputs"}:
+        from validator_ev import combos_allowed, summarise_validation, validate_inputs
+
+        mapping: Dict[str, Any] = {
+            "combos_allowed": combos_allowed,
+            "summarise_validation": summarise_validation,
+            "validate_inputs": validate_inputs,
+        }
+        return mapping[name]
+
+    if name in {"append_csv_line", "append_json", "CSV_HEADER"}:
+        from logging_io import append_csv_line, append_json, CSV_HEADER
+
+        mapping: Dict[str, Any] = {
+            "append_csv_line": append_csv_line,
+            "append_json": append_json,
+            "CSV_HEADER": CSV_HEADER,
+        }
+        return mapping[name]
+
+    if name == "sw":
+        import simulate_wrapper as sw_module
+
+        return sw_module
+
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def configure_logging(level: str | int | None = None) -> None:
     """Configure root logging based on CLI or environment settings."""
 
+    _maybe_load_dotenv()
     resolved = level if level is not None else os.getenv(LOG_LEVEL_ENV_VAR, "INFO")
     numeric_level: int | None
     invalid_level = False
@@ -76,14 +156,10 @@ def configure_logging(level: str | int | None = None) -> None:
             "Invalid log level %r, defaulting to INFO", resolved
         )
 
-load_dotenv()
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-OUTPUT_DIR = os.getenv("OUTPUT_DIR", "out/hminus5")
-Path(OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
 
 REQ_KEYS = [
     "BUDGET_TOTAL",
@@ -131,6 +207,9 @@ STEAM_DOWN = -0.03
 def drift_points(odds_h30: float | None, odds_h5: float | None) -> float:
     """Return the change in implied probability between H-30 and H-5."""
 
+    implied_prob = cast(
+        Callable[[float | None], float], _load_simulate_ev()["implied_prob"]
+    )
     return implied_prob(odds_h5) - implied_prob(odds_h30)
 
 
@@ -255,11 +334,16 @@ def simulate_with_metrics(
     if not tickets:
         return {"ev": 0.0, "roi": 0.0}
 
+    simulate_ev_batch_fn = cast(
+        Callable[..., dict], _load_simulate_ev()["simulate_ev_batch"]
+    )
     sim_input = [copy.deepcopy(t) for t in tickets]
     if kelly_cap is None:
-        stats = simulate_ev_batch(sim_input, bankroll=bankroll)
+        stats = simulate_ev_batch_fn(sim_input, bankroll=bankroll)
     else:
-        stats = simulate_ev_batch(sim_input, bankroll=bankroll, kelly_cap=kelly_cap)
+        stats = simulate_ev_batch_fn(
+            sim_input, bankroll=bankroll, kelly_cap=kelly_cap
+        )
     for original, simulated in zip(tickets, sim_input):
         for key in METRIC_KEYS:
             if key in simulated:
@@ -401,7 +485,10 @@ def _summarize_optimization(
         return None
 
     pack = [copy.deepcopy(t) for t in tickets]
-    stats_opt = simulate_ev_batch(
+    simulate_ev_batch_fn = cast(
+        Callable[..., dict], _load_simulate_ev()["simulate_ev_batch"]
+    )
+    stats_opt = simulate_ev_batch_fn(
         pack,
         bankroll=bankroll,
         kelly_cap=kelly_cap,
@@ -466,6 +553,11 @@ def enforce_ror_threshold(
     except (TypeError, ValueError):
         max_iterations = 1
 
+    allocate_dutching_sp_fn = cast(
+        Callable[[dict, list[dict]], tuple[list[dict], Any]],
+        _load_simulate_ev()["allocate_dutching_sp"],
+    )
+
     def _log_variance_drift(stats: dict, context: str) -> None:
         naive = stats.get("variance_naive")
         variance = stats.get("variance")
@@ -505,7 +597,7 @@ def enforce_ror_threshold(
     except (TypeError, ValueError):  # pragma: no cover - defensive
         min_stake = 0.0
 
-    sp_tickets, _ = allocate_dutching_sp(cfg_iter, runners)
+    sp_tickets, _ = allocate_dutching_sp_fn(cfg_iter, runners)
     sp_tickets.sort(key=lambda t: t.get("ev_ticket", 0.0), reverse=True)
     try:
         max_count = int(cfg_iter.get("MAX_TICKETS_SP", len(sp_tickets)))
@@ -621,6 +713,10 @@ def enforce_ror_threshold(
 
 
 def load_yaml(path: str) -> dict:
+    import yaml
+
+    _maybe_load_dotenv()
+
     with open(path, "r", encoding="utf-8") as fh:
         raw_cfg = yaml.safe_load(fh) or {}
 
@@ -784,7 +880,10 @@ def _implied_from_odds_map(odds_map: dict[str, float]) -> dict[str, float]:
         return {}
     ids = list(odds_map.keys())
     values = [_coerce_odds(odds_map[cid]) for cid in ids]
-    probs = implied_probs(values)
+    implied_probs_fn = cast(
+        Callable[[list[float]], list[float]], _load_simulate_ev()["implied_probs"]
+    )
+    probs = implied_probs_fn(values)
     implied = {}
     for cid, odds, prob in zip(ids, values, probs):
         implied[cid] = prob if odds > 0 else 0.0
@@ -973,9 +1072,18 @@ def _coerce_positive_count(value) -> float | None:
 
 
 def build_p_true(cfg, partants, odds_h5, odds_h30, stats_je) -> dict:
+    helpers = _load_p_true_helpers()
+    load_model = cast(Callable[[], Any], helpers["load_p_true_model"])
+    get_metadata = cast(Callable[[Any], dict], helpers["get_model_metadata"])
+    compute_features = cast(
+        Callable[[float, float | None, dict | None], Any],
+        helpers["compute_runner_features"],
+    )
+    predict_prob = cast(Callable[[Any, Any], float], helpers["predict_probability"])
+
     model = None
     try:
-        model = load_p_true_model()
+        model = load_model()
     except Exception as exc:  # pragma: no cover - corrupted file
         logger.warning("Impossible de charger le modèle p_true: %s", exc)
         model = None
@@ -983,7 +1091,7 @@ def build_p_true(cfg, partants, odds_h5, odds_h30, stats_je) -> dict:
     if model is not None:
         min_samples = float(cfg.get("P_TRUE_MIN_SAMPLES", 0) or 0)
         if min_samples > 0:
-            metadata = get_model_metadata(model)
+            metadata = get_metadata(model)
             sample_count = _coerce_positive_count(metadata.get("n_samples"))
             race_count = _coerce_positive_count(metadata.get("n_races"))
             too_few_samples = sample_count is None or sample_count < min_samples
@@ -1003,14 +1111,14 @@ def build_p_true(cfg, partants, odds_h5, odds_h30, stats_je) -> dict:
             if cid not in odds_h5:
                 continue
             try:
-                features = compute_runner_features(
+                features = compute_features(
                     float(odds_h5[cid]),
                     float(odds_h30.get(cid, odds_h5[cid])) if odds_h30 else None,
                     stats_je.get(cid) if stats_je else None,
                 )
             except (ValueError, TypeError):
                 continue
-            prob = predict_probability(model, features)
+            prob = predict_prob(model, features)
             probs[cid] = prob
 
         total = sum(probs.values())
@@ -1130,9 +1238,19 @@ def export(
 
 
 def cmd_analyse(args: argparse.Namespace) -> None:
+    import simulate_wrapper as sw
+    from logging_io import CSV_HEADER, append_csv_line, append_json
+    from tickets_builder import allow_combo, apply_ticket_policy
+    from validator_ev import (
+        combos_allowed as combos_ev_gate,
+        summarise_validation,
+        validate_inputs,
+    )
+
     cfg = load_yaml(args.gpi)
-    cfg["OUTDIR_DEFAULT"] = OUTPUT_DIR
-    print(f"[pipeline] Export local only → {OUTPUT_DIR}")
+    output_dir = _resolve_output_dir()
+    cfg["OUTDIR_DEFAULT"] = output_dir
+    print(f"[pipeline] Export local only → {output_dir}")
     if args.budget is not None:
         cfg["BUDGET_TOTAL"] = args.budget
     if args.ev_global is not None:
@@ -1145,6 +1263,13 @@ def cmd_analyse(args: argparse.Namespace) -> None:
         cfg["MIN_PAYOUT_COMBOS"] = args.min_payout
     if args.allow_je_na:
         cfg["ALLOW_JE_NA"] = True
+
+    sim_helpers = _load_simulate_ev()
+    allocate_dutching_sp_fn = cast(
+        Callable[[dict, list[dict]], tuple[list[dict], Any]],
+        sim_helpers["allocate_dutching_sp"],
+    )
+    gate_ev_fn = cast(Callable[..., dict], sim_helpers["gate_ev"])
 
     sw.set_correlation_penalty(cfg.get("CORRELATION_PENALTY"))
 
@@ -1355,7 +1480,7 @@ def cmd_analyse(args: argparse.Namespace) -> None:
         or stats_ev.get("homogeneous_field", False)
     )
 
-    flags = gate_ev(
+    flags = gate_ev_fn(
         cfg,
         ev_sp,
         ev_global,
@@ -1428,7 +1553,7 @@ def cmd_analyse(args: argparse.Namespace) -> None:
         cfg_sp = dict(cfg)
         cfg_sp["SP_RATIO"] = float(cfg.get("SP_RATIO", 0.0)) + float(cfg.get("COMBO_RATIO", 0.0))
         cfg_sp["COMBO_RATIO"] = 0.0
-        sp_tickets, _ = allocate_dutching_sp(cfg_sp, runners)
+        sp_tickets, _ = allocate_dutching_sp_fn(cfg_sp, runners)
         sp_tickets, stats_ev, reduction_info = adjust_pack(cfg_sp, [])
         last_reduction_info = reduction_info
         ev_sp, roi_sp, total_stake_sp = summarize_sp_tickets(sp_tickets)
@@ -1437,7 +1562,7 @@ def cmd_analyse(args: argparse.Namespace) -> None:
         combined_payout = float(stats_ev.get("combined_expected_payout", 0.0))
         risk_of_ruin = float(stats_ev.get("risk_of_ruin", 0.0))
         ev_over_std = float(stats_ev.get("ev_over_std", 0.0))        
-        flags = gate_ev(
+        flags = gate_ev_fn(
             cfg_sp,
             ev_sp,
             ev_global,
