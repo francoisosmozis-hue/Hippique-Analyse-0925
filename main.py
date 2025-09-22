@@ -5,6 +5,7 @@ import tempfile
 import subprocess
 from pathlib import Path
 from typing import Optional, List, Literal, Tuple
+from urllib.parse import urlparse
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
@@ -21,6 +22,11 @@ DATA_MODE = os.getenv("DATA_MODE", "web")  # "web" ou "local"
 APP_VERSION = "GPI v5.1"
 
 app = FastAPI(title="Hippique Analyse", version=APP_VERSION)
+
+ALLOWED_COURSE_URL_DOMAINS: tuple[str, ...] = (
+    "zeturf.fr",
+    "geny.com",
+)
 
 
 # =========================
@@ -170,6 +176,32 @@ def _resolve_reunion_course(params: AnalyseParams) -> Tuple[Optional[str], Optio
     return reunion, course
 
 
+def _validate_course_url(raw_url: str) -> str:
+    url = raw_url.strip()
+    if not url:
+        raise ValueError("Le champ course_url ne peut pas être vide.")
+
+    parsed = urlparse(url)
+    scheme = (parsed.scheme or "").lower()
+    if scheme != "https":
+        raise ValueError("Le champ course_url doit utiliser https://.")
+
+    hostname = (parsed.hostname or "").lower()
+    if not hostname:
+        raise ValueError("Le champ course_url doit contenir un nom de domaine.")
+
+    if not any(
+        hostname == domain or hostname.endswith(f".{domain}")
+        for domain in ALLOWED_COURSE_URL_DOMAINS
+    ):
+        allowed = ", ".join(sorted(ALLOWED_COURSE_URL_DOMAINS))
+        raise ValueError(
+            f"Domaine {hostname!r} non autorisé pour course_url. Domaines autorisés: {allowed}."
+        )
+
+    return url
+
+
 @app.post("/analyse", response_model=AnalyseResult)
 def analyse(body: AnalyseParams):
     """
@@ -200,6 +232,19 @@ def analyse(body: AnalyseParams):
     env["DATA_MODE"] = eff_data_mode
     env["OUTPUTS_DIR"] = str(outputs_dir)
 
+    try:
+        reunion_label, course_label = _resolve_reunion_course(body)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+    validated_course_url: Optional[str] = None
+    if body.course_url:
+        try:
+            validated_course_url = _validate_course_url(body.course_url)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+        body = body.model_copy(update={"course_url": validated_course_url})
+
     # Construis la commande du script principal
     # NOTE: adapte les flags si ton script en attend d’autres (meeting, URL, phase, etc.)
     cmd = [
@@ -210,16 +255,12 @@ def analyse(body: AnalyseParams):
     ]
     kelly_fraction = env.get("KELLY_FRACTION")
     if kelly_fraction:
-        cmd += ["--kelly", str(kelly_fraction)]    
-    try:
-        reunion_label, course_label = _resolve_reunion_course(body)
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
+        cmd += ["--kelly", str(kelly_fraction)]
 
     if reunion_label and course_label:
         cmd += ["--reunion", reunion_label, "--course", course_label]
-    if body.course_url:
-        cmd += ["--reunion-url", body.course_url]
+    if validated_course_url:
+        cmd += ["--reunion-url", validated_course_url]
 
     # Exécution du pipeline principal
     try:
