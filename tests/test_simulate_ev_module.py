@@ -1,14 +1,12 @@
 import math
 import os
 import sys
-from pathlib import Path
 
 import pytest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from simulate_ev import (
-    implied_prob,
     implied_probs,
     normalize_overround,    
     allocate_dutching_sp,
