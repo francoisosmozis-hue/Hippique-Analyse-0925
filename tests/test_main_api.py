@@ -104,6 +104,33 @@ def test_analyse_passes_budget_override(monkeypatch):
     assert cmd[budget_index + 1] == str(params.default_budget)
 
 
+def test_analyse_propagates_ev_thresholds_and_max_vol(monkeypatch):
+    captured_envs = []
+
+    def _run(cmd, **kwargs):
+        captured_envs.append(kwargs.get("env"))
+        return subprocess.CompletedProcess(cmd, 0, stdout="ok\n", stderr="")
+
+    monkeypatch.setattr(main.subprocess, "run", _run)
+
+    params = main.AnalyseParams(
+        min_ev_sp=0.42,
+        min_ev_combo=0.91,
+        max_volat_per_horse=0.73,
+        run_export=False,
+    )
+    result = main.analyse(params)
+
+    assert result.ok is True
+    assert captured_envs, "Le script principal doit être invoqué"
+    env = captured_envs[0]
+    assert env is not None
+    assert env["EV_MIN_SP"] == str(params.min_ev_sp)
+    assert env["EV_MIN_GLOBAL"] == str(params.min_ev_combo)
+    assert env["MAX_VOL_PAR_CHEVAL"] == str(params.max_volat_per_horse)
+    assert env["MAX_VOL_PER_HORSE"] == str(params.max_volat_per_horse)
+
+
 def test_analyse_export_discovers_p_finale(monkeypatch, tmp_path):
     recorded_cmds = []
     outputs_dir = tmp_path / "call_outputs"
