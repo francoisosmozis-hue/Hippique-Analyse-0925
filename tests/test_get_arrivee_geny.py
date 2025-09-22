@@ -1,11 +1,13 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 import json
 import sys
 from types import SimpleNamespace
 import xml.etree.ElementTree as ET
+
+from pathlib import Path
+
+import pytest
 
 if "requests" not in sys.modules:
 
@@ -133,6 +135,7 @@ from get_arrivee_geny import (
     PlanningEntry,
     _resolve_course_url_from_meeting,
     load_planning,
+    main,
     parse_arrival,
 )
 
@@ -208,3 +211,15 @@ def test_resolve_course_url_checks_all_data_course_nodes(monkeypatch) -> None:
     entry = PlanningEntry(rc="R1C2", reunion="R1", course="C2", course_id="222")
     resolved = _resolve_course_url_from_meeting("https://www.geny.com/reunion", entry)
     assert resolved == "https://www.geny.com/course-222"
+
+
+def test_main_errors_when_planning_file_missing(tmp_path: Path) -> None:
+    missing_planning = tmp_path / "missing.json"
+    out_path = tmp_path / "arrivals.json"
+
+    with pytest.raises(SystemExit) as excinfo:
+        main(["--planning", str(missing_planning), "--out", str(out_path)])
+
+    message = str(excinfo.value)
+    assert "Planning file" in message
+    assert "online_fetch_zeturf.py --mode planning" in message
