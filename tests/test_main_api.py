@@ -1,6 +1,11 @@
+import json
 import subprocess
 from pathlib import Path
+from typing import get_args
 
+import anyio
+
+import analyse_courses_du_jour_enrichie as acde
 import main
 
 
@@ -114,3 +119,97 @@ def test_analyse_export_discovers_p_finale(monkeypatch, tmp_path):
     assert "--outputs-dir" in export_cmd
     export_dir_index = export_cmd.index("--outputs-dir")
     assert export_cmd[export_dir_index + 1] == str(outputs_dir)
+
+
+def test_fastapi_analyse_accepts_declared_phases(monkeypatch, tmp_path):
+    phase_field = main.AnalyseParams.model_fields["phase"]
+    declared_phases = list(get_args(phase_field.annotation))
+    assert declared_phases, "AnalyseParams.phase should advertise at least one option"
+
+    recorded_cmds = []
+
+    def _phase_guard_run(cmd, **kwargs):
+        recorded_cmds.append(cmd)
+        if "--phase" in cmd:
+            idx = cmd.index("--phase")
+            phase_value = cmd[idx + 1]
+            try:
+                acde._normalise_phase(phase_value)
+            except ValueError as exc:  # pragma: no cover - defensive
+                raise RuntimeError(f"Invalid phase {phase_value!r}") from exc
+        return subprocess.CompletedProcess(cmd, 0, stdout="ok\n", stderr="")
+
+    counter = {"value": 0}
+    created_dirs = []
+
+    def fake_mkdtemp(prefix):
+        counter["value"] += 1
+        path = tmp_path / f"{prefix}{counter['value']}"
+        path.mkdir(parents=True, exist_ok=True)
+        created_dirs.append(path)
+        return str(path)
+
+    monkeypatch.setattr(main.subprocess, "run", _phase_guard_run)
+    monkeypatch.setattr(main.tempfile, "mkdtemp", fake_mkdtemp)
+
+    async def post_analyse_async(payload: dict) -> tuple[int, list[tuple[bytes, bytes]], bytes]:
+        body_bytes = json.dumps(payload).encode("utf-8")
+        events = [
+            {"type": "http.request", "body": body_bytes, "more_body": False},
+        ]
+
+        async def receive() -> dict:
+            if events:
+                return events.pop(0)
+            return {"type": "http.disconnect"}
+
+        messages: list[dict] = []
+
+        async def send(message: dict) -> None:
+            messages.append(message)
+
+        scope = {
+            "type": "http",
+            "asgi": {"version": "3.0", "spec_version": "2.3"},
+            "http_version": "1.1",
+            "method": "POST",
+            "scheme": "http",
+            "path": "/analyse",
+            "raw_path": b"/analyse",
+            "headers": [
+                (b"host", b"testserver"),
+                (b"content-type", b"application/json"),
+                (b"content-length", str(len(body_bytes)).encode("latin-1")),
+            ],
+            "query_string": b"",
+            "root_path": "",
+            "client": ("testclient", 50000),
+            "server": ("testserver", 80),
+            "state": {},
+        }
+
+        await main.app(scope, receive, send)
+
+        start_message = next(msg for msg in messages if msg["type"] == "http.response.start")
+        status_code = start_message["status"]
+        headers = start_message.get("headers", [])
+        body_chunks = [msg.get("body", b"") for msg in messages if msg["type"] == "http.response.body"]
+        return status_code, headers, b"".join(body_chunks)
+
+    def post_analyse(payload: dict) -> tuple[int, list[tuple[bytes, bytes]], bytes]:
+        return anyio.run(post_analyse_async, payload, backend="asyncio")
+
+    for phase in declared_phases:
+        recorded_cmds.clear()
+        status_code, _, body = post_analyse({"phase": phase, "run_export": False})
+        assert status_code == 200, body.decode("utf-8")
+        payload = json.loads(body.decode("utf-8"))
+        assert payload["ok"] is True
+        assert payload["params"]["phase"] == phase
+        assert recorded_cmds, "Le script principal doit être invoqué"
+        cmd = recorded_cmds[0]
+        assert "analyse_courses_du_jour_enrichie.py" in cmd
+        phase_index = cmd.index("--phase")
+        assert cmd[phase_index + 1] == phase
+        data_dir_index = cmd.index("--data-dir")
+        assert cmd[data_dir_index + 1] == str(created_dirs[-1])
