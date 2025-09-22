@@ -2,23 +2,32 @@ from __future__ import annotations
 
 
 def kelly_fraction(p: float, odds: float, lam: float = 1.0, cap: float = 1.0) -> float:
-    """Return Kelly fraction for given probability and odds.
+     """Return a capped Kelly fraction for the given probability and odds."""
 
-    Parameters
-    ----------
-    p : float
-        Win probability (0<p<1).
-    odds : float
-        Decimal odds (>1).
-    lam : float, optional
-        Fraction of Kelly to use, default 1.0.
-    cap : float, optional
-        Maximum allowed fraction, default 1.0.
-    """
-    if not 0 < p < 1:
-        raise ValueError("p must be in (0,1)")
-    if odds <= 1:
-        raise ValueError("odds must be >1")
-    frac = (p * odds - 1) / (odds - 1)
-    frac *= lam
-    return max(0.0, min(cap, frac))
+    try:
+        probability = float(p)
+        price = float(odds)
+        lam_value = float(lam)
+        cap_value = float(cap)
+    except (TypeError, ValueError):
+        return 0.0
+
+    if not 0.0 < probability < 1.0:
+        return 0.0
+    if price <= 1.0:
+        return 0.0
+    if not lam_value > 0.0:
+        return 0.0
+
+    net_odds = price - 1.0
+    if net_odds <= 0.0:
+        return 0.0
+
+    kelly = (probability * price - 1.0) / net_odds
+    if kelly <= 0.0:
+        return 0.0
+
+    kelly *= lam_value
+    if cap_value > 0.0:
+        return min(cap_value, kelly)
+    return kelly
