@@ -107,7 +107,7 @@ jobs:
                   fh.write(f"MEETING_LABEL={meeting}\n")
               if race:
                   fh.write(f"RACE_LABEL={race}\n")
-          PY 
+          PY
       - name: Inject course ID into source URL
         if: steps.course.outputs.course_id != ''
         run: |
