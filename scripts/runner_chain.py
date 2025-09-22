@@ -199,7 +199,16 @@ def main() -> None:
         if any(getattr(args, name) for name in ("reunion", "course", "phase")):
             parser.error("--planning cannot be combined with --reunion/--course/--phase")
 
-        planning = _load_planning(Path(args.planning))
+        planning_path = Path(args.planning)
+        if not planning_path.is_file():
+            parser.error(
+                "Planning file "
+                f"{planning_path} not found. "
+                "Generate it with: python scripts/online_fetch_zeturf.py --mode planning --out "
+                "data/planning/<date>.json"
+            )
+
+        planning = _load_planning(planning_path)
         now = dt.datetime.now()
 
         for entry in planning:
