@@ -9,7 +9,13 @@ import os
 from pathlib import Path
 from typing import Any, Dict, List, Sequence
 
-import requests
+try:
+    import requests
+except ModuleNotFoundError as exc:  # pragma: no cover - exercised via dedicated test
+    raise RuntimeError(
+        "The 'requests' package is required to fetch data from Zeturf. "
+        "Install it with 'pip install requests' or switch to the urllib-based fallback implementation."
+    ) from exc
 import yaml
 from bs4 import BeautifulSoup
 import re
