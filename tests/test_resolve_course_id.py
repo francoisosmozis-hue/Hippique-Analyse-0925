@@ -9,6 +9,7 @@ import pytest
 
 from scripts.resolve_course_id import (
     CourseContextError,
+    _iter_schedule_entries,
     resolve_course_context,
 )
 
@@ -59,3 +60,39 @@ def test_resolve_course_context_errors_when_empty(tmp_path: Path) -> None:
 
     with pytest.raises(CourseContextError):
         resolve_course_context(schedule_file=schedule, planning_dir=None)
+
+
+def test_iter_schedule_entries_supports_fr_course_urls(tmp_path: Path) -> None:
+    """Schedules containing modern Zeturf URLs should yield entries."""
+
+    schedule = write_schedule(
+        tmp_path,
+        [
+            "https://www.zeturf.fr/fr/course/2025-09-10/R1C1-prix-test-654321;2025-09-10 13:00;R1;C1",
+        ],
+    )
+
+    entries = list(_iter_schedule_entries(schedule))
+
+    assert entries
+    assert entries[0].course_id == "654321"
+
+
+def test_resolve_course_context_supports_fr_course_urls(tmp_path: Path) -> None:
+    """The resolver should handle schedules with /fr/course/ links."""
+
+    schedule = write_schedule(
+        tmp_path,
+        [
+            "https://www.zeturf.fr/fr/course/2025-09-10/R1C1-prix-test-654321;2025-09-10 13:00;R1;C1",
+            "https://www.zeturf.fr/fr/course/2025-09-10/R1C2-prix-test-765432;2025-09-10 13:30;R1;C2",
+        ],
+    )
+    now = dt.datetime(2025, 9, 10, 12, 50, tzinfo=ZoneInfo("Europe/Paris"))
+
+    ctx = resolve_course_context(schedule_file=schedule, planning_dir=None, now=now)
+
+    assert ctx.course_id == "654321"
+    assert ctx.meeting == "R1"
+    assert ctx.race == "C1"
+
