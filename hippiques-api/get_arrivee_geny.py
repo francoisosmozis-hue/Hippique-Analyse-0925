@@ -95,7 +95,7 @@ def build_payload(race_id: str) -> dict[str, object]:
     else:
         status = "ERROR"
 
-payload = {
+    payload = {
         "race_id": course_id,
         "status": status,
         "source": "geny",
