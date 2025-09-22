@@ -435,6 +435,33 @@ def enforce_ror_threshold(
     except (TypeError, ValueError):
         max_iterations = 1
 
+    def _log_variance_drift(stats: dict, context: str) -> None:
+        naive = stats.get("variance_naive")
+        variance = stats.get("variance")
+        if naive is None or variance is None:
+            return
+        try:
+            naive_f = float(naive)
+            variance_f = float(variance)
+        except (TypeError, ValueError):
+            return
+        drift = variance_f - naive_f
+        if abs(drift) <= 1e-9:
+            return
+        if math.isfinite(naive_f) and abs(naive_f) > 1e-12:
+            pct = (drift / naive_f) * 100.0
+            pct_str = f"{pct:.2f}%"
+        else:
+            pct_str = "inf%" if drift > 0 else "-inf%"
+        logger.info(
+            "Covariance adjustment (%s): naive=%.6f adjusted=%.6f drift=%.6f (%s)",
+            context,
+            naive_f,
+            variance_f,
+            drift,
+            pct_str,
+        )
+        
     cfg_iter = dict(cfg)
     target = float(cfg_iter.get("ROR_MAX", 0.0))
     cap = float(cfg_iter.get("MAX_VOL_PAR_CHEVAL", 0.60))
@@ -477,6 +504,7 @@ def enforce_ror_threshold(
         return sp_tickets, stats_ev, info
 
     stats_ev = simulate_with_metrics(pack, bankroll=bankroll, kelly_cap=cap)
+    _log_variance_drift(stats_ev, "initial")
 
     initial_risk = float(stats_ev.get("risk_of_ruin", 0.0))
     initial_ev = float(stats_ev.get("ev", 0.0))
@@ -522,6 +550,7 @@ def enforce_ror_threshold(
                 bankroll=bankroll,
                 kelly_cap=effective_cap,
             )
+            _log_variance_drift(stats_current, f"iteration {iterations + 1}")
 
             iterations += 1
             if factor <= 1e-6:
