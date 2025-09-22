@@ -22,17 +22,33 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+      - name: Generate planning for the day
+        run: |
+          set -euo pipefail
+          mkdir -p data/planning data/results
+          python online_fetch_zeturf.py \
+            --mode planning \
+            --out "data/planning/$(date +%F).json" \
+            --sources config/sources.yml
       - name: Fetch results + prepare Excel update commands
         run: |
-          python get_arrivee_geny.py \
-            --planning data/planning/$(date +%F).json \
-            --out data/results/$(date +%F)_arrivees.json
-            
-          python p_finale_export.py \
-            --arrivees data/results/$(date +%F)_arrivees.json \
-            --analyses-dir data/analyses \
-            --excel excel/modele_suivi_courses_hippiques.xlsx \
-            --out-dir data/results
+          set -euo pipefail
+          PLANNING="data/planning/$(date +%F).json"
+          ARRIVEE_OUT="data/results/$(date +%F)_arrivees.json"
+
+          if [ ! -s "$PLANNING" ] || ! jq -e '.meetings | length > 0' "$PLANNING" >/dev/null 2>&1; then
+            echo "::warning::Aucun planning valide pour $(date +%F). Étape arrivées sautée."
+            echo '{"date":"'"$(date +%F)"'","arrivees":[]}' > "$ARRIVEE_OUT"
+          else
+            python get_arrivee_geny.py --planning "$PLANNING" --out "$ARRIVEE_OUT"
+
+            python p_finale_export.py \
+              --arrivees "$ARRIVEE_OUT" \
+              --analyses-dir data/analyses \
+              --excel excel/modele_suivi_courses_hippiques.xlsx \
+              --out-dir data/results
+          fi
+  
 
 
       - name: Update Excel with results
