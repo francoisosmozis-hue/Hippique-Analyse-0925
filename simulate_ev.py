@@ -78,6 +78,7 @@ def allocate_dutching_sp(cfg: Dict[str, float], runners: List[Dict[str, Any]]) -
     raw_total = budget * kelly_coef
     step = float(cfg.get("ROUND_TO_SP", 0.10))
     min_stake = float(cfg.get("MIN_STAKE_SP", 0.1))
+    rounding_enabled = step > 0
 
     tickets: List[Dict[str, Any]] = []
     ev_sp = 0.0
@@ -86,7 +87,10 @@ def allocate_dutching_sp(cfg: Dict[str, float], runners: List[Dict[str, Any]]) -
             frac = kelly_fraction(p, o, lam=kelly_coef / total_kelly, cap=cap)
         except (ValueError, TypeError):
             continue
-        stake = round(budget * frac / step) * step
+        if rounding_enabled:
+            stake = round(budget * frac / step) * step
+        else:
+            stake = budget * frac
         if stake <= 0 or stake < min_stake:
             continue
         ev_ticket = stake * (p * (o - 1.0) - (1.0 - p))
@@ -103,11 +107,17 @@ def allocate_dutching_sp(cfg: Dict[str, float], runners: List[Dict[str, Any]]) -
         
     if tickets:
         total_stake = sum(t["stake"] for t in tickets)
-        diff = round((raw_total - total_stake) / step) * step
-        if diff:
+        if rounding_enabled:
+            diff = round((raw_total - total_stake) / step) * step
+        else:
+            diff = raw_total - total_stake
+        if abs(diff) > 1e-9:
             best = max(tickets, key=lambda t: t["ev_ticket"])
-            new_stake = min(best["stake"] + diff, budget * cap)
-            if new_stake >= min_stake:
+            target_stake = best["stake"] + diff
+            if rounding_enabled:
+                target_stake = round(target_stake / step) * step
+            new_stake = max(0.0, min(target_stake, budget * cap))
+            if new_stake >= min_stake - 1e-9:
                 best["stake"] = new_stake
                 best["ev_ticket"] = new_stake * (
                     best["p"] * (best["odds"] - 1.0) - (1.0 - best["p"])
