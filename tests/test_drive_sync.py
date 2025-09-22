@@ -150,9 +150,14 @@ def test_build_service_env(monkeypatch):
     assert client == "client"
 
 
-def test_build_service_missing_env(monkeypatch):
+@pytest.mark.parametrize("project_env", [None, ""])
+def test_build_service_missing_env(monkeypatch, project_env):
     monkeypatch.delenv("GCS_SERVICE_KEY_B64", raising=False)
     monkeypatch.delenv("GCS_SERVICE_KEY_JSON", raising=False)
+    if project_env is None:
+        monkeypatch.delenv("GOOGLE_CLOUD_PROJECT", raising=False)
+    else:
+        monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", project_env)
     with patch("scripts.drive_sync.storage.Client") as client_mock:
         client = drive_sync._build_service()
     client_mock.assert_called_once_with(project=None)
