@@ -192,10 +192,11 @@ def analyse(body: AnalyseParams):
 
     # Prépare l’environnement pour les scripts Python appelés
     env = os.environ.copy()
-    eenv["BUDGET_TOTAL"] = str(eff_default_budget)
-    env["MIN_EV_SP"] = str(eff_min_ev_sp)
-    env["MIN_EV_COMBO"] = str(eff_min_ev_combo)
-    env["MAX_VOLAT_PER_HORSE"] = str(eff_max_volat)
+    env["BUDGET_TOTAL"] = str(eff_default_budget)
+    env["EV_MIN_SP"] = str(eff_min_ev_sp)
+    env["EV_MIN_GLOBAL"] = str(eff_min_ev_combo)
+    env["MAX_VOL_PAR_CHEVAL"] = str(eff_max_volat)
+    env["MAX_VOL_PER_HORSE"] = str(eff_max_volat)
     env["DATA_MODE"] = eff_data_mode
     env["OUTPUTS_DIR"] = str(outputs_dir)
 
