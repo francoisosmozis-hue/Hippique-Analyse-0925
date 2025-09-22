@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import math
-from typing import Any, Dict, Iterable, List, Sequence
+from typing import Any, Dict, List, Sequence
 
 from ev_calculator import compute_ev_roi
 from simulate_wrapper import simulate_wrapper
