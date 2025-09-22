@@ -1387,7 +1387,7 @@ def cmd_analyse(args: argparse.Namespace) -> None:
             cfg=cfg,
         )
         if combo_ok is False and combo_tickets:
-        flags.setdefault("reasons", {}).setdefault("combo", []).append("ALLOW_COMBO")
+            flags.setdefault("reasons", {}).setdefault("combo", []).append("ALLOW_COMBO")
 
     final_combo_tickets = combo_tickets if combo_ok else []
 
