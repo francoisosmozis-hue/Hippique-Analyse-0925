@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+import logging_io
 import pipeline_run
 import tickets_builder
 from test_pipeline_smoke import (
@@ -101,9 +102,30 @@ def _run_pipeline(tmp_path, inputs):
     return outdir
 
 
+def _mock_tracking_outputs(tmp_path, monkeypatch):
+    tracking_path = tmp_path / "modele_suivi_courses_hippiques_clean.csv"
+
+    def fake_append_csv_line(path, data, header=logging_io.CSV_HEADER):
+        return logging_io.append_csv_line(tracking_path, data, header=header)
+
+    def fake_append_json(path, data):
+        target = Path(path)
+        if target.is_absolute():
+            target = target.relative_to(target.anchor)
+        target_path = tmp_path / target
+        return logging_io.append_json(target_path, data)
+
+    monkeypatch.setattr(pipeline_run, "append_csv_line", fake_append_csv_line)
+    monkeypatch.setattr(pipeline_run, "append_json", fake_append_json)
+
+    return tracking_path
+
+
 def test_pipeline_allocates_combo_budget(tmp_path, monkeypatch):
     partants = _with_exotics(partants_sample())
     inputs = _write_inputs(tmp_path, partants)
+
+     _mock_tracking_outputs(tmp_path, monkeypatch)
 
     def fake_validate(candidates, bankroll, **kwargs):
         validated = []
@@ -169,6 +191,8 @@ def test_pipeline_recomputes_after_combo_rejection(tmp_path, monkeypatch):
     partants = _with_exotics(partants_sample())
     inputs = _write_inputs(tmp_path, partants)
 
+    _mock_tracking_outputs(tmp_path, monkeypatch)
+
     def fake_validate(candidates, bankroll, **kwargs):
         validated = []
         for idx, candidate in enumerate(candidates, start=1):
@@ -225,8 +249,7 @@ def test_pipeline_uses_capped_stake_in_exports(tmp_path, monkeypatch):
     partants = partants_sample()
     inputs = _write_inputs(tmp_path, partants, combo_ratio=0.0)
 
-    tracking_path = Path("modele_suivi_courses_hippiques_clean.csv")
-    tracking_path.unlink(missing_ok=True)
+    tracking_path = _mock_tracking_outputs(tmp_path, monkeypatch)
 
     base_ticket = {
         "type": "SP",
@@ -317,13 +340,13 @@ def test_pipeline_uses_capped_stake_in_exports(tmp_path, monkeypatch):
     values = tracking_lines[-1].split(";")
     tracking = dict(zip(header, values))
     assert float(tracking["total_stake"]) == pytest.approx(capped["capped"])
-
-    tracking_path.unlink(missing_ok=True)
-
+    
 def test_pipeline_optimization_preserves_ev_and_budget(tmp_path, monkeypatch):
     partants = partants_sample()
     inputs = _write_inputs(tmp_path, partants, combo_ratio=0.0)
 
+    tracking_path = _mock_tracking_outputs(tmp_path, monkeypatch)
+    
     base_tickets = [
         {
             "type": "SP",
@@ -347,10 +370,7 @@ def test_pipeline_optimization_preserves_ev_and_budget(tmp_path, monkeypatch):
         lambda *args, **kwargs: ([dict(t) for t in base_tickets], [], None),
     )
     monkeypatch.setattr(pipeline_run, "allow_combo", lambda *args, **kwargs: False)
-
-    tracking_path = Path("modele_suivi_courses_hippiques_clean.csv")
-    tracking_path.unlink(missing_ok=True)
-
+    
     outdir = _run_pipeline(tmp_path, inputs)
 
     data = json.loads((outdir / "p_finale.json").read_text(encoding="utf-8"))
@@ -366,8 +386,6 @@ def test_pipeline_optimization_preserves_ev_and_budget(tmp_path, monkeypatch):
     values = tracking_lines[-1].split(";")
     tracking = dict(zip(header, values))
     assert float(tracking["total_optimized_stake"]) >= 0.0
-
-    tracking_path.unlink(missing_ok=True)
 
     capped: dict[str, object] = {}
 
@@ -456,5 +474,4 @@ def test_pipeline_optimization_preserves_ev_and_budget(tmp_path, monkeypatch):
     assert float(tracking["total_stake"]) == pytest.approx(total_stake)
     assert float(tracking["roi_sp"]) == pytest.approx(data["ev"]["roi_sp"])
     assert float(tracking["roi_global"]) == pytest.approx(data["ev"]["roi_global"])
-
-    tracking_path.unlink(missing_ok=True)
+   
