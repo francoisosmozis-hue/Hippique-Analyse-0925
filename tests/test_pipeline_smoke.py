@@ -797,7 +797,6 @@ def test_combo_pack_scaled_not_removed(tmp_path, monkeypatch):
     assert final_metrics["risk_of_ruin"] == pytest.approx(final_ror)
 
     sp_stake_total = sum(t["stake"] for t in tickets)
-    combo_stake_total = sum(t["stake"] for t in tickets if t.get("type") != "SP")
     assert sp_stake_total > 0.0
     final_total = sp_stake_total
     assert final_total == pytest.approx(stake_reduction["final"]["total_stake"])
