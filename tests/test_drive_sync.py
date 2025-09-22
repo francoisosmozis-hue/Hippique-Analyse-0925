@@ -4,6 +4,7 @@ import sys
 from unittest.mock import MagicMock, patch
 
 import pytest
+from google.auth.exceptions import DefaultCredentialsError
 
 pytest.importorskip("google.cloud.storage")
 
@@ -110,6 +111,24 @@ def test_main_honours_env_prefix(monkeypatch):
     assert result == 0
     push_mock.assert_called_once_with(
         "data", folder_id="env/prefix", bucket="bucket", service=client
+    )
+
+
+def test_main_skips_when_credentials_missing(monkeypatch, capsys):
+    monkeypatch.setattr(drive_sync, "is_gcs_enabled", lambda: True)
+    monkeypatch.setattr(sys, "argv", ["drive_sync.py"])
+    
+    def _raise_missing(*_args, **_kwargs):
+        raise DefaultCredentialsError("missing")
+
+    monkeypatch.setattr(drive_sync, "_build_service", _raise_missing)
+    result = drive_sync.main()
+
+    captured = capsys.readouterr()
+    assert result == 0
+    assert (
+        "[drive_sync] no Google Cloud credentials detected → skipping Google Cloud Storage synchronisation."
+        in captured.out
     )
 
 
