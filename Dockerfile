@@ -15,6 +15,9 @@ RUN pip install -r requirements.txt
 
 COPY . .
 
+# Assure l'exécution du script de démarrage sur Cloud Run
+RUN chmod +x start.sh
+
 # Cloud Run / local lisent PORT
 ENV PORT=8080
 CMD ["./start.sh"]
