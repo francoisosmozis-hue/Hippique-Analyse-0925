@@ -1,11 +1,15 @@
+import math
 import os
 import sys
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+import pytest
+
 from ev_calculator import compute_ev_roi
 from simulate_ev import allocate_dutching_sp
 from tickets_builder import PAYOUT_MIN_COMBO, allow_combo
+from kelly import kelly_fraction
 
 def test_max_two_tickets():
     cfg = {
@@ -77,3 +81,41 @@ def test_optimization_never_decreases_ev_and_respects_budget():
 
     assert result["ev"] >= result.get("ev_individual", 0.0) - 1e-9
     assert sum(result.get("optimized_stakes", [])) <= 5.0 + 1e-9
+
+
+def test_allocate_dutching_sp_without_rounding():
+    cfg = {
+        "BUDGET_TOTAL": 100.0,
+        "SP_RATIO": 1.0,
+        "MAX_VOL_PAR_CHEVAL": 1.0,
+        "MIN_STAKE_SP": 0.0,
+        "ROUND_TO_SP": 0.0,
+        "KELLY_FRACTION": 1.0,
+    }
+    runners = [
+        {"id": "1", "name": "Alpha", "odds": 2.2, "p": 0.55},
+        {"id": "2", "name": "Bravo", "odds": 3.5, "p": 0.30},
+        {"id": "3", "name": "Charlie", "odds": 6.0, "p": 0.20},
+    ]
+
+    tickets, ev_sp = allocate_dutching_sp(cfg, runners)
+
+    assert tickets
+    budget = cfg["BUDGET_TOTAL"] * cfg["SP_RATIO"]
+    total_stake = sum(t["stake"] for t in tickets)
+    assert total_stake == pytest.approx(budget)
+
+    total_kelly = sum(
+        kelly_fraction(r["p"], r["odds"], lam=1.0, cap=1.0) for r in runners
+    )
+    lam = cfg["KELLY_FRACTION"] / total_kelly if total_kelly else 0.0
+    result = compute_ev_roi(
+        tickets,
+        budget=budget,
+        round_to=0.0,
+        kelly_cap=lam,
+    )
+
+    assert math.isfinite(result["ev"])
+    assert math.isfinite(result["roi"])
+    assert result["ev"] == pytest.approx(ev_sp)
