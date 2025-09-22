@@ -44,7 +44,7 @@ from typing import Iterable, Optional
 # Keep these imports on separate lines to avoid syntax issues when running
 # under stripped/concatenated builds.
 
-from google.auth.exceptions import DefaultCredentialsError
+import google.auth.exceptions as google_auth_exceptions
 from google.cloud import storage
 from google.oauth2 import service_account
 
@@ -249,7 +249,7 @@ def main() -> int | None:
 
     try:
         client = _build_service(args.credentials_json, project=args.project)
-    except DefaultCredentialsError:
+    except google_auth_exceptions.DefaultCredentialsError:
         print(
             "[drive_sync] no Google Cloud credentials detected → skipping Google Cloud Storage synchronisation."
         )
