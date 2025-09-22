@@ -13,7 +13,7 @@ import itertools
 import logging
 import math
 import sys
-from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 try:  # pragma: no cover - SciPy is optional
     from scipy.optimize import minimize
@@ -369,8 +369,7 @@ def optimize_stake_allocation(
     x0: List[float] = []
     for t in tickets:
         p = t["p"]
-        odds = t["odds"]
-        kelly_frac = _kelly_fraction(p, odds)
+        odds = t["odds"]        
         cap_fraction = kelly_fraction(p, odds, lam=kelly_cap, cap=1.0)
         cap_fraction = min(cap_fraction, 1 - 1e-9)
         p_odds.append((p, odds))
