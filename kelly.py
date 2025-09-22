@@ -5,10 +5,12 @@ def kelly_fraction(p: float, odds: float, lam: float = 1.0, cap: float = 1.0) ->
     """Return a capped Kelly fraction for the given probability and odds."""
 
     try:
-        probability = float(p)
-        price = float(odds)
-        lam_value = float(lam)
-        cap_value = float(cap)
+        probability, price, lam_value, cap_value = (
+            float(p),
+            float(odds),
+            float(lam),
+            float(cap),
+        )
     except (TypeError, ValueError):
         return 0.0
 
