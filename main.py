@@ -236,6 +236,7 @@ def analyse(body: AnalyseParams):
             detail = _format_subprocess_failure(
                 "analyse_courses_du_jour_enrichie.py a échoué", proc
             )
+            raise HTTPException(status_code=500, detail=detail)
     except subprocess.TimeoutExpired:
         raise HTTPException(status_code=504, detail="Timeout pipeline analyse (12 min).")
     except Exception as e:
