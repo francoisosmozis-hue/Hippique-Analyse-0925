@@ -16,7 +16,7 @@ jobs:
       GCS_PREFIX: ${{ vars.GCS_PREFIX || '' }}
       GOOGLE_CLOUD_PROJECT: ${{ vars.GOOGLE_CLOUD_PROJECT }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
