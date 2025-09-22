@@ -41,7 +41,8 @@ import sys
 from pathlib import Path
 from typing import Iterable, Optional
 
-from google.auth.exceptions import DefaultCredentialsErrorfrom google.cloud import storage
+from google.auth.exceptions import DefaultCredentialsError
+from google.cloud import storage
 from google.oauth2 import service_account
 
 try:  # pragma: no cover - fallback when executed from within scripts/
