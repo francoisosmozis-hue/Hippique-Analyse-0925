@@ -11,6 +11,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from validator_ev import (
     ValidationError,
+    combos_allowed,
     validate_ev,
     validate_inputs,
     validate_policy,
@@ -62,6 +63,12 @@ def test_validate_combos_fail_default():
     # When no minimum payout is provided the default (12.0) is applied
     with pytest.raises(ValidationError):
         validate_combos(expected_payout=11.0)
+
+
+def test_combos_allowed_thresholds():
+    assert combos_allowed(0.45, 15.0)
+    assert not combos_allowed(0.30, 20.0)
+    assert not combos_allowed(0.45, 10.0)
 
 
 def _sample_partants(n=6):
