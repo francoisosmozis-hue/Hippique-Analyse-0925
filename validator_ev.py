@@ -196,6 +196,31 @@ def validate_combos(expected_payout: float, min_payout: float = 12.0) -> bool:
     return True
 
 
+def combos_allowed(
+    ev_basket: float,
+    expected_payout: float,
+    *,
+    min_ev: float = 0.40,
+    min_payout: float = 12.0,
+) -> bool:
+    """Return ``True`` when combinés satisfy EV and payout guardrails."""
+
+    try:
+        ev_value = float(ev_basket)
+    except (TypeError, ValueError):
+        ev_value = 0.0
+    try:
+        payout_value = float(expected_payout)
+    except (TypeError, ValueError):
+        payout_value = 0.0
+
+    if ev_value < min_ev:
+        return False
+    if payout_value < min_payout:
+        return False
+    return True
+
+
 # ---------------------------------------------------------------------------
 # CLI helpers
 # ---------------------------------------------------------------------------
