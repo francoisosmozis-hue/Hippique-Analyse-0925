@@ -55,10 +55,16 @@ def dutching_kelly_fractional(
                        (défaut lambda o: 1/max(1.01,o)).
         lambda_kelly: fraction de Kelly (0<λ≤1), défaut 0.5.
         cap_per_horse: ratio max du Kelly par cheval (0..1), défaut 0.60.
-        round_to: granularité d'arrondi des mises (€, 0.10 par défaut).
+        round_to: granularité d'arrondi des mises (€, 0.10 par défaut). Utilisez
+            une valeur ≤ 0 pour désactiver l'arrondi et conserver les montants
+            Kelly exacts.
         horse_labels: noms/identifiants à afficher (optionnel).
     Returns:
-        DataFrame avec colonnes: Cheval, Cote, p, f_kelly, Part, Stake (€), Gain brut (€), EV (€)
+        DataFrame avec colonnes: Cheval, Cote, p, f_kelly, Part, Stake (€), Gain brut (€), EV (€).
+        Lorsque l'arrondi est actif, les montants de mises et les EV/ROI sont
+        calculés sur les valeurs arrondies. Avec `round_to <= 0`, aucune
+        correction d'arrondi n'est appliquée et les EV/ROI reflètent les mises
+        continues issues du Kelly fractionné.
     """
     if not odds or len(odds) == 0:
         raise ValueError("`odds` ne peut pas être vide.")
@@ -86,17 +92,20 @@ def dutching_kelly_fractional(
 
     # Arrondir à la granularité (0.10 € par défaut)
     def _round_to(x: float, step: float) -> float:
-        return round(x/step)*step
+        if step <= 0:
+            return float(x)
+        return round(x / step) * step
     stakes = [_round_to(st, round_to) for st in stakes]
 
-    # Corriger l'écart d'arrondi uniquement si dépassement
-    diff = round(total_stake - sum(stakes), 2)
-    if abs(diff) >= round_to/2:
-        try:
-            idx = max(range(n), key=lambda i: f_k[i])
-        except ValueError:
-            idx = 0
-        stakes[idx] = max(0.0, _round_to(stakes[idx] + diff, round_to))
+    # Corriger l'écart d'arrondi uniquement si dépassement (et arrondi actif)
+    if round_to > 0:
+        diff = round(total_stake - sum(stakes), 2)
+        if abs(diff) >= round_to / 2:
+            try:
+                idx = max(range(n), key=lambda i: f_k[i])
+            except ValueError:
+                idx = 0
+            stakes[idx] = max(0.0, _round_to(stakes[idx] + diff, round_to))
 
     sum_alloc = sum(stakes)
     shares = [st/sum_alloc if sum_alloc else 0 for st in stakes]
