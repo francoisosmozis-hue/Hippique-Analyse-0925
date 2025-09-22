@@ -228,7 +228,98 @@ def test_pipeline_uses_capped_stake_in_exports(tmp_path, monkeypatch):
     tracking_path = Path("modele_suivi_courses_hippiques_clean.csv")
     tracking_path.unlink(missing_ok=True)
 
-    
+    base_ticket = {
+        "type": "SP",
+        "id": "sp-1",
+        "stake": 4.0,
+        "ev_ticket": 0.8,
+        "odds": 2.4,
+        "p": 0.55,
+    }
+
+    monkeypatch.setattr(
+        pipeline_run,
+        "apply_ticket_policy",
+        lambda *args, **kwargs: ([dict(base_ticket)], [], None),
+    )
+    monkeypatch.setattr(pipeline_run, "allow_combo", lambda *args, **kwargs: False)
+
+    capped: dict[str, float] = {}
+
+    def fake_simulate(tickets, bankroll, **kwargs):
+        if kwargs.get("optimize"):
+            capped_stake = capped.get("capped", 0.0)
+            original = capped.get("original", capped_stake)
+            return {
+                "ev_individual": capped_stake * 0.2,
+                "ev": capped_stake * 0.2,
+                "roi_individual": 0.2 if capped_stake else 0.0,
+                "roi": 0.2 if capped_stake else 0.0,
+                "risk_of_ruin": 0.05,
+                "optimized_stakes": [capped_stake],
+                "ticket_metrics_individual": [
+                    {
+                        "stake": original,
+                        "kelly_stake": original,
+                        "ev": capped_stake * 0.2,
+                        "roi": 0.2 if capped_stake else 0.0,
+                        "variance": 0.5,
+                        "clv": 0.0,
+                    }
+                ],
+                "green": True,
+            }
+
+        total = 0.0
+        for ticket in tickets:
+            original = float(ticket.get("stake", 0.0))
+            capped_stake = original * 0.5
+            capped["original"] = original
+            capped["capped"] = capped_stake
+            ticket["kelly_stake"] = original
+            ticket["stake"] = capped_stake
+            ticket["ev"] = capped_stake * 0.2
+            ticket["roi"] = 0.2 if capped_stake else 0.0
+            ticket["variance"] = 0.5
+            ticket["clv"] = 0.0
+            total += capped_stake
+
+        return {
+            "ev": total * 0.2,
+            "roi": 0.2 if total else 0.0,
+            "combined_expected_payout": total * 3.0,
+            "risk_of_ruin": 0.05,
+            "ev_over_std": 0.4,
+            "variance": 0.5,
+            "clv": 0.0,
+        }
+
+    monkeypatch.setattr(pipeline_run, "simulate_ev_batch", fake_simulate)
+    monkeypatch.setattr(
+        pipeline_run,
+        "gate_ev",
+        lambda *args, **kwargs: {"sp": True, "combo": False, "reasons": {"sp": [], "combo": []}},
+    )
+
+    outdir = _run_pipeline(tmp_path, inputs)
+
+    assert capped, "fake_simulate should adjust at least one stake"
+
+    data = json.loads((outdir / "p_finale.json").read_text(encoding="utf-8"))
+    tickets = data["tickets"]
+    assert tickets, "pipeline should export at least one ticket"
+    capped_ticket = tickets[0]
+    assert capped_ticket["stake"] == pytest.approx(capped["capped"])
+    assert capped_ticket["kelly_stake"] == pytest.approx(capped["original"])
+
+    tracking_lines = tracking_path.read_text(encoding="utf-8").strip().splitlines()
+    header = tracking_lines[0].split(";")
+    values = tracking_lines[-1].split(";")
+    tracking = dict(zip(header, values))
+    assert float(tracking["total_stake"]) == pytest.approx(capped["capped"])
+
+    tracking_path.unlink(missing_ok=True)
+
 def test_pipeline_optimization_preserves_ev_and_budget(tmp_path, monkeypatch):
     partants = partants_sample()
     inputs = _write_inputs(tmp_path, partants, combo_ratio=0.0)
