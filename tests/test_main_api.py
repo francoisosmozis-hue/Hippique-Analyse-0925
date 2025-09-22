@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import get_args
 
 import anyio
+import pytest
 
 import analyse_courses_du_jour_enrichie as acde
 import main
@@ -68,7 +69,7 @@ def test_analyse_maps_course_url_to_reunion_url(monkeypatch):
     monkeypatch.setattr(main.subprocess, "run", _recording_run(recorded_cmds))
 
     params = main.AnalyseParams(
-        course_url="https://example.test/reunion",
+        course_url="https://www.zeturf.fr/fr/reunion/paris-vincennes",
         phase="H30",
         run_export=False,
     )
@@ -87,6 +88,29 @@ def test_analyse_maps_course_url_to_reunion_url(monkeypatch):
     url_index = cmd.index("--reunion-url")
     assert cmd[url_index + 1] == params.course_url
     assert "--course-url" not in cmd
+
+
+@pytest.mark.parametrize(
+    "url, expected_fragment",
+    [
+        ("http://127.0.0.1/reunion", "https://"),
+        ("ftp://www.zeturf.fr/fr/reunion/paris-vincennes", "https://"),
+        ("https://example.com/reunion", "non autorisé"),
+    ],
+)
+def test_analyse_rejects_disallowed_course_urls(monkeypatch, url, expected_fragment):
+    def _unexpected_run(cmd, **kwargs):
+        raise AssertionError("Le pipeline ne doit pas être invoqué")
+
+    monkeypatch.setattr(main.subprocess, "run", _unexpected_run)
+
+    params = main.AnalyseParams(course_url=url, run_export=False)
+
+    with pytest.raises(main.HTTPException) as excinfo:
+        main.analyse(params)
+
+    assert excinfo.value.status_code == 422
+    assert expected_fragment in excinfo.value.detail
 
 
 def test_analyse_passes_budget_override(monkeypatch):
