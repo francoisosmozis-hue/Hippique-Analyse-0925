@@ -156,7 +156,7 @@ def test_pipeline_allocates_combo_budget(tmp_path, monkeypatch):
         return {
             "ev": total * 0.2,
             "roi": 0.2,
-            "combined_expected_payout": total * 3.0,
+            "combined_expected_payout": total * 8.0,
             "risk_of_ruin": 0.1,
             "ev_over_std": 0.5,
             "variance": 1.2,
@@ -184,7 +184,7 @@ def test_pipeline_allocates_combo_budget(tmp_path, monkeypatch):
     assert combo_ids and {"CP1", "TRIO2"}.issuperset(combo_ids)
     assert data["ev"]["global"] == pytest.approx(sum(t["stake"] for t in final_call) * 0.2)
     assert data["ev"]["variance"] == pytest.approx(1.2)
-    assert data["ev"]["combined_expected_payout"] == pytest.approx(sum(t["stake"] for t in final_call) * 3.0)
+    assert data["ev"]["combined_expected_payout"] == pytest.approx(sum(t["stake"] for t in final_call) * 8.0)
 
 
 def test_pipeline_recomputes_after_combo_rejection(tmp_path, monkeypatch):
@@ -310,7 +310,7 @@ def test_pipeline_uses_capped_stake_in_exports(tmp_path, monkeypatch):
         return {
             "ev": total * 0.2,
             "roi": 0.2 if total else 0.0,
-            "combined_expected_payout": total * 3.0,
+            "combined_expected_payout": total * 8.0,
             "risk_of_ruin": 0.05,
             "ev_over_std": 0.4,
             "variance": 0.5,
@@ -432,7 +432,7 @@ def test_pipeline_optimization_preserves_ev_and_budget(tmp_path, monkeypatch):
         return {
             "ev": total * 0.2,
             "roi": roi_total,
-            "combined_expected_payout": total * 3.0,
+            "combined_expected_payout": total * 8.0,
             "risk_of_ruin": 0.05,
             "ev_over_std": 0.4,
             "variance": 0.5,
