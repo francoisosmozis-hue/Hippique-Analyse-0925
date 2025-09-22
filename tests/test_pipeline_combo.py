@@ -125,7 +125,7 @@ def test_pipeline_allocates_combo_budget(tmp_path, monkeypatch):
     partants = _with_exotics(partants_sample())
     inputs = _write_inputs(tmp_path, partants)
 
-     _mock_tracking_outputs(tmp_path, monkeypatch)
+    _mock_tracking_outputs(tmp_path, monkeypatch)
 
     def fake_validate(candidates, bankroll, **kwargs):
         validated = []
