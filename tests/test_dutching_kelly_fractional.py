@@ -36,3 +36,31 @@ def test_shares_sum_to_one_after_rounding():
     probs = [0.4, 0.3, 0.3]
     df = dutching_kelly_fractional(odds, total_stake=10.0, probs=probs, round_to=0.01)
     assert round(df["Part"].sum(), 10) == 1.0
+
+
+def test_round_to_zero_keeps_continuous_ev():
+    odds = [2.6, 4.2, 6.5]
+    probs = [0.45, 0.25, 0.18]
+    bankroll = 20.0
+
+    df = dutching_kelly_fractional(odds, total_stake=bankroll, probs=probs, round_to=0)
+
+    fk = df["f_kelly"].tolist()
+    if sum(fk) <= 0:
+        expected_stakes = [bankroll / len(fk)] * len(fk)
+    else:
+        expected_stakes = [f * bankroll for f in fk]
+        total_alloc = sum(expected_stakes)
+        if total_alloc > bankroll:
+            factor = bankroll / total_alloc
+            expected_stakes = [st * factor for st in expected_stakes]
+
+    expected_stakes_rounded = [round(st, 2) for st in expected_stakes]
+    assert df["Stake (€)"].tolist() == expected_stakes_rounded
+
+    expected_evs = []
+    for st, o, p in zip(expected_stakes, odds, probs):
+        gain_net = st * (o - 1.0)
+        expected_evs.append(round(p * gain_net - (1.0 - p) * st, 2))
+
+    assert df["EV (€)"].tolist() == expected_evs
