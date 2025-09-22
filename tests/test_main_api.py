@@ -30,6 +30,9 @@ def test_analyse_meeting_splits_into_reunion_and_course(monkeypatch):
     assert "--data-dir" in cmd
     data_dir_index = cmd.index("--data-dir")
     assert cmd[data_dir_index + 1] == result.outputs_dir
+    assert "--budget" in cmd
+    budget_index = cmd.index("--budget")
+    assert cmd[budget_index + 1] == str(main.DEFAULT_BUDGET)
     assert "--meeting" not in cmd
     assert "--reunion" in cmd
     assert "--course" in cmd
@@ -51,6 +54,9 @@ def test_analyse_accepts_separate_reunion_course(monkeypatch):
     assert "--data-dir" in cmd
     data_dir_index = cmd.index("--data-dir")
     assert cmd[data_dir_index + 1] == result.outputs_dir
+    assert "--budget" in cmd
+    budget_index = cmd.index("--budget")
+    assert cmd[budget_index + 1] == str(main.DEFAULT_BUDGET)
     reunion_index = cmd.index("--reunion")
     course_index = cmd.index("--course")
     assert cmd[reunion_index + 1] == "R2"
@@ -74,11 +80,28 @@ def test_analyse_maps_course_url_to_reunion_url(monkeypatch):
     assert "--data-dir" in cmd
     data_dir_index = cmd.index("--data-dir")
     assert cmd[data_dir_index + 1] == result.outputs_dir
+    assert "--budget" in cmd
+    budget_index = cmd.index("--budget")
+    assert cmd[budget_index + 1] == str(main.DEFAULT_BUDGET)
     assert "--reunion-url" in cmd
     url_index = cmd.index("--reunion-url")
     assert cmd[url_index + 1] == params.course_url
     assert "--course-url" not in cmd
 
+
+def test_analyse_passes_budget_override(monkeypatch):
+    recorded_cmds = []
+    monkeypatch.setattr(main.subprocess, "run", _recording_run(recorded_cmds))
+
+    params = main.AnalyseParams(default_budget=42.5, run_export=False)
+    result = main.analyse(params)
+
+    assert result.ok is True
+    assert recorded_cmds, "Le script principal doit être invoqué"
+    cmd = recorded_cmds[0]
+    assert "--budget" in cmd
+    budget_index = cmd.index("--budget")
+    assert cmd[budget_index + 1] == str(params.default_budget)
 
 
 def test_analyse_export_discovers_p_finale(monkeypatch, tmp_path):
