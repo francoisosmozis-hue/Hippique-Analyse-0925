@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """Utilities for validating exotic tickets and exporting tracking lines.
 
 This module exposes two helper functions used by the pipeline:
@@ -12,6 +10,8 @@ both a high EV and a large expected payout an ``ALERTE_VALUE`` flag is attached.
 ``export_tracking_csv_line`` appends a line to the tracking CSV and supports an
 optional ``ALERTE_VALUE`` column when the alert flag is present.
 """
+
+from __future__ import annotations
 
 from typing import Any, Dict, Iterable, List, Mapping, Tuple
 
