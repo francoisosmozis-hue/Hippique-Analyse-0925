@@ -85,7 +85,7 @@ def enrich_h5(
     rc_dir = ensure_dir(Path(rc_dir))
 
     def _latest_snapshot(tag: str) -> Path | None:
-        pattern = f"*_{{tag}}.json".replace("{tag}", tag)
+        pattern = f"*_{tag}.json"
         candidates = sorted(rc_dir.glob(pattern))
         if not candidates:
             return None
@@ -294,7 +294,7 @@ def build_prompt_from_meta(
             parts.append(f"cote {float(odds):.2f}")
         legs = ticket.get("legs") or ticket.get("selection")
         if isinstance(legs, Iterable) and not isinstance(legs, (str, bytes)):
-            legs_fmt = ", ".join(str(l) for l in legs)
+            legs_fmt = ", ".join(str(leg) for leg in legs)
             if legs_fmt:
                 parts.append(f"legs: {legs_fmt}")
         return " – ".join(parts)
