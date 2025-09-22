@@ -106,7 +106,7 @@ def test_allocate_dutching_sp_without_rounding():
     assert total_stake == pytest.approx(budget)
 
     total_kelly = sum(
-        kelly_fraction(r["p"], r["odds"], lam=1.0, cap=1.0) for r in runners
+        kelly_fraction(t["p"], t["odds"], lam=1.0, cap=1.0) for t in tickets
     )
     lam = cfg["KELLY_FRACTION"] / total_kelly if total_kelly else 0.0
     result = compute_ev_roi(
