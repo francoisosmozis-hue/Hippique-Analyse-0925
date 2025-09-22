@@ -93,7 +93,9 @@ def _build_service(
     """Instantiate and return a ``storage.Client``."""
 
     creds = _load_credentials(credentials_json)
-    project_id = project or os.environ.get(PROJECT_ENV)
+    project_id = project if project not in (None, "") else os.environ.get(PROJECT_ENV)
+    if project_id == "":
+        project_id = None
     if creds is None:
         return storage.Client(project=project_id)
     return storage.Client(project=project_id, credentials=creds)
