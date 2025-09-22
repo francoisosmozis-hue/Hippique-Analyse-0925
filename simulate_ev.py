@@ -9,14 +9,43 @@ from simulate_wrapper import simulate_wrapper
 from kelly import kelly_fraction
 
 
+def implied_prob(odds: float) -> float:
+    """Return the implied probability from decimal odds."""
+
+    try:
+        value = float(odds)
+    except (TypeError, ValueError):
+        return 0.0
+    if value <= 1.0 or not math.isfinite(value):
+        return 0.0
+    return 1.0 / value
+
+
+def normalize_overround(probs: Dict[str, float]) -> Dict[str, float]:
+    """Normalise a probability dictionary to remove the bookmaker overround."""
+
+    cleaned: Dict[str, float] = {}
+    total = 0.0
+    for key, value in probs.items():
+        try:
+            prob = float(value)
+        except (TypeError, ValueError):
+            prob = 0.0
+        if not math.isfinite(prob) or prob < 0.0:
+            prob = 0.0
+        cleaned[key] = prob
+        total += prob
+    if total <= 0.0:
+        return {key: 0.0 for key in cleaned}
+    return {key: prob / total for key, prob in cleaned.items()}
+
+
 def implied_probs(odds_list: Sequence[float]) -> List[float]:
     """Return normalised implied probabilities from decimal ``odds_list``."""
 
-    inv = [1.0 / float(o) if float(o) > 0 else 0.0 for o in odds_list]
-    total = sum(inv)
-    if total <= 0:
-        return [0.0] * len(inv)
-    return [x / total for x in inv]
+    raw = {str(index): implied_prob(odds) for index, odds in enumerate(odds_list)}
+    normalised = normalize_overround(raw)
+    return [normalised[str(index)] for index in range(len(odds_list))]
 
 
 def allocate_dutching_sp(cfg: Dict[str, float], runners: List[Dict[str, Any]]) -> tuple[List[Dict[str, Any]], float]:
@@ -31,44 +60,77 @@ def allocate_dutching_sp(cfg: Dict[str, float], runners: List[Dict[str, Any]]) -
         return [], 0.0
 
     odds: List[float] = []
-    for runner in runners:
+    direct_probs: Dict[str, float] = {}
+    fallback_probs: Dict[str, float] = {}
+    ordered_keys: List[str] = []
+
+    for index, runner in enumerate(runners):
+        key = str(runner.get("id", index))
+        ordered_keys.append(key)
         try:
-            odds.append(float(runner.get("odds", 0.0)))
+            odds_value = float(runner.get("odds", 0.0))
         except (TypeError, ValueError):
-            odds.append(0.0)
-    if all("p" in r for r in runners):
-        probs = []
-        for runner in runners:
-            try:
-                probs.append(float(runner.get("p", 0.0)))
-            except (TypeError, ValueError):
-                probs.append(0.0)
-    else:
-        fallback: List[float] = []
-        for runner in runners:
-            raw = runner.get("p_imp_h5", runner.get("p_imp"))
-            try:
-                prob = float(raw)
-            except (TypeError, ValueError):
-                prob = 0.0
-            if not math.isfinite(prob) or prob < 0:
-                prob = 0.0
-            fallback.append(prob)
-        total_fallback = sum(fallback)
-        if total_fallback > 0:
-            probs = [prob / total_fallback for prob in fallback]
+            odds_value = 0.0
+        if not math.isfinite(odds_value) or odds_value <= 1.0:
+            odds_value = 0.0
+        odds.append(odds_value)
+
+        prob_primary = runner.get("p")
+        if prob_primary is None:
+            prob_primary = runner.get("p_true")
+        prob_value: float | None
+        try:
+            prob_value = float(prob_primary) if prob_primary is not None else None
+        except (TypeError, ValueError):
+            prob_value = None
+        if prob_value is not None and (not math.isfinite(prob_value) or prob_value <= 0.0 or prob_value >= 1.0):
+            prob_value = None
+
+        if prob_value is not None:
+            direct_probs[key] = prob_value
+            continue
+
+        fallback_source = runner.get("p_imp_h5", runner.get("p_imp"))
+        try:
+            fallback_value = float(fallback_source) if fallback_source is not None else None
+        except (TypeError, ValueError):
+            fallback_value = None
+        if fallback_value is None or not math.isfinite(fallback_value) or fallback_value <= 0.0:
+            fallback_value = implied_prob(odds_value) if odds_value > 0 else 0.0
+        fallback_probs[key] = fallback_value
+
+    combined_probs: Dict[str, float] = {}
+    if direct_probs and not fallback_probs:
+        total_direct = sum(direct_probs.values())
+        if total_direct > 1.0:
+            scale = 1.0 / total_direct
+            combined_probs = {key: value * scale for key, value in direct_probs.items()}
         else:
-            probs = implied_probs(odds)
+            combined_probs = dict(direct_probs)
+    elif not direct_probs and fallback_probs:
+        combined_probs = normalize_overround(fallback_probs)
+    else:
+        combined_probs = dict(direct_probs)
+        total_direct = sum(direct_probs.values())
+        if total_direct >= 1.0 or not fallback_probs:
+            for key in fallback_probs:
+                combined_probs.setdefault(key, 0.0)
+        else:
+            remaining = max(0.0, 1.0 - total_direct)
+            normalised_fallback = normalize_overround(fallback_probs)
+            for key, value in normalised_fallback.items():
+                combined_probs[key] = value * remaining
+
+    probs = [combined_probs.get(key, 0.0) for key in ordered_keys]
     budget = float(cfg.get("BUDGET_TOTAL", 0.0)) * float(cfg.get("SP_RATIO", 1.0))
     cap = float(cfg.get("MAX_VOL_PAR_CHEVAL", 0.60))
 
     valid: List[tuple[Dict[str, Any], float, float]] = []
     total_kelly = 0.0
     for runner, p, o in zip(runners, probs, odds):
-        try:
-            k = kelly_fraction(p, o, lam=1.0, cap=1.0)
-        except (ValueError, TypeError):
+        if not (0.0 < p < 1.0) or o <= 1.0:
             continue
+        k = kelly_fraction(p, o, lam=1.0, cap=1.0)
         total_kelly += k
         valid.append((runner, p, o))
     if not valid:
@@ -83,14 +145,17 @@ def allocate_dutching_sp(cfg: Dict[str, float], runners: List[Dict[str, Any]]) -
     tickets: List[Dict[str, Any]] = []
     ev_sp = 0.0
     for runner, p, o in valid:
-        try:
-            frac = kelly_fraction(p, o, lam=kelly_coef / total_kelly, cap=cap)
-        except (ValueError, TypeError):
-            continue
+        frac = kelly_fraction(p, o, lam=kelly_coef / total_kelly, cap=1.0)
+        raw_stake = budget * frac
+        cap_value = budget * cap
+        if raw_stake > cap_value:
+            raw_stake = cap_value
         if rounding_enabled:
-            stake = round(budget * frac / step) * step
+            stake = round(raw_stake / step) * step
+            if stake > cap_value:
+                stake = cap_value
         else:
-            stake = budget * frac
+            stake = raw_stake
         if stake <= 0 or stake < min_stake:
             continue
         ev_ticket = stake * (p * (o - 1.0) - (1.0 - p))
