@@ -41,6 +41,8 @@ import sys
 from pathlib import Path
 from typing import Iterable, Optional
 
+# Keep these imports on separate lines to avoid syntax issues when running
+# under stripped/concatenated builds.
 from google.auth.exceptions import DefaultCredentialsError
 from google.cloud import storage
 from google.oauth2 import service_account
