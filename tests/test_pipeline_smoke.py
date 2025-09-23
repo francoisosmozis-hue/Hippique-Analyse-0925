@@ -11,6 +11,8 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 import pipeline_run
 import validator_ev
+import logging_io
+import tickets_builder
 from simulate_ev import allocate_dutching_sp, gate_ev, simulate_ev_batch, implied_probs
 from pipeline_run import build_p_true, compute_drift_dict, load_yaml
 
@@ -370,11 +372,13 @@ def test_cmd_analyse_enriches_runners(tmp_path, monkeypatch: pytest.MonkeyPatch)
         }
         return [], stats_stub, {"applied": False}
 
-    monkeypatch.setattr("pipeline_run.apply_ticket_policy", stub_apply_ticket_policy)
+    monkeypatch.setattr("tickets_builder.apply_ticket_policy", stub_apply_ticket_policy)
     monkeypatch.setattr("pipeline_run.enforce_ror_threshold", stub_enforce)
     monkeypatch.setattr("pipeline_run.append_csv_line", lambda *a, **k: None)
     monkeypatch.setattr("pipeline_run.append_json", lambda *a, **k: None)
-
+    monkeypatch.setattr(logging_io, "append_csv_line", lambda *a, **k: None)
+    monkeypatch.setattr(logging_io, "append_json", lambda *a, **k: None)
+    
     args = argparse.Namespace(
         h30=str(h30_path),
         h5=str(h5_path),
@@ -447,7 +451,7 @@ def test_pipeline_validation_failure_reports_summary(tmp_path, monkeypatch):
         captured_summary.update(result)
         return result
 
-    monkeypatch.setattr(pipeline_run, "summarise_validation", recording_summary)
+    monkeypatch.setattr(validator_ev, "summarise_validation", recording_summary)
 
     args = argparse.Namespace(
         h30=str(h30_path),
@@ -821,7 +825,11 @@ def test_drift_coef_sensitivity(monkeypatch):
     h5 = odds_h5()
     stats = stats_sample()
 
-    monkeypatch.setattr("pipeline_run.load_p_true_model", lambda: None)
+    import calibration.p_true_model as p_true_model
+
+    pipeline_run._load_p_true_helpers.cache_clear()
+    monkeypatch.setattr(p_true_model, "load_p_true_model", lambda: None)
+    pipeline_run._load_p_true_helpers.cache_clear()
 
     p_default = build_p_true({"JE_BONUS_COEF": 0.001}, partants, h5, h30, stats)
     p_no_drift = build_p_true(
@@ -829,6 +837,7 @@ def test_drift_coef_sensitivity(monkeypatch):
     )
 
     assert abs(p_default["4"] - p_no_drift["4"]) > 1e-9
+    pipeline_run._load_p_true_helpers.cache_clear()
 
 
 def test_negative_drift_increases_p_true():
@@ -854,12 +863,17 @@ def test_je_bonus_coef_sensitivity(monkeypatch):
     h5 = odds_h5()
     stats = {"1": {"j_win": 5, "e_win": 0}}
 
-    monkeypatch.setattr("pipeline_run.load_p_true_model", lambda: None)
+    import calibration.p_true_model as p_true_model
+
+    pipeline_run._load_p_true_helpers.cache_clear()
+    monkeypatch.setattr(p_true_model, "load_p_true_model", lambda: None)
+    pipeline_run._load_p_true_helpers.cache_clear()
 
     p_default = build_p_true({"JE_BONUS_COEF": 0.001}, partants, h5, h30, stats)
     p_no_bonus = build_p_true({"JE_BONUS_COEF": 0.0}, partants, h5, h30, stats)
-
+    
     assert p_default["1"] > p_no_bonus["1"]
+    pipeline_run._load_p_true_helpers.cache_clear()
 
 
 def test_invalid_config_ratio(tmp_path):
