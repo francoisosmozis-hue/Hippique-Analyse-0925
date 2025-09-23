@@ -28,7 +28,7 @@ on:
         required: false
         default: ""
   schedule:
-    - cron: "*/10 7-21 * * *"
+    - cron: "*/5 7-21 * * *"
 
 concurrency:
   group: hminus-${{ github.event.inputs.course_id || github.run_id }}
@@ -46,6 +46,7 @@ env:
   EV_MIN: ${{ vars.SCHEDULER_EV_MIN || '0.35' }}
   ROI_MIN: ${{ vars.SCHEDULER_ROI_MIN || '0.25' }}
   PASTILLE_RULE: ${{ vars.SCHEDULER_PASTILLE_RULE || '' }}
+  GCS_BUCKET: ${{ vars.GCS_BUCKET || '' }}
 
 jobs:
   schedule-runner:
@@ -70,6 +71,7 @@ jobs:
       - name: Run scheduler windows (H-30/H-5)
         run: |
           mkdir -p "${OUTPUT_DIR}/analyses"
+          echo "ANALYSIS_ROOT=${OUTPUT_DIR}/analyses" >> "${GITHUB_ENV}"
           python scripts/runner_chain.py \
             --planning "data/planning/$(date +%F).json" \
             --h30-window-min 27 --h30-window-max 33 \
@@ -83,6 +85,37 @@ jobs:
             --pastille-rule "${PASTILLE_RULE}" \
             --gpi-config config/gpi_v51.yml
 
+      - name: Guardrail EV/ROI
+        run: |
+          set -euo pipefail
+          analysis_root="${ANALYSIS_ROOT:-${OUTPUT_DIR}/analyses}"
+          mkdir -p "${analysis_root}"
+          any=false
+          find "${analysis_root}" -type f -name 'analysis_H5.json' -print0 | while IFS= read -r -d '' analysis; do
+            [ -n "${analysis}" ] || continue
+            dir=$(dirname "${analysis}")
+            tmp_env=$(mktemp)
+            python "${GITHUB_WORKSPACE}/scripts/guardrails.py" \
+              --analysis "${analysis}" \
+              --ev-min "${EV_MIN}" \
+              --roi-min "${ROI_MIN}" \
+              --report "${dir}/abstention.json" \
+              --env "${tmp_env}"
+            if grep -q '^ABSTAIN=true' "${tmp_env}"; then
+              echo "[guardrail] Abstention pour ${dir}" >&2
+              any=true
+            else
+              rm -f "${dir}/abstention.json"
+            fi
+            cat "${tmp_env}" >> "${GITHUB_ENV}"
+            rm -f "${tmp_env}"
+          done
+          if [ "${any}" = true ]; then
+            echo "ANY_ABSTAIN=true" >> "${GITHUB_ENV}"
+          else
+            echo "ANY_ABSTAIN=false" >> "${GITHUB_ENV}"
+          fi
+          
       - name: Export normalized JSON/CSV
         run: |
           set -euo pipefail
@@ -98,6 +131,10 @@ jobs:
               continue
             fi
             dir=$(dirname "${pfinale}")
+            if [ -f "${dir}/abstention.json" ]; then
+              echo "[guardrail] Skip export pour ${dir} (abstention)" >&2
+              continue
+            fi
             echo "[export] Traitement de ${dir}"
             python "${GITHUB_WORKSPACE}/p_finale_export.py" \
               --outputs-dir "${dir}"
@@ -110,10 +147,15 @@ jobs:
 
 
       - name: Upload artifacts (H-30/H-5)
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: hminus-${{ github.run_id }}
           path: |
+            ${{ env.OUTPUT_DIR }}/analyses/**/analysis_H5.json
+            ${{ env.OUTPUT_DIR }}/analyses/**/per_horse_report.csv
+            ${{ env.OUTPUT_DIR }}/analyses/**/tracking.csv
+            ${{ env.OUTPUT_DIR }}/analyses/**/abstention.json
             out/hminus/**
             data/snapshots/**
             !**/__pycache__/**
