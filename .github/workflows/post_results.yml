@@ -8,6 +8,7 @@ on:
 env:
   TZ: Europe/Paris
   PYTHONUNBUFFERED: "1"
+  GCS_BUCKET: ${{ vars.GCS_BUCKET || '' }}
 
 jobs:
   results:
