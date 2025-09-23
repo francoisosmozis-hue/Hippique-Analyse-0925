@@ -19,7 +19,7 @@ def kelly_fraction(p: float, odds: float, lam: float = 1.0, cap: float = 1.0) ->
     Args:
         p    : probabilité de gain (0 < p < 1)
         odds : cote décimale (> 1)
-        lam  : fraction de Kelly appliquée (0 < lam <= 1)
+        lam  : fraction de Kelly appliquée (lam > 0)
         cap  : plafond sur la fraction finale (0 < cap <= 1)
 
     Retourne:
@@ -33,7 +33,7 @@ def kelly_fraction(p: float, odds: float, lam: float = 1.0, cap: float = 1.0) ->
     # Validation douce
     if p is None or o is None or not (0.0 < p < 1.0) or o <= 1.0:
         return 0.0
-    if not (0.0 < lam <= 1.0):
+    if lam is None or lam <= 0.0 or not math.isfinite(lam):
         lam = 1.0
     if not (0.0 < cap <= 1.0):
         cap = 1.0
