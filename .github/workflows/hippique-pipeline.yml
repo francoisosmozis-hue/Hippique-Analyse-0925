@@ -30,6 +30,9 @@ on:
 env:
   TZ: Europe/Paris
   PYTHONUNBUFFERED: "1"
+  BUDGET: ${{ vars.PIPELINE_BUDGET || '5' }}
+  EV_MIN: ${{ vars.PIPELINE_EV_MIN || '0.35' }}
+  ROI_MIN: ${{ vars.PIPELINE_ROI_MIN || '0.25' }}
 
 jobs:
   run:
@@ -38,7 +41,7 @@ jobs:
       ZETURF_LOGIN: ${{ secrets.ZETURF_LOGIN }}
       ZETURF_PASSWORD: ${{ secrets.ZETURF_PASSWORD }}
       GCS_SERVICE_KEY_B64: ${{ secrets.GCS_SERVICE_KEY_B64 }}
-      GCS_BUCKET: ${{ vars.GCS_BUCKET }}
+      GCS_BUCKET: ${{ vars.GCS_BUCKET || '' }}
       GCS_PREFIX: ${{ vars.GCS_PREFIX || '' }}
       GOOGLE_CLOUD_PROJECT: ${{ vars.GOOGLE_CLOUD_PROJECT }}
       GENY_COOKIE: ${{ secrets.GENY_COOKIE }}
@@ -57,6 +60,15 @@ jobs:
             pip install -r requirements.txt --extra-index-url "$PYPI_EXTRA_INDEX"
           else
             pip install -r requirements.txt
+          fi
+
+      - name: Mask secrets
+        run: |
+          if [ -n "${ZETURF_PASSWORD}" ]; then
+            echo "::add-mask::${ZETURF_PASSWORD}"
+          fi
+          if [ -n "${GENY_COOKIE}" ]; then
+            echo "::add-mask::${GENY_COOKIE}"
           fi
 
       - name: Préparer le contexte
@@ -139,6 +151,38 @@ jobs:
             --partants "$RUN_DIR/h5/h5.json" \
             --gpi config/gpi.yml \
             --outdir "$RUN_DIR/out"
+
+      - name: Guardrail EV/ROI
+        if: github.event.inputs.mode == 'h5'
+        run: |
+          set -euo pipefail
+          analysis_json="$RUN_DIR/out/analysis_H5.json"
+          if [ ! -f "${analysis_json}" ]; then
+            echo "::error::analysis_H5.json introuvable dans $RUN_DIR/out" >&2
+            exit 1
+          fi
+          python scripts/guardrails.py \
+            --analysis "${analysis_json}" \
+            --ev-min "${EV_MIN}" \
+            --roi-min "${ROI_MIN}" \
+            --report "$RUN_DIR/out/abstention.json"
+
+      - name: Nettoyage en cas d'abstention
+        if: github.event.inputs.mode == 'h5' && env.ABSTAIN == 'true'
+        run: |
+          rm -f "$RUN_DIR/out/p_finale.json" "$RUN_DIR/out/tickets.json" "$RUN_DIR/out/ligne.csv"
+
+      - name: Upload audit artifacts (H-5)
+        if: always() && github.event.inputs.mode == 'h5'
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-h5-${{ github.run_id }}
+          path: |
+            ${{ env.RUN_DIR }}/out/analysis_H5.json
+            ${{ env.RUN_DIR }}/out/per_horse_report.csv
+            ${{ env.RUN_DIR }}/out/tracking.csv
+            ${{ env.RUN_DIR }}/out/abstention.json
+          if-no-files-found: warn
 
       - name: Phase post-course
         if: github.event.inputs.mode == 'post'
