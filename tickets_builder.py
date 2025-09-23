@@ -26,6 +26,36 @@ PAYOUT_MIN_COMBO: float = 12.0
 MAX_TICKETS: int = 2
 """Maximum number of tickets emitted (1 SP + 1 combo)."""
 
+
+def _coerce_float(value: Any, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _is_homogeneous_field(runners: Iterable[Mapping[str, Any]]) -> bool:
+    """Return ``True`` when the top-4 implied probabilities are within 8 pts."""
+
+    implied: List[float] = []
+    for runner in runners:
+        odds = _coerce_float(
+            runner.get("odds")
+            or runner.get("cote")
+            or runner.get("expected_odds")
+            or runner.get("closing_odds"),
+            default=0.0,
+        )
+        if odds <= 0:
+            continue
+        implied.append(100.0 / odds)
+    if len(implied) < 4:
+        return False
+    implied.sort(reverse=True)
+    top_four = implied[:4]
+    spread = max(top_four) - min(top_four)
+    return spread < 8.0
+
 def allow_combo(
     ev_global: float,
     roi_global: float,
@@ -317,13 +347,16 @@ def apply_ticket_policy(
     """
 
     cfg = dict(cfg)
+    runners_list = list(runners)
     budget_total = float(cfg.get("BUDGET_TOTAL", BUDGET_CAP_EUR))
     cfg.setdefault("SP_RATIO", SP_SHARE)
     cfg.setdefault("COMBO_RATIO", COMBO_SHARE)
     cfg.setdefault("MAX_TICKETS_SP", MAX_TICKETS)
+    homogeneous_field = _is_homogeneous_field(runners_list)
+    cfg["HOMOGENEOUS_FIELD"] = homogeneous_field
 
     # --- SP tickets -----------------------------------------------------
-    sp_tickets, _ = allocate_dutching_sp(cfg, list(runners))
+    sp_tickets, _ = allocate_dutching_sp(cfg, runners_list)
     sp_tickets.sort(key=lambda t: t.get("ev_ticket", 0.0), reverse=True)
     max_tickets = int(cfg.get("MAX_TICKETS_SP", len(sp_tickets)))
     sp_tickets = sp_tickets[:max_tickets]
@@ -341,6 +374,18 @@ def apply_ticket_policy(
         )
     else:
         combo_candidates = list(combo_candidates)
+    if homogeneous_field and combo_candidates:
+        filtered_candidates: List[List[Dict[str, Any]]] = []
+        for candidate in combo_candidates:
+            if not candidate:
+                continue
+            combo_type = str(candidate[0].get("type", "")).upper()
+            if combo_type in {"TRIO", "ZE4", "ZE4+", "ZE4X"}:
+                continue
+            filtered_candidates.append(candidate)
+        combo_candidates = filtered_candidates
+        if not combo_candidates:
+            info.setdefault("notes", []).append("homogeneous_field_filtered")
     if not combo_candidates:
         return sp_tickets, [], info
 
@@ -352,6 +397,7 @@ def apply_ticket_policy(
         if payout_threshold is None
         else payout_threshold
     )
+    sharpe_threshold = float(cfg.get("SHARPE_MIN", 0.0))
 
     validated, info = validate_exotics_with_simwrapper(
         combo_candidates,
@@ -359,6 +405,7 @@ def apply_ticket_policy(
         ev_min=ev_threshold,
         roi_min=roi_threshold,
         payout_min=payout_threshold,
+        sharpe_min=sharpe_threshold,
         allow_heuristic=allow_heuristic,
     )
 
