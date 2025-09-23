@@ -14,8 +14,9 @@ import datetime as dt
 import json
 import logging
 import os
+import re
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Mapping
 
 import sys
 
@@ -25,6 +26,15 @@ from simulate_ev import simulate_ev_batch
 from validator_ev import ValidationError, validate_ev
 
 from scripts.gcs_utils import disabled_reason, is_gcs_enabled
+
+from pydantic import (
+    AliasChoices,
+    BaseModel,
+    ConfigDict,
+    ValidationError as PydanticValidationError,
+    Field,
+    field_validator,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +48,89 @@ if USE_GCS:
         USE_GCS = False
 else:  # pragma: no cover - simple fallback when Drive is disabled
     upload_file = None  # type: ignore[assignment]
+
+
+class PayloadValidationError(RuntimeError):
+    """Raised when the runner payload fails validation."""
+
+
+_VALID_PHASES = {"H30", "H5", "RESULT"}
+
+
+class RunnerPayload(BaseModel):
+    """Schema validating runner invocations coming from CLI or planning."""
+
+    model_config = ConfigDict(extra="ignore", populate_by_name=True)
+
+    id_course: str = Field(validation_alias=AliasChoices("id_course", "course_id"))
+    reunion: str = Field(validation_alias=AliasChoices("reunion", "meeting", "R"))
+    course: str = Field(validation_alias=AliasChoices("course", "race", "C"))
+    phase: str = Field(validation_alias=AliasChoices("phase", "when"))
+    start_time: dt.datetime = Field(
+        validation_alias=AliasChoices("start_time", "time", "start")
+    )
+    budget: float = Field(
+        validation_alias=AliasChoices("budget", "budget_total", "bankroll"),
+        ge=1.0,
+        le=10.0,
+    )
+
+    @field_validator("id_course")
+    @classmethod
+    def _validate_course_id(cls, value: str) -> str:
+        text = str(value).strip()
+        if not text or not text.isdigit() or len(text) < 6:
+            raise ValueError("id_course must be a numeric string with at least 6 digits")
+        return text
+
+    @field_validator("reunion")
+    @classmethod
+    def _validate_reunion(cls, value: str) -> str:
+        text = str(value).strip().upper()
+        if not text:
+            raise ValueError("reunion is required")
+        if not text.startswith("R"):
+            text = f"R{text}"
+        if not text[1:].isdigit():
+            raise ValueError("reunion must match pattern R\\d+")
+        return text
+
+    @field_validator("course")
+    @classmethod
+    def _validate_course(cls, value: str) -> str:
+        text = str(value).strip().upper()
+        if not text:
+            raise ValueError("course is required")
+        if not text.startswith("C"):
+            text = f"C{text}"
+        if not text[1:].isdigit():
+            raise ValueError("course must match pattern C\\d+")
+        return text
+
+    @field_validator("phase")
+    @classmethod
+    def _validate_phase(cls, value: str) -> str:
+        text = str(value).strip().upper().replace("-", "")
+        if text not in _VALID_PHASES:
+            raise ValueError(f"phase must be one of {sorted(_VALID_PHASES)}")
+        return text
+
+    @property
+    def race_id(self) -> str:
+        return f"{self.reunion}{self.course}"
+
+
+def _coerce_payload(data: Mapping[str, Any], *, context: str) -> RunnerPayload:
+    """Validate ``data`` against :class:`RunnerPayload` and normalise fields."""
+
+    try:
+        return RunnerPayload.model_validate(data)
+    except PydanticValidationError as exc:
+        formatted = "; ".join(
+            f"{'.'.join(str(loc) for loc in err['loc'])}: {err['msg']}"
+            for err in exc.errors()
+        )
+        raise PayloadValidationError(f"{context}: {formatted}") from exc
 
 
 def _load_planning(path: Path) -> List[Dict[str, Any]]:
@@ -128,19 +221,19 @@ def _write_analysis(
 
 
 def _trigger_phase(
-    race_id: str,
-    phase: str,
+    payload: RunnerPayload,
     *,
     snap_dir: Path,
     analysis_dir: Path,
-    budget: float,
     ev_min: float,
     roi_min: float,
     mode: str,
 ) -> None:
     """Run snapshot and/or analysis tasks for ``phase``."""
 
-    phase_norm = phase.strip().upper()
+    phase_norm = payload.phase
+    race_id = payload.race_id
+    budget = float(payload.budget)
     if phase_norm == "H30":
         _write_snapshot(race_id, "H30", snap_dir)
         return
@@ -164,9 +257,11 @@ def main() -> None:
         description="Run H-30 and H-5 windows from planning information"
     )
     parser.add_argument("--planning", help="Path to planning JSON file")
+    parser.add_argument("--course-id", help="Numeric course identifier (>= 6 digits)")
     parser.add_argument("--reunion", help="Reunion identifier (e.g. R1)")
     parser.add_argument("--course", help="Course identifier (e.g. C3)")
-    parser.add_argument("--phase", help="Phase to execute (H30 or H5)")
+    parser.add_argument("--phase", help="Phase to execute (H30, H5 or RESULT)")
+    parser.add_argument("--start-time", help="Race start time (ISO 8601)")
     parser.add_argument("--h30-window-min", type=int, default=27)
     parser.add_argument("--h30-window-max", type=int, default=33)
     parser.add_argument("--h5-window-min", type=int, default=3)
@@ -196,8 +291,9 @@ def main() -> None:
     analysis_dir = Path(analysis_root)
 
     if args.planning:
-        if any(getattr(args, name) for name in ("reunion", "course", "phase")):
-            parser.error("--planning cannot be combined with --reunion/--course/--phase")
+        for name in ("course_id", "reunion", "course", "phase", "start_time"):
+            if getattr(args, name):
+                parser.error("--planning cannot be combined with single-race options")
 
         planning_path = Path(args.planning)
         if not planning_path.is_file():
@@ -211,60 +307,119 @@ def main() -> None:
         planning = _load_planning(planning_path)
         now = dt.datetime.now()
 
-        for entry in planning:
-            race_id = (
-                entry.get("id") or f"{entry.get('meeting', '')}{entry.get('race', '')}"
-            )
-            start = entry.get("start")
-            if not race_id or not start:
-                continue
-            try:
-                start_time = dt.datetime.fromisoformat(start)
-            except ValueError:
-                continue
-            delta = (start_time - now).total_seconds() / 60
-            if args.h30_window_min <= delta <= args.h30_window_max:
-                _trigger_phase(
-                    race_id,
-                    "H30",
-                    snap_dir=snap_dir,
-                    analysis_dir=analysis_dir,
-                    budget=args.budget,
-                    ev_min=args.ev_min,
-                    roi_min=args.roi_min,
-                    mode=args.mode,
+        try:
+            for entry in planning:
+                context_id = (
+                    entry.get("id_course")
+                    or entry.get("course_id")
+                    or entry.get("idcourse")
+                    or entry.get("courseId")
+                    or entry.get("id")
                 )
-            if args.h5_window_min <= delta <= args.h5_window_max:
-                _trigger_phase(
-                    race_id,
-                    "H5",
-                    snap_dir=snap_dir,
-                    analysis_dir=analysis_dir,
-                    budget=args.budget,
-                    ev_min=args.ev_min,
-                    roi_min=args.roi_min,
-                    mode=args.mode,
-                )
+                rc_label = str(entry.get("id") or entry.get("rc") or "").strip().upper()
+                reunion = entry.get("reunion") or entry.get("meeting")
+                course = entry.get("course") or entry.get("race")
+                if not reunion or not course:
+                    if rc_label:
+                        match = re.match(r"^(R\d+)(C\d+)$", rc_label)
+                        if match:
+                            reunion = reunion or match.group(1)
+                            course = course or match.group(2)
+                start = entry.get("start") or entry.get("time") or entry.get("start_time")
+                if not (reunion and course and start and context_id):
+                    logger.error(
+                        "[runner] Invalid planning entry skipped: missing labels/id_course (%s)",
+                        entry,
+                    )
+                    raise SystemExit(1)
+                try:
+                    start_time = dt.datetime.fromisoformat(start)
+                except ValueError:
+                    logger.error("[runner] Invalid ISO timestamp for planning entry %s", entry)
+                    raise SystemExit(1)
+                delta = (start_time - now).total_seconds() / 60
+                if args.h30_window_min <= delta <= args.h30_window_max:
+                    payload_dict = {
+                        "id_course": context_id,
+                        "reunion": reunion,
+                        "course": course,
+                        "phase": "H30",
+                        "start": start,
+                        "budget": entry.get("budget", args.budget),
+                    }
+                    payload = _coerce_payload(
+                        payload_dict, context=f"planning:{context_id}:H30"
+                    )
+                    _trigger_phase(
+                        payload,
+                        snap_dir=snap_dir,
+                        analysis_dir=analysis_dir,
+                        ev_min=args.ev_min,
+                        roi_min=args.roi_min,
+                        mode=args.mode,
+                    )
+                if args.h5_window_min <= delta <= args.h5_window_max:
+                    payload_dict = {
+                        "id_course": context_id,
+                        "reunion": reunion,
+                        "course": course,
+                        "phase": "H5",
+                        "start": start,
+                        "budget": entry.get("budget", args.budget),
+                    }
+                    payload = _coerce_payload(
+                        payload_dict, context=f"planning:{context_id}:H5"
+                    )
+                    _trigger_phase(
+                        payload,
+                        snap_dir=snap_dir,
+                        analysis_dir=analysis_dir,
+                        ev_min=args.ev_min,
+                        roi_min=args.roi_min,
+                        mode=args.mode,
+                    )
+        except PayloadValidationError as exc:
+            logger.error("[runner] %s", exc)
+            raise SystemExit(1) from exc
         return
 
-    missing = [name for name in ("reunion", "course", "phase") if not getattr(args, name)]
+    missing = [
+        name
+        for name in ("course_id", "reunion", "course", "phase", "start_time")
+        if not getattr(args, name)
+    ]
     if missing:
         parser.error(
             "Missing required options for single-race mode: " + ", ".join(f"--{m}" for m in missing)
         )
 
-    race_id = f"{args.reunion}{args.course}"
-    _trigger_phase(
-        race_id,
-        args.phase,
-        snap_dir=snap_dir,
-        analysis_dir=analysis_dir,
-        budget=args.budget,
-        ev_min=args.ev_min,
-        roi_min=args.roi_min,
-        mode=args.mode,
-    )
-            
+    payload_dict = {
+        "id_course": args.course_id,
+        "reunion": args.reunion,
+        "course": args.course,
+        "phase": args.phase,
+        "start_time": args.start_time,
+        "budget": args.budget,
+    }
+    try:
+        payload = _coerce_payload(payload_dict, context="cli")
+    except PayloadValidationError as exc:
+        logger.error("[runner] %s", exc)
+        raise SystemExit(1) from exc
+
+    try:
+        _trigger_phase(
+            payload,
+            snap_dir=snap_dir,
+            analysis_dir=analysis_dir,
+            ev_min=args.ev_min,
+            roi_min=args.roi_min,
+            mode=args.mode,
+        )        
+    except PayloadValidationError as exc:
+        logger.error("[runner] %s", exc)
+        raise SystemExit(1) from exc
+          
 
 if __name__ == "__main__":
     main()
