@@ -26,6 +26,7 @@ env:
   EV_MIN_GLOBAL: "0.40"           # seuils GPI v5.1
   ROI_MIN_ESTIME: "0.20"
   BANKROLL_CAP: "5"               # plafond € / course
+  GCS_BUCKET: ${{ vars.GCS_BUCKET || '' }}
 
 jobs:
   build-run:
@@ -78,6 +79,7 @@ jobs:
           fi
           analysis_dir="${OUTPUT_DIR}/${reunion_label}${course_label}"
           echo "→ Labels normalisés: ${reunion_label} ${course_label} (dir: ${analysis_dir})"
+          echo "ANALYSIS_DIR=${analysis_dir}" >> "${GITHUB_ENV}"
 
           # 1) analyse & tickets (respect GPI v5.1 / budget 5€)
           python "${GITHUB_WORKSPACE}/analyse_courses_du_jour_enrichie.py" \
@@ -93,7 +95,24 @@ jobs:
             --inputs "${analysis_dir}" \
             --out "${analysis_dir}/ev_report.json" || true
 
-          # 3) exporter JSON/CSV standardisés (post-course ready)
+      - name: Guardrail EV/ROI
+        run: |
+          set -euo pipefail
+          analysis_json="${ANALYSIS_DIR}/analysis_H5.json"
+          if [ ! -f "${analysis_json}" ]; then
+            echo "::error::analysis_H5.json introuvable dans ${ANALYSIS_DIR}" >&2
+            exit 1
+          fi
+          python "${GITHUB_WORKSPACE}/scripts/guardrails.py" \
+            --analysis "${analysis_json}" \
+            --ev-min "${EV_MIN_GLOBAL}" \
+            --roi-min "${ROI_MIN_ESTIME}" \
+            --report "${ANALYSIS_DIR}/abstention.json"
+
+      - name: Export normalized JSON/CSV
+        if: env.ABSTAIN != 'true'
+        run: |
+          analysis_dir="${ANALYSIS_DIR}"
           if [ ! -f "${analysis_dir}/p_finale.json" ]; then
             echo "[ERROR] p_finale.json introuvable dans ${analysis_dir}" >&2
             ls -al "${analysis_dir}" || true
@@ -104,16 +123,21 @@ jobs:
             --outputs-dir "${analysis_dir}"
 
       - name: Upload artifacts (JSON, CSV, DOCX, logs)
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: hminus5-${{ github.run_id }}
           path: |
+            ${{ env.OUTPUT_DIR }}/**/analysis_H5.json
+            ${{ env.OUTPUT_DIR }}/**/per_horse_report.csv
+            ${{ env.OUTPUT_DIR }}/**/tracking.csv
+            ${{ env.OUTPUT_DIR }}/**/abstention.json
             out/hminus5/**
             !**/__pycache__/**
 
       # OPTION A — Commit sur branche data (sans Drive)
       - name: Commit to data branch
-        if: ${{ github.ref == 'refs/heads/main' }}
+        if: ${{ env.ABSTAIN != 'true' && github.ref == 'refs/heads/main' }}
         uses: EndBug/add-and-commit@v9
         with:
           add: "out/hminus5"
