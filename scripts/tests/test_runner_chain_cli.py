@@ -45,12 +45,16 @@ def test_single_race_h5_creates_snapshot_and_analysis(tmp_path, monkeypatch, run
         runner_chain_module,
         monkeypatch,
         [
+            "--course-id",
+            "123456",
             "--reunion",
             "R1",
             "--course",
             "C2",
             "--phase",
             "H5",
+            "--start-time",
+            "2024-01-01T12:05:00",
             "--snap-dir",
             str(snap_dir),
             "--analysis-dir",
@@ -73,12 +77,16 @@ def test_single_race_h30_only_writes_snapshot(tmp_path, monkeypatch, runner_chai
         runner_chain_module,
         monkeypatch,
         [
+            "--course-id",
+            "123456",
             "--reunion",
             "R1",
             "--course",
             "C2",
             "--phase",
             "H30",
+            "--start-time",
+            "2024-01-01T12:05:00",
             "--snap-dir",
             str(snap_dir),
             "--analysis-dir",
@@ -100,8 +108,18 @@ def test_planning_mode_remains_functional(tmp_path, monkeypatch, runner_chain_mo
 
     reference_now = dt.datetime(2024, 1, 1, 12, 0, 0)
     start_time = reference_now + dt.timedelta(minutes=5)
-    planning_path.write_text(json.dumps([{"id": "R1C2", "start": start_time.isoformat()}]), encoding="utf-8")
-
+    planning_payload = [
+        {
+            "id": "R1C2",
+            "id_course": "654321",
+            "reunion": "R1",
+            "course": "C2",
+            "start": start_time.isoformat(),
+            "budget": 5,
+        }
+    ]
+    planning_path.write_text(json.dumps(planning_payload), encoding="utf-8")
+    
     class FixedDateTime(dt.datetime):
         @classmethod
         def now(cls, tz=None):  # type: ignore[override]
@@ -158,3 +176,38 @@ def test_planning_mode_errors_when_file_missing(
         "python scripts/online_fetch_zeturf.py --mode planning --out "
         "data/planning/<date>.json" in err
     )
+
+
+
+def test_invalid_cli_payload_exits(monkeypatch, runner_chain_module, caplog, tmp_path):
+    _stub_analysis(monkeypatch, runner_chain_module)
+
+    snap_dir = tmp_path / "snap"
+    analysis_dir = tmp_path / "analyses"
+
+    caplog.set_level("ERROR")
+
+    with pytest.raises(SystemExit) as excinfo:
+        _invoke(
+            runner_chain_module,
+            monkeypatch,
+            [
+                "--course-id",
+                "12AB",
+                "--reunion",
+                "R?",
+                "--course",
+                "C2",
+                "--phase",
+                "H5",
+                "--start-time",
+                "not-a-date",
+                "--snap-dir",
+                str(snap_dir),
+                "--analysis-dir",
+                str(analysis_dir),
+            ],
+        )
+
+    assert excinfo.value.code == 1
+    assert "id_course" in caplog.text
