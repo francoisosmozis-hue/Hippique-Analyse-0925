@@ -6,6 +6,7 @@ import pytest
 
 import logging_io
 import pipeline_run
+import simulate_ev
 import tickets_builder
 from test_pipeline_smoke import (
     GPI_YML,
@@ -29,6 +30,16 @@ def _with_exotics(partants: dict) -> dict:
     enriched["exotics"] = combos
     return enriched
 
+
+def _patch_simulation(monkeypatch, *, simulate_fn=None, gate_fn=None):
+    pipeline_run._load_simulate_ev.cache_clear()
+    if simulate_fn is not None:
+        monkeypatch.setattr(simulate_ev, "simulate_ev_batch", simulate_fn)
+    if gate_fn is not None:
+        monkeypatch.setattr(simulate_ev, "gate_ev", gate_fn)
+    pipeline_run._load_simulate_ev.cache_clear()
+    return pipeline_run._load_simulate_ev.cache_clear
+    
 def _write_inputs(tmp_path, partants, *, combo_ratio: float = 0.4):
     h30_path = tmp_path / "h30.json"
     h5_path = tmp_path / "h5.json"
@@ -105,8 +116,11 @@ def _run_pipeline(tmp_path, inputs):
 def _mock_tracking_outputs(tmp_path, monkeypatch):
     tracking_path = tmp_path / "modele_suivi_courses_hippiques_clean.csv"
 
+    original_append_csv_line = logging_io.append_csv_line
+    original_append_json = logging_io.append_json
+    
     def fake_append_csv_line(path, data, header=logging_io.CSV_HEADER):
-        return logging_io.append_csv_line(tracking_path, data, header=header)
+        return original_append_csv_line(tracking_path, data, header=header)
 
     def fake_append_json(path, data):
         target = Path(path)
@@ -117,6 +131,8 @@ def _mock_tracking_outputs(tmp_path, monkeypatch):
 
     monkeypatch.setattr(pipeline_run, "append_csv_line", fake_append_csv_line)
     monkeypatch.setattr(pipeline_run, "append_json", fake_append_json)
+    monkeypatch.setattr(logging_io, "append_csv_line", fake_append_csv_line)
+    monkeypatch.setattr(logging_io, "append_json", fake_append_json)
 
     return tracking_path
 
@@ -128,25 +144,24 @@ def test_pipeline_allocates_combo_budget(tmp_path, monkeypatch):
     _mock_tracking_outputs(tmp_path, monkeypatch)
 
     def fake_validate(candidates, bankroll, **kwargs):
-        validated = []
-        for idx, candidate in enumerate(candidates, start=1):
-            ticket = candidate[0]
-            validated.append(
-                {
-                    "id": f"{ticket['type']}{idx}",
-                    "type": ticket["type"],
-                    "legs": ticket["legs"],
-                    "ev_check": {
-                        "ev_ratio": 0.5,
-                        "roi": 0.5,
-                        "payout_expected": 40.0,
-                    },
-                }
-            )
-        return validated, {"notes": [], "flags": {"combo": True}}
+        if not candidates:
+            return [], {"notes": [], "flags": {"combo": False}}
+        base = dict(candidates[0][0])
+        ticket = {
+            "id": base.get("id", "combo-1"),
+            "type": base.get("type", "CP"),
+            "legs": list(base.get("legs", [])),
+            "stake": float(base.get("stake", 1.0)),
+            "ev_check": {
+                "ev_ratio": 0.6,
+                "roi": 0.55,
+                "payout_expected": 40.0,
+                "sharpe": 0.7,
+            },
+        }
+        return [ticket], {"notes": [], "flags": {"combo": True}}
 
-    monkeypatch.setattr(tickets_builder, "validate_exotics_with_simwrapper", fake_validate)
-    monkeypatch.setattr(pipeline_run, "allow_combo", lambda *args, **kwargs: True)
+    monkeypatch.setattr(tickets_builder, "validate_exotics_with_simwrapper", fake_validate)    
 
     calls = []
 
@@ -163,13 +178,24 @@ def test_pipeline_allocates_combo_budget(tmp_path, monkeypatch):
             "clv": 0.0,
         }
 
-    monkeypatch.setattr(pipeline_run, "simulate_ev_batch", fake_simulate)
-    monkeypatch.setattr(
-        pipeline_run,
-        "gate_ev",
-        lambda *args, **kwargs: {"sp": True, "combo": True, "reasons": {"sp": [], "combo": []}},
-    )
-    outdir = _run_pipeline(tmp_path, inputs)
+    def fake_gate(
+        cfg,
+        ev_sp,
+        ev_global,
+        roi_sp,
+        roi_global,
+        min_payout_combos,
+        risk_of_ruin=0.0,
+        ev_over_std=0.0,
+        homogeneous_field=False,
+    ):
+        return {"sp": True, "combo": True, "reasons": {"sp": [], "combo": []}}
+
+    cleanup = _patch_simulation(monkeypatch, simulate_fn=fake_simulate, gate_fn=fake_gate)
+    try:
+        outdir = _run_pipeline(tmp_path, inputs)
+    finally:
+        cleanup()
 
     assert calls, "simulate_ev_batch should be called"
     final_call = calls[-1]
@@ -194,25 +220,24 @@ def test_pipeline_recomputes_after_combo_rejection(tmp_path, monkeypatch):
     _mock_tracking_outputs(tmp_path, monkeypatch)
 
     def fake_validate(candidates, bankroll, **kwargs):
-        validated = []
-        for idx, candidate in enumerate(candidates, start=1):
-            ticket = candidate[0]
-            validated.append(
-                {
-                    "id": f"{ticket['type']}{idx}",
-                    "type": ticket["type"],
-                    "legs": ticket["legs"],
-                    "ev_check": {
-                        "ev_ratio": 0.5,
-                        "roi": 0.5,
-                        "payout_expected": 40.0,
-                    },
-                }
-            )
-        return validated, {"notes": [], "flags": {"combo": True}}
+        if not candidates:
+            return [], {"notes": [], "flags": {"combo": False}}
+        base = dict(candidates[0][0])
+        ticket = {
+            "id": base.get("id", "combo-1"),
+            "type": base.get("type", "CP"),
+            "legs": list(base.get("legs", [])),
+            "stake": float(base.get("stake", 1.0)),
+            "ev_check": {
+                "ev_ratio": 0.6,
+                "roi": 0.55,
+                "payout_expected": 40.0,
+                "sharpe": 0.7,
+            },
+        }
+        return [ticket], {"notes": [], "flags": {"combo": True}}
 
-    monkeypatch.setattr(tickets_builder, "validate_exotics_with_simwrapper", fake_validate)
-    monkeypatch.setattr(pipeline_run, "allow_combo", lambda *args, **kwargs: True)
+    monkeypatch.setattr(tickets_builder, "validate_exotics_with_simwrapper", fake_validate)    
 
     calls = []
 
@@ -229,13 +254,24 @@ def test_pipeline_recomputes_after_combo_rejection(tmp_path, monkeypatch):
             "clv": 0.0,
         }
 
-    monkeypatch.setattr(pipeline_run, "simulate_ev_batch", fake_simulate)
-    def fake_gate(cfg, *args, **kwargs):
+    def fake_gate(
+        cfg,
+        ev_sp,
+        ev_global,
+        roi_sp,
+        roi_global,
+        min_payout_combos,
+        risk_of_ruin=0.0,
+        ev_over_std=0.0,
+        homogeneous_field=False,
+    ):
         return {"sp": True, "combo": False, "reasons": {"sp": [], "combo": ["ROI_MIN_GLOBAL"]}}
 
-    monkeypatch.setattr(pipeline_run, "gate_ev", fake_gate)
-
-    outdir = _run_pipeline(tmp_path, inputs)
+    cleanup = _patch_simulation(monkeypatch, simulate_fn=fake_simulate, gate_fn=fake_gate)
+    try:
+        outdir = _run_pipeline(tmp_path, inputs)
+    finally:
+        cleanup()
 
     assert calls, "simulate_ev_batch should be called at least once"
     data = json.loads((outdir / "p_finale.json").read_text(encoding="utf-8"))
@@ -317,14 +353,25 @@ def test_pipeline_uses_capped_stake_in_exports(tmp_path, monkeypatch):
             "clv": 0.0,
         }
 
-    monkeypatch.setattr(pipeline_run, "simulate_ev_batch", fake_simulate)
-    monkeypatch.setattr(
-        pipeline_run,
-        "gate_ev",
-        lambda *args, **kwargs: {"sp": True, "combo": False, "reasons": {"sp": [], "combo": []}},
-    )
+    def fake_gate(
+        cfg,
+        ev_sp,
+        ev_global,
+        roi_sp,
+        roi_global,
+        min_payout_combos,
+        risk_of_ruin=0.0,
+        ev_over_std=0.0,
+        homogeneous_field=False,
+    ):
+        return {"sp": True, "combo": False, "reasons": {"sp": [], "combo": []}}
 
-    outdir = _run_pipeline(tmp_path, inputs)
+    cleanup = _patch_simulation(monkeypatch, simulate_fn=fake_simulate, gate_fn=fake_gate)
+
+    try:
+        outdir = _run_pipeline(tmp_path, inputs)
+    finally:
+        cleanup()
 
     assert capped, "fake_simulate should adjust at least one stake"
 
@@ -439,14 +486,25 @@ def test_pipeline_optimization_preserves_ev_and_budget(tmp_path, monkeypatch):
             "clv": 0.0,
         }
 
-    monkeypatch.setattr(pipeline_run, "simulate_ev_batch", fake_simulate)
-    monkeypatch.setattr(
-        pipeline_run,
-        "gate_ev",
-        lambda *args, **kwargs: {"sp": True, "combo": True, "reasons": {"sp": [], "combo": []}},
-    )
+    def fake_gate(
+        cfg,
+        ev_sp,
+        ev_global,
+        roi_sp,
+        roi_global,
+        min_payout_combos,
+        risk_of_ruin=0.0,
+        ev_over_std=0.0,
+        homogeneous_field=False,
+    ):
+        return {"sp": True, "combo": True, "reasons": {"sp": [], "combo": []}}
 
-    outdir = _run_pipeline(tmp_path, inputs)
+    cleanup = _patch_simulation(monkeypatch, simulate_fn=fake_simulate, gate_fn=fake_gate)
+
+    try:
+        outdir = _run_pipeline(tmp_path, inputs)
+    finally:
+        cleanup()
 
     assert capped, "fake_simulate should adjust at least one stake"
     data = json.loads((outdir / "p_finale.json").read_text(encoding="utf-8"))
