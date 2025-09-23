@@ -8,6 +8,7 @@ def test_validate_exotics_with_simwrapper_filters_and_alert(monkeypatch):
                 'ev_ratio': 0.1,
                 'roi': 0.05,
                 'payout_expected': 5.0,
+                'sharpe': 0.2,
                 'notes': [],
                 'requirements': []
             }
@@ -15,6 +16,7 @@ def test_validate_exotics_with_simwrapper_filters_and_alert(monkeypatch):
             'ev_ratio': 0.6,
             'roi': 0.8,
             'payout_expected': 25.0,
+            'sharpe': 0.2,
             'notes': [],
             'requirements': []
         }
@@ -38,6 +40,7 @@ def test_validate_exotics_with_simwrapper_rejects_low_payout(monkeypatch):
             'ev_ratio': 0.8,
             'roi': 0.7,
             'payout_expected': 5.0,
+            'sharpe': 0.7,
             'notes': [],
             'requirements': []
         }
@@ -57,8 +60,8 @@ def test_validate_exotics_with_simwrapper_rejects_low_payout(monkeypatch):
 
 def test_validate_exotics_with_simwrapper_caps_best_and_alert(monkeypatch):
     results = {
-        'a': {'ev_ratio': 0.6, 'roi': 0.7, 'payout_expected': 30.0, 'notes': [], 'requirements': []},
-        'b': {'ev_ratio': 0.8, 'roi': 0.9, 'payout_expected': 35.0, 'notes': [], 'requirements': []},
+        'a': {'ev_ratio': 0.6, 'roi': 0.7, 'payout_expected': 30.0, 'sharpe': 0.6, 'notes': [], 'requirements': []},
+        'b': {'ev_ratio': 0.8, 'roi': 0.9, 'payout_expected': 35.0, 'sharpe': 0.8, 'notes': [], 'requirements': []},
     }
 
     def fake_eval(tickets, bankroll, allow_heuristic=True):
@@ -85,6 +88,7 @@ def test_validate_exotics_with_simwrapper_skips_unreliable(monkeypatch):
             'ev_ratio': 0.6,
             'roi': 0.6,
             'payout_expected': 30.0,
+            'sharpe': 0.6,
             'notes': ['combo_probabilities_unreliable'],
             'requirements': []
         }
@@ -94,6 +98,7 @@ def test_validate_exotics_with_simwrapper_skips_unreliable(monkeypatch):
     tickets, info = runner_chain.validate_exotics_with_simwrapper(
         [[{'id': 'unsafe', 'p': 0.5, 'odds': 2.0, 'stake': 1.0}]],
         bankroll=5,
+        sharpe_min=0.5,
     )
 
     assert tickets == []
@@ -101,14 +106,51 @@ def test_validate_exotics_with_simwrapper_skips_unreliable(monkeypatch):
     assert 'combo_probabilities_unreliable' in info['notes']
 
 
+def test_validate_exotics_with_simwrapper_rejects_low_sharpe(monkeypatch):
+    def fake_eval(tickets, bankroll, allow_heuristic=True):
+        return {
+            'ev_ratio': 0.7,
+            'roi': 0.8,
+            'payout_expected': 30.0,
+            'sharpe': 0.3,
+            'notes': [],
+            'requirements': []
+        }
+
+    monkeypatch.setattr(runner_chain, 'evaluate_combo', fake_eval)
+
+    tickets, info = runner_chain.validate_exotics_with_simwrapper(
+        [[{'id': 'low_sharpe', 'p': 0.5, 'odds': 2.0, 'stake': 1.0}]],
+        bankroll=10,
+        sharpe_min=0.5,
+    )
+
+    assert tickets == []
+    assert 'sharpe_below_threshold' in info['flags']['reasons']['combo']
+
+
 def test_export_tracking_csv_line(tmp_path):
     path = tmp_path / 'track.csv'
     meta = {'reunion': 'R1', 'course': 'C1', 'hippodrome': 'X', 'date': '2024-01-01', 'discipline': 'plat', 'partants': 8}
-    tickets = [{'stake': 2.0}, {'stake': 1.0}]
-    stats = {'ev_sp': 0.3, 'ev_global': 0.6, 'roi_sp': 0.2, 'roi_global': 0.5, 'risk_of_ruin': 0.1, 'clv_moyen': 0.0, 'model': 'M'}
+    tickets = [{'stake': 2.0, 'p': 0.4}, {'stake': 1.0, 'p': 0.3}]
+    stats = {
+        'ev_sp': 0.3,
+        'ev_global': 0.6,
+        'roi_sp': 0.2,
+        'roi_global': 0.5,
+        'risk_of_ruin': 0.1,
+        'clv_moyen': 0.0,
+        'model': 'M',
+        'prob_implicite_panier': 0.55,
+        'roi_reel': 0.45,
+        'sharpe': 0.8,
+        'drift_sign': 1,
+    }
 
     runner_chain.export_tracking_csv_line(str(path), meta, tickets, stats, alerte=True)
 
     lines = path.read_text(encoding='utf-8').splitlines()
-    assert lines[0].split(';')[-1] == 'ALERTE_VALUE'
+    header = lines[0].split(';')
+    assert header[-1] == 'ALERTE_VALUE'
+    assert {'prob_implicite_panier', 'ev_simulee_post_arrondi', 'roi_simule', 'roi_reel', 'sharpe', 'drift_sign'} <= set(header)
     assert lines[1].split(';')[-1] == 'ALERTE_VALUE'
