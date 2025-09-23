@@ -733,6 +733,8 @@ def evaluate_combo(
         "ev_ratio": float(stats.get("ev_ratio", 0.0)),
         "roi": float(stats.get("roi", 0.0)),
         "payout_expected": float(stats.get("combined_expected_payout", 0.0)),
+        "sharpe": float(stats.get("sharpe", 0.0)),
+        "ticket_metrics": stats.get("ticket_metrics", []), 
         "notes": notes,
         "requirements": requirements,
     }
