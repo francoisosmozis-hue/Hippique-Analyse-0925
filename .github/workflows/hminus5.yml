@@ -122,6 +122,21 @@ jobs:
           python "${GITHUB_WORKSPACE}/p_finale_export.py" \
             --outputs-dir "${analysis_dir}"
 
+      - name: Auth GCP
+        if: env.ABSTAIN != 'true'
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+
+      - name: Append H-5 row to Excel in GCS
+        if: env.ABSTAIN != 'true'
+        run: |
+          pip install google-cloud-storage openpyxl
+          python scripts/gcs_excel_update.py --bucket analyse-hippique-excel --object modele_suivi_courses_hippiques.xlsx \
+            --date "$(date +%F)" --reunion "R3" --course "C4" --hippodrome "Compiègne" --discipline "Plat" \
+            --phase H-5 --jouable OUI --tickets "SP Dutching ..." --mises 5 --gains 0 --roi-estime 0.28 --roi-reel 0 \
+            --notes "MAJ auto GH Actions"
+
       - name: Upload artifacts (JSON, CSV, DOCX, logs)
         if: always()
         uses: actions/upload-artifact@v4
