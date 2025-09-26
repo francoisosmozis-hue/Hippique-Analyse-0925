@@ -324,6 +324,30 @@ def _compute_implied_probabilities(runners: Sequence[Dict[str, Any]]) -> Dict[st
     return {cid: value / total for cid, value in implied.items()}
 
 
+def _normalise_start_time(value: Any) -> str | None:
+    """Return a ``HH:MM`` representation for ``value`` when possible."""
+
+    if value in (None, ""):
+        return None
+
+    if isinstance(value, (int, float)):
+        text = f"{int(value):04d}"
+    else:
+        text = str(value).strip()
+    if not text:
+        return None
+
+    try:
+        parsed = dt.datetime.fromisoformat(text)
+    except ValueError:
+        if len(text) == 4 and text.isdigit():
+            return f"{text[:2]}:{text[2:]}"
+        if len(text) == 5 and text[2] == ":":
+            return text
+        return text
+    return parsed.strftime("%H:%M")
+
+
 def normalize_snapshot(payload: Dict[str, Any]) -> Dict[str, Any]:
     """Return a normalized snapshot of runners with metadata."""
     rc = payload.get("rc", "")
@@ -333,6 +357,24 @@ def normalize_snapshot(payload: Dict[str, Any]) -> Dict[str, Any]:
         "date": payload.get("date", dt.date.today().isoformat()),
         "discipline": payload.get("discipline", ""),
     }
+    start_time = None
+    if isinstance(payload.get("meta"), dict):
+        start_time = payload["meta"].get("start_time") or payload["meta"].get("start")
+        if not start_time:
+            for key in ("heure", "time", "hour"):
+                value = payload["meta"].get(key)
+                if value:
+                    start_time = value
+                    break
+    if not start_time:
+        for key in ("start_time", "start", "heure", "time", "hour"):
+            value = payload.get(key)
+            if value:
+                start_time = value
+                break
+    formatted_time = _normalise_start_time(start_time)
+    if formatted_time:
+        meta["start_time"] = formatted_time
     runners = []
     id2name: Dict[str, str] = {}
     seen_ids: set[str] = set()
