@@ -359,15 +359,44 @@ def _normalise_start_time(value: Any) -> str | None:
     if not text:
         return None
 
+    text = text.replace("\u202f", " ")
+
+    # Direct digit-based formats such as 1305 or 13:05
+    if len(text) == 4 and text.isdigit():
+        return f"{text[:2]}:{text[2:]}"
+    if len(text) >= 5 and text[2] == ":" and text[:2].isdigit():
+        try:
+            hour = int(text[:2]) % 24
+            minute = int(text[3:5])
+        except ValueError:
+            pass
+        else:
+            return f"{hour:02d}:{minute:02d}"
+
+    cleaned = text.replace("Z", "+00:00")
     try:
-        parsed = dt.datetime.fromisoformat(text)
+        parsed = dt.datetime.fromisoformat(cleaned)
     except ValueError:
-        if len(text) == 4 and text.isdigit():
-            return f"{text[:2]}:{text[2:]}"
-        if len(text) == 5 and text[2] == ":":
-            return text
-        return text
-    return parsed.strftime("%H:%M")
+        time_pattern = re.compile(
+            r"(\d{1,2})\s*(?:heures?|heure|hours?|hrs?|hres?|[hH:.])\s*(\d{1,2})?",
+            re.IGNORECASE,
+        )
+        match = time_pattern.search(text)
+        if match:
+            hour = int(match.group(1)) % 24
+            minute_str = match.group(2)
+            minute = int(minute_str) if minute_str is not None else 0
+            return f"{hour:02d}:{minute:02d}"
+
+        # Handle explicit hour-only strings such as "13h" or "13 heures"
+        hour_only = re.search(r"(\d{1,2})\s*(?:heures?|heure|hours?|hrs?|hres?|[hH])", text)
+        if hour_only:
+            hour = int(hour_only.group(1)) % 24
+            return f"{hour:02d}:00"
+
+        return text if text else None
+    else:
+        return parsed.strftime("%H:%M")
 
 
 def _detect_start_time(payload: Mapping[str, Any]) -> str | None:
