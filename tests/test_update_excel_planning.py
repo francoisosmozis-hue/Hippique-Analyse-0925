@@ -687,3 +687,87 @@ def test_format_time_handles_textual_hours(value: str, expected: str) -> None:
     """French textual hour formats should be normalised to HH:MM."""
 
     assert planner._format_time(value) == expected
+
+
+def test_cli_alias_and_dash_phase(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """The CLI should accept ``--in`` and dashed phase labels while printing a summary."""
+
+    meeting_dir = tmp_path / "meeting"
+    meeting_dir.mkdir()
+    meeting_payload = {
+        "meta": {
+            "date": "2025-09-26",
+            "reunion": "R4",
+            "course": "C5",
+            "hippodrome": "Vincennes",
+            "start_time": "13h15",
+            "discipline": "Trot",
+        },
+        "runners": [{"id": 1}, {"id": 2}, {"id": 3}, {"id": 4}],
+    }
+    (meeting_dir / "snapshot.json").write_text(json.dumps(meeting_payload), encoding="utf-8")
+
+    excel_path = tmp_path / "planning.xlsx"
+
+    planner.main(
+        [
+            "--phase",
+            "H-30",
+            "--in",
+            str(meeting_dir),
+            "--excel",
+            str(excel_path),
+        ]
+    )
+    out_h30 = capsys.readouterr().out
+    assert "1 ligne(s) H-30 mises à jour" in out_h30
+
+    analysis_dir = tmp_path / "analysis"
+    analysis_dir.mkdir()
+    analysis_payload = {
+        "meta": {
+            "date": "2025-09-26",
+            "reunion": "R4",
+            "course": "C5",
+            "hippodrome": "Vincennes",
+            "start_time": "13:15",
+            "discipline": "Trot",
+        },
+        "tickets": [
+            {
+                "type": "SP",
+                "legs": [{"selections": [3, 5]}],
+                "odds": 2.0,
+            }
+        ],
+        "abstain": False,
+        "roi": 0.4,
+    }
+    (analysis_dir / "analysis_H5.json").write_text(json.dumps(analysis_payload), encoding="utf-8")
+
+    planner.main(
+        [
+            "--phase",
+            "H5",
+            "--in",
+            str(analysis_dir),
+            "--excel",
+            str(excel_path),
+        ]
+    )
+    out_h5 = capsys.readouterr().out
+    assert "1 ligne H-5 mise à jour" in out_h5
+
+    wb = load_workbook(excel_path)
+    ws = wb["Planning"]
+    row = _read_row(ws, 2)
+    assert row["Date"] == "2025-09-26"
+    assert row["Réunion"] == "R4"
+    assert row["Course"] == "C5"
+    assert row["Heure"] == "13:15"
+    assert row["Partants"] == 4
+    assert row["Statut H-30"] == "Collecté"
+    assert row["Statut H-5"] == "Analysé"
+    assert row["Jouable H-5"] == "Oui"
+    assert row["Tickets H-5"] == "SP:3-5@2"
+    assert row["Commentaires"] == "ROI estimé 40%"
