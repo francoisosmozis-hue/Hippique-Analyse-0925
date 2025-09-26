@@ -65,3 +65,27 @@ def test_extract_start_time_handles_minutes_suffix() -> None:
     <div class="race">Départ 21h05mn</div>
     """
     assert zeturf._extract_start_time(textwrap.dedent(html)) == "21:05"
+
+
+def test_extract_start_time_from_meta_tag() -> None:
+    html = """
+    <html>
+      <head>
+        <meta property="og:race:start" content="08:30" />
+      </head>
+    </html>
+    """
+    assert zeturf._extract_start_time(textwrap.dedent(html)) == "08:30"
+
+
+def test_extract_start_time_from_start_time_field() -> None:
+    html = """
+    <html>
+      <body>
+        <script type="application/ld+json">
+          {"startTime": "2024-09-25T10:05:00+02:00"}
+        </script>
+      </body>
+    </html>
+    """
+    assert zeturf._extract_start_time(textwrap.dedent(html)) == "10:05"
