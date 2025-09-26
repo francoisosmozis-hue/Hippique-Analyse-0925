@@ -242,6 +242,69 @@ def test_h5_preserves_existing_metadata_when_missing(tmp_path: Path) -> None:
     assert row["Jouable H-5"] == "Non"
 
 
+def test_h5_converts_timezone_when_tz_env_set(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    meeting_dir = tmp_path / "meeting"
+    meeting_dir.mkdir()
+    base_payload = {
+        "meta": {
+            "date": "2024-10-01",
+            "reunion": "R3",
+            "course": "C4",
+            "hippodrome": "Chantilly",
+        },
+        "runners": [{"id": 1}, {"id": 2}],
+    }
+    (meeting_dir / "snapshot.json").write_text(json.dumps(base_payload), encoding="utf-8")
+
+    excel_path = tmp_path / "planning.xlsx"
+    planner.main(
+        [
+            "--phase",
+            "H30",
+            "--input",
+            str(meeting_dir),
+            "--excel",
+            str(excel_path),
+        ]
+    )
+
+    monkeypatch.setenv("TZ", "Europe/Paris")
+    planner._env_timezone.cache_clear()
+
+    rc_dir = tmp_path / "R3C4"
+    rc_dir.mkdir()
+    analysis_payload = {
+        "meta": {
+            "date": "2024-10-01",
+            "reunion": "R3",
+            "course": "C4",
+            "start_time": "2024-10-01T12:05:00+00:00",
+        },
+        "abstain": False,
+    }
+    (rc_dir / "analysis_H5.json").write_text(json.dumps(analysis_payload), encoding="utf-8")
+
+    planner.main(
+        [
+            "--phase",
+            "H5",
+            "--input",
+            str(rc_dir),
+            "--excel",
+            str(excel_path),
+        ]
+    )
+
+    wb = load_workbook(excel_path)
+    ws = wb["Planning"]
+    row = _read_row(ws, 2)
+    assert row["Heure"] == "14:05"
+
+    planner._env_timezone.cache_clear()
+
+
 def test_custom_status_h5_flag(tmp_path: Path) -> None:
     meeting_dir = tmp_path / "meeting"
     meeting_dir.mkdir()
