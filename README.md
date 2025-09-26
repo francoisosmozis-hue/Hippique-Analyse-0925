@@ -108,6 +108,40 @@ snapshots (`meta.start_time` et `start_time`). Cela garantit que le script
 `update_excel_planning.py` dispose toujours d'une heure fiable pour l'onglet
 Planning.
 
+### Mise à jour automatisée du planning Excel
+
+Le script `scripts/update_excel_planning.py` met à jour l'onglet **Planning**
+du classeur `modele_suivi_courses_hippiques.xlsx` à partir des snapshots H‑30
+et des analyses H‑5.
+
+Commandes usuelles :
+
+- **Phase H‑30** – traite un répertoire contenant les snapshots collectés :
+
+  ```bash
+  python scripts/update_excel_planning.py \
+    --phase H30 \
+    --in data/meeting \
+    --excel modele_suivi_courses_hippiques.xlsx
+  ```
+
+- **Phase H‑5** – injecte l'analyse d'une course (tickets, statut, jouable) :
+
+  ```bash
+  python scripts/update_excel_planning.py \
+    --phase H5 \
+    --in data/R4C5 \
+    --excel modele_suivi_courses_hippiques.xlsx
+  ```
+
+Le script crée l'onglet s'il est absent, garantit la présence des colonnes
+standard (Date, Réunion, Course, Hippodrome, Heure, Partants, Discipline,
+Statuts H‑30/H‑5, Jouable H‑5, Tickets H‑5, Commentaires) et réalise une mise
+à jour en **upsert** sur la clé `(Date, Réunion, Course)` pour éviter les
+doublons. Les commandes ci‑dessus peuvent être enchaînées avec un utilitaire
+d'upload (ex. `scripts/drive_sync.py`) pour pousser le fichier sur Google
+Drive.
+
 ---
 
 ## ⚙️ Installation locale
