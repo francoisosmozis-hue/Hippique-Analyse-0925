@@ -426,47 +426,69 @@ def _upsert(ws: Worksheet, header_map: Mapping[str, int], row: Mapping[str, Any]
         ws.cell(row=target_row, column=header_map[header], value=value)
 
 
+def _normalise_ticket_label(label: Any) -> str:
+    if label in (None, ""):
+        return ""
+    text = str(label).strip()
+    if not text:
+        return ""
+    if re.fullmatch(r"[A-Za-z0-9]{1,10}", text):
+        return text.upper()
+    return text
+
+
+def _consume_selection(values: Any, horses: List[str]) -> None:
+    if values in (None, ""):
+        return
+    if isinstance(values, Mapping):
+        for key in ("selections", "horses", "selection", "horse", "num", "number", "id"):
+            if key in values:
+                _consume_selection(values.get(key), horses)
+                return
+        return
+    if isinstance(values, Sequence) and not isinstance(values, (str, bytes, bytearray)):
+        for item in values:
+            _consume_selection(item, horses)
+        return
+
+    text = str(values).strip()
+    if not text:
+        return
+    parts = re.split(r"[-,;/\\s]+", text)
+    horses.extend(part for part in parts if part)
+
+
 def _summarise_tickets(tickets: Any) -> str:
-    if not isinstance(tickets, Iterable):
+    if not isinstance(tickets, Iterable) or isinstance(tickets, (str, bytes, bytearray)):
         return ""
     summaries: List[str] = []
     for ticket in tickets:
         if not isinstance(ticket, Mapping):
             continue
-        label = _first_non_empty(ticket.get("type"), ticket.get("bet_type"), ticket.get("id"))
+        label = _first_non_empty(
+            ticket.get("type"),
+            ticket.get("bet_type"),
+            ticket.get("label"),
+            ticket.get("id"),
+        )
         legs = ticket.get("legs")
         horses: List[str] = []
         if isinstance(legs, Iterable) and not isinstance(legs, (str, bytes)):
             for leg in legs:
                 if isinstance(leg, Mapping):
-                    selections = leg.get("selections")
-                    if isinstance(selections, Iterable) and not isinstance(selections, (str, bytes)):
-                        selection_text = "-".join(str(x) for x in selections if x not in (None, ""))
-                    else:
-                        selection_text = None
-                    horses_list = leg.get("horses")
-                    if isinstance(horses_list, Iterable) and not isinstance(horses_list, (str, bytes)):
-                        horses_text = "-".join(str(x) for x in horses_list if x not in (None, ""))
-                    else:
-                        horses_text = None
-                    horse = _first_non_empty(
-                        leg.get("horse"),
-                        leg.get("selection"),
-                        leg.get("id"),
-                        leg.get("num"),
-                        leg.get("number"),
-                        selection_text,
-                        horses_text,
-                    )
+                    _consume_selection(leg, horses)
                 else:
-                    horse = leg
-                if horse not in (None, ""):
-                    horses.append(str(horse))
+                    _consume_selection(leg, horses)
+        if not horses:
+            for key in ("selections", "horses", "selection", "horse", "combination", "combo", "numbers"):
+                if key in ticket:
+                    _consume_selection(ticket.get(key), horses)
         odds = _first_non_empty(ticket.get("odds"), ticket.get("rapport"), ticket.get("payout"))
-        horses_joined = "-".join(horses)
+        horses_joined = "-".join(str(horse) for horse in horses if str(horse))
         base = ""
-        if label:
-            base = str(label)
+        normalised_label = _normalise_ticket_label(label)
+        if normalised_label:
+            base = normalised_label
         if horses_joined:
             base = f"{base}:{horses_joined}" if base else horses_joined
         parts: List[str] = []
