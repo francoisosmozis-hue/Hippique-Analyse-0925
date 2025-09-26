@@ -393,8 +393,8 @@ def _status_h30(default: str) -> str:
     return default
 
 
-def _status_h5() -> str:
-    return "Analysé"
+def _status_h5(label: str) -> str:
+    return label
 
 
 def _jouable_flag(payload: Mapping[str, Any]) -> str:
@@ -480,7 +480,7 @@ def _load_h5_payload(source: Path) -> Mapping[str, Any]:
     raise FileNotFoundError(source)
 
 
-def _prepare_h5_row(payload: Mapping[str, Any]) -> Dict[str, Any]:
+def _prepare_h5_row(payload: Mapping[str, Any], status_label: str) -> Dict[str, Any]:
     meta = _extract_common_meta(payload)
     tickets = payload.get("tickets") if isinstance(payload, Mapping) else None
     summary = _summarise_tickets(tickets)
@@ -492,7 +492,7 @@ def _prepare_h5_row(payload: Mapping[str, Any]) -> Dict[str, Any]:
         "Heure": _blank_if_missing(meta.get("start_time")),
         "Partants": _blank_if_missing(meta.get("partants")),
         "Discipline": _blank_if_missing(meta.get("discipline")),
-        "Statut H-5": _status_h5(),
+        "Statut H-5": _status_h5(status_label),
         "Jouable H-5": _jouable_flag(payload)
     }
     row["Tickets H-5"] = summary or ""
@@ -510,6 +510,11 @@ def main(argv: Sequence[str] | None = None) -> None:
         "--status-h30",
         default="Collecté",
         help="Statut par défaut renseigné pour les lignes H-30",
+    )
+    parser.add_argument(
+        "--status-h5",
+        default="Analysé",
+        help="Statut renseigné pour les lignes H-5",
     )
     parser.add_argument("--rc", help=argparse.SUPPRESS)
     parser.add_argument("--drive-folder", help=argparse.SUPPRESS)
@@ -529,7 +534,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         message = f"{len(rows)} ligne(s) H-30 mises à jour"
     else:
         payload = _load_h5_payload(source)
-        row = _prepare_h5_row(payload)
+        row = _prepare_h5_row(payload, status_label=args.status_h5)
         keys = ("Date", "Réunion", "Course")
         if not all(row.get(key) for key in keys):
             raise ValueError("Impossible de déterminer Date/Réunion/Course pour la mise à jour H-5")
