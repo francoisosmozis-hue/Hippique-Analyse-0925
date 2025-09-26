@@ -196,12 +196,21 @@ def _extract_common_meta(
 
     date = _first_non_empty(*_values(["date"], ["date"]))
     hippodrome = _first_non_empty(*_values(["hippodrome", "hippo"], ["hippodrome", "hippo"]))
+    rc_value = _first_non_empty(*_values(["rc"], ["rc", "rc_label"]))
     reunion = _first_non_empty(
         *_values(["reunion", "meeting", "r"], ["reunion", "meeting", "r", "r_label"])
     )
     course = _first_non_empty(
         *_values(["course", "race", "c"], ["course", "race", "c", "course_label"])
     )
+    if not reunion and isinstance(rc_value, str):
+        match = re.search(r"R\s*(\d+)", rc_value, re.IGNORECASE)
+        if match:
+            reunion = f"R{int(match.group(1))}"
+    if not course and isinstance(rc_value, str):
+        match = re.search(r"C\s*(\d+)", rc_value, re.IGNORECASE)
+        if match:
+            course = f"C{int(match.group(1))}"
     partants = _first_non_empty(
         *_values(
             ["partants", "nb_partants", "runners_count"],
