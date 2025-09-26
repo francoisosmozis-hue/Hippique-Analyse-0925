@@ -8,7 +8,7 @@ import json
 import os
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, Sequence
+from typing import Any, Dict, Iterable, List, Mapping, Sequence, Tuple
 
 from openpyxl import Workbook, load_workbook
 from openpyxl.worksheet.worksheet import Worksheet
@@ -150,59 +150,57 @@ def _blank_if_missing(value: Any) -> Any:
     return "" if value in (None, "") else value
 
 
-def _extract_common_meta(payload: Mapping[str, Any]) -> Dict[str, Any]:
-    meta = payload.get("meta") if isinstance(payload.get("meta"), Mapping) else {}
-    date = _first_non_empty(meta.get("date"), payload.get("date"))
-    hippodrome = _first_non_empty(meta.get("hippodrome"), meta.get("hippo"), payload.get("hippodrome"), payload.get("hippo"))
+def _extract_common_meta(
+    payload: Mapping[str, Any], parents: Sequence[Mapping[str, Any]] | None = None
+) -> Dict[str, Any]:
+    sources: List[Mapping[str, Any]] = [payload]
+    if parents:
+        sources.extend(parent for parent in parents if isinstance(parent, Mapping))
+
+    def _values(meta_keys: Sequence[str], payload_keys: Sequence[str]) -> List[Any]:
+        candidates: List[Any] = []
+        for source in sources:
+            meta = source.get("meta") if isinstance(source.get("meta"), Mapping) else None
+            if isinstance(meta, Mapping):
+                candidates.extend(meta.get(key) for key in meta_keys)
+            candidates.extend(source.get(key) for key in payload_keys)
+        return candidates
+
+    date = _first_non_empty(*_values(["date"], ["date"]))
+    hippodrome = _first_non_empty(*_values(["hippodrome", "hippo"], ["hippodrome", "hippo"]))
     reunion = _first_non_empty(
-        meta.get("reunion"),
-        meta.get("meeting"),
-        meta.get("r"),
-        payload.get("reunion"),
-        payload.get("meeting"),
-        payload.get("r"),
-        payload.get("r_label"),
+        *_values(["reunion", "meeting", "r"], ["reunion", "meeting", "r", "r_label"])
     )
     course = _first_non_empty(
-        meta.get("course"),
-        meta.get("race"),
-        meta.get("c"),
-        payload.get("course"),
-        payload.get("race"),
-        payload.get("c"),
-        payload.get("course_label"),
+        *_values(["course", "race", "c"], ["course", "race", "c", "course_label"])
     )
     partants = _first_non_empty(
-        meta.get("partants"),
-        payload.get("partants"),
-        meta.get("nb_partants"),
-        payload.get("nb_partants"),
-        meta.get("runners_count"),
-        payload.get("runners_count"),
+        *_values(
+            ["partants", "nb_partants", "runners_count"],
+            ["partants", "nb_partants", "runners_count"],
+        )
     )
     if partants in (None, ""):
-        runners = meta.get("runners") if isinstance(meta, Mapping) else None
-        if not runners:
-            runners = payload.get("runners")
-        if isinstance(runners, Iterable) and not isinstance(runners, (str, bytes, Mapping)):
-            partants = sum(1 for _ in runners)
+        for source in sources:
+            meta = source.get("meta") if isinstance(source.get("meta"), Mapping) else None
+            runners = None
+            if isinstance(meta, Mapping):
+                runners = meta.get("runners")
+            if not runners:
+                runners = source.get("runners")
+            if isinstance(runners, Iterable) and not isinstance(runners, (str, bytes, Mapping)):
+                partants = sum(1 for _ in runners)
+                if partants not in (None, ""):
+                    break
     start_time = _first_non_empty(
-        meta.get("start_time"),
-        meta.get("start"),
-        meta.get("heure"),
-        meta.get("time"),
-        payload.get("start_time"),
-        payload.get("start"),
-        payload.get("heure"),
-        payload.get("time"),
-        payload.get("hour"),
+        *_values(
+            ["start_time", "start", "heure", "time"],
+            ["start_time", "start", "heure", "time", "hour"],
+        )
     )
     formatted_time = _format_time(start_time)
     discipline = _first_non_empty(
-        meta.get("discipline"),
-        meta.get("type"),
-        payload.get("discipline"),
-        payload.get("type"),
+        *_values(["discipline", "type"], ["discipline", "type"])
     )
     return {
         "date": date,
@@ -213,6 +211,83 @@ def _extract_common_meta(payload: Mapping[str, Any]) -> Dict[str, Any]:
         "partants": partants,
         "discipline": discipline,
     }
+
+
+def _course_like(obj: Mapping[str, Any]) -> bool:
+    keys = set(obj.keys())
+    meta = obj.get("meta") if isinstance(obj.get("meta"), Mapping) else None
+    if isinstance(meta, Mapping):
+        keys.update(meta.keys())
+    hints = {
+        "course",
+        "race",
+        "c",
+        "course_label",
+        "r_label",
+        "num_course",
+        "id_course",
+        "numero_course",
+        "event_id",
+    }
+    details = {
+        "runners",
+        "participants",
+        "partants",
+        "horses",
+        "odds",
+        "start_time",
+        "start",
+        "heure",
+        "time",
+        "hour",
+        "discipline",
+    }
+    has_hint = any(key in keys for key in hints)
+    if not has_hint:
+        return False
+    if any(key in obj for key in details):
+        return True
+    if isinstance(meta, Mapping) and any(key in meta for key in details):
+        return True
+    return False
+
+
+def _extract_course_payloads(
+    payload: Mapping[str, Any]
+) -> List[Tuple[Mapping[str, Any], Tuple[Mapping[str, Any], ...]]]:
+    results: List[Tuple[Mapping[str, Any], Tuple[Mapping[str, Any], ...]]] = []
+    visited: set[int] = set()
+
+    def _walk(value: Any, parents: Tuple[Mapping[str, Any], ...]) -> None:
+        if isinstance(value, Mapping):
+            obj_id = id(value)
+            if obj_id in visited:
+                return
+            visited.add(obj_id)
+            if value is not payload and _course_like(value):
+                results.append((value, parents))
+            next_parents = parents + (value,)
+            for child in value.values():
+                _walk(child, next_parents)
+        elif isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+            for item in value:
+                _walk(item, parents)
+
+    for key in ("courses", "races", "items", "data"):
+        if key in payload:
+            _walk(payload[key], (payload,))
+
+    # Deduplicate potential duplicates by object identity while preserving order
+    seen_ids: set[int] = set()
+    unique_results: List[Tuple[Mapping[str, Any], Tuple[Mapping[str, Any], ...]]] = []
+    for course_payload, parents in results:
+        obj_id = id(course_payload)
+        if obj_id in seen_ids:
+            continue
+        seen_ids.add(obj_id)
+        unique_results.append((course_payload, parents))
+
+    return unique_results
 
 
 def _upsert(ws: Worksheet, header_map: Mapping[str, int], row: Mapping[str, Any], keys: Sequence[str]) -> None:
@@ -352,21 +427,41 @@ def _collect_h30_entries(source: Path, status: str) -> List[Dict[str, Any]]:
     for path, payload in payloads:
         if not isinstance(payload, Mapping):
             continue
-        meta = _extract_common_meta(payload)
-        if not (meta.get("date") and meta.get("reunion") and meta.get("course")):
+        courses = _extract_course_payloads(payload)
+        if not courses:
+            meta = _extract_common_meta(payload)
+            if not (meta.get("date") and meta.get("reunion") and meta.get("course")):
+                continue
+            row = {
+                "Date": meta.get("date"),
+                "Réunion": meta.get("reunion"),
+                "Course": meta.get("course"),
+                "Hippodrome": _blank_if_missing(meta.get("hippodrome")),
+                "Heure": _blank_if_missing(meta.get("start_time")),
+                "Partants": _blank_if_missing(meta.get("partants")),
+                "Discipline": _blank_if_missing(meta.get("discipline")),
+                "Statut H-30": _status_h30(status),
+                "Commentaires": "",
+            }
+            entries.append(row)
             continue
-        row = {
-            "Date": meta.get("date"),
-            "Réunion": meta.get("reunion"),
-            "Course": meta.get("course"),
-            "Hippodrome": _blank_if_missing(meta.get("hippodrome")),
-            "Heure": _blank_if_missing(meta.get("start_time")),
-            "Partants": _blank_if_missing(meta.get("partants")),
-            "Discipline": _blank_if_missing(meta.get("discipline")),
-            "Statut H-30": _status_h30(status),
-            "Commentaires": "",
-        }
-        entries.append(row)
+            
+        for course_payload, parents in courses:
+            meta = _extract_common_meta(course_payload, parents=parents)
+            if not (meta.get("date") and meta.get("reunion") and meta.get("course")):
+                continue
+            row = {
+                "Date": meta.get("date"),
+                "Réunion": meta.get("reunion"),
+                "Course": meta.get("course"),
+                "Hippodrome": _blank_if_missing(meta.get("hippodrome")),
+                "Heure": _blank_if_missing(meta.get("start_time")),
+                "Partants": _blank_if_missing(meta.get("partants")),
+                "Discipline": _blank_if_missing(meta.get("discipline")),
+                "Statut H-30": _status_h30(status),
+                "Commentaires": "",
+            }
+            entries.append(row)
     return entries
 
 
