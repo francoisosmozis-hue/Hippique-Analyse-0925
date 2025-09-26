@@ -600,12 +600,18 @@ def _extract_start_time(html: str) -> str | None:
         "data-start",
         "data-starttime",
         "data-time-start",
+        "data-starts",
+        "data-starts-at",
+        "data-event-time",
+        "data-event-hour",
         "data-heure",
         "data-heure-depart",
         "data-depart",
         "data-departure",
         "data-race-time",
         "data-race-hour",
+        "data-race-start",
+        "data-official-time",
     )
     for attr in attr_candidates:
         for tag in soup.find_all(attrs={attr: True}):
