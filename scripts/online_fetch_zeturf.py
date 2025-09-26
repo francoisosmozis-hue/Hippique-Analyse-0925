@@ -413,36 +413,69 @@ def _extract_start_time(html: str) -> str | None:
 
     soup = BeautifulSoup(html, "html.parser")
 
+    def _format_match(hour_text: str, minute_text: str | None) -> str:
+        hour = int(hour_text) % 24
+        minute = int(minute_text) if minute_text is not None else 0
+        return f"{hour:02d}:{minute:02d}"
+
+    time_pattern = re.compile(r"(\d{1,2})\s*[hH:.\u202f]\s*(\d{1,2})?")
+    
     def _from_text(text: str) -> str | None:
-        cleaned = text.replace("h", ":")
+        cleaned = text.replace("\u202f", " ")
+        cleaned = re.sub(r"\s*[hH]\s*", ":", cleaned)
+        cleaned = cleaned.replace(".", ":")
         formatted = _normalise_start_time(cleaned)
         if formatted and re.fullmatch(r"\d{2}:\d{2}", formatted):
             return formatted
-        match_local = re.search(r"(\d{1,2})\s*[hH:]\s*(\d{2})", text)
+        match_local = time_pattern.search(text)
         if match_local:
-            hour = int(match_local.group(1)) % 24
-            minute = int(match_local.group(2))
-            return f"{hour:02d}:{minute:02d}"
+            return _format_match(match_local.group(1), match_local.group(2))
         return formatted if formatted and ":" in formatted else None
 
-    for time_tag in soup.find_all("time"):
-        for attr in ("datetime", "content"):
-            candidate = time_tag.get(attr)
-            formatted = _normalise_start_time(candidate)
+    def _from_attributes(tag: Any, *attrs: str) -> str | None:
+        for attr in attrs:
+            value = tag.get(attr)
+            if not value:
+                continue
+            formatted = _normalise_start_time(value)
             if formatted:
                 return formatted
+            formatted = _from_text(str(value))
+            if formatted:
+                return formatted
+        return None
+
+    for time_tag in soup.find_all("time"):
+        formatted = _from_attributes(time_tag, "datetime", "content")
+        if formatted:
+            return formatted
         candidate_text = time_tag.get_text(" ", strip=True)
         formatted = _from_text(candidate_text)
         if formatted:
             return formatted
 
-    for attr in ("data-time", "data-start-time", "data-start", "data-heure"):
+    attr_candidates = (
+        "data-time",
+        "data-start-time",
+        "data-start",
+        "data-heure",
+        "data-race-time",
+        "data-race-hour",
+        "data-starttime",
+    )
+    for attr in attr_candidates:
         for tag in soup.find_all(attrs={attr: True}):
-            formatted = _from_text(str(tag[attr]))
+            formatted = _from_attributes(tag, attr)
             if formatted:
                 return formatted
 
     keyword = re.compile(r"(heure|départ|depart|start|off)", re.IGNORECASE)
+    for meta_tag in soup.find_all("meta"):
+        meta_keys = [meta_tag.get(key) for key in ("property", "name", "itemprop")]
+        if any(key and keyword.search(key) for key in meta_keys):
+            formatted = _from_attributes(meta_tag, "content", "value")
+            if formatted:
+                return formatted
     for tag in soup.find_all(True):
         descriptor = " ".join(
             [
@@ -457,11 +490,9 @@ def _extract_start_time(html: str) -> str | None:
             if formatted and re.search(r"\d", text):
                 return formatted
 
-    match = re.search(r"(\d{1,2})\s*[hH:]\s*(\d{2})", html)
+    match = time_pattern.search(html)
     if match:
-        hour = int(match.group(1)) % 24
-        minute = int(match.group(2))
-        return f"{hour:02d}:{minute:02d}"
+        return _format_match(match.group(1), match.group(2))
 
     return None
 
