@@ -213,8 +213,20 @@ def _extract_common_meta(
             course = f"C{int(match.group(1))}"
     partants = _first_non_empty(
         *_values(
-            ["partants", "nb_partants", "runners_count"],
-            ["partants", "nb_partants", "runners_count"],
+            [
+                "partants",
+                "nb_partants",
+                "runners_count",
+                "nb_partants_declares",
+                "nombre_partants",
+            ],
+            [
+                "partants",
+                "nb_partants",
+                "runners_count",
+                "nb_partants_declares",
+                "nombre_partants",
+            ],
         )
     )
     if partants in (None, ""):
@@ -231,13 +243,36 @@ def _extract_common_meta(
                     break
     start_time = _first_non_empty(
         *_values(
-            ["start_time", "start", "heure", "time"],
-            ["start_time", "start", "heure", "time", "hour"],
+            [
+                "start_time",
+                "start",
+                "heure",
+                "time",
+                "hour",
+                "startTime",
+                "heure_depart",
+                "heure_depart_programme",
+                "heure_programme",
+            ],
+            [
+                "start_time",
+                "start",
+                "heure",
+                "time",
+                "hour",
+                "startTime",
+                "heure_depart",
+                "heure_depart_programme",
+                "heure_programme",
+            ],
         )
     )
     formatted_time = _format_time(start_time)
     discipline = _first_non_empty(
-        *_values(["discipline", "type"], ["discipline", "type"])
+        *_values(
+            ["discipline", "type", "specialite", "speciality"],
+            ["discipline", "type", "specialite", "speciality"],
+        )
     )
     return {
         "date": date,
