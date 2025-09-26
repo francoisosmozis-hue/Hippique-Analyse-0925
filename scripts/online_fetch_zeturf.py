@@ -7,7 +7,7 @@ import datetime as dt
 import json
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Sequence
+from typing import Any, Dict, List, Mapping, Sequence
 
 try:
     import requests
@@ -24,6 +24,11 @@ import re
 GENY_BASE = "https://www.geny.com"
 HDRS = {"User-Agent": "Mozilla/5.0 (+EV; GPI v5.1)"}
 GENY_FALLBACK_URL = f"{GENY_BASE}/reunions-courses-pmu"
+COURSE_PAGE_TEMPLATES: Sequence[str] = (
+    "https://www.zeturf.fr/fr/course/{course_id}",
+    "https://www.zeturf.fr/course/{course_id}",
+    "https://m.zeeturf.fr/fr/course/{course_id}",
+)
 
 _URL_FIELDS: Sequence[str] = ("url", "endpoint", "href")
 _MODE_HINTS: Dict[str, Sequence[str]] = {
@@ -187,9 +192,22 @@ def fetch_runners(url: str) -> Dict[str, Any]:
     except requests.HTTPError as exc:  # pragma: no cover - exercised via tests
         status = exc.response.status_code if exc.response is not None else None
         if status == 404 and course_id:
-            return fetch_from_geny_idcourse(course_id)            
+            return fetch_from_geny_idcourse(course_id)
         raise
-    return resp.json()
+    payload = resp.json()
+
+    if isinstance(payload, Mapping) and course_id:
+        start_time = _detect_start_time(payload)
+        if not start_time:
+            scraped = _scrape_start_time_from_course_page(course_id)
+            if scraped:
+                meta = payload.get("meta") if isinstance(payload.get("meta"), Mapping) else {}
+                updated_meta = dict(meta) if meta else {}
+                updated_meta.setdefault("start_time", scraped)
+                payload["meta"] = updated_meta
+                payload.setdefault("start_time", scraped)
+
+    return payload
 
 
 def fetch_from_geny_idcourse(id_course: str) -> Dict[str, Any]:
@@ -350,6 +368,41 @@ def _normalise_start_time(value: Any) -> str | None:
             return text
         return text
     return parsed.strftime("%H:%M")
+
+
+def _detect_start_time(payload: Mapping[str, Any]) -> str | None:
+    """Return an already-present start time in ``payload`` if available."""
+
+    meta = payload.get("meta")
+    if isinstance(meta, Mapping):
+        for key in ("start_time", "start", "heure", "time", "hour"):
+            formatted = _normalise_start_time(meta.get(key))
+            if formatted:
+                return formatted
+
+    for key in ("start_time", "start", "heure", "time", "hour"):
+        formatted = _normalise_start_time(payload.get(key))
+        if formatted:
+            return formatted
+
+    return None
+
+
+def _scrape_start_time_from_course_page(course_id: str) -> str | None:
+    """Fetch the public course page and extract its start time."""
+
+    for template in COURSE_PAGE_TEMPLATES:
+        url = template.format(course_id=course_id)
+        try:
+            resp = requests.get(url, headers=HDRS, timeout=10)
+            resp.raise_for_status()
+        except requests.RequestException:
+            continue
+        start_time = _extract_start_time(resp.text)
+        if start_time:
+            return start_time
+
+    return None
 
 
 def _extract_start_time(html: str) -> str | None:
