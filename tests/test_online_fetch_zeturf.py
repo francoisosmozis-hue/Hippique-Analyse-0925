@@ -211,7 +211,7 @@ def test_fetch_runners_enriches_start_time(monkeypatch: pytest.MonkeyPatch) -> N
     assert calls == [api_url, "https://www.zeturf.fr/fr/course/12345"]
 
 
-    def test_extract_start_time_variants() -> None:
+def test_extract_start_time_variants() -> None:
     """The helper should normalise hours from HTML fragments."""
 
     html = """
