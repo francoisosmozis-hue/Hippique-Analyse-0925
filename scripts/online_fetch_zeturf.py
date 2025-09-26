@@ -518,6 +518,7 @@ def _extract_start_time(html: str) -> str | None:
     
     def _from_text(text: str) -> str | None:
         cleaned = text.replace("\u202f", " ")
+        cleaned = re.sub(r"\([^()]*\)", " ", cleaned)
         cleaned = re.sub(r"(?i)\b(?:mn|minutes?)\b", "", cleaned)
         cleaned = re.sub(r"\s*[hH]\s*", ":", cleaned)
         cleaned = cleaned.replace(".", ":")
