@@ -21,6 +21,7 @@ def test_h30_populates_planning_sheet(tmp_path: Path) -> None:
             "course": "C1",
             "hippodrome": "Paris-Vincennes",
             "start_time": "2024-09-25T12:05:00",
+            "discipline": "Trot",
         },
         "runners": [{"id": 1}, {"id": 2}, {"id": 3}],
     }
@@ -42,11 +43,12 @@ def test_h30_populates_planning_sheet(tmp_path: Path) -> None:
     ws = wb["Planning"]
     row = _read_row(ws, 2)
     assert row["Date"] == "2024-09-25"
-    assert row["R/C"] == "R1C1"
     assert row["Heure"] == "12:05"
     assert row["Partants"] == 3
-    assert row["Statut H-30"] == "OK (collecte)"
+    assert row["Discipline"] == "Trot"
+    assert row["Statut H-30"] == "Collecté"
     assert row.get("Statut H-5") in (None, "")
+    assert row.get("Jouable H-5") in (None, "")
 
 
 def test_h5_updates_status_and_tickets(tmp_path: Path) -> None:
@@ -58,6 +60,7 @@ def test_h5_updates_status_and_tickets(tmp_path: Path) -> None:
             "reunion": "R1",
             "course": "C1",
             "hippodrome": "Paris-Vincennes",
+            "discipline": "Trot",
         },
         "runners": [{"id": 1}, {"id": 2}],
     }
@@ -83,6 +86,7 @@ def test_h5_updates_status_and_tickets(tmp_path: Path) -> None:
             "course": "C1",
             "hippodrome": "Paris-Vincennes",
             "start_time": "12:10",
+            "discipline": "Trot",
         },
         "validation": {"roi_global_est": 0.31},
         "abstain": False,
@@ -114,9 +118,11 @@ def test_h5_updates_status_and_tickets(tmp_path: Path) -> None:
     wb = load_workbook(excel_path)
     ws = wb["Planning"]
     row = _read_row(ws, 2)
-    assert row["Statut H-30"] == "OK (collecte)"
-    assert row["Statut H-5"] == "Jouable (ROI 0.31)"
-    assert row["Tickets H-5"] == "SP [6] 2€ @ 3.4"
+    assert row["Statut H-30"] == "Collecté"
+    assert row["Statut H-5"] == "Analysé"
+    assert row["Jouable H-5"] == "Oui"
+    assert row["Commentaires"] == "ROI estimé 31%"
+    assert row["Tickets H-5"] == "SP:6 2€ @3.4"
     assert row["Heure"] == "12:10"
 
 
@@ -169,5 +175,7 @@ def test_h5_abstention_uses_reason(tmp_path: Path) -> None:
     wb = load_workbook(excel_path)
     ws = wb["Planning"]
     row = _read_row(ws, 2)
-    assert row["Statut H-5"] == "Non jouable (ROI global < 0.20)"
+    assert row["Statut H-5"] == "Analysé"
+    assert row["Jouable H-5"] == "Non"
+    assert row["Commentaires"] == "ROI global < 0.20"
     assert row.get("Tickets H-5") in (None, "")
