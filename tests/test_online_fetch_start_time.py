@@ -60,6 +60,13 @@ def test_extract_start_time_from_data_attribute() -> None:
     assert zeturf._extract_start_time(textwrap.dedent(html)) == "13:05"
 
 
+def test_extract_start_time_from_additional_data_attribute() -> None:
+    html = """
+    <section class="race-card" data-starts-at="2024-09-25T12:15:00+02:00"></section>
+    """
+    assert zeturf._extract_start_time(textwrap.dedent(html)) == "12:15"
+
+
 def test_extract_start_time_handles_minutes_suffix() -> None:
     html = """
     <div class="race">Départ 21h05mn</div>
