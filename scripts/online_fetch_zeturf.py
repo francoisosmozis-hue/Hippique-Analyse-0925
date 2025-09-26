@@ -801,6 +801,8 @@ def normalize_snapshot(payload: Dict[str, Any]) -> Dict[str, Any]:
 
     odds_map = {runner["id"]: runner["odds"] for runner in runners}
 
+    meta.setdefault("partants", len(runners))
+
     meta.update({
         "runners": runners,
         "id2name": id2name,
