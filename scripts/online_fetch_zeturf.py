@@ -36,6 +36,8 @@ COURSE_PAGE_TEMPLATES: Sequence[str] = (
     "https://m.zeeturf.fr/fr/course/{course_id}",
 )
 
+_SCRAPED_START_TIMES: Dict[str, str] = {}
+
 _COURSE_PLACEHOLDER = re.compile(r"{\s*course[_-]?id\s*}", re.IGNORECASE)
 _COURSE_ID_PATTERN = re.compile(r"\d{5,}")
 _COURSE_JSON_PATTERNS: Sequence[re.Pattern[str]] = (
@@ -476,6 +478,11 @@ def _detect_start_time(payload: Mapping[str, Any]) -> str | None:
 def _scrape_start_time_from_course_page(course_id: str) -> str | None:
     """Fetch the public course page and extract its start time."""
 
+    cache_key = str(course_id)
+    cached = _SCRAPED_START_TIMES.get(cache_key)
+    if cached:
+        return cached
+
     for template in COURSE_PAGE_TEMPLATES:
         url = template.format(course_id=course_id)
         try:
@@ -485,6 +492,7 @@ def _scrape_start_time_from_course_page(course_id: str) -> str | None:
             continue
         start_time = _extract_start_time(resp.text)
         if start_time:
+            _SCRAPED_START_TIMES[cache_key] = start_time
             return start_time
 
     return None
