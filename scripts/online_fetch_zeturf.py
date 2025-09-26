@@ -79,6 +79,15 @@ _PROVIDER_PRIORITY: Dict[str, Sequence[str]] = {
 _DEFAULT_PROVIDER_ORDER: Sequence[str] = ("geny", "pmu", "zeturf")
 
 
+_TEXTUAL_TIME_PATTERN = re.compile(
+    r"(\d{1,2})\s*(?:heures?|heure|hours?|hrs?|hres?|[hH:.\u202f])\s*(\d{1,2})?\s*(?:mn|minutes?)?",
+    re.IGNORECASE,
+)
+_HOUR_ONLY_PATTERN = re.compile(
+    r"(\d{1,2})\s*(?:heures?|heure|hours?|hrs?|hres?|[hH])",
+    re.IGNORECASE,
+)
+
 @lru_cache(maxsize=1)
 def _env_timezone() -> dt.tzinfo | None:
     """Return the timezone configured via ``$TZ`` when available."""
