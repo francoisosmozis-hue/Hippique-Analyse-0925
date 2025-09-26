@@ -259,7 +259,11 @@ def _summarise_tickets(tickets: Any) -> str:
         if stake not in (None, ""):
             parts.append(f"{_coerce_number(stake)}€")
         if odds not in (None, ""):
-            parts.append(f"@{_coerce_number(odds)}")
+            suffix = f"@{_coerce_number(odds)}"
+            if parts:
+                parts[-1] = f"{parts[-1]}{suffix}" if parts[-1] else suffix
+            else:
+                parts.append(suffix)
         segment = " ".join(parts)
         if segment:
             summaries.append(segment)
