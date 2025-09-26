@@ -6,6 +6,7 @@ import argparse
 import datetime as dt
 import json
 import os
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Sequence
 
@@ -19,6 +20,11 @@ except ModuleNotFoundError as exc:  # pragma: no cover - exercised via dedicated
 import yaml
 from bs4 import BeautifulSoup
 import re
+
+try:  # pragma: no cover - Python < 3.9 fallbacks are extremely rare
+    from zoneinfo import ZoneInfo
+except Exception:  # pragma: no cover - very defensive
+    ZoneInfo = None  # type: ignore[assignment]
 
 
 GENY_BASE = "https://www.geny.com"
@@ -69,6 +75,23 @@ _PROVIDER_PRIORITY: Dict[str, Sequence[str]] = {
     "h5": ("pmu", "geny", "zeturf"),
 }
 _DEFAULT_PROVIDER_ORDER: Sequence[str] = ("geny", "pmu", "zeturf")
+
+
+@lru_cache(maxsize=1)
+def _env_timezone() -> dt.tzinfo | None:
+    """Return the timezone configured via ``$TZ`` when available."""
+
+    if ZoneInfo is None:
+        return None
+
+    tz_name = os.environ.get("TZ")
+    if not tz_name:
+        return None
+
+    try:
+        return ZoneInfo(tz_name)
+    except Exception:  # pragma: no cover - invalid/unknown TZ identifiers
+        return None
 
 
 def _resolve_from_provider(section: Any, hints: Sequence[str]) -> str | None:
@@ -425,6 +448,10 @@ def _normalise_start_time(value: Any) -> str | None:
 
         return text if text else None
     else:
+        if parsed.tzinfo is not None:
+            tz = _env_timezone()
+            if tz is not None:
+                parsed = parsed.astimezone(tz)
         return parsed.strftime("%H:%M")
 
 
