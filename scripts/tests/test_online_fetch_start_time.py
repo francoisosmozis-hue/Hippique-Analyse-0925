@@ -25,6 +25,16 @@ def test_extract_start_time_from_text(monkeypatch):
     assert zeturf._extract_start_time(html) == "14:35"
 
 
+def test_extract_start_time_with_parenthetical_suffix(monkeypatch):
+    monkeypatch.delenv("TZ", raising=False)
+    html = """
+    <div class="course-header">
+      Heure de départ : <strong>14h35 (GMT+2)</strong>
+    </div>
+    """
+    assert zeturf._extract_start_time(html) == "14:35"
+
+
 def test_extract_start_time_from_plain_html(monkeypatch):
     monkeypatch.delenv("TZ", raising=False)
     html = """
