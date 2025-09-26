@@ -440,11 +440,7 @@ def _normalise_start_time(value: Any) -> str | None:
     try:
         parsed = dt.datetime.fromisoformat(cleaned)
     except ValueError:
-        time_pattern = re.compile(
-            r"(\d{1,2})\s*(?:heures?|heure|hours?|hrs?|hres?|[hH:.])\s*(\d{1,2})?",
-            re.IGNORECASE,
-        )
-        match = time_pattern.search(text)
+        match = _TEXTUAL_TIME_PATTERN.search(text)
         if match:
             hour = int(match.group(1)) % 24
             minute_str = match.group(2)
@@ -452,7 +448,7 @@ def _normalise_start_time(value: Any) -> str | None:
             return f"{hour:02d}:{minute:02d}"
 
         # Handle explicit hour-only strings such as "13h" or "13 heures"
-        hour_only = re.search(r"(\d{1,2})\s*(?:heures?|heure|hours?|hrs?|hres?|[hH])", text)
+        hour_only = _HOUR_ONLY_PATTERN.search(text)
         if hour_only:
             hour = int(hour_only.group(1)) % 24
             return f"{hour:02d}:00"
@@ -520,11 +516,6 @@ def _extract_start_time(html: str) -> str | None:
         minute = int(minute_text) if minute_text is not None else 0
         return f"{hour:02d}:{minute:02d}"
 
-    time_pattern = re.compile(
-        r"(\d{1,2})\s*(?:heures?|heure|hours?|hrs?|hres?|[hH:.\u202f])\s*(\d{1,2})?\s*(?:mn|minutes?)?",
-        re.IGNORECASE,
-    )
-    
     def _from_text(text: str) -> str | None:
         cleaned = text.replace("\u202f", " ")
         cleaned = re.sub(r"\([^()]*\)", " ", cleaned)
@@ -534,7 +525,7 @@ def _extract_start_time(html: str) -> str | None:
         formatted = _normalise_start_time(cleaned)
         if formatted and re.fullmatch(r"\d{2}:\d{2}", formatted):
             return formatted
-        match_local = time_pattern.search(text)
+        match_local = _TEXTUAL_TIME_PATTERN.search(text)
         if match_local:
             return _format_match(match_local.group(1), match_local.group(2))
         return formatted if formatted and ":" in formatted else None
@@ -671,7 +662,7 @@ def _extract_start_time(html: str) -> str | None:
             if formatted and re.search(r"\d", text):
                 return formatted
 
-    match = time_pattern.search(html)
+    match = _TEXTUAL_TIME_PATTERN.search(html)
     if match:
         return _format_match(match.group(1), match.group(2))
 
