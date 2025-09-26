@@ -437,12 +437,16 @@ def _extract_start_time(html: str) -> str | None:
             value = tag.get(attr)
             if not value:
                 continue
-            formatted = _normalise_start_time(value)
-            if formatted:
-                return formatted
+            normalised = _normalise_start_time(value)
+            if normalised and re.fullmatch(r"\d{2}:\d{2}", normalised):
+                return normalised
             formatted = _from_text(str(value))
             if formatted:
                 return formatted
+            if normalised and ":" in normalised and re.search(r"\d", normalised):
+                candidate = _from_text(normalised)
+                if candidate:
+                    return candidate
         return None
 
     for time_tag in soup.find_all("time"):
@@ -515,6 +519,8 @@ def _extract_start_time(html: str) -> str | None:
             formatted = _from_attributes(meta_tag, "content", "value")
             if formatted:
                 return formatted
+    attr_hint_names = ("aria-label", "title", "data-label", "data-tooltip")
+    
     for tag in soup.find_all(True):
         descriptor = " ".join(
             [
@@ -523,7 +529,15 @@ def _extract_start_time(html: str) -> str | None:
                 tag.get("id") or "",
             ]
         )
+        attr_values = [tag.get(name) for name in attr_hint_names]
+        if any(value and keyword.search(str(value)) for value in attr_values):
+            formatted = _from_attributes(tag, *attr_hint_names)
+            if formatted:
+                return formatted
         if keyword.search(descriptor):
+            formatted = _from_attributes(tag, *attr_hint_names)
+            if formatted:
+                return formatted
             text = tag.get_text(" ", strip=True)
             formatted = _from_text(text)
             if formatted and re.search(r"\d", text):
