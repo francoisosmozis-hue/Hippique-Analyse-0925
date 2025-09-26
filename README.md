@@ -156,6 +156,37 @@ Dans **Settings → Secrets and variables → Actions** du repo, créer :
 - `update_excel_with_results.py` → met à jour `excel/modele_suivi_courses_hippiques.xlsx`
 - Upload Excel + résultats sur GCS
 
+### 🧾 Mise à jour de l'onglet « Planning »
+
+Le script `scripts/update_excel_planning.py` assure l'upsert des lignes **H‑30** et **H‑5** dans le classeur `modele_suivi_courses_hippiques.xlsx`.
+
+1. **Snap H‑30** – toutes les réunions françaises du jour :
+
+   ```bash
+   export TZ=Europe/Paris
+   while read -r URL; do
+     python online_fetch_zeturf.py --reunion-url "$URL" --snapshot H-30 --out data/meeting
+   done < sources.txt
+
+   python scripts/update_excel_planning.py \
+     --phase H30 \
+     --in data/meeting \
+     --excel modele_suivi_courses_hippiques.xlsx
+   ```
+
+   Le script crée l'onglet « Planning » s'il est absent, alimente les colonnes *Date*, *Réunion*, *Course*, *Hippodrome*, *Heure*, *Partants*, *Discipline* et positionne « Collecté » dans *Statut H‑30*.
+
+2. **Snap H‑5** – par course analysée :
+
+   ```bash
+   python scripts/update_excel_planning.py \
+     --phase H5 \
+     --in data/R4C5 \
+     --excel modele_suivi_courses_hippiques.xlsx
+   ```
+
+   La ligne ciblée est mise à jour avec *Statut H‑5 = Analysé*, le drapeau *Jouable H‑5* (Oui/Non selon `abstain`) et une synthèse compacte des tickets (*Tickets H‑5*). Les colonnes vides sont conservées pour d'éventuels commentaires manuels.
+
 ### Lancer les workflows manuellement
 
 Les trois workflows ci-dessus sont planifiés mais peuvent aussi être déclenchés à la demande depuis l'onglet **Actions** du dépôt
