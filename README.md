@@ -90,6 +90,24 @@ COURSE_ID=123456 sed -i "s/{course_id}/$COURSE_ID/" config/sources.yml
 python scripts/online_fetch_zeturf.py --mode h30 --out data/h30/h30.json
 ```
 
+### Détection robuste de l'heure de départ
+
+`scripts/online_fetch_zeturf.py` récupère désormais l'heure officielle de départ
+des courses directement depuis la page publique ZEturf lorsque l'API ne la
+fournit pas. Le scraper :
+
+- parcourt les balises `<time>` et les attributs structurés (`data-start-time`,
+  `datetime`, etc.) ;
+- lit les blocs `application/ld+json` pour capturer les champs `startDate` ou
+  `startTime` ;
+- applique en dernier ressort une expression régulière tolérante (`21 h 05`,
+  `21h05`, `21.05`...).
+
+Les heures sont normalisées au format `HH:MM` avant d'être injectées dans les
+snapshots (`meta.start_time` et `start_time`). Cela garantit que le script
+`update_excel_planning.py` dispose toujours d'une heure fiable pour l'onglet
+Planning.
+
 ---
 
 ## ⚙️ Installation locale
