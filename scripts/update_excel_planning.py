@@ -647,7 +647,9 @@ def main(argv: Sequence[str] | None = None) -> None:
         keys = ("Date", "Réunion", "Course")
         for row in rows:
             _upsert(ws, header_map, row, keys)
-        message = f"{len(rows)} ligne(s) H-30 mises à jour"
+        details = ", ".join(filter(None, (_format_row_identifier(row) for row in rows)))
+        suffix = f" ({details})" if details else ""
+        message = f"{len(rows)} ligne(s) H-30 mises à jour{suffix}"
     else:
         payload = _load_h5_payload(source)
         row = _prepare_h5_row(payload, status_label=args.status_h5)
@@ -655,7 +657,9 @@ def main(argv: Sequence[str] | None = None) -> None:
         if not all(row.get(key) for key in keys):
             raise ValueError("Impossible de déterminer Date/Réunion/Course pour la mise à jour H-5")
         _upsert(ws, header_map, row, keys)
-        message = "1 ligne H-5 mise à jour"
+        detail = _format_row_identifier(row)
+        suffix = f" ({detail})" if detail else ""
+        message = f"1 ligne H-5 mise à jour{suffix}"
 
     wb.save(excel_path)
     print(message)
