@@ -310,3 +310,18 @@ def test_format_time_uses_env_timezone(monkeypatch: pytest.MonkeyPatch) -> None:
     assert planner._format_time("2024-09-25T13:05:00+00:00") == "15:05"
     monkeypatch.delenv("TZ", raising=False)
     planner._env_timezone.cache_clear()
+
+
+@pytest.mark.parametrize(
+    "value, expected",
+    [
+        ("13h05", "13:05"),
+        ("7h", "07:00"),
+        ("09 heures 30", "09:30"),
+        ("18.45", "18:45"),
+    ],
+)
+def test_format_time_handles_textual_hours(value: str, expected: str) -> None:
+    """French textual hour formats should be normalised to HH:MM."""
+
+    assert planner._format_time(value) == expected
