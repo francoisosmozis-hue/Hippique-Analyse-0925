@@ -436,6 +436,21 @@ def test_normalize_snapshot_includes_start_time(raw: str, expected: str) -> None
 
 
 
+def test_normalize_snapshot_honours_timezone(monkeypatch: pytest.MonkeyPatch) -> None:
+    """ISO datetimes should be converted to the timezone specified via ``$TZ``."""
+
+    payload = sample_snapshot()
+    payload["start_time"] = "2025-09-10T15:42:00+02:00"
+
+    ofz._env_timezone.cache_clear()
+    monkeypatch.setenv("TZ", "UTC")
+    try:
+        normalized = ofz.normalize_snapshot(payload)
+    finally:
+        ofz._env_timezone.cache_clear()
+
+    assert normalized["start_time"] == "13:42"
+
 
 @pytest.mark.parametrize("mode", ["h30", "h5"])
 def test_main_snapshot_modes(mode: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
