@@ -100,7 +100,7 @@ def test_h5_updates_status_and_tickets(tmp_path: Path) -> None:
             }
         ],
     }
-    (rc_dir / "analysis_H5.json").write_text(json.dumps(analysis), encoding="utf-8")
+    (rc_dir / "analysis_H5_R1C1.json").write_text(json.dumps(analysis), encoding="utf-8")
 
     planner.main(
         [
