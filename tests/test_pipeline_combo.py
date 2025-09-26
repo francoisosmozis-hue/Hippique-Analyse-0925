@@ -127,7 +127,7 @@ def _mock_tracking_outputs(tmp_path, monkeypatch):
         if target.is_absolute():
             target = target.relative_to(target.anchor)
         target_path = tmp_path / target
-        return logging_io.append_json(target_path, data)
+        return original_append_json(target_path, data)
 
     monkeypatch.setattr(pipeline_run, "append_csv_line", fake_append_csv_line)
     monkeypatch.setattr(pipeline_run, "append_json", fake_append_json)
