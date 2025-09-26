@@ -477,12 +477,13 @@ def _extract_start_time(html: str) -> str | None:
         return f"{hour:02d}:{minute:02d}"
 
     time_pattern = re.compile(
-        r"(\d{1,2})\s*(?:heures?|heure|hours?|hrs?|hres?|[hH:.\u202f])\s*(\d{1,2})?",
+        r"(\d{1,2})\s*(?:heures?|heure|hours?|hrs?|hres?|[hH:.\u202f])\s*(\d{1,2})?\s*(?:mn|minutes?)?",
         re.IGNORECASE,
     )
     
     def _from_text(text: str) -> str | None:
         cleaned = text.replace("\u202f", " ")
+        cleaned = re.sub(r"(?i)\b(?:mn|minutes?)\b", "", cleaned)
         cleaned = re.sub(r"\s*[hH]\s*", ":", cleaned)
         cleaned = cleaned.replace(".", ":")
         formatted = _normalise_start_time(cleaned)
