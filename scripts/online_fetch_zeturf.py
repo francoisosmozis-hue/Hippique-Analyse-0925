@@ -30,6 +30,33 @@ COURSE_PAGE_TEMPLATES: Sequence[str] = (
     "https://m.zeeturf.fr/fr/course/{course_id}",
 )
 
+_COURSE_PLACEHOLDER = re.compile(r"{\s*course[_-]?id\s*}", re.IGNORECASE)
+_COURSE_ID_PATTERN = re.compile(r"\d{5,}")
+_COURSE_JSON_PATTERNS: Sequence[re.Pattern[str]] = (
+    re.compile(r'courseId["\']?\s*[:=]\s*"?(\d{5,})'),
+    re.compile(r'course_id["\']?\s*[:=]\s*"?(\d{5,})'),
+    re.compile(r'idCourse["\']?\s*[:=]\s*"?(\d{5,})'),
+    re.compile(r'id_course["\']?\s*[:=]\s*"?(\d{5,})'),
+    re.compile(r"course/(\d{5,})"),
+    re.compile(r"race/(\d{5,})"),
+)
+_COURSE_LINK_PATTERNS: Sequence[re.Pattern[str]] = (
+    re.compile(r"/course/(\d{5,})"),
+    re.compile(r"/race/(\d{5,})"),
+)
+_COURSE_ATTR_HINTS: Sequence[str] = (
+    "data-course-id",
+    "data-courseid",
+    "data-course",
+    "data-idcourse",
+    "data-courseId",
+    "data-id-course",
+    "data-race-id",
+    "data-raceid",
+    "data-event-id",
+    "data-eventid",
+)
+
 _URL_FIELDS: Sequence[str] = ("url", "endpoint", "href")
 _MODE_HINTS: Dict[str, Sequence[str]] = {
     "planning": ("planning", "meetings", "schedule"),
@@ -206,6 +233,8 @@ def fetch_runners(url: str) -> Dict[str, Any]:
                 updated_meta.setdefault("start_time", scraped)
                 payload["meta"] = updated_meta
                 payload.setdefault("start_time", scraped)
+
+        payload.setdefault("course_id", course_id)
 
     return payload
 
@@ -586,6 +615,85 @@ def _extract_start_time(html: str) -> str | None:
     return None
 
 
+def _inject_course_id(url_template: str, course_id: str) -> str:
+    """Return ``url_template`` with ``course_id`` injected."""
+
+    if _COURSE_PLACEHOLDER.search(url_template):
+        return _COURSE_PLACEHOLDER.sub(course_id, url_template)
+
+    if "{course_id}" in url_template:
+        return url_template.replace("{course_id}", course_id)
+
+    if course_id in url_template:
+        return url_template
+
+    if "?" in url_template:
+        separator = "&" if url_template.endswith(("&", "?")) else "&"
+        return f"{url_template}{separator}course_id={course_id}"
+
+    return f"{url_template.rstrip('/')}/{course_id}"
+
+
+def _extract_course_ids_from_meeting(html: str) -> List[str]:
+    """Return ordered course identifiers discovered in ``html``."""
+
+    if not html:
+        return []
+
+    soup = BeautifulSoup(html, "html.parser")
+    ordered: List[str] = []
+    seen: set[str] = set()
+
+    def _push(candidate: str | None) -> None:
+        if not candidate:
+            return
+        match = _COURSE_ID_PATTERN.search(str(candidate))
+        if not match:
+            return
+        value = match.group(0)
+        if value in seen:
+            return
+        seen.add(value)
+        ordered.append(value)
+
+    for tag in soup.find_all(True):
+        for attr in _COURSE_ATTR_HINTS:
+            attr_value = tag.get(attr)
+            if attr_value:
+                _push(attr_value)
+        if tag.name == "a" and tag.get("href"):
+            href = tag.get("href")
+            for pattern in _COURSE_LINK_PATTERNS:
+                match = pattern.search(href)
+                if match:
+                    _push(match.group(1))
+        if tag.name == "script":
+            text = tag.string or tag.get_text()
+            if not text:
+                continue
+            for pattern in _COURSE_JSON_PATTERNS:
+                for match in pattern.findall(text):
+                    _push(match)
+
+    if not ordered:
+        for pattern in _COURSE_JSON_PATTERNS:
+            for match in pattern.findall(html):
+                _push(match)
+
+    return ordered
+
+
+def _normalise_snapshot_phase(value: str) -> tuple[str, str, str]:
+    """Return (phase_tag, mode, file_label) for ``value`` (H-30/H-5)."""
+
+    cleaned = value.strip().upper().replace(" ", "").replace("-", "")
+    if cleaned == "H30":
+        return "H30", "h30", "H-30"
+    if cleaned == "H5":
+        return "H5", "h5", "H-5"
+    raise ValueError("snapshot must be H-30 ou H-5")
+
+
 def normalize_snapshot(payload: Dict[str, Any]) -> Dict[str, Any]:
     """Return a normalized snapshot of runners with metadata."""
     rc = payload.get("rc", "")
@@ -595,6 +703,16 @@ def normalize_snapshot(payload: Dict[str, Any]) -> Dict[str, Any]:
         "date": payload.get("date", dt.date.today().isoformat()),
         "discipline": payload.get("discipline", ""),
     }
+    course_id = payload.get("course_id") or payload.get("id_course") or payload.get("idCourse")
+    if course_id:
+        meta["course_id"] = str(course_id)
+
+    rc_text = str(rc).strip().upper()
+    if rc_text:
+        match = re.search(r"R(\d+)C(\d+)", rc_text)
+        if match:
+            meta.setdefault("reunion", f"R{int(match.group(1))}")
+            meta.setdefault("course", f"C{int(match.group(2))}")
     start_time = None
     if isinstance(payload.get("meta"), dict):
         start_time = payload["meta"].get("start_time") or payload["meta"].get("start")
@@ -713,13 +831,62 @@ __all__ = [
 
 def main() -> None:  # pragma: no cover - minimal CLI wrapper
     parser = argparse.ArgumentParser(description="Fetch data from Zeturf")
-    parser.add_argument(
-        "--mode", choices=["planning", "h30", "h5", "diff"], required=True
-    )
-    parser.add_argument("--out", required=True, help="Output JSON file")
-    parser.add_argument("--sources", default="config/sources.yml", help="YAML sources")
+    parser.add_argument("--mode", choices=["planning", "h30", "h5", "diff"], help="Mode classique (planning/h30/h5/diff)")
+    parser.add_argument("--out", required=True, help="Fichier ou dossier de sortie")
+    parser.add_argument("--sources", default="config/sources.yml", help="Fichier YAML des endpoints")
+    parser.add_argument("--reunion-url", help="URL publique de la réunion ZEturf à parcourir")
+    parser.add_argument("--snapshot", help="Phase pour --reunion-url (H-30 ou H-5)")
     args = parser.parse_args()
-    
+
+    if args.reunion_url:
+        if args.mode:
+            parser.error("--mode et --reunion-url sont mutuellement exclusifs")
+        if not args.snapshot:
+            parser.error("--snapshot est requis avec --reunion-url")
+
+        phase_tag, mode_key, file_label = _normalise_snapshot_phase(args.snapshot)
+        with open(args.sources, "r", encoding="utf-8") as fh:
+            config = yaml.safe_load(fh) or {}
+        url_template = resolve_source_url(config, mode_key)
+
+        resp = requests.get(args.reunion_url, headers=HDRS, timeout=10)
+        resp.raise_for_status()
+        html = resp.text
+        course_ids = _extract_course_ids_from_meeting(html)
+        if not course_ids:
+            raise ValueError("Aucun identifiant de course trouvé dans la page réunion")
+
+        out_dir = Path(args.out)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        written = 0
+        for course_id in course_ids:
+            api_url = _inject_course_id(url_template, course_id)
+            payload = fetch_runners(api_url)
+            data = normalize_snapshot(payload)
+            data.setdefault("course_id", str(course_id))
+
+            reunion = data.get("reunion")
+            course_label = data.get("course")
+            rc = data.get("rc") or ""
+            if reunion and course_label:
+                folder_name = f"{reunion}{course_label}"
+            elif rc:
+                folder_name = re.sub(r"[^0-9A-Za-z]+", "", str(rc)) or str(course_id)
+            else:
+                folder_name = str(course_id)
+
+            dest_dir = out_dir / folder_name
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            dest = dest_dir / f"snapshot_{file_label}.json"
+            dest.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+            written += 1
+
+        print(f"{written} snapshot(s) {phase_tag} enregistrés dans {out_dir}")
+        return
+
+    if not args.mode:
+        parser.error("--mode est requis lorsque --reunion-url n'est pas utilisé")
+
     if args.mode in {"planning", "h30", "h5"}:
         with open(args.sources, "r", encoding="utf-8") as fh:
             config = yaml.safe_load(fh) or {}
