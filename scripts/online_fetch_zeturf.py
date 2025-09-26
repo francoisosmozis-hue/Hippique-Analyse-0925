@@ -777,10 +777,16 @@ def normalize_snapshot(payload: Dict[str, Any]) -> Dict[str, Any]:
             meta.setdefault("reunion", f"R{int(match.group(1))}")
             meta.setdefault("course", f"C{int(match.group(2))}")
     start_time = _detect_start_time(payload)
+    if not start_time and course_id:
+        start_time = _scrape_start_time_from_course_page(str(course_id))
+    if not start_time:
+        raw_meta = payload.get("meta") if isinstance(payload.get("meta"), Mapping) else None
+        if isinstance(raw_meta, Mapping):
+            start_time = _normalise_start_time(raw_meta.get("start_time"))
+    if not start_time:
+        start_time = _normalise_start_time(payload.get("start_time"))
     if start_time:
         meta["start_time"] = start_time
-    if formatted_time:
-        meta["start_time"] = formatted_time
     runners = []
     id2name: Dict[str, str] = {}
     seen_ids: set[str] = set()
