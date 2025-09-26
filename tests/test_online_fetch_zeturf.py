@@ -237,6 +237,9 @@ def test_extract_start_time_variants() -> None:
     html_hour_only = "<p>Off 15h</p>"
     assert ofz._extract_start_time(html_hour_only) == "15:00"
 
+    html_words = "<div>Départ prévu à 18 heures 30</div>"
+    assert ofz._extract_start_time(html_words) == "18:30"
+
 
 def test_fetch_from_geny_adds_start_time(monkeypatch: pytest.MonkeyPatch) -> None:
     """Geny fallback snapshots should expose the parsed start time."""
