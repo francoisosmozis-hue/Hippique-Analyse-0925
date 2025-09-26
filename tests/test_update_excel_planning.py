@@ -405,6 +405,74 @@ def test_h30_handles_nested_course_payload(tmp_path: Path) -> None:
     assert row["Discipline"] == "Plat"
 
 
+def test_h30_infers_rc_fields(tmp_path: Path) -> None:
+    meeting_dir = tmp_path / "snapshots"
+    meeting_dir.mkdir()
+    payload = {
+        "meta": {
+            "date": "2024-10-01",
+            "rc": "R4C5",
+            "hippodrome": "Laval",
+        },
+        "runners": [{"id": 1}, {"id": 2}],
+    }
+    (meeting_dir / "meeting.json").write_text(json.dumps(payload), encoding="utf-8")
+    excel_path = tmp_path / "planning.xlsx"
+
+    planner.main(
+        [
+            "--phase",
+            "H30",
+            "--input",
+            str(meeting_dir),
+            "--excel",
+            str(excel_path),
+        ]
+    )
+
+    wb = load_workbook(excel_path)
+    ws = wb["Planning"]
+    row = _read_row(ws, 2)
+
+    assert row["Réunion"] == "R4"
+    assert row["Course"] == "C5"
+    assert row["Hippodrome"] == "Laval"
+
+
+def test_h5_infers_rc_fields(tmp_path: Path) -> None:
+    excel_path = tmp_path / "planning.xlsx"
+    analysis_file = tmp_path / "analysis.json"
+    payload = {
+        "meta": {
+            "date": "2024-10-02",
+            "rc": "r7 c3",
+            "start_time": "13h30",
+        },
+        "tickets": [],
+        "abstain": False,
+    }
+    analysis_file.write_text(json.dumps(payload), encoding="utf-8")
+
+    planner.main(
+        [
+            "--phase",
+            "H5",
+            "--input",
+            str(analysis_file),
+            "--excel",
+            str(excel_path),
+        ]
+    )
+
+    wb = load_workbook(excel_path)
+    ws = wb["Planning"]
+    row = _read_row(ws, 2)
+
+    assert row["Réunion"] == "R7"
+    assert row["Course"] == "C3"
+    assert row["Heure"] == "13:30"
+
+
 def test_h5_compact_ticket_summary(tmp_path: Path) -> None:
     meeting_dir = tmp_path / "snapshots"
     meeting_dir.mkdir()
