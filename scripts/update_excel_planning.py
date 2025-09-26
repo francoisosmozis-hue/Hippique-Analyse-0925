@@ -147,7 +147,11 @@ def _first_non_empty(*values: Any) -> Any:
 
 
 def _blank_if_missing(value: Any) -> Any:
-    return "" if value in (None, "") else value
+    """Return ``None`` for missing values to preserve existing cells."""
+
+    if value in (None, ""):
+        return None
+    return value
 
 
 def _extract_common_meta(
