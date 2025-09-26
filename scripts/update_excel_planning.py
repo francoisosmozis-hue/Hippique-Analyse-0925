@@ -134,7 +134,7 @@ def _format_time(value: Any) -> str | None:
     cleaned = text.replace("Z", "+00:00")
     try:
         parsed = dt.datetime.fromisoformat(cleaned)
-     except ValueError:
+    except ValueError:
         time_pattern = re.compile(
             r"(\d{1,2})\s*(?:heures?|heure|hours?|hrs?|hres?|[hH:.])\s*(\d{1,2})?",
             re.IGNORECASE,
