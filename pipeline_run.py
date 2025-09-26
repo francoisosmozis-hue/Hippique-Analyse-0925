@@ -12,7 +12,7 @@ import os
 import re
 from functools import lru_cache, partial
 from pathlib import Path
-from typing import Any, Callable, Dict, cast
+from typing import Any, Callable, Dict, Iterable, Mapping, Sequence, cast
 
 from config.env_utils import get_env
 
@@ -202,6 +202,275 @@ OPTIONAL_KEYS = {
 
 STEAM_UP = 0.03
 STEAM_DOWN = -0.03
+
+MIN_SP_DEC_ODDS = 5.0
+"""Minimum decimal odds allowed for Simple Placé tickets (4/1)."""
+
+MIN_CP_SUM_DEC = 8.0
+"""Minimum combined decimal odds allowed for Couplé Placé tickets (>6/1)."""
+
+_ODDS_KEYS = (
+    "cote_place",
+    "odds_place",
+    "odds",
+    "cote",
+    "odd",
+    "decimal_odds",
+    "odds_dec",
+    "place_odds",
+)
+
+_SP_TYPES = {
+    "SP",
+    "SIMPLE_PLACE_DUTCHING",
+    "DUTCHING_SP",
+    "PLACE_DUTCHING",
+}
+
+_SP_LABELS = {"SP_DUTCHING_GPIV51"}
+
+_CP_TYPES = {
+    "COUPLE",
+    "COUPLE_PLACE",
+    "COUPLE PLACÉ",
+    "COUPLÉ PLACÉ",
+    "COUPLE PLACÉ",
+    "COUPLÉ PLACE",
+    "CP",
+}
+
+
+def _norm_float(value: Any) -> float | None:
+    """Convert ``value`` to ``float`` returning ``None`` on failure."""
+
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        number = float(text.replace(",", "."))
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(number):
+        return None
+    return number
+
+
+def _normalize_sequence(value: Any) -> list[Any]:
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        return list(value)
+    return []
+
+
+def _extract_leg_ids(entry: Mapping[str, Any]) -> list[str]:
+    candidates: list[str] = []
+    for key in (
+        "id",
+        "code",
+        "runner",
+        "participant",
+        "horse",
+        "horse_id",
+        "id_horse",
+        "num",
+        "number",
+        "selection",
+    ):
+        value = entry.get(key)
+        if value in (None, ""):
+            continue
+        candidates.append(str(value))
+    return candidates
+
+
+def _extract_entry_odds(entry: Mapping[str, Any]) -> float | None:
+    for key in _ODDS_KEYS:
+        if key in entry and entry[key] not in (None, ""):
+            odds = _norm_float(entry[key])
+            if odds is not None:
+                return odds
+    return None
+
+
+def _build_runner_odds_lookup(
+    runners: Iterable[Mapping[str, Any]],
+    partants: Mapping[str, Any],
+) -> dict[str, float]:
+    """Return a lookup mapping runner identifiers to decimal odds."""
+
+    lookup: dict[str, float] = {}
+
+    def register(entry: Any) -> None:
+        if not isinstance(entry, Mapping):
+            return
+        odds = _extract_entry_odds(entry)
+        if odds is None:
+            return
+        for key in _extract_leg_ids(entry):
+            if key and key not in lookup:
+                lookup[key] = odds
+
+    market = partants.get("market") if isinstance(partants, Mapping) else None
+    market_horses = []
+    if isinstance(market, Mapping):
+        horses = market.get("horses")
+        if isinstance(horses, Sequence):
+            market_horses = horses
+
+    runners_data = partants.get("runners") if isinstance(partants, Mapping) else None
+
+    for collection in (market_horses, runners_data, runners):
+        if not collection:
+            continue
+        for item in collection:
+            register(item)
+
+    return lookup
+
+
+def _resolve_leg_odds(
+    leg: Any,
+    odds_lookup: Mapping[str, float],
+    fallback_entries: Sequence[Mapping[str, Any]] | None = None,
+) -> float | None:
+    """Return decimal odds associated with ``leg`` using lookup/fallbacks."""
+
+    if isinstance(leg, Mapping):
+        odds = _extract_entry_odds(leg)
+        if odds is not None:
+            return odds
+        for key in _extract_leg_ids(leg):
+            odds = odds_lookup.get(key)
+            if odds is not None:
+                return odds
+    else:
+        text = str(leg).strip()
+        if text:
+            odds = odds_lookup.get(text)
+            if odds is not None:
+                return odds
+            converted = _norm_float(text)
+            if converted is not None and converted > 0:
+                return converted
+
+    if fallback_entries:
+        for entry in fallback_entries:
+            odds = _extract_entry_odds(entry)
+            if odds is not None:
+                return odds
+    return None
+
+
+def _extract_ticket_odds(
+    ticket: Mapping[str, Any], odds_lookup: Mapping[str, float]
+) -> float | None:
+    odds = _extract_entry_odds(ticket)
+    if odds is not None:
+        return odds
+    for key in _extract_leg_ids(ticket):
+        odds = odds_lookup.get(key)
+        if odds is not None:
+            return odds
+    return None
+
+
+def _filter_sp_and_cp_tickets(
+    sp_tickets: Sequence[Mapping[str, Any]],
+    combo_tickets: Sequence[Mapping[str, Any]],
+    runners: Sequence[Mapping[str, Any]],
+    partants: Mapping[str, Any],
+) -> tuple[list[dict], list[dict], list[str]]:
+    """Apply SP/CP guardrails on ticket odds returning filtered copies."""
+
+    odds_lookup = _build_runner_odds_lookup(runners, partants)
+    notes: list[str] = []
+
+    filtered_sp: list[dict] = []
+    for ticket in sp_tickets:
+        typ = str(ticket.get("type") or "").upper()
+        label = str(ticket.get("label") or "").upper()
+        if typ in _SP_TYPES or label in _SP_LABELS:
+            legs_seq = _normalize_sequence(ticket.get("legs"))
+            bets_seq = _normalize_sequence(ticket.get("bets"))
+            legs_details_seq = _normalize_sequence(ticket.get("legs_details"))
+            if legs_seq:
+                kept_indices: list[int] = []
+                for index, leg in enumerate(legs_seq):
+                    fallback_entries: list[Mapping[str, Any]] = []
+                    if index < len(legs_details_seq) and isinstance(legs_details_seq[index], Mapping):
+                        fallback_entries.append(legs_details_seq[index])
+                    if index < len(bets_seq) and isinstance(bets_seq[index], Mapping):
+                        fallback_entries.append(bets_seq[index])
+                    odds = _resolve_leg_odds(leg, odds_lookup, fallback_entries)
+                    if odds is not None and odds >= MIN_SP_DEC_ODDS:
+                        kept_indices.append(index)
+                if kept_indices:
+                    ticket_copy = dict(ticket)
+                    if legs_seq:
+                        ticket_copy["legs"] = [legs_seq[i] for i in kept_indices]
+                    if bets_seq:
+                        ticket_copy["bets"] = [
+                            bets_seq[i]
+                            for i in kept_indices
+                            if i < len(bets_seq)
+                        ]
+                    if legs_details_seq:
+                        ticket_copy["legs_details"] = [
+                            legs_details_seq[i]
+                            for i in kept_indices
+                            if i < len(legs_details_seq)
+                        ]
+                    filtered_sp.append(ticket_copy)
+                else:
+                    notes.append("SP retiré: toutes les cotes < 4/1 (5.0 déc).")
+                continue
+
+            odds_value = _extract_ticket_odds(ticket, odds_lookup)
+            if odds_value is None:
+                notes.append("SP retiré: cotes manquantes (règle 4/1 non vérifiable).")
+                continue
+            if odds_value < MIN_SP_DEC_ODDS:
+                notes.append("SP retiré: toutes les cotes < 4/1 (5.0 déc).")
+                continue
+        filtered_sp.append(dict(ticket))
+
+    filtered_combo: list[dict] = []
+    for ticket in combo_tickets:
+        typ = str(ticket.get("type") or "").upper()
+        label = str(ticket.get("label") or "").upper()
+        if typ in _CP_TYPES or label in _CP_TYPES:
+            legs_seq = _normalize_sequence(ticket.get("legs"))
+            legs_details_seq = _normalize_sequence(ticket.get("legs_details"))
+            if len(legs_seq) != 2:
+                filtered_combo.append(dict(ticket))
+                notes.append("Avertissement: CP non-binaire (≠2 jambes).")
+                continue
+            odds_values: list[float | None] = []
+            for index, leg in enumerate(legs_seq):
+                fallback_entries: list[Mapping[str, Any]] = []
+                if index < len(legs_details_seq) and isinstance(legs_details_seq[index], Mapping):
+                    fallback_entries.append(legs_details_seq[index])
+                odds = _resolve_leg_odds(leg, odds_lookup, fallback_entries)
+                odds_values.append(odds)
+            if all(value is not None for value in odds_values):
+                assert len(odds_values) == 2
+                total = float(odds_values[0]) + float(odds_values[1])
+                if total > MIN_CP_SUM_DEC:
+                    filtered_combo.append(dict(ticket))
+                else:
+                    notes.append(
+                        (
+                            "CP retiré: somme des cotes décimales "
+                            f"{float(odds_values[0]):.2f}+{float(odds_values[1]):.2f} ≤ 8.00 (règle > 6/1 cumulés)."
+                        )
+                    )
+            else:
+                notes.append("CP retiré: cotes manquantes (règle >6/1 non vérifiable).")
+            continue
+        filtered_combo.append(dict(ticket))
+
+    return filtered_sp, filtered_combo, notes
 
 
 def drift_points(odds_h30: float | None, odds_h5: float | None) -> float:
@@ -1428,6 +1697,21 @@ def cmd_analyse(args: argparse.Namespace) -> None:
             ticket = dict(template)
             ticket["stake"] = combo_budget * (weight / total_weight)
             combo_tickets.append(ticket)
+
+    sp_tickets, combo_tickets, guard_notes = _filter_sp_and_cp_tickets(
+        sp_tickets,
+        combo_tickets,
+        runners,
+        partants_data,
+    )
+    if guard_notes:
+        notes_bucket = meta.setdefault("notes", [])
+        if isinstance(notes_bucket, list):
+            for note in guard_notes:
+                if note not in notes_bucket:
+                    notes_bucket.append(note)
+        else:
+            meta["notes"] = list(guard_notes)
 
     bankroll = float(cfg.get("BUDGET_TOTAL", 0.0))
     
