@@ -6,6 +6,7 @@ import argparse
 import datetime as dt
 import json
 import os
+import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Sequence, Tuple
@@ -119,14 +120,37 @@ def _format_time(value: Any) -> str | None:
     text = str(value).strip()
     if not text:
         return None
+    text = text.replace("\u202f", " ")   
     if len(text) == 4 and text.isdigit():
         return f"{text[:2]}:{text[2:]}"
-    if len(text) == 5 and text[2] == ":":
-        return text
+    if len(text) >= 5 and text[2] == ":" and text[:2].isdigit():
+        try:
+            hour = int(text[:2]) % 24
+            minute = int(text[3:5])
+        except ValueError:
+            pass
+        else:
+            return f"{hour:02d}:{minute:02d}"
     cleaned = text.replace("Z", "+00:00")
     try:
         parsed = dt.datetime.fromisoformat(cleaned)
-    except ValueError:
+     except ValueError:
+        time_pattern = re.compile(
+            r"(\d{1,2})\s*(?:heures?|heure|hours?|hrs?|hres?|[hH:.])\s*(\d{1,2})?",
+            re.IGNORECASE,
+        )
+        match = time_pattern.search(text)
+        if match:
+            hour = int(match.group(1)) % 24
+            minute_str = match.group(2)
+            minute = int(minute_str) if minute_str is not None else 0
+            return f"{hour:02d}:{minute:02d}"
+        hour_only = re.search(
+            r"(\d{1,2})\s*(?:heures?|heure|hours?|hrs?|hres?|[hH])", text, re.IGNORECASE
+        )
+        if hour_only:
+            hour = int(hour_only.group(1)) % 24
+            return f"{hour:02d}:00"        
         return text
     if parsed.tzinfo is not None:
         target_tz = _env_timezone()
