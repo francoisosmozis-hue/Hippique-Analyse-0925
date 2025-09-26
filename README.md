@@ -204,6 +204,7 @@ Le script `scripts/update_excel_planning.py` assure l'upsert des lignes **H‑30
    ```
 
    La ligne ciblée est mise à jour avec *Statut H‑5 = Analysé*, le drapeau *Jouable H‑5* (Oui/Non selon `abstain`) et une synthèse compacte des tickets (*Tickets H‑5*). Les colonnes vides sont conservées pour d'éventuels commentaires manuels.
+   Le libellé du statut H‑5 peut être personnalisé via l'option `--status-h5` (ex. `--status-h5 "Validé"`).
 
 ### Lancer les workflows manuellement
 
