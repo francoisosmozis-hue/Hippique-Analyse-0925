@@ -20,7 +20,7 @@ from test_pipeline_smoke import (
 def _with_exotics(partants: dict) -> dict:
     combos = {
         "CP": [
-            {"id": "cp-alpha", "legs": ["1", "2"], "odds": 6.0, "stake": 1.0},
+            {"id": "cp-alpha", "legs": ["5", "6"], "odds": 6.0, "stake": 1.0},
         ],
         "TRIO": [
             {"id": "trio-beta", "legs": ["1", "2", "3"], "odds": 15.0, "stake": 1.0},
@@ -141,25 +141,75 @@ def test_pipeline_allocates_combo_budget(tmp_path, monkeypatch):
     partants = _with_exotics(partants_sample())
     inputs = _write_inputs(tmp_path, partants)
 
-    _mock_tracking_outputs(tmp_path, monkeypatch)
+    original_append_csv_line = logging_io.append_csv_line
+    original_append_json = logging_io.append_json
+
+    def fake_append_csv(path, data, header=logging_io.CSV_HEADER):
+        return original_append_csv_line(tmp_path / "tracking.csv", data, header=header)
+
+    def fake_append_json(path, data):
+        target = Path(path)
+        if target.is_absolute():
+            target = target.relative_to(target.anchor)
+        target_path = tmp_path / target
+        return original_append_json(target_path, data)
+
+    monkeypatch.setattr(pipeline_run, "append_csv_line", fake_append_csv)
+    monkeypatch.setattr(pipeline_run, "append_json", fake_append_json)
+    monkeypatch.setattr(logging_io, "append_csv_line", fake_append_csv)
+    monkeypatch.setattr(logging_io, "append_json", fake_append_json)
+
+    def fake_allocate(cfg_local, runners):
+        tickets = [
+            {
+                "type": "SP",
+                "id": "5",
+                "odds": 9.0,
+                "stake": 2.0,
+                "ev_ticket": 0.3,
+            },
+            {
+                "type": "SP",
+                "id": "6",
+                "odds": 11.0,
+                "stake": 1.0,
+                "ev_ticket": 0.2,
+            },
+        ]
+        return [dict(ticket) for ticket in tickets], 0.5
+
+    monkeypatch.setattr(pipeline_run, "allocate_dutching_sp", fake_allocate)
+
+    original_filter = pipeline_run._filter_sp_and_cp_tickets
+    captured = {}
+
+    def wrapped_filter(sp_tickets, combo_tickets, runners, partants):
+        result = original_filter(sp_tickets, combo_tickets, runners, partants)
+        captured["result"] = result
+        return result
+
+    monkeypatch.setattr(pipeline_run, "_filter_sp_and_cp_tickets", wrapped_filter)
 
     def fake_validate(candidates, bankroll, **kwargs):
         if not candidates:
             return [], {"notes": [], "flags": {"combo": False}}
-        base = dict(candidates[0][0])
-        ticket = {
-            "id": base.get("id", "combo-1"),
-            "type": base.get("type", "CP"),
-            "legs": list(base.get("legs", [])),
-            "stake": float(base.get("stake", 1.0)),
-            "ev_check": {
-                "ev_ratio": 0.6,
-                "roi": 0.55,
-                "payout_expected": 40.0,
-                "sharpe": 0.7,
-            },
-        }
-        return [ticket], {"notes": [], "flags": {"combo": True}}
+        tickets = []
+        for candidate in candidates:
+            base = dict(candidate[0])
+            ticket = {
+                "id": base.get("id", "combo-1"),
+                "type": base.get("type", "CP"),
+                "legs": list(base.get("legs", [])),
+                "stake": float(base.get("stake", 1.0)),
+                "ev_check": {
+                    "ev_ratio": 0.6,
+                    "roi": 0.55,
+                    "payout_expected": 40.0,
+                    "sharpe": 0.7,
+                },
+            }
+            tickets.append(ticket)
+        return tickets, {"notes": [], "flags": {"combo": True}}
 
     monkeypatch.setattr(tickets_builder, "validate_exotics_with_simwrapper", fake_validate)    
 
@@ -199,15 +249,20 @@ def test_pipeline_allocates_combo_budget(tmp_path, monkeypatch):
 
     assert calls, "simulate_ev_batch should be called"
     final_call = calls[-1]
+    combo_types = [t.get("type") for t in final_call if t.get("type") in {"CP", "TRIO", "ZE4"}]
+    filtered = captured.get("result")
+    if filtered:
+        _, combo_filtered, notes = filtered
+        assert any(t.get("type") == "CP" for t in combo_filtered), f"CP filtered unexpectedly: {combo_filtered}, notes={notes}"
     combo_stakes = [t["stake"] for t in final_call if t.get("type") in {"CP", "TRIO", "ZE4"}]
-    assert len(combo_stakes) == 2
+    assert len(combo_stakes) == 2, f"combo types={combo_types}, stakes={combo_stakes}"
     combo_budget = 5 * 0.4
     assert sum(combo_stakes) == pytest.approx(combo_budget)
     assert all(stake == pytest.approx(combo_budget / 2) for stake in combo_stakes)
 
     data = json.loads((outdir / "p_finale.json").read_text(encoding="utf-8"))
     combo_ids = [t["id"] for t in data["tickets"] if t.get("type") in {"CP", "TRIO"}]
-    assert combo_ids and {"CP1", "TRIO2"}.issuperset(combo_ids)
+    assert combo_ids and {"cp-alpha", "trio-beta"}.issuperset(set(combo_ids))
     assert data["ev"]["global"] == pytest.approx(sum(t["stake"] for t in final_call) * 0.2)
     assert data["ev"]["variance"] == pytest.approx(1.2)
     assert data["ev"]["combined_expected_payout"] == pytest.approx(sum(t["stake"] for t in final_call) * 8.0)
@@ -219,23 +274,48 @@ def test_pipeline_recomputes_after_combo_rejection(tmp_path, monkeypatch):
 
     _mock_tracking_outputs(tmp_path, monkeypatch)
 
+    def fake_allocate(cfg_local, runners):
+        tickets = [
+            {
+                "type": "SP",
+                "id": "5",
+                "odds": 9.0,
+                "stake": 2.0,
+                "ev_ticket": 0.3,
+            },
+            {
+                "type": "SP",
+                "id": "6",
+                "odds": 11.0,
+                "stake": 1.0,
+                "ev_ticket": 0.2,
+            },
+        ]
+        return [dict(ticket) for ticket in tickets], 0.5
+
+    monkeypatch.setattr(pipeline_run, "allocate_dutching_sp", fake_allocate)
+    
     def fake_validate(candidates, bankroll, **kwargs):
         if not candidates:
             return [], {"notes": [], "flags": {"combo": False}}
-        base = dict(candidates[0][0])
-        ticket = {
-            "id": base.get("id", "combo-1"),
-            "type": base.get("type", "CP"),
-            "legs": list(base.get("legs", [])),
-            "stake": float(base.get("stake", 1.0)),
-            "ev_check": {
-                "ev_ratio": 0.6,
-                "roi": 0.55,
-                "payout_expected": 40.0,
-                "sharpe": 0.7,
-            },
-        }
-        return [ticket], {"notes": [], "flags": {"combo": True}}
+            
+        tickets = []
+        for candidate in candidates:
+            base = dict(candidate[0])
+            ticket = {
+                "id": base.get("id", "combo-1"),
+                "type": base.get("type", "CP"),
+                "legs": list(base.get("legs", [])),
+                "stake": float(base.get("stake", 1.0)),
+                "ev_check": {
+                    "ev_ratio": 0.6,
+                    "roi": 0.55,
+                    "payout_expected": 40.0,
+                    "sharpe": 0.7,
+                },
+            }
+            tickets.append(ticket)
+        return tickets, {"notes": [], "flags": {"combo": True}}
 
     monkeypatch.setattr(tickets_builder, "validate_exotics_with_simwrapper", fake_validate)    
 
@@ -281,6 +361,29 @@ def test_pipeline_recomputes_after_combo_rejection(tmp_path, monkeypatch):
     assert data["ev"]["global"] == pytest.approx(final_total * 0.1)
     assert data["ev"]["combined_expected_payout"] == pytest.approx(final_total * 2.0)
 
+def test_filter_sp_and_cp_tickets_removes_low_odds_cp():
+    runners = [
+        {"id": "1", "odds": 2.2},
+        {"id": "2", "odds": 3.1},
+        {"id": "5", "odds": 9.0},
+    ]
+    partants = {"runners": runners}
+
+    sp_ticket = {"type": "SP", "id": "5", "odds": 9.0, "stake": 1.0}
+    combo_ticket = {"type": "CP", "legs": ["1", "2"], "stake": 1.0}
+
+    sp_filtered, combo_filtered, notes = pipeline_run._filter_sp_and_cp_tickets(
+        [sp_ticket],
+        [combo_ticket],
+        runners,
+        partants,
+    )
+
+    assert sp_filtered and sp_filtered[0]["id"] == "5"
+    assert combo_filtered == []
+    assert any("CP retiré" in str(note) for note in notes)
+
+
 def test_pipeline_uses_capped_stake_in_exports(tmp_path, monkeypatch):
     partants = partants_sample()
     inputs = _write_inputs(tmp_path, partants, combo_ratio=0.0)
@@ -292,7 +395,7 @@ def test_pipeline_uses_capped_stake_in_exports(tmp_path, monkeypatch):
         "id": "sp-1",
         "stake": 4.0,
         "ev_ticket": 0.8,
-        "odds": 2.4,
+        "odds": 6.0,
         "p": 0.55,
     }
 
@@ -399,14 +502,14 @@ def test_pipeline_optimization_preserves_ev_and_budget(tmp_path, monkeypatch):
             "type": "SP",
             "id": "sp-a",
             "stake": 2.0,
-            "odds": 2.4,
+            "odds": 6.0,
             "p": 0.55,
         },
         {
             "type": "SP",
             "id": "sp-b",
             "stake": 1.5,
-            "odds": 3.2,
+            "odds": 7.0,
             "p": 0.38,
         },
     ]
@@ -441,7 +544,7 @@ def test_pipeline_optimization_preserves_ev_and_budget(tmp_path, monkeypatch):
         "id": "sp-1",
         "stake": 4.0,
         "ev_ticket": 0.8,
-        "odds": 2.0,
+        "odds": 6.0,
         "p": 0.6,
     }
 
