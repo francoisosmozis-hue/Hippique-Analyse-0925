@@ -421,6 +421,56 @@ def test_custom_status_h30_and_h5(tmp_path: Path) -> None:
     assert row["Statut H-5"] == "Validé"
 
 
+def test_h30_preserves_existing_comment(tmp_path: Path) -> None:
+    meeting_dir = tmp_path / "meeting"
+    meeting_dir.mkdir()
+    payload = {
+        "meta": {
+            "date": "2024-09-27",
+            "reunion": "R1",
+            "course": "C2",
+            "hippodrome": "Enghien",
+        },
+        "runners": [{"id": 1}, {"id": 2}],
+    }
+    (meeting_dir / "snapshot.json").write_text(json.dumps(payload), encoding="utf-8")
+
+    excel_path = tmp_path / "planning.xlsx"
+    planner.main(
+        [
+            "--phase",
+            "H30",
+            "--input",
+            str(meeting_dir),
+            "--excel",
+            str(excel_path),
+        ]
+    )
+
+    wb = load_workbook(excel_path)
+    ws = wb["Planning"]
+    header_map = {cell.value: idx for idx, cell in enumerate(ws[1], start=1) if cell.value}
+    ws.cell(row=2, column=header_map["Commentaires"]).value = "Note à conserver"
+    wb.save(excel_path)
+    wb.close()
+
+    planner.main(
+        [
+            "--phase",
+            "H30",
+            "--input",
+            str(meeting_dir),
+            "--excel",
+            str(excel_path),
+        ]
+    )
+
+    wb = load_workbook(excel_path)
+    ws = wb["Planning"]
+    row = _read_row(ws, 2)
+    assert row["Commentaires"] == "Note à conserver"
+
+
 def test_h30_handles_nested_course_payload(tmp_path: Path) -> None:
     meeting_dir = tmp_path / "snapshots"
     meeting_dir.mkdir()
