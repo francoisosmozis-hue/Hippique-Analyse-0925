@@ -5,11 +5,18 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import os
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Sequence
 
 from openpyxl import Workbook, load_workbook
 from openpyxl.worksheet.worksheet import Worksheet
+
+try:  # pragma: no cover - fallback for older Python versions
+    from zoneinfo import ZoneInfo
+except Exception:  # pragma: no cover - very defensive
+    ZoneInfo = None  # type: ignore[assignment]
 
 
 PLANNING_HEADERS: Sequence[str] = (
@@ -26,6 +33,23 @@ PLANNING_HEADERS: Sequence[str] = (
     "Tickets H-5",
     "Commentaires",
 )
+
+
+@lru_cache(maxsize=1)
+def _env_timezone() -> dt.tzinfo | None:
+    """Return the timezone configured via ``$TZ`` when available."""
+
+    if ZoneInfo is None:
+        return None
+
+    tz_name = os.environ.get("TZ")
+    if not tz_name:
+        return None
+
+    try:
+        return ZoneInfo(tz_name)
+    except Exception:  # pragma: no cover - invalid/unknown TZ identifiers
+        return None
 
 
 def _phase_argument(value: str) -> str:
@@ -105,7 +129,9 @@ def _format_time(value: Any) -> str | None:
     except ValueError:
         return text
     if parsed.tzinfo is not None:
-        parsed = parsed.astimezone(dt.timezone.utc)
+        target_tz = _env_timezone()
+        if target_tz is not None:
+            parsed = parsed.astimezone(target_tz)
     return parsed.strftime("%H:%M")
 
 
