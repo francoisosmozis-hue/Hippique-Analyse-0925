@@ -123,7 +123,7 @@ def test_h5_updates_status_and_tickets(tmp_path: Path) -> None:
     assert row["Statut H-5"] == "Analysé"
     assert row["Jouable H-5"] == "Oui"
     assert row["Commentaires"] == "ROI estimé 31%"
-    assert row["Tickets H-5"] == "SP:6 2€@3.4"
+    assert row["Tickets H-5"] == "SP:6@3.4"
     assert row["Heure"] == "12:10"
 
 
