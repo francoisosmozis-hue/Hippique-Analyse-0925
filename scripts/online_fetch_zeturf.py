@@ -206,11 +206,13 @@ def fetch_from_geny_idcourse(id_course: str) -> Dict[str, Any]:
 
     resp_partants = requests.get(partants_url, headers=HDRS, timeout=10)
     resp_partants.raise_for_status()
-    soup = BeautifulSoup(resp_partants.text, "html.parser")
+    html = resp_partants.text
+    soup = BeautifulSoup(html, "html.parser")
 
     text = soup.get_text(" ", strip=True)
     match = re.search(r"R\d+", text)
     r_label = match.group(0) if match else None
+    start_time = _extract_start_time(html)
 
     runners: List[Dict[str, Any]] = []
     for tr in soup.select("tr"):
@@ -272,6 +274,8 @@ def fetch_from_geny_idcourse(id_course: str) -> Dict[str, Any]:
         "runners": runners,
         "partants": len(runners),
     }
+    if start_time:
+        snapshot["start_time"] = start_time
     return snapshot
 
 
@@ -346,6 +350,67 @@ def _normalise_start_time(value: Any) -> str | None:
             return text
         return text
     return parsed.strftime("%H:%M")
+
+
+def _extract_start_time(html: str) -> str | None:
+    """Extract a start time from a Geny/Zeturf HTML fragment."""
+
+    if not html:
+        return None
+
+    soup = BeautifulSoup(html, "html.parser")
+
+    def _from_text(text: str) -> str | None:
+        cleaned = text.replace("h", ":")
+        formatted = _normalise_start_time(cleaned)
+        if formatted and re.fullmatch(r"\d{2}:\d{2}", formatted):
+            return formatted
+        match_local = re.search(r"(\d{1,2})\s*[hH:]\s*(\d{2})", text)
+        if match_local:
+            hour = int(match_local.group(1)) % 24
+            minute = int(match_local.group(2))
+            return f"{hour:02d}:{minute:02d}"
+        return formatted if formatted and ":" in formatted else None
+
+    for time_tag in soup.find_all("time"):
+        for attr in ("datetime", "content"):
+            candidate = time_tag.get(attr)
+            formatted = _normalise_start_time(candidate)
+            if formatted:
+                return formatted
+        candidate_text = time_tag.get_text(" ", strip=True)
+        formatted = _from_text(candidate_text)
+        if formatted:
+            return formatted
+
+    for attr in ("data-time", "data-start-time", "data-start", "data-heure"):
+        for tag in soup.find_all(attrs={attr: True}):
+            formatted = _from_text(str(tag[attr]))
+            if formatted:
+                return formatted
+
+    keyword = re.compile(r"(heure|départ|depart|start|off)", re.IGNORECASE)
+    for tag in soup.find_all(True):
+        descriptor = " ".join(
+            [
+                tag.name or "",
+                " ".join(tag.get("class", [])),
+                tag.get("id") or "",
+            ]
+        )
+        if keyword.search(descriptor):
+            text = tag.get_text(" ", strip=True)
+            formatted = _from_text(text)
+            if formatted and re.search(r"\d", text):
+                return formatted
+
+    match = re.search(r"(\d{1,2})\s*[hH:]\s*(\d{2})", html)
+    if match:
+        hour = int(match.group(1)) % 24
+        minute = int(match.group(2))
+        return f"{hour:02d}:{minute:02d}"
+
+    return None
 
 
 def normalize_snapshot(payload: Dict[str, Any]) -> Dict[str, Any]:
