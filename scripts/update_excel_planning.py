@@ -578,6 +578,13 @@ def _collect_h30_entries(source: Path, status: str) -> List[Dict[str, Any]]:
                 "Commentaires": None,
             }
             entries.append(row)
+    entries.sort(
+        key=lambda row: (
+            str(row.get("Date") or ""),
+            str(row.get("Réunion") or ""),
+            str(row.get("Course") or ""),
+        )
+    )
     return entries
 
 
