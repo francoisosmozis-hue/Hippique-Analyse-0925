@@ -418,7 +418,10 @@ def _extract_start_time(html: str) -> str | None:
         minute = int(minute_text) if minute_text is not None else 0
         return f"{hour:02d}:{minute:02d}"
 
-    time_pattern = re.compile(r"(\d{1,2})\s*[hH:.\u202f]\s*(\d{1,2})?")
+    time_pattern = re.compile(
+        r"(\d{1,2})\s*(?:heures?|heure|hours?|hrs?|hres?|[hH:.\u202f])\s*(\d{1,2})?",
+        re.IGNORECASE,
+    )
     
     def _from_text(text: str) -> str | None:
         cleaned = text.replace("\u202f", " ")
@@ -501,10 +504,14 @@ def _extract_start_time(html: str) -> str | None:
         "data-time",
         "data-start-time",
         "data-start",
+        "data-starttime",
+        "data-time-start",
         "data-heure",
+        "data-heure-depart",
+        "data-depart",
+        "data-departure",
         "data-race-time",
         "data-race-hour",
-        "data-starttime",
     )
     for attr in attr_candidates:
         for tag in soup.find_all(attrs={attr: True}):
