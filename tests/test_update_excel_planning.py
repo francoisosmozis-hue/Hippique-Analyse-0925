@@ -721,6 +721,8 @@ def test_cli_alias_and_dash_phase(tmp_path: Path, capsys: pytest.CaptureFixture[
     )
     out_h30 = capsys.readouterr().out
     assert "1 ligne(s) H-30 mises à jour" in out_h30
+    assert "R4C5" in out_h30
+    assert "2025-09-26" in out_h30
 
     analysis_dir = tmp_path / "analysis"
     analysis_dir.mkdir()
@@ -757,6 +759,8 @@ def test_cli_alias_and_dash_phase(tmp_path: Path, capsys: pytest.CaptureFixture[
     )
     out_h5 = capsys.readouterr().out
     assert "1 ligne H-5 mise à jour" in out_h5
+    assert "R4C5" in out_h5
+    assert "2025-09-26" in out_h5
 
     wb = load_workbook(excel_path)
     ws = wb["Planning"]
