@@ -225,6 +225,18 @@ def test_extract_start_time_variants() -> None:
     html_alt = "<span class='depart'>Départ 9h05</span>"
     assert ofz._extract_start_time(html_alt) == "09:05"
 
+    html_meta = """
+    <meta property="event:start_time" content="2025-10-09T09:15:00+01:00" />
+    <div>Autre contenu</div>
+    """
+    assert ofz._extract_start_time(html_meta) == "09:15"
+
+    html_single_digit = "<div>Départ prévu 7h5</div>"
+    assert ofz._extract_start_time(html_single_digit) == "07:05"
+
+    html_hour_only = "<p>Off 15h</p>"
+    assert ofz._extract_start_time(html_hour_only) == "15:00"
+
 
 def test_fetch_from_geny_adds_start_time(monkeypatch: pytest.MonkeyPatch) -> None:
     """Geny fallback snapshots should expose the parsed start time."""
