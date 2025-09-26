@@ -246,17 +246,21 @@ def _summarise_tickets(tickets: Any) -> str:
                 if horse not in (None, ""):
                     horses.append(str(horse))
         odds = _first_non_empty(ticket.get("odds"), ticket.get("rapport"), ticket.get("payout"))
-        horses_joined = "-".join(horses)
-        segment = ""
-        if label:
-            segment = str(label)
-        if horses_joined:
-            segment = f"{segment}:{horses_joined}" if segment else horses_joined
-        if odds not in (None, ""):
-            segment = f"{segment}@{_coerce_number(odds)}"
         stake = _first_non_empty(ticket.get("stake"), ticket.get("mise"), ticket.get("amount"))
+        horses_joined = "-".join(horses)
+        base = ""
+        if label:
+            base = str(label)
+        if horses_joined:
+            base = f"{base}:{horses_joined}" if base else horses_joined
+        parts: List[str] = []
+        if base:
+            parts.append(base)
         if stake not in (None, ""):
-            segment = f"{segment}({_coerce_number(stake)}€)"
+            parts.append(f"{_coerce_number(stake)}€")
+        if odds not in (None, ""):
+            parts.append(f"@{_coerce_number(odds)}")
+        segment = " ".join(parts)
         if segment:
             summaries.append(segment)
     return " | ".join(summaries)
@@ -306,7 +310,7 @@ def _comment_h5(payload: Mapping[str, Any]) -> str:
     if abstain:
         return reason or ""
     if roi is not None:
-        return f"ROI {roi:.2f}"
+        return f"ROI estimé {roi * 100:.0f}%"
     return reason or ""
 
 
@@ -381,6 +385,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         default="Collecté",
         help="Statut par défaut renseigné pour les lignes H-30",
     )
+    parser.add_argument("--rc", help=argparse.SUPPRESS)
     parser.add_argument("--drive-folder", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
 
