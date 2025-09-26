@@ -454,6 +454,45 @@ def _extract_start_time(html: str) -> str | None:
         if formatted:
             return formatted
 
+    def _from_json_ld(value: Any) -> str | None:
+        if isinstance(value, Mapping):
+            for key in ("startDate", "startTime", "start_time", "start"):
+                formatted = _normalise_start_time(value.get(key))
+                if formatted and re.fullmatch(r"\d{2}:\d{2}", formatted):
+                    return formatted
+                formatted = _from_text(str(value.get(key))) if value.get(key) else None
+                if formatted:
+                    return formatted
+            for nested in value.values():
+                formatted = _from_json_ld(nested)
+                if formatted:
+                    return formatted
+        elif isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+            for item in value:
+                formatted = _from_json_ld(item)
+                if formatted:
+                    return formatted
+        elif isinstance(value, str):
+            formatted = _from_text(value)
+            if formatted:
+                return formatted
+        return None
+
+    for script_tag in soup.find_all("script", attrs={"type": "application/ld+json"}):
+        text_content = script_tag.string or script_tag.get_text()
+        if not text_content:
+            continue
+        try:
+            data = json.loads(text_content)
+        except (TypeError, ValueError):
+            formatted = _from_text(text_content)
+            if formatted:
+                return formatted
+            continue
+        formatted = _from_json_ld(data)
+        if formatted:
+            return formatted
+
     attr_candidates = (
         "data-time",
         "data-start-time",
