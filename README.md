@@ -576,6 +576,39 @@ Le second script déclenche automatiquement les phases **H30** puis **H5** pour 
 - `beautifulsoup4`
 - `requests`
 
+#### Mise à jour du planning Excel
+
+Un utilitaire dédié `scripts/update_excel_planning.py` permet d'alimenter
+l'onglet **Planning** du classeur `modele_suivi_courses_hippiques.xlsx`. Le
+script gère les phases H-30 (collecte) et H-5 (analyse) en réalisant un
+*upsert* basé sur la clé `(Date, Réunion, Course)`.
+
+```bash
+# Phase H-30 : collecte de toutes les réunions françaises du jour
+export TZ=Europe/Paris
+while read -r URL; do
+  python online_fetch_zeturf.py --reunion-url "$URL" --snapshot H-30 --out data/meeting
+done < sources.txt
+
+python scripts/update_excel_planning.py \
+  --phase H30 \
+  --in data/meeting \
+  --excel modele_suivi_courses_hippiques.xlsx
+
+# Phase H-5 : mise à jour course par course après l'analyse
+python scripts/update_excel_planning.py \
+  --phase H5 \
+  --in data/R4C5 \
+  --excel modele_suivi_courses_hippiques.xlsx
+```
+
+Les colonnes suivantes sont ajoutées si nécessaire :
+`Date`, `Réunion`, `Course`, `Hippodrome`, `Heure`, `Partants`, `Discipline`,
+`Statut H-30`, `Statut H-5`, `Jouable H-5`, `Tickets H-5`, `Commentaires`.
+La phase H-5 synthétise les tickets au format compact (`SP:3-5@2.0 | CPL:1-3@1.5`)
+et alimente les drapeaux `Statut H-5`/`Jouable H-5` selon l'analyse
+(`abstain`).
+
 #### Autres usages
 
 - Exemple pour traiter toutes les réunions du jour :
