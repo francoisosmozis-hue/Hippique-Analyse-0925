@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
-import re
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Sequence
 
@@ -17,13 +16,15 @@ PLANNING_HEADERS: Sequence[str] = (
     "Date",
     "Réunion",
     "Course",
-    "R/C",
     "Hippodrome",
     "Heure",
     "Partants",
+    "Discipline",
     "Statut H-30",
     "Statut H-5",
+    "Jouable H-5",
     "Tickets H-5",
+    "Commentaires",
 )
 
 
@@ -119,6 +120,10 @@ def _first_non_empty(*values: Any) -> Any:
     return None
 
 
+def _blank_if_missing(value: Any) -> Any:
+    return "" if value in (None, "") else value
+
+
 def _extract_common_meta(payload: Mapping[str, Any]) -> Dict[str, Any]:
     meta = payload.get("meta") if isinstance(payload.get("meta"), Mapping) else {}
     date = _first_non_empty(meta.get("date"), payload.get("date"))
@@ -141,14 +146,6 @@ def _extract_common_meta(payload: Mapping[str, Any]) -> Dict[str, Any]:
         payload.get("c"),
         payload.get("course_label"),
     )
-    rc = _first_non_empty(meta.get("rc"), payload.get("rc"), payload.get("race_id"), payload.get("id"))
-    if isinstance(rc, str):
-        match = re.match(r"^(R\d+)(C\d+)$", rc.replace(" ", "").upper())
-        if match:
-            reunion = reunion or match.group(1)
-            course = course or match.group(2)
-    if not rc and reunion and course:
-        rc = f"{reunion}{course}"
     partants = _first_non_empty(
         meta.get("partants"),
         payload.get("partants"),
@@ -175,14 +172,20 @@ def _extract_common_meta(payload: Mapping[str, Any]) -> Dict[str, Any]:
         payload.get("hour"),
     )
     formatted_time = _format_time(start_time)
+    discipline = _first_non_empty(
+        meta.get("discipline"),
+        meta.get("type"),
+        payload.get("discipline"),
+        payload.get("type"),
+    )
     return {
         "date": date,
         "hippodrome": hippodrome,
         "reunion": reunion,
         "course": course,
-        "rc": rc,
         "start_time": formatted_time,
         "partants": partants,
+        "discipline": discipline,
     }
 
 
@@ -201,7 +204,7 @@ def _upsert(ws: Worksheet, header_map: Mapping[str, int], row: Mapping[str, Any]
     if target_row is None:
         target_row = max(2, max_row + 1)
     for header, value in row.items():
-        if header not in header_map or value in (None, ""):
+        if header not in header_map or value is None:
             continue
         ws.cell(row=target_row, column=header_map[header], value=value)
 
@@ -219,31 +222,44 @@ def _summarise_tickets(tickets: Any) -> str:
         if isinstance(legs, Iterable) and not isinstance(legs, (str, bytes)):
             for leg in legs:
                 if isinstance(leg, Mapping):
+                    selections = leg.get("selections")
+                    if isinstance(selections, Iterable) and not isinstance(selections, (str, bytes)):
+                        selection_text = "-".join(str(x) for x in selections if x not in (None, ""))
+                    else:
+                        selection_text = None
+                    horses_list = leg.get("horses")
+                    if isinstance(horses_list, Iterable) and not isinstance(horses_list, (str, bytes)):
+                        horses_text = "-".join(str(x) for x in horses_list if x not in (None, ""))
+                    else:
+                        horses_text = None
                     horse = _first_non_empty(
                         leg.get("horse"),
                         leg.get("selection"),
                         leg.get("id"),
                         leg.get("num"),
                         leg.get("number"),
+                        selection_text,
+                        horses_text,
                     )
                 else:
                     horse = leg
                 if horse not in (None, ""):
                     horses.append(str(horse))
-        parts: List[str] = []
+        odds = _first_non_empty(ticket.get("odds"), ticket.get("rapport"), ticket.get("payout"))
+        horses_joined = "-".join(horses)
+        segment = ""
         if label:
-            parts.append(str(label))
-        if horses:
-            parts.append(f"[{', '.join(horses)}]")
+            segment = str(label)
+        if horses_joined:
+            segment = f"{segment}:{horses_joined}" if segment else horses_joined
+        if odds not in (None, ""):
+            segment = f"{segment}@{_coerce_number(odds)}"
         stake = _first_non_empty(ticket.get("stake"), ticket.get("mise"), ticket.get("amount"))
         if stake not in (None, ""):
-            parts.append(f"{_coerce_number(stake)}€")
-        odds = _first_non_empty(ticket.get("odds"), ticket.get("rapport"), ticket.get("payout"))
-        if odds not in (None, ""):
-            parts.append(f"@ {_coerce_number(odds)}")
-        if parts:
-            summaries.append(" ".join(parts))
-    return "; ".join(summaries)
+            segment = f"{segment}({_coerce_number(stake)}€)"
+        if segment:
+            summaries.append(segment)
+    return " | ".join(summaries)
 
 
 def _extract_roi(payload: Mapping[str, Any]) -> float | None:
@@ -271,21 +287,27 @@ def _status_h30(default: str) -> str:
     return default
 
 
-def _status_h5(payload: Mapping[str, Any]) -> str:
+def _status_h5() -> str:
+    return "Analysé"
+
+
+def _jouable_flag(payload: Mapping[str, Any]) -> str:
+    return "Non" if bool(payload.get("abstain")) else "Oui"
+
+
+def _comment_h5(payload: Mapping[str, Any]) -> str:
     abstain = bool(payload.get("abstain"))
+    reason = _first_non_empty(
+        payload.get("abstain_reason"),
+        payload.get("notes"),
+        payload.get("message"),
+    )
     roi = _extract_roi(payload)
     if abstain:
-        reason = _first_non_empty(
-            payload.get("abstain_reason"),
-            payload.get("notes"),
-            payload.get("message"),
-        )
-        if not reason and roi is not None:
-            reason = f"ROI {roi:.2f}"
-        return f"Non jouable{f' ({reason})' if reason else ''}"
+        return reason or ""
     if roi is not None:
-        return f"Jouable (ROI {roi:.2f})"
-    return "Jouable"
+        return f"ROI {roi:.2f}"
+    return reason or ""
 
 
 def _collect_h30_entries(source: Path, status: str) -> List[Dict[str, Any]]:
@@ -306,11 +328,12 @@ def _collect_h30_entries(source: Path, status: str) -> List[Dict[str, Any]]:
             "Date": meta.get("date"),
             "Réunion": meta.get("reunion"),
             "Course": meta.get("course"),
-            "R/C": meta.get("rc"),
-            "Hippodrome": meta.get("hippodrome"),
-            "Heure": meta.get("start_time"),
-            "Partants": meta.get("partants"),
+            "Hippodrome": _blank_if_missing(meta.get("hippodrome")),
+            "Heure": _blank_if_missing(meta.get("start_time")),
+            "Partants": _blank_if_missing(meta.get("partants")),
+            "Discipline": _blank_if_missing(meta.get("discipline")),
             "Statut H-30": _status_h30(status),
+            "Commentaires": "",
         }
         entries.append(row)
     return entries
@@ -335,29 +358,29 @@ def _prepare_h5_row(payload: Mapping[str, Any]) -> Dict[str, Any]:
         "Date": meta.get("date"),
         "Réunion": meta.get("reunion"),
         "Course": meta.get("course"),
-        "R/C": meta.get("rc"),
-        "Hippodrome": meta.get("hippodrome"),
-        "Heure": meta.get("start_time"),
-        "Partants": meta.get("partants"),
-        "Statut H-5": _status_h5(payload),
+        "Hippodrome": _blank_if_missing(meta.get("hippodrome")),
+        "Heure": _blank_if_missing(meta.get("start_time")),
+        "Partants": _blank_if_missing(meta.get("partants")),
+        "Discipline": _blank_if_missing(meta.get("discipline")),
+        "Statut H-5": _status_h5(),
+        "Jouable H-5": _jouable_flag(payload)
     }
-    if summary:
-        row["Tickets H-5"] = summary
+    row["Tickets H-5"] = summary or ""
+    row["Commentaires"] = _comment_h5(payload) or ""
     return row
 
 
 def main(argv: Sequence[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Met à jour l'onglet Planning de l'Excel")
     parser.add_argument("--phase", required=True, type=_phase_argument, help="Phase à appliquer (H30/H5)")
-    parser.add_argument("--input", dest="source", required=True, help="Fichier ou dossier source")
+    parser.add_argument("--input", "--in", dest="source", required=True, help="Fichier ou dossier source")
     parser.add_argument("--excel", required=True, help="Chemin du classeur Excel")
     parser.add_argument("--sheet", default="Planning", help="Nom de l'onglet à mettre à jour")
     parser.add_argument(
         "--status-h30",
-        default="OK (collecte)",
+        default="Collecté",
         help="Statut par défaut renseigné pour les lignes H-30",
     )
-    parser.add_argument("--rc", help="Identifiant R/C à cibler pour H-5")
     parser.add_argument("--drive-folder", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
 
@@ -376,13 +399,6 @@ def main(argv: Sequence[str] | None = None) -> None:
     else:
         payload = _load_h5_payload(source)
         row = _prepare_h5_row(payload)
-        if args.rc:
-            row.setdefault("R/C", args.rc)
-            if args.rc and not row.get("Réunion"):
-                match = re.match(r"^(R\d+)(C\d+)$", args.rc.replace(" ", "").upper())
-                if match:
-                    row["Réunion"] = row.get("Réunion") or match.group(1)
-                    row["Course"] = row.get("Course") or match.group(2)
         keys = ("Date", "Réunion", "Course")
         if not all(row.get(key) for key in keys):
             raise ValueError("Impossible de déterminer Date/Réunion/Course pour la mise à jour H-5")
