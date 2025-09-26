@@ -478,7 +478,7 @@ def _collect_h30_entries(source: Path, status: str) -> List[Dict[str, Any]]:
                 "Partants": _blank_if_missing(meta.get("partants")),
                 "Discipline": _blank_if_missing(meta.get("discipline")),
                 "Statut H-30": _status_h30(status),
-                "Commentaires": "",
+                "Commentaires": None,
             }
             entries.append(row)
             continue
@@ -496,7 +496,7 @@ def _collect_h30_entries(source: Path, status: str) -> List[Dict[str, Any]]:
                 "Partants": _blank_if_missing(meta.get("partants")),
                 "Discipline": _blank_if_missing(meta.get("discipline")),
                 "Statut H-30": _status_h30(status),
-                "Commentaires": "",
+                "Commentaires": None,
             }
             entries.append(row)
     return entries
