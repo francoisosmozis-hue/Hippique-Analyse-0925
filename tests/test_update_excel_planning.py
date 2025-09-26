@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 
+import pytest
 from openpyxl import load_workbook
 
 from scripts import update_excel_planning as planner
@@ -122,7 +123,7 @@ def test_h5_updates_status_and_tickets(tmp_path: Path) -> None:
     assert row["Statut H-5"] == "Analysé"
     assert row["Jouable H-5"] == "Oui"
     assert row["Commentaires"] == "ROI estimé 31%"
-    assert row["Tickets H-5"] == "SP:6 2€ @3.4"
+    assert row["Tickets H-5"] == "SP:6 2€@3.4"
     assert row["Heure"] == "12:10"
 
 
@@ -179,3 +180,17 @@ def test_h5_abstention_uses_reason(tmp_path: Path) -> None:
     assert row["Jouable H-5"] == "Non"
     assert row["Commentaires"] == "ROI global < 0.20"
     assert row.get("Tickets H-5") in (None, "")
+
+
+def test_format_time_respects_input_timezone(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("TZ", raising=False)
+    planner._env_timezone.cache_clear()
+    assert planner._format_time("2024-09-25T13:05:00+02:00") == "13:05"
+
+
+def test_format_time_uses_env_timezone(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("TZ", "Europe/Paris")
+    planner._env_timezone.cache_clear()
+    assert planner._format_time("2024-09-25T13:05:00+00:00") == "15:05"
+    monkeypatch.delenv("TZ", raising=False)
+    planner._env_timezone.cache_clear()
