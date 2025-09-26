@@ -361,6 +361,66 @@ def test_custom_status_h5_flag(tmp_path: Path) -> None:
     assert row["Statut H-5"] == "Validé"
 
 
+def test_custom_status_h30_and_h5(tmp_path: Path) -> None:
+    meeting_dir = tmp_path / "meeting"
+    meeting_dir.mkdir()
+    payload = {
+        "meta": {
+            "date": "2024-09-30",
+            "reunion": "R2",
+            "course": "C3",
+        },
+        "runners": [{"id": 1}],
+    }
+    (meeting_dir / "snapshot.json").write_text(json.dumps(payload), encoding="utf-8")
+
+    excel_path = tmp_path / "planning.xlsx"
+    planner.main(
+        [
+            "--phase",
+            "H30",
+            "--input",
+            str(meeting_dir),
+            "--excel",
+            str(excel_path),
+            "--status-h30",
+            "Importé",
+        ]
+    )
+
+    analysis_dir = tmp_path / "R2C3"
+    analysis_dir.mkdir()
+    analysis_payload = {
+        "meta": {
+            "date": "2024-09-30",
+            "reunion": "R2",
+            "course": "C3",
+        },
+        "abstain": False,
+        "tickets": [],
+    }
+    (analysis_dir / "analysis_H5.json").write_text(json.dumps(analysis_payload), encoding="utf-8")
+
+    planner.main(
+        [
+            "--phase",
+            "H5",
+            "--input",
+            str(analysis_dir),
+            "--excel",
+            str(excel_path),
+            "--status-h5",
+            "Validé",
+        ]
+    )
+
+    wb = load_workbook(excel_path)
+    ws = wb["Planning"]
+    row = _read_row(ws, 2)
+    assert row["Statut H-30"] == "Importé"
+    assert row["Statut H-5"] == "Validé"
+
+
 def test_h30_handles_nested_course_payload(tmp_path: Path) -> None:
     meeting_dir = tmp_path / "snapshots"
     meeting_dir.mkdir()
