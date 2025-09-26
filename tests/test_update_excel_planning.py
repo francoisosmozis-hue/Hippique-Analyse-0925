@@ -182,6 +182,66 @@ def test_h5_abstention_uses_reason(tmp_path: Path) -> None:
     assert row.get("Tickets H-5") in (None, "")
 
 
+def test_h5_preserves_existing_metadata_when_missing(tmp_path: Path) -> None:
+    meeting_dir = tmp_path / "meeting"
+    meeting_dir.mkdir()
+    base_payload = {
+        "meta": {
+            "date": "2024-09-26",
+            "reunion": "R2",
+            "course": "C3",
+            "hippodrome": "Lyon-Parilly",
+            "start_time": "2024-09-26T14:15:00",
+        },
+        "runners": [{"id": 1}, {"id": 2}],
+    }
+    (meeting_dir / "snapshot.json").write_text(json.dumps(base_payload), encoding="utf-8")
+
+    excel_path = tmp_path / "planning.xlsx"
+    planner.main(
+        [
+            "--phase",
+            "H30",
+            "--input",
+            str(meeting_dir),
+            "--excel",
+            str(excel_path),
+        ]
+    )
+
+    analysis_dir = tmp_path / "R2C3"
+    analysis_dir.mkdir()
+    minimal_h5 = {
+        "meta": {
+            "date": "2024-09-26",
+            "reunion": "R2",
+            "course": "C3",
+        },
+        "abstain": True,
+        "abstain_reason": "Champ trop ouvert",
+    }
+    (analysis_dir / "analysis_H5.json").write_text(json.dumps(minimal_h5), encoding="utf-8")
+
+    planner.main(
+        [
+            "--phase",
+            "H5",
+            "--input",
+            str(analysis_dir),
+            "--excel",
+            str(excel_path),
+        ]
+    )
+
+    wb = load_workbook(excel_path)
+    ws = wb["Planning"]
+    row = _read_row(ws, 2)
+    assert row["Hippodrome"] == "Lyon-Parilly"
+    assert row["Heure"] == "14:15"
+    assert row["Statut H-5"] == "Analysé"
+    assert row["Jouable H-5"] == "Non"
+
+
 def test_custom_status_h5_flag(tmp_path: Path) -> None:
     meeting_dir = tmp_path / "meeting"
     meeting_dir.mkdir()
