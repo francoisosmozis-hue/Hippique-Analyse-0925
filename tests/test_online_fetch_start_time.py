@@ -89,3 +89,36 @@ def test_extract_start_time_from_start_time_field() -> None:
     </html>
     """
     assert zeturf._extract_start_time(textwrap.dedent(html)) == "10:05"
+
+
+def test_extract_start_time_from_jsonld_graph() -> None:
+    """Nested JSON-LD structures should still expose the start time."""
+
+    html = """
+    <html>
+      <head>
+        <script type="application/ld+json">
+        {
+          "@graph": [
+            {"@type": "SportsEvent", "startDate": "2024-09-25T19:20:00+02:00"},
+            {"@type": "Thing", "name": "Placeholder"}
+          ]
+        }
+        </script>
+      </head>
+    </html>
+    """
+
+    assert zeturf._extract_start_time(textwrap.dedent(html)) == "19:20"
+
+
+def test_extract_start_time_uses_html_regex_fallback() -> None:
+    """A plain text mention without tags should still be detected."""
+
+    html = """
+    <div class="course-infos">
+      Prochain départ annoncé à 9H35, restez connectés !
+    </div>
+    """
+
+    assert zeturf._extract_start_time(textwrap.dedent(html)) == "09:35"
