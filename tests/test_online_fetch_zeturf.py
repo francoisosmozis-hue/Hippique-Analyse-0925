@@ -389,15 +389,23 @@ def test_normalize_snapshot_with_program_numbers() -> None:
     assert sum(normalized["p_imp"].values()) == pytest.approx(1.0)
 
 
-def test_normalize_snapshot_includes_start_time() -> None:
+@pytest.mark.parametrize(
+    "raw, expected",
+    [
+        ("2025-09-10T15:42:00", "15:42"),
+        ("13h05", "13:05"),
+        ("7h", "07:00"),
+    ],
+)
+def test_normalize_snapshot_includes_start_time(raw: str, expected: str) -> None:
     """Start times available in the payload should be normalised to HH:MM."""
 
     payload = sample_snapshot()
-    payload["start_time"] = "2025-09-10T15:42:00"
+    payload["start_time"] = raw
 
     normalized = ofz.normalize_snapshot(payload)
 
-    assert normalized["start_time"] == "15:42"
+    assert normalized["start_time"] == expected
 
 
 
