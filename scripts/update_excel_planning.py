@@ -347,6 +347,10 @@ def _load_h5_payload(source: Path) -> Mapping[str, Any]:
     if source.is_file():
         return _load_json(source)
     if source.is_dir():
+        pattern_matches = sorted(source.glob("analysis_H5*.json"))
+        for candidate in pattern_matches:
+            if candidate.is_file():
+                return _load_json(candidate)
         for name in ("analysis_H5.json", "analysis.json"):
             candidate = source / name
             if candidate.is_file():
