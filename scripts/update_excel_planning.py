@@ -272,7 +272,6 @@ def _summarise_tickets(tickets: Any) -> str:
                 if horse not in (None, ""):
                     horses.append(str(horse))
         odds = _first_non_empty(ticket.get("odds"), ticket.get("rapport"), ticket.get("payout"))
-        stake = _first_non_empty(ticket.get("stake"), ticket.get("mise"), ticket.get("amount"))
         horses_joined = "-".join(horses)
         base = ""
         if label:
@@ -282,8 +281,6 @@ def _summarise_tickets(tickets: Any) -> str:
         parts: List[str] = []
         if base:
             parts.append(base)
-        if stake not in (None, ""):
-            parts.append(f"{_coerce_number(stake)}€")
         if odds not in (None, ""):
             suffix = f"@{_coerce_number(odds)}"
             if parts:
