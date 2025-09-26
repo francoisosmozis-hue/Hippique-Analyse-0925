@@ -219,6 +219,9 @@ def _extract_common_meta(
                 "runners_count",
                 "nb_partants_declares",
                 "nombre_partants",
+                "nb_participants",
+                "nombre_participants",
+                "participants_count",
             ],
             [
                 "partants",
@@ -226,6 +229,9 @@ def _extract_common_meta(
                 "runners_count",
                 "nb_partants_declares",
                 "nombre_partants",
+                "nb_participants",
+                "nombre_participants",
+                "participants_count",
             ],
         )
     )
@@ -253,6 +259,10 @@ def _extract_common_meta(
                 "heure_depart",
                 "heure_depart_programme",
                 "heure_programme",
+                "official_start_time",
+                "official_time",
+                "heure_officielle",
+                "horaire",
             ],
             [
                 "start_time",
@@ -264,6 +274,10 @@ def _extract_common_meta(
                 "heure_depart",
                 "heure_depart_programme",
                 "heure_programme",
+                "official_start_time",
+                "official_time",
+                "heure_officielle",
+                "horaire",
             ],
         )
     )
@@ -305,9 +319,14 @@ def _course_like(obj: Mapping[str, Any]) -> bool:
         "runners",
         "participants",
         "partants",
+        "nb_participants",
+        "nombre_participants",
+        "participants_count",
         "horses",
         "odds",
         "start_time",
+        "official_start_time",
+        "official_time",
         "start",
         "heure",
         "time",
