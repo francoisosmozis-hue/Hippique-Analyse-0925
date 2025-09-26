@@ -142,6 +142,53 @@ doublons. Les commandes ci‑dessus peuvent être enchaînées avec un utilitair
 d'upload (ex. `scripts/drive_sync.py`) pour pousser le fichier sur Google
 Drive.
 
+#### Exemple de flux quotidien
+
+1. **Collecte H‑30**
+   - Renseigner `sources.txt` avec une URL ZEturf par réunion.
+   - Exécuter la boucle de snapshots :
+
+     ```bash
+     export TZ=Europe/Paris
+     while read -r url; do
+       python online_fetch_zeturf.py --reunion-url "$url" --snapshot H-30 --out data/meeting
+     done < sources.txt
+     ```
+
+   - Mettre à jour l'Excel :
+
+     ```bash
+     python scripts/update_excel_planning.py \
+       --phase H30 \
+       --in data/meeting \
+       --excel modele_suivi_courses_hippiques.xlsx
+     ```
+
+2. **Analyse H‑5**
+   - Lancer l'analyse (ex. `python analyse_courses_du_jour_enrichie.py`).
+   - Actualiser l'onglet Planning avec la course traitée :
+
+     ```bash
+     python scripts/update_excel_planning.py \
+       --phase H5 \
+       --in data/R4C5 \
+       --excel modele_suivi_courses_hippiques.xlsx
+     ```
+
+3. **Synchronisation Drive (optionnel)**
+   - Utiliser l'outil existant pour pousser le fichier mis à jour :
+
+     ```bash
+     python scripts/drive_sync.py \
+       --push \
+       --folder-id "<ID_DOSSIER_DRIVE>" \
+       --credentials credentials.json \
+       --file modele_suivi_courses_hippiques.xlsx
+     ```
+
+Cette séquence garantit que les colonnes Statut H‑30/H‑5, Jouable et Tickets
+sont enrichies au fur et à mesure des analyses tout en conservant un historique
+cohérent pour le suivi quotidien.
 ---
 
 ## ⚙️ Installation locale
