@@ -208,7 +208,20 @@ def test_fetch_runners_enriches_start_time(monkeypatch: pytest.MonkeyPatch) -> N
 
     assert data["meta"]["start_time"] == "13:05"
     assert data["start_time"] == "13:05"
+    assert data["course_id"] == "12345"
     assert calls == [api_url, "https://www.zeturf.fr/fr/course/12345"]
+
+
+def test_extract_course_ids_from_meeting() -> None:
+    """Meeting pages should yield ordered course identifiers."""
+
+    html = """
+    <div data-course-id="12345"></div>
+    <a href="/fr/course/67890-course-name">Course 2</a>
+    <script>window.__NUXT__ = {"courseId": "99999"}</script>
+    """
+
+    assert ofz._extract_course_ids_from_meeting(html) == ["12345", "67890", "99999"]
 
 
 def test_extract_start_time_variants() -> None:
@@ -389,6 +402,20 @@ def test_normalize_snapshot_with_program_numbers() -> None:
     assert sum(normalized["p_imp"].values()) == pytest.approx(1.0)
 
 
+def test_normalize_snapshot_derives_labels() -> None:
+    """The normaliser should expose reunion/course labels when rc is present."""
+
+    payload = sample_snapshot()
+    payload["rc"] = "R4C7"
+    payload["course_id"] = 555666
+
+    normalized = ofz.normalize_snapshot(payload)
+
+    assert normalized["reunion"] == "R4"
+    assert normalized["course"] == "C7"
+    assert normalized["course_id"] == "555666"
+
+
 @pytest.mark.parametrize(
     "raw, expected",
     [
@@ -467,6 +494,78 @@ def test_main_diff_mode(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
     assert data["steams"][0]["id_cheval"] == "1"
     assert data["drifts"][0]["id_cheval"] == "2"
 
+
+
+def test_reunion_snapshot_cli(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The CLI should fetch all course snapshots for a meeting URL."""
+
+    meeting_url = "https://www.zeturf.fr/fr/reunion/2024-09-25/R1-paris"
+    meeting_html = """
+    <div data-course-id="11111"></div>
+    <a href="/course/22222-prix-test">Course 2</a>
+    """
+
+    config_path = tmp_path / "sources.yml"
+    config_path.write_text(
+        "zeturf:\n  url: 'https://api.example/race/{course_id}'\n",
+        encoding="utf-8",
+    )
+
+    def fake_get(url: str, headers: Any | None = None, timeout: int = 10) -> DummyResp:
+        if url == meeting_url:
+            return DummyResp(200, {}, text=meeting_html)
+        if "11111" in url:
+            payload = {
+                "rc": "R1C1",
+                "hippodrome": "Paris-Vincennes",
+                "date": "2024-09-25",
+                "discipline": "trot",
+                "runners": [{"id": 1, "name": "Alpha", "odds": 3.5}],
+            }
+            return DummyResp(200, payload, text="<html></html>")
+        if "22222" in url:
+            payload = {
+                "rc": "R1C2",
+                "hippodrome": "Paris-Vincennes",
+                "date": "2024-09-25",
+                "discipline": "trot",
+                "runners": [{"id": 2, "name": "Beta", "odds": 4.0}],
+            }
+            return DummyResp(200, payload, text="<html></html>")
+        raise AssertionError(f"Unexpected URL {url}")
+
+    monkeypatch.setattr(ofz.requests, "get", fake_get)
+
+    out_dir = tmp_path / "meeting"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "scripts/online_fetch_zeturf.py",
+            "--reunion-url",
+            meeting_url,
+            "--snapshot",
+            "H-30",
+            "--out",
+            str(out_dir),
+            "--sources",
+            str(config_path),
+        ],
+    )
+
+    ofz.main()
+
+    snap1 = out_dir / "R1C1" / "snapshot_H-30.json"
+    snap2 = out_dir / "R1C2" / "snapshot_H-30.json"
+    assert snap1.exists()
+    assert snap2.exists()
+
+    data1 = json.loads(snap1.read_text(encoding="utf-8"))
+    data2 = json.loads(snap2.read_text(encoding="utf-8"))
+    assert data1["course_id"] == "11111"
+    assert data2["course_id"] == "22222"
+    assert data1["reunion"] == "R1"
+    assert data2["course"] == "C2"
 
 
 def test_main_planning_mode(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
