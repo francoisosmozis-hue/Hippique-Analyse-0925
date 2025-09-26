@@ -178,6 +178,31 @@ def _blank_if_missing(value: Any) -> Any:
     return value
 
 
+def _format_row_identifier(row: Mapping[str, Any]) -> str:
+    """Return a compact label describing ``row`` for CLI feedback."""
+
+    def _clean(value: Any) -> str:
+        if value in (None, ""):
+            return ""
+        return str(value).strip()
+
+    reunion = _clean(row.get("Réunion"))
+    course = _clean(row.get("Course"))
+    rc = ""
+    if reunion and course:
+        rc = f"{reunion}{course}"
+    else:
+        rc = reunion or course
+    if not rc:
+        rc = _clean(row.get("RC")) or _clean(row.get("rc"))
+
+    date = _clean(row.get("Date"))
+
+    if rc and date:
+        return f"{rc} – {date}"
+    return rc or date
+
+
 def _extract_common_meta(
     payload: Mapping[str, Any], parents: Sequence[Mapping[str, Any]] | None = None
 ) -> Dict[str, Any]:
