@@ -187,6 +187,41 @@ def test_fetch_runners_fallback_on_404(
     assert data["id_course"] == "12345"
 
 
+def test_extract_start_time_variants() -> None:
+    """The helper should normalise hours from HTML fragments."""
+
+    html = """
+    <div class='infos-course'>
+        <time datetime="2024-09-25T13:45:00+02:00">13h45</time>
+    </div>
+    """
+
+    assert ofz._extract_start_time(html) == "13:45"
+
+    html_alt = "<span class='depart'>Départ 9h05</span>"
+    assert ofz._extract_start_time(html_alt) == "09:05"
+
+
+def test_fetch_from_geny_adds_start_time(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Geny fallback snapshots should expose the parsed start time."""
+
+    html = """
+    <div id='horaire'>Départ prévu à <strong>16h20</strong></div>
+    <table><tr><td>1</td><td>Nom</td><td>J</td><td>E</td></tr></table>
+    """
+
+    def fake_get(url: str, headers: Any = None, timeout: int = 10) -> DummyResp:
+        if "partants" in url:
+            return DummyResp(200, "", text=html)
+        return DummyResp(200, {"runners": []})
+
+    monkeypatch.setattr(ofz.requests, "get", fake_get)
+
+    snap = ofz.fetch_from_geny_idcourse("99999")
+
+    assert snap["start_time"] == "16:20"
+
+
 def test_compute_diff_top_lists() -> None:
     """``compute_diff`` should expose top steams and drifts."""
 
@@ -324,6 +359,7 @@ def test_normalize_snapshot_includes_start_time() -> None:
     normalized = ofz.normalize_snapshot(payload)
 
     assert normalized["start_time"] == "15:42"
+
 
 
 
