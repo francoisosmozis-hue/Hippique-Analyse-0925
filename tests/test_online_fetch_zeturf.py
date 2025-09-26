@@ -163,7 +163,7 @@ def test_fetch_runners_placeholder_url() -> None:
 def test_fetch_runners_fallback_on_404(
     monkeypatch: pytest.MonkeyPatch, url: str
 ) -> None:
-    """``fetch_runners`` should fallback to Geny on a 404."""    
+    """``fetch_runners`` should fallback to Geny on a 404."""
     seen: list[str] = []
 
     def fake_get(u: str, timeout: int = 10) -> DummyResp:
@@ -187,7 +187,31 @@ def test_fetch_runners_fallback_on_404(
     assert data["id_course"] == "12345"
 
 
-def test_extract_start_time_variants() -> None:
+def test_fetch_runners_enriches_start_time(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Successful API fetches should scrape the course page for start time."""
+
+    api_url = "https://www.zeturf.fr/rest/api/race/12345"
+    html = "<time datetime='2024-09-25T13:05:00+02:00'>13h05</time>"
+    calls: list[str] = []
+
+    def fake_get(url: str, timeout: int = 10, headers: Any | None = None) -> DummyResp:
+        calls.append(url)
+        if url == api_url:
+            return DummyResp(200, {"meta": {}})
+        if url == "https://www.zeturf.fr/fr/course/12345":
+            return DummyResp(200, {}, text=html)
+        raise AssertionError(f"Unexpected URL: {url}")
+
+    monkeypatch.setattr(ofz.requests, "get", fake_get)
+
+    data = ofz.fetch_runners(api_url)
+
+    assert data["meta"]["start_time"] == "13:05"
+    assert data["start_time"] == "13:05"
+    assert calls == [api_url, "https://www.zeturf.fr/fr/course/12345"]
+
+
+    def test_extract_start_time_variants() -> None:
     """The helper should normalise hours from HTML fragments."""
 
     html = """
