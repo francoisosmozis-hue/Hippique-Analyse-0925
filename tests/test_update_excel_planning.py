@@ -298,6 +298,127 @@ def test_custom_status_h5_flag(tmp_path: Path) -> None:
     assert row["Statut H-5"] == "Validé"
 
 
+def test_h30_handles_nested_course_payload(tmp_path: Path) -> None:
+    meeting_dir = tmp_path / "snapshots"
+    meeting_dir.mkdir()
+    payload = {
+        "courses": [
+            {
+                "meta": {
+                    "date": "2024-09-25",
+                    "reunion": "R4",
+                    "course": "C5",
+                    "hippodrome": "Vincennes",
+                    "start_time": "13h05",
+                    "partants": 14,
+                },
+                "discipline": "Plat",
+            }
+        ]
+    }
+    (meeting_dir / "meeting.json").write_text(json.dumps(payload), encoding="utf-8")
+    excel_path = tmp_path / "planning.xlsx"
+
+    planner.main(
+        [
+            "--phase",
+            "H30",
+            "--input",
+            str(meeting_dir),
+            "--excel",
+            str(excel_path),
+        ]
+    )
+
+    wb = load_workbook(excel_path)
+    ws = wb["Planning"]
+    row = _read_row(ws, 2)
+
+    assert row["Réunion"] == "R4"
+    assert row["Course"] == "C5"
+    assert row["Hippodrome"] == "Vincennes"
+    assert row["Heure"] == "13:05"
+    assert row["Partants"] == 14
+    assert row["Discipline"] == "Plat"
+
+
+def test_h5_compact_ticket_summary(tmp_path: Path) -> None:
+    meeting_dir = tmp_path / "snapshots"
+    meeting_dir.mkdir()
+    payload = {
+        "courses": [
+            {
+                "meta": {
+                    "date": "2024-09-25",
+                    "reunion": "R4",
+                    "course": "C5",
+                    "hippodrome": "Vincennes",
+                },
+            }
+        ]
+    }
+    (meeting_dir / "meeting.json").write_text(json.dumps(payload), encoding="utf-8")
+    excel_path = tmp_path / "planning.xlsx"
+    planner.main(
+        [
+            "--phase",
+            "H30",
+            "--input",
+            str(meeting_dir),
+            "--excel",
+            str(excel_path),
+        ]
+    )
+
+    analysis_dir = tmp_path / "R4C5"
+    analysis_dir.mkdir()
+    analysis_payload = {
+        "meta": {
+            "date": "2024-09-25",
+            "reunion": "R4",
+            "course": "C5",
+            "hippodrome": "Vincennes",
+            "start_time": "13h05",
+            "discipline": "Plat",
+            "partants": 14,
+        },
+        "abstain": False,
+        "roi": 0.12,
+        "tickets": [
+            {
+                "type": "SP",
+                "legs": [{"selections": [3, 5]}],
+                "odds": 2.0,
+            },
+            {
+                "type": "CPL",
+                "legs": [{"horses": [1, 3]}],
+                "rapport": 1.5,
+            },
+        ],
+    }
+    (analysis_dir / "analysis_H5.json").write_text(json.dumps(analysis_payload), encoding="utf-8")
+
+    planner.main(
+        [
+            "--phase",
+            "H5",
+            "--input",
+            str(analysis_dir),
+            "--excel",
+            str(excel_path),
+        ]
+    )
+
+    wb = load_workbook(excel_path)
+    ws = wb["Planning"]
+    row = _read_row(ws, 2)
+
+    assert row["Statut H-5"] == "Analysé"
+    assert row["Jouable H-5"] == "Oui"
+    assert row["Tickets H-5"] == "SP:3-5@2 | CPL:1-3@1.5"
+    assert row["Commentaires"] == "ROI estimé 12%"
+
 def test_format_time_respects_input_timezone(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("TZ", raising=False)
     planner._env_timezone.cache_clear()
