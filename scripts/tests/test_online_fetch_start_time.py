@@ -50,6 +50,25 @@ def test_extract_start_time_from_plain_html(monkeypatch):
     assert zeturf._extract_start_time(html) == "09:00"
 
 
+def test_extract_start_time_from_json_ld(monkeypatch):
+    monkeypatch.delenv("TZ", raising=False)
+    html = """
+    <html>
+      <head>
+        <script type="application/ld+json">
+        {
+          "@context": "https://schema.org",
+          "@type": "HorseRace",
+          "startDate": "2023-09-25T18:20:00+02:00"
+        }
+        </script>
+      </head>
+      <body></body>
+    </html>
+    """
+    assert zeturf._extract_start_time(html) == "18:20"
+
+
 def test_fetch_runners_scrapes_start_time(monkeypatch):
     payload = {"meta": {}, "runners": []}
 
