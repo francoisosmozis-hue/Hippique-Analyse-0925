@@ -315,6 +315,18 @@ def test_normalize_snapshot_with_program_numbers() -> None:
     assert sum(normalized["p_imp"].values()) == pytest.approx(1.0)
 
 
+def test_normalize_snapshot_includes_start_time() -> None:
+    """Start times available in the payload should be normalised to HH:MM."""
+
+    payload = sample_snapshot()
+    payload["start_time"] = "2025-09-10T15:42:00"
+
+    normalized = ofz.normalize_snapshot(payload)
+
+    assert normalized["start_time"] == "15:42"
+
+
+
 @pytest.mark.parametrize("mode", ["h30", "h5"])
 def test_main_snapshot_modes(mode: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """CLI should normalise snapshots for h30/h5 modes."""
