@@ -38,3 +38,26 @@ def test_extract_start_time_from_plain_html(monkeypatch):
     </html>
     """
     assert zeturf._extract_start_time(html) == "09:00"
+
+
+def test_fetch_runners_scrapes_start_time(monkeypatch):
+    payload = {"meta": {}, "runners": []}
+
+    class DummyResponse:
+        def json(self):
+            return payload
+
+        def raise_for_status(self):
+            return None
+
+    def fake_get(url, *args, **kwargs):
+        return DummyResponse()
+
+    monkeypatch.setattr(zeturf.requests, "get", fake_get)
+    monkeypatch.setattr(zeturf, "_scrape_start_time_from_course_page", lambda course_id: "13:45")
+
+    result = zeturf.fetch_runners("https://www.zeturf.fr/race/123456")
+
+    assert result["meta"]["start_time"] == "13:45"
+    assert result["start_time"] == "13:45"
+
