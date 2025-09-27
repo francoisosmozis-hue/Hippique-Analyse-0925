@@ -86,6 +86,41 @@ def fetch_race_snapshot(
     if url:
         entry["url"] = url
 
+    course_id_hint = None
+    try:
+        course_id_hint = _impl._extract_course_id_from_entry(entry)
+    except AttributeError:  # pragma: no cover - defensive fallback
+        course_id_hint = None
+
+    candidate_urls: list[str] = []
+    try:
+        entry_url = _impl._extract_url_from_entry(entry)
+    except AttributeError:  # pragma: no cover - defensive fallback
+        entry_url = entry.get("url") if isinstance(entry, Mapping) else None
+    if isinstance(entry_url, str) and entry_url not in candidate_urls:
+        candidate_urls.append(entry_url)
+    if url and url not in candidate_urls:
+        candidate_urls.append(url)
+
+    if not course_id_hint:
+        for candidate in candidate_urls:
+            if not candidate:
+                continue
+            try:
+                match = _impl._COURSE_ID_PATTERN.search(candidate)
+            except AttributeError:  # pragma: no cover - defensive fallback
+                match = None
+            if match:
+                course_id_hint = match.group(0)
+                entry.setdefault("course_id", course_id_hint)
+                break
+
+    if not course_id_hint:
+        recovered = getattr(_impl, "discover_course_id", lambda _rc: None)(rc)
+        if recovered:
+            entry["course_id"] = recovered
+            course_id_hint = recovered
+
     rc_map[rc] = entry
     sources["rc_map"] = rc_map
 
