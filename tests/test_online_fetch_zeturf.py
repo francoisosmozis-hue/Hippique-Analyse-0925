@@ -326,7 +326,18 @@ def test_cli_fetch_race_snapshot_defaults_phase(monkeypatch: pytest.MonkeyPatch)
         initial_delay: float,
     ) -> dict[str, Any]:
         calls.setdefault("phase", phase)
-        return {"rc": rc, "meta": {}}
+        return {
+            "rc": rc,
+            "hippodrome": "Testville",
+            "date": "2024-09-25",
+            "discipline": "plat",
+            "reunion": "R1",
+            "course": "C1",
+            "runners": [
+                {"id": "1", "name": "Alpha", "odds": 2.5},
+            ],
+            "partants": 1,
+        }
 
     monkeypatch.setattr(cli, "_load_sources_config", lambda _path=None: _stub_sources_config())
     monkeypatch.setattr(cli._impl, "fetch_race_snapshot", fake_fetch)
@@ -334,6 +345,10 @@ def test_cli_fetch_race_snapshot_defaults_phase(monkeypatch: pytest.MonkeyPatch)
     snapshot = cli.fetch_race_snapshot("R1", "C1")
 
     assert snapshot["rc"] == "R1C1"
+    assert snapshot["reunion"] == "R1"
+    assert snapshot["course"] == "C1"
+    assert snapshot["runners"][0]["num"] == "1"
+    assert snapshot["runners"][0]["name"] == "Alpha"
     assert calls["phase"] == "H30"
 
 
@@ -356,7 +371,17 @@ def test_cli_fetch_race_snapshot_normalises_phase_aliases(
         initial_delay: float,
     ) -> dict[str, Any]:
         calls.setdefault("phase", phase)
-        return {"rc": rc, "meta": {}}
+        return {
+            "rc": rc,
+            "hippodrome": "Testville",
+            "date": "2024-09-25",
+            "discipline": "plat",
+            "reunion": "R1",
+            "course": "C1",
+            "runners": [
+                {"id": "1", "name": "Alpha", "odds": 2.5},
+            ],
+        }
 
     monkeypatch.setattr(cli, "_load_sources_config", lambda _path=None: _stub_sources_config())
     monkeypatch.setattr(cli._impl, "fetch_race_snapshot", fake_fetch)
@@ -364,6 +389,7 @@ def test_cli_fetch_race_snapshot_normalises_phase_aliases(
     snapshot = cli.fetch_race_snapshot("R1", "C1", requested)
 
     assert snapshot["rc"] == "R1C1"
+    assert snapshot["reunion"] == "R1"
     assert calls["phase"] == expected
 
 
@@ -391,8 +417,18 @@ def test_cli_fetch_race_snapshot_discovers_course_id(monkeypatch: pytest.MonkeyP
         calls.setdefault("fetch", []).append(rc)
         entry = sources["rc_map"][rc]
         assert entry["course_id"] == "12345"
-        return {"rc": rc, "course_id": entry["course_id"], "meta": {}}
-
+        return {
+            "rc": rc,
+            "course_id": entry["course_id"],
+            "hippodrome": "Testville",
+            "date": "2024-09-25",
+            "discipline": "plat",
+            "reunion": "R1",
+            "course": "C1",
+            "runners": [
+                {"id": "1", "name": "Alpha", "odds": 2.5},
+            ],
+        }
     monkeypatch.setattr(ofz, "discover_course_id", fake_discover)
     monkeypatch.setattr(ofz, "fetch_race_snapshot", fake_fetch)
 
@@ -404,6 +440,8 @@ def test_cli_fetch_race_snapshot_discovers_course_id(monkeypatch: pytest.MonkeyP
     )
 
     assert snapshot["course_id"] == "12345"
+    assert snapshot["reunion"] == "R1"
+    assert snapshot["runners"][0]["num"] == "1"
     assert calls["discover"] == ["R1C1"]
     assert calls["fetch"] == ["R1C1"]
 
