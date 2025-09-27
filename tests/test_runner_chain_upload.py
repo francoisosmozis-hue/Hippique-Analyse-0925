@@ -1,3 +1,4 @@
+import datetime as dt
 import pathlib
 
 import scripts.runner_chain as rc
@@ -11,8 +12,19 @@ def test_upload_file_called_for_snapshot(tmp_path, monkeypatch):
 
     monkeypatch.setattr(rc, "upload_file", fake_upload)
     monkeypatch.setattr(rc, "USE_GCS", True)
+    monkeypatch.setattr(rc, "_load_sources_config", lambda: {})
+    monkeypatch.setattr(rc.ofz, "fetch_race_snapshot", lambda *a, **k: {"rc": "R1C1"})
 
-    rc._write_snapshot("R1C1", "H30", tmp_path)
+    payload = rc.RunnerPayload(
+        id_course="123456",
+        reunion="R1",
+        course="C1",
+        phase="H30",
+        start_time=dt.datetime(2024, 1, 1, 12, 0),
+        budget=5.0,
+    )
+
+    rc._write_snapshot(payload, "H30", tmp_path)
 
     assert called == [tmp_path / "R1C1" / "snapshot_H30.json"]
 
