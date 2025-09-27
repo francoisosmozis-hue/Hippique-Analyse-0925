@@ -7,6 +7,8 @@ import datetime as dt
 import json
 import logging
 import os
+import subprocess
+import sys
 import time
 from functools import lru_cache
 from pathlib import Path
@@ -103,6 +105,7 @@ def _http_get_with_backoff(
 GENY_BASE = "https://www.geny.com"
 HDRS = {"User-Agent": "Mozilla/5.0 (+EV; GPI v5.1)"}
 GENY_FALLBACK_URL = f"{GENY_BASE}/reunions-courses-pmu"
+_DISCOVER_GENY_SCRIPT = Path(__file__).resolve().with_name("discover_geny_today.py")
 COURSE_PAGE_TEMPLATES: Sequence[str] = (
     "https://www.zeturf.fr/fr/course/{course_id}",
     "https://www.zeturf.fr/course/{course_id}",
@@ -151,6 +154,79 @@ _PROVIDER_PRIORITY: Dict[str, Sequence[str]] = {
     "h5": ("pmu", "geny", "zeturf"),
 }
 _DEFAULT_PROVIDER_ORDER: Sequence[str] = ("geny", "pmu", "zeturf")
+
+
+def _load_geny_discovery_payload() -> Mapping[str, Any]:
+    """Return the JSON payload produced by ``discover_geny_today`` when available."""
+
+    try:
+        raw = subprocess.check_output([sys.executable, str(_DISCOVER_GENY_SCRIPT)], text=True)
+    except FileNotFoundError as exc:  # pragma: no cover - defensive guard
+        logger.warning("Discovery helper %s introuvable: %s", _DISCOVER_GENY_SCRIPT, exc)
+        return {}
+    except subprocess.CalledProcessError as exc:  # pragma: no cover - external failure
+        logger.warning("Echec discover_geny_today (code %s): %s", exc.returncode, exc)
+        return {}
+    except OSError as exc:  # pragma: no cover - defensive guard
+        logger.warning("Impossible d'exécuter discover_geny_today: %s", exc)
+        return {}
+
+    if not raw:
+        return {}
+
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError as exc:  # pragma: no cover - defensive guard
+        logger.warning("Payload discover_geny_today invalide: %s", exc)
+        return {}
+
+    if isinstance(payload, Mapping):
+        return payload
+
+    logger.warning("Payload discover_geny_today inattendu: %s", type(payload))
+    return {}
+
+
+def discover_course_id(rc: str) -> str | None:
+    """Return the course identifier discovered via ``discover_geny_today``."""
+
+    rc_norm = _normalise_rc(rc)
+    if not rc_norm:
+        return None
+
+    match = re.match(r"R(\d+)C(\d+)", rc_norm)
+    if not match:
+        return None
+
+    reunion_label = f"R{int(match.group(1))}"
+    course_label = f"C{int(match.group(2))}"
+
+    payload = _load_geny_discovery_payload()
+    meetings = payload.get("meetings") if isinstance(payload, Mapping) else None
+    if not isinstance(meetings, list):
+        return None
+
+    for meeting in meetings:
+        if not isinstance(meeting, Mapping):
+            continue
+        if str(meeting.get("r", "")).upper() != reunion_label:
+            continue
+        courses = meeting.get("courses")
+        if not isinstance(courses, list):
+            continue
+        for info in courses:
+            if not isinstance(info, Mapping):
+                continue
+            if str(info.get("c", "")).upper() != course_label:
+                continue
+            for key in ("id_course", "course_id", "id"):
+                value = info.get(key)
+                if value is None:
+                    continue
+                text = str(value).strip()
+                if text:
+                    return text
+    return None
 
 
 _TEXTUAL_TIME_PATTERN = re.compile(
@@ -1358,6 +1434,7 @@ __all__ = [
     "write_snapshot_from_geny",
     "normalize_snapshot",
     "compute_diff",
+    "discover_course_id",
     "make_diff",
     "resolve_source_url",
     "main",
