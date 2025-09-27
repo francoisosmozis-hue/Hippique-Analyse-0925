@@ -165,12 +165,29 @@ def test_missing_enrich_outputs(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
 
     def fake_snapshot(cid: str, ph: str, rc_dir: Path) -> Path:
         dest = rc_dir / "snap_H-5.json"
-        dest.write_text("{}", encoding="utf-8")
+        payload = {"id_course": cid, "course_id": cid}
+        dest.write_text(json.dumps(payload), encoding="utf-8")
         return dest
 
     monkeypatch.setattr(acde, "write_snapshot_from_geny", fake_snapshot)
 
-    monkeypatch.setattr(acde, "enrich_h5", lambda rc_dir, **kw: None)
+    def fake_enrich(rc_dir: Path, **kw) -> None:
+        snap_path = rc_dir / "snap_H-5.json"
+        course_id = ""
+        if snap_path.exists():
+            try:
+                payload = json.loads(snap_path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                payload = {}
+            course_id = str(
+                (payload.get("id_course") or payload.get("course_id") or "")
+            )
+        minimal = {"course_id": course_id}
+        (rc_dir / "normalized_h5.json").write_text(
+            json.dumps(minimal), encoding="utf-8"
+        )
+        (rc_dir / "partants.json").write_text(json.dumps(minimal), encoding="utf-8")
+    monkeypatch.setattr(acde, "enrich_h5", fake_enrich)
     monkeypatch.setattr(acde.time, "sleep", lambda delay: None)
     monkeypatch.setattr(acde, "build_p_finale", lambda *a, **k: None)
     monkeypatch.setattr(acde, "run_pipeline", lambda *a, **k: None)
@@ -179,8 +196,9 @@ def test_missing_enrich_outputs(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
 
     calls: list[list[str]] = []
 
-    def fake_run(cmd: list[str], check: bool = False) -> None:
+    def fake_run(cmd: list[str], check: bool = False):
         calls.append(cmd)
+        return types.SimpleNamespace(returncode=0)
 
     monkeypatch.setattr(acde.subprocess, "run", fake_run)
 
@@ -206,18 +224,28 @@ def test_missing_enrich_outputs(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
         "reason": "data-missing",
         "details": {"missing": ["snap_H-5_je.csv", "chronos.csv"]},
     }
-marker = rc_dir / "UNPLAYABLE.txt"
+    marker = rc_dir / "UNPLAYABLE.txt"
     assert marker.exists()
+    fetch_stats = str(
+        Path(acde.__file__).resolve().with_name("scripts") / "fetch_je_stats.py"
+    )
+    fetch_chrono = str(
+        Path(acde.__file__).resolve().with_name("scripts") / "fetch_je_chrono.py"
+    )
     assert calls == [
         [
             sys.executable,
-            str(Path(acde.__file__).resolve().with_name("scripts") / "fetch_je_stats.py"),
-            "--course-dir",
-            str(rc_dir),
+            fetch_stats,
+            "--course-id",
+            "123",
+            "--h5",
+            str(rc_dir / "normalized_h5.json"),
+            "--out",
+            str(rc_dir / "stats_je.json"),
         ],
         [
             sys.executable,
-            str(Path(acde.__file__).resolve().with_name("scripts") / "fetch_je_chrono.py"),
+            fetch_chrono,
             "--course-dir",
             str(rc_dir),
         ],
@@ -235,12 +263,30 @@ def test_missing_enrich_outputs_recovers_after_fetch(
 
     def fake_snapshot(cid: str, ph: str, rc_dir: Path) -> Path:
         dest = rc_dir / "snap_H-5.json"
-        dest.write_text("{}", encoding="utf-8")
+        payload = {"id_course": cid, "course_id": cid}
+        dest.write_text(json.dumps(payload), encoding="utf-8")
         return dest
 
     monkeypatch.setattr(acde, "write_snapshot_from_geny", fake_snapshot)
     monkeypatch.setattr(acde, "enrich_h5", lambda rc_dir, **kw: None)
-    monkeypatch.setattr(acde.time, "sleep", lambda delay: None)
+    def fake_enrich(rc_dir: Path, **kw) -> None:
+        snap_path = rc_dir / "snap_H-5.json"
+        course_id = ""
+        if snap_path.exists():
+            try:
+                payload = json.loads(snap_path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                payload = {}
+            course_id = str(
+                (payload.get("id_course") or payload.get("course_id") or "")
+            )
+        minimal = {"course_id": course_id}
+        (rc_dir / "normalized_h5.json").write_text(
+            json.dumps(minimal), encoding="utf-8"
+        )
+        (rc_dir / "partants.json").write_text(json.dumps(minimal), encoding="utf-8")
+
+    monkeypatch.setattr(acde, "enrich_h5", fake_enrich)
 
     pipeline_calls: list[Path] = []
     monkeypatch.setattr(
@@ -264,8 +310,12 @@ def test_missing_enrich_outputs_recovers_after_fetch(
         lambda rc_dir: (pipeline_calls.append(rc_dir) or (rc_dir / "per_horse_report.csv")),
     )
 
-    def fake_run(cmd: list[str], check: bool = False) -> None:
-        rc_dir = Path(cmd[-1])
+    def fake_run(cmd: list[str], check: bool = False):
+        if "fetch_je_stats.py" in cmd[1]:
+            out_index = cmd.index("--out")
+            rc_dir = Path(cmd[out_index + 1]).parent
+        else:
+            rc_dir = Path(cmd[-1])
         snap = rc_dir / "snap_H-5.json"
         if snap.exists():
             if "fetch_je_stats.py" in cmd[1]:
@@ -278,6 +328,7 @@ def test_missing_enrich_outputs_recovers_after_fetch(
                     "num,chrono\n1,1.0\n",
                     encoding="utf-8",
                 )
+        return types.SimpleNamespace(returncode=0)
 
     monkeypatch.setattr(acde.subprocess, "run", fake_run)
 
