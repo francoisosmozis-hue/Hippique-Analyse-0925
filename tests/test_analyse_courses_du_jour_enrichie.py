@@ -1,11 +1,16 @@
 import os
 import sys
 import json
+import types
 from pathlib import Path
 
 import pytest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+stub_fetch = types.ModuleType("scripts.online_fetch_zeturf")
+stub_fetch.normalize_snapshot = lambda payload: payload
+sys.modules.setdefault("scripts.online_fetch_zeturf", stub_fetch)
 
 import analyse_courses_du_jour_enrichie as acde
 
@@ -166,6 +171,7 @@ def test_missing_enrich_outputs(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
     monkeypatch.setattr(acde, "write_snapshot_from_geny", fake_snapshot)
 
     monkeypatch.setattr(acde, "enrich_h5", lambda rc_dir, **kw: None)
+    monkeypatch.setattr(acde.time, "sleep", lambda delay: None)
     monkeypatch.setattr(acde, "build_p_finale", lambda *a, **k: None)
     monkeypatch.setattr(acde, "run_pipeline", lambda *a, **k: None)
     monkeypatch.setattr(acde, "build_prompt_from_meta", lambda *a, **k: None)
@@ -181,9 +187,17 @@ def test_missing_enrich_outputs(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
         str(tmp_path),
     ]
     monkeypatch.setattr(sys, "argv", argv)
-    with pytest.raises(SystemExit) as exc:
-        acde.main()
-    assert exc.value.code == 1
+    acde.main()
+
+    decision_path = next(tmp_path.glob("R*C*/decision.json"), None)
+    assert decision_path is not None
+    payload = json.loads(decision_path.read_text(encoding="utf-8"))
+    assert payload == {
+        "status": "no-bet",
+        "decision": "ABSTENTION",
+        "reason": "data-missing",
+        "details": {"missing": ["snap_H-5_je.csv", "chronos.csv"]},
+    }
 
 
 def test_export_per_horse_csv(tmp_path: Path) -> None:
