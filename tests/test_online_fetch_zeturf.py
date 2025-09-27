@@ -299,6 +299,74 @@ def test_fetch_race_snapshot_accepts_direct_url(monkeypatch: pytest.MonkeyPatch)
     assert snapshot["course_id"] == "12345"
 
 
+def _stub_sources_config() -> dict[str, Any]:
+    return {
+        "rc_map": {
+            "R1C1": {
+                "course_id": "12345",
+                "url": "https://www.zeturf.fr/rest/api/race/{course_id}",
+            }
+        }
+    }
+
+
+def test_cli_fetch_race_snapshot_defaults_phase(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The CLI wrapper should fall back to H30 when no phase is provided."""
+
+    calls: dict[str, Any] = {}
+
+    def fake_fetch(
+        rc: str,
+        *,
+        phase: str,
+        sources: Mapping[str, Any],
+        url: str | None,
+        retries: int,
+        backoff: float,
+        initial_delay: float,
+    ) -> dict[str, Any]:
+        calls.setdefault("phase", phase)
+        return {"rc": rc, "meta": {}}
+
+    monkeypatch.setattr(cli, "_load_sources_config", lambda _path=None: _stub_sources_config())
+    monkeypatch.setattr(cli._impl, "fetch_race_snapshot", fake_fetch)
+
+    snapshot = cli.fetch_race_snapshot("R1", "C1")
+
+    assert snapshot["rc"] == "R1C1"
+    assert calls["phase"] == "H30"
+
+
+@pytest.mark.parametrize("requested, expected", [("H-30", "H30"), ("H5", "H5")])
+def test_cli_fetch_race_snapshot_normalises_phase_aliases(
+    monkeypatch: pytest.MonkeyPatch, requested: str, expected: str
+) -> None:
+    """Explicit phases should be normalised without discarding caller intent."""
+
+    calls: dict[str, Any] = {}
+
+    def fake_fetch(
+        rc: str,
+        *,
+        phase: str,
+        sources: Mapping[str, Any],
+        url: str | None,
+        retries: int,
+        backoff: float,
+        initial_delay: float,
+    ) -> dict[str, Any]:
+        calls.setdefault("phase", phase)
+        return {"rc": rc, "meta": {}}
+
+    monkeypatch.setattr(cli, "_load_sources_config", lambda _path=None: _stub_sources_config())
+    monkeypatch.setattr(cli._impl, "fetch_race_snapshot", fake_fetch)
+
+    snapshot = cli.fetch_race_snapshot("R1", "C1", requested)
+
+    assert snapshot["rc"] == "R1C1"
+    assert calls["phase"] == expected
+
+
 def test_cli_fetch_race_snapshot_discovers_course_id(monkeypatch: pytest.MonkeyPatch) -> None:
     """The CLI wrapper should recover missing course ids via discovery when needed."""
 
