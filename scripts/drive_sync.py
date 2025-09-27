@@ -1,9 +1,13 @@
-"""Synchronise local files with Google Cloud Storage.
+"""Synchronise local artefacts with Google Cloud Storage and Google Drive.
 
-This module exposes :func:`upload_file`, :func:`download_file` and
-:func:`push_tree` helpers built on top of ``google-cloud-storage``.  The
-previous Google Drive implementation has been replaced by a simpler Google
-Cloud Storage client that relies on the following environment variables:
+This module keeps backwards compatibility with the historical Google Cloud
+Storage helpers (:func:`upload_file`, :func:`download_file` and
+:func:`push_tree`) while adding a thin wrapper around the Google Drive API.
+The Drive utilities are used to automate the "post-course" workflow: download
+the ROI tracking Excel workbook, update it via :mod:`update_excel_with_results`
+then upload the refreshed version along with optional JSON/CSV artefacts.
+
+Google Cloud Storage relies on the following environment variables:
 
 ``GCS_BUCKET``
     Name of the destination bucket.
@@ -28,6 +32,17 @@ The CLI accepts multiple ``--upload-glob`` patterns.  Files matching each
 pattern are uploaded to the configured bucket under the configured prefix.
 ``--download OBJECT DEST`` pairs may be provided to retrieve specific objects,
 while ``--push DIR`` recursively uploads an entire directory tree.
+For Google Drive synchronisation the following knobs are available:
+
+``DRIVE_CREDENTIALS_JSON`` (optional)
+    Raw service account JSON string.  When omitted ``GOOGLE_APPLICATION_CREDENTIALS``
+    is honoured and may point to a credentials file on disk.
+``DRIVE_IMPERSONATE" (optional)
+    Optional user e-mail to impersonate when using a service account with
+    domain-wide delegation.
+
+The CLI exposes ``--drive-credentials`` (path to a JSON key) and ``--folder-id``
+allowing fully standalone execution.
 """
 
 from __future__ import annotations
@@ -35,11 +50,13 @@ from __future__ import annotations
 import argparse
 import base64
 import glob
+import io
 import json
+import mimetypes
 import os
 import sys
 from pathlib import Path
-from typing import Callable, Iterable, Optional
+from typing import Any, Callable, Iterable, Optional
 
 # Keep these imports on separate lines to avoid syntax issues when running
 # under stripped/concatenated builds.
@@ -54,11 +71,43 @@ except ImportError:  # pragma: no cover
     from gcs_utils import disabled_reason, is_gcs_enabled
     
 SCOPES = ("https://www.googleapis.com/auth/devstorage.read_write",)
+DRIVE_SCOPES = ("https://www.googleapis.com/auth/drive",)
+
+_DRIVE_BUILD: Any | None = None
+_MEDIA_FILE_UPLOAD: Any | None = None
+_MEDIA_DOWNLOAD: Any | None = None
 BUCKET_ENV = "GCS_BUCKET"
 PREFIX_ENV = "GCS_PREFIX"
 PROJECT_ENV = "GOOGLE_CLOUD_PROJECT"
 SERVICE_KEY_JSON_ENV = "GCS_SERVICE_KEY_JSON"
 SERVICE_KEY_B64_ENV = "GCS_SERVICE_KEY_B64"
+
+
+def _ensure_drive_imports() -> None:
+    """Ensure Google Drive helpers are imported lazily."""
+
+    global _DRIVE_BUILD, _MEDIA_FILE_UPLOAD, _MEDIA_DOWNLOAD
+    if (
+        _DRIVE_BUILD is not None
+        and _MEDIA_FILE_UPLOAD is not None
+        and _MEDIA_DOWNLOAD is not None
+    ):
+        return
+
+    try:  # pragma: no cover - executed when googleapiclient is available
+        from googleapiclient.discovery import build as drive_build
+        from googleapiclient.http import (
+            MediaFileUpload as _MediaFileUpload,
+            MediaIoBaseDownload as _MediaIoBaseDownload,
+        )
+    except ImportError as exc:  # pragma: no cover - handled in tests via patching
+        raise RuntimeError(
+            "googleapiclient is required for Google Drive synchronisation"
+        ) from exc
+
+    _DRIVE_BUILD = drive_build
+    _MEDIA_FILE_UPLOAD = _MediaFileUpload
+    _MEDIA_DOWNLOAD = _MediaIoBaseDownload
 
 
 def _load_credentials(credentials_json: Optional[str] = None):
@@ -104,6 +153,53 @@ def _build_service(
     return storage.Client(project=project_id, credentials=creds)
 
 
+def _build_drive_service(
+    credentials: str | os.PathLike[str] | None,
+    *,
+    subject: str | None = None,
+) -> Any:
+    """Instantiate a Google Drive service client."""
+
+    _ensure_drive_imports()
+
+    info_payload: dict[str, Any] | None = None
+    credentials_path: Path | None = None
+
+    candidate = credentials or os.environ.get("DRIVE_CREDENTIALS_JSON")
+    if candidate in (None, ""):
+        candidate = None
+
+    if isinstance(candidate, (str, os.PathLike)) and Path(candidate).exists():
+        credentials_path = Path(candidate)
+    elif isinstance(candidate, (str, os.PathLike)) and str(candidate).strip():
+        try:
+            info_payload = json.loads(str(candidate))
+        except json.JSONDecodeError:
+            credentials_path = Path(str(candidate))
+    else:
+        env_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+        if env_path:
+            credentials_path = Path(env_path)
+
+    if info_payload is not None:
+        creds = service_account.Credentials.from_service_account_info(
+            info_payload, scopes=DRIVE_SCOPES
+        )
+    elif credentials_path is not None and credentials_path.exists():
+        creds = service_account.Credentials.from_service_account_file(
+            str(credentials_path), scopes=DRIVE_SCOPES
+        )
+    else:
+        raise FileNotFoundError("Google Drive credentials not provided")
+
+    impersonate = subject or os.environ.get("DRIVE_IMPERSONATE")
+    if impersonate:
+        creds = creds.with_subject(impersonate)
+
+    assert _DRIVE_BUILD is not None
+    return _DRIVE_BUILD("drive", "v3", credentials=creds, cache_discovery=False)
+
+
 def _remote_path(*parts: str | os.PathLike[str] | None) -> str:
     """Join ``parts`` using ``/`` while stripping empty segments."""
 
@@ -131,6 +227,19 @@ def _iter_uploads(patterns: Iterable[str]) -> Iterable[Path]:
                 yield p
 
 
+def _resolve_excel_path(excel: str | Path | None, outdir: str | Path | None) -> Path:
+    """Return the Excel path used for post-course updates."""
+
+    if excel:
+        path = Path(excel)
+    elif outdir:
+        path = Path(outdir) / "modele_suivi_courses_hippiques.xlsx"
+    else:
+        path = Path("modele_suivi_courses_hippiques.xlsx")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path
+
+
 def _run_local_post_course(
     arrivee: str | Path | None,
     tickets: str | Path | None,
@@ -139,25 +248,28 @@ def _run_local_post_course(
     *,
     places: int = 1,
     excel_runner: Callable[[list[str] | None], None] | None = None,
-) -> None:
-    """Execute local post-course steps when arrival/tickets payloads exist."""
+) -> dict[str, Path]:
+    """Execute local post-course steps and return generated artefacts."""
+
+    outputs: dict[str, Path] = {}
 
     if not arrivee or not tickets:
-        return
+        return outputs
 
     arrivee_path = Path(arrivee)
     tickets_path = Path(tickets)
     if not arrivee_path.exists() or not tickets_path.exists():
-        return
-
+        return outputs
+        
     target_out = Path(outdir) if outdir else tickets_path.parent
-    excel_path = Path(excel) if excel else Path("modele_suivi_courses_hippiques.xlsx")
+    excel_path = _resolve_excel_path(excel, outdir)
+    outputs["excel"] = excel_path
 
     try:
         import post_course
         import update_excel_with_results
     except ImportError:  # pragma: no cover - defensive guard
-        return
+        return outputs
 
     arrivee_data = post_course._load_json(arrivee_path)
     tickets_data = post_course._load_json(tickets_path)
@@ -198,7 +310,10 @@ def _run_local_post_course(
         "ev_ecart_total": diff_ev_total,
     }
     arrivee_output = target_out / "arrivee.json"
-    post_course._save_json(arrivee_output, arrivee_out)
+    csv_line = target_out / "ligne_resultats.csv"
+    post_course._save_text(csv_line, header + ligne + "\n")
+    outputs["csv_line"] = csv_line
+    outputs["arrivee"] = arrivee_output
 
     ligne = (
         f'{meta.get("rc", "")};{meta.get("hippodrome", "")};{meta.get("date", "")};'
@@ -220,8 +335,10 @@ def _run_local_post_course(
         f'--arrivee "{arrivee_output}" '
         f'--tickets "{tickets_path}"\n'
     )
-    post_course._save_text(target_out / "cmd_update_excel.txt", cmd)
-
+    cmd_path = target_out / "cmd_update_excel.txt"
+    post_course._save_text(cmd_path, cmd)
+    outputs["cmd"] = cmd_path
+    
     runner = excel_runner or update_excel_with_results.main
     try:
         runner(
@@ -236,6 +353,8 @@ def _run_local_post_course(
         )
     except SystemExit:  # pragma: no cover - align with CLI style
         pass
+
+    return outputs
 
 
 def _require_bucket(bucket: Optional[str] = None) -> str:
@@ -263,6 +382,59 @@ def upload_file(
     blob = client.bucket(bucket_name).blob(blob_name)
     blob.upload_from_filename(str(path))
     return blob.name
+
+
+def drive_download_file(service: Any, file_id: str, dest: str | Path) -> Path:
+    """Download ``file_id`` from Drive into ``dest``."""
+
+    _ensure_drive_imports()
+    assert _MEDIA_DOWNLOAD is not None
+
+    request = service.files().get_media(fileId=file_id)
+    buffer = io.BytesIO()
+    downloader = _MEDIA_DOWNLOAD(buffer, request)
+    done = False
+    while not done:
+        _status, done = downloader.next_chunk()
+
+    dest_path = Path(dest)
+    dest_path.parent.mkdir(parents=True, exist_ok=True)
+    dest_path.write_bytes(buffer.getvalue())
+    return dest_path
+
+
+def drive_upload_file(
+    service: Any,
+    folder_id: str | None,
+    path: str | Path,
+    *,
+    file_id: str | None = None,
+    mime_type: str | None = None,
+) -> str:
+    """Upload ``path`` to Drive and return the file identifier."""
+
+    _ensure_drive_imports()
+    assert _MEDIA_FILE_UPLOAD is not None
+
+    local_path = Path(path)
+    guessed_type = mime_type or mimetypes.guess_type(local_path.name)[0]
+    media = _MEDIA_FILE_UPLOAD(str(local_path), mimetype=guessed_type, resumable=False)
+
+    files_resource = service.files()
+    metadata: dict[str, Any] = {"name": local_path.name}
+    if folder_id:
+        metadata["parents"] = [folder_id]
+
+    if file_id:
+        request = files_resource.update(fileId=file_id, media_body=media)
+        result = request.execute()
+        file_id_out = result.get("id", file_id)
+        return str(file_id_out) if file_id_out is not None else ""
+
+    request = files_resource.create(body=metadata, media_body=media, fields="id")
+    result = request.execute()
+    file_id_out = result.get("id")
+    return str(file_id_out) if file_id_out is not None else ""
 
 
 def download_file(
@@ -346,6 +518,35 @@ def main() -> int | None:
         help="Répertoire à envoyer sur GCS",
     )
     parser.add_argument(
+        "--drive-credentials",
+        help="Chemin ou payload JSON pour le compte de service Google Drive",
+    )
+    parser.add_argument(
+        "--drive-subject",
+        help="Utilisateur à impersoner pour Drive (delegation domain-wide)",
+    )
+    parser.add_argument(
+        "--excel-file-id",
+        help="Identifiant Drive du classeur ROI à mettre à jour",
+    )
+    parser.add_argument(
+        "--upload-result",
+        action="store_true",
+        help="Téléverser le snapshot arrivee.json sur Drive",
+    )
+    parser.add_argument(
+        "--upload-line",
+        action="store_true",
+        help="Téléverser la synthèse CSV (ligne_resultats.csv) sur Drive",
+    )
+    parser.add_argument(
+        "--upload-file",
+        action="append",
+        default=[],
+        metavar="PATH",
+        help="Fichiers additionnels à téléverser sur Drive",
+    )
+    parser.add_argument(
         "--local-only",
         action="store_true",
         help="N'exécuter que les actions locales (aucun appel GCS)",
@@ -371,13 +572,125 @@ def main() -> int | None:
     )
     args = parser.parse_args()
 
-    _run_local_post_course(
+    excel_path = _resolve_excel_path(args.excel, args.outdir)
+
+    drive_requested = bool(
+        not args.local_only
+        and (
+            args.excel_file_id
+            or args.upload_result
+            or args.upload_line
+            or args.upload_file
+        )
+    )
+
+    drive_service = None
+    if drive_requested:
+        credentials_arg = args.drive_credentials or args.credentials_json
+        try:
+            drive_service = _build_drive_service(
+                credentials_arg, subject=args.drive_subject
+            )
+        except Exception as exc:  # pragma: no cover - logged for operator visibility
+            print(f"[drive_sync] Drive sync désactivée: {exc}")
+            drive_service = None
+        else:
+            if args.excel_file_id:
+                try:
+                    drive_download_file(drive_service, args.excel_file_id, excel_path)
+                except Exception as exc:  # pragma: no cover - best effort
+                    print(
+                        f"[drive_sync] Impossible de télécharger l'Excel Drive: {exc}",
+                        file=sys.stderr,
+                    )
+
+    outputs = _run_local_post_course(
         args.arrivee,
         args.tickets,
         args.outdir,
-        args.excel,
+        excel_path,
         places=args.places,
     )
+
+    if drive_service:
+        folder_id = args.prefix
+        excel_file = outputs.get("excel", excel_path)
+        mime_xlsx = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        if args.excel_file_id:
+            try:
+                drive_upload_file(
+                    drive_service,
+                    None,
+                    excel_file,
+                    file_id=args.excel_file_id,
+                    mime_type=mime_xlsx,
+                )
+            except Exception as exc:  # pragma: no cover - best effort
+                print(
+                    f"[drive_sync] Impossible de téléverser l'Excel Drive: {exc}",
+                    file=sys.stderr,
+                )
+        elif folder_id:
+            try:
+                drive_upload_file(
+                    drive_service,
+                    folder_id,
+                    excel_file,
+                    mime_type=mime_xlsx,
+                )
+            except Exception as exc:  # pragma: no cover - best effort
+                print(
+                    f"[drive_sync] Upload Excel Drive ignoré: {exc}",
+                    file=sys.stderr,
+                )
+        elif args.upload_result or args.upload_line or args.upload_file:
+            print(
+                "[drive_sync] Upload Drive ignoré: --folder-id manquant pour les créations.",
+                file=sys.stderr,
+            )
+
+        if args.upload_result:
+            arrivee_path = outputs.get("arrivee")
+            if arrivee_path and arrivee_path.exists() and folder_id:
+                try:
+                    drive_upload_file(drive_service, folder_id, arrivee_path)
+                except Exception as exc:  # pragma: no cover
+                    print(
+                        f"[drive_sync] Upload arrivee.json échoué: {exc}",
+                        file=sys.stderr,
+                    )
+        if args.upload_line:
+            csv_line = outputs.get("csv_line")
+            if csv_line and csv_line.exists() and folder_id:
+                try:
+                    drive_upload_file(drive_service, folder_id, csv_line)
+                except Exception as exc:  # pragma: no cover
+                    print(
+                        f"[drive_sync] Upload ligne_resultats.csv échoué: {exc}",
+                        file=sys.stderr,
+                    )
+
+        for extra in args.upload_file:
+            extra_path = Path(extra)
+            if not extra_path.exists():
+                print(
+                    f"[drive_sync] Fichier introuvable, upload ignoré: {extra_path}",
+                    file=sys.stderr,
+                )
+                continue
+            if not folder_id:
+                print(
+                    f"[drive_sync] Upload ignoré (folder-id manquant): {extra_path}",
+                    file=sys.stderr,
+                )
+                continue
+            try:
+                drive_upload_file(drive_service, folder_id, extra_path)
+            except Exception as exc:  # pragma: no cover
+                print(
+                    f"[drive_sync] Upload Drive échoué pour {extra_path}: {exc}",
+                    file=sys.stderr,
+                )
 
     if args.local_only:
         print("[drive_sync] --local-only → skipping Google Cloud Storage synchronisation.")
