@@ -213,6 +213,48 @@ def test_fetch_runners_enriches_start_time(monkeypatch: pytest.MonkeyPatch) -> N
     assert calls == [api_url, "https://www.zeturf.fr/fr/course/12345"]
 
 
+def test_fetch_race_snapshot_uses_entry_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An explicit entry URL should be used directly without template injection."""
+
+    entry_url = "https://www.zeturf.fr/rest/api/race/55555"
+    called: dict[str, Any] = {}
+
+    def fake_fetch(url: str) -> dict[str, Any]:
+        called.setdefault("fetch_urls", []).append(url)
+        return {"rc": "R1C1", "runners": []}
+
+    def fake_retry(
+        operation: Any,
+        *,
+        retries: int,
+        initial_delay: float,
+        backoff: float,
+        retry_exceptions: Any,
+    ) -> dict[str, Any]:
+        called["operation"] = operation
+        return operation()
+
+    monkeypatch.setattr(ofz, "fetch_runners", fake_fetch)
+    monkeypatch.setattr(ofz, "_retry_with_backoff", fake_retry)
+
+    config = {
+        "entries": {
+            "R1C1": {
+                "rc": "R1C1",
+                "url": entry_url,
+                "course_id": "55555",
+            }
+        },
+        "online": {"zeturf": {"h30": {"url": "https://template/{course_id}"}}},
+    }
+
+    snapshot = ofz.fetch_race_snapshot("R1C1", phase="H-30", sources=config)
+
+    assert called["fetch_urls"] == [entry_url]
+    assert callable(called["operation"])
+    assert snapshot["rc"] == "R1C1"
+
+
 def test_fetch_from_geny_parser_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
     """The Geny parser should fallback to attribute/regex extraction."""
 
