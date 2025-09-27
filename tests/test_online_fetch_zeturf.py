@@ -4,7 +4,7 @@ import os
 import sys
 import builtins
 import datetime as dt
-from typing import Any
+from typing import Any, Mapping
 from pathlib import Path
 import json
 import importlib.util
@@ -15,6 +15,7 @@ import pytest
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import scripts.online_fetch_zeturf as ofz
+import online_fetch_zeturf as cli
 
 
 class DummyResp:
@@ -296,6 +297,47 @@ def test_fetch_race_snapshot_accepts_direct_url(monkeypatch: pytest.MonkeyPatch)
     assert callable(called["operation"])
     assert snapshot["rc"] == "R1C1"
     assert snapshot["course_id"] == "12345"
+
+
+def test_cli_fetch_race_snapshot_discovers_course_id(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The CLI wrapper should recover missing course ids via discovery when needed."""
+
+    calls: dict[str, list[str]] = {}
+
+    monkeypatch.setattr(cli, "_load_sources_config", lambda _path=None: {})
+
+    def fake_discover(rc: str) -> str:
+        calls.setdefault("discover", []).append(rc)
+        return "12345"
+
+    def fake_fetch(
+        rc: str,
+        *,
+        phase: str,
+        sources: Mapping[str, Any],
+        url: str | None,
+        retries: int,
+        backoff: float,
+        initial_delay: float,
+    ) -> dict[str, Any]:
+        calls.setdefault("fetch", []).append(rc)
+        entry = sources["rc_map"][rc]
+        assert entry["course_id"] == "12345"
+        return {"rc": rc, "course_id": entry["course_id"], "meta": {}}
+
+    monkeypatch.setattr(ofz, "discover_course_id", fake_discover)
+    monkeypatch.setattr(ofz, "fetch_race_snapshot", fake_fetch)
+
+    snapshot = cli.fetch_race_snapshot(
+        "R1",
+        "C1",
+        "H-30",
+        url="https://www.zeturf.fr/rest/api/race/{course_id}",
+    )
+
+    assert snapshot["course_id"] == "12345"
+    assert calls["discover"] == ["R1C1"]
+    assert calls["fetch"] == ["R1C1"]
 
 
 def test_fetch_from_geny_parser_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
