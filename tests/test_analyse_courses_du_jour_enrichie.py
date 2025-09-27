@@ -177,6 +177,13 @@ def test_missing_enrich_outputs(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
     monkeypatch.setattr(acde, "build_prompt_from_meta", lambda *a, **k: None)
     monkeypatch.setattr(acde, "export_per_horse_csv", lambda *a, **k: None)
 
+    calls: list[list[str]] = []
+
+    def fake_run(cmd: list[str], check: bool = False) -> None:
+        calls.append(cmd)
+
+    monkeypatch.setattr(acde.subprocess, "run", fake_run)
+
     argv = [
         "analyse_courses_du_jour_enrichie.py",
         "--reunion-url",
@@ -189,7 +196,8 @@ def test_missing_enrich_outputs(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
     monkeypatch.setattr(sys, "argv", argv)
     acde.main()
 
-    decision_path = next(tmp_path.glob("R*C*/decision.json"), None)
+    rc_dir = next(tmp_path.glob("R*C*"))
+    decision_path = rc_dir / "decision.json"
     assert decision_path is not None
     payload = json.loads(decision_path.read_text(encoding="utf-8"))
     assert payload == {
@@ -198,6 +206,97 @@ def test_missing_enrich_outputs(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
         "reason": "data-missing",
         "details": {"missing": ["snap_H-5_je.csv", "chronos.csv"]},
     }
+marker = rc_dir / "UNPLAYABLE.txt"
+    assert marker.exists()
+    assert calls == [
+        [
+            sys.executable,
+            str(Path(acde.__file__).resolve().with_name("scripts") / "fetch_je_stats.py"),
+            "--course-dir",
+            str(rc_dir),
+        ],
+        [
+            sys.executable,
+            str(Path(acde.__file__).resolve().with_name("scripts") / "fetch_je_chrono.py"),
+            "--course-dir",
+            str(rc_dir),
+        ],
+    ]
+
+
+def test_missing_enrich_outputs_recovers_after_fetch(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    html = """
+    <html><body><a href="/fr/course/123">C1</a></body></html>
+    """
+
+    monkeypatch.setattr(acde.requests, "get", lambda *a, **k: DummyResp(html))
+
+    def fake_snapshot(cid: str, ph: str, rc_dir: Path) -> Path:
+        dest = rc_dir / "snap_H-5.json"
+        dest.write_text("{}", encoding="utf-8")
+        return dest
+
+    monkeypatch.setattr(acde, "write_snapshot_from_geny", fake_snapshot)
+    monkeypatch.setattr(acde, "enrich_h5", lambda rc_dir, **kw: None)
+    monkeypatch.setattr(acde.time, "sleep", lambda delay: None)
+
+    pipeline_calls: list[Path] = []
+    monkeypatch.setattr(
+        acde,
+        "build_p_finale",
+        lambda rc_dir, **kw: pipeline_calls.append(rc_dir),
+    )
+    monkeypatch.setattr(
+        acde,
+        "run_pipeline",
+        lambda rc_dir, **kw: pipeline_calls.append(rc_dir),
+    )
+    monkeypatch.setattr(
+        acde,
+        "build_prompt_from_meta",
+        lambda rc_dir, **kw: pipeline_calls.append(rc_dir),
+    )
+    monkeypatch.setattr(
+        acde,
+        "export_per_horse_csv",
+        lambda rc_dir: (pipeline_calls.append(rc_dir) or (rc_dir / "per_horse_report.csv")),
+    )
+
+    def fake_run(cmd: list[str], check: bool = False) -> None:
+        rc_dir = Path(cmd[-1])
+        snap = rc_dir / "snap_H-5.json"
+        if snap.exists():
+            if "fetch_je_stats.py" in cmd[1]:
+                (rc_dir / f"{snap.stem}_je.csv").write_text(
+                    "num,nom,j_rate,e_rate\n1,A,0.1,0.2\n",
+                    encoding="utf-8",
+                )
+            if "fetch_je_chrono.py" in cmd[1]:
+                (rc_dir / "chronos.csv").write_text(
+                    "num,chrono\n1,1.0\n",
+                    encoding="utf-8",
+                )
+
+    monkeypatch.setattr(acde.subprocess, "run", fake_run)
+
+    argv = [
+        "analyse_courses_du_jour_enrichie.py",
+        "--reunion-url",
+        "https://www.zeturf.fr/fr/reunion/2024-09-25/R1-test",
+        "--phase",
+        "H5",
+        "--data-dir",
+        str(tmp_path),
+    ]
+    monkeypatch.setattr(sys, "argv", argv)
+    acde.main()
+
+    rc_dir = next(tmp_path.glob("R*C*"))
+    assert not (rc_dir / "UNPLAYABLE.txt").exists()
+    assert (rc_dir / "decision.json").exists() is False
+    assert len(pipeline_calls) == 4
 
 
 def test_export_per_horse_csv(tmp_path: Path) -> None:
