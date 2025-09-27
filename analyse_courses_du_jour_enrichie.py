@@ -692,15 +692,106 @@ def _missing_requires_chronos(missing: Iterable[str]) -> bool:
     return any(str(name) == "chronos.csv" for name in missing)
 
 
-def _run_fetch_script(script_path: Path, rc_dir: Path) -> None:
-    cmd = [sys.executable, str(script_path), "--course-dir", str(rc_dir)]
+def _run_fetch_script(script_path: Path, rc_dir: Path) -> bool:
+    """Invoke an auxiliary fetch script and report whether it succeeded."""
+
+    cmd: list[str] = [sys.executable, str(script_path)]
+
+    if script_path.name == "fetch_je_stats.py":
+
+        def _extract_course_id(payload: dict[str, Any]) -> str | None:
+            for key in ("course_id", "id_course", "id"):
+                value = payload.get(key)
+                if value not in (None, ""):
+                    return str(value).strip()
+            meta = payload.get("meta")
+            if isinstance(meta, dict):
+                return _extract_course_id(meta)
+            return None
+
+        course_id: str | None = None
+        partants_path = rc_dir / "partants.json"
+        if partants_path.exists():
+            try:
+                payload = json.loads(partants_path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError as exc:  # pragma: no cover - defensive
+                print(
+                    f"[WARN] partants.json invalide dans {rc_dir}: {exc}",
+                    file=sys.stderr,
+                )
+            else:
+                if isinstance(payload, dict):
+                    course_id = _extract_course_id(payload)
+
+        if not course_id:
+            candidates: list[Path] = []
+            normalized = rc_dir / "normalized_h5.json"
+            if normalized.exists():
+                candidates.append(normalized)
+            candidates.extend(sorted(rc_dir.glob("*_H-5.json")))
+            for candidate in candidates:
+                try:
+                    payload = json.loads(candidate.read_text(encoding="utf-8"))
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(payload, dict):
+                    course_id = _extract_course_id(payload)
+                if course_id:
+                    break
+
+        if not course_id:
+            print(
+                f"[WARN] Impossible de déterminer l'identifiant course pour {rc_dir}",
+                file=sys.stderr,
+            )
+            return False
+
+        h5_json_path = rc_dir / "normalized_h5.json"
+        if not h5_json_path.exists():
+            fallback = sorted(rc_dir.glob("*_H-5.json"))
+            if fallback:
+                h5_json_path = fallback[-1]
+                print(
+                    f"[WARN] normalized_h5.json absent dans {rc_dir}, utilisation de {h5_json_path.name}",
+                    file=sys.stderr,
+                )
+            else:
+                print(
+                    f"[WARN] Aucun snapshot H-5 disponible pour {rc_dir}",
+                    file=sys.stderr,
+                )
+
+        stats_json_path = rc_dir / "stats_je.json"
+        cmd.extend(
+            [
+                "--course-id",
+                course_id,
+                "--h5",
+                str(h5_json_path),
+                "--out",
+                str(stats_json_path),
+            ]
+        )
+    else:
+        cmd.extend(["--course-dir", str(rc_dir)])
+
     try:
-        subprocess.run(cmd, check=False)
+        result = subprocess.run(cmd, check=False)
     except Exception as exc:  # pragma: no cover - defensive logging
         print(
             f"[WARN] Impossible d'exécuter {script_path.name} pour {rc_dir.name}: {exc}",
             file=sys.stderr,
         )
+        return False
+
+    if result.returncode != 0:
+        print(
+            f"[WARN] {script_path.name} a terminé avec le code {result.returncode} pour {rc_dir.name}",
+            file=sys.stderr,
+        )
+        return False
+
+    return True
 
 
 def _ensure_h5_artifacts(rc_dir: Path) -> dict[str, Any] | None:
@@ -714,11 +805,10 @@ def _ensure_h5_artifacts(rc_dir: Path) -> dict[str, Any] | None:
     retried = False
 
     if _missing_requires_stats(missing):
-        _run_fetch_script(_FETCH_JE_STATS_SCRIPT, rc_dir)
+        retried = _run_fetch_script(_FETCH_JE_STATS_SCRIPT, rc_dir) or retried
         retried = True
     if _missing_requires_chronos(missing):
-        _run_fetch_script(_FETCH_JE_CHRONO_SCRIPT, rc_dir)
-        retried = True or retried
+        retried = _run_fetch_script(_FETCH_JE_CHRONO_SCRIPT, rc_dir) or retried
 
     if retried:
         outcome = _check_enrich_outputs(rc_dir, retry_delay=0.0)
