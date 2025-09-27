@@ -60,6 +60,32 @@ def test_check_enrich_outputs_no_bet_payload(monkeypatch: pytest.MonkeyPatch, tm
     }
 
 
+def test_check_enrich_outputs_prefers_latest_snapshot(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    older = tmp_path / "20240101T120000_R1C1_H-5.json"
+    older.write_text("{}", encoding="utf-8")
+    newer = tmp_path / "20240101T120500_R1C1_H-5.json"
+    newer.write_text("{}", encoding="utf-8")
+
+    os.utime(older, (1000, 1000))
+    os.utime(newer, (2000, 2000))
+
+    monkeypatch.setattr(acde.time, "sleep", lambda delay: None)
+
+    result = acde._check_enrich_outputs(tmp_path, retry_delay=0.0)
+
+    assert result == {
+        "status": "no-bet",
+        "decision": "ABSTENTION",
+        "reason": "data-missing",
+        "details": {
+            "missing": [
+                "20240101T120500_R1C1_H-5_je.csv",
+                "chronos.csv",
+            ]
+        },
+    }
 def test_process_reunion_continues_after_failure(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
