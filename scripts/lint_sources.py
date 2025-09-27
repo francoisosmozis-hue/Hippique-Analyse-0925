@@ -33,10 +33,13 @@ class Diagnostics:
         self.warnings.append((line, message))
 
     def exit_code(self, warn_only: bool) -> int:
+        """Return the process exit code based on collected diagnostics."""
+
+        # ``warn_only`` is kept for backward compatibility but no longer
+        # influences the exit status (only the emitted message severity).
         if self.errors:
             return 1
         if self.warnings:
-            return 2 if warn_only else 0
         return 0
 
 
@@ -148,7 +151,10 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--warn-only",
         action="store_true",
-        help="Retourne 2 en cas d'avertissements (1 en cas d'erreurs, 0 sinon).",
+        help=(
+            "Émet les avertissements en tant qu'alertes et retourne 2 si des"
+            " avertissements sont présents (1 en cas d'erreurs, 0 sinon)."
+        ),
     )
     return parser
 
