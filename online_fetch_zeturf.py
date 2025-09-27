@@ -48,10 +48,21 @@ def _normalise_label(value: str, prefix: str) -> str:
     return text
 
 
+def _normalise_phase_alias(value: str) -> str:
+    """Return a canonical ``phase`` representation understood by the backend."""
+
+    text = str(value).strip()
+    if not text:
+        raise ValueError("phase value is required")
+    # Accept common aliases such as ``H-30`` while keeping the canonical tag
+    # expected by the scripts implementation.
+    return text.upper().replace("-", "")
+
+
 def fetch_race_snapshot(
     reunion: str,
     course: str,
-    phase: str,
+    phase: str = "H30",
     url: str | None = None,
     *,
     retry: int = 2,
@@ -124,9 +135,11 @@ def fetch_race_snapshot(
     rc_map[rc] = entry
     sources["rc_map"] = rc_map
 
+    phase_norm = _normalise_phase_alias(phase)
+
     snapshot = _impl.fetch_race_snapshot(
         rc,
-        phase=phase,
+        phase=phase_norm,
         sources=sources,
         url=url,
         retries=max(1, int(retry)),
