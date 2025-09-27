@@ -35,8 +35,8 @@ class Diagnostics:
     def exit_code(self, warn_only: bool) -> int:
         if self.errors:
             return 1
-        if warn_only and self.warnings:
-            return 2
+        if self.warnings:
+            return 2 if warn_only else 0
         return 0
 
 
@@ -148,7 +148,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--warn-only",
         action="store_true",
-        help="Renvoie 2 en cas d'avertissements et 1 en cas d'erreurs (mode CI).",
+        help="Retourne 2 en cas d'avertissements (1 en cas d'erreurs, 0 sinon).",
     )
     return parser
 
