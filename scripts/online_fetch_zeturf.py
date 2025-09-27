@@ -38,6 +38,10 @@ class EmptyDomError(RuntimeError):
     """Raised when an HTML payload lacks meaningful DOM nodes."""
 
 
+class SuspiciousResponseError(requests.RequestException):
+    """Raised when a payload looks like throttled or anti-bot HTML."""
+
+
 T = TypeVar("T")
 
 
@@ -141,6 +145,164 @@ _COURSE_ATTR_HINTS: Sequence[str] = (
     "data-event-id",
     "data-eventid",
 )
+
+_SUSPICIOUS_HTML_PATTERNS: tuple[str, ...] = (
+    "too many requests",
+    "captcha",
+    "temporarily unavailable",
+    "access denied",
+    "service unavailable",
+    "cloudflare",
+)
+
+_ZT_NUM_RE = re.compile(r'data-runner-num=["\']?(\d+)', re.IGNORECASE)
+_ZT_NAME_RE = re.compile(r'data-runner-name=["\']?([^"\']+)', re.IGNORECASE)
+_ZT_ODDS_RE = re.compile(r'data-odds=(?:"|\')?([0-9]+(?:[.,][0-9]+)?)', re.IGNORECASE)
+_ZT_PARTANTS_RE = re.compile(r'(?:\b|\D)([0-9]{1,2})\s+partants?', re.IGNORECASE)
+_ZT_DISCIPLINE_RE = re.compile(r'(trot|plat|obstacles?|mont[ée])', re.IGNORECASE)
+
+
+def _looks_like_suspicious_html(html: Any) -> bool:
+    """Return ``True`` when ``html`` is likely an anti-bot or throttled page."""
+
+    if isinstance(html, bytes):
+        try:
+            html = html.decode("utf-8", errors="ignore")
+        except Exception:  # pragma: no cover - defensive
+            html = ""
+    if not isinstance(html, str):
+        html = str(html or "")
+    if not html:
+        return True
+    lowered = html.lower()
+    if "<html" not in lowered:
+        return False
+    if any(pattern in lowered for pattern in _SUSPICIOUS_HTML_PATTERNS):
+        return True
+    stripped = lowered.strip()
+    if stripped.startswith("<html") and len(stripped) < 512:
+        return True
+    return False
+
+
+def _fallback_parse_course_html(html: Any) -> Dict[str, Any]:
+    """Extract minimal snapshot information from raw course HTML."""
+
+    if isinstance(html, bytes):
+        try:
+            html = html.decode("utf-8", errors="ignore")
+        except Exception:  # pragma: no cover - defensive
+            html = ""
+    if not isinstance(html, str):
+        html = str(html or "")
+
+    runners: list[Dict[str, Any]] = []
+    meeting: str | None = None
+    discipline: str | None = None
+    partants: int | None = None
+
+    soup: BeautifulSoup | None = None
+    if BeautifulSoup is not None and html:
+        soup = BeautifulSoup(html, "html.parser")
+
+    if soup is not None:
+        seen: set[str] = set()
+        for tag in soup.select("[data-runner-num], [data-num]"):
+            num = (
+                tag.get("data-runner-num")
+                or tag.get("data-num")
+                or tag.get("data-number")
+            )
+            if num is None:
+                continue
+            num_text = str(num).strip()
+            if not num_text.isdigit() or num_text in seen:
+                continue
+            seen.add(num_text)
+            name = (
+                tag.get("data-runner-name")
+                or tag.get("data-name")
+                or tag.get("data-cheval")
+                or tag.get("data-horse")
+            )
+            if not name:
+                text_content = tag.get_text(" ", strip=True)
+                if text_content.startswith(num_text):
+                    text_content = text_content[len(num_text) :].strip()
+                name = text_content or num_text
+            odds_val = (
+                tag.get("data-odds")
+                or tag.get("data-cote")
+                or tag.get("data-odds-dec")
+            )
+            odds: float | None
+            try:
+                odds = float(str(odds_val).replace(",", ".")) if odds_val else None
+            except (TypeError, ValueError):
+                odds = None
+            runner: Dict[str, Any] = {"num": num_text, "name": str(name).strip() or num_text}
+            if odds is not None:
+                runner["cote"] = odds
+            runners.append(runner)
+
+        # Try to locate metadata if present in data attributes
+        hippo_tag = soup.find(attrs={"data-hippodrome": True})
+        if hippo_tag is not None:
+            meeting = str(hippo_tag.get("data-hippodrome") or "").strip() or None
+        discipline_tag = soup.find(attrs={"data-discipline": True})
+        if discipline_tag is not None:
+            discipline = str(discipline_tag.get("data-discipline") or "").strip() or None
+
+        if meeting is None:
+            title_tag = soup.find("title")
+            if title_tag:
+                title_text = title_tag.get_text(strip=True)
+                hippo_match = re.search(r"hippodrome\s+de\s+([\w\s'\-éèêàùôç]+)", title_text, re.IGNORECASE)
+                if hippo_match:
+                    meeting = hippo_match.group(1).strip()
+
+    if not runners:
+        nums = _ZT_NUM_RE.findall(html)
+        names = _ZT_NAME_RE.findall(html)
+        odds = _ZT_ODDS_RE.findall(html)
+        for idx, num in enumerate(nums):
+            runner: Dict[str, Any] = {"num": str(num)}
+            if idx < len(names):
+                runner["name"] = names[idx].strip()
+            if idx < len(odds):
+                try:
+                    runner["cote"] = float(odds[idx].replace(",", "."))
+                except Exception:  # pragma: no cover - defensive
+                    runner["cote"] = None
+            runners.append(runner)
+
+    match_partants = _ZT_PARTANTS_RE.search(html)
+    if match_partants:
+        try:
+            partants = int(match_partants.group(1))
+        except (TypeError, ValueError):  # pragma: no cover - defensive
+            partants = None
+
+    match_discipline = _ZT_DISCIPLINE_RE.search(html)
+    if match_discipline:
+        discipline = match_discipline.group(1).lower()
+
+    meeting_from_text = re.search(
+        r"hippodrome\s+de\s+([\w\s'\-éèêàùôç]+)",
+        html,
+        re.IGNORECASE,
+    )
+    if meeting is None and meeting_from_text:
+        meeting = meeting_from_text.group(1).strip()
+
+    payload: Dict[str, Any] = {
+        "hippodrome": meeting,
+        "meeting": meeting,
+        "discipline": discipline,
+        "partants": partants,
+        "runners": runners,
+    }
+    return payload
 
 _URL_FIELDS: Sequence[str] = ("url", "endpoint", "href")
 _MODE_HINTS: Dict[str, Sequence[str]] = {
@@ -396,18 +558,82 @@ def fetch_runners(url: str) -> Dict[str, Any]:
         )
     match = re.search(r"/race/(\d+)", url)
     course_id = match.group(1) if match else None
-    
-    try:
+
+    def _request() -> requests.Response:
         resp = requests.get(url, timeout=10)
+        if resp.status_code in {403, 429, 503}:
+            err = requests.HTTPError(f"HTTP {resp.status_code} returned by {url}")
+            err.response = resp  # type: ignore[assignment]
+            raise err
+        # ``raise_for_status`` ensures 4xx/5xx responses bubble up so callers
+        # (e.g. tests expecting a Geny fallback) can react accordingly.
         resp.raise_for_status()
+        headers = getattr(resp, "headers", {}) or {}
+        content_type = str(headers.get("Content-Type", ""))
+        if "json" not in content_type.lower():
+            if _looks_like_suspicious_html(resp.text):
+                try:
+                    resp.json()
+                except ValueError:
+                    err = SuspiciousResponseError("Suspicious HTML payload returned")
+                    err.response = resp  # type: ignore[assignment]
+                    raise err
+        return resp
+
+    try:
+        resp = _retry_with_backoff(
+            _request,
+            retries=3,
+            initial_delay=0.5,
+            backoff=1.5,
+            retry_exceptions=(
+                SuspiciousResponseError,
+                requests.ConnectionError,
+                requests.Timeout,
+            ),
+        )
     except requests.HTTPError as exc:  # pragma: no cover - exercised via tests
         status = exc.response.status_code if exc.response is not None else None
         if status == 404 and course_id:
             return fetch_from_geny_idcourse(course_id)
         raise
-    payload = resp.json()
+    
+    text_payload = resp.text
+    payload: Dict[str, Any] | None
+    fallback_used = False
+    try:
+        payload = resp.json()
+        if not isinstance(payload, Mapping):
+            payload = None
+    except ValueError:
+        payload = None
 
-    if isinstance(payload, Mapping) and course_id:
+    if not payload:
+        payload = {}
+
+    if not payload.get("runners"):
+        fallback = _fallback_parse_course_html(text_payload)
+        fallback_used = True
+        if fallback.get("runners"):
+            payload["runners"] = fallback.get("runners")
+        meeting_val = fallback.get("hippodrome") or fallback.get("meeting")
+        if meeting_val:
+            payload.setdefault("hippodrome", meeting_val)
+            payload.setdefault("meeting", meeting_val)
+        if fallback.get("discipline"):
+            payload.setdefault("discipline", fallback.get("discipline"))
+        if fallback.get("partants") is not None:
+            payload.setdefault("partants", fallback.get("partants"))
+
+    if fallback_used:
+        logger.warning("Fallback HTML parsing applied for %s", url)
+        for field in ("hippodrome", "discipline", "partants"):
+            value = payload.get(field)
+            if value in (None, ""):
+                logger.warning("Snapshot field '%s' missing after fallback for %s", field, url)
+
+    if course_id:
+        payload.setdefault("course_id", course_id)
         start_time = _detect_start_time(payload)
         if not start_time:
             scraped = _scrape_start_time_from_course_page(course_id)
@@ -417,8 +643,6 @@ def fetch_runners(url: str) -> Dict[str, Any]:
                 updated_meta.setdefault("start_time", scraped)
                 payload["meta"] = updated_meta
                 payload.setdefault("start_time", scraped)
-
-        payload.setdefault("course_id", course_id)
 
     return payload
 
