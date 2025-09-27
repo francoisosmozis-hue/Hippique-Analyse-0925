@@ -609,10 +609,21 @@ def _upload_artifacts(rc_dir: Path, *, gcs_prefix: str | None) -> None:
 
 
 def _snap_prefix(rc_dir: Path) -> str | None:
-    """Return the stem of the H-5 snapshot if available."""
+    """Return the stem of the most recent H-5 snapshot if available."""
 
-    snap = next(rc_dir.glob("*_H-5.json"), None)
-    return snap.stem if snap else None
+    snapshots = list(rc_dir.glob("*_H-5.json"))
+    if not snapshots:
+        return None
+
+    def _key(path: Path) -> tuple[float, str]:
+        try:
+            mtime = path.stat().st_mtime
+        except OSError:
+            mtime = 0.0
+        return (mtime, path.name)
+
+    latest = max(snapshots, key=_key)
+    return latest.stem
 
 
 def _check_enrich_outputs(
