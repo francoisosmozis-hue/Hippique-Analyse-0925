@@ -898,12 +898,20 @@ def _ensure_h5_artifacts(
         outcome = _check_enrich_outputs(rc_dir, retry_delay=0.0)
         if outcome is None:
             return None
+        missing = list(outcome.get("details", {}).get("missing", []))
 
     marker = rc_dir / "UNPLAYABLE.txt"
-    marker.write_text(
-        "non jouable: data JE/chronos manquante\n",
-        encoding="utf-8",
-    )
+    marker_message = "non jouable: data JE/chronos manquante"
+    if missing:
+        missing_text = ", ".join(str(item) for item in missing)
+        marker_message = f"{marker_message} ({missing_text})"
+    try:
+        marker.write_text(marker_message + "\n", encoding="utf-8")
+    except OSError as exc:  # pragma: no cover - filesystem issues are non fatal
+        print(
+            f"[WARN] impossible d'écrire {marker.name} dans {rc_dir.name}: {exc}",
+            file=sys.stderr,
+        )
     print(
         f"[ABSTAIN] Course marquée non jouable (data manquante) : {rc_dir.name}",
         file=sys.stderr,
