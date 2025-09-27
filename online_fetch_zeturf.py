@@ -5,8 +5,9 @@ from __future__ import annotations
 
 import logging
 import os
-from pathlib import Path
+from dataclasses import dataclass
 import inspect
+from pathlib import Path
 from typing import Any, Dict, Iterable, Mapping
 
 import yaml
@@ -14,6 +15,46 @@ import yaml
 from scripts import online_fetch_zeturf as _impl
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(slots=True)
+class RaceSnapshot:
+    """Structured representation of a race snapshot."""
+
+    meeting: str | None
+    date: str | None
+    reunion: str
+    course: str
+    discipline: str | None
+    runners: list[dict[str, Any]]
+    partants: int | None
+    phase: str
+    rc: str
+    r_label: str
+    c_label: str
+    source_url: str | None = None
+    course_id: str | None = None
+
+    def as_dict(self) -> Dict[str, Any]:
+        payload: Dict[str, Any] = {
+            "meeting": self.meeting,
+            "date": self.date,
+            "reunion": self.reunion,
+            "course": self.course,
+            "r_label": self.r_label,
+            "c_label": self.c_label,
+            "discipline": self.discipline,
+            "runners": self.runners,
+            "partants": self.partants,
+            "phase": self.phase,
+            "rc": self.rc,
+        }
+        if self.source_url:
+            payload["source_url"] = self.source_url
+        if self.course_id:
+            payload["course_id"] = self.course_id
+        return payload
+
 
 _DEFAULT_SOURCES_FILE = Path("config/sources.yml")
 _BASE_EV_THRESHOLD = 0.40
@@ -155,31 +196,41 @@ def _build_snapshot_payload(
     if partants_val is None and runners:
         partants_val = len(runners)
 
-    snapshot: dict[str, Any] = {
-        "meeting": meeting,
-        "date": date,
-        "discipline": discipline,
-        "reunion": reunion,
-        "course": course,
-        "r_label": reunion,
-        "c_label": course,
-        "runners": runners,
-        "partants": partants_val,
-        "phase": phase,
-        "rc": f"{reunion}{course}",
-    }
-    if course_id:
-        snapshot["course_id"] = str(course_id)
-    if source_url:
-        snapshot["source_url"] = source_url
+    rc = f"{reunion}{course}"
+    snapshot = RaceSnapshot(
+        meeting=meeting,
+        date=date,
+        reunion=reunion,
+        course=course,
+        discipline=discipline,
+        runners=runners,
+        partants=partants_val,
+        phase=phase,
+        rc=rc,
+        r_label=reunion,
+        c_label=course,
+        source_url=source_url,
+        course_id=str(course_id) if course_id else None,
+    )
 
-    for field in ("meeting", "discipline", "partants"):
-        if snapshot.get(field) in (None, ""):
-            logger.warning("[ZEturf] Champ clé manquant: %s (rc=%s)", field, snapshot["rc"])
+    missing_fields = []
+    for name, value in (
+        ("meeting", snapshot.meeting),
+        ("discipline", snapshot.discipline),
+        ("partants", snapshot.partants),
+    ):
+        if value in (None, "", 0):
+            missing_fields.append(name)
+    if missing_fields:
+        logger.warning(
+            "[ZEturf] Champ clé manquant: %s (rc=%s)",
+            ", ".join(sorted(set(missing_fields))),
+            rc,
+        )
 
-    return snapshot
-
-
+    return snapshot.as_dict()
+ 
+    
 def fetch_race_snapshot(
     reunion: str,
     course: str,
@@ -189,13 +240,7 @@ def fetch_race_snapshot(
     retry: int = 2,
     backoff: float = 0.6,
 ) -> dict:
-    """Return a normalised snapshot for ``reunion``/``course``.
-
-    The helper mirrors the historical CLI behaviour used by :mod:`runner_chain`.
-    When a dedicated ``url`` is not provided the RC mapping is loaded from the
-    standard ``config/sources.yml`` file.  The returned payload contains the
-    metadata expected downstream (``runners``, ``partants``, ``meeting``, …).
-    """
+    """Return a normalised snapshot for ``reunion``/``course``."""
 
     reunion_norm = _normalise_label(reunion, "R")
     course_norm = _normalise_label(course, "C")
@@ -258,65 +303,59 @@ def fetch_race_snapshot(
 
     phase_norm = _normalise_phase_alias(phase)
 
-    fetch_fn = getattr(_impl, "fetch_race_snapshot")
-    use_new_signature = False
-    try:
-        raw_snapshot = _impl.fetch_race_snapshot(
-            rc,
-            phase=phase_norm,
-            sources=sources,
-            url=url,
-            retries=max(1, int(retry)),
-            backoff=backoff if backoff > 0 else 0.6,
-            initial_delay=0.3,
-        )
+    fetch_fn = getattr(_impl, "fetch_race_snapshot")    
+    try:        
         signature = inspect.signature(fetch_fn)
     except (TypeError, ValueError):  # pragma: no cover - builtins without signature
         signature = None
+
+    fetch_kwargs = {
+        "phase": phase_norm,
+        "sources": sources,
+        "url": url,
+        "retries": max(1, int(retry)),
+        "backoff": backoff if backoff > 0 else 0.6,
+        "initial_delay": 0.3,
+    }
+
+    arg_candidates: list[tuple[Any, ...]] = []
     if signature is not None and "course" in signature.parameters:
-        use_new_signature = True
-
-    try:
-        if use_new_signature:
-            raw_snapshot = fetch_fn(
-                reunion_norm,
-                course_norm,
-                phase_norm,
-                sources=sources,
-                url=url,
-                retries=max(1, int(retry)),
-                backoff=backoff if backoff > 0 else 0.6,
-                initial_delay=0.3,
-            )
+        arg_candidates.append((reunion_norm, course_norm))
+    arg_candidates.append((rc,))
+    
+    raw_snapshot: Mapping[str, Any] | None = None
+    last_error: Exception | None = None
+    for args in arg_candidates:
+        try:
+            result = fetch_fn(*args, **fetch_kwargs)
+        except TypeError as exc:  # pragma: no cover - defensive
+            last_error = exc
+            continue
+        except Exception as exc:  # pragma: no cover - propagate after logging
+            last_error = exc
+            break
         else:
-            raw_snapshot = fetch_fn(
-                rc,
-                phase=phase_norm,
-                sources=sources,
-                url=url,
-                retries=max(1, int(retry)),
-                backoff=backoff if backoff > 0 else 0.6,
-                initial_delay=0.3,
-            )
-    except Exception as exc:  # pragma: no cover - defensive catch
-        logger.error("[ZEturf] échec fetch_race_snapshot pour %s: %s", rc, exc)
-        return {
-            "meeting": None,
-            "date": None,
-            "discipline": None,
-            "reunion": reunion_norm,
-            "course": course_norm,
-            "r_label": reunion_norm,
-            "c_label": course_norm,
-            "runners": [],
-            "partants": None,
-            "phase": phase_norm,
-            "rc": rc,
-        }
+            raw_snapshot = result if isinstance(result, Mapping) else {}
+            last_error = None
+            break
 
-    if not isinstance(raw_snapshot, Mapping):
-        raw_snapshot = {}
-
+    if raw_snapshot is None:
+        if last_error is not None:
+            logger.error("[ZEturf] échec fetch_race_snapshot pour %s: %s", rc, last_error)
+        return RaceSnapshot(
+            meeting=None,
+            date=None,
+            reunion=reunion_norm,
+            course=course_norm,
+            discipline=None,
+            runners=[],
+            partants=None,
+            phase=phase_norm,
+            rc=rc,
+            r_label=reunion_norm,
+            c_label=course_norm,
+        ).as_dict()
+        
     source_url = entry.get("url") if isinstance(entry.get("url"), str) else None
     snapshot = _build_snapshot_payload(
         raw_snapshot,
@@ -326,7 +365,6 @@ def fetch_race_snapshot(
         source_url=source_url,
     )
 
-    # Ensure hard minimum thresholds are echoed for downstream audits
     meta = raw_snapshot.get("meta") if isinstance(raw_snapshot, Mapping) else None
     if isinstance(meta, dict):
         thresholds = meta.setdefault("exotic_thresholds", {})
