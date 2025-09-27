@@ -19,6 +19,50 @@ from simulate_wrapper import evaluate_combo
 from logging_io import append_csv_line, CSV_HEADER
 
 
+def compute_overround_cap(
+    discipline: str | None,
+    partants: Any,
+    default_cap: float = 1.30,
+) -> float:
+    """Return the overround ceiling adjusted for flat handicaps."""
+
+    try:
+        cap = float(default_cap)
+    except (TypeError, ValueError):  # pragma: no cover - defensive
+        cap = 1.30
+    if cap <= 0:
+        cap = 1.30
+
+    label = (discipline or "").strip().lower()
+    try:
+        partants_int = int(partants)
+    except (TypeError, ValueError):
+        partants_int = None
+
+    lowered = label.replace("é", "e")
+    is_flat = any(word in lowered for word in ("plat", "galop", "galopeur"))
+    is_handicap = "handicap" in lowered
+
+    if is_flat and (is_handicap or (partants_int is not None and partants_int >= 14)):
+        return min(cap, 1.25)
+
+    return cap
+
+
+def filter_exotics_by_overround(
+    exotics: Iterable[List[Dict[str, Any]]],
+    *,
+    overround: float | None,
+    overround_max: float = 1.30,
+    discipline: str | None = None,
+    partants: Any = None,
+) -> List[List[Dict[str, Any]]]:
+    """Filter exotic tickets when the market overround exceeds the cap."""
+
+    cap = compute_overround_cap(discipline, partants, default_cap=overround_max)
+    if overround is None or overround <= cap:
+        return [list(ticket) for ticket in exotics]
+    return []
 
 def validate_exotics_with_simwrapper(
     exotics: Iterable[List[Dict[str, Any]]],
@@ -278,4 +322,9 @@ def export_tracking_csv_line(
     append_csv_line(path, data, header=header)
 
 
-__all__ = ["validate_exotics_with_simwrapper", "export_tracking_csv_line"]
+__all__ = [
+    "compute_overround_cap",
+    "filter_exotics_by_overround",
+    "validate_exotics_with_simwrapper",
+    "export_tracking_csv_line",
+]
