@@ -63,8 +63,7 @@ def _patch_combo_eval(monkeypatch, *, stats=None):
         result.setdefault("sharpe", 0.0)
         return result
 
-    monkeypatch.setattr(simulate_wrapper, "evaluate_combo", fake_eval)def _write_inputs(tmp_path, partants, *, combo_ratio: float = 0.4):
-    
+    monkeypatch.setattr(simulate_wrapper, "evaluate_combo", fake_eval)    
 def _write_inputs(tmp_path, partants, *, combo_ratio: float = 0.4):
     h30_path = tmp_path / "h30.json"
     h5_path = tmp_path / "h5.json"
@@ -77,8 +76,7 @@ def _write_inputs(tmp_path, partants, *, combo_ratio: float = 0.4):
     h5_path.write_text(json.dumps(odds_h5()), encoding="utf-8")
     stats_path.write_text(json.dumps(stats_sample()), encoding="utf-8")
     partants_path.write_text(json.dumps(partants), encoding="utf-8")
-    partants_path.write_text(json.dumps(partants), encoding="utf-8")
-    
+        
     gpi_txt = (
         GPI_YML
         .replace("EV_MIN_GLOBAL: 0.35", "EV_MIN_GLOBAL: 0.0")
@@ -266,6 +264,7 @@ def test_pipeline_allocates_combo_budget(tmp_path, monkeypatch):
     ):
         return {"sp": True, "combo": True, "reasons": {"sp": [], "combo": []}}
 
+    monkeypatch.setattr(pipeline_run, "compute_overround_cap", lambda *a, **k: 2.0)
     _patch_combo_eval(monkeypatch)
     cleanup = _patch_simulation(monkeypatch, simulate_fn=fake_simulate, gate_fn=fake_gate)
     try:
