@@ -535,21 +535,37 @@ def fetch_race_snapshot(
             if match:
                 course_id = match.group(0)
 
-    template = resolve_source_url(config, mode_key)
+    needs_injection = bool(
+        entry_url
+        and (
+            _COURSE_PLACEHOLDER.search(entry_url)
+            or "{course_id}" in entry_url
+        )
+    )
+
+    template: str | None = None
+    if not entry_url or needs_injection:
+        try:
+            template = resolve_source_url(config, mode_key)
+        except ValueError:
+            if not entry_url:
+                raise
 
     if entry_url:
-        if _COURSE_PLACEHOLDER.search(entry_url) or "{course_id}" in entry_url:
+        if needs_injection:
             if not course_id:
                 raise ValueError(f"No course_id configured for {rc_norm}")
             fetch_url = _inject_course_id(entry_url, course_id)
         else:
             fetch_url = entry_url
     else:
+        if template is None:
+            template = resolve_source_url(config, mode_key)
         if not course_id:
             raise ValueError(f"Unable to resolve course_id for {rc_norm}")
         fetch_url = _inject_course_id(template, course_id)
 
-   def _do_fetch() -> Dict[str, Any]:
+    def _do_fetch() -> Dict[str, Any]:
         return fetch_runners(fetch_url)
 
     try:
