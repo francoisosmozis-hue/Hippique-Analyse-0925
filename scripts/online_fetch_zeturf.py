@@ -6,9 +6,10 @@ import argparse
 import datetime as dt
 import json
 import os
+import time
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Sequence
+from typing import Any, Dict, List, Mapping, MutableMapping, Sequence
 
 try:
     import requests
@@ -40,6 +41,7 @@ _SCRAPED_START_TIMES: Dict[str, str] = {}
 
 _COURSE_PLACEHOLDER = re.compile(r"{\s*course[_-]?id\s*}", re.IGNORECASE)
 _COURSE_ID_PATTERN = re.compile(r"\d{5,}")
+_RC_PATTERN = re.compile(r"^R\d+C\d+$", re.IGNORECASE)
 _COURSE_JSON_PATTERNS: Sequence[re.Pattern[str]] = (
     re.compile(r'courseId["\']?\s*[:=]\s*"?(\d{5,})'),
     re.compile(r'course_id["\']?\s*[:=]\s*"?(\d{5,})'),
@@ -271,6 +273,237 @@ def fetch_runners(url: str) -> Dict[str, Any]:
         payload.setdefault("course_id", course_id)
 
     return payload
+
+
+def _normalise_rc(value: Any) -> str | None:
+    """Return the canonical ``R<d>C<d>`` representation for ``value``."""
+
+    if value is None:
+        return None
+    text = str(value).strip().upper().replace(" ", "")
+    if not text:
+        return None
+    if _RC_PATTERN.match(text):
+        return text
+    return None
+
+
+def _resolve_rc_entry(rc: str, obj: Any, *, visited: set[int] | None = None) -> Any:
+    """Return the configuration entry associated with ``rc`` in ``obj``.
+
+    The search inspects nested mappings/lists, recognising either explicit ``rc``
+    keys or combinations of ``reunion``/``course`` values.
+    """
+
+    if visited is None:
+        visited = set()
+
+    if isinstance(obj, Mapping):
+        obj_id = id(obj)
+        if obj_id in visited:
+            return None
+        visited.add(obj_id)
+
+        for key, value in obj.items():
+            key_rc = _normalise_rc(key)
+            if key_rc == rc:
+                return value
+
+        rc_candidates = [
+            obj.get("rc"),
+            obj.get("race_id"),
+            obj.get("race"),
+            obj.get("course_label"),
+        ]
+        for candidate in rc_candidates:
+            if _normalise_rc(candidate) == rc:
+                return obj
+
+        reunion = obj.get("reunion") or obj.get("meeting") or obj.get("r")
+        course = obj.get("course") or obj.get("race") or obj.get("c")
+        if reunion and course:
+            combined = _normalise_rc(f"{reunion}{course}")
+            if combined == rc:
+                return obj
+
+        for value in obj.values():
+            if isinstance(value, (Mapping, list, tuple, set)):
+                found = _resolve_rc_entry(rc, value, visited=visited)
+                if found is not None:
+                    return found
+        return None
+
+    if isinstance(obj, (list, tuple, set)):
+        for item in obj:
+            found = _resolve_rc_entry(rc, item, visited=visited)
+            if found is not None:
+                return found
+    return None
+
+
+def _extract_course_id_from_entry(entry: Any, *, visited: set[int] | None = None) -> str | None:
+    """Extract ``course_id`` from ``entry`` when present."""
+
+    if entry is None:
+        return None
+
+    if isinstance(entry, str):
+        text = entry.strip()
+        if text.isdigit():
+            return text
+        match = _COURSE_ID_PATTERN.search(text)
+        if match:
+            return match.group(0)
+        return None
+
+    if not isinstance(entry, Mapping):
+        if isinstance(entry, (list, tuple, set)):
+            for item in entry:
+                course_id = _extract_course_id_from_entry(item, visited=visited)
+                if course_id:
+                    return course_id
+        return None
+
+    if visited is None:
+        visited = set()
+    obj_id = id(entry)
+    if obj_id in visited:
+        return None
+    visited.add(obj_id)
+
+    for key in ("course_id", "id_course", "courseId", "idCourse", "id", "numero", "number"):
+        if key in entry:
+            value = entry[key]
+            if isinstance(value, (int, str)):
+                text = str(value).strip()
+                if text.isdigit():
+                    return text
+                match = _COURSE_ID_PATTERN.search(text)
+                if match:
+                    return match.group(0)
+
+    for value in entry.values():
+        if isinstance(value, (Mapping, list, tuple, set)):
+            course_id = _extract_course_id_from_entry(value, visited=visited)
+            if course_id:
+                return course_id
+
+    return None
+
+
+def _extract_url_from_entry(entry: Any) -> str | None:
+    """Return a URL embedded in ``entry`` when available."""
+
+    if entry is None:
+        return None
+
+    if isinstance(entry, str):
+        text = entry.strip()
+        if text.startswith("http://") or text.startswith("https://"):
+            return text
+        return None
+
+    if isinstance(entry, Mapping):
+        for key in _URL_FIELDS:
+            value = entry.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        for value in entry.values():
+            if isinstance(value, (Mapping, list, tuple, set, str)):
+                url = _extract_url_from_entry(value)
+                if url:
+                    return url
+    elif isinstance(entry, (list, tuple, set)):
+        for item in entry:
+            url = _extract_url_from_entry(item)
+            if url:
+                return url
+
+    return None
+
+
+def fetch_race_snapshot(
+    rc: str,
+    *,
+    phase: str,
+    sources: Mapping[str, Any],
+    url: str | None = None,
+    retries: int = 3,
+    backoff: float = 1.5,
+    initial_delay: float = 0.5,
+) -> Dict[str, Any]:
+    """Return a normalized snapshot for ``rc`` using ``sources`` configuration."""
+
+    rc_norm = _normalise_rc(rc)
+    if not rc_norm:
+        raise ValueError("rc must follow pattern R<C> with digits, e.g. R1C3")
+
+    if not isinstance(sources, Mapping):
+        raise ValueError("sources must be a mapping configuration")
+
+    phase_tag, mode_key, _ = _normalise_snapshot_phase(phase)
+    retries = max(1, int(retries))
+    backoff = float(backoff) if backoff > 0 else 1.0
+    delay = max(0.0, float(initial_delay))
+
+    config: MutableMapping[str, Any]
+    if isinstance(sources, MutableMapping):
+        config = sources
+    else:
+        config = dict(sources)
+
+    entry = _resolve_rc_entry(rc_norm, config)
+    course_id = _extract_course_id_from_entry(entry)
+    entry_url = _extract_url_from_entry(entry)
+
+    if url:
+        entry_url = url.strip()
+        if not course_id:
+            match = _COURSE_ID_PATTERN.search(entry_url)
+            if match:
+                course_id = match.group(0)
+
+    template = resolve_source_url(config, mode_key)
+
+    if entry_url:
+        if _COURSE_PLACEHOLDER.search(entry_url) or "{course_id}" in entry_url:
+            if not course_id:
+                raise ValueError(f"No course_id configured for {rc_norm}")
+            fetch_url = _inject_course_id(entry_url, course_id)
+        else:
+            fetch_url = entry_url
+    else:
+        if not course_id:
+            raise ValueError(f"Unable to resolve course_id for {rc_norm}")
+        fetch_url = _inject_course_id(template, course_id)
+
+    last_exc: Exception | None = None
+    for attempt in range(retries):
+        try:
+            payload = fetch_runners(fetch_url)
+        except requests.RequestException as exc:  # pragma: no cover - exercised in tests
+            last_exc = exc
+            if attempt == retries - 1:
+                raise
+            if delay:
+                time.sleep(delay)
+                delay *= backoff
+            continue
+
+        if isinstance(payload, MutableMapping):
+            payload.setdefault("rc", rc_norm)
+            if course_id:
+                payload.setdefault("course_id", course_id)
+            match = re.match(r"R(\d+)C(\d+)", rc_norm)
+            if match:
+                payload.setdefault("reunion", f"R{int(match.group(1))}")
+                payload.setdefault("course", f"C{int(match.group(2))}")
+            payload.setdefault("phase", phase_tag)
+        return normalize_snapshot(payload)
+
+    if last_exc:
+        raise last_exc
+    raise RuntimeError("Unable to fetch snapshot")
 
 
 def fetch_from_geny_idcourse(id_course: str) -> Dict[str, Any]:
@@ -868,6 +1101,7 @@ __all__ = [
     "fetch_meetings",
     "filter_today",
     "fetch_runners",
+    "fetch_race_snapshot",
     "fetch_from_geny_idcourse",
     "write_snapshot_from_geny",
     "normalize_snapshot",
