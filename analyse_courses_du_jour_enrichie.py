@@ -19,7 +19,7 @@ import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable
 
 import requests
 from bs4 import BeautifulSoup
@@ -630,7 +630,10 @@ _FETCH_JE_STATS_SCRIPT = Path(__file__).resolve().with_name("scripts").joinpath(
     "fetch_je_stats.py"
 )
 def _check_enrich_outputs(
-    rc_dir: Path, *, retry_delay: float = 1.0
+    rc_dir: Path,
+    *,
+    retry_delay: float = 1.0,
+    retry_cb: Callable[[], None] | None = None,
 ) -> dict[str, Any] | None:
     """Ensure ``enrich_h5`` produced required CSV artefacts.
 
@@ -661,7 +664,16 @@ def _check_enrich_outputs(
                 + message,
                 file=sys.stderr,
             )
-            time.sleep(max(0.0, retry_delay))
+            if retry_cb is not None:
+                try:
+                    retry_cb()
+                except Exception as exc:  # pragma: no cover - defensive logging
+                    print(
+                        f"[WARN] relance enrich_h5 a échoué pour {rc_dir.name}: {exc}",
+                        file=sys.stderr,
+                    )
+            if retry_delay:
+                time.sleep(max(0.0, retry_delay))
             continue
 
         print(
@@ -858,10 +870,12 @@ def _regenerate_chronos_csv(rc_dir: Path) -> bool:
     return False
 
 
-def _ensure_h5_artifacts(rc_dir: Path) -> dict[str, Any] | None:
+def _ensure_h5_artifacts(
+    rc_dir: Path, *, retry_cb: Callable[[], None] | None = None
+) -> dict[str, Any] | None:
     """Ensure H-5 enrichment produced JE/chronos files or mark course unplayable."""
 
-    outcome = _check_enrich_outputs(rc_dir)
+    outcome = _check_enrich_outputs(rc_dir, retry_cb=retry_cb)
     if outcome is None:
         return None
 
@@ -1039,7 +1053,10 @@ def _process_single_course(
     outcome: dict[str, Any] | None = None
     if phase.upper() == "H5":
         enrich_h5(rc_dir, budget=budget, kelly=kelly)
-        outcome = _ensure_h5_artifacts(rc_dir)
+        outcome = _ensure_h5_artifacts(
+            rc_dir,
+            retry_cb=lambda d=rc_dir: enrich_h5(d, budget=budget, kelly=kelly),
+        )
         if outcome is None:
             build_p_finale(rc_dir, budget=budget, kelly=kelly)
             run_pipeline(rc_dir, budget=budget, kelly=kelly)
@@ -1092,7 +1109,10 @@ def _process_reunion(
         outcome: dict[str, Any] | None = None
         if phase.upper() == "H5":
             enrich_h5(rc_dir, budget=budget, kelly=kelly)
-            outcome = _ensure_h5_artifacts(rc_dir)
+            outcome = _ensure_h5_artifacts(
+                rc_dir,
+                retry_cb=lambda d=rc_dir: enrich_h5(d, budget=budget, kelly=kelly),
+            )
             if outcome is None:
                 build_p_finale(rc_dir, budget=budget, kelly=kelly)
                 run_pipeline(rc_dir, budget=budget, kelly=kelly)
@@ -1239,7 +1259,12 @@ def main() -> None:
                 write_snapshot_from_geny(course_id, "H30", rc_dir)
                 write_snapshot_from_geny(course_id, "H5", rc_dir)
                 enrich_h5(rc_dir, budget=args.budget, kelly=args.kelly)
-                decision = _ensure_h5_artifacts(rc_dir)
+                decision = _ensure_h5_artifacts(
+                    rc_dir,
+                    retry_cb=lambda d=rc_dir: enrich_h5(
+                        d, budget=args.budget, kelly=args.kelly
+                    ),
+                )
                 if decision is None:
                     build_p_finale(rc_dir, budget=args.budget, kelly=args.kelly)
                     run_pipeline(rc_dir, budget=args.budget, kelly=args.kelly)
