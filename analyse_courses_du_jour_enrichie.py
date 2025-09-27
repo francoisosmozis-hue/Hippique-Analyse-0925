@@ -626,6 +626,14 @@ def _snap_prefix(rc_dir: Path) -> str | None:
     return latest.stem
 
 
+_FETCH_JE_STATS_SCRIPT = Path(__file__).resolve().with_name("scripts").joinpath(
+    "fetch_je_stats.py"
+)
+_FETCH_JE_CHRONO_SCRIPT = Path(__file__).resolve().with_name("scripts").joinpath(
+    "fetch_je_chrono.py"
+)
+
+
 def _check_enrich_outputs(
     rc_dir: Path, *, retry_delay: float = 1.0
 ) -> dict[str, Any] | None:
@@ -674,6 +682,59 @@ def _check_enrich_outputs(
         }
 
     return None
+
+
+def _missing_requires_stats(missing: Iterable[str]) -> bool:
+    return any(str(name).endswith("_je.csv") for name in missing)
+
+
+def _missing_requires_chronos(missing: Iterable[str]) -> bool:
+    return any(str(name) == "chronos.csv" for name in missing)
+
+
+def _run_fetch_script(script_path: Path, rc_dir: Path) -> None:
+    cmd = [sys.executable, str(script_path), "--course-dir", str(rc_dir)]
+    try:
+        subprocess.run(cmd, check=False)
+    except Exception as exc:  # pragma: no cover - defensive logging
+        print(
+            f"[WARN] Impossible d'exécuter {script_path.name} pour {rc_dir.name}: {exc}",
+            file=sys.stderr,
+        )
+
+
+def _ensure_h5_artifacts(rc_dir: Path) -> dict[str, Any] | None:
+    """Ensure H-5 enrichment produced JE/chronos files or mark course unplayable."""
+
+    outcome = _check_enrich_outputs(rc_dir)
+    if outcome is None:
+        return None
+
+    missing = list(outcome.get("details", {}).get("missing", []))
+    retried = False
+
+    if _missing_requires_stats(missing):
+        _run_fetch_script(_FETCH_JE_STATS_SCRIPT, rc_dir)
+        retried = True
+    if _missing_requires_chronos(missing):
+        _run_fetch_script(_FETCH_JE_CHRONO_SCRIPT, rc_dir)
+        retried = True or retried
+
+    if retried:
+        outcome = _check_enrich_outputs(rc_dir, retry_delay=0.0)
+        if outcome is None:
+            return None
+
+    marker = rc_dir / "UNPLAYABLE.txt"
+    marker.write_text(
+        "Analyse H-5 impossible : données manquantes.\n",
+        encoding="utf-8",
+    )
+    print(
+        f"[WARN] course non jouable (data manquante) : {rc_dir.name}",
+        file=sys.stderr,
+    )
+    return outcome
 
 
 def export_per_horse_csv(rc_dir: Path) -> Path:
@@ -823,7 +884,7 @@ def _process_single_course(
     outcome: dict[str, Any] | None = None
     if phase.upper() == "H5":
         enrich_h5(rc_dir, budget=budget, kelly=kelly)
-        outcome = _check_enrich_outputs(rc_dir)
+        outcome = _ensure_h5_artifacts(rc_dir)
         if outcome is None:
             build_p_finale(rc_dir, budget=budget, kelly=kelly)
             run_pipeline(rc_dir, budget=budget, kelly=kelly)
@@ -832,11 +893,6 @@ def _process_single_course(
             print(f"[INFO] per-horse report écrit: {csv_path}")
         else:
             _write_json_file(rc_dir / "decision.json", outcome)
-            missing = ", ".join(outcome.get("details", {}).get("missing", []))
-            print(
-                f"[WARN] Pipeline H-5 ignoré pour {rc_dir.name} (données manquantes: {missing})",
-                file=sys.stderr,
-            )
     if gcs_prefix is not None:
         _upload_artifacts(rc_dir, gcs_prefix=gcs_prefix)
     return outcome
@@ -881,7 +937,7 @@ def _process_reunion(
         outcome: dict[str, Any] | None = None
         if phase.upper() == "H5":
             enrich_h5(rc_dir, budget=budget, kelly=kelly)
-            outcome = _check_enrich_outputs(rc_dir)
+            outcome = _ensure_h5_artifacts(rc_dir)
             if outcome is None:
                 build_p_finale(rc_dir, budget=budget, kelly=kelly)
                 run_pipeline(rc_dir, budget=budget, kelly=kelly)
@@ -890,11 +946,6 @@ def _process_reunion(
                 print(f"[INFO] per-horse report écrit: {csv_path}")
             else:
                 _write_json_file(rc_dir / "decision.json", outcome)
-                missing = ", ".join(outcome.get("details", {}).get("missing", []))
-                print(
-                    f"[WARN] Pipeline H-5 ignoré pour {rc_dir.name} (données manquantes: {missing})",
-                    file=sys.stderr,
-                )
         if gcs_prefix is not None:
             _upload_artifacts(rc_dir, gcs_prefix=gcs_prefix)
 
@@ -1033,12 +1084,15 @@ def main() -> None:
                 write_snapshot_from_geny(course_id, "H30", rc_dir)
                 write_snapshot_from_geny(course_id, "H5", rc_dir)
                 enrich_h5(rc_dir, budget=args.budget, kelly=args.kelly)
-                _check_enrich_outputs(rc_dir)
-                build_p_finale(rc_dir, budget=args.budget, kelly=args.kelly)
-                run_pipeline(rc_dir, budget=args.budget, kelly=args.kelly)
-                build_prompt_from_meta(rc_dir, budget=args.budget, kelly=args.kelly)
-                csv_path = export_per_horse_csv(rc_dir)
-                print(f"[INFO] per-horse report écrit: {csv_path}")
+                decision = _ensure_h5_artifacts(rc_dir)
+                if decision is None:
+                    build_p_finale(rc_dir, budget=args.budget, kelly=args.kelly)
+                    run_pipeline(rc_dir, budget=args.budget, kelly=args.kelly)
+                    build_prompt_from_meta(rc_dir, budget=args.budget, kelly=args.kelly)
+                    csv_path = export_per_horse_csv(rc_dir)
+                    print(f"[INFO] per-horse report écrit: {csv_path}")
+                else:
+                    _write_json_file(rc_dir / "decision.json", decision)
                 if gcs_prefix is not None:
                     _upload_artifacts(rc_dir, gcs_prefix=gcs_prefix)
         print("[DONE] from-geny-today pipeline terminé.")
