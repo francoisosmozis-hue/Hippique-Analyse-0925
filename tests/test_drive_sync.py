@@ -1,10 +1,12 @@
 import base64
 import json
 import sys
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 from google.auth.exceptions import DefaultCredentialsError
+from openpyxl import load_workbook
 
 pytest.importorskip("google.cloud.storage")
 
@@ -114,23 +116,147 @@ def test_main_honours_env_prefix(monkeypatch):
     )
 
 
-def test_main_skips_when_credentials_missing(monkeypatch, capsys):
+def _write_sample_payload(tmp_path: Path) -> tuple[Path, Path, Path, Path]:
+    tickets_path = tmp_path / "tickets.json"
+    arrivee_path = tmp_path / "arrivee_officielle.json"
+    outdir = tmp_path / "artefacts"
+    excel_path = tmp_path / "excel" / "roi.xlsx"
+
+    tickets = {
+        "meta": {
+            "rc": "R1C1",
+            "hippodrome": "Test",
+            "date": "2024-09-25",
+            "discipline": "trot",
+            "model": "GPI",
+        },
+        "tickets": [
+            {"id": "1", "stake": 2.0, "odds": 4.0, "p": 0.3},
+            {"id": "3", "stake": 1.0, "odds": 2.5, "p": 0.2},
+        ],
+    }
+    arrivee = {"rc": "R1C1", "result": ["1", "5", "7"]}
+    tickets_path.write_text(json.dumps(tickets), encoding="utf-8")
+    arrivee_path.write_text(json.dumps(arrivee), encoding="utf-8")
+    return tickets_path, arrivee_path, outdir, excel_path
+
+
+def test_main_skips_when_credentials_missing(monkeypatch, capsys, tmp_path):
+    tickets_path, arrivee_path, outdir, excel_path = _write_sample_payload(tmp_path)
+
     monkeypatch.setattr(drive_sync, "is_gcs_enabled", lambda: True)
-    monkeypatch.setattr(sys, "argv", ["drive_sync.py"])
-    
+    monkeypatch.setattr(
+        drive_sync,
+        "push_tree",
+        MagicMock(side_effect=AssertionError("push_tree should not run")),
+    )
+    monkeypatch.setattr(
+        drive_sync,
+        "upload_file",
+        MagicMock(side_effect=AssertionError("upload_file should not run")),
+    )
+    monkeypatch.setattr(
+        drive_sync,
+        "download_file",
+        MagicMock(side_effect=AssertionError("download_file should not run")),
+    )
+
     def _raise_missing(*_args, **_kwargs):
         raise DefaultCredentialsError("missing")
 
     monkeypatch.setattr(drive_sync, "_build_service", _raise_missing)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "drive_sync.py",
+            "--arrivee",
+            str(arrivee_path),
+            "--tickets",
+            str(tickets_path),
+            "--outdir",
+            str(outdir),
+            "--excel",
+            str(excel_path),
+        ],
+    )
+    
     result = drive_sync.main()
 
     captured = capsys.readouterr()
     assert result == 0
-    assert (
-        "[drive_sync] no Google Cloud credentials detected → skipping Google Cloud Storage synchronisation."
-        in captured.out
+    assert "[drive_sync] ROI non historisé (Drive off)" in captured.out
+    assert (outdir / "arrivee.json").exists()
+    assert (outdir / "ligne_resultats.csv").exists()
+    assert (outdir / "cmd_update_excel.txt").exists()
+
+
+def test_main_local_only_runs_local_artifacts(tmp_path, monkeypatch, capsys):
+    tickets_path, arrivee_path, outdir, excel_path = _write_sample_payload(tmp_path)
+
+    monkeypatch.setattr(drive_sync, "is_gcs_enabled", lambda: True)
+    monkeypatch.setattr(
+        drive_sync,
+        "_build_service",
+        MagicMock(side_effect=AssertionError("_build_service should be skipped")),
+    )
+    monkeypatch.setattr(
+        drive_sync,
+        "push_tree",
+        MagicMock(side_effect=AssertionError("push_tree should not run")),
+    )
+    monkeypatch.setattr(
+        drive_sync,
+        "upload_file",
+        MagicMock(side_effect=AssertionError("upload_file should not run")),
+    )
+    monkeypatch.setattr(
+        drive_sync,
+        "download_file",
+        MagicMock(side_effect=AssertionError("download_file should not run")),
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "drive_sync.py",
+            "--local-only",
+            "--arrivee",
+            str(arrivee_path),
+            "--tickets",
+            str(tickets_path),
+            "--outdir",
+            str(outdir),
+            "--excel",
+            str(excel_path),
+            "--places",
+            "2",
+        ],
     )
 
+    result = drive_sync.main()
+    captured = capsys.readouterr()
+
+    assert result == 0
+    assert "--local-only" in captured.out
+
+    updated = json.loads(tickets_path.read_text(encoding="utf-8"))
+    assert "roi_reel" in updated
+    assert "brier_total" in updated
+
+    arrivee_payload = json.loads((outdir / "arrivee.json").read_text(encoding="utf-8"))
+    assert arrivee_payload["result"] == ["1", "5"]
+
+    csv_content = (outdir / "ligne_resultats.csv").read_text(encoding="utf-8")
+    assert "ROI_reel" in csv_content.splitlines()[0]
+
+    cmd = (outdir / "cmd_update_excel.txt").read_text(encoding="utf-8")
+    assert "update_excel_with_results.py" in cmd
+
+    assert excel_path.exists()
+    workbook = load_workbook(excel_path)
+    assert "ROI Observé" in workbook.sheetnames
+    
 
 def test_build_service_env(monkeypatch):
     creds_data = {"type": "service_account"}
