@@ -32,6 +32,7 @@ def test_validate_exotics_with_simwrapper_filters_and_alert(monkeypatch):
     assert len(tickets) == 1
     assert tickets[0]['flags'] == ['ALERTE_VALUE']
     assert info['flags']['combo'] is True
+    assert info['decision'] == 'accept'
 
 
 def test_validate_exotics_with_simwrapper_rejects_low_payout(monkeypatch):
@@ -54,8 +55,9 @@ def test_validate_exotics_with_simwrapper_rejects_low_payout(monkeypatch):
     )
 
     assert tickets == []
-    assert 'payout_below_threshold' in info['flags']['reasons']['combo']
+    assert 'payout_expected_below_accept_threshold' in info['flags']['reasons']['combo']
     assert info['flags']['combo'] is False
+    assert info['decision'] == 'reject:payout_expected_below_accept_threshold'
 
 
 def test_validate_exotics_with_simwrapper_caps_best_and_alert(monkeypatch):
