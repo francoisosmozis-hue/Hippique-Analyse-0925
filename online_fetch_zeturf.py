@@ -263,12 +263,19 @@ def fetch_race_snapshot(
     reunion: str,
     course: str,
     phase: str = "H30",
-    url: str | None = None,
     *,
+    url: str | None = None,
     retry: int = 2,
     backoff: float = 0.6,
-) -> dict:
-    """Return a normalised snapshot for ``reunion``/``course``."""
+) -> dict[str, Any]:
+    """Return a normalised snapshot for ``reunion``/``course``.
+
+    The signature enforces ``url`` as a keyword-only argument to mirror the
+    public contract advertised to downstream callers (runner_chain/pipeline).
+    Additional keyword-only knobs (``retry``/``backoff``) remain available for
+    advanced use-cases while keeping the positional parameters identical to the
+    historical CLI wrapper.
+    """
 
     reunion_norm = _normalise_label(reunion, "R")
     course_norm = _normalise_label(course, "C")
