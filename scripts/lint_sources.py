@@ -152,9 +152,9 @@ def _build_parser() -> argparse.ArgumentParser:
         "--warn-only",
         action="store_true",
         help=(
-            "Force l'émission des avertissements au niveau warning et fait"
-            " renvoyer 2 par la CLI en cas d'avertissements (1 en cas"
-            " d'erreurs)."
+            "Force l'émission des avertissements au niveau warning ; la CLI"
+            " renvoie 2 s'il reste des avertissements et 1 s'il reste des"
+            " erreurs."
         ),
     )
     return parser
