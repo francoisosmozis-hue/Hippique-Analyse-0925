@@ -8,6 +8,7 @@ from typing import Any
 from pathlib import Path
 import json
 import importlib.util
+import logging
 
 import pytest
 
@@ -104,7 +105,7 @@ def test_fetch_meetings_fallback_on_404(monkeypatch: pytest.MonkeyPatch) -> None
     </ul>
     """
 
-    def fake_get(url: str, timeout: int) -> DummyResp:
+    def fake_get(url: str, timeout: int, headers: Any | None = None) -> DummyResp:
         calls.append(url)
         if url == primary:
              return DummyResp(404, None)
@@ -127,7 +128,7 @@ def test_fetch_meetings_fallback_on_connection_error(
     fallback_payload = {"meetings": [{"id": "GENY", "name": "Fallback", "date": "today"}]}
     called: dict[str, int] = {"fallback": 0}
 
-    def fake_get(url: str, timeout: int = 10) -> DummyResp:
+    def fake_get(url: str, timeout: int = 10, headers: Any | None = None) -> DummyResp:
         if url == primary:
             raise ofz.requests.ConnectionError("boom")
         raise AssertionError("Unexpected URL")
@@ -212,6 +213,103 @@ def test_fetch_runners_enriches_start_time(monkeypatch: pytest.MonkeyPatch) -> N
     assert calls == [api_url, "https://www.zeturf.fr/fr/course/12345"]
 
 
+def test_fetch_from_geny_parser_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The Geny parser should fallback to attribute/regex extraction."""
+
+    id_course = "55555"
+    partants_html = """
+    <section>
+        <div data-num="1" data-name="Alpha" data-jockey="J1" data-entraineur="T1"></div>
+        <div data-num="2" data-name="Bravo"></div>
+    </section>
+    """
+    cotes_payload = {"runners": [{"num": "1", "cote": "3"}, {"num": "2", "cote": "5"}]}
+    calls: list[str] = []
+
+    def fake_get(url: str, headers: Any | None = None, timeout: int = 10) -> DummyResp:
+        calls.append(url)
+        if "partants" in url:
+            return DummyResp(200, partants_html)
+        if "cotes" in url:
+            return DummyResp(200, cotes_payload)
+        raise AssertionError(f"Unexpected URL: {url}")
+
+    monkeypatch.setattr(ofz.requests, "get", fake_get)
+
+    snap = ofz.fetch_from_geny_idcourse(id_course)
+
+    assert [r["num"] for r in snap["runners"]] == ["1", "2"]
+    assert snap["runners"][0]["jockey"] == "J1"
+    assert snap["runners"][0]["entraineur"] == "T1"
+    assert snap["partants"] == 2
+    assert calls.count(f"{ofz.GENY_BASE}/partants-pmu/_c{id_course}") == 1
+
+
+def test_fetch_from_geny_retries_on_empty_dom(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Empty DOM responses should trigger exponential backoff."""
+
+    id_course = "66666"
+    valid_html = """
+    <table><tr><td>1</td><td>Gamma</td><td>J2</td><td>T2</td></tr></table>
+    """
+    partants_responses = [DummyResp(200, "   "), DummyResp(200, valid_html)]
+    sleep_calls: list[float] = []
+
+    def fake_get(url: str, headers: Any | None = None, timeout: int = 10) -> DummyResp:
+        if "partants" in url:
+            return partants_responses.pop(0)
+        if "cotes" in url:
+            return DummyResp(200, {"runners": []})
+        raise AssertionError(f"Unexpected URL: {url}")
+
+    monkeypatch.setattr(ofz.requests, "get", fake_get)
+    monkeypatch.setattr(ofz.time, "sleep", lambda delay: sleep_calls.append(delay))
+
+    snap = ofz.fetch_from_geny_idcourse(id_course)
+
+    assert snap["partants"] == 1
+    assert sleep_calls == [0.5]
+
+
+def test_fetch_from_geny_retries_on_429(monkeypatch: pytest.MonkeyPatch) -> None:
+    """HTTP 429 responses should be retried with exponential backoff."""
+
+    id_course = "77777"
+    html = """
+    <table><tr><td>1</td><td>Delta</td><td>J3</td><td>T3</td></tr></table>
+    """
+    responses = [DummyResp(429, None, text="Too many requests"), DummyResp(200, html)]
+    sleep_calls: list[float] = []
+
+    def fake_get(url: str, headers: Any | None = None, timeout: int = 10) -> DummyResp:
+        if "partants" in url:
+            return responses.pop(0)
+        if "cotes" in url:
+            return DummyResp(200, {"runners": []})
+        raise AssertionError(f"Unexpected URL: {url}")
+
+    monkeypatch.setattr(ofz.requests, "get", fake_get)
+    monkeypatch.setattr(ofz.time, "sleep", lambda delay: sleep_calls.append(delay))
+
+    snap = ofz.fetch_from_geny_idcourse(id_course)
+
+    assert snap["partants"] == 1
+    assert sleep_calls == [0.5]
+
+
+def test_normalize_snapshot_logs_missing_metadata(caplog: pytest.LogCaptureFixture) -> None:
+    """Missing metadata should emit a warning for visibility."""
+
+    payload = {"rc": "R1C1", "runners": []}
+
+    with caplog.at_level(logging.WARNING):
+        meta = ofz.normalize_snapshot(payload)
+
+    assert meta["partants"] == 0
+    messages = [record.message for record in caplog.records]
+    assert any("meeting" in message for message in messages)
+    assert any("discipline" in message for message in messages)
+    assert any("partants" in message for message in messages)
 def test_extract_course_ids_from_meeting() -> None:
     """Meeting pages should yield ordered course identifiers."""
 
