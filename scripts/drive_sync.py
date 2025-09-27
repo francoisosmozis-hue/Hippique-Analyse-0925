@@ -391,19 +391,25 @@ def main() -> int | None:
         return 0
 
     try:
+        bucket_name = _require_bucket(args.bucket)
+    except EnvironmentError as exc:
+        print(f"[drive_sync] ROI non historisé (Drive off): {exc}")
+        return 0
+        
+    try:
         client = _build_service(args.credentials_json, project=args.project)
     except google_auth_exceptions.DefaultCredentialsError:
         print("[drive_sync] ROI non historisé (Drive off)")
         return 0
 
     for base in args.push:
-        push_tree(base, folder_id=args.prefix, bucket=args.bucket, service=client)
+        push_tree(base, folder_id=args.prefix, bucket=bucket_name, service=client)
 
     for path in _iter_uploads(args.upload_glob):
-        upload_file(path, folder_id=args.prefix, bucket=args.bucket, service=client)
+        upload_file(path, folder_id=args.prefix, bucket=bucket_name, service=client)
 
     for object_name, dest in args.download:
-        download_file(object_name, dest, bucket=args.bucket, service=client)
+        download_file(object_name, dest, bucket=bucket_name, service=client)
 
     return 0
 
