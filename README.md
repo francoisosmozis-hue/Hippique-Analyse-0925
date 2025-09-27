@@ -142,6 +142,42 @@ doublons. Les commandes ci‑dessus peuvent être enchaînées avec un utilitair
 d'upload (ex. `scripts/drive_sync.py`) pour pousser le fichier sur Google
 Drive.
 
+### Automatisation GitHub Actions H‑30 / H‑5
+
+Deux workflows dédiés (`.github/workflows/h30.yml` et `.github/workflows/h5.yml`)
+permettent d'orchestrer la collecte et l'analyse quotidiennes à partir du
+fichier `sources.txt` :
+
+- **08:30 Europe/Paris** → workflow *Planning H-30* :
+  - lance `online_fetch_zeturf.py` pour chaque réunion listée ;
+  - met à jour l'onglet Planning (phase `H30`) via
+    `scripts/update_excel_planning.py` ;
+  - publie les snapshots + l'Excel consolidé en tant qu'artifact GitHub Actions
+    (et peut synchroniser vers GCS si les variables `GCS_*` sont définies).
+- **Toutes les 5 minutes (08:00–20:55 UTC)** → workflow *Planning H-5* :
+  - déclenche `scripts/cron_decider.py` pour identifier les courses à H‑5 ;
+  - actualise l'onglet Planning (phase `H5`) à partir de la dernière analyse ;
+  - uploade les rapports en artifact et propose la même synchronisation GCS.
+
+Un linter dédié (`scripts/lint_sources.py`) est exécuté automatiquement en H‑30
+avec `--enforce-today --warn-only` pour détecter :
+
+- URLs manquantes, mal formées ou hors domaine `zeturf.fr` ;
+- doublons ;
+- absence de la date du jour dans les liens renseignés.
+
+Le job crée un commentaire GitHub en cas d'anomalie et alerte Slack si le
+secret `SLACK_WEBHOOK` est défini. Pour transformer ces avertissements en
+échecs bloquants, retirer `--warn-only` dans l'étape « Lint sources.txt ».
+
+Le workflow H‑5 propage également les erreurs vers Slack et peut envoyer un
+email (via `dawidd6/action-send-mail`) lorsque les secrets `MAIL_*` sont
+configurés. Pour tester localement la qualité des sources avant un commit :
+
+```bash
+python scripts/lint_sources.py --file sources.txt --enforce-today
+```
+
 #### Exemple de flux quotidien
 
 1. **Collecte H‑30**
