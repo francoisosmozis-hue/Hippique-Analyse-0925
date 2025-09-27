@@ -6,7 +6,7 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
-from typing import Any, Dict, Mapping
+from typing import Any, Dict, Iterable, Mapping
 
 import yaml
 
@@ -57,6 +57,126 @@ def _normalise_phase_alias(value: str) -> str:
     # Accept common aliases such as ``H-30`` while keeping the canonical tag
     # expected by the scripts implementation.
     return text.upper().replace("-", "")
+
+
+def _coerce_runner_entry(entry: Mapping[str, Any]) -> dict[str, Any] | None:
+    """Normalise a runner payload into the structure expected downstream."""
+
+    identifiers = (
+        entry.get("num"),
+        entry.get("number"),
+        entry.get("id"),
+        entry.get("runner_id"),
+    )
+    number: str | None = None
+    for candidate in identifiers:
+        if candidate in (None, ""):
+            continue
+        number = str(candidate).strip()
+        if number:
+            break
+    if not number:
+        return None
+
+    name_raw = (
+        entry.get("name")
+        or entry.get("horse")
+        or entry.get("label")
+        or entry.get("runner")
+    )
+    name = str(name_raw).strip() if name_raw not in (None, "") else number
+
+    runner: dict[str, Any] = {"num": number, "name": name}
+
+    def _coerce_float(value: Any) -> float | None:
+        if value in (None, ""):
+            return None
+        try:
+            return float(str(value).replace(",", "."))
+        except (TypeError, ValueError):  # pragma: no cover - defensive
+            return None
+
+    for odds_key in ("cote", "odds", "odd", "cote_dec", "price"):
+        odds_val = _coerce_float(entry.get(odds_key))
+        if odds_val is not None:
+            runner.setdefault("cote", odds_val)
+            break
+
+    for prob_key in ("p", "probability", "p_imp", "p_imp_h5", "p_true"):
+        prob_val = _coerce_float(entry.get(prob_key))
+        if prob_val is not None:
+            runner.setdefault("p", prob_val)
+            break
+
+    for extra_key in ("id", "runner_id", "number"):
+        extra_val = entry.get(extra_key)
+        if extra_val not in (None, "", number):
+            runner.setdefault("id", str(extra_val).strip())
+            break
+
+    if "odds" not in runner and entry.get("odds") not in (None, ""):
+        odds_val = _coerce_float(entry.get("odds"))
+        if odds_val is not None:
+            runner["odds"] = odds_val
+
+    if "cote" not in runner and "odds" in runner:
+        runner["cote"] = runner["odds"]
+
+    return runner
+
+
+def _build_snapshot_payload(
+    raw_snapshot: Mapping[str, Any],
+    reunion: str,
+    course: str,
+    *,
+    phase: str,
+    source_url: str | None = None,
+) -> dict[str, Any]:
+    meeting = raw_snapshot.get("hippodrome") or raw_snapshot.get("meeting")
+    date = raw_snapshot.get("date")
+    discipline = raw_snapshot.get("discipline")
+    course_id = raw_snapshot.get("course_id") or raw_snapshot.get("id_course")
+    runners_raw = raw_snapshot.get("runners")
+    runners: list[dict[str, Any]] = []
+    if isinstance(runners_raw, Iterable) and not isinstance(runners_raw, (str, bytes)):
+        for entry in runners_raw:
+            if isinstance(entry, Mapping):
+                parsed = _coerce_runner_entry(entry)
+                if parsed:
+                    runners.append(parsed)
+
+    partants = raw_snapshot.get("partants")
+    try:
+        partants_val = int(partants) if partants not in (None, "") else None
+    except (TypeError, ValueError):  # pragma: no cover - defensive
+        partants_val = None
+    if partants_val is None and runners:
+        partants_val = len(runners)
+
+    snapshot: dict[str, Any] = {
+        "meeting": meeting,
+        "date": date,
+        "discipline": discipline,
+        "reunion": reunion,
+        "course": course,
+        "r_label": reunion,
+        "c_label": course,
+        "runners": runners,
+        "partants": partants_val,
+        "phase": phase,
+        "rc": f"{reunion}{course}",
+    }
+    if course_id:
+        snapshot["course_id"] = str(course_id)
+    if source_url:
+        snapshot["source_url"] = source_url
+
+    for field in ("meeting", "discipline", "partants"):
+        if snapshot.get(field) in (None, ""):
+            logger.warning("[ZEturf] Champ clé manquant: %s (rc=%s)", field, snapshot["rc"])
+
+    return snapshot
 
 
 def fetch_race_snapshot(
@@ -137,18 +257,46 @@ def fetch_race_snapshot(
 
     phase_norm = _normalise_phase_alias(phase)
 
-    snapshot = _impl.fetch_race_snapshot(
-        rc,
+    try:
+        raw_snapshot = _impl.fetch_race_snapshot(
+            rc,
+            phase=phase_norm,
+            sources=sources,
+            url=url,
+            retries=max(1, int(retry)),
+            backoff=backoff if backoff > 0 else 0.6,
+            initial_delay=0.3,
+        )
+    except Exception as exc:  # pragma: no cover - defensive catch
+        logger.error("[ZEturf] échec fetch_race_snapshot pour %s: %s", rc, exc)
+        return {
+            "meeting": None,
+            "date": None,
+            "discipline": None,
+            "reunion": reunion_norm,
+            "course": course_norm,
+            "r_label": reunion_norm,
+            "c_label": course_norm,
+            "runners": [],
+            "partants": None,
+            "phase": phase_norm,
+            "rc": rc,
+        }
+
+    if not isinstance(raw_snapshot, Mapping):
+        raw_snapshot = {}
+
+    source_url = entry.get("url") if isinstance(entry.get("url"), str) else None
+    snapshot = _build_snapshot_payload(
+        raw_snapshot,
+        reunion_norm,
+        course_norm,
         phase=phase_norm,
-        sources=sources,
-        url=url,
-        retries=max(1, int(retry)),
-        backoff=backoff if backoff > 0 else 0.6,
-        initial_delay=0.3,
+        source_url=source_url,
     )
 
     # Ensure hard minimum thresholds are echoed for downstream audits
-    meta = snapshot.setdefault("meta", {}) if isinstance(snapshot, dict) else {}
+    meta = raw_snapshot.get("meta") if isinstance(raw_snapshot, Mapping) else None
     if isinstance(meta, dict):
         thresholds = meta.setdefault("exotic_thresholds", {})
         if isinstance(thresholds, dict):
