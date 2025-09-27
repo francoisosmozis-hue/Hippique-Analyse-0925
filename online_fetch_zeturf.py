@@ -57,8 +57,38 @@ class RaceSnapshot:
 
 
 _DEFAULT_SOURCES_FILE = Path("config/sources.yml")
+_DEFAULT_ZETURF_TEMPLATE = "https://m.zeeturf.fr/rest/api/2/race/{course_id}"
 _BASE_EV_THRESHOLD = 0.40
 _BASE_PAYOUT_THRESHOLD = 10.0
+
+
+def _ensure_default_templates(config: Mapping[str, Any] | None) -> Dict[str, Any]:
+    """Return ``config`` augmented with default Zeturf templates."""
+
+    result: Dict[str, Any]
+    if isinstance(config, Mapping):
+        result = {str(k): v for k, v in config.items()}
+    else:
+        result = {}
+
+    def _normalise_section(value: Mapping[str, Any] | None) -> Dict[str, Any]:
+        if isinstance(value, Mapping):
+            return {str(k): v for k, v in value.items()}
+        return {}
+
+    zet_section = _normalise_section(result.get("zeturf") if isinstance(result.get("zeturf"), Mapping) else None)
+    if not any(isinstance(zet_section.get(key), str) for key in ("url", "course")):
+        zet_section.setdefault("url", _DEFAULT_ZETURF_TEMPLATE)
+    result["zeturf"] = zet_section
+
+    online_section = _normalise_section(result.get("online") if isinstance(result.get("online"), Mapping) else None)
+    zet_online = _normalise_section(online_section.get("zeturf") if isinstance(online_section.get("zeturf"), Mapping) else None)
+    if not any(isinstance(zet_online.get(key), str) for key in ("course", "url")):
+        zet_online.setdefault("course", _DEFAULT_ZETURF_TEMPLATE)
+    online_section["zeturf"] = zet_online
+    result["online"] = online_section
+
+    return result
 
 
 def _load_sources_config(path: str | os.PathLike[str] | None = None) -> Dict[str, Any]:
@@ -68,15 +98,13 @@ def _load_sources_config(path: str | os.PathLike[str] | None = None) -> Dict[str
         path = os.getenv("SOURCES_FILE") or _DEFAULT_SOURCES_FILE
     candidate = Path(path)
     if not candidate.is_file():
-        return {}
+        return _ensure_default_templates(None)
     try:
         data = yaml.safe_load(candidate.read_text(encoding="utf-8")) or {}
     except yaml.YAMLError as exc:  # pragma: no cover - defensive guard
         logger.warning("Unable to parse %s: %s", candidate, exc)
-        return {}
-    if isinstance(data, Mapping):
-        return dict(data)
-    return {}
+        return _ensure_default_templates(None)
+    return _ensure_default_templates(data if isinstance(data, Mapping) else None)
 
 
 def _normalise_label(value: str, prefix: str) -> str:
@@ -297,6 +325,9 @@ def fetch_race_snapshot(
         if recovered:
             entry["course_id"] = recovered
             course_id_hint = recovered
+
+    if course_id_hint and not isinstance(entry.get("url"), str):
+        entry["url"] = _DEFAULT_ZETURF_TEMPLATE
 
     rc_map[rc] = entry
     sources["rc_map"] = rc_map
