@@ -827,7 +827,7 @@ def _process_single_course(
                 file=sys.stderr,
             )
     if gcs_prefix is not None:
-        _upload_artifacts(rc_dir, gcs_prefix=gcs_prefix
+        _upload_artifacts(rc_dir, gcs_prefix=gcs_prefix)
     return outcome
 
 
