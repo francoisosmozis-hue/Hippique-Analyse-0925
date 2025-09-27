@@ -626,9 +626,9 @@ def _snap_prefix(rc_dir: Path) -> str | None:
     return latest.stem
 
 
-_FETCH_JE_STATS_SCRIPT = Path(__file__).resolve().with_name("scripts").joinpath(
-    "fetch_je_stats.py"
-)
+_SCRIPTS_DIR = Path(__file__).resolve().with_name("scripts")
+_FETCH_JE_STATS_SCRIPT = _SCRIPTS_DIR.joinpath("fetch_je_stats.py")
+_FETCH_JE_CHRONO_SCRIPT = _SCRIPTS_DIR.joinpath("fetch_je_chrono.py")
 def _check_enrich_outputs(
     rc_dir: Path,
     *,
@@ -883,12 +883,17 @@ def _ensure_h5_artifacts(
     retried = False
 
     if _missing_requires_stats(missing):
-        retried = _run_fetch_script(_FETCH_JE_STATS_SCRIPT, rc_dir) or retried
         retried = True
+        _run_fetch_script(_FETCH_JE_STATS_SCRIPT, rc_dir)
     if _missing_requires_chronos(missing):
-        _regenerate_chronos_csv(rc_dir)
         retried = True
-
+        success = False
+        if _FETCH_JE_CHRONO_SCRIPT.exists():
+            success = _run_fetch_script(_FETCH_JE_CHRONO_SCRIPT, rc_dir)
+        chronos_path = rc_dir / "chronos.csv"
+        if not success or not chronos_path.exists():
+            _regenerate_chronos_csv(rc_dir)
+            
     if retried:
         outcome = _check_enrich_outputs(rc_dir, retry_delay=0.0)
         if outcome is None:
