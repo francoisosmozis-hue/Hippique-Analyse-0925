@@ -28,7 +28,7 @@ def validate_exotics_with_simwrapper(
     roi_min: float = 0.0,
     payout_min: float = 0.0,
     sharpe_min: float = 0.0,
-    allow_heuristic: bool = True,
+    allow_heuristic: bool = False,
 ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     """Validate exotic ticket candidates using :func:`evaluate_combo`.
 
@@ -74,6 +74,7 @@ def validate_exotics_with_simwrapper(
             continue
             
         stats = evaluate_combo(candidate, bankroll, allow_heuristic=allow_heuristic)
+        status = str(stats.get("status") or "ok").lower()
         ev_ratio = float(stats.get("ev_ratio", 0.0))
         roi = float(stats.get("roi", 0.0))
         payout = float(stats.get("payout_expected", 0.0))
@@ -81,6 +82,15 @@ def validate_exotics_with_simwrapper(
         stats_notes = [str(n) for n in stats.get("notes", [])]
         for note in stats_notes:
             add_note(note)
+        if status != "ok":
+            reasons.append(f"status_{status or 'unknown'}")
+            continue
+        if ev_ratio < 0.40:
+            reasons.append("ev_ratio_below_accept_threshold")
+            continue
+        if payout < 10.0:
+            reasons.append("payout_expected_below_accept_threshold")
+            continue
         if "combo_probabilities_unreliable" in stats_notes:
             reasons.append("probabilities_unreliable")
             continue
@@ -165,11 +175,20 @@ def validate_exotics_with_simwrapper(
     )
     validated = validated[:1]
 
-    flags = {"combo": bool(validated), "reasons": {"combo": reasons}}
+    reasons_unique = list(dict.fromkeys(reasons))
+    flags = {"combo": bool(validated), "reasons": {"combo": reasons_unique}}
     if alerte:
         flags["ALERTE_VALUE"] = True
 
-    return validated, {"notes": notes, "flags": flags}
+    if validated:
+        decision = "accept"
+    else:
+        decision_reason = "no_candidate"
+        if reasons_unique:
+            decision_reason = ",".join(reasons_unique)
+        decision = f"reject:{decision_reason}"
+
+    return validated, {"notes": notes, "flags": flags, "decision": decision}
 
 
 def export_tracking_csv_line(
