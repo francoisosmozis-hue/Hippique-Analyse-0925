@@ -119,6 +119,7 @@ def test_process_reunion_continues_after_failure(
 
     monkeypatch.setattr(acde, "enrich_h5", fake_enrich)
     monkeypatch.setattr(acde.time, "sleep", lambda delay: None)
+    monkeypatch.setattr(acde.subprocess, "run", lambda *a, **k: None)
 
     pipeline_calls: list[Path] = []
     monkeypatch.setattr(
