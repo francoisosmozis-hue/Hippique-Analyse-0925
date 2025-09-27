@@ -15,6 +15,7 @@ import json
 import logging
 import os
 import re
+from copy import deepcopy
 from pathlib import Path
 from typing import Any, Dict, List, Mapping
 
@@ -25,6 +26,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from simulate_ev import simulate_ev_batch
 from validator_ev import ValidationError, validate_ev
 
+from scripts import online_fetch_zeturf as ofz
 from scripts.gcs_utils import disabled_reason, is_gcs_enabled
 
 from pydantic import (
@@ -35,6 +37,8 @@ from pydantic import (
     Field,
     field_validator,
 )
+
+import yaml
 
 logger = logging.getLogger(__name__)
 
@@ -147,28 +151,82 @@ def _load_planning(path: Path) -> List[Dict[str, Any]]:
     return [d for d in data if isinstance(d, dict)]
 
 
-def _write_snapshot(race_id: str, window: str, base: Path) -> None:
+def _load_sources_config() -> Dict[str, Any]:
+    """Load snapshot source configuration from disk."""
+
+    default_path = os.getenv("RUNNER_SOURCES_FILE") or os.getenv("SOURCES_FILE")
+    path = Path(default_path) if default_path else Path("config/sources.yml")
+    if not path.is_file():
+        return {}
+
+    with path.open("r", encoding="utf-8") as fh:
+        data = yaml.safe_load(fh) or {}
+    if isinstance(data, dict):
+        return data
+    return {}
+
+
+def _write_snapshot(payload: RunnerPayload, window: str, base: Path) -> None:
     """Write a snapshot file for ``race_id`` under ``base``.
 
     Parameters
     ----------
-    race_id:
-        Identifier for the race, e.g. ``"R1C3"``.
+    payload:
+        Runner payload carrying race metadata.
     window:
         Window label (``"H30"`` or ``"H5"``).
     base:
         Base directory where snapshot files are written.
     """
+    race_id = payload.race_id
     dest = base / race_id
     dest.mkdir(parents=True, exist_ok=True)
-    payload = {
-        "race_id": race_id,
-        "window": window,
-        "timestamp": dt.datetime.now().isoformat(),
-    }
     path = dest / f"snapshot_{window}.json"
+
+    sources = deepcopy(_load_sources_config())
+    rc_map = sources.get("rc_map")
+    if isinstance(rc_map, Mapping):
+        rc_entry = dict(rc_map)
+    else:
+        rc_entry = {}
+    rc_entry[race_id] = {
+        "course_id": payload.id_course,
+        "reunion": payload.reunion,
+        "course": payload.course,
+    }
+    sources["rc_map"] = rc_entry
+
+    now = dt.datetime.now().isoformat()
+    try:
+        snapshot = ofz.fetch_race_snapshot(
+            race_id,
+            phase=window,
+            sources=sources,
+        )
+    except Exception as exc:
+        reason = str(exc)
+        logger.error(
+            "[runner] Snapshot fetch failed for %s (%s): %s", race_id, window, reason
+        )
+        payload_out = {
+            "status": "no-data",
+            "rc": race_id,
+            "phase": window,
+            "fetched_at": now,
+            "reason": reason,
+        }
+    else:
+        payload_out = {
+            "status": "ok",
+            "rc": race_id,
+            "phase": window,
+            "fetched_at": now,
+            "payload": snapshot,
+        }
+        logger.info("[runner] Snapshot %s (%s) fetched", race_id, window)
+
     with path.open("w", encoding="utf-8") as fh:
-        json.dump(payload, fh, ensure_ascii=False, indent=2)
+        json.dump(payload_out, fh, ensure_ascii=False, indent=2)
     if USE_GCS and upload_file:
         try:
             upload_file(path)
@@ -235,10 +293,10 @@ def _trigger_phase(
     race_id = payload.race_id
     budget = float(payload.budget)
     if phase_norm == "H30":
-        _write_snapshot(race_id, "H30", snap_dir)
+        _write_snapshot(payload, "H30", snap_dir)
         return
     if phase_norm == "H5":
-        _write_snapshot(race_id, "H5", snap_dir)
+        _write_snapshot(payload, "H5", snap_dir)
         _write_analysis(
             race_id,
             analysis_dir,
