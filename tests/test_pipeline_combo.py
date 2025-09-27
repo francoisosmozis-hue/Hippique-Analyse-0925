@@ -7,6 +7,7 @@ import pytest
 import logging_io
 import pipeline_run
 import simulate_ev
+import simulate_wrapper
 import tickets_builder
 from test_pipeline_smoke import (
     GPI_YML,
@@ -39,6 +40,30 @@ def _patch_simulation(monkeypatch, *, simulate_fn=None, gate_fn=None):
         monkeypatch.setattr(simulate_ev, "gate_ev", gate_fn)
     pipeline_run._load_simulate_ev.cache_clear()
     return pipeline_run._load_simulate_ev.cache_clear
+    
+
+def _patch_combo_eval(monkeypatch, *, stats=None):
+    default_stats = {
+        "status": "ok",
+        "ev_ratio": 0.6,
+        "payout_expected": 25.0,
+        "roi": 0.3,
+        "sharpe": 0.5,
+    }
+    payload = dict(default_stats)
+    if stats:
+        payload.update(stats)
+
+    def fake_eval(tickets, bankroll, allow_heuristic=False):
+        result = dict(payload)
+        result.setdefault("status", "ok")
+        result.setdefault("ev_ratio", 0.0)
+        result.setdefault("roi", 0.0)
+        result.setdefault("payout_expected", 0.0)
+        result.setdefault("sharpe", 0.0)
+        return result
+
+    monkeypatch.setattr(simulate_wrapper, "evaluate_combo", fake_eval)def _write_inputs(tmp_path, partants, *, combo_ratio: float = 0.4):
     
 def _write_inputs(tmp_path, partants, *, combo_ratio: float = 0.4):
     h30_path = tmp_path / "h30.json"
@@ -241,6 +266,7 @@ def test_pipeline_allocates_combo_budget(tmp_path, monkeypatch):
     ):
         return {"sp": True, "combo": True, "reasons": {"sp": [], "combo": []}}
 
+    _patch_combo_eval(monkeypatch)
     cleanup = _patch_simulation(monkeypatch, simulate_fn=fake_simulate, gate_fn=fake_gate)
     try:
         outdir = _run_pipeline(tmp_path, inputs)
@@ -347,6 +373,7 @@ def test_pipeline_recomputes_after_combo_rejection(tmp_path, monkeypatch):
     ):
         return {"sp": True, "combo": False, "reasons": {"sp": [], "combo": ["ROI_MIN_GLOBAL"]}}
 
+    _patch_combo_eval(monkeypatch)
     cleanup = _patch_simulation(monkeypatch, simulate_fn=fake_simulate, gate_fn=fake_gate)
     try:
         outdir = _run_pipeline(tmp_path, inputs)
