@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, Mapping, Sequence, cast
 
 from config.env_utils import get_env
+from runner_chain import compute_overround_cap
 
 logger = logging.getLogger(__name__)
 LOG_LEVEL_ENV_VAR = "PIPELINE_LOG_LEVEL"
@@ -22,6 +23,89 @@ DEFAULT_OUTPUT_DIR = "out/hminus5"
 
 EXOTIC_BASE_EV = 0.40
 EXOTIC_BASE_PAYOUT = 10.0
+
+
+def _compute_market_overround(odds: Mapping[str, Any]) -> float | None:
+    """Return the market overround computed from decimal odds."""
+
+    total = 0.0
+    seen = False
+    for value in odds.values():
+        try:
+            odd = float(value)
+        except (TypeError, ValueError):
+            continue
+        if odd <= 0:
+            continue
+        total += 1.0 / odd
+        seen = True
+    if not seen:
+        return None
+    return total
+
+
+def _evaluate_combo_strict(
+    template: Mapping[str, Any],
+    bankroll: float,
+    *,
+    sim_wrapper,
+    ev_min: float,
+    payout_min: float,
+) -> tuple[bool, dict[str, Any], list[str]]:
+    """Evaluate a combo candidate enforcing strict EV/payout guards."""
+
+    result = sim_wrapper.evaluate_combo(
+        [template],
+        bankroll,
+        allow_heuristic=False,
+    )
+
+    if not isinstance(result, Mapping):
+        result = {}
+
+    status = str(result.get("status") or "").lower()
+    ev_ratio = float(result.get("ev_ratio", 0.0))
+    payout_expected = float(result.get("payout_expected", 0.0))
+    roi_val = float(result.get("roi", 0.0))
+    sharpe_val = float(result.get("sharpe", 0.0))
+
+    keep = True
+    reasons: list[str] = []
+
+    if status != "ok":
+        reasons.append(f"status_{status or 'unknown'}")
+        keep = False
+    if ev_ratio < EXOTIC_BASE_EV:
+        reasons.append("ev_ratio_below_accept_threshold")
+        keep = False
+    if payout_expected < EXOTIC_BASE_PAYOUT:
+        reasons.append("payout_expected_below_accept_threshold")
+        keep = False
+    if ev_ratio < ev_min:
+        reasons.append("ev_ratio_below_pipeline_threshold")
+        keep = False
+    if payout_expected < payout_min:
+        reasons.append("payout_below_pipeline_threshold")
+        keep = False
+
+    if not keep:
+        logger.info(
+            "[COMBO] rejet template=%s status=%s ev=%.3f payout=%.2f",
+            template.get("type"),
+            status or "unknown",
+            ev_ratio,
+            payout_expected,
+        )
+
+    enriched = {
+        "ev_ratio": ev_ratio,
+        "payout_expected": payout_expected,
+        "roi": roi_val,
+        "sharpe": sharpe_val,
+    }
+
+    return keep, enriched, reasons
+
 
 def _maybe_load_dotenv() -> None:
     """Load environment variables from a .env file when available."""
@@ -1605,6 +1689,14 @@ def cmd_analyse(args: argparse.Namespace) -> None:
         "drift_min_delta": cfg.get("DRIFT_MIN_DELTA"),
     }
 
+    try:
+        meta_partants = int(partants_data.get("partants"))
+    except (TypeError, ValueError):
+        meta_partants = None
+    if meta_partants is None:
+        meta_partants = len(partants)
+    meta["partants"] = meta_partants
+    
     if not isinstance(stats_je, dict):
         stats_je = {}
     if "coverage" not in stats_je:
@@ -1745,48 +1837,46 @@ def cmd_analyse(args: argparse.Namespace) -> None:
 
     filtered_templates: list[dict] = []
     filter_reasons: list[str] = []
+
+    market_overround = _compute_market_overround(odds_h5)
+    overround_cap = compute_overround_cap(
+        meta.get("discipline"),
+        meta.get("partants"),
+        default_cap=1.30,
+    )
+    combo_info["thresholds"]["overround_max"] = overround_cap
+    metrics = combo_info.setdefault("metrics", {})
+    if market_overround is not None:
+        metrics["overround"] = market_overround
+        if market_overround > overround_cap:
+            combo_flags.setdefault(
+                "overround",
+                {"value": market_overround, "threshold": overround_cap},
+            )
+            if "overround_above_threshold" not in reasons_list:
+                reasons_list.append("overround_above_threshold")
+            filter_reasons.append("overround_above_threshold")
+            combo_templates = []
     for template in combo_templates:
         bankroll_for_eval = combo_budget if combo_budget > 0 else float(template.get("stake", 0.0))
         if bankroll_for_eval <= 0:
             bankroll_for_eval = 1.0
-        stats = sw.evaluate_combo([
+            
+        keep, enriched, reasons = _evaluate_combo_strict(
             template,
-        ], bankroll_for_eval, allow_heuristic=False)
-        status = str(stats.get("status") or "").lower()
-        ev_ratio = float(stats.get("ev_ratio", 0.0))
-        payout_expected = float(stats.get("payout_expected", 0.0))
-        roi_val = float(stats.get("roi", 0.0))
-        sharpe_val = float(stats.get("sharpe", 0.0))
+        bankroll_for_eval,
+            sim_wrapper=sw,
+            ev_min=ev_min_exotic,
+            payout_min=payout_min_exotic,
+        )
 
         template_copy = dict(template)
-        template_copy["ev_check"] = {
-            "ev_ratio": ev_ratio,
-            "roi": roi_val,
-            "payout_expected": payout_expected,
-            "sharpe": sharpe_val,
-        }
+        template_copy["ev_check"] = enriched
 
-        if status != "ok":
-            filter_reasons.append(f"status_{status or 'unknown'}")
-            continue
-        if ev_ratio < EXOTIC_BASE_EV:
-            filter_reasons.append("ev_ratio_below_accept_threshold")
-            if ev_ratio < ev_min_exotic:
-                filter_reasons.append("ev_ratio_below_pipeline_threshold")
-            continue
-        if payout_expected < EXOTIC_BASE_PAYOUT:
-            filter_reasons.append("payout_expected_below_accept_threshold")
-            if payout_expected < payout_min_exotic:
-                filter_reasons.append("payout_below_pipeline_threshold")
-            continue
-        if ev_ratio < ev_min_exotic:
-            filter_reasons.append("ev_ratio_below_pipeline_threshold")
-            continue
-        if payout_expected < payout_min_exotic:
-            filter_reasons.append("payout_below_pipeline_threshold")
-            continue
-
-        filtered_templates.append(template_copy)
+        if keep:
+            filtered_templates.append(template_copy)
+        else:
+            filter_reasons.extend(reasons)
 
     if filter_reasons:
         for reason in filter_reasons:
