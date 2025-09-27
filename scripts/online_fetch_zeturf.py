@@ -5,11 +5,12 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import logging
 import os
 import time
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, MutableMapping, Sequence
+from typing import Any, Callable, Dict, Iterable, List, Mapping, MutableMapping, Sequence, TypeVar
 
 try:
     import requests
@@ -26,6 +27,77 @@ try:  # pragma: no cover - Python < 3.9 fallbacks are extremely rare
     from zoneinfo import ZoneInfo
 except Exception:  # pragma: no cover - very defensive
     ZoneInfo = None  # type: ignore[assignment]
+
+
+logger = logging.getLogger(__name__)
+
+
+class EmptyDomError(RuntimeError):
+    """Raised when an HTML payload lacks meaningful DOM nodes."""
+
+
+T = TypeVar("T")
+
+
+def _retry_with_backoff(
+    operation: Callable[[], T],
+    *,
+    retries: int = 3,
+    initial_delay: float = 0.5,
+    backoff: float = 1.5,
+    retry_exceptions: Iterable[type[BaseException]] = (Exception,),
+) -> T:
+    """Execute ``operation`` retrying failures with exponential backoff."""
+
+    attempts = max(1, int(retries))
+    delay = max(0.0, float(initial_delay))
+    factor = backoff if backoff > 0 else 1.0
+    retry_types = tuple(retry_exceptions)
+
+    last_exc: BaseException | None = None
+    for attempt in range(attempts):
+        try:
+            return operation()
+        except retry_types as exc:  # type: ignore[misc]
+            last_exc = exc
+            if attempt == attempts - 1:
+                break
+            if delay:
+                time.sleep(delay)
+                delay *= factor
+
+    if last_exc is not None:
+        raise last_exc
+
+    raise RuntimeError("Operation failed without raising an exception")
+
+
+def _http_get_with_backoff(
+    url: str,
+    *,
+    headers: Mapping[str, str] | None = None,
+    timeout: int = 10,
+    retries: int = 3,
+    initial_delay: float = 0.5,
+    backoff: float = 1.5,
+    require_text: bool = False,
+):
+    """Return an HTTP response, retrying on throttling or empty payloads."""
+
+    def _request() -> requests.Response:
+        resp = requests.get(url, headers=headers, timeout=timeout)
+        resp.raise_for_status()
+        if require_text and not (resp.text and resp.text.strip()):
+            raise EmptyDomError(f"Empty DOM response received from {url}")
+        return resp
+
+    return _retry_with_backoff(
+        _request,
+        retries=retries,
+        initial_delay=initial_delay,
+        backoff=backoff,
+        retry_exceptions=(requests.RequestException, EmptyDomError),
+    )
 
 
 GENY_BASE = "https://www.geny.com"
@@ -194,8 +266,8 @@ def resolve_source_url(config: Dict[str, Any], mode: str) -> str:
 
 def _fetch_from_geny() -> Dict[str, Any]:
     """Scrape meetings from Geny when the Zeturf API is unavailable."""
-    resp = requests.get(GENY_FALLBACK_URL, timeout=10)
-    resp.raise_for_status()
+    
+    resp = _http_get_with_backoff(GENY_FALLBACK_URL, timeout=10, require_text=True)
     soup = BeautifulSoup(resp.text, "html.parser")
     today = dt.date.today().isoformat()
     meetings: List[Dict[str, Any]] = []
@@ -477,33 +549,170 @@ def fetch_race_snapshot(
             raise ValueError(f"Unable to resolve course_id for {rc_norm}")
         fetch_url = _inject_course_id(template, course_id)
 
-    last_exc: Exception | None = None
-    for attempt in range(retries):
-        try:
-            payload = fetch_runners(fetch_url)
-        except requests.RequestException as exc:  # pragma: no cover - exercised in tests
-            last_exc = exc
-            if attempt == retries - 1:
-                raise
-            if delay:
-                time.sleep(delay)
-                delay *= backoff
+        def _do_fetch() -> Dict[str, Any]:
+        return fetch_runners(fetch_url)
+
+    try:
+        payload = _retry_with_backoff(
+            _do_fetch,
+            retries=retries,
+            initial_delay=delay,
+            backoff=backoff,
+            retry_exceptions=(requests.RequestException,),
+        )
+    except requests.RequestException:
+        raise
+
+    if isinstance(payload, MutableMapping):
+        payload.setdefault("rc", rc_norm)
+        if course_id:
+            payload.setdefault("course_id", course_id)
+        match = re.match(r"R(\d+)C(\d+)", rc_norm)
+        if match:
+            payload.setdefault("reunion", f"R{int(match.group(1))}")
+            payload.setdefault("course", f"C{int(match.group(2))}")
+        payload.setdefault("phase", phase_tag)
+    return normalize_snapshot(payload)
+
+
+def _rows_to_runners(rows: Iterable[Any]) -> List[Dict[str, Any]]:
+    """Return runners extracted from table rows."""
+
+    runners: List[Dict[str, Any]] = []
+    seen: set[str] = set()
+    for tr in rows:
+        if not hasattr(tr, "find_all"):
             continue
+        cols = [td.get_text(strip=True) for td in tr.find_all(["td", "th"])]
+        if len(cols) < 2:
+            continue
+        num = cols[0].strip()
+        if not num.isdigit() or num in seen:
+            continue
+        seen.add(num)
+        runner: Dict[str, Any] = {"num": num, "name": cols[1] or num}
+        if len(cols) > 2 and cols[2]:
+            runner["jockey"] = cols[2]
+        if len(cols) > 3 and cols[3]:
+            runner["entraineur"] = cols[3]
+        runners.append(runner)
+    return runners
 
-        if isinstance(payload, MutableMapping):
-            payload.setdefault("rc", rc_norm)
-            if course_id:
-                payload.setdefault("course_id", course_id)
-            match = re.match(r"R(\d+)C(\d+)", rc_norm)
-            if match:
-                payload.setdefault("reunion", f"R{int(match.group(1))}")
-                payload.setdefault("course", f"C{int(match.group(2))}")
-            payload.setdefault("phase", phase_tag)
-        return normalize_snapshot(payload)
+    
+        def _parse_geny_runners(soup: BeautifulSoup, html: str) -> List[Dict[str, Any]]:
+    """Parse runner information from Geny partants HTML."""
 
-    if last_exc:
-        raise last_exc
-    raise RuntimeError("Unable to fetch snapshot")
+    runners = _rows_to_runners(soup.select("tr"))
+    if runners:
+        return runners
+
+    runners = _rows_to_runners(soup.find_all("tr"))
+    if runners:
+        return runners
+
+    attr_based: List[Dict[str, Any]] = []
+    seen: set[str] = set()
+    for tag in soup.find_all(attrs={"data-num": True}):
+        num = str(tag.get("data-num", "")).strip()
+        if not num.isdigit() or num in seen:
+            continue
+        name = (
+            tag.get("data-name")
+            or tag.get("data-cheval")
+            or tag.get("data-horse")
+            or tag.get("data-runner")
+        )
+        if not name:
+            name = tag.get_text(" ", strip=True)
+            if name.startswith(num):
+                name = name[len(num) :].strip()
+        runner: Dict[str, Any] = {"num": num, "name": (name or "").strip() or num}
+        jockey = tag.get("data-jockey") or tag.get("data-driver")
+        trainer = tag.get("data-entraineur") or tag.get("data-trainer")
+        if jockey:
+            runner["jockey"] = str(jockey).strip()
+        if trainer:
+            runner["entraineur"] = str(trainer).strip()
+        attr_based.append(runner)
+        seen.add(num)
+    if attr_based:
+        return attr_based
+
+    rows_pattern = re.compile(r"<tr[^>]*>(.*?)</tr>", re.IGNORECASE | re.DOTALL)
+    cell_pattern = re.compile(r"<t[dh][^>]*>(.*?)</t[dh]>", re.IGNORECASE | re.DOTALL)
+    parsed: List[Dict[str, Any]] = []
+    seen.clear()
+    for row_html in rows_pattern.findall(html):
+        cells = [
+            BeautifulSoup(cell, "html.parser").get_text(strip=True)
+            for cell in cell_pattern.findall(row_html)
+        ]
+        if len(cells) < 2:
+            continue
+        num = cells[0].strip()
+        if not num.isdigit() or num in seen:
+            continue
+        runner: Dict[str, Any] = {"num": num, "name": cells[1] or num}
+        if len(cells) > 2 and cells[2]:
+            runner["jockey"] = cells[2]
+        if len(cells) > 3 and cells[3]:
+            runner["entraineur"] = cells[3]
+        parsed.append(runner)
+        seen.add(num)
+    if parsed:
+        return parsed
+
+    attr_block_pattern = re.compile(
+        r'data-num=["\'](?P<num>\d+)["\'](?P<body>.*?)(?=data-num=["\']\d+["\']|$)',
+        re.IGNORECASE | re.DOTALL,
+    )
+    parsed = []
+    seen.clear()
+    for match in attr_block_pattern.finditer(html):
+        num = match.group("num")
+        if num in seen:
+            continue
+        body = match.group("body")
+        name_match = re.search(
+            r"data-(?:name|cheval|horse|runner)=[\"']([^\"']+)[\"']",
+            body,
+            re.IGNORECASE,
+        )
+        name = name_match.group(1).strip() if name_match else num
+        runner: Dict[str, Any] = {"num": num, "name": name or num}
+        jockey_match = re.search(
+            r"data-(?:jockey|driver)=[\"']([^\"']+)[\"']",
+            body,
+            re.IGNORECASE,
+        )
+        trainer_match = re.search(
+            r"data-(?:entraineur|trainer)=[\"']([^\"']+)[\"']",
+            body,
+            re.IGNORECASE,
+        )
+        if jockey_match:
+            runner["jockey"] = jockey_match.group(1).strip()
+        if trainer_match:
+            runner["entraineur"] = trainer_match.group(1).strip()
+        parsed.append(runner)
+        seen.add(num)
+    if parsed:
+        return parsed
+
+    text = soup.get_text("\n", strip=True)
+    text_pattern = re.compile(r"^(?P<num>\d{1,3})\s+(?P<name>.+)$", re.MULTILINE)
+    parsed = []
+    seen.clear()
+    for match in text_pattern.finditer(text):
+        num = match.group("num")
+        if num in seen:
+            continue
+        name = match.group("name").strip()
+        if not name:
+            continue
+        parsed.append({"num": num, "name": name})
+        seen.add(num)
+    return parsed
 
 
 def fetch_from_geny_idcourse(id_course: str) -> Dict[str, Any]:
@@ -518,8 +727,12 @@ def fetch_from_geny_idcourse(id_course: str) -> Dict[str, Any]:
     partants_url = f"{GENY_BASE}/partants-pmu/_c{id_course}"
     cotes_url = f"{GENY_BASE}/cotes?id_course={id_course}"
 
-    resp_partants = requests.get(partants_url, headers=HDRS, timeout=10)
-    resp_partants.raise_for_status()
+    resp_partants = _http_get_with_backoff(
+        partants_url,
+        headers=HDRS,
+        timeout=10,
+        require_text=True,
+    )
     html = resp_partants.text
     soup = BeautifulSoup(html, "html.parser")
 
@@ -528,19 +741,9 @@ def fetch_from_geny_idcourse(id_course: str) -> Dict[str, Any]:
     r_label = match.group(0) if match else None
     start_time = _extract_start_time(html)
 
-    runners: List[Dict[str, Any]] = []
-    for tr in soup.select("tr"):
-        cols = [td.get_text(strip=True) for td in tr.find_all("td")]
-        if len(cols) < 4 or not cols[0].isdigit():
-            continue
-        runners.append(
-            {
-                "num": cols[0],
-                "name": cols[1],
-                "jockey": cols[2],
-                "entraineur": cols[3],
-            }
-        )
+    runners = _parse_geny_runners(soup, html)
+    if not runners:
+        logger.warning("No runners parsed from Geny partants page for %s", id_course)
 
     resp_cotes = requests.get(cotes_url, headers=HDRS, timeout=10)
     resp_cotes.raise_for_status()
@@ -724,9 +927,13 @@ def _scrape_start_time_from_course_page(course_id: str) -> str | None:
     for template in COURSE_PAGE_TEMPLATES:
         url = template.format(course_id=course_id)
         try:
-            resp = requests.get(url, headers=HDRS, timeout=10)
-            resp.raise_for_status()
-        except requests.RequestException:
+            resp = _http_get_with_backoff(
+                url,
+                headers=HDRS,
+                timeout=10,
+                require_text=True,
+            )
+        except (requests.RequestException, EmptyDomError):
             continue
         start_time = _extract_start_time(resp.text)
         if start_time:
@@ -1053,8 +1260,37 @@ def normalize_snapshot(payload: Dict[str, Any]) -> Dict[str, Any]:
         "odds": odds_map,
         "p_imp": implied,
     })
+    _warn_missing_metadata(meta)
     return meta
 
+
+def _warn_missing_metadata(meta: Mapping[str, Any]) -> None:
+    """Emit warnings when critical metadata is missing."""
+
+    missing: List[str] = []
+    if not str(meta.get("hippodrome") or "").strip():
+        missing.append("meeting")
+    if not str(meta.get("discipline") or "").strip():
+        missing.append("discipline")
+    partants = meta.get("partants")
+    try:
+        partants_count = int(partants) if partants is not None else 0
+    except (TypeError, ValueError):
+        partants_count = 0
+    if partants_count <= 0:
+        missing.append("partants")
+
+    if not missing:
+        return
+
+    rc = (
+        meta.get("rc")
+        or meta.get("course_id")
+        or meta.get("reunion")
+        or meta.get("id_course")
+        or "unknown"
+    )
+    logger.warning("Missing snapshot metadata for %s: %s", rc, ", ".join(sorted(set(missing))))
 def compute_diff(
     h30: Dict[str, Any],
     h5: Dict[str, Any],
