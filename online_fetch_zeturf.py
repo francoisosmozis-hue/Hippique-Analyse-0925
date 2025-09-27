@@ -6,6 +6,7 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
+import inspect
 from typing import Any, Dict, Iterable, Mapping
 
 import yaml
@@ -257,6 +258,8 @@ def fetch_race_snapshot(
 
     phase_norm = _normalise_phase_alias(phase)
 
+    fetch_fn = getattr(_impl, "fetch_race_snapshot")
+    use_new_signature = False
     try:
         raw_snapshot = _impl.fetch_race_snapshot(
             rc,
@@ -267,6 +270,34 @@ def fetch_race_snapshot(
             backoff=backoff if backoff > 0 else 0.6,
             initial_delay=0.3,
         )
+        signature = inspect.signature(fetch_fn)
+    except (TypeError, ValueError):  # pragma: no cover - builtins without signature
+        signature = None
+    if signature is not None and "course" in signature.parameters:
+        use_new_signature = True
+
+    try:
+        if use_new_signature:
+            raw_snapshot = fetch_fn(
+                reunion_norm,
+                course_norm,
+                phase_norm,
+                sources=sources,
+                url=url,
+                retries=max(1, int(retry)),
+                backoff=backoff if backoff > 0 else 0.6,
+                initial_delay=0.3,
+            )
+        else:
+            raw_snapshot = fetch_fn(
+                rc,
+                phase=phase_norm,
+                sources=sources,
+                url=url,
+                retries=max(1, int(retry)),
+                backoff=backoff if backoff > 0 else 0.6,
+                initial_delay=0.3,
+            )
     except Exception as exc:  # pragma: no cover - defensive catch
         logger.error("[ZEturf] échec fetch_race_snapshot pour %s: %s", rc, exc)
         return {
