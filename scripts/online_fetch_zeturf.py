@@ -549,8 +549,8 @@ def fetch_race_snapshot(
             raise ValueError(f"Unable to resolve course_id for {rc_norm}")
         fetch_url = _inject_course_id(template, course_id)
 
-        def _do_fetch() -> Dict[str, Any]:
-            return fetch_runners(fetch_url)
+   def _do_fetch() -> Dict[str, Any]:
+        return fetch_runners(fetch_url)
 
     try:
         payload = _retry_with_backoff(
@@ -599,7 +599,7 @@ def _rows_to_runners(rows: Iterable[Any]) -> List[Dict[str, Any]]:
     return runners
 
     
-    def _parse_geny_runners(soup: BeautifulSoup, html: str) -> List[Dict[str, Any]]:
+def _parse_geny_runners(soup: BeautifulSoup, html: str) -> List[Dict[str, Any]]:
     """Parse runner information from Geny partants HTML."""
 
     runners = _rows_to_runners(soup.select("tr"))
