@@ -1533,6 +1533,28 @@ def cmd_analyse(args: argparse.Namespace) -> None:
     if args.allow_je_na:
         cfg["ALLOW_JE_NA"] = True
 
+    # Exotic thresholds / heuristics overrides
+    if args.ev_min_exotic is not None:
+        ev_min_exotic = float(args.ev_min_exotic)
+    else:
+        ev_min_exotic = float(
+            cfg.get("EV_MIN_EXOTIC", cfg.get("EV_MIN_COMBO", 0.40))
+        )
+    cfg["EV_MIN_EXOTIC"] = ev_min_exotic
+
+    if args.payout_min_exotic is not None:
+        payout_min_exotic = float(args.payout_min_exotic)
+    else:
+        payout_min_exotic = float(
+            cfg.get(
+                "PAYOUT_MIN_EXOTIC",
+                cfg.get("EXOTIC_MIN_PAYOUT", cfg.get("MIN_PAYOUT_COMBOS", 10.0)),
+            )
+        )
+    cfg["PAYOUT_MIN_EXOTIC"] = payout_min_exotic
+
+    allow_heuristic = bool(args.allow_heuristic)
+
     sim_helpers = _load_simulate_ev()
     allocate_dutching_sp_fn = cast(
         Callable[[dict, list[dict]], tuple[list[dict], Any]],
@@ -1679,6 +1701,9 @@ def cmd_analyse(args: argparse.Namespace) -> None:
         runners,
         combo_candidates=None,
         combos_source=partants_data,
+        ev_threshold=ev_min_exotic,
+        payout_threshold=payout_min_exotic,
+        allow_heuristic=allow_heuristic,
     )
 
     ev_sp = 0.0
@@ -1686,6 +1711,77 @@ def cmd_analyse(args: argparse.Namespace) -> None:
     roi_sp = 0.0
 
     combo_budget = float(cfg.get("BUDGET_TOTAL", 0.0)) * float(cfg.get("COMBO_RATIO", 0.0))
+    
+    combo_info = {
+        "notes": list(_combo_info.get("notes", [])) if isinstance(_combo_info, Mapping) else [],
+        "flags": {},
+    }
+    if isinstance(_combo_info, Mapping):
+        flags_raw = _combo_info.get("flags")
+        if isinstance(flags_raw, Mapping):
+            combo_info["flags"] = {k: copy.deepcopy(v) for k, v in flags_raw.items()}
+        decision_raw = _combo_info.get("decision")
+        if isinstance(decision_raw, str):
+            combo_info["decision"] = decision_raw
+
+    combo_flags = combo_info.setdefault("flags", {})
+    reasons_map = combo_flags.setdefault("reasons", {})
+    reasons_list = reasons_map.setdefault("combo", [])
+
+    combo_info["thresholds"] = {
+        "ev_min": ev_min_exotic,
+        "payout_min": payout_min_exotic,
+        "allow_heuristic": allow_heuristic,
+    }
+
+    filtered_templates: list[dict] = []
+    filter_reasons: list[str] = []
+    for template in combo_templates:
+        bankroll_for_eval = combo_budget if combo_budget > 0 else float(template.get("stake", 0.0))
+        if bankroll_for_eval <= 0:
+            bankroll_for_eval = 1.0
+        stats = sw.evaluate_combo([
+            template,
+        ], bankroll_for_eval, allow_heuristic=False)
+        status = str(stats.get("status") or "").lower()
+        ev_ratio = float(stats.get("ev_ratio", 0.0))
+        payout_expected = float(stats.get("payout_expected", 0.0))
+        roi_val = float(stats.get("roi", 0.0))
+        sharpe_val = float(stats.get("sharpe", 0.0))
+
+        template_copy = dict(template)
+        template_copy["ev_check"] = {
+            "ev_ratio": ev_ratio,
+            "roi": roi_val,
+            "payout_expected": payout_expected,
+            "sharpe": sharpe_val,
+        }
+
+        if status != "ok":
+            filter_reasons.append(f"status_{status or 'unknown'}")
+            continue
+        if ev_ratio < ev_min_exotic:
+            filter_reasons.append("ev_ratio_below_pipeline_threshold")
+            continue
+        if payout_expected < payout_min_exotic:
+            filter_reasons.append("payout_below_pipeline_threshold")
+            continue
+
+        filtered_templates.append(template_copy)
+
+    if filter_reasons:
+        for reason in filter_reasons:
+            if reason not in reasons_list:
+                reasons_list.append(reason)
+
+    if filtered_templates:
+        combo_templates = filtered_templates
+        combo_info.setdefault("decision", "accept")
+    else:
+        combo_templates = []
+        decision_reason = ",".join(dict.fromkeys(filter_reasons)) if filter_reasons else "no_candidate"
+        combo_info["decision"] = f"reject:{decision_reason}"
+
     combo_tickets: list[dict] = []
     if combo_templates and combo_budget > 0:
         weights = [max(float(t.get("stake", 0.0)), 0.0) for t in combo_templates]
@@ -1712,6 +1808,9 @@ def cmd_analyse(args: argparse.Namespace) -> None:
                     notes_bucket.append(note)
         else:
             meta["notes"] = list(guard_notes)
+        for note in guard_notes:
+            if note not in combo_info["notes"]:
+                combo_info["notes"].append(note)
 
     bankroll = float(cfg.get("BUDGET_TOTAL", 0.0))
     
@@ -1778,8 +1877,8 @@ def cmd_analyse(args: argparse.Namespace) -> None:
 
     combo_ok = bool(combo_tickets) and flags.get("sp") and flags.get("combo")
     if combo_ok:
-        strict_ev = max(0.40, float(cfg.get("EV_MIN_GLOBAL", 0.0)))
-        strict_payout = max(12.0, float(cfg.get("MIN_PAYOUT_COMBOS", 0.0)))
+        strict_ev = max(ev_min_exotic, float(cfg.get("EV_MIN_GLOBAL", 0.0)))
+        strict_payout = max(payout_min_exotic, float(cfg.get("MIN_PAYOUT_COMBOS", 0.0)))
         combo_ok = combos_ev_gate(
             ev_global,
             combined_payout,
@@ -1921,6 +2020,40 @@ def cmd_analyse(args: argparse.Namespace) -> None:
                     pass
             last_reduction_info = updated_info
 
+    final_combo_present = bool(final_combo_tickets)
+    existing_decision = combo_info.get("decision")
+    extra_reasons: list[str] = []
+    if final_combo_present:
+        combo_info["decision"] = "accept"
+    else:
+        if combo_tickets and existing_decision == "accept":
+            extra_reasons.extend(flags.get("reasons", {}).get("combo", []))
+            if not flags.get("sp", False):
+                extra_reasons.append("sp_block")
+            if combo_budget_reassign:
+                extra_reasons.append("combo_budget_reassign")
+            if no_combo_available:
+                extra_reasons.append("no_combo_available")
+            if not extra_reasons:
+                extra_reasons.append("combo_removed_post_gate")
+            combo_info["decision"] = \
+                f"reject:{','.join(dict.fromkeys(extra_reasons))}"
+        elif not combo_tickets and "decision" not in combo_info:
+            combo_info["decision"] = "reject:no_candidate"
+
+    for reason in extra_reasons:
+        if reason not in reasons_list:
+            reasons_list.append(reason)
+    combo_flags["combo"] = final_combo_present
+
+    meta["exotics"] = {
+        "decision": combo_info.get("decision"),
+        "notes": list(combo_info.get("notes", [])),
+        "flags": copy.deepcopy(combo_info.get("flags", {})),
+        "thresholds": dict(combo_info.get("thresholds", {})),
+        "available": final_combo_present,
+    }
+    
     if flags.get("reasons", {}).get("sp"):
         logger.warning(
             "Blocage SP dû aux seuils: %s",
@@ -1984,7 +2117,11 @@ def cmd_analyse(args: argparse.Namespace) -> None:
     )
     append_json(
         f"journaux/{course_id}_pre.json",
-        {"tickets": tickets, "ev": {"sp": ev_sp, "global": ev_global}},
+        {
+            "tickets": tickets,
+            "ev": {"sp": ev_sp, "global": ev_global},
+            "exotics": meta.get("exotics", {}),
+        },
     )
 
 
@@ -2076,6 +2213,13 @@ def main() -> None:
     ana.add_argument("--roi-global", dest="roi_global", type=float)
     ana.add_argument("--max-vol", dest="max_vol", type=float)
     ana.add_argument("--min-payout", dest="min_payout", type=float)
+    ana.add_argument("--ev-min-exotic", dest="ev_min_exotic", type=float, default=None)
+    ana.add_argument(
+        "--payout-min-exotic", dest="payout_min_exotic", type=float, default=None
+    )
+    ana.add_argument(
+        "--allow-heuristic", dest="allow_heuristic", action="store_true"
+    )
     ana.add_argument("--allow-je-na", dest="allow_je_na", action="store_true")
     ana.set_defaults(func=cmd_analyse)
 
