@@ -39,7 +39,7 @@ import json
 import os
 import sys
 from pathlib import Path
-from typing import Iterable, Optional
+from typing import Callable, Iterable, Optional
 
 # Keep these imports on separate lines to avoid syntax issues when running
 # under stripped/concatenated builds.
@@ -131,6 +131,113 @@ def _iter_uploads(patterns: Iterable[str]) -> Iterable[Path]:
                 yield p
 
 
+def _run_local_post_course(
+    arrivee: str | Path | None,
+    tickets: str | Path | None,
+    outdir: str | Path | None,
+    excel: str | Path | None,
+    *,
+    places: int = 1,
+    excel_runner: Callable[[list[str] | None], None] | None = None,
+) -> None:
+    """Execute local post-course steps when arrival/tickets payloads exist."""
+
+    if not arrivee or not tickets:
+        return
+
+    arrivee_path = Path(arrivee)
+    tickets_path = Path(tickets)
+    if not arrivee_path.exists() or not tickets_path.exists():
+        return
+
+    target_out = Path(outdir) if outdir else tickets_path.parent
+    excel_path = Path(excel) if excel else Path("modele_suivi_courses_hippiques.xlsx")
+
+    try:
+        import post_course
+        import update_excel_with_results
+    except ImportError:  # pragma: no cover - defensive guard
+        return
+
+    arrivee_data = post_course._load_json(arrivee_path)
+    tickets_data = post_course._load_json(tickets_path)
+
+    winners = [str(x) for x in arrivee_data.get("result", [])[: max(places, 0)]]
+    (
+        total_gain,
+        total_stake,
+        roi,
+        ev_total,
+        diff_ev_total,
+        result_moyen,
+        roi_reel_moyen,
+        brier_total,
+        brier_moyen,
+    ) = post_course._compute_gains(tickets_data.get("tickets", []), winners)
+
+    tickets_data["roi_reel"] = roi
+    tickets_data["result_moyen"] = result_moyen
+    tickets_data["roi_reel_moyen"] = roi_reel_moyen
+    tickets_data["brier_total"] = brier_total
+    tickets_data["brier_moyen"] = brier_moyen
+    post_course._save_json(tickets_path, tickets_data)
+
+    target_out.mkdir(parents=True, exist_ok=True)
+    meta = tickets_data.get("meta", {}) if isinstance(tickets_data, dict) else {}
+    arrivee_out = {
+        "rc": arrivee_data.get("rc") or meta.get("rc"),
+        "date": arrivee_data.get("date") or meta.get("date"),
+        "result": winners,
+        "gains": total_gain,
+        "roi_reel": roi,
+        "result_moyen": result_moyen,
+        "roi_reel_moyen": roi_reel_moyen,
+        "brier_total": brier_total,
+        "brier_moyen": brier_moyen,
+        "ev_total": ev_total,
+        "ev_ecart_total": diff_ev_total,
+    }
+    arrivee_output = target_out / "arrivee.json"
+    post_course._save_json(arrivee_output, arrivee_out)
+
+    ligne = (
+        f'{meta.get("rc", "")};{meta.get("hippodrome", "")};{meta.get("date", "")};'
+        f'{meta.get("discipline", "")};{total_stake:.2f};{roi:.4f};'
+        f'{result_moyen:.4f};{roi_reel_moyen:.4f};'
+        f'{brier_total:.4f};{brier_moyen:.4f};'
+        f'{ev_total:.2f};{diff_ev_total:.2f};'
+        f'{meta.get("model", meta.get("MODEL", ""))}'
+    )
+    header = (
+        "R/C;hippodrome;date;discipline;mises;ROI_reel;result_moyen;"
+        "ROI_reel_moyen;Brier_total;Brier_moyen;EV_total;EV_ecart;model\n"
+    )
+    post_course._save_text(target_out / "ligne_resultats.csv", header + ligne + "\n")
+
+    cmd = (
+        "python update_excel_with_results.py "
+        f'--excel "{excel_path}" '
+        f'--arrivee "{arrivee_output}" '
+        f'--tickets "{tickets_path}"\n'
+    )
+    post_course._save_text(target_out / "cmd_update_excel.txt", cmd)
+
+    runner = excel_runner or update_excel_with_results.main
+    try:
+        runner(
+            [
+                "--excel",
+                str(excel_path),
+                "--arrivee",
+                str(arrivee_output),
+                "--tickets",
+                str(tickets_path),
+            ]
+        )
+    except SystemExit:  # pragma: no cover - align with CLI style
+        pass
+
+
 def _require_bucket(bucket: Optional[str] = None) -> str:
     name = bucket or os.environ.get(BUCKET_ENV)
     if not name:
@@ -200,13 +307,6 @@ def push_tree(
 
 
 def main() -> int | None:
-    if not is_gcs_enabled():
-        reason = disabled_reason() or "USE_GCS"
-        print(
-            f"[drive_sync] {reason}=false → skipping Google Cloud Storage synchronisation."
-        )
-        return 0
-
     parser = argparse.ArgumentParser(
         description="Upload/download files to Google Cloud Storage"
     )
@@ -245,14 +345,55 @@ def main() -> int | None:
         default=[],
         help="Répertoire à envoyer sur GCS",
     )
+    parser.add_argument(
+        "--local-only",
+        action="store_true",
+        help="N'exécuter que les actions locales (aucun appel GCS)",
+    )
+    parser.add_argument("--arrivee", help="Arrivée officielle pour la mise à jour post-course")
+    parser.add_argument(
+        "--tickets",
+        help="Tickets JSON à enrichir avec le ROI observé",
+    )
+    parser.add_argument(
+        "--outdir",
+        help="Répertoire pour stocker les artefacts post-course",
+    )
+    parser.add_argument(
+        "--excel",
+        help="Classeur Excel à mettre à jour avec les résultats",
+    )
+    parser.add_argument(
+        "--places",
+        type=int,
+        default=1,
+        help="Nombre de positions rémunérées à considérer pour le ROI",
+    )
     args = parser.parse_args()
+
+    _run_local_post_course(
+        args.arrivee,
+        args.tickets,
+        args.outdir,
+        args.excel,
+        places=args.places,
+    )
+
+    if args.local_only:
+        print("[drive_sync] --local-only → skipping Google Cloud Storage synchronisation.")
+        return 0
+
+    if not is_gcs_enabled():
+        reason = disabled_reason() or "USE_GCS"
+        print(
+            f"[drive_sync] {reason}=false → skipping Google Cloud Storage synchronisation."
+        )
+        return 0
 
     try:
         client = _build_service(args.credentials_json, project=args.project)
     except google_auth_exceptions.DefaultCredentialsError:
-        print(
-            "[drive_sync] no Google Cloud credentials detected → skipping Google Cloud Storage synchronisation."
-        )
+        print("[drive_sync] ROI non historisé (Drive off)")
         return 0
 
     for base in args.push:
