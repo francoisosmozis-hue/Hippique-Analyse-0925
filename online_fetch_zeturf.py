@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import logging
 import os
+import re
+import time
 from dataclasses import dataclass
 import inspect
 from pathlib import Path
@@ -13,6 +15,11 @@ from typing import Any, Dict, Iterable, Mapping
 import yaml
 
 from scripts import online_fetch_zeturf as _impl
+
+try:  # pragma: no cover - requests is always available in production
+    import requests
+except Exception:  # pragma: no cover - fallback when requests missing in tests
+    requests = None  # type: ignore[assignment]
 
 logger = logging.getLogger(__name__)
 
@@ -56,10 +63,177 @@ class RaceSnapshot:
         return payload
 
 
+def _exp_backoff_sleep(attempt: int, *, base: float = 0.6, cap: float = 5.0) -> None:
+    """Sleep using an exponential backoff policy."""
+
+    delay = min(cap, base * (2 ** max(0, attempt - 1)))
+    if delay > 0:
+        time.sleep(delay)
+
+
+def _fallback_parse_html(html: Any) -> dict[str, Any]:
+    """Extract a minimal snapshot payload using regex heuristics."""
+
+    if isinstance(html, bytes):
+        try:
+            html = html.decode("utf-8", errors="ignore")
+        except Exception:  # pragma: no cover - defensive guard
+            html = ""
+    if not isinstance(html, str):
+        html = str(html or "")
+
+    runners: list[dict[str, Any]] = []
+    numbers = _RUNNER_NUM_RE.findall(html)
+    names = _RUNNER_NAME_RE.findall(html)
+    odds = _RUNNER_ODDS_RE.findall(html)
+
+    for idx, number in enumerate(numbers):
+        runner: dict[str, Any] = {"num": str(number)}
+        if idx < len(names):
+            runner["name"] = names[idx].strip()
+        if idx < len(odds):
+            try:
+                runner["cote"] = float(odds[idx].replace(",", "."))
+            except Exception:  # pragma: no cover - defensive conversion
+                runner["cote"] = None
+        runners.append(runner)
+
+    partants: int | None = None
+    partants_match = _PARTANTS_RE.search(html)
+    if partants_match:
+        try:
+            partants = int(partants_match.group(1))
+        except Exception:  # pragma: no cover - defensive conversion
+            partants = None
+
+    discipline: str | None = None
+    discipline_match = _DISCIPLINE_RE.search(html)
+    if discipline_match:
+        discipline = discipline_match.group(1).lower()
+
+    return {
+        "runners": runners,
+        "partants": partants,
+        "discipline": discipline,
+    }
+
+
+def _http_get(url: str, *, timeout: float = 12.0) -> str:
+    """Return raw HTML for ``url`` raising on suspicious throttled payloads."""
+
+    if requests is None:
+        raise RuntimeError("requests module unavailable for HTML fallback fetch")
+
+    headers = {
+        "User-Agent": "Mozilla/5.0 (compatible; GPI/5.1; +https://example.local)",
+        "Accept-Language": "fr-FR,fr;q=0.9",
+    }
+
+    resp = requests.get(url, headers=headers, timeout=timeout)
+    if resp.status_code in (403, 429):
+        raise RuntimeError(f"HTTP {resp.status_code} returned by {url}")
+    text = resp.text
+    if not text or len(text) < 512:
+        raise RuntimeError(f"Payload trop court reçu de {url}")
+    return text
+
+
+def _double_extract(url: str, *, snapshot: str) -> dict[str, Any]:
+    """Return parsed data using the official parser with a regex fallback."""
+
+    html = _http_get(url)
+
+    data: dict[str, Any] | None = None
+    parse_fn = getattr(_impl, "parse_course_page", None)
+    if callable(parse_fn):
+        try:
+            parsed = parse_fn(url, snapshot=snapshot)
+        except Exception as exc:  # pragma: no cover - defensive logging
+            logger.warning("parse_course_page a échoué (%s) pour %s", exc, url)
+        else:
+            if isinstance(parsed, Mapping):
+                data = {str(k): v for k, v in parsed.items()}
+
+    if not data or not data.get("runners"):
+        fallback = _fallback_parse_html(html)
+        if fallback.get("runners"):
+            data = {**(data or {}), **fallback}
+        elif data is None:
+            data = fallback
+
+    if not data:
+        return {}
+
+    data.setdefault("source_url", url)
+    return data
+
+
+def _merge_snapshot_data(target: dict[str, Any], source: Mapping[str, Any]) -> None:
+    """Fill missing fields of ``target`` with values from ``source`` when present."""
+
+    if not isinstance(source, Mapping):
+        return
+
+    for key in ("hippodrome", "meeting"):
+        if target.get(key) in (None, "") and source.get(key) not in (None, ""):
+            target[key] = source[key]
+
+    for key in ("date", "discipline", "partants", "course_id", "id_course"):
+        if target.get(key) in (None, "", 0) and source.get(key) not in (None, ""):
+            target[key] = source[key]
+
+    runners = source.get("runners")
+    if (not target.get("runners")) and isinstance(runners, list) and runners:
+        target["runners"] = runners
+
+
+def _fetch_snapshot_via_html(
+    urls: Iterable[str], *, phase: str, retries: int, backoff: float
+) -> dict[str, Any] | None:
+    """Fetch a course page via HTML and return a parsed snapshot."""
+
+    if requests is None:
+        return None
+
+    snapshot_mode = "H-30" if phase.upper().replace("-", "") == "H30" else "H-5"
+    attempts = max(1, int(retries))
+    base_delay = backoff if backoff > 0 else 0.6
+
+    for url in urls:
+        if not url:
+            continue
+        for attempt in range(1, attempts + 1):
+            try:
+                parsed = _double_extract(url, snapshot=snapshot_mode)
+            except Exception as exc:  # pragma: no cover - defensive logging
+                logger.warning(
+                    "[ZEturf] fallback HTML fetch échec (%s) tentative %d/%d", url, attempt, attempts
+                )
+                logger.debug("[ZEturf] détail erreur fallback HTML: %s", exc)
+                _exp_backoff_sleep(attempt, base=base_delay)
+                continue
+            if parsed:
+                parsed.setdefault("source_url", url)
+                return parsed
+    return None
+
+
 _DEFAULT_SOURCES_FILE = Path("config/sources.yml")
 _DEFAULT_ZETURF_TEMPLATE = "https://m.zeeturf.fr/rest/api/2/race/{course_id}"
 _BASE_EV_THRESHOLD = 0.40
 _BASE_PAYOUT_THRESHOLD = 10.0
+
+_COURSE_PAGE_TEMPLATES = (
+    "https://www.zeturf.fr/fr/course/{course_id}",
+    "https://m.zeeturf.fr/fr/course/{course_id}",
+)
+_COURSE_PAGE_FROM_RC = "https://www.zeturf.fr/fr/course/{rc}"
+
+_RUNNER_NUM_RE = re.compile(r"data-runner-num=['\"]?(\d+)", re.IGNORECASE)
+_RUNNER_NAME_RE = re.compile(r"data-runner-name=['\"]?([^'\"]+)", re.IGNORECASE)
+_RUNNER_ODDS_RE = re.compile(r"data-odds=(?:'|\")?([0-9]+(?:[.,][0-9]+)?)", re.IGNORECASE)
+_PARTANTS_RE = re.compile(r"(\d{1,2})\s+partants", re.IGNORECASE)
+_DISCIPLINE_RE = re.compile(r"(trot|plat|obstacles?|mont[ée])", re.IGNORECASE)
 
 
 def _ensure_default_templates(config: Mapping[str, Any] | None) -> Dict[str, Any]:
@@ -336,6 +510,24 @@ def fetch_race_snapshot(
     if course_id_hint and not isinstance(entry.get("url"), str):
         entry["url"] = _DEFAULT_ZETURF_TEMPLATE
 
+    seen_urls: set[str] = set()
+    fallback_urls: list[str] = []
+    for candidate in candidate_urls:
+        if candidate and candidate not in seen_urls:
+            fallback_urls.append(candidate)
+            seen_urls.add(candidate)
+
+    if course_id_hint:
+        for template in _COURSE_PAGE_TEMPLATES:
+            candidate = template.format(course_id=course_id_hint)
+            if candidate not in seen_urls:
+                fallback_urls.append(candidate)
+                seen_urls.add(candidate)
+
+    guessed_from_rc = _COURSE_PAGE_FROM_RC.format(rc=rc)
+    if guessed_from_rc not in seen_urls:
+        fallback_urls.append(guessed_from_rc)
+
     rc_map[rc] = entry
     sources["rc_map"] = rc_map
 
@@ -361,7 +553,7 @@ def fetch_race_snapshot(
         arg_candidates.append((reunion_norm, course_norm))
     arg_candidates.append((rc,))
     
-    raw_snapshot: Mapping[str, Any] | None = None
+    raw_snapshot: dict[str, Any] | None = None
     last_error: Exception | None = None
     for args in arg_candidates:
         try:
@@ -373,13 +565,34 @@ def fetch_race_snapshot(
             last_error = exc
             break
         else:
-            raw_snapshot = result if isinstance(result, Mapping) else {}
+            raw_snapshot = dict(result) if isinstance(result, Mapping) else {}
             last_error = None
             break
 
+    fallback_snapshot: dict[str, Any] | None = None
+    needs_fallback = (
+        raw_snapshot is None
+        or not isinstance(raw_snapshot, dict)
+        or not raw_snapshot.get("runners")
+    )
+    if needs_fallback:
+        fallback_snapshot = _fetch_snapshot_via_html(
+            fallback_urls,
+            phase=phase_norm,
+            retries=max(1, int(retry)),
+            backoff=backoff,
+        )
+        if isinstance(fallback_snapshot, dict) and fallback_snapshot:
+            if raw_snapshot is None or not isinstance(raw_snapshot, dict):
+                raw_snapshot = dict(fallback_snapshot)
+            else:
+                _merge_snapshot_data(raw_snapshot, fallback_snapshot)
+                
     if raw_snapshot is None:
         if last_error is not None:
             logger.error("[ZEturf] échec fetch_race_snapshot pour %s: %s", rc, last_error)
+        else:
+            logger.error("[ZEturf] échec fetch_race_snapshot pour %s: aucune donnée recueillie", rc)
         return RaceSnapshot(
             meeting=None,
             date=None,
@@ -395,6 +608,10 @@ def fetch_race_snapshot(
         ).as_dict()
         
     source_url = entry.get("url") if isinstance(entry.get("url"), str) else None
+    if not source_url and fallback_snapshot and isinstance(fallback_snapshot.get("source_url"), str):
+        source_url = str(fallback_snapshot["source_url"])
+    if not source_url and url:
+        source_url = url
     snapshot = _build_snapshot_payload(
         raw_snapshot,
         reunion_norm,
