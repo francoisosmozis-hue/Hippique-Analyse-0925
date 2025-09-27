@@ -727,11 +727,11 @@ def _ensure_h5_artifacts(rc_dir: Path) -> dict[str, Any] | None:
 
     marker = rc_dir / "UNPLAYABLE.txt"
     marker.write_text(
-        "Analyse H-5 impossible : données manquantes.\n",
+        "non jouable: data JE/chronos manquante\n",
         encoding="utf-8",
     )
     print(
-        f"[WARN] course non jouable (data manquante) : {rc_dir.name}",
+        f"[ABSTAIN] Course marquée non jouable (data manquante) : {rc_dir.name}",
         file=sys.stderr,
     )
     return outcome
