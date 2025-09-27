@@ -629,11 +629,6 @@ def _snap_prefix(rc_dir: Path) -> str | None:
 _FETCH_JE_STATS_SCRIPT = Path(__file__).resolve().with_name("scripts").joinpath(
     "fetch_je_stats.py"
 )
-_FETCH_JE_CHRONO_SCRIPT = Path(__file__).resolve().with_name("scripts").joinpath(
-    "fetch_je_chrono.py"
-)
-
-
 def _check_enrich_outputs(
     rc_dir: Path, *, retry_delay: float = 1.0
 ) -> dict[str, Any] | None:
@@ -794,6 +789,75 @@ def _run_fetch_script(script_path: Path, rc_dir: Path) -> bool:
     return True
 
 
+def _regenerate_chronos_csv(rc_dir: Path) -> bool:
+    """Attempt to rebuild ``chronos.csv`` from locally available runner data."""
+
+    chronos_path = rc_dir / "chronos.csv"
+
+    def _load_payload(path: Path) -> dict[str, Any] | None:
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return None
+        return payload if isinstance(payload, dict) else None
+
+    def _extract_runners(payload: dict[str, Any]) -> list[dict[str, Any]]:
+        def _clean(items: Any) -> list[dict[str, Any]]:
+            cleaned: list[dict[str, Any]] = []
+            if isinstance(items, list):
+                for runner in items:
+                    if not isinstance(runner, dict):
+                        continue
+                    if runner.get("id") is None and runner.get("num") is None and runner.get(
+                        "number"
+                    ) is None:
+                        continue
+                    cleaned.append(runner)
+            return cleaned
+
+        for key in ("runners", "participants", "partants"):
+            if key in payload:
+                runners = _clean(payload.get(key))
+                if runners:
+                    return runners
+
+        for key in ("data", "course", "payload"):
+            nested = payload.get(key)
+            if isinstance(nested, dict):
+                runners = _extract_runners(nested)
+                if runners:
+                    return runners
+
+        return []
+
+    candidates: list[Path] = []
+    partants_path = rc_dir / "partants.json"
+    if partants_path.exists():
+        candidates.append(partants_path)
+
+    normalized_path = rc_dir / "normalized_h5.json"
+    if normalized_path.exists():
+        candidates.append(normalized_path)
+
+    candidates.extend(sorted(rc_dir.glob("*_H-5.json"), reverse=True))
+
+    for candidate in candidates:
+        payload = _load_payload(candidate)
+        if not payload:
+            continue
+        runners = _extract_runners(payload)
+        if not runners:
+            continue
+        _write_chronos_csv(chronos_path, runners)
+        return True
+
+    print(
+        f"[WARN] Impossible de régénérer chronos.csv pour {rc_dir.name}: données partants indisponibles",
+        file=sys.stderr,
+    )
+    return False
+
+
 def _ensure_h5_artifacts(rc_dir: Path) -> dict[str, Any] | None:
     """Ensure H-5 enrichment produced JE/chronos files or mark course unplayable."""
 
@@ -808,7 +872,8 @@ def _ensure_h5_artifacts(rc_dir: Path) -> dict[str, Any] | None:
         retried = _run_fetch_script(_FETCH_JE_STATS_SCRIPT, rc_dir) or retried
         retried = True
     if _missing_requires_chronos(missing):
-        retried = _run_fetch_script(_FETCH_JE_CHRONO_SCRIPT, rc_dir) or retried
+        _regenerate_chronos_csv(rc_dir)
+        retried = True
 
     if retried:
         outcome = _check_enrich_outputs(rc_dir, retry_delay=0.0)
