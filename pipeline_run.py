@@ -20,6 +20,8 @@ logger = logging.getLogger(__name__)
 LOG_LEVEL_ENV_VAR = "PIPELINE_LOG_LEVEL"
 DEFAULT_OUTPUT_DIR = "out/hminus5"
 
+EXOTIC_BASE_EV = 0.40
+EXOTIC_BASE_PAYOUT = 10.0
 
 def _maybe_load_dotenv() -> None:
     """Load environment variables from a .env file when available."""
@@ -1538,8 +1540,9 @@ def cmd_analyse(args: argparse.Namespace) -> None:
         ev_min_exotic = float(args.ev_min_exotic)
     else:
         ev_min_exotic = float(
-            cfg.get("EV_MIN_EXOTIC", cfg.get("EV_MIN_COMBO", 0.40))
+            cfg.get("EV_MIN_EXOTIC", cfg.get("EV_MIN_COMBO", EXOTIC_BASE_EV))
         )
+    ev_min_exotic = max(ev_min_exotic, EXOTIC_BASE_EV)
     cfg["EV_MIN_EXOTIC"] = ev_min_exotic
 
     if args.payout_min_exotic is not None:
@@ -1548,9 +1551,13 @@ def cmd_analyse(args: argparse.Namespace) -> None:
         payout_min_exotic = float(
             cfg.get(
                 "PAYOUT_MIN_EXOTIC",
-                cfg.get("EXOTIC_MIN_PAYOUT", cfg.get("MIN_PAYOUT_COMBOS", 10.0)),
+                cfg.get(
+                    "EXOTIC_MIN_PAYOUT",
+                    cfg.get("MIN_PAYOUT_COMBOS", EXOTIC_BASE_PAYOUT),
+                ),
             )
         )
+    payout_min_exotic = max(payout_min_exotic, EXOTIC_BASE_PAYOUT)
     cfg["PAYOUT_MIN_EXOTIC"] = payout_min_exotic
 
     allow_heuristic = bool(args.allow_heuristic)
@@ -1732,6 +1739,8 @@ def cmd_analyse(args: argparse.Namespace) -> None:
         "ev_min": ev_min_exotic,
         "payout_min": payout_min_exotic,
         "allow_heuristic": allow_heuristic,
+        "ev_accept_min": EXOTIC_BASE_EV,
+        "payout_accept_min": EXOTIC_BASE_PAYOUT,
     }
 
     filtered_templates: list[dict] = []
@@ -1759,6 +1768,16 @@ def cmd_analyse(args: argparse.Namespace) -> None:
 
         if status != "ok":
             filter_reasons.append(f"status_{status or 'unknown'}")
+            continue
+        if ev_ratio < EXOTIC_BASE_EV:
+            filter_reasons.append("ev_ratio_below_accept_threshold")
+            if ev_ratio < ev_min_exotic:
+                filter_reasons.append("ev_ratio_below_pipeline_threshold")
+            continue
+        if payout_expected < EXOTIC_BASE_PAYOUT:
+            filter_reasons.append("payout_expected_below_accept_threshold")
+            if payout_expected < payout_min_exotic:
+                filter_reasons.append("payout_below_pipeline_threshold")
             continue
         if ev_ratio < ev_min_exotic:
             filter_reasons.append("ev_ratio_below_pipeline_threshold")
