@@ -255,6 +255,49 @@ def test_fetch_race_snapshot_uses_entry_url(monkeypatch: pytest.MonkeyPatch) -> 
     assert snapshot["rc"] == "R1C1"
 
 
+def test_fetch_race_snapshot_accepts_direct_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Providing a direct URL should skip template resolution entirely."""
+
+    direct_url = "https://www.zeturf.fr/rest/api/race/12345"
+    called: dict[str, Any] = {}
+
+    def fake_fetch(url: str) -> dict[str, Any]:
+        called.setdefault("fetch_urls", []).append(url)
+        return {"rc": "R1C1", "runners": []}
+
+    def fake_retry(
+        operation: Any,
+        *,
+        retries: int,
+        initial_delay: float,
+        backoff: float,
+        retry_exceptions: Any,
+    ) -> dict[str, Any]:
+        called["operation"] = operation
+        return operation()
+
+    def forbidden_resolver(*_args: Any, **_kwargs: Any) -> str:
+        raise AssertionError("resolve_source_url should not be called when a direct URL is provided")
+
+    monkeypatch.setattr(ofz, "fetch_runners", fake_fetch)
+    monkeypatch.setattr(ofz, "_retry_with_backoff", fake_retry)
+    monkeypatch.setattr(ofz, "resolve_source_url", forbidden_resolver)
+
+    config = {"rc_map": {"R1C1": {"course_id": "12345"}}}
+
+    snapshot = ofz.fetch_race_snapshot(
+        "R1C1",
+        phase="H-30",
+        sources=config,
+        url=direct_url,
+    )
+
+    assert called["fetch_urls"] == [direct_url]
+    assert callable(called["operation"])
+    assert snapshot["rc"] == "R1C1"
+    assert snapshot["course_id"] == "12345"
+
+
 def test_fetch_from_geny_parser_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
     """The Geny parser should fallback to attribute/regex extraction."""
 
