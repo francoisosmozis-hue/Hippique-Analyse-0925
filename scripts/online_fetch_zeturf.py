@@ -571,7 +571,7 @@ def fetch_runners(url: str) -> Dict[str, Any]:
         headers = getattr(resp, "headers", {}) or {}
         content_type = str(headers.get("Content-Type", ""))
         if "json" not in content_type.lower():
-            if _looks_like_suspicious_html(resp.text):
+            if _looks_like_suspicious_html(getattr(resp, "text", "")):
                 try:
                     resp.json()
                 except ValueError:
@@ -598,7 +598,7 @@ def fetch_runners(url: str) -> Dict[str, Any]:
             return fetch_from_geny_idcourse(course_id)
         raise
     
-    text_payload = resp.text
+    text_payload = getattr(resp, "text", "")
     payload: Dict[str, Any] | None
     fallback_used = False
     try:
@@ -658,6 +658,38 @@ def _normalise_rc(value: Any) -> str | None:
     if _RC_PATTERN.match(text):
         return text
     return None
+
+
+def _normalise_reunion_label(value: Any) -> str:
+    """Return canonical ``R`` label for ``value`` raising on invalid input."""
+
+    if value is None:
+        raise ValueError("reunion value is required")
+    text = str(value).strip().upper()
+    if not text:
+        raise ValueError("reunion value is required")
+    if not text.startswith("R"):
+        text = f"R{text}"
+    suffix = text[1:]
+    if not suffix.isdigit():
+        raise ValueError(f"reunion must match pattern R\\d+ (got {value!r})")
+    return text
+
+
+def _normalise_course_label(value: Any) -> str:
+    """Return canonical ``C`` label for ``value`` raising on invalid input."""
+
+    if value is None:
+        raise ValueError("course value is required")
+    text = str(value).strip().upper()
+    if not text:
+        raise ValueError("course value is required")
+    if not text.startswith("C"):
+        text = f"C{text}"
+    suffix = text[1:]
+    if not suffix.isdigit():
+        raise ValueError(f"course must match pattern C\\d+ (got {value!r})")
+    return text
 
 
 def _resolve_rc_entry(rc: str, obj: Any, *, visited: set[int] | None = None) -> Any:
@@ -794,7 +826,7 @@ def _extract_url_from_entry(entry: Any) -> str | None:
     return None
 
 
-def fetch_race_snapshot(
+def _fetch_race_snapshot_by_rc(
     rc: str,
     *,
     phase: str,
@@ -889,6 +921,83 @@ def fetch_race_snapshot(
             payload.setdefault("course", f"C{int(match.group(2))}")
         payload.setdefault("phase", phase_tag)
     return normalize_snapshot(payload)
+
+
+def fetch_race_snapshot(
+    reunion: str,
+    course: str | None = None,
+    phase: str = "H30",
+    *,
+    sources: Mapping[str, Any] | None = None,
+    url: str | None = None,
+    retries: int = 3,
+    backoff: float = 1.5,
+    initial_delay: float = 0.5,
+) -> Dict[str, Any]:
+    """Return a normalised snapshot for ``reunion``/``course``.
+
+    The helper accepts both the historical ``rc`` calling convention and the
+    new ``reunion``/``course`` pair.  When a fully qualified ``rc`` string is
+    provided (``course`` left to ``None``) the ``sources`` mapping is expected
+    to be supplied and behaviour matches the legacy implementation.  When both
+    ``reunion`` and ``course`` are provided the function constructs a minimal
+    ``rc_map`` entry and delegates to :func:`_fetch_race_snapshot_by_rc` which
+    handles retries, HTML fallbacks and snapshot normalisation.
+    """
+
+    rc_from_first = _normalise_rc(reunion)
+    if course is None and sources is not None and rc_from_first:
+        return _fetch_race_snapshot_by_rc(
+            rc_from_first,
+            phase=phase,
+            sources=sources,
+            url=url,
+            retries=retries,
+            backoff=backoff,
+            initial_delay=initial_delay,
+        )
+
+    if course is None:
+        raise ValueError("course label is required when reunion/course are provided separately")
+
+    reunion_label = _normalise_reunion_label(reunion)
+    course_label = _normalise_course_label(course)
+    rc = f"{reunion_label}{course_label}"
+
+    config: Dict[str, Any]
+    if isinstance(sources, MutableMapping):
+        config = dict(sources)
+    elif isinstance(sources, Mapping):
+        config = dict(sources)
+    else:
+        config = {}
+
+    rc_map_raw = config.get("rc_map") if isinstance(config.get("rc_map"), Mapping) else None
+    rc_map: Dict[str, Any] = {str(k): v for k, v in rc_map_raw.items()} if rc_map_raw else {}
+
+    entry = dict(rc_map.get(rc, {}))
+    entry.setdefault("reunion", reunion_label)
+    entry.setdefault("course", course_label)
+    if url:
+        entry["url"] = url
+
+    rc_map[rc] = entry
+    config["rc_map"] = rc_map
+
+    snapshot = _fetch_race_snapshot_by_rc(
+        rc,
+        phase=phase,
+        sources=config,
+        url=url,
+        retries=retries,
+        backoff=backoff,
+        initial_delay=initial_delay,
+    )
+
+    snapshot.setdefault("reunion", reunion_label)
+    snapshot.setdefault("course", course_label)
+    snapshot.setdefault("rc", rc)
+    return snapshot
 
 
 def _rows_to_runners(rows: Iterable[Any]) -> List[Dict[str, Any]]:
