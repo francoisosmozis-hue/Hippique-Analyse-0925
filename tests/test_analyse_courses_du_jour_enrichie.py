@@ -182,7 +182,7 @@ def test_missing_enrich_outputs(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
             course_id = str(
                 (payload.get("id_course") or payload.get("course_id") or "")
             )
-        minimal = {"course_id": course_id}
+        minimal = {"course_id": course_id, "runners": [{"id": "1", "chrono": ""}]}
         (rc_dir / "normalized_h5.json").write_text(
             json.dumps(minimal), encoding="utf-8"
         )
@@ -222,15 +222,14 @@ def test_missing_enrich_outputs(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
         "status": "no-bet",
         "decision": "ABSTENTION",
         "reason": "data-missing",
-        "details": {"missing": ["snap_H-5_je.csv", "chronos.csv"]},
+        "details": {"missing": ["snap_H-5_je.csv"]},
     }
     marker = rc_dir / "UNPLAYABLE.txt"
     assert marker.exists()
+    chronos_path = rc_dir / "chronos.csv"
+    assert chronos_path.exists()
     fetch_stats = str(
         Path(acde.__file__).resolve().with_name("scripts") / "fetch_je_stats.py"
-    )
-    fetch_chrono = str(
-        Path(acde.__file__).resolve().with_name("scripts") / "fetch_je_chrono.py"
     )
     assert calls == [
         [
@@ -242,13 +241,7 @@ def test_missing_enrich_outputs(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
             str(rc_dir / "normalized_h5.json"),
             "--out",
             str(rc_dir / "stats_je.json"),
-        ],
-        [
-            sys.executable,
-            fetch_chrono,
-            "--course-dir",
-            str(rc_dir),
-        ],
+        ]
     ]
 
 
@@ -280,7 +273,7 @@ def test_missing_enrich_outputs_recovers_after_fetch(
             course_id = str(
                 (payload.get("id_course") or payload.get("course_id") or "")
             )
-        minimal = {"course_id": course_id}
+        minimal = {"course_id": course_id, "runners": [{"id": "1", "chrono": "1.0"}]}
         (rc_dir / "normalized_h5.json").write_text(
             json.dumps(minimal), encoding="utf-8"
         )
@@ -314,18 +307,11 @@ def test_missing_enrich_outputs_recovers_after_fetch(
         if "fetch_je_stats.py" in cmd[1]:
             out_index = cmd.index("--out")
             rc_dir = Path(cmd[out_index + 1]).parent
-        else:
-            rc_dir = Path(cmd[-1])
         snap = rc_dir / "snap_H-5.json"
         if snap.exists():
             if "fetch_je_stats.py" in cmd[1]:
                 (rc_dir / f"{snap.stem}_je.csv").write_text(
                     "num,nom,j_rate,e_rate\n1,A,0.1,0.2\n",
-                    encoding="utf-8",
-                )
-            if "fetch_je_chrono.py" in cmd[1]:
-                (rc_dir / "chronos.csv").write_text(
-                    "num,chrono\n1,1.0\n",
                     encoding="utf-8",
                 )
         return types.SimpleNamespace(returncode=0)
