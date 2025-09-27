@@ -16,6 +16,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
@@ -61,6 +62,10 @@ else:  # pragma: no cover - Cloud sync explicitly disabled
 # --- RÈGLES ANTI-COTES FAIBLES (SP min 4/1 ; CP somme > 6/1) -----------------
 MIN_SP_DEC_ODDS = 5.0        # 4/1 = 5.0
 MIN_CP_SUM_DEC = 8.0         # (o1-1)+(o2-1) > 6  <=> (o1+o2) > 8.0
+
+
+def _write_json_file(path: Path, payload: Any) -> None:
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def _norm_float(value: Any) -> float | None:
@@ -301,13 +306,10 @@ def enrich_h5(
     if not odds_h30:
         odds_h30 = dict(odds_h5)
 
-    def _write_json(path: Path, payload: Any) -> None:
-        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-
-    _write_json(rc_dir / "normalized_h5.json", h5_normalised)
-    _write_json(rc_dir / "normalized_h30.json", h30_normalised)
-    _write_json(rc_dir / "h5.json", odds_h5)
-    _write_json(rc_dir / "h30.json", odds_h30)
+    _write_json_file(rc_dir / "normalized_h5.json", h5_normalised)
+    _write_json_file(rc_dir / "normalized_h30.json", h30_normalised)
+    _write_json_file(rc_dir / "h5.json", odds_h5)
+    _write_json_file(rc_dir / "h30.json", odds_h30)
 
     partants_payload = {
         "rc": h5_normalised.get("rc") or rc_dir.name,
@@ -320,7 +322,7 @@ def enrich_h5(
         or h5_payload.get("course_id")
         or h5_payload.get("id"),
     }
-    _write_json(rc_dir / "partants.json", partants_payload)
+    _write_json_file(rc_dir / "partants.json", partants_payload)
 
     stats_path = rc_dir / "stats_je.json"
     course_id = str(partants_payload.get("course_id") or "").strip()
@@ -329,7 +331,7 @@ def enrich_h5(
     coverage, mapped = collect_stats(course_id, h5_path=rc_dir / "normalized_h5.json")
     stats_payload: dict[str, Any] = {"coverage": coverage}
     stats_payload.update(mapped)
-    _write_json(stats_path, stats_payload)
+    _write_json_file(stats_path, stats_payload)
 
     snap_stem = h5_raw_path.stem
     je_csv_path = rc_dir / f"{snap_stem}_je.csv"
@@ -534,6 +536,9 @@ def _run_single_pipeline(rc_dir: Path, *, budget: float) -> None:
         roi_global=None,
         max_vol=None,
         min_payout=None,
+        ev_min_exotic=None,
+        payout_min_exotic=None,
+        allow_heuristic=False,
         allow_je_na=allow_je_na,
     )
     pipeline_run.cmd_analyse(args)
@@ -610,23 +615,54 @@ def _snap_prefix(rc_dir: Path) -> str | None:
     return snap.stem if snap else None
 
 
-def _check_enrich_outputs(rc_dir: Path) -> None:
-    """Ensure enrich_h5 produced required CSV artefacts."""
+def _check_enrich_outputs(
+    rc_dir: Path, *, retry_delay: float = 1.0
+) -> dict[str, Any] | None:
+    """Ensure ``enrich_h5`` produced required CSV artefacts.
 
-    snap = _snap_prefix(rc_dir)
-    je_csv = rc_dir / f"{snap}_je.csv" if snap else None
-    chronos_csv = rc_dir / "chronos.csv"
-    missing = []
-    if not je_csv or not je_csv.exists():
-        missing.append(f"{snap}_je.csv" if snap else "*_je.csv")
-    if not chronos_csv.exists():
-        missing.append("chronos.csv")
-    if missing:
+    The check retries once after a short delay to accommodate slow I/O. When
+    the required files remain missing, a structured ``no-bet`` payload is
+    returned so that callers can gracefully skip the course instead of
+    terminating the whole pipeline.
+    """
+
+    for attempt in range(2):
+        snap = _snap_prefix(rc_dir)
+        je_csv = rc_dir / f"{snap}_je.csv" if snap else None
+        chronos_csv = rc_dir / "chronos.csv"
+
+        missing: list[str] = []
+        if not je_csv or not je_csv.exists():
+            missing.append(f"{snap}_je.csv" if snap else "*_je.csv")
+        if not chronos_csv.exists():
+            missing.append("chronos.csv")
+
+        if not missing:
+            return None
+
+        message = ", ".join(missing)
+        if attempt == 0:
+            print(
+                "[WARN] fichiers manquants après enrich_h5 (nouvelle tentative) : "
+                + message,
+                file=sys.stderr,
+            )
+            time.sleep(max(0.0, retry_delay))
+            continue
+
         print(
-            "[ERROR] fichiers manquants après enrich_h5: " + ", ".join(missing),
+            "[ERROR] fichiers manquants après enrich_h5 malgré la nouvelle tentative : "
+            + message,
             file=sys.stderr,
         )
-        raise SystemExit(1)
+        return {
+            "status": "no-bet",
+            "decision": "ABSTENTION",
+            "reason": "data-missing",
+            "details": {"missing": missing},
+        }
+
+    return None
 
 
 def export_per_horse_csv(rc_dir: Path) -> Path:
@@ -766,23 +802,33 @@ def _process_single_course(
     budget: float,
     kelly: float,
     gcs_prefix: str | None,
-) -> None:
+) -> dict[str, Any] | None:
     """Fetch and analyse a specific course designated by ``reunion``/``course``."""
 
     course_id = _resolve_course_id(reunion, course)
     base_dir = ensure_dir(data_dir)
     rc_dir = ensure_dir(base_dir / f"{reunion}{course}")
     write_snapshot_from_geny(course_id, phase, rc_dir)
+    outcome: dict[str, Any] | None = None
     if phase.upper() == "H5":
         enrich_h5(rc_dir, budget=budget, kelly=kelly)
-        _check_enrich_outputs(rc_dir)
-        build_p_finale(rc_dir, budget=budget, kelly=kelly)
-        run_pipeline(rc_dir, budget=budget, kelly=kelly)
-        build_prompt_from_meta(rc_dir, budget=budget, kelly=kelly)
-        csv_path = export_per_horse_csv(rc_dir)
-        print(f"[INFO] per-horse report écrit: {csv_path}")
+        outcome = _check_enrich_outputs(rc_dir)
+        if outcome is None:
+            build_p_finale(rc_dir, budget=budget, kelly=kelly)
+            run_pipeline(rc_dir, budget=budget, kelly=kelly)
+            build_prompt_from_meta(rc_dir, budget=budget, kelly=kelly)
+            csv_path = export_per_horse_csv(rc_dir)
+            print(f"[INFO] per-horse report écrit: {csv_path}")
+        else:
+            _write_json_file(rc_dir / "decision.json", outcome)
+            missing = ", ".join(outcome.get("details", {}).get("missing", []))
+            print(
+                f"[WARN] Pipeline H-5 ignoré pour {rc_dir.name} (données manquantes: {missing})",
+                file=sys.stderr,
+            )
     if gcs_prefix is not None:
-        _upload_artifacts(rc_dir, gcs_prefix=gcs_prefix)
+        _upload_artifacts(rc_dir, gcs_prefix=gcs_prefix
+    return outcome
 
 
 # ---------------------------------------------------------------------------
@@ -821,14 +867,23 @@ def _process_reunion(
     for c_label, course_id in courses:
         rc_dir = ensure_dir(base_dir / f"{r_label}{c_label}")
         write_snapshot_from_geny(course_id, phase, rc_dir)
+        outcome: dict[str, Any] | None = None
         if phase.upper() == "H5":
             enrich_h5(rc_dir, budget=budget, kelly=kelly)
-            _check_enrich_outputs(rc_dir)
-            build_p_finale(rc_dir, budget=budget, kelly=kelly)
-            run_pipeline(rc_dir, budget=budget, kelly=kelly)
-            build_prompt_from_meta(rc_dir, budget=budget, kelly=kelly)
-            csv_path = export_per_horse_csv(rc_dir)
-            print(f"[INFO] per-horse report écrit: {csv_path}")
+            outcome = _check_enrich_outputs(rc_dir)
+            if outcome is None:
+                build_p_finale(rc_dir, budget=budget, kelly=kelly)
+                run_pipeline(rc_dir, budget=budget, kelly=kelly)
+                build_prompt_from_meta(rc_dir, budget=budget, kelly=kelly)
+                csv_path = export_per_horse_csv(rc_dir)
+                print(f"[INFO] per-horse report écrit: {csv_path}")
+            else:
+                _write_json_file(rc_dir / "decision.json", outcome)
+                missing = ", ".join(outcome.get("details", {}).get("missing", []))
+                print(
+                    f"[WARN] Pipeline H-5 ignoré pour {rc_dir.name} (données manquantes: {missing})",
+                    file=sys.stderr,
+                )
         if gcs_prefix is not None:
             _upload_artifacts(rc_dir, gcs_prefix=gcs_prefix)
 
