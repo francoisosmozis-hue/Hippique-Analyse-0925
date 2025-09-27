@@ -392,6 +392,9 @@ def test_cmd_analyse_enriches_runners(tmp_path, monkeypatch: pytest.MonkeyPatch)
         roi_global=None,
         max_vol=None,
         min_payout=None,
+        ev_min_exotic=None,
+        payout_min_exotic=None,
+        allow_heuristic=False,
         allow_je_na=True,
     )
 
@@ -466,6 +469,9 @@ def test_pipeline_validation_failure_reports_summary(tmp_path, monkeypatch):
         roi_global=None,
         max_vol=None,
         min_payout=None,
+        ev_min_exotic=None,
+        payout_min_exotic=None,
+        allow_heuristic=False,
         allow_je_na=False,
     )
 
@@ -654,6 +660,9 @@ def test_high_risk_pack_is_trimmed(tmp_path, monkeypatch):
         roi_global=None,
         max_vol=None,
         min_payout=None,
+        ev_min_exotic=None,
+        payout_min_exotic=None,
+        allow_heuristic=False,
         allow_je_na=True,
     )
 
@@ -770,6 +779,9 @@ def test_combo_pack_scaled_not_removed(tmp_path, monkeypatch):
         roi_global=None,
         max_vol=None,
         min_payout=None,
+        ev_min_exotic=None,
+        payout_min_exotic=None,
+        allow_heuristic=False,
         allow_je_na=True,
     )
 
