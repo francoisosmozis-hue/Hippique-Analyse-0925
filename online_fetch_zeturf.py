@@ -118,6 +118,30 @@ def _fallback_parse_html(html: Any) -> dict[str, Any]:
     }
 
 
+def _looks_like_suspicious_html(payload: Any) -> bool:
+    """Return ``True`` when a payload resembles throttled anti-bot HTML."""
+
+    if isinstance(payload, bytes):
+        try:
+            payload = payload.decode("utf-8", errors="ignore")
+        except Exception:  # pragma: no cover - defensive conversion
+            payload = ""
+    if not isinstance(payload, str):
+        payload = str(payload or "")
+    if not payload:
+        return True
+
+    lowered = payload.lower()
+    if "<html" not in lowered:
+        return False
+    if any(marker in lowered for marker in _SUSPICIOUS_HTML_PATTERNS):
+        return True
+    stripped = lowered.strip()
+    if stripped.startswith("<html") and len(stripped) < 512:
+        return True
+    return False
+
+
 def _http_get(url: str, *, timeout: float = 12.0) -> str:
     """Return raw HTML for ``url`` raising on suspicious throttled payloads."""
 
@@ -133,6 +157,8 @@ def _http_get(url: str, *, timeout: float = 12.0) -> str:
     if resp.status_code in (403, 429):
         raise RuntimeError(f"HTTP {resp.status_code} returned by {url}")
     text = resp.text
+    if _looks_like_suspicious_html(text):
+        raise RuntimeError(f"Payload suspect reçu de {url}")
     if not text or len(text) < 512:
         raise RuntimeError(f"Payload trop court reçu de {url}")
     return text
@@ -144,6 +170,7 @@ def _double_extract(url: str, *, snapshot: str) -> dict[str, Any]:
     html = _http_get(url)
 
     data: dict[str, Any] | None = None
+    fallback_used = False
     parse_fn = getattr(_impl, "parse_course_page", None)
     if callable(parse_fn):
         try:
@@ -158,13 +185,17 @@ def _double_extract(url: str, *, snapshot: str) -> dict[str, Any]:
         fallback = _fallback_parse_html(html)
         if fallback.get("runners"):
             data = {**(data or {}), **fallback}
+            fallback_used = True
         elif data is None:
             data = fallback
+            fallback_used = True
 
     if not data:
         return {}
 
     data.setdefault("source_url", url)
+    if fallback_used:
+        logger.warning("[ZEturf] Extraction fallback utilisée pour %s", url)
     return data
 
 
@@ -234,6 +265,14 @@ _RUNNER_NAME_RE = re.compile(r"data-runner-name=['\"]?([^'\"]+)", re.IGNORECASE)
 _RUNNER_ODDS_RE = re.compile(r"data-odds=(?:'|\")?([0-9]+(?:[.,][0-9]+)?)", re.IGNORECASE)
 _PARTANTS_RE = re.compile(r"(\d{1,2})\s+partants", re.IGNORECASE)
 _DISCIPLINE_RE = re.compile(r"(trot|plat|obstacles?|mont[ée])", re.IGNORECASE)
+_SUSPICIOUS_HTML_PATTERNS = (
+    "too many requests",
+    "captcha",
+    "temporarily unavailable",
+    "access denied",
+    "service unavailable",
+    "cloudflare",
+)
 
 
 def _ensure_default_templates(config: Mapping[str, Any] | None) -> Dict[str, Any]:
