@@ -19,6 +19,13 @@ Pipeline **pro** pour planifier, capturer H‑30 / H‑5, analyser et consigner 
 - **ROUND_TO_SP = 0.10** : arrondi des mises SP à 0,10 €; utiliser `0` pour désactiver l'arrondi sans provoquer de crash tout en conservant le calcul EV/ROI.
 - **SHARPE_MIN = 0.5** : seuil minimal de ratio EV/σ; filtre les paris à variance trop élevée.
 
+### Garde-fous opérationnels
+
+- `online_fetch_zeturf.fetch_race_snapshot()` expose l'API de snapshot Python attendue par `runner_chain`. Elle sait prendre une URL directe ou un couple `R?`/`C?`, applique un backoff exponentiel et journalise lorsque des champs critiques (meeting, discipline, partants) sont absents du HTML.
+- La phase **H‑5** réessaie automatiquement les collectes `JE`/`chronos` en cas d'absence des CSV, marque la course « non jouable » via `UNPLAYABLE.txt` si la régénération échoue et évite ainsi que le pipeline plante.
+- Les combinés sont désormais filtrés strictement dans `pipeline_run.py` : statut `"ok"` obligatoire, EV ≥ +40 % et payout attendu ≥ 10 € sans heuristique. Le runner et le pipeline partagent la même règle, ce qui garantit un comportement homogène en CLI comme dans les automatisations.
+- Le seuil d'overround est adapté automatiquement (`1.30` standard, `1.25` pour les handicaps plats ouverts ≥ 14 partants) pour réduire les tickets exotiques à faible espérance.
+
 ### API `/analyse`
 
 L'API FastAPI expose un endpoint `POST /analyse` (voir `main.py`).
