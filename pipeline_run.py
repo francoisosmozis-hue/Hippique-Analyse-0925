@@ -1848,10 +1848,17 @@ def cmd_analyse(args: argparse.Namespace) -> None:
     filter_reasons: list[str] = []
 
     market_overround = _compute_market_overround(odds_h5)
+    course_label_text = (
+        partants_data.get("course_label")
+        or partants_data.get("label")
+        or partants_data.get("name")
+        or meta.get("course")
+    )
     overround_cap = compute_overround_cap(
         meta.get("discipline"),
         meta.get("partants"),
         default_cap=1.30,
+        course_label=course_label_text,
     )
     combo_info["thresholds"]["overround_max"] = overround_cap
     metrics = combo_info.setdefault("metrics", {})
