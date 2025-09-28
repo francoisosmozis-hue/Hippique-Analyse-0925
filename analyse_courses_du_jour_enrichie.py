@@ -1069,7 +1069,9 @@ def _ensure_h5_artifacts(
             return False
 
         if stats_recovered and not allow_without_fetch:
-            return False
+            snap = _snap_prefix(rc_dir)
+            if snap and (rc_dir / f"{snap}_je.csv").exists():
+                return False
 
         stats_ready = stats_fetch_success
         if not stats_ready:
