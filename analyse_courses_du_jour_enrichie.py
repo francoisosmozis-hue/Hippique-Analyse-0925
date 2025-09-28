@@ -68,6 +68,70 @@ def _write_json_file(path: Path, payload: Any) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def _extract_id2name(payload: Any) -> dict[str, str]:
+    """Return an ``id -> name`` mapping from the provided payload."""
+
+    mapping: dict[str, str] = {}
+    if not isinstance(payload, dict):
+        return mapping
+
+    raw = payload.get("id2name")
+    if isinstance(raw, dict) and raw:
+        for cid, name in raw.items():
+            if cid is None:
+                continue
+            mapping[str(cid)] = "" if name is None else str(name)
+        if mapping:
+            return mapping
+
+    runners = payload.get("runners")
+    if isinstance(runners, list):
+        for runner in runners:
+            if not isinstance(runner, dict):
+                continue
+            cid = runner.get("id") or runner.get("num") or runner.get("number")
+            if cid is None:
+                continue
+            name = runner.get("name") or runner.get("nom") or runner.get("label")
+            mapping[str(cid)] = "" if name is None else str(name)
+    return mapping
+
+
+def _extract_stats_mapping(stats_payload: Any) -> dict[str, dict[str, Any]]:
+    """Normalise the stats payload into a ``dict[id] -> stats`` mapping."""
+
+    mapping: dict[str, dict[str, Any]] = {}
+    if isinstance(stats_payload, dict):
+        for key, value in stats_payload.items():
+            if not isinstance(value, dict):
+                continue
+            mapping[str(key)] = value
+    return mapping
+
+
+def _write_je_csv_file(
+    path: Path, *, id2name: dict[str, str], stats_payload: Any
+) -> None:
+    """Materialise the ``*_je.csv`` companion using the provided mappings."""
+
+    stats_mapping = _extract_stats_mapping(stats_payload)
+    with path.open("w", newline="", encoding="utf-8") as fh:
+        writer = csv.writer(fh)
+        writer.writerow(["num", "nom", "j_rate", "e_rate"])
+        for cid, name in sorted(id2name.items(), key=lambda item: item[0]):
+            stats = stats_mapping.get(cid, {})
+            if not isinstance(stats, dict):
+                stats = {}
+            writer.writerow(
+                [
+                    cid,
+                    name,
+                    stats.get("j_win", ""),
+                    stats.get("e_win", ""),
+                ]
+            )
+
+
 def _norm_float(value: Any) -> float | None:
     try:
         return float(str(value).replace(",", "."))
@@ -334,21 +398,8 @@ def enrich_h5(
     _write_json_file(stats_path, stats_payload)
 
     snap_stem = h5_raw_path.stem
-    je_csv_path = rc_dir / f"{snap_stem}_je.csv"
-    with je_csv_path.open("w", newline="", encoding="utf-8") as fh:
-        writer = csv.writer(fh)
-        writer.writerow(["num", "nom", "j_rate", "e_rate"])
-        id2name = partants_payload.get("id2name", {})
-        for cid, name in sorted(id2name.items(), key=lambda item: item[0]):
-            stats = mapped.get(cid, {}) if isinstance(mapped, dict) else {}
-            writer.writerow(
-                [
-                    cid,
-                    name,
-                    stats.get("j_win", ""),
-                    stats.get("e_win", ""),
-                ]
-            )
+    id2name = _extract_id2name(partants_payload)
+    _write_je_csv_file(rc_dir / f"{snap_stem}_je.csv", id2name=id2name, stats_payload=mapped)
 
     chronos_path = rc_dir / "chronos.csv"
     _write_chronos_csv(chronos_path, partants_payload.get("runners", []))
@@ -801,6 +852,59 @@ def _run_fetch_script(script_path: Path, rc_dir: Path) -> bool:
     return True
 
 
+def _rebuild_je_csv_from_stats(rc_dir: Path) -> bool:
+    """Attempt to rebuild ``*_je.csv`` using freshly fetched stats."""
+
+    snap = _snap_prefix(rc_dir)
+    if not snap:
+        print(
+            f"[WARN] Impossible de déterminer le snapshot H-5 pour {rc_dir.name}",
+            file=sys.stderr,
+        )
+        return False
+
+    stats_path = rc_dir / "stats_je.json"
+    try:
+        stats_payload = json.loads(stats_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        print(
+            f"[WARN] stats_je.json introuvable ou invalide dans {rc_dir.name}: {exc}",
+            file=sys.stderr,
+        )
+        return False
+
+    id2name: dict[str, str] = {}
+    for candidate in [rc_dir / "partants.json", rc_dir / "normalized_h5.json"]:
+        if not candidate.exists():
+            continue
+        try:
+            payload = json.loads(candidate.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        mapping = _extract_id2name(payload)
+        if mapping:
+            id2name = mapping
+            break
+
+    if not id2name:
+        print(
+            f"[WARN] Impossible de reconstruire {snap}_je.csv pour {rc_dir.name}: id2name manquant",
+            file=sys.stderr,
+        )
+        return False
+
+    try:
+        _write_je_csv_file(rc_dir / f"{snap}_je.csv", id2name=id2name, stats_payload=stats_payload)
+    except OSError as exc:
+        print(
+            f"[WARN] Échec d'écriture du CSV J/E pour {rc_dir.name}: {exc}",
+            file=sys.stderr,
+        )
+        return False
+
+    return True
+
+
 def _regenerate_chronos_csv(rc_dir: Path) -> bool:
     """Attempt to rebuild ``chronos.csv`` from locally available runner data."""
 
@@ -908,7 +1012,9 @@ def _ensure_h5_artifacts(
 
     if _missing_requires_stats(missing):
         retried = True
-        _run_fetch_script(_FETCH_JE_STATS_SCRIPT, rc_dir)
+        stats_success = _run_fetch_script(_FETCH_JE_STATS_SCRIPT, rc_dir)
+        if stats_success:
+            _rebuild_je_csv_from_stats(rc_dir)
     if _missing_requires_chronos(missing):
         retried = True
         success = False
