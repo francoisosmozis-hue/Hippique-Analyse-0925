@@ -1003,12 +1003,13 @@ def _ensure_h5_artifacts(
 ) -> dict[str, Any] | None:
     """Ensure H-5 enrichment produced JE/chronos files or mark course unplayable."""
 
-    outcome = _check_enrich_outputs(rc_dir, retry_cb=retry_cb)
+    outcome = _check_enrich_outputs(rc_dir)
     if outcome is None:
         return None
 
     missing = list(outcome.get("details", {}).get("missing", []))
     retried = False
+    retry_invoked = False
 
     stats_fetch_success = False
     if _missing_requires_stats(missing):
@@ -1026,6 +1027,7 @@ def _ensure_h5_artifacts(
                         file=sys.stderr,
                     )
                 else:
+                    retry_invoked = True
                     stats_recovered = True
             retried = retried or stats_recovered or stats_fetch_success
     if _missing_requires_chronos(missing):
@@ -1042,6 +1044,20 @@ def _ensure_h5_artifacts(
         if outcome is None:
             return None
         missing = list(outcome.get("details", {}).get("missing", []))
+
+    if missing and retry_cb is not None and not retry_invoked:
+        try:
+            retry_cb()
+        except Exception as exc:  # pragma: no cover - defensive logging
+            print(
+                f"[WARN] relance enrich_h5 a échoué pour {rc_dir.name}: {exc}",
+                file=sys.stderr,
+            )
+        else:
+            outcome = _check_enrich_outputs(rc_dir, retry_delay=0.0)
+            if outcome is None:
+                return None
+            missing = list(outcome.get("details", {}).get("missing", []))
 
     _mark_course_unplayable(rc_dir, missing)
     return outcome
