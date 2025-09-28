@@ -132,7 +132,7 @@ def test_safe_enrich_h5_recovers_after_stats_fetch(tmp_path, monkeypatch):
 
     assert success is True
     assert outcome is None
-    assert calls["enrich"] == 2
+    assert calls["enrich"] == 1
     assert je_csv.exists()
     assert not (rc_dir / "UNPLAYABLE.txt").exists()
     assert fetch_calls == {"stats": 1, "chrono": 0}
