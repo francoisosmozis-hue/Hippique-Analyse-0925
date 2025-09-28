@@ -1100,8 +1100,6 @@ def _ensure_h5_artifacts(
             return None
         if _attempt_stats_rebuild():
             return None
-        if _attempt_stats_rebuild():
-        return None
             
     if missing and retry_cb is not None and not retry_invoked:
         try:
