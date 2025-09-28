@@ -93,7 +93,12 @@ def _prepare_stubs(monkeypatch: pytest.MonkeyPatch, eval_stats: dict[str, float 
         "combos_allowed",
         lambda *args, **kwargs: True,
     )
-
+    monkeypatch.setattr(
+        pipeline_run,
+        "compute_overround_cap",
+        lambda *_args, **_kwargs: 5.0,
+    )
+    
     def fake_enforce(cfg_local, runners_local, combos_local, bankroll, **_kwargs):
         stats = {
             "ev": 12.0,
@@ -235,3 +240,25 @@ def test_exotics_rejects_low_ev(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     log_decision = log_entry.get("exotics", {}).get("decision")
     assert isinstance(log_decision, str)
     assert log_decision.startswith("reject")
+
+
+def test_exotics_rejects_on_status(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    eval_stats = {
+        "status": "insufficient_data",
+        "ev_ratio": 0.55,
+        "payout_expected": 18.0,
+        "roi": 0.15,
+        "sharpe": 0.25,
+    }
+
+    meta, log_entry, _ = _run_analysis(monkeypatch, tmp_path, eval_stats)
+
+    exotics_meta = meta.get("exotics")
+    assert exotics_meta["available"] is False
+    reasons = exotics_meta["flags"]["reasons"]["combo"]
+    assert "status_insufficient_data" in reasons
+    assert exotics_meta["decision"].startswith("reject:"), exotics_meta
+
+    log_decision = log_entry.get("exotics", {}).get("decision")
+    assert isinstance(log_decision, str)
+    assert log_decision.startswith("reject:status_insufficient_data")
