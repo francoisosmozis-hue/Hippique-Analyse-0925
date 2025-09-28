@@ -363,6 +363,51 @@ def test_ensure_h5_artifacts_rebuilds_after_retry_cb(tmp_path, monkeypatch):
     assert rows[1] == ["7", "Juliet", "0.55", "0.65"]
 
 
+def test_ensure_h5_artifacts_rebuilds_when_retry_creates_stats(tmp_path, monkeypatch):
+    """A retry callback providing stats should trigger a rebuild even if fetch failed."""
+
+    rc_dir = tmp_path / "R2C4"
+    snap = _write_snapshot(rc_dir)
+    chronos = rc_dir / "chronos.csv"
+    chronos.write_text("num,chrono\n9,\n", encoding="utf-8")
+
+    stats_path = rc_dir / "stats_je.json"
+    partants_path = rc_dir / "partants.json"
+
+    fetch_calls: list[Path] = []
+    retry_calls: list[int] = []
+
+    def fake_fetch(script_path: Path, course_dir: Path) -> bool:
+        assert course_dir == rc_dir
+        assert script_path == acd._FETCH_JE_STATS_SCRIPT
+        fetch_calls.append(script_path)
+        return False
+
+    def retry_cb() -> None:
+        retry_calls.append(1)
+        payload = {"id2name": {"9": "Oscar"}, "runners": [{"id": "9", "name": "Oscar"}]}
+        partants_path.write_text(json.dumps(payload), encoding="utf-8")
+        stats_payload = {"coverage": 100, "9": {"j_win": "0.25", "e_win": "0.35"}}
+        stats_path.write_text(json.dumps(stats_payload), encoding="utf-8")
+
+    monkeypatch.setattr(acd, "_run_fetch_script", fake_fetch)
+    monkeypatch.setattr(acd.time, "sleep", lambda _delay: None)
+
+    outcome = acd._ensure_h5_artifacts(rc_dir, retry_cb=retry_cb)
+
+    assert outcome is None
+    assert fetch_calls == [acd._FETCH_JE_STATS_SCRIPT]
+    assert retry_calls == [1]
+
+    je_csv = rc_dir / f"{snap.stem}_je.csv"
+    assert je_csv.exists()
+    assert not (rc_dir / "UNPLAYABLE.txt").exists()
+
+    rows = list(csv.reader(io.StringIO(je_csv.read_text(encoding="utf-8"))))
+    assert rows[0] == ["num", "nom", "j_rate", "e_rate"]
+    assert rows[1] == ["9", "Oscar", "0.25", "0.35"]
+
+
 def test_recover_je_csv_from_stats_helper(tmp_path, monkeypatch):
     """Helper should fetch stats and rebuild the JE CSV when possible."""
 
