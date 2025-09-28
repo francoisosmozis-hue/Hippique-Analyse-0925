@@ -881,6 +881,9 @@ def _recover_je_csv_from_stats(
         )
         return True, False, False
 
+    if _rebuild_je_csv_from_stats(rc_dir):
+        return True, True, True
+        
     return True, False, True
 
 
