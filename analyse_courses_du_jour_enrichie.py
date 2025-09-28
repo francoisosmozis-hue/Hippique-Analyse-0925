@@ -881,7 +881,7 @@ def _recover_je_csv_from_stats(
         )
         return True, False, False
 
-    return True, True, True
+    return True, False, True
 
 
 def _rebuild_je_csv_from_stats(rc_dir: Path) -> bool:
@@ -1044,10 +1044,14 @@ def _ensure_h5_artifacts(
     retry_invoked = False
 
     stats_fetch_success = False
+    stats_recovered = False
+    stats_retry_invoked = False
     if _missing_requires_stats(missing):
-        stats_fetch_success, stats_recovered, stats_retry_invoked = _recover_je_csv_from_stats(
-            rc_dir, retry_cb=retry_cb
-        )
+        (
+            stats_fetch_success,
+            stats_recovered,
+            stats_retry_invoked,
+        ) = _recover_je_csv_from_stats(rc_dir, retry_cb=retry_cb)
         retry_invoked = retry_invoked or stats_retry_invoked
         retried = (
             retried
@@ -1070,6 +1074,19 @@ def _ensure_h5_artifacts(
             return None
         missing = list(outcome.get("details", {}).get("missing", []))
 
+    if (
+        missing
+        and stats_fetch_success
+        and not stats_recovered
+        and _missing_requires_stats(missing)
+    ):
+        if _rebuild_je_csv_from_stats(rc_dir):
+            stats_recovered = True
+            outcome = _check_enrich_outputs(rc_dir, retry_delay=0.0)
+            if outcome is None:
+                return None
+            missing = list(outcome.get("details", {}).get("missing", []))
+            
     if missing and retry_cb is not None and not retry_invoked:
         try:
             retry_cb()
