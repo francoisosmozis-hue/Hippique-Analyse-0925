@@ -111,7 +111,19 @@ def _fallback_parse_html(html: Any) -> dict[str, Any]:
     if discipline_match:
         discipline = discipline_match.group(1).lower()
 
+    meeting: str | None = None
+    meeting_match = _MEETING_RE.search(html)
+    if meeting_match:
+        meeting = meeting_match.group(1).strip() or None
+
+    date: str | None = None
+    date_match = _DATE_RE.search(html)
+    if date_match:
+        date = date_match.group(1)
+
     return {
+        "meeting": meeting,
+        "date": date,
         "runners": runners,
         "partants": partants,
         "discipline": discipline,
@@ -307,6 +319,11 @@ _RUNNER_NAME_RE = re.compile(r"data-runner-name=['\"]?([^'\"]+)", re.IGNORECASE)
 _RUNNER_ODDS_RE = re.compile(r"data-odds=(?:'|\")?([0-9]+(?:[.,][0-9]+)?)", re.IGNORECASE)
 _PARTANTS_RE = re.compile(r"(\d{1,2})\s+partants", re.IGNORECASE)
 _DISCIPLINE_RE = re.compile(r"(trot|plat|obstacles?|mont[ée])", re.IGNORECASE)
+_MEETING_RE = re.compile(
+    r"(?:data-)?(?:meeting|hippodrome)[-_]?name\s*[=:]\s*['\"]([^'\"]+)",
+    re.IGNORECASE,
+)
+_DATE_RE = re.compile(r"(20\d{2}-\d{2}-\d{2})")
 _SUSPICIOUS_HTML_PATTERNS = (
     "too many requests",
     "captcha",
