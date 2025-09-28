@@ -44,7 +44,13 @@ def _write_inputs(tmp_path: Path) -> dict[str, Path]:
     }
 
 
-def _prepare_stubs(monkeypatch: pytest.MonkeyPatch, eval_stats: dict[str, float | str]):
+def _prepare_stubs(
+    monkeypatch: pytest.MonkeyPatch,
+    eval_stats: dict[str, float | str],
+    *,
+    overround_cap: float = 5.0,
+    market_overround: float | None = None,
+):
     pipeline_run._load_simulate_ev.cache_clear()
 
     def fake_allocate(cfg, runners):
@@ -91,14 +97,21 @@ def _prepare_stubs(monkeypatch: pytest.MonkeyPatch, eval_stats: dict[str, float 
     monkeypatch.setattr(
         validator_ev,
         "combos_allowed",
-        lambda *args, **kwargs: True,
+        lambda *_args, **_kwargs: overround_cap,
     )
     monkeypatch.setattr(
         pipeline_run,
         "compute_overround_cap",
-        lambda *_args, **_kwargs: 5.0,
+        lambda *_args, **_kwargs: overround_cap,
     )
     
+    if market_overround is not None:
+        monkeypatch.setattr(
+            pipeline_run,
+            "_compute_market_overround",
+            lambda *_args, **_kwargs: market_overround,
+        )
+        
     def fake_enforce(cfg_local, runners_local, combos_local, bankroll, **_kwargs):
         stats = {
             "ev": 12.0,
@@ -162,9 +175,21 @@ def _prepare_stubs(monkeypatch: pytest.MonkeyPatch, eval_stats: dict[str, float 
     return captured_log, eval_calls
 
 
-def _run_analysis(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, eval_stats: dict[str, float | str]):
+def _run_analysis(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    eval_stats: dict[str, float | str],
+    *,
+    overround_cap: float = 5.0,
+    market_overround: float | None = None,
+):
     inputs = _write_inputs(tmp_path)
-    captured_log, eval_calls = _prepare_stubs(monkeypatch, eval_stats)
+    captured_log, eval_calls = _prepare_stubs(
+        monkeypatch,
+        eval_stats,
+        overround_cap=overround_cap,
+        market_overround=market_overround,
+    )
 
     outdir = tmp_path / "out"
 
@@ -290,3 +315,37 @@ def test_exotics_rejects_low_payout(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     log_decision = log_entry.get("exotics", {}).get("decision")
     assert isinstance(log_decision, str)
     assert "payout_expected_below_accept_threshold" in log_decision
+
+
+def test_exotics_rejects_when_overround_exceeds_cap(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """High overround markets should block combinés before evaluation."""
+
+    eval_stats = {
+        "status": "ok",
+        "ev_ratio": 0.65,
+        "payout_expected": 25.0,
+        "roi": 0.2,
+        "sharpe": 0.4,
+    }
+
+    meta, log_entry, eval_calls = _run_analysis(
+        monkeypatch,
+        tmp_path,
+        eval_stats,
+        overround_cap=1.25,
+        market_overround=1.33,
+    )
+
+    assert not eval_calls, "evaluation should be skipped when overround is too high"
+
+    exotics_meta = meta.get("exotics")
+    assert exotics_meta["available"] is False
+    reasons = exotics_meta["flags"]["reasons"]["combo"]
+    assert "overround_above_threshold" in reasons
+    assert exotics_meta["decision"].startswith("reject:"), exotics_meta
+
+    log_decision = log_entry.get("exotics", {}).get("decision")
+    assert isinstance(log_decision, str)
+    assert "overround_above_threshold" in log_decision
