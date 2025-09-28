@@ -595,20 +595,32 @@ def fetch_race_snapshot(
     *,
     url: str | None = None,
     session: Any | None = None,
-    retry: int = 3,
-    backoff: float = 1.0,
+    retry: int | None = 3,
+    retries: int | None = None,
+    backoff: float = 1.0
+    sources: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Return a normalised snapshot for ``reunion``/``course``.
 
     The signature enforces ``url`` as a keyword-only argument to mirror the
     public contract advertised to downstream callers (runner_chain/pipeline).
-    Additional keyword-only knobs (``retry``/``backoff``) remain available for
-    advanced use-cases while keeping the positional parameters identical to the
-    historical CLI wrapper.
+    Additional keyword-only knobs (``retry``/``retries``/``backoff``) remain
+    available for advanced use-cases while keeping the positional parameters
+    identical to the historical CLI wrapper.  Callers may supply a custom
+    ``sources`` mapping to override the default configuration loaded from
+    :mod:`config/sources.yml`.
     """
 
     reunion_text = str(reunion).strip()
     course_text = "" if course is None else str(course).strip()
+
+    retry_count = retries if retries is not None else retry
+    try:
+        retry_count_int = int(retry_count) if retry_count is not None else 3
+    except (TypeError, ValueError):  # pragma: no cover - defensive fallback
+        retry_count_int = 3
+    if retry_count_int <= 0:
+        retry_count_int = 1
 
     if not reunion_text:
         raise ValueError("reunion value is required")
@@ -625,8 +637,15 @@ def fetch_race_snapshot(
     course_norm = _normalise_label(course_text, "C")
     rc = f"{reunion_norm}{course_norm}"
 
-    sources = _load_sources_config()
-    rc_map_raw = sources.get("rc_map") if isinstance(sources, Mapping) else None
+    if sources is not None:
+        sources_payload = _ensure_default_templates(sources)
+    else:
+        sources_payload = _load_sources_config()
+    rc_map_raw = (
+        sources_payload.get("rc_map")
+        if isinstance(sources_payload, Mapping)
+        else None
+    )
     rc_map: Dict[str, Any]
     if isinstance(rc_map_raw, Mapping):
         rc_map = {str(k): v for k, v in rc_map_raw.items()}
@@ -707,7 +726,7 @@ def fetch_race_snapshot(
         seen_urls.add(normalised_guess)
 
     rc_map[rc] = entry
-    sources["rc_map"] = rc_map
+    sources_payload["rc_map"] = rc_map
 
     phase_norm = _normalise_phase_alias(phase)
 
@@ -739,7 +758,7 @@ def fetch_race_snapshot(
             return _fetch_snapshot_via_html(
                 ordered,
                 phase=phase_norm,
-                retries=max(1, int(retry)),
+                retries=retry_count_int,
                 backoff=backoff,
                 session=session_obj,
             )
@@ -756,9 +775,9 @@ def fetch_race_snapshot(
 
         fetch_kwargs = {
             "phase": phase_norm,
-            "sources": sources,
+            "sources": sources_payload,
             "url": _ensure_absolute_url(url) if url else url,
-            "retries": max(1, int(retry)),
+            "retries": retry_count_int,
             "backoff": backoff if backoff > 0 else 1.0,
             "initial_delay": 0.3,
         }
