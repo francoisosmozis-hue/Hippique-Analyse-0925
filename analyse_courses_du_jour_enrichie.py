@@ -1065,7 +1065,10 @@ def _ensure_h5_artifacts(
         """Try rebuilding the JE CSV when stats data appears to be available."""
         
         nonlocal stats_recovered
-        if not missing or stats_recovered or not _missing_requires_stats(missing):
+        if not missing or not _missing_requires_stats(missing):
+            return False
+
+        if stats_recovered and not allow_without_fetch:
             return False
 
         stats_ready = stats_fetch_success
