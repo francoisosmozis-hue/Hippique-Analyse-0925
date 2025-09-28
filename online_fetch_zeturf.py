@@ -327,6 +327,7 @@ def _fetch_snapshot_via_html(
                     continue
                 if parsed:
                     parsed.setdefault("source_url", url)
+                    parsed.setdefault("phase", snapshot_mode)
                     return parsed
         return None
     finally:
@@ -846,7 +847,13 @@ def fetch_race_snapshot(
         fallback_urls.append(normalised_guess)
         seen_urls.add(normalised_guess)
 
+    primary_url: str | None = None
+    if normalised_user_url:
+        primary_url = normalised_user_url
+    elif fallback_urls:
+        primary_url = fallback_urls[0]
     rc_map[rc] = entry
+    
     sources_payload["rc_map"] = rc_map
 
     phase_norm = _normalise_phase_alias(phase)
@@ -956,6 +963,7 @@ def fetch_race_snapshot(
                 rc=rc,
                 r_label=reunion_norm,
                 c_label=course_norm,
+                source_url=primary_url,
             ).as_dict()
 
         source_url = entry.get("url") if isinstance(entry.get("url"), str) else None
@@ -963,10 +971,12 @@ def fetch_race_snapshot(
             source_url = str(html_snapshot["source_url"])
         if not source_url and url:
             source_url = url
+        if not source_url and primary_url:
+            source_url = primary_url
         snapshot = _build_snapshot_payload(
             raw_snapshot,
             reunion_norm,
-            course_norm,            
+            course_norm,
             phase=phase_norm,
             source_url=source_url,
         )
