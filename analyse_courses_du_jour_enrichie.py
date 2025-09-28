@@ -1058,20 +1058,31 @@ def _ensure_h5_artifacts(
         missing = list(outcome.get("details", {}).get("missing", []))
         return False
 
-    def _attempt_stats_rebuild() -> bool:
-        """Try rebuilding the JE CSV from freshly fetched stats."""
-
+    def _attempt_stats_rebuild(*, allow_without_fetch: bool = False) -> bool:
+        """Try rebuilding the JE CSV when stats data appears to be available."""
+        
         nonlocal stats_recovered
-        if (
-            missing
-            and stats_fetch_success
-            and not stats_recovered
-            and _missing_requires_stats(missing)
-        ):
-            if _rebuild_je_csv_from_stats(rc_dir):
-                stats_recovered = True
-                if _refresh_missing_state():
-                    return True
+        if not missing or stats_recovered or not _missing_requires_stats(missing):
+            return False
+
+        stats_ready = stats_fetch_success
+        if not stats_ready:
+            stats_path = rc_dir / "stats_je.json"
+            stats_ready = stats_path.exists()
+            if stats_ready and not allow_without_fetch:
+                # ``stats_fetch_success`` guards against rebuilding when the
+                # fetch script failed earlier.  When ``allow_without_fetch`` is
+                # False we keep that behaviour to avoid consuming stale files
+                # left behind by a previous run.
+                stats_ready = False
+
+        if not stats_ready:
+            return False
+
+        if _rebuild_je_csv_from_stats(rc_dir):
+            stats_recovered = True
+            if _refresh_missing_state():
+                return True
         return False
     if _missing_requires_stats(missing):
         (
@@ -1112,7 +1123,7 @@ def _ensure_h5_artifacts(
         else:
             if _refresh_missing_state():
                 return None
-            if _attempt_stats_rebuild():
+            if _attempt_stats_rebuild(allow_without_fetch=True):
                 return None
             missing = list(outcome.get("details", {}).get("missing", []))
 
