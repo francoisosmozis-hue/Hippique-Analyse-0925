@@ -155,3 +155,22 @@ def test_process_reunion_continues_after_failure(
     assert all(rc.name.endswith("C2") for rc in pipeline_calls)
     decision_path = tmp_path / "R1C1" / "decision.json"
     assert decision_path.exists()
+
+
+def test_mark_course_unplayable_writes_marker(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    rc_dir = tmp_path / "R1C1"
+    rc_dir.mkdir()
+
+    missing = ["chronos.csv", "R1C1_H-5_je.csv"]
+    acde._mark_course_unplayable(rc_dir, missing)
+
+    marker = rc_dir / "UNPLAYABLE.txt"
+    assert marker.exists()
+    content = marker.read_text(encoding="utf-8")
+    for item in missing:
+        assert item in content
+
+    captured = capsys.readouterr()
+    assert "Course marquée non jouable" in captured.err
