@@ -1,4 +1,16 @@
+import pytest
+
 import runner_chain
+
+
+def test_compute_overround_cap_flat_handicap_string_partants() -> None:
+    cap = runner_chain.compute_overround_cap("Handicap de Plat", "16 partants")
+    assert cap == pytest.approx(1.25)
+
+
+def test_compute_overround_cap_other_disciplines() -> None:
+    cap = runner_chain.compute_overround_cap("Trot Attelé", 12)
+    assert cap == pytest.approx(1.30)
 
 
 def test_validate_exotics_with_simwrapper_filters_and_alert(monkeypatch):
