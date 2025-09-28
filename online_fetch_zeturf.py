@@ -7,6 +7,7 @@ import logging
 import os
 import re
 import time
+import unicodedata
 from dataclasses import dataclass
 import inspect
 from pathlib import Path
@@ -368,6 +369,35 @@ def _ensure_absolute_url(value: str | os.PathLike[str] | None) -> str | None:
     if "." in head:
         return "https://" + text
     return text
+
+
+def _coerce_str(value: Any) -> str | None:
+    if value in (None, ""):
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _slugify_hippodrome(value: str | None) -> str | None:
+    if not value:
+        return None
+    normalized = unicodedata.normalize("NFKD", value)
+    ascii_text = normalized.encode("ascii", "ignore").decode("ascii")
+    cleaned = re.sub(r"[^a-z0-9]+", "-", ascii_text.lower())
+    cleaned = re.sub(r"-+", "-", cleaned).strip("-")
+    return cleaned or None
+
+
+def _build_canonical_course_url(
+    date_text: str | None, reunion: str, course: str, hippo: str | None
+) -> str | None:
+    if not date_text or not hippo:
+        return None
+    slug = _slugify_hippodrome(hippo)
+    if not slug:
+        return None
+    base = _ensure_absolute_url(_ZT_BASE_URL) or _ZT_BASE_URL
+    return f"{base}/fr/course/{date_text}/{reunion}{course}-{slug}"
     
 _RUNNER_NUM_RE = re.compile(r"data-runner-num=['\"]?(\d+)", re.IGNORECASE)
 _RUNNER_NAME_RE = re.compile(r"data-runner-name=['\"]?([^'\"]+)", re.IGNORECASE)
@@ -734,6 +764,19 @@ def fetch_race_snapshot(
     except AttributeError:  # pragma: no cover - defensive fallback
         course_id_hint = None
 
+    date_hint = _coerce_str(entry.get("date")) or _coerce_str(entry.get("jour"))
+    hippo_hint = _coerce_str(entry.get("hippodrome")) or _coerce_str(entry.get("meeting"))
+    meta_hint = entry.get("meta") if isinstance(entry.get("meta"), Mapping) else None
+    if isinstance(meta_hint, Mapping):
+        date_hint = date_hint or _coerce_str(
+            meta_hint.get("date") or meta_hint.get("jour") or meta_hint.get("day")
+        )
+        hippo_hint = hippo_hint or _coerce_str(
+            meta_hint.get("hippodrome")
+            or meta_hint.get("meeting")
+            or meta_hint.get("venue")
+        )
+        
     candidate_urls: list[str] = []
     try:
         entry_url = _impl._extract_url_from_entry(entry)
@@ -747,6 +790,15 @@ def fetch_race_snapshot(
         if normalised_user_url in candidate_urls:
             candidate_urls.remove(normalised_user_url)
         candidate_urls.insert(0, normalised_user_url)
+
+    canonical_url = _build_canonical_course_url(
+        date_hint, reunion_norm, course_norm, hippo_hint
+    )
+    if canonical_url and canonical_url not in candidate_urls:
+        if normalised_user_url:
+            candidate_urls.append(canonical_url)
+        else:
+            candidate_urls.insert(0, canonical_url)
 
     if not course_id_hint:
         for candidate in candidate_urls:
