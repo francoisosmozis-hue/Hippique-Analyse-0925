@@ -884,6 +884,13 @@ else:  # pragma: no cover - defensive fallback for stripped builds
 
 __all__ = ["fetch_race_snapshot", "main"]
 
+# Re-export normalisation helper when available so downstream tooling can rely
+# on the same convenience shim regardless of whether it imports the lightweight
+# wrapper (this module) or the historical implementation under ``scripts``.
+if hasattr(_impl, "normalize_snapshot"):
+    normalize_snapshot = _impl.normalize_snapshot  # type: ignore[attr-defined]
+    if "normalize_snapshot" not in __all__:
+        __all__.append("normalize_snapshot")
 
 if __name__ == "__main__":  # pragma: no cover
     main()
