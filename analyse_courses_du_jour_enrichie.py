@@ -1010,9 +1010,10 @@ def _ensure_h5_artifacts(
     missing = list(outcome.get("details", {}).get("missing", []))
     retried = False
 
+    stats_fetch_success = False
     if _missing_requires_stats(missing):
-        stats_success = _run_fetch_script(_FETCH_JE_STATS_SCRIPT, rc_dir)
-        if stats_success:
+        stats_fetch_success = _run_fetch_script(_FETCH_JE_STATS_SCRIPT, rc_dir)
+        if stats_fetch_success:
             stats_recovered = False
             if _rebuild_je_csv_from_stats(rc_dir):
                 stats_recovered = True
@@ -1026,7 +1027,7 @@ def _ensure_h5_artifacts(
                     )
                 else:
                     stats_recovered = True
-            retried = retried or stats_recovered
+            retried = retried or stats_recovered or stats_fetch_success
     if _missing_requires_chronos(missing):
         retried = True
         success = False
