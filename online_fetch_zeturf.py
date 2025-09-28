@@ -57,6 +57,11 @@ class RaceSnapshot:
             "phase": self.phase,
             "rc": self.rc,
         }
+        # ``hippodrome`` is often used as an alias for ``meeting`` downstream.
+        # Persist it whenever available so callers no longer need to duplicate
+        # the fallback logic.
+        if self.meeting and "hippodrome" not in payload:
+            payload["hippodrome"] = self.meeting
         if self.source_url:
             payload["source_url"] = self.source_url
         if self.course_id:
@@ -125,6 +130,7 @@ def _fallback_parse_html(html: Any) -> dict[str, Any]:
 
     return {
         "meeting": meeting,
+        "hippodrome": meeting,
         "date": date,
         "runners": runners,
         "partants": partants,
@@ -867,7 +873,11 @@ def fetch_race_snapshot(
 
 
 
-main = _impl.main
+if hasattr(_impl, "main"):
+    main = _impl.main
+else:  # pragma: no cover - defensive fallback for stripped builds
+    def main(*_args: Any, **_kwargs: Any) -> None:
+        raise RuntimeError("scripts.online_fetch_zeturf.main is unavailable")
 
 
 __all__ = ["fetch_race_snapshot", "main"]
