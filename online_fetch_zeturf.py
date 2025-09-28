@@ -597,7 +597,7 @@ def fetch_race_snapshot(
     session: Any | None = None,
     retry: int | None = 3,
     retries: int | None = None,
-    backoff: float = 1.0
+    backoff: float = 1.0,
     sources: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Return a normalised snapshot for ``reunion``/``course``.
