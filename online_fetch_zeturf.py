@@ -63,11 +63,12 @@ class RaceSnapshot:
         return payload
 
 
-def _exp_backoff_sleep(attempt: int, *, base: float = 0.6, cap: float = 5.0) -> None:
+def _exp_backoff_sleep(attempt: int, *, base: float = 1.0, cap: float = 5.0) -> None:
     """Sleep using an exponential backoff policy."""
 
     delay = min(cap, base * (2 ** max(0, attempt - 1)))
     if delay > 0:
+        logger.debug("[ZEturf] backoff %.2fs before retry #%d", delay, attempt)
         time.sleep(delay)
 
 
@@ -258,7 +259,7 @@ def _fetch_snapshot_via_html(
 
     snapshot_mode = "H-30" if phase.upper().replace("-", "") == "H30" else "H-5"
     attempts = max(1, int(retries))
-    base_delay = backoff if backoff > 0 else 0.6
+    base_delay = backoff if backoff > 0 else 1.0
 
     owns_session = False
     sess: Any | None = session
@@ -522,10 +523,15 @@ def _build_snapshot_payload(
         if value in (None, "", 0):
             missing_fields.append(name)
     if missing_fields:
+        source_hint = (
+            snapshot.source_url
+            or (raw_snapshot.get("source_url") if isinstance(raw_snapshot, Mapping) else None)
+        )
         logger.warning(
-            "[ZEturf] Champ clé manquant: %s (rc=%s)",
+            ""[ZEturf] Champ(s) manquant(s): %s (rc=%s, url=%s)",
             ", ".join(sorted(set(missing_fields))),
             rc,
+            source_hint or "?",
         )
 
     return snapshot.as_dict()
@@ -539,7 +545,7 @@ def fetch_race_snapshot(
     url: str | None = None,
     session: Any | None = None,
     retry: int = 2,
-    backoff: float = 0.6,
+    backoff: float = 1.0,
 ) -> dict[str, Any]:
     """Return a normalised snapshot for ``reunion``/``course``.
 
@@ -680,7 +686,7 @@ def fetch_race_snapshot(
             "sources": sources,
             "url": url,
             "retries": max(1, int(retry)),
-            "backoff": backoff if backoff > 0 else 0.6,
+            "backoff": backoff if backoff > 0 else 1.0,
             "initial_delay": 0.3,
         }
 
