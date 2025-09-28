@@ -182,7 +182,7 @@ def _http_get(
         resp = session.get(url, headers=headers, timeout=timeout)
     else:
         resp = requests.get(url, headers=headers, timeout=timeout)
-    if resp.status_code in (403, 429):
+    if resp.status_code in (403, 429) or 500 <= resp.status_code < 600:
         raise RuntimeError(f"HTTP {resp.status_code} returned by {url}")
     text = resp.text
     if _looks_like_suspicious_html(text):
@@ -682,8 +682,10 @@ def fetch_race_snapshot(
     if normalised_entry_url and normalised_entry_url not in candidate_urls:
         candidate_urls.append(normalised_entry_url)
     normalised_user_url = _ensure_absolute_url(url) if url else None
-    if normalised_user_url and normalised_user_url not in candidate_urls:
-        candidate_urls.append(normalised_user_url)
+    if normalised_user_url:
+        if normalised_user_url in candidate_urls:
+            candidate_urls.remove(normalised_user_url)
+        candidate_urls.insert(0, normalised_user_url)
 
     if not course_id_hint:
         for candidate in candidate_urls:
