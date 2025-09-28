@@ -310,11 +310,7 @@ def _run_local_post_course(
         "ev_ecart_total": diff_ev_total,
     }
     arrivee_output = target_out / "arrivee.json"
-    csv_line = target_out / "ligne_resultats.csv"
-    post_course._save_text(csv_line, header + ligne + "\n")
-    outputs["csv_line"] = csv_line
-    outputs["arrivee"] = arrivee_output
-
+    
     ligne = (
         f'{meta.get("rc", "")};{meta.get("hippodrome", "")};{meta.get("date", "")};'
         f'{meta.get("discipline", "")};{total_stake:.2f};{roi:.4f};'
@@ -327,7 +323,11 @@ def _run_local_post_course(
         "R/C;hippodrome;date;discipline;mises;ROI_reel;result_moyen;"
         "ROI_reel_moyen;Brier_total;Brier_moyen;EV_total;EV_ecart;model\n"
     )
-    post_course._save_text(target_out / "ligne_resultats.csv", header + ligne + "\n")
+    post_course._save_json(arrivee_output, arrivee_out)
+    csv_line = target_out / "ligne_resultats.csv"
+    post_course._save_text(csv_line, header + ligne + "\n")
+    outputs["arrivee"] = arrivee_output
+    outputs["csv_line"] = csv_line
 
     cmd = (
         "python update_excel_with_results.py "
