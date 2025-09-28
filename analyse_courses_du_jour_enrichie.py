@@ -889,7 +889,7 @@ def _mark_course_unplayable(rc_dir: Path, missing: Iterable[str]) -> None:
 
     label = rc_dir.name or "?"
     print(
-        f"[ABSTAIN] Course non jouable (data manquante) – {label}",
+        f"[ABSTAIN] Course marquée non jouable (data manquante) – {label}",
         file=sys.stderr,
     )
 
