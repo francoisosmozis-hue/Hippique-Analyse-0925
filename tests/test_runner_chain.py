@@ -13,6 +13,14 @@ def test_compute_overround_cap_other_disciplines() -> None:
     assert cap == pytest.approx(1.30)
 
 
+def test_compute_overround_cap_detects_handicap_from_course_label() -> None:
+    cap = runner_chain.compute_overround_cap(
+        None,
+        "15 partants",
+        course_label="Grand Handicap de Paris",
+    )
+    assert cap == pytest.approx(1.25)
+
 def test_validate_exotics_with_simwrapper_filters_and_alert(monkeypatch):
     def fake_eval(tickets, bankroll, allow_heuristic=True):
         if tickets[0]['id'] == 'fail':
