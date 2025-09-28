@@ -51,13 +51,20 @@ def _evaluate_combo_strict(
     sim_wrapper,
     ev_min: float,
     payout_min: float,
+    allow_heuristic: bool = False,
 ) -> tuple[bool, dict[str, Any], list[str]]:
-    """Evaluate a combo candidate enforcing strict EV/payout guards."""
+    """Evaluate a combo candidate enforcing strict EV/payout guards.
+
+    ``allow_heuristic`` mirrors the CLI flag while keeping the default behaviour
+    strictly factual.  When ``False`` (default) any calibration gap immediately
+    translates into an ``insufficient_data`` status which is then rejected by
+    the guard rails below.
+    """
 
     result = sim_wrapper.evaluate_combo(
         [template],
         bankroll,
-        allow_heuristic=False,
+        allow_heuristic=allow_heuristic,
     )
 
     if not isinstance(result, Mapping):
@@ -1864,10 +1871,11 @@ def cmd_analyse(args: argparse.Namespace) -> None:
             
         keep, enriched, reasons = _evaluate_combo_strict(
             template,
-        bankroll_for_eval,
+            bankroll_for_eval,
             sim_wrapper=sw,
             ev_min=ev_min_exotic,
             payout_min=payout_min_exotic,
+            allow_heuristic=allow_heuristic,
         )
 
         template_copy = dict(template)
