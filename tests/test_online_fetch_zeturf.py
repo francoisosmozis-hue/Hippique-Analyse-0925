@@ -352,6 +352,48 @@ def test_cli_fetch_race_snapshot_defaults_phase(monkeypatch: pytest.MonkeyPatch)
     assert calls["phase"] == "H30"
 
 
+def test_cli_fetch_race_snapshot_accepts_combined_rc(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Providing a combined ``RC`` label should remain supported."""
+
+    calls: dict[str, Any] = {}
+
+    def fake_fetch(
+        rc: str,
+        *,
+        phase: str,
+        sources: Mapping[str, Any],
+        url: str | None,
+        retries: int,
+        backoff: float,
+        initial_delay: float,
+    ) -> dict[str, Any]:
+        calls.setdefault("rc", rc)
+        return {
+            "rc": rc,
+            "hippodrome": "Testville",
+            "date": "2024-09-25",
+            "discipline": "plat",
+            "reunion": "R1",
+            "course": "C1",
+            "runners": [
+                {"id": "3", "name": "Gamma", "odds": 3.0},
+            ],
+            "partants": 1,
+        }
+
+    monkeypatch.setattr(cli, "_load_sources_config", lambda _path=None: _stub_sources_config())
+    monkeypatch.setattr(cli._impl, "fetch_race_snapshot", fake_fetch)
+
+    snapshot = cli.fetch_race_snapshot("R1C1")
+
+    assert calls["rc"] == "R1C1"
+    assert snapshot["reunion"] == "R1"
+    assert snapshot["course"] == "C1"
+    assert snapshot["runners"][0]["num"] == "3"
+
+
 @pytest.mark.parametrize("requested, expected", [("H-30", "H30"), ("H5", "H5")])
 def test_cli_fetch_race_snapshot_normalises_phase_aliases(
     monkeypatch: pytest.MonkeyPatch, requested: str, expected: str
