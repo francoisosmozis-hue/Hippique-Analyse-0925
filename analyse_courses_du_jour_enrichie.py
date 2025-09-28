@@ -1046,6 +1046,33 @@ def _ensure_h5_artifacts(
     stats_fetch_success = False
     stats_recovered = False
     stats_retry_invoked = False
+
+    def _refresh_missing_state() -> bool:
+        """Re-run the output check and update ``missing`` accordingly."""
+
+        nonlocal outcome, missing
+        outcome = _check_enrich_outputs(rc_dir, retry_delay=0.0)
+        if outcome is None:
+            missing = []
+            return True
+        missing = list(outcome.get("details", {}).get("missing", []))
+        return False
+
+    def _attempt_stats_rebuild() -> bool:
+        """Try rebuilding the JE CSV from freshly fetched stats."""
+
+        nonlocal stats_recovered
+        if (
+            missing
+            and stats_fetch_success
+            and not stats_recovered
+            and _missing_requires_stats(missing)
+        ):
+            if _rebuild_je_csv_from_stats(rc_dir):
+                stats_recovered = True
+                if _refresh_missing_state():
+                    return True
+        return False
     if _missing_requires_stats(missing):
         (
             stats_fetch_success,
@@ -1069,23 +1096,12 @@ def _ensure_h5_artifacts(
             _regenerate_chronos_csv(rc_dir)
             
     if retried:
-        outcome = _check_enrich_outputs(rc_dir, retry_delay=0.0)
-        if outcome is None:
+        if _refresh_missing_state():
             return None
-        missing = list(outcome.get("details", {}).get("missing", []))
-
-    if (
-        missing
-        and stats_fetch_success
-        and not stats_recovered
-        and _missing_requires_stats(missing)
-    ):
-        if _rebuild_je_csv_from_stats(rc_dir):
-            stats_recovered = True
-            outcome = _check_enrich_outputs(rc_dir, retry_delay=0.0)
-            if outcome is None:
-                return None
-            missing = list(outcome.get("details", {}).get("missing", []))
+        if _attempt_stats_rebuild():
+            return None
+        if _attempt_stats_rebuild():
+        return None
             
     if missing and retry_cb is not None and not retry_invoked:
         try:
@@ -1096,8 +1112,9 @@ def _ensure_h5_artifacts(
                 file=sys.stderr,
             )
         else:
-            outcome = _check_enrich_outputs(rc_dir, retry_delay=0.0)
-            if outcome is None:
+            if _refresh_missing_state():
+                return None
+            if _attempt_stats_rebuild():
                 return None
             missing = list(outcome.get("details", {}).get("missing", []))
 
