@@ -143,6 +143,51 @@ def test_safe_enrich_h5_recovers_after_stats_fetch(tmp_path, monkeypatch):
     assert rows[1] == ["1", "Alpha", "0.10", "0.20"]
 
 
+def test_ensure_h5_artifacts_rebuilds_csv_from_stats(tmp_path, monkeypatch):
+    """_ensure_h5_artifacts should rebuild the JE CSV after a stats fetch."""
+
+    rc_dir = tmp_path / "R2C1"
+    snap = _write_snapshot(rc_dir)
+    chronos = rc_dir / "chronos.csv"
+    chronos.write_text("num,chrono\n1,\n", encoding="utf-8")
+
+    (rc_dir / "partants.json").write_text(
+        json.dumps({"id2name": {"1": "Bravo"}, "runners": [{"id": "1", "name": "Bravo"}]}),
+        encoding="utf-8",
+    )
+
+    stats_path = rc_dir / "stats_je.json"
+
+    fetch_calls: list[Path] = []
+
+    def fake_fetch(script_path: Path, course_dir: Path) -> bool:
+        assert course_dir == rc_dir
+        if script_path == acd._FETCH_JE_STATS_SCRIPT:
+            fetch_calls.append(script_path)
+            stats_path.write_text(
+                json.dumps({"coverage": 100, "1": {"j_win": "0.30", "e_win": "0.40"}}),
+                encoding="utf-8",
+            )
+            return True
+        return False
+
+    monkeypatch.setattr(acd, "_run_fetch_script", fake_fetch)
+    monkeypatch.setattr(acd.time, "sleep", lambda _delay: None)
+
+    outcome = acd._ensure_h5_artifacts(rc_dir)
+
+    assert outcome is None
+    assert fetch_calls == [acd._FETCH_JE_STATS_SCRIPT]
+
+    je_csv = rc_dir / f"{snap.stem}_je.csv"
+    assert je_csv.exists()
+    assert not (rc_dir / "UNPLAYABLE.txt").exists()
+
+    rows = list(csv.reader(io.StringIO(je_csv.read_text(encoding="utf-8"))))
+    assert rows[0] == ["num", "nom", "j_rate", "e_rate"]
+    assert rows[1] == ["1", "Bravo", "0.30", "0.40"]
+
+
 def test_rebuild_from_stats_uses_normalized_payload(tmp_path):
     """Fallback rebuild should use normalized snapshots when partants absent."""
 
