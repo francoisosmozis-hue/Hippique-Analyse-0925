@@ -142,7 +142,12 @@ def _looks_like_suspicious_html(payload: Any) -> bool:
     return False
 
 
-def _http_get(url: str, *, timeout: float = 12.0) -> str:
+def _http_get(
+    url: str,
+    *,
+    timeout: float = 12.0,
+    session: Any | None = None,
+) -> str:
     """Return raw HTML for ``url`` raising on suspicious throttled payloads."""
 
     if requests is None:
@@ -153,7 +158,10 @@ def _http_get(url: str, *, timeout: float = 12.0) -> str:
         "Accept-Language": "fr-FR,fr;q=0.9",
     }
 
-    resp = requests.get(url, headers=headers, timeout=timeout)
+    if session is not None:
+        resp = session.get(url, headers=headers, timeout=timeout)
+    else:
+        resp = requests.get(url, headers=headers, timeout=timeout)
     if resp.status_code in (403, 429):
         raise RuntimeError(f"HTTP {resp.status_code} returned by {url}")
     text = resp.text
@@ -164,10 +172,15 @@ def _http_get(url: str, *, timeout: float = 12.0) -> str:
     return text
 
 
-def _double_extract(url: str, *, snapshot: str) -> dict[str, Any]:
+def _double_extract(
+    url: str,
+    *,
+    snapshot: str,
+    session: Any | None = None,
+) -> dict[str, Any]:
     """Return parsed data using the official parser with a regex fallback."""
 
-    html = _http_get(url)
+    html = _http_get(url, session=session)
 
     data: dict[str, Any] | None = None
     fallback_used = False
@@ -219,7 +232,12 @@ def _merge_snapshot_data(target: dict[str, Any], source: Mapping[str, Any]) -> N
 
 
 def _fetch_snapshot_via_html(
-    urls: Iterable[str], *, phase: str, retries: int, backoff: float
+    urls: Iterable[str],
+    *,
+    phase: str,
+    retries: int,
+    backoff: float,
+    session: Any | None = None,
 ) -> dict[str, Any] | None:
     """Fetch a course page via HTML and return a parsed snapshot."""
 
@@ -230,23 +248,47 @@ def _fetch_snapshot_via_html(
     attempts = max(1, int(retries))
     base_delay = backoff if backoff > 0 else 0.6
 
-    for url in urls:
-        if not url:
-            continue
-        for attempt in range(1, attempts + 1):
-            try:
-                parsed = _double_extract(url, snapshot=snapshot_mode)
-            except Exception as exc:  # pragma: no cover - defensive logging
-                logger.warning(
-                    "[ZEturf] fallback HTML fetch échec (%s) tentative %d/%d", url, attempt, attempts
-                )
-                logger.debug("[ZEturf] détail erreur fallback HTML: %s", exc)
-                _exp_backoff_sleep(attempt, base=base_delay)
+    owns_session = False
+    sess: Any | None = session
+    if sess is None:
+        try:
+            sess = requests.Session()
+        except Exception:  # pragma: no cover - defensive guard
+            sess = None
+        else:
+            owns_session = True
+
+    try:
+        for url in urls:
+            if not url:
                 continue
-            if parsed:
-                parsed.setdefault("source_url", url)
-                return parsed
-    return None
+            for attempt in range(1, attempts + 1):
+                try:
+                    parsed = _double_extract(
+                        url,
+                        snapshot=snapshot_mode,
+                        session=sess,
+                    )
+                except Exception as exc:  # pragma: no cover - defensive logging
+                    logger.warning(
+                        "[ZEturf] fallback HTML fetch échec (%s) tentative %d/%d",
+                        url,
+                        attempt,
+                        attempts,
+                    )
+                    logger.debug("[ZEturf] détail erreur fallback HTML: %s", exc)
+                    _exp_backoff_sleep(attempt, base=base_delay)
+                    continue
+                if parsed:
+                    parsed.setdefault("source_url", url)
+                    return parsed
+        return None
+    finally:
+        if owns_session and sess is not None:
+            try:
+                sess.close()
+            except Exception:  # pragma: no cover - best effort cleanup
+                pass
 
 
 _DEFAULT_SOURCES_FILE = Path("config/sources.yml")
@@ -478,6 +520,7 @@ def fetch_race_snapshot(
     phase: str = "H30",
     *,
     url: str | None = None,
+    session: Any | None = None,
     retry: int = 2,
     backoff: float = 0.6,
 ) -> dict[str, Any]:
@@ -577,114 +620,136 @@ def fetch_race_snapshot(
     
     html_attempted: set[str] = set()
 
-    def _try_html(urls: Iterable[str]) -> dict[str, Any] | None:
-        ordered: list[str] = []
-        for candidate in urls:
-            if not candidate or candidate in html_attempted:
-                continue
-            ordered.append(candidate)
-        if not ordered:
-            return None
-        html_attempted.update(ordered)
-        return _fetch_snapshot_via_html(
-            ordered,
-            phase=phase_norm,
-            retries=max(1, int(retry)),
-            backoff=backoff,
-        )
-        
-    html_snapshot = _try_html(fallback_urls)
-    if isinstance(html_snapshot, dict) and html_snapshot:
-        raw_snapshot = dict(html_snapshot)
-        
-    fetch_fn = getattr(_impl, "fetch_race_snapshot")
-    try:        
-        signature = inspect.signature(fetch_fn)
-    except (TypeError, ValueError):  # pragma: no cover - builtins without signature
-        signature = None
+    owns_session = False
+    session_obj: Any | None = session
+    if session_obj is None and requests is not None:
+        try:
+            session_obj = requests.Session()
+        except Exception:  # pragma: no cover - defensive guard
+            session_obj = None
+        else:
+            owns_session = True
 
-    fetch_kwargs = {
-        "phase": phase_norm,
-        "sources": sources,
-        "url": url,
-        "retries": max(1, int(retry)),
-        "backoff": backoff if backoff > 0 else 0.6,
-        "initial_delay": 0.3,
-    }
+    try:
+        def _try_html(urls: Iterable[str]) -> dict[str, Any] | None:
+            ordered: list[str] = []
+            for candidate in urls:
+                if not candidate or candidate in html_attempted:
+                    continue
+                ordered.append(candidate)
+            if not ordered:
+                return None
+            html_attempted.update(ordered)
+            return _fetch_snapshot_via_html(
+                ordered,
+                phase=phase_norm,
+                retries=max(1, int(retry)),
+                backoff=backoff,
+                session=session_obj,
+            )
 
-    arg_candidates: list[tuple[Any, ...]] = []
-    if signature is not None and "course" in signature.parameters:
-        arg_candidates.append((reunion_norm, course_norm))
-    arg_candidates.append((rc,))
-    
-    if raw_snapshot is None or not raw_snapshot.get("runners"):
-        for args in arg_candidates:
-            try:
-                result = fetch_fn(*args, **fetch_kwargs)
-            except TypeError as exc:  # pragma: no cover - defensive
-                last_error = exc
-                continue
-            except Exception as exc:  # pragma: no cover - propagate after logging
-                last_error = exc
-                break
-            snapshot_candidate = dict(result) if isinstance(result, Mapping) else {}
-            if snapshot_candidate:
-                if raw_snapshot is None:
-                    raw_snapshot = snapshot_candidate
-                else:
-                    _merge_snapshot_data(raw_snapshot, snapshot_candidate)
-                last_error = None
-                break
+        html_snapshot = _try_html(fallback_urls)
+        if isinstance(html_snapshot, dict) and html_snapshot:
+            raw_snapshot = dict(html_snapshot)
+
+        fetch_fn = getattr(_impl, "fetch_race_snapshot")
+        try:
+            signature = inspect.signature(fetch_fn)
+        except (TypeError, ValueError):  # pragma: no cover - builtins without signature
+            signature = None
+
+        fetch_kwargs = {
+            "phase": phase_norm,
+            "sources": sources,
+            "url": url,
+            "retries": max(1, int(retry)),
+            "backoff": backoff if backoff > 0 else 0.6,
+            "initial_delay": 0.3,
+        }
+
+        arg_candidates: list[tuple[Any, ...]] = []
+        if signature is not None and "course" in signature.parameters:
+            arg_candidates.append((reunion_norm, course_norm))
+        arg_candidates.append((rc,)) 
                 
         if raw_snapshot is None or not raw_snapshot.get("runners"):
-            fallback_snapshot: dict[str, Any] | None = _try_html(fallback_urls)
-            if fallback_snapshot:
-                if raw_snapshot is None:
-                    raw_snapshot = dict(fallback_snapshot)
-                else:
-                    _merge_snapshot_data(raw_snapshot, fallback_snapshot)
-                html_snapshot = fallback_snapshot
-            
-    if raw_snapshot is None:
-        if last_error is not None:
-            logger.error("[ZEturf] échec fetch_race_snapshot pour %s: %s", rc, last_error)
-        else:
-            logger.error("[ZEturf] échec fetch_race_snapshot pour %s: aucune donnée recueillie", rc)
-        return RaceSnapshot(
-            meeting=None,
-            date=None,
-            reunion=reunion_norm,
-            course=course_norm,
-            discipline=None,
-            runners=[],
-            partants=None,
+            for args in arg_candidates:
+                try:
+                    result = fetch_fn(*args, **fetch_kwargs)
+                except TypeError as exc:  # pragma: no cover - defensive
+                    last_error = exc
+                    continue
+                except Exception as exc:  # pragma: no cover - propagate after logging
+                    last_error = exc
+                    break
+                snapshot_candidate = dict(result) if isinstance(result, Mapping) else {}
+                if snapshot_candidate:
+                    if raw_snapshot is None:
+                        raw_snapshot = snapshot_candidate
+                    else:
+                        _merge_snapshot_data(raw_snapshot, snapshot_candidate)
+                    last_error = None
+                    break
+
+            if raw_snapshot is None or not raw_snapshot.get("runners"):
+                fallback_snapshot: dict[str, Any] | None = _try_html(fallback_urls)
+                if fallback_snapshot:
+                    if raw_snapshot is None:
+                        raw_snapshot = dict(fallback_snapshot)
+                    else:
+                        _merge_snapshot_data(raw_snapshot, fallback_snapshot)
+                    html_snapshot = fallback_snapshot
+
+        if raw_snapshot is None:
+            if last_error is not None:
+                logger.error("[ZEturf] échec fetch_race_snapshot pour %s: %s", rc, last_error)
+            else:
+                logger.error(
+                    "[ZEturf] échec fetch_race_snapshot pour %s: aucune donnée recueillie",
+                    rc,
+                )
+            return RaceSnapshot(
+                meeting=None,
+                date=None,
+                reunion=reunion_norm,
+                course=course_norm,
+                discipline=None,
+                runners=[],
+                partants=None,
+                phase=phase_norm,
+                rc=rc,
+                r_label=reunion_norm,
+                c_label=course_norm,
+            ).as_dict()
+
+        source_url = entry.get("url") if isinstance(entry.get("url"), str) else None
+        if not source_url and html_snapshot and isinstance(html_snapshot.get("source_url"), str):
+            source_url = str(html_snapshot["source_url"])
+        if not source_url and url:
+            source_url = url
+        snapshot = _build_snapshot_payload(
+            raw_snapshot,
+            reunion_norm,
+            course_norm,            
             phase=phase_norm,
-            rc=rc,
-            r_label=reunion_norm,
-            c_label=course_norm,
-        ).as_dict()
+            source_url=source_url,
+        )
         
-    source_url = entry.get("url") if isinstance(entry.get("url"), str) else None
-    if not source_url and html_snapshot and isinstance(html_snapshot.get("source_url"), str):
-        source_url = str(html_snapshot["source_url"])
-    if not source_url and url:
-        source_url = url
-    snapshot = _build_snapshot_payload(
-        raw_snapshot,
-        reunion_norm,
-        course_norm,
-        phase=phase_norm,
-        source_url=source_url,
-    )
+        meta = raw_snapshot.get("meta") if isinstance(raw_snapshot, Mapping) else None
+        if isinstance(meta, dict):
+            thresholds = meta.setdefault("exotic_thresholds", {})
+            if isinstance(thresholds, dict):
+                thresholds.setdefault("ev_min", _BASE_EV_THRESHOLD)
+                thresholds.setdefault("payout_min", _BASE_PAYOUT_THRESHOLD)
 
-    meta = raw_snapshot.get("meta") if isinstance(raw_snapshot, Mapping) else None
-    if isinstance(meta, dict):
-        thresholds = meta.setdefault("exotic_thresholds", {})
-        if isinstance(thresholds, dict):
-            thresholds.setdefault("ev_min", _BASE_EV_THRESHOLD)
-            thresholds.setdefault("payout_min", _BASE_PAYOUT_THRESHOLD)
+        return snapshot
+    finally:
+        if owns_session and session_obj is not None:
+            try:
+                session_obj.close()
+            except Exception:  # pragma: no cover - best effort cleanup
+                pass
 
-    return snapshot
 
 
 main = _impl.main
