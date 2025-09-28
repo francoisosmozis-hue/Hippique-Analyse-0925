@@ -5,10 +5,12 @@
 import argparse
 import copy
 import datetime as dt
+import inspect
 import json
 import logging
 import math
 import os
+import sys
 import re
 from functools import lru_cache, partial
 from pathlib import Path
@@ -23,6 +25,35 @@ DEFAULT_OUTPUT_DIR = "out/hminus5"
 
 EXOTIC_BASE_EV = 0.40
 EXOTIC_BASE_PAYOUT = 10.0
+
+_DEFAULT_ALLOW_COMBO: Callable[..., Any] | None = None
+_DEFAULT_APPLY_TICKET_POLICY: Callable[..., Any] | None = None
+
+_ALLOW_COMBO_BASELINES: set[Callable[..., Any]] = set()
+_APPLY_POLICY_BASELINES: set[Callable[..., Any]] = set()
+
+
+def _filter_kwargs(func: Callable[..., Any], overrides: Mapping[str, Any]) -> dict[str, Any]:
+    """Return keyword arguments supported by ``func`` from ``overrides``."""
+
+    try:
+        signature = inspect.signature(func)
+    except (TypeError, ValueError):  # pragma: no cover - builtins without signature
+        return dict(overrides)
+
+    accepts_kwargs = any(
+        param.kind is inspect.Parameter.VAR_KEYWORD for param in signature.parameters.values()
+    )
+    if accepts_kwargs:
+        return dict(overrides)
+
+    supported = {
+        name
+        for name, param in signature.parameters.items()
+        if param.kind
+        in (inspect.Parameter.KEYWORD_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+    }
+    return {key: value for key, value in overrides.items() if key in supported}
 
 
 def _compute_market_overround(odds: Mapping[str, Any]) -> float | None:
@@ -1248,6 +1279,9 @@ def _implied_from_odds_map(odds_map: dict[str, float]) -> dict[str, float]:
         Callable[[list[float]], list[float]], _load_simulate_ev()["implied_probs"]
     )
     probs = implied_probs_fn(values)
+    total = sum(probs)
+    if total > 0:
+        probs = [prob / total for prob in probs]
     implied = {}
     for cid, odds, prob in zip(ids, values, probs):
         implied[cid] = prob if odds > 0 else 0.0
@@ -1278,7 +1312,9 @@ def _snapshot_odds_and_probs(snapshot) -> tuple[dict[str, float], dict[str, floa
                 if cid is None:
                     continue
                 cid_str = str(cid)
-                odds_map[cid_str] = _coerce_odds(runner.get("odds"))
+                odds_value = _coerce_odds(runner.get("odds"))
+                if odds_value > 0.0 or cid_str not in odds_map:
+                    odds_map[cid_str] = odds_value
                 if "p_imp" in runner:
                     implied[cid_str] = _coerce_probability(runner.get("p_imp"))
                 elif "p_implied" in runner:
@@ -1311,7 +1347,9 @@ def _snapshot_odds_and_probs(snapshot) -> tuple[dict[str, float], dict[str, floa
             if cid is None:
                 continue
             cid_str = str(cid)
-            odds_map[cid_str] = _coerce_odds(runner.get("odds"))
+            odds_value = _coerce_odds(runner.get("odds"))
+            if odds_value > 0.0 or cid_str not in odds_map:
+                odds_map[cid_str] = odds_value
             if "p_imp" in runner:
                 implied[cid_str] = _coerce_probability(runner.get("p_imp"))
             elif "p_implied" in runner:
@@ -1604,13 +1642,40 @@ def export(
 def cmd_analyse(args: argparse.Namespace) -> None:
     import simulate_wrapper as sw
     from logging_io import CSV_HEADER, append_csv_line, append_json
-    from tickets_builder import allow_combo, apply_ticket_policy
+    from tickets_builder import (
+        allow_combo as _allow_combo_impl,
+        apply_ticket_policy as _apply_ticket_policy_impl,
+    )
     from validator_ev import (
         combos_allowed as combos_ev_gate,
         summarise_validation,
         validate_inputs,
     )
 
+    
+    module_self = sys.modules[__name__]
+    module_vars = getattr(module_self, "__dict__", {})
+
+    global _DEFAULT_ALLOW_COMBO, _DEFAULT_APPLY_TICKET_POLICY
+    _ALLOW_COMBO_BASELINES.add(_allow_combo_impl)
+    _APPLY_POLICY_BASELINES.add(_apply_ticket_policy_impl)
+    if _DEFAULT_ALLOW_COMBO is None:
+        _DEFAULT_ALLOW_COMBO = _allow_combo_impl
+    if _DEFAULT_APPLY_TICKET_POLICY is None:
+        _DEFAULT_APPLY_TICKET_POLICY = _apply_ticket_policy_impl
+
+    allow_combo_attr = module_vars.get("allow_combo")
+    if allow_combo_attr is not None and allow_combo_attr not in _ALLOW_COMBO_BASELINES:
+        allow_combo = allow_combo_attr
+    else:
+        allow_combo = _allow_combo_impl
+
+    policy_attr = module_vars.get("apply_ticket_policy")
+    if policy_attr is not None and policy_attr not in _APPLY_POLICY_BASELINES:
+        apply_ticket_policy_fn = policy_attr
+    else:
+        apply_ticket_policy_fn = _apply_ticket_policy_impl
+        
     cfg = load_yaml(args.gpi)
     output_dir = _resolve_output_dir()
     cfg["OUTDIR_DEFAULT"] = output_dir
@@ -1804,14 +1869,20 @@ def cmd_analyse(args: argparse.Namespace) -> None:
             }
             runners.append(runner)
 
-    sp_tickets, combo_templates, _combo_info = apply_ticket_policy(
+    policy_kwargs = _filter_kwargs(
+        apply_ticket_policy_fn,
+        {
+            "ev_threshold": ev_min_exotic,
+            "payout_threshold": payout_min_exotic,
+            "allow_heuristic": allow_heuristic,
+        },
+    )
+    sp_tickets, combo_templates, _combo_info = apply_ticket_policy_fn(
         cfg,
         runners,
         combo_candidates=None,
         combos_source=partants_data,
-        ev_threshold=ev_min_exotic,
-        payout_threshold=payout_min_exotic,
-        allow_heuristic=allow_heuristic,
+        **policy_kwargs,
     )
 
     ev_sp = 0.0
