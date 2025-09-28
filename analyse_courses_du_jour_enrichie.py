@@ -1014,7 +1014,15 @@ def _ensure_h5_artifacts(
         retried = True
         stats_success = _run_fetch_script(_FETCH_JE_STATS_SCRIPT, rc_dir)
         if stats_success:
-            _rebuild_je_csv_from_stats(rc_dir)
+            rebuilt = _rebuild_je_csv_from_stats(rc_dir)
+            if not rebuilt and retry_cb is not None:
+                try:
+                    retry_cb()
+                except Exception as exc:  # pragma: no cover - defensive logging
+                    print(
+                        f"[WARN] relance enrich_h5 a échoué pour {rc_dir.name}: {exc}",
+                        file=sys.stderr,
+                    )
     if _missing_requires_chronos(missing):
         retried = True
         success = False
