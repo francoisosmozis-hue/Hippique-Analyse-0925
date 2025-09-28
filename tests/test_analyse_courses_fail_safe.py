@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import csv
+import io
+import json
 from pathlib import Path
 
 import analyse_courses_du_jour_enrichie as acd
@@ -74,3 +77,62 @@ def test_safe_enrich_h5_marks_course_unplayable(tmp_path, monkeypatch):
     marker = rc_dir / "UNPLAYABLE.txt"
     assert marker.exists()
     assert "non jouable" in marker.read_text(encoding="utf-8")
+
+
+def test_safe_enrich_h5_recovers_after_stats_fetch(tmp_path, monkeypatch):
+    """Successful stats fetch should regenerate the JE CSV and resume."""
+
+    rc_dir = tmp_path / "R1C1"
+    snapshot = _write_snapshot(rc_dir)
+    chronos = rc_dir / "chronos.csv"
+    partants = rc_dir / "partants.json"
+    stats = rc_dir / "stats_je.json"
+    je_csv = rc_dir / f"{snapshot.stem}_je.csv"
+
+    calls: dict[str, int] = {"enrich": 0}
+
+    def fake_enrich(target: Path, *, budget: float, kelly: float) -> None:
+        assert target == rc_dir
+        calls["enrich"] += 1
+        snapshot.touch()
+        chronos.write_text("num\n1\n", encoding="utf-8")
+        partants.write_text(
+            json.dumps(
+                {
+                    "id2name": {"1": "Alpha"},
+                    "runners": [{"id": "1", "name": "Alpha"}],
+                }
+            ),
+            encoding="utf-8",
+        )
+        if stats.exists():
+            stats.unlink()
+        if je_csv.exists():
+            je_csv.unlink()
+
+    def fake_fetch(script_path: Path, course_dir: Path) -> bool:
+        assert course_dir == rc_dir
+        if script_path == acd._FETCH_JE_STATS_SCRIPT:
+            stats.write_text(
+                json.dumps({"coverage": 100, "1": {"j_win": "0.10", "e_win": "0.20"}}),
+                encoding="utf-8",
+            )
+            return True
+        return False
+
+    monkeypatch.setattr(acd, "enrich_h5", fake_enrich)
+    monkeypatch.setattr(acd, "_run_fetch_script", fake_fetch)
+    monkeypatch.setattr(acd.time, "sleep", lambda _delay: None)
+
+    success, outcome = acd.safe_enrich_h5(rc_dir, budget=5.0, kelly=0.05)
+
+    assert success is True
+    assert outcome is None
+    assert calls["enrich"] >= 1
+    assert je_csv.exists()
+    assert not (rc_dir / "UNPLAYABLE.txt").exists()
+
+    content = je_csv.read_text(encoding="utf-8")
+    rows = list(csv.reader(io.StringIO(content)))
+    assert rows[0] == ["num", "nom", "j_rate", "e_rate"]
+    assert rows[1] == ["1", "Alpha", "0.10", "0.20"]
