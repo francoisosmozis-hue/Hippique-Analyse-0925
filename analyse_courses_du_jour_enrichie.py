@@ -852,6 +852,38 @@ def _run_fetch_script(script_path: Path, rc_dir: Path) -> bool:
     return True
 
 
+def _recover_je_csv_from_stats(
+    rc_dir: Path, *, retry_cb: Callable[[], None] | None = None
+) -> tuple[bool, bool, bool]:
+    """Fetch stats and rebuild the JE CSV if possible.
+
+    Returns a tuple ``(fetch_success, recovered, retry_invoked)`` so the caller
+    can decide whether to re-run post fetch checks and whether ``retry_cb`` was
+    already invoked inside the helper.
+    """
+
+    stats_fetch_success = _run_fetch_script(_FETCH_JE_STATS_SCRIPT, rc_dir)
+    if not stats_fetch_success:
+        return False, False, False
+
+    if _rebuild_je_csv_from_stats(rc_dir):
+        return True, True, False
+
+    if retry_cb is None:
+        return True, False, False
+
+    try:
+        retry_cb()
+    except Exception as exc:  # pragma: no cover - defensive logging
+        print(
+            f"[WARN] relance enrich_h5 a échoué pour {rc_dir.name}: {exc}",
+            file=sys.stderr,
+        )
+        return True, False, False
+
+    return True, True, True
+
+
 def _rebuild_je_csv_from_stats(rc_dir: Path) -> bool:
     """Attempt to rebuild ``*_je.csv`` using freshly fetched stats."""
 
@@ -1013,23 +1045,16 @@ def _ensure_h5_artifacts(
 
     stats_fetch_success = False
     if _missing_requires_stats(missing):
-        stats_fetch_success = _run_fetch_script(_FETCH_JE_STATS_SCRIPT, rc_dir)
-        if stats_fetch_success:
-            stats_recovered = False
-            if _rebuild_je_csv_from_stats(rc_dir):
-                stats_recovered = True
-            elif retry_cb is not None:
-                try:
-                    retry_cb()
-                except Exception as exc:  # pragma: no cover - defensive logging
-                    print(
-                        f"[WARN] relance enrich_h5 a échoué pour {rc_dir.name}: {exc}",
-                        file=sys.stderr,
-                    )
-                else:
-                    retry_invoked = True
-                    stats_recovered = True
-            retried = retried or stats_recovered or stats_fetch_success
+        stats_fetch_success, stats_recovered, stats_retry_invoked = _recover_je_csv_from_stats(
+            rc_dir, retry_cb=retry_cb
+        )
+        retry_invoked = retry_invoked or stats_retry_invoked
+        retried = (
+            retried
+            or stats_fetch_success
+            or stats_recovered
+            or stats_retry_invoked
+        )
     if _missing_requires_chronos(missing):
         retried = True
         success = False
