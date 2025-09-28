@@ -252,6 +252,44 @@ def test_ensure_h5_artifacts_rebuilds_csv_from_stats(tmp_path, monkeypatch):
     assert rows[1] == ["1", "Bravo", "0.30", "0.40"]
 
 
+def test_recover_je_csv_from_stats_helper(tmp_path, monkeypatch):
+    """Helper should fetch stats and rebuild the JE CSV when possible."""
+
+    rc_dir = tmp_path / "R3C1"
+    snap = _write_snapshot(rc_dir)
+
+    (rc_dir / "partants.json").write_text(
+        json.dumps({"id2name": {"5": "Delta"}, "runners": [{"id": "5", "name": "Delta"}]}),
+        encoding="utf-8",
+    )
+
+    stats_path = rc_dir / "stats_je.json"
+
+    def fake_fetch(script_path: Path, course_dir: Path) -> bool:
+        assert course_dir == rc_dir
+        assert script_path == acd._FETCH_JE_STATS_SCRIPT
+        stats_path.write_text(
+            json.dumps({"coverage": 100, "5": {"j_win": "0.70", "e_win": "0.80"}}),
+            encoding="utf-8",
+        )
+        return True
+
+    monkeypatch.setattr(acd, "_run_fetch_script", fake_fetch)
+
+    fetch_success, recovered, retry_invoked = acd._recover_je_csv_from_stats(rc_dir)
+
+    assert fetch_success is True
+    assert recovered is True
+    assert retry_invoked is False
+
+    je_csv = rc_dir / f"{snap.stem}_je.csv"
+    assert je_csv.exists()
+
+    rows = list(csv.reader(io.StringIO(je_csv.read_text(encoding="utf-8"))))
+    assert rows[0] == ["num", "nom", "j_rate", "e_rate"]
+    assert rows[1] == ["5", "Delta", "0.70", "0.80"]
+
+
 def test_rebuild_from_stats_uses_normalized_payload(tmp_path):
     """Fallback rebuild should use normalized snapshots when partants absent."""
 
