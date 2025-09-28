@@ -24,10 +24,12 @@ from logging_io import append_csv_line, CSV_HEADER
 def compute_overround_cap(
     discipline: str | None,
     partants: Any,
+    *,
     default_cap: float = 1.30,
+    course_label: str | None = None,
 ) -> float:
-    """Return the overround ceiling adjusted for flat handicaps."""
-
+    """Return the overround ceiling adjusted for flat-handicap races."""
+    
     try:
         cap = float(default_cap)
     except (TypeError, ValueError):  # pragma: no cover - defensive
@@ -35,25 +37,46 @@ def compute_overround_cap(
     if cap <= 0:
         cap = 1.30
 
-    label = (discipline or "").strip().lower()
-    partants_int: int | None = None
-    if isinstance(partants, (int, float)):
-        try:
-            partants_int = int(partants)
-        except (TypeError, ValueError):  # pragma: no cover - defensive
-            partants_int = None
-    elif isinstance(partants, str):
-        match = re.search(r"\d+", partants)
-        if match:
+    def _coerce_partants(value: Any) -> int | None:
+        if isinstance(value, (int, float)):
             try:
-                partants_int = int(match.group())
-            except ValueError:  # pragma: no cover - defensive
-                partants_int = None
+                return int(value)
+            except (TypeError, ValueError):  # pragma: no cover - defensive
+                return None
+        if isinstance(value, str):
+            match = re.search(r"\d+", value)
+            if match:
+                try:
+                    return int(match.group())
+                except ValueError:  # pragma: no cover - defensive
+                    return None
+        return None
 
-    lowered = label.replace("é", "e")
-    is_flat = any(word in lowered for word in ("plat", "galop", "galopeur"))
+    partants_int = _coerce_partants(partants)
+
+    def _normalise_text(value: str | None) -> str:
+        if not value:
+            return ""
+        lowered = value.lower()
+        for src, dst in (("é", "e"), ("è", "e"), ("ê", "e"), ("à", "a")):
+            lowered = lowered.replace(src, dst)
+        return lowered
+
+    discipline_text = _normalise_text(discipline)
+    course_text = _normalise_text(course_label)
+    combined_text = " ".join(token for token in (discipline_text, course_text) if token)
+
+    flat_tokens = ("plat", "galop", "galopeur")
     handicap_tokens = ("handicap", "hand.", "hcap", "handi")
-    is_handicap = any(token in lowered for token in handicap_tokens)
+    obstacle_tokens = ("haies", "steeple", "obstacle", "cross")
+    trot_tokens = ("trot", "attel", "mont", "sulky")
+
+    flat_hint = any(token in combined_text for token in flat_tokens)
+    is_handicap = any(token in combined_text for token in handicap_tokens)
+    is_obstacle = any(token in combined_text for token in obstacle_tokens)
+    is_trot = any(token in combined_text for token in trot_tokens)
+
+    is_flat = flat_hint or (is_handicap and not is_obstacle and not is_trot)
 
     if is_flat and (is_handicap or (partants_int is not None and partants_int >= 14)):
         return min(cap, 1.25)
@@ -68,10 +91,16 @@ def filter_exotics_by_overround(
     overround_max: float = 1.30,
     discipline: str | None = None,
     partants: Any = None,
+    course_label: str | None = None,
 ) -> List[List[Dict[str, Any]]]:
     """Filter exotic tickets when the market overround exceeds the cap."""
 
-    cap = compute_overround_cap(discipline, partants, default_cap=overround_max)
+    cap = compute_overround_cap(
+        discipline,
+        partants,
+        default_cap=overround_max,
+        course_label=course_label,
+    )
     if overround is None or overround <= cap:
         return [list(ticket) for ticket in exotics]
     return []
