@@ -1100,6 +1100,9 @@ def _ensure_h5_artifacts(
             or stats_recovered
             or stats_retry_invoked
         )
+        if stats_retry_invoked and not stats_recovered:
+            if _attempt_stats_rebuild(allow_without_fetch=True):
+                return None
     if _missing_requires_chronos(missing):
         retried = True
         success = False
