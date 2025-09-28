@@ -637,13 +637,13 @@ def fetch_race_snapshot(
                 break
                 
         if raw_snapshot is None or not raw_snapshot.get("runners"):
-        fallback_snapshot: dict[str, Any] | None = _try_html(fallback_urls)
-        if fallback_snapshot:
-            if raw_snapshot is None:
-                raw_snapshot = dict(fallback_snapshot)
-            else:
-                _merge_snapshot_data(raw_snapshot, fallback_snapshot)
-            html_snapshot = fallback_snapshot
+            fallback_snapshot: dict[str, Any] | None = _try_html(fallback_urls)
+            if fallback_snapshot:
+                if raw_snapshot is None:
+                    raw_snapshot = dict(fallback_snapshot)
+                else:
+                    _merge_snapshot_data(raw_snapshot, fallback_snapshot)
+                html_snapshot = fallback_snapshot
             
     if raw_snapshot is None:
         if last_error is not None:
