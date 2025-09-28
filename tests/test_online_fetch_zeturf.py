@@ -394,6 +394,54 @@ def test_cli_fetch_race_snapshot_accepts_combined_rc(
     assert snapshot["runners"][0]["num"] == "3"
 
 
+def test_cli_fetch_race_snapshot_meta_fallback(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Metadata provided under ``meta`` should populate missing fields."""
+
+    calls: dict[str, Any] = {}
+
+    def fake_fetch(
+        reunion: str,
+        course: str,
+        *,
+        phase: str,
+        sources: Mapping[str, Any],
+        url: str | None,
+        retries: int,
+        backoff: float,
+        initial_delay: float,
+    ) -> dict[str, Any]:
+        calls.setdefault("phase", phase)
+        return {
+            "rc": f"{reunion}{course}",
+            "runners": [{"id": "9", "name": "Iota"}],
+            "meta": {
+                "meeting": "Fallback City",
+                "discipline": "plat",
+                "partants": "16 partants",
+                "date": "2024-11-02",
+            },
+        }
+
+    monkeypatch.setattr(cli, "_load_sources_config", lambda _path=None: {"rc_map": {}})
+    monkeypatch.setattr(cli._impl, "fetch_race_snapshot", fake_fetch)
+
+    with caplog.at_level(logging.WARNING):
+        snapshot = cli.fetch_race_snapshot("R2", "C3", phase="H5")
+
+    assert snapshot["meeting"] == "Fallback City"
+    assert snapshot["discipline"] == "plat"
+    assert snapshot["partants"] == 16
+    assert snapshot["date"] == "2024-11-02"
+    assert snapshot["reunion"] == "R2"
+    assert snapshot["course"] == "C3"
+    assert calls["phase"] == "H5"
+
+    warn_messages = [record.message for record in caplog.records if "Champ(s) manquant" in record.message]
+    assert not warn_messages
+
+
 @pytest.mark.parametrize("requested, expected", [("H-30", "H30"), ("H5", "H5")])
 def test_cli_fetch_race_snapshot_normalises_phase_aliases(
     monkeypatch: pytest.MonkeyPatch, requested: str, expected: str
