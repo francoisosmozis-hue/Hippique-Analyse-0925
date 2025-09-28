@@ -198,9 +198,10 @@ def _double_extract(
     data: dict[str, Any] | None = None
     fallback_used = False
     parse_fn = getattr(_impl, "parse_course_page", None)
+    snapshot_mode = "H-30" if str(snapshot).upper().replace("-", "") == "H30" else "H-5"
     if callable(parse_fn):
         try:
-            parsed = parse_fn(url, snapshot=snapshot)
+            parsed = parse_fn(url, snapshot=snapshot_mode)
         except Exception as exc:  # pragma: no cover - defensive logging
             logger.warning("parse_course_page a échoué (%s) pour %s", exc, url)
         else:
