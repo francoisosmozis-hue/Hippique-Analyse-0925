@@ -928,6 +928,32 @@ def _ensure_h5_artifacts(
     return outcome
 
 
+def _execute_h5_chain(
+    rc_dir: Path, *, budget: float, kelly: float
+) -> tuple[bool, dict[str, Any] | None]:
+    """Run the full H-5 enrichment pipeline with fail-safe guards.
+
+    The helper executes ``enrich_h5`` followed by the JE/chronos availability
+    checks.  When the required CSV artefacts remain missing after the retry,
+    the function returns ``(False, abstention_payload)`` so callers can persist
+    the structured ``no-bet`` decision.  On success the downstream p_finale,
+    pipeline and prompt steps are executed and ``(True, None)`` is returned.
+    """
+
+    enrich_h5(rc_dir, budget=budget, kelly=kelly)
+    outcome = _ensure_h5_artifacts(
+        rc_dir,
+        retry_cb=lambda d=rc_dir: enrich_h5(d, budget=budget, kelly=kelly),
+    )
+    if outcome is not None:
+        return False, outcome
+
+    build_p_finale(rc_dir, budget=budget, kelly=kelly)
+    run_pipeline(rc_dir, budget=budget, kelly=kelly)
+    build_prompt_from_meta(rc_dir, budget=budget, kelly=kelly)
+    return True, None
+
+
 def export_per_horse_csv(rc_dir: Path) -> Path:
     """Export a per-horse report aggregating probabilities and J/E stats."""
 
@@ -1073,20 +1099,28 @@ def _process_single_course(
     rc_dir = ensure_dir(base_dir / f"{reunion}{course}")
     write_snapshot_from_geny(course_id, phase, rc_dir)
     outcome: dict[str, Any] | None = None
+    pipeline_done = False
     if phase.upper() == "H5":
-        enrich_h5(rc_dir, budget=budget, kelly=kelly)
-        outcome = _ensure_h5_artifacts(
+        pipeline_done, outcome = _execute_h5_chain(
             rc_dir,
-            retry_cb=lambda d=rc_dir: enrich_h5(d, budget=budget, kelly=kelly),
+            budget=budget,
+            kelly=kelly,
         )
-        if outcome is None:
-            build_p_finale(rc_dir, budget=budget, kelly=kelly)
-            run_pipeline(rc_dir, budget=budget, kelly=kelly)
-            build_prompt_from_meta(rc_dir, budget=budget, kelly=kelly)
+        if pipeline_done:
             csv_path = export_per_horse_csv(rc_dir)
             print(f"[INFO] per-horse report écrit: {csv_path}")
-        else:
+            outcome = None
+        elif outcome is not None:
             _write_json_file(rc_dir / "decision.json", outcome)
+        else:  # pragma: no cover - defensive fallback
+            _write_json_file(
+                rc_dir / "decision.json",
+                {
+                    "status": "no-bet",
+                    "decision": "ABSTENTION",
+                    "reason": "pipeline-error",
+                },
+            )
     if gcs_prefix is not None:
         _upload_artifacts(rc_dir, gcs_prefix=gcs_prefix)
     return outcome
@@ -1129,20 +1163,27 @@ def _process_reunion(
         rc_dir = ensure_dir(base_dir / f"{r_label}{c_label}")
         write_snapshot_from_geny(course_id, phase, rc_dir)
         outcome: dict[str, Any] | None = None
+        pipeline_done = False
         if phase.upper() == "H5":
-            enrich_h5(rc_dir, budget=budget, kelly=kelly)
-            outcome = _ensure_h5_artifacts(
+            pipeline_done, outcome = _execute_h5_chain(
                 rc_dir,
-                retry_cb=lambda d=rc_dir: enrich_h5(d, budget=budget, kelly=kelly),
+                budget=budget,
+                kelly=kelly,
             )
-            if outcome is None:
-                build_p_finale(rc_dir, budget=budget, kelly=kelly)
-                run_pipeline(rc_dir, budget=budget, kelly=kelly)
-                build_prompt_from_meta(rc_dir, budget=budget, kelly=kelly)
+            if pipeline_done:
                 csv_path = export_per_horse_csv(rc_dir)
                 print(f"[INFO] per-horse report écrit: {csv_path}")
-            else:
+            elif outcome is not None:
                 _write_json_file(rc_dir / "decision.json", outcome)
+            else:  # pragma: no cover - defensive fallback
+                _write_json_file(
+                    rc_dir / "decision.json",
+                    {
+                        "status": "no-bet",
+                        "decision": "ABSTENTION",
+                        "reason": "pipeline-error",
+                    },
+                )
         if gcs_prefix is not None:
             _upload_artifacts(rc_dir, gcs_prefix=gcs_prefix)
 
