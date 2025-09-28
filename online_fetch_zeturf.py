@@ -198,6 +198,13 @@ def _double_extract(
 
     data: dict[str, Any] | None = None
     fallback_used = False
+    fallback_data: dict[str, Any] | None = None
+
+    def _ensure_fallback() -> dict[str, Any]:
+        nonlocal fallback_data
+        if fallback_data is None:
+            fallback_data = _fallback_parse_html(html)
+        return fallback_data
     parse_fn = getattr(_impl, "parse_course_page", None)
     snapshot_mode = "H-30" if str(snapshot).upper().replace("-", "") == "H30" else "H-5"
     if callable(parse_fn):
@@ -210,7 +217,7 @@ def _double_extract(
                 data = {str(k): v for k, v in parsed.items()}
 
     if not data or not data.get("runners"):
-        fallback = _fallback_parse_html(html)
+        fallback = _ensure_fallback()
         if fallback.get("runners"):
             data = {**(data or {}), **fallback}
             fallback_used = True
@@ -221,6 +228,23 @@ def _double_extract(
     if not data:
         return {}
 
+    missing_keys: list[str] = []
+    for key in ("meeting", "discipline", "partants"):
+        value = data.get(key)
+        if value in (None, "", 0):
+            missing_keys.append(key)
+
+    if missing_keys:
+        fallback = _ensure_fallback()
+        for key in missing_keys:
+            candidate = fallback.get(key)
+            if candidate not in (None, "", 0):
+                data[key] = candidate
+                fallback_used = True
+
+    for key in ("meeting", "discipline", "partants"):
+        if data.get(key) in (None, "", 0):
+            logger.warning("[ZEturf] Champ clé manquant: %s (url=%s)", key, url)
     data.setdefault("source_url", url)
     if fallback_used:
         logger.warning("[ZEturf] Extraction fallback utilisée pour %s", url)
