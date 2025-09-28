@@ -262,3 +262,31 @@ def test_exotics_rejects_on_status(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     log_decision = log_entry.get("exotics", {}).get("decision")
     assert isinstance(log_decision, str)
     assert log_decision.startswith("reject:status_insufficient_data")
+
+
+def test_exotics_rejects_low_payout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Combos with sub-10€ payout should be rejected systematically."""
+
+    eval_stats = {
+        "status": "ok",
+        "ev_ratio": 0.55,
+        "payout_expected": 8.5,
+        "roi": 0.18,
+        "sharpe": 0.3,
+    }
+
+    meta, log_entry, _ = _run_analysis(monkeypatch, tmp_path, eval_stats)
+
+    exotics_meta = meta.get("exotics")
+    assert exotics_meta["available"] is False
+    reasons = exotics_meta["flags"]["reasons"]["combo"]
+    assert "payout_expected_below_accept_threshold" in reasons
+    assert "payout_below_pipeline_threshold" in reasons
+
+    decision = exotics_meta["decision"]
+    assert isinstance(decision, str)
+    assert decision.startswith("reject:"), decision
+
+    log_decision = log_entry.get("exotics", {}).get("decision")
+    assert isinstance(log_decision, str)
+    assert "payout_expected_below_accept_threshold" in log_decision
