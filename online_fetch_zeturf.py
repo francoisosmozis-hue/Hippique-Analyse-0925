@@ -572,7 +572,23 @@ def fetch_race_snapshot(
 
     phase_norm = _normalise_phase_alias(phase)
 
-    fetch_fn = getattr(_impl, "fetch_race_snapshot")    
+    # Shortcut: when a fully qualified course URL is provided we try to fetch it
+    # directly before invoking the heavier scripts implementation. This covers
+    # the use-case where caller already resolved the course URL and avoids an
+    # unnecessary round-trip through the CLI helper.
+    raw_snapshot: dict[str, Any] | None = None
+    last_error: Exception | None = None
+    if url:
+        direct = _fetch_snapshot_via_html(
+            [url],
+            phase=phase_norm,
+            retries=max(1, int(retry)),
+            backoff=backoff,
+        )
+        if isinstance(direct, dict) and direct:
+            raw_snapshot = dict(direct)
+
+    fetch_fn = getattr(_impl, "fetch_race_snapshot")
     try:        
         signature = inspect.signature(fetch_fn)
     except (TypeError, ValueError):  # pragma: no cover - builtins without signature
@@ -592,17 +608,25 @@ def fetch_race_snapshot(
         arg_candidates.append((reunion_norm, course_norm))
     arg_candidates.append((rc,))
     
-    raw_snapshot: dict[str, Any] | None = None
-    last_error: Exception | None = None
-    for args in arg_candidates:
-        try:
-            result = fetch_fn(*args, **fetch_kwargs)
-        except TypeError as exc:  # pragma: no cover - defensive
-            last_error = exc
-            continue
-        except Exception as exc:  # pragma: no cover - propagate after logging
-            last_error = exc
-            break
+    if raw_snapshot is None or not raw_snapshot.get("runners"):
+        for args in arg_candidates:
+            try:
+                result = fetch_fn(*args, **fetch_kwargs)
+            except TypeError as exc:  # pragma: no cover - defensive
+                last_error = exc
+                continue
+            except Exception as exc:  # pragma: no cover - propagate after logging
+                last_error = exc
+                break
+            else:
+                snapshot_candidate = dict(result) if isinstance(result, Mapping) else {}
+                if snapshot_candidate:
+                    if raw_snapshot is None:
+                        raw_snapshot = snapshot_candidate
+                    else:
+                        _merge_snapshot_data(raw_snapshot, snapshot_candidate)
+                last_error = None
+                break
         else:
             raw_snapshot = dict(result) if isinstance(result, Mapping) else {}
             last_error = None
