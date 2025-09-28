@@ -52,7 +52,7 @@ def _evaluate_combo_strict(
     ev_min: float,
     payout_min: float,
     allow_heuristic: bool = False,
-) -> tuple[bool, dict[str, Any], list[str]]:
+) -> tuple[bool, dict[str, Any], list[str], dict[str, Any]]:
     """Evaluate a combo candidate enforcing strict EV/payout guards.
 
     ``allow_heuristic`` mirrors the CLI flag while keeping the default behaviour
@@ -67,14 +67,16 @@ def _evaluate_combo_strict(
         allow_heuristic=allow_heuristic,
     )
 
-    if not isinstance(result, Mapping):
-        result = {}
+    if isinstance(result, Mapping):
+        raw_stats = {str(k): v for k, v in result.items()}
+    else:
+        raw_stats = {}
 
-    status = str(result.get("status") or "").lower()
-    ev_ratio = float(result.get("ev_ratio", 0.0))
-    payout_expected = float(result.get("payout_expected", 0.0))
-    roi_val = float(result.get("roi", 0.0))
-    sharpe_val = float(result.get("sharpe", 0.0))
+    status = str(raw_stats.get("status") or "").lower()
+    ev_ratio = float(raw_stats.get("ev_ratio", 0.0))
+    payout_expected = float(raw_stats.get("payout_expected", 0.0))
+    roi_val = float(raw_stats.get("roi", 0.0))
+    sharpe_val = float(raw_stats.get("sharpe", 0.0))
 
     keep = True
     reasons: list[str] = []
@@ -111,7 +113,7 @@ def _evaluate_combo_strict(
         "sharpe": sharpe_val,
     }
 
-    return keep, enriched, reasons
+    return keep, enriched, reasons, raw_stats
 
 
 def _maybe_load_dotenv() -> None:
@@ -1869,7 +1871,7 @@ def cmd_analyse(args: argparse.Namespace) -> None:
         if bankroll_for_eval <= 0:
             bankroll_for_eval = 1.0
             
-        keep, enriched, reasons = _evaluate_combo_strict(
+        keep, enriched, reasons, raw_stats = _evaluate_combo_strict(
             template,
             bankroll_for_eval,
             sim_wrapper=sw,
@@ -1880,6 +1882,8 @@ def cmd_analyse(args: argparse.Namespace) -> None:
 
         template_copy = dict(template)
         template_copy["ev_check"] = enriched
+        if raw_stats:
+            template_copy["_sim"] = raw_stats
 
         if keep:
             filtered_templates.append(template_copy)
