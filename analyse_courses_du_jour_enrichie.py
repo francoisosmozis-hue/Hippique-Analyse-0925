@@ -870,6 +870,30 @@ def _regenerate_chronos_csv(rc_dir: Path) -> bool:
     return False
 
 
+def _mark_course_unplayable(rc_dir: Path, missing: Iterable[str]) -> None:
+    """Write the abstention marker and emit the canonical abstain log."""
+
+    marker = rc_dir / "UNPLAYABLE.txt"
+    marker_message = "non jouable: data JE/chronos manquante"
+    missing_items = [str(item) for item in missing if item]
+    if missing_items:
+        marker_message = f"{marker_message} ({', '.join(missing_items)})"
+
+    try:
+        marker.write_text(marker_message + "\n", encoding="utf-8")
+    except OSError as exc:  # pragma: no cover - filesystem issues are non fatal
+        print(
+            f"[WARN] impossible d'écrire {marker.name} dans {rc_dir.name}: {exc}",
+            file=sys.stderr,
+        )
+
+    label = rc_dir.name or "?"
+    print(
+        f"[ABSTAIN] Course non jouable (data manquante) – {label}",
+        file=sys.stderr,
+    )
+
+
 def _ensure_h5_artifacts(
     rc_dir: Path, *, retry_cb: Callable[[], None] | None = None
 ) -> dict[str, Any] | None:
@@ -900,22 +924,7 @@ def _ensure_h5_artifacts(
             return None
         missing = list(outcome.get("details", {}).get("missing", []))
 
-    marker = rc_dir / "UNPLAYABLE.txt"
-    marker_message = "non jouable: data JE/chronos manquante"
-    if missing:
-        missing_text = ", ".join(str(item) for item in missing)
-        marker_message = f"{marker_message} ({missing_text})"
-    try:
-        marker.write_text(marker_message + "\n", encoding="utf-8")
-    except OSError as exc:  # pragma: no cover - filesystem issues are non fatal
-        print(
-            f"[WARN] impossible d'écrire {marker.name} dans {rc_dir.name}: {exc}",
-            file=sys.stderr,
-        )
-    print(
-        f"[ABSTAIN] Course marquée non jouable (data manquante) : {rc_dir.name}",
-        file=sys.stderr,
-    )
+    _mark_course_unplayable(rc_dir, missing)
     return outcome
 
 
