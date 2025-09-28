@@ -141,3 +141,33 @@ def test_safe_enrich_h5_recovers_after_stats_fetch(tmp_path, monkeypatch):
     rows = list(csv.reader(io.StringIO(content)))
     assert rows[0] == ["num", "nom", "j_rate", "e_rate"]
     assert rows[1] == ["1", "Alpha", "0.10", "0.20"]
+
+
+def test_rebuild_from_stats_uses_normalized_payload(tmp_path):
+    """Fallback rebuild should use normalized snapshots when partants absent."""
+
+    rc_dir = tmp_path / "R1C2"
+    snapshot = _write_snapshot(rc_dir)
+
+    normalized = rc_dir / "normalized_h5.json"
+    normalized.write_text(
+        json.dumps(
+            {
+                "id2name": {"3": "Bravo"},
+                "runners": [{"id": "3", "name": "Bravo"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    stats_payload = {"coverage": 100, "3": {"j_win": "0.30", "e_win": "0.40"}}
+    (rc_dir / "stats_je.json").write_text(json.dumps(stats_payload), encoding="utf-8")
+
+    assert acd._rebuild_je_csv_from_stats(rc_dir) is True
+
+    je_csv = rc_dir / f"{snapshot.stem}_je.csv"
+    assert je_csv.exists()
+
+    rows = list(csv.reader(io.StringIO(je_csv.read_text(encoding="utf-8"))))
+    assert rows[0] == ["num", "nom", "j_rate", "e_rate"]
+    assert rows[1] == ["3", "Bravo", "0.30", "0.40"]
