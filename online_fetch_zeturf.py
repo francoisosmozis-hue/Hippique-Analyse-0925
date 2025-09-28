@@ -530,9 +530,39 @@ def _build_snapshot_payload(
     phase: str,
     source_url: str | None = None,
 ) -> dict[str, Any]:
-    meeting = raw_snapshot.get("hippodrome") or raw_snapshot.get("meeting")
-    date = raw_snapshot.get("date")
-    discipline = raw_snapshot.get("discipline")
+    def _coerce_str(value: Any) -> str | None:
+        if value in (None, ""):
+            return None
+        text = str(value).strip()
+        return text or None
+
+    def _coerce_int(value: Any) -> int | None:
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            try:
+                return int(value)
+            except (TypeError, ValueError):  # pragma: no cover - defensive
+                return None
+        if isinstance(value, str):
+            match = re.search(r"\d+", value)
+            if match:
+                try:
+                    return int(match.group(0))
+                except ValueError:  # pragma: no cover - defensive
+                    return None
+        return None
+
+    def _first_meta_value(mapping: Mapping[str, Any] | None, *keys: str) -> Any:
+        if not isinstance(mapping, Mapping):
+            return None
+        for key in keys:
+            value = mapping.get(key)
+            if value not in (None, ""):
+                return value
+        return None
+
+    meeting = _coerce_str(raw_snapshot.get("hippodrome") or raw_snapshot.get("meeting"))
+    date = _coerce_str(raw_snapshot.get("date"))
+    discipline = _coerce_str(raw_snapshot.get("discipline"))
     course_id = raw_snapshot.get("course_id") or raw_snapshot.get("id_course")
     runners_raw = raw_snapshot.get("runners")
     runners: list[dict[str, Any]] = []
@@ -543,11 +573,42 @@ def _build_snapshot_payload(
                 if parsed:
                     runners.append(parsed)
 
-    partants = raw_snapshot.get("partants")
-    try:
-        partants_val = int(partants) if partants not in (None, "") else None
-    except (TypeError, ValueError):  # pragma: no cover - defensive
-        partants_val = None
+    partants_val = _coerce_int(raw_snapshot.get("partants"))
+
+    meta_raw = raw_snapshot.get("meta") if isinstance(raw_snapshot.get("meta"), Mapping) else None
+    course_meta = (
+        meta_raw.get("course")
+        if isinstance(meta_raw, Mapping) and isinstance(meta_raw.get("course"), Mapping)
+        else None
+    )
+
+    if meeting is None:
+        candidate = _coerce_str(
+            _first_meta_value(meta_raw, "hippodrome", "meeting", "venue")
+        ) or _coerce_str(_first_meta_value(course_meta, "hippodrome", "meeting", "venue"))
+        if candidate:
+            meeting = candidate
+
+    if date is None:
+        candidate = _coerce_str(_first_meta_value(meta_raw, "date", "jour", "day"))
+        if not candidate:
+            candidate = _coerce_str(_first_meta_value(course_meta, "date", "jour", "day"))
+        if candidate:
+            date = candidate
+
+    if discipline is None:
+        candidate = _coerce_str(
+            _first_meta_value(meta_raw, "discipline", "sport", "type")
+        ) or _coerce_str(_first_meta_value(course_meta, "discipline", "type", "specialite"))
+        if candidate:
+            discipline = candidate
+
+    if partants_val is None:
+        candidate = _first_meta_value(meta_raw, "partants", "nb_partants", "n_partants", "participants")
+        if candidate is None:
+            candidate = _first_meta_value(course_meta, "partants", "participants", "nb_partants")
+        partants_val = _coerce_int(candidate)
+
     if partants_val is None and runners:
         partants_val = len(runners)
 
