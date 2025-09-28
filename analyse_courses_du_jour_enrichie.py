@@ -672,7 +672,7 @@ def _check_enrich_outputs(
                         f"[WARN] relance enrich_h5 a échoué pour {rc_dir.name}: {exc}",
                         file=sys.stderr,
                     )
-            if retry_delay:
+            if retry_delay is not None:
                 time.sleep(max(0.0, retry_delay))
             continue
 
@@ -928,17 +928,13 @@ def _ensure_h5_artifacts(
     return outcome
 
 
-def _execute_h5_chain(
-    rc_dir: Path, *, budget: float, kelly: float
+def safe_enrich_h5(
+    rc_dir: Path,
+    *,
+    budget: float,
+    kelly: float,
 ) -> tuple[bool, dict[str, Any] | None]:
-    """Run the full H-5 enrichment pipeline with fail-safe guards.
-
-    The helper executes ``enrich_h5`` followed by the JE/chronos availability
-    checks.  When the required CSV artefacts remain missing after the retry,
-    the function returns ``(False, abstention_payload)`` so callers can persist
-    the structured ``no-bet`` decision.  On success the downstream p_finale,
-    pipeline and prompt steps are executed and ``(True, None)`` is returned.
-    """
+    """Execute ``enrich_h5`` ensuring JE/chronos data or mark the course out."""
 
     enrich_h5(rc_dir, budget=budget, kelly=kelly)
     outcome = _ensure_h5_artifacts(
@@ -946,6 +942,21 @@ def _execute_h5_chain(
         retry_cb=lambda d=rc_dir: enrich_h5(d, budget=budget, kelly=kelly),
     )
     if outcome is not None:
+        return False, outcome
+    return True, None
+
+
+def _execute_h5_chain(
+    rc_dir: Path, *, budget: float, kelly: float
+) -> tuple[bool, dict[str, Any] | None]:
+    """Run the full H-5 enrichment pipeline with fail-safe guards.
+
+    The helper executes ``safe_enrich_h5`` and, when successful, chains the
+    downstream p_finale, pipeline and prompt generation steps.
+    """
+
+    success, outcome = safe_enrich_h5(rc_dir, budget=budget, kelly=kelly)
+    if not success:
         return False, outcome
 
     build_p_finale(rc_dir, budget=budget, kelly=kelly)
@@ -1321,21 +1332,18 @@ def main() -> None:
                     continue
                 write_snapshot_from_geny(course_id, "H30", rc_dir)
                 write_snapshot_from_geny(course_id, "H5", rc_dir)
-                enrich_h5(rc_dir, budget=args.budget, kelly=args.kelly)
-                decision = _ensure_h5_artifacts(
-                    rc_dir,
-                    retry_cb=lambda d=rc_dir: enrich_h5(
-                        d, budget=args.budget, kelly=args.kelly
-                    ),
+                success, decision = safe_enrich_h5(
+                    rc_dir, budget=args.budget, kelly=args.kelly
                 )
-                if decision is None:
+                if success:
                     build_p_finale(rc_dir, budget=args.budget, kelly=args.kelly)
                     run_pipeline(rc_dir, budget=args.budget, kelly=args.kelly)
                     build_prompt_from_meta(rc_dir, budget=args.budget, kelly=args.kelly)
                     csv_path = export_per_horse_csv(rc_dir)
                     print(f"[INFO] per-horse report écrit: {csv_path}")
                 else:
-                    _write_json_file(rc_dir / "decision.json", decision)
+                    if decision is not None:
+                        _write_json_file(rc_dir / "decision.json", decision)
                 if gcs_prefix is not None:
                     _upload_artifacts(rc_dir, gcs_prefix=gcs_prefix)
         print("[DONE] from-geny-today pipeline terminé.")
