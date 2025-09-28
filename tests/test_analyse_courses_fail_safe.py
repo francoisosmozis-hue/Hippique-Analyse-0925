@@ -143,6 +143,70 @@ def test_safe_enrich_h5_recovers_after_stats_fetch(tmp_path, monkeypatch):
     assert rows[1] == ["1", "Alpha", "0.10", "0.20"]
 
 
+def test_safe_enrich_h5_retries_when_rebuild_impossible(tmp_path, monkeypatch):
+    """If rebuild fails after stats fetch, ``enrich_h5`` should be retried."""
+
+    rc_dir = tmp_path / "R1C3"
+    snapshot = _write_snapshot(rc_dir)
+    chronos = rc_dir / "chronos.csv"
+    partants = rc_dir / "partants.json"
+    stats = rc_dir / "stats_je.json"
+    je_csv = rc_dir / f"{snapshot.stem}_je.csv"
+
+    calls: dict[str, int] = {"enrich": 0}
+
+    def fake_enrich(target: Path, *, budget: float, kelly: float) -> None:
+        assert target == rc_dir
+        calls["enrich"] += 1
+        snapshot.touch()
+        chronos.write_text("num\n1\n", encoding="utf-8")
+        if calls["enrich"] == 1:
+            if partants.exists():
+                partants.unlink()
+            if je_csv.exists():
+                je_csv.unlink()
+        else:
+            partants.write_text(
+                json.dumps(
+                    {
+                        "id2name": {"1": "Gamma"},
+                        "runners": [{"id": "1", "name": "Gamma"}],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            je_csv.write_text(
+                "num,nom,j_rate,e_rate\n1,Gamma,0.50,0.60\n",
+                encoding="utf-8",
+            )
+
+    def fake_fetch(script_path: Path, course_dir: Path) -> bool:
+        assert script_path == acd._FETCH_JE_STATS_SCRIPT
+        assert course_dir == rc_dir
+        stats.write_text(
+            json.dumps({"coverage": 100, "1": {"j_win": "0.50", "e_win": "0.60"}}),
+            encoding="utf-8",
+        )
+        return True
+
+    monkeypatch.setattr(acd, "enrich_h5", fake_enrich)
+    monkeypatch.setattr(acd, "_run_fetch_script", fake_fetch)
+    monkeypatch.setattr(acd.time, "sleep", lambda _delay: None)
+
+    success, outcome = acd.safe_enrich_h5(rc_dir, budget=5.0, kelly=0.05)
+
+    assert success is True
+    assert outcome is None
+    assert calls["enrich"] == 2, "enrich_h5 should be retried when rebuild fails"
+    assert je_csv.exists()
+    assert not (rc_dir / "UNPLAYABLE.txt").exists()
+
+    content = je_csv.read_text(encoding="utf-8")
+    rows = list(csv.reader(io.StringIO(content)))
+    assert rows[0] == ["num", "nom", "j_rate", "e_rate"]
+    assert rows[1] == ["1", "Gamma", "0.50", "0.60"]
+
+
 def test_ensure_h5_artifacts_rebuilds_csv_from_stats(tmp_path, monkeypatch):
     """_ensure_h5_artifacts should rebuild the JE CSV after a stats fetch."""
 
