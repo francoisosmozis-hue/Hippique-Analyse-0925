@@ -10,6 +10,7 @@ import time
 from dataclasses import dataclass
 import inspect
 from pathlib import Path
+from urllib.parse import urljoin
 from typing import Any, Dict, Iterable, Mapping
 
 import yaml
@@ -315,7 +316,29 @@ _COURSE_PAGE_TEMPLATES = (
     "https://m.zeeturf.fr/fr/course/{course_id}",
 )
 _COURSE_PAGE_FROM_RC = "https://www.zeturf.fr/fr/course/{rc}"
+_ZT_BASE_URL = "https://www.zeturf.fr"
 
+
+def _ensure_absolute_url(value: str | os.PathLike[str] | None) -> str | None:
+    """Normalise ``value`` into an absolute URL when possible."""
+
+    if value in (None, ""):
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    lowered = text.lower()
+    if lowered.startswith("http://") or lowered.startswith("https://"):
+        return text
+    if text.startswith("//"):
+        return "https:" + text
+    if text.startswith("/"):
+        return urljoin(_ZT_BASE_URL, text)
+    head = text.split("/")[0]
+    if "." in head:
+        return "https://" + text
+    return text
+    
 _RUNNER_NUM_RE = re.compile(r"data-runner-num=['\"]?(\d+)", re.IGNORECASE)
 _RUNNER_NAME_RE = re.compile(r"data-runner-name=['\"]?([^'\"]+)", re.IGNORECASE)
 _RUNNER_ODDS_RE = re.compile(r"data-odds=(?:'|\")?([0-9]+(?:[.,][0-9]+)?)", re.IGNORECASE)
@@ -529,7 +552,7 @@ def _build_snapshot_payload(
             or (raw_snapshot.get("source_url") if isinstance(raw_snapshot, Mapping) else None)
         )
         logger.warning(
-            ""[ZEturf] Champ(s) manquant(s): %s (rc=%s, url=%s)",
+            "[ZEturf] Champ(s) manquant(s): %s (rc=%s, url=%s)",
             ", ".join(sorted(set(missing_fields))),
             rc,
             source_hint or "?",
@@ -545,7 +568,7 @@ def fetch_race_snapshot(
     *,
     url: str | None = None,
     session: Any | None = None,
-    retry: int = 2,
+    retry: int = 3,
     backoff: float = 1.0,
 ) -> dict[str, Any]:
     """Return a normalised snapshot for ``reunion``/``course``.
@@ -576,7 +599,7 @@ def fetch_race_snapshot(
     entry.setdefault("reunion", reunion_norm)
     entry.setdefault("course", course_norm)
     if url:
-        entry["url"] = url
+        entry["url"] = _ensure_absolute_url(url) or url
 
     course_id_hint = None
     try:
@@ -589,10 +612,12 @@ def fetch_race_snapshot(
         entry_url = _impl._extract_url_from_entry(entry)
     except AttributeError:  # pragma: no cover - defensive fallback
         entry_url = entry.get("url") if isinstance(entry, Mapping) else None
-    if isinstance(entry_url, str) and entry_url not in candidate_urls:
-        candidate_urls.append(entry_url)
-    if url and url not in candidate_urls:
-        candidate_urls.append(url)
+    normalised_entry_url = _ensure_absolute_url(entry_url) if isinstance(entry_url, str) else None
+    if normalised_entry_url and normalised_entry_url not in candidate_urls:
+        candidate_urls.append(normalised_entry_url)
+    normalised_user_url = _ensure_absolute_url(url) if url else None
+    if normalised_user_url and normalised_user_url not in candidate_urls:
+        candidate_urls.append(normalised_user_url)
 
     if not course_id_hint:
         for candidate in candidate_urls:
@@ -619,20 +644,26 @@ def fetch_race_snapshot(
     seen_urls: set[str] = set()
     fallback_urls: list[str] = []
     for candidate in candidate_urls:
-        if candidate and candidate not in seen_urls:
-            fallback_urls.append(candidate)
-            seen_urls.add(candidate)
+        if not candidate:
+            continue
+        normalised = _ensure_absolute_url(candidate) or candidate
+        if normalised not in seen_urls:
+            fallback_urls.append(normalised)
+            seen_urls.add(normalised)
 
     if course_id_hint:
         for template in _COURSE_PAGE_TEMPLATES:
             candidate = template.format(course_id=course_id_hint)
-            if candidate not in seen_urls:
-                fallback_urls.append(candidate)
-                seen_urls.add(candidate)
+            normalised = _ensure_absolute_url(candidate) or candidate
+            if normalised not in seen_urls:
+                fallback_urls.append(normalised)
+                seen_urls.add(normalised)
 
     guessed_from_rc = _COURSE_PAGE_FROM_RC.format(rc=rc)
-    if guessed_from_rc not in seen_urls:
-        fallback_urls.append(guessed_from_rc)
+    normalised_guess = _ensure_absolute_url(guessed_from_rc) or guessed_from_rc
+    if normalised_guess not in seen_urls:
+        fallback_urls.append(normalised_guess)
+        seen_urls.add(normalised_guess)
 
     rc_map[rc] = entry
     sources["rc_map"] = rc_map
@@ -685,7 +716,7 @@ def fetch_race_snapshot(
         fetch_kwargs = {
             "phase": phase_norm,
             "sources": sources,
-            "url": url,
+            "url": _ensure_absolute_url(url) if url else url,
             "retries": max(1, int(retry)),
             "backoff": backoff if backoff > 0 else 1.0,
             "initial_delay": 0.3,
@@ -784,3 +815,4 @@ __all__ = ["fetch_race_snapshot", "main"]
 
 if __name__ == "__main__":  # pragma: no cover
     main()
+
