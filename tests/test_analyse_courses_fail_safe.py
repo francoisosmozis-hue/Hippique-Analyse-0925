@@ -110,14 +110,18 @@ def test_safe_enrich_h5_recovers_after_stats_fetch(tmp_path, monkeypatch):
         if je_csv.exists():
             je_csv.unlink()
 
+    fetch_calls = {"stats": 0, "chrono": 0}
+    
     def fake_fetch(script_path: Path, course_dir: Path) -> bool:
         assert course_dir == rc_dir
         if script_path == acd._FETCH_JE_STATS_SCRIPT:
+            fetch_calls["stats"] += 1
             stats.write_text(
                 json.dumps({"coverage": 100, "1": {"j_win": "0.10", "e_win": "0.20"}}),
                 encoding="utf-8",
             )
             return True
+        fetch_calls["chrono"] += 1
         return False
 
     monkeypatch.setattr(acd, "enrich_h5", fake_enrich)
@@ -131,6 +135,7 @@ def test_safe_enrich_h5_recovers_after_stats_fetch(tmp_path, monkeypatch):
     assert calls["enrich"] == 2
     assert je_csv.exists()
     assert not (rc_dir / "UNPLAYABLE.txt").exists()
+    assert fetch_calls == {"stats": 1, "chrono": 0}
 
     content = je_csv.read_text(encoding="utf-8")
     rows = list(csv.reader(io.StringIO(content)))
