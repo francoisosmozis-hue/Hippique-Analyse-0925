@@ -311,6 +311,58 @@ def test_ensure_h5_artifacts_rebuilds_csv_from_stats(tmp_path, monkeypatch):
     assert rows[1] == ["1", "Bravo", "0.30", "0.40"]
 
 
+def test_ensure_h5_artifacts_rebuilds_after_retry_cb(tmp_path, monkeypatch):
+    """Fallback should rebuild the JE CSV when retry_cb populates partants."""
+
+    rc_dir = tmp_path / "R2C3"
+    snap = _write_snapshot(rc_dir)
+    chronos = rc_dir / "chronos.csv"
+    chronos.write_text("num,chrono\n7,\n", encoding="utf-8")
+
+    stats_path = rc_dir / "stats_je.json"
+    partants_path = rc_dir / "partants.json"
+    normalized_path = rc_dir / "normalized_h5.json"
+
+    fetch_calls: list[Path] = []
+    retry_calls: list[int] = []
+
+    def fake_fetch(script_path: Path, course_dir: Path) -> bool:
+        assert course_dir == rc_dir
+        assert script_path == acd._FETCH_JE_STATS_SCRIPT
+        fetch_calls.append(script_path)
+        stats_path.write_text(
+            json.dumps({"coverage": 100, "7": {"j_win": "0.55", "e_win": "0.65"}}),
+            encoding="utf-8",
+        )
+        return True
+
+    def retry_cb() -> None:
+        retry_calls.append(1)
+        payload = {"id2name": {"7": "Juliet"}, "runners": [{"id": "7", "name": "Juliet"}]}
+        partants_path.write_text(json.dumps(payload), encoding="utf-8")
+        normalized_path.write_text(json.dumps(payload), encoding="utf-8")
+        je_csv = rc_dir / f"{snap.stem}_je.csv"
+        if je_csv.exists():
+            je_csv.unlink()
+
+    monkeypatch.setattr(acd, "_run_fetch_script", fake_fetch)
+    monkeypatch.setattr(acd.time, "sleep", lambda _delay: None)
+
+    outcome = acd._ensure_h5_artifacts(rc_dir, retry_cb=retry_cb)
+
+    assert outcome is None
+    assert fetch_calls == [acd._FETCH_JE_STATS_SCRIPT]
+    assert retry_calls == [1]
+
+    je_csv = rc_dir / f"{snap.stem}_je.csv"
+    assert je_csv.exists()
+    assert not (rc_dir / "UNPLAYABLE.txt").exists()
+
+    rows = list(csv.reader(io.StringIO(je_csv.read_text(encoding="utf-8"))))
+    assert rows[0] == ["num", "nom", "j_rate", "e_rate"]
+    assert rows[1] == ["7", "Juliet", "0.55", "0.65"]
+
+
 def test_recover_je_csv_from_stats_helper(tmp_path, monkeypatch):
     """Helper should fetch stats and rebuild the JE CSV when possible."""
 
