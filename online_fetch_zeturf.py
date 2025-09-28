@@ -585,9 +585,12 @@ def _build_snapshot_payload(
     return snapshot.as_dict()
  
     
+_RC_COMBINED_RE = re.compile(r"R?\s*(\d+)\s*C\s*(\d+)", re.IGNORECASE)
+
+
 def fetch_race_snapshot(
     reunion: str,
-    course: str,
+    course: str | None = None,
     phase: str = "H30",
     *,
     url: str | None = None,
@@ -604,8 +607,22 @@ def fetch_race_snapshot(
     historical CLI wrapper.
     """
 
-    reunion_norm = _normalise_label(reunion, "R")
-    course_norm = _normalise_label(course, "C")
+    reunion_text = str(reunion).strip()
+    course_text = "" if course is None else str(course).strip()
+
+    if not reunion_text:
+        raise ValueError("reunion value is required")
+
+    if not course_text:
+        match = _RC_COMBINED_RE.search(reunion_text.upper())
+        if match:
+            reunion_text = f"R{match.group(1)}"
+            course_text = f"C{match.group(2)}"
+        else:
+            raise ValueError("course value is required")
+
+    reunion_norm = _normalise_label(reunion_text, "R")
+    course_norm = _normalise_label(course_text, "C")
     rc = f"{reunion_norm}{course_norm}"
 
     sources = _load_sources_config()
