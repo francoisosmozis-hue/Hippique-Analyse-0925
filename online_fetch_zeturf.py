@@ -572,22 +572,31 @@ def fetch_race_snapshot(
 
     phase_norm = _normalise_phase_alias(phase)
 
-    # Shortcut: when a fully qualified course URL is provided we try to fetch it
-    # directly before invoking the heavier scripts implementation. This covers
-    # the use-case where caller already resolved the course URL and avoids an
-    # unnecessary round-trip through the CLI helper.
     raw_snapshot: dict[str, Any] | None = None
     last_error: Exception | None = None
-    if url:
-        direct = _fetch_snapshot_via_html(
-            [url],
+    
+    html_attempted: set[str] = set()
+
+    def _try_html(urls: Iterable[str]) -> dict[str, Any] | None:
+        ordered: list[str] = []
+        for candidate in urls:
+            if not candidate or candidate in html_attempted:
+                continue
+            ordered.append(candidate)
+        if not ordered:
+            return None
+        html_attempted.update(ordered)
+        return _fetch_snapshot_via_html(
+            ordered,
             phase=phase_norm,
             retries=max(1, int(retry)),
             backoff=backoff,
         )
-        if isinstance(direct, dict) and direct:
-            raw_snapshot = dict(direct)
-
+        
+    html_snapshot = _try_html(fallback_urls)
+    if isinstance(html_snapshot, dict) and html_snapshot:
+        raw_snapshot = dict(html_snapshot)
+        
     fetch_fn = getattr(_impl, "fetch_race_snapshot")
     try:        
         signature = inspect.signature(fetch_fn)
@@ -618,39 +627,24 @@ def fetch_race_snapshot(
             except Exception as exc:  # pragma: no cover - propagate after logging
                 last_error = exc
                 break
-            else:
-                snapshot_candidate = dict(result) if isinstance(result, Mapping) else {}
-                if snapshot_candidate:
-                    if raw_snapshot is None:
-                        raw_snapshot = snapshot_candidate
-                    else:
-                        _merge_snapshot_data(raw_snapshot, snapshot_candidate)
+            snapshot_candidate = dict(result) if isinstance(result, Mapping) else {}
+            if snapshot_candidate:
+                if raw_snapshot is None:
+                    raw_snapshot = snapshot_candidate
+                else:
+                    _merge_snapshot_data(raw_snapshot, snapshot_candidate)
                 last_error = None
                 break
-        else:
-            raw_snapshot = dict(result) if isinstance(result, Mapping) else {}
-            last_error = None
-            break
-
-    fallback_snapshot: dict[str, Any] | None = None
-    needs_fallback = (
-        raw_snapshot is None
-        or not isinstance(raw_snapshot, dict)
-        or not raw_snapshot.get("runners")
-    )
-    if needs_fallback:
-        fallback_snapshot = _fetch_snapshot_via_html(
-            fallback_urls,
-            phase=phase_norm,
-            retries=max(1, int(retry)),
-            backoff=backoff,
-        )
-        if isinstance(fallback_snapshot, dict) and fallback_snapshot:
-            if raw_snapshot is None or not isinstance(raw_snapshot, dict):
+                
+        if raw_snapshot is None or not raw_snapshot.get("runners"):
+        fallback_snapshot: dict[str, Any] | None = _try_html(fallback_urls)
+        if fallback_snapshot:
+            if raw_snapshot is None:
                 raw_snapshot = dict(fallback_snapshot)
             else:
                 _merge_snapshot_data(raw_snapshot, fallback_snapshot)
-                
+            html_snapshot = fallback_snapshot
+            
     if raw_snapshot is None:
         if last_error is not None:
             logger.error("[ZEturf] échec fetch_race_snapshot pour %s: %s", rc, last_error)
@@ -671,8 +665,8 @@ def fetch_race_snapshot(
         ).as_dict()
         
     source_url = entry.get("url") if isinstance(entry.get("url"), str) else None
-    if not source_url and fallback_snapshot and isinstance(fallback_snapshot.get("source_url"), str):
-        source_url = str(fallback_snapshot["source_url"])
+    if not source_url and html_snapshot and isinstance(html_snapshot.get("source_url"), str):
+        source_url = str(html_snapshot["source_url"])
     if not source_url and url:
         source_url = url
     snapshot = _build_snapshot_payload(
