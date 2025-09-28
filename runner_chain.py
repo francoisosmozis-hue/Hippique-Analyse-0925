@@ -13,6 +13,8 @@ optional ``ALERTE_VALUE`` column when the alert flag is present.
 
 from __future__ import annotations
 
+import re
+
 from typing import Any, Dict, Iterable, List, Mapping, Sequence, Tuple
 
 from simulate_wrapper import evaluate_combo
@@ -34,14 +36,24 @@ def compute_overround_cap(
         cap = 1.30
 
     label = (discipline or "").strip().lower()
-    try:
-        partants_int = int(partants)
-    except (TypeError, ValueError):
-        partants_int = None
+    partants_int: int | None = None
+    if isinstance(partants, (int, float)):
+        try:
+            partants_int = int(partants)
+        except (TypeError, ValueError):  # pragma: no cover - defensive
+            partants_int = None
+    elif isinstance(partants, str):
+        match = re.search(r"\d+", partants)
+        if match:
+            try:
+                partants_int = int(match.group())
+            except ValueError:  # pragma: no cover - defensive
+                partants_int = None
 
     lowered = label.replace("é", "e")
     is_flat = any(word in lowered for word in ("plat", "galop", "galopeur"))
-    is_handicap = "handicap" in lowered
+    handicap_tokens = ("handicap", "hand.", "hcap", "handi")
+    is_handicap = any(token in lowered for token in handicap_tokens)
 
     if is_flat and (is_handicap or (partants_int is not None and partants_int >= 14)):
         return min(cap, 1.25)
