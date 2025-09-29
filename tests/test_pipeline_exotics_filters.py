@@ -348,6 +348,58 @@ def test_filter_combos_strict_disables_heuristics_by_default() -> None:
     assert wrapper.calls[0]["allow_heuristic"] is False
 
 
+def test_filter_combos_strict_limits_to_best_combo() -> None:
+    """Only the best-valued combo should be retained when several pass guards."""
+
+    class DummyWrapper:
+        def __init__(self, responses: Mapping[str, Mapping[str, Any]]) -> None:
+            self._responses = responses
+            self.calls: list[str] = []
+
+        def evaluate_combo(self, tickets, bankroll, *, allow_heuristic=False):  # type: ignore[override]
+            assert len(tickets) == 1
+            identifier = str(tickets[0].get("id") or tickets[0].get("type"))
+            self.calls.append(identifier)
+            return dict(self._responses[identifier])
+
+    templates = [
+        {"id": "combo_a", "stake": 1.0},
+        {"id": "combo_b", "stake": 1.0},
+    ]
+
+    responses: Mapping[str, Mapping[str, Any]] = {
+        "combo_a": {
+            "status": "ok",
+            "ev_ratio": 0.48,
+            "payout_expected": 14.0,
+            "roi": 0.18,
+            "sharpe": 0.28,
+        },
+        "combo_b": {
+            "status": "ok",
+            "ev_ratio": 0.55,
+            "payout_expected": 18.0,
+            "roi": 0.24,
+            "sharpe": 0.32,
+        },
+    }
+
+    wrapper = DummyWrapper(responses)
+
+    kept, reasons = pipeline_run.filter_combos_strict(
+        templates,
+        sim_wrapper=wrapper,
+        bankroll_lookup=lambda _template: 5.0,
+        ev_min=0.40,
+        payout_min=10.0,
+    )
+
+    assert wrapper.calls == ["combo_a", "combo_b"]
+    assert len(kept) == 1
+    assert kept[0]["id"] == "combo_b"
+    assert "combo_limit_enforced" in reasons
+
+
 def test_exotics_rejects_low_payout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Combos with sub-10€ payout should be rejected systematically."""
 
