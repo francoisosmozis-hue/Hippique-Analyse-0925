@@ -642,7 +642,28 @@ def _build_snapshot_payload(
                 parsed = _coerce_runner_entry(entry)
                 if parsed:
                     runners.append(parsed)
+                    
+    if runners:
+        deduped: list[dict[str, Any]] = []
+        seen_numbers: set[str] = set()
 
+        for runner in runners:
+            number = str(runner.get("num") or runner.get("id") or "").strip()
+            if number:
+                if number in seen_numbers:
+                    continue
+                seen_numbers.add(number)
+            deduped.append(runner)
+
+        def _runner_sort_key(item: Mapping[str, Any]) -> tuple[int, str]:
+            raw_number = str(item.get("num") or item.get("id") or "").strip()
+            match = re.search(r"\d+", raw_number)
+            num_val = int(match.group(0)) if match else 10**6
+            return (num_val, raw_number)
+
+        deduped.sort(key=_runner_sort_key)
+        runners = deduped
+        
     partants_val = _coerce_int(raw_snapshot.get("partants"))
 
     meta_raw = raw_snapshot.get("meta") if isinstance(raw_snapshot.get("meta"), Mapping) else None
