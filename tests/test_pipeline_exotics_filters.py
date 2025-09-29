@@ -1,6 +1,7 @@
 import argparse
 import json
 from pathlib import Path
+from typing import Any, Callable, Mapping
 
 import pytest
 
@@ -19,7 +20,9 @@ from test_pipeline_smoke import (
 )
 
 
-def _write_inputs(tmp_path: Path) -> dict[str, Path]:
+def _write_inputs(
+    tmp_path: Path, *, partants_override: Mapping[str, Any] | None = None
+) -> dict[str, Path]:
     h30_path = tmp_path / "h30.json"
     h5_path = tmp_path / "h5.json"
     stats_path = tmp_path / "stats.json"
@@ -30,7 +33,11 @@ def _write_inputs(tmp_path: Path) -> dict[str, Path]:
     h30_path.write_text(json.dumps(odds_h30()), encoding="utf-8")
     h5_path.write_text(json.dumps(odds_h5()), encoding="utf-8")
     stats_path.write_text(json.dumps(stats_sample()), encoding="utf-8")
-    partants_path.write_text(json.dumps(partants_sample()), encoding="utf-8")
+    
+    partants_payload = partants_sample()
+    if partants_override:
+        partants_payload.update(partants_override)
+    partants_path.write_text(json.dumps(partants_payload), encoding="utf-8")
     gpi_path.write_text(GPI_YML, encoding="utf-8")
     diff_path.write_text("{}", encoding="utf-8")
 
@@ -49,7 +56,8 @@ def _prepare_stubs(
     eval_stats: dict[str, float | str],
     *,
     overround_cap: float = 5.0,
-    market_overround: float | None = None,
+    market_overround: float | None = None
+    compute_cap_stub: Callable[..., float] | None = None,
 ):
     pipeline_run._load_simulate_ev.cache_clear()
 
@@ -99,10 +107,13 @@ def _prepare_stubs(
         "combos_allowed",
         lambda *_args, **_kwargs: overround_cap,
     )
+    if compute_cap_stub is None:
+        compute_cap_stub = lambda *_args, **_kwargs: overround_cap
+        
     monkeypatch.setattr(
         pipeline_run,
         "compute_overround_cap",
-        lambda *_args, **_kwargs: overround_cap,
+        compute_cap_stub,
     )
     
     if market_overround is not None:
@@ -182,13 +193,16 @@ def _run_analysis(
     *,
     overround_cap: float = 5.0,
     market_overround: float | None = None,
+    partants_override: Mapping[str, Any] | None = None,
+    compute_cap_stub: Callable[..., float] | None = None,
 ):
-    inputs = _write_inputs(tmp_path)
+    inputs = _write_inputs(tmp_path, partants_override=partants_override)
     captured_log, eval_calls = _prepare_stubs(
         monkeypatch,
         eval_stats,
         overround_cap=overround_cap,
         market_overround=market_overround,
+        compute_cap_stub=compute_cap_stub,
     )
 
     outdir = tmp_path / "out"
@@ -349,3 +363,56 @@ def test_exotics_rejects_when_overround_exceeds_cap(
     log_decision = log_entry.get("exotics", {}).get("decision")
     assert isinstance(log_decision, str)
     assert "overround_above_threshold" in log_decision
+
+
+def test_overround_cap_uses_metadata_fallbacks(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Pipeline should fall back to course metadata when meta fields are blank."""
+
+    eval_stats = {
+        "status": "ok",
+        "ev_ratio": 0.6,
+        "payout_expected": 20.0,
+        "roi": 0.3,
+        "sharpe": 0.5,
+    }
+
+    calls: list[dict[str, Any]] = []
+
+    def record_cap(discipline, partants, *, default_cap, course_label):
+        calls.append(
+            {
+                "discipline": discipline,
+                "partants": partants,
+                "default_cap": default_cap,
+                "course_label": course_label,
+            }
+        )
+        return 1.30
+
+    runners_override = [
+        {"id": str(idx), "name": f"Runner {idx}"}
+        for idx in range(1, 15)
+    ]
+    partants_override = {
+        "discipline": "",
+        "type_course": "Handicap de plat",
+        "course_label": "Handicap de plat - test",
+        "runners": runners_override,
+    }
+
+    _run_analysis(
+        monkeypatch,
+        tmp_path,
+        eval_stats,
+        partants_override=partants_override,
+        compute_cap_stub=record_cap,
+    )
+
+    assert calls, "compute_overround_cap should have been invoked"
+    last_call = calls[-1]
+    assert isinstance(last_call["discipline"], str)
+    assert "handicap" in last_call["discipline"].lower()
+    assert int(last_call["partants"]) == 14
+    assert last_call["default_cap"] == pytest.approx(1.30)
