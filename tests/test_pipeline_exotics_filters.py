@@ -303,6 +303,51 @@ def test_exotics_rejects_on_status(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     assert log_decision.startswith("reject:status_insufficient_data")
 
 
+def test_filter_combos_strict_disables_heuristics_by_default() -> None:
+    """Default combo evaluation must run with heuristics disabled."""
+
+    class DummyWrapper:
+        def __init__(self) -> None:
+            self.calls: list[dict[str, Any]] = []
+
+        def evaluate_combo(self, tickets, bankroll, *, allow_heuristic=False):  # type: ignore[override]
+            self.calls.append(
+                {
+                    "tickets": [dict(t) for t in tickets],
+                    "bankroll": bankroll,
+                    "allow_heuristic": allow_heuristic,
+                }
+            )
+            return {
+                "status": "ok",
+                "ev_ratio": 0.55,
+                "payout_expected": 15.0,
+                "roi": 0.25,
+                "sharpe": 0.4,
+            }
+
+    wrapper = DummyWrapper()
+
+    kept, reasons = pipeline_run.filter_combos_strict(
+        [
+            {
+                "type": "CP",
+                "stake": 1.0,
+                "legs": ["1", "2"],
+            }
+        ],
+        sim_wrapper=wrapper,
+        bankroll_lookup=lambda _template: 5.0,
+        ev_min=0.40,
+        payout_min=10.0,
+    )
+
+    assert kept, "expected the combo to be retained"
+    assert reasons == []
+    assert wrapper.calls, "evaluate_combo should have been invoked"
+    assert wrapper.calls[0]["allow_heuristic"] is False
+
+
 def test_exotics_rejects_low_payout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Combos with sub-10€ payout should be rejected systematically."""
 
