@@ -291,7 +291,13 @@ def _double_extract(
             fallback_used = True
 
     if not data:
-        return {}
+        logger.warning(
+            "[ZEturf] Aucune donnée exploitable extraite (url=%s, snapshot=%s)",
+            url,
+            snapshot_mode,
+        )
+        data = {"runners": []}
+        fallback_used = True
 
     missing_keys: list[str] = []
     for key in ("meeting", "hippodrome", "discipline", "partants"):
@@ -319,6 +325,13 @@ def _double_extract(
                 url,
                 snapshot_mode,
             )
+    if not data.get("runners"):
+        logger.warning(
+            "[ZEturf] Aucun partant détecté (url=%s, snapshot=%s) — retournera une liste vide",
+            url,
+            snapshot_mode,
+        )
+        data["runners"] = []
     data.setdefault("source_url", url)
     if fallback_used:
         logger.warning(
