@@ -2004,17 +2004,7 @@ def cmd_analyse(args: argparse.Namespace) -> None:
             payout_min=payout_min_exotic,
             allow_heuristic=allow_heuristic,
         )
-        filter_reasons.extend(eval_reasons)
-
-        template_copy = dict(template)
-        template_copy["ev_check"] = enriched
-        if raw_stats:
-            template_copy["_sim"] = raw_stats
-
-        if keep:
-            filtered_templates.append(template_copy)
-        else:
-            filter_reasons.extend(reasons)
+        filter_reasons.extend(eval_reasons)      
 
     if filter_reasons:
         for reason in filter_reasons:
