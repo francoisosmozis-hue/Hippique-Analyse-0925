@@ -2086,7 +2086,8 @@ def cmd_analyse(args: argparse.Namespace) -> None:
             bankroll_lookup=_combo_bankroll,
             ev_min=ev_min_exotic,
             payout_min=payout_min_exotic,
-            max_keep=2,
+            # Conform to the "SP + 1 combiné" rule of the GPI v5.1 playbook.
+            max_keep=1,
             allow_heuristic=allow_heuristic,
         )
         filter_reasons.extend(eval_reasons)      
