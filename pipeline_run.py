@@ -516,6 +516,54 @@ def _extract_entry_odds(entry: Mapping[str, Any]) -> float | None:
     return None
 
 
+def filter_sp_candidates(cands: Sequence[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
+    """Return Simple Placé candidates with place odds above the minimum threshold."""
+
+    total = len(cands)
+    kept: list[Mapping[str, Any]] = []
+    for cand in cands:
+        if not isinstance(cand, Mapping):
+            continue
+        odds = _extract_entry_odds(cand)
+        if odds is not None and odds >= MIN_SP_DEC_ODDS:
+            kept.append(cand)
+    logger.info(
+        "SP filter: kept=%d / total=%d (min_place_odds=%.1f)",
+        len(kept),
+        total,
+        MIN_SP_DEC_ODDS,
+    )
+    return kept
+
+
+def filter_cp_candidates(
+    pairs: Sequence[Sequence[Mapping[str, Any]]]
+) -> list[tuple[Mapping[str, Any], Mapping[str, Any]]]:
+    """Return Couplé Placé pairs meeting the cumulative place odds requirement."""
+
+    total = len(pairs)
+    kept: list[tuple[Mapping[str, Any], Mapping[str, Any]]] = []
+    for pair in pairs:
+        if not isinstance(pair, Sequence) or len(pair) != 2:
+            continue
+        leg_a, leg_b = pair[0], pair[1]
+        if not isinstance(leg_a, Mapping) or not isinstance(leg_b, Mapping):
+            continue
+        odds_a = _extract_entry_odds(leg_a)
+        odds_b = _extract_entry_odds(leg_b)
+        if odds_a is None or odds_b is None:
+            continue
+        if (odds_a + odds_b) >= MIN_CP_SUM_DEC:
+            kept.append((leg_a, leg_b))
+    logger.info(
+        "CP filter: kept=%d / total=%d (min_sum_place_odds=%.1f)",
+        len(kept),
+        total,
+        MIN_CP_SUM_DEC,
+    )
+    return kept
+
+
 def _build_runner_odds_lookup(
     runners: Iterable[Mapping[str, Any]],
     partants: Mapping[str, Any],
