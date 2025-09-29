@@ -662,3 +662,27 @@ def test_pipeline_optimization_preserves_ev_and_budget(tmp_path, monkeypatch):
     assert float(tracking["roi_sp"]) == pytest.approx(data["ev"]["roi_sp"])
     assert float(tracking["roi_global"]) == pytest.approx(data["ev"]["roi_global"])
    
+
+def test_filter_combos_strict_handles_missing_metrics():
+    class DummyWrapper:
+        def evaluate_combo(self, combo, bankroll, allow_heuristic=False):
+            return {
+                "status": "insufficient_data",
+                "ev_ratio": None,
+                "payout_expected": None,
+                "roi": None,
+                "sharpe": None,
+            }
+
+    templates = [{"id": "combo", "stake": 1.0}]
+    kept, reasons = pipeline_run.filter_combos_strict(
+        templates,
+        sim_wrapper=DummyWrapper(),
+        bankroll_lookup=lambda _template: 5.0,
+        ev_min=0.40,
+        payout_min=10.0,
+        allow_heuristic=False,
+    )
+
+    assert kept == []
+    assert "status_insufficient_data" in reasons
