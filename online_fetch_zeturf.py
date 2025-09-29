@@ -313,10 +313,19 @@ def _double_extract(
 
     for key in ("meeting", "discipline", "partants"):
         if data.get(key) in (None, "", 0):
-            logger.warning("[ZEturf] Champ clé manquant: %s (url=%s)", key, url)
+            logger.warning(
+                "[ZEturf] Champ clé manquant: %s (url=%s, snapshot=%s)",
+                key,
+                url,
+                snapshot_mode,
+            )
     data.setdefault("source_url", url)
     if fallback_used:
-        logger.warning("[ZEturf] Extraction fallback utilisée pour %s", url)
+        logger.warning(
+            "[ZEturf] Extraction fallback utilisée pour %s (snapshot=%s)",
+            url,
+            snapshot_mode,
+        )
     return data
 
 
