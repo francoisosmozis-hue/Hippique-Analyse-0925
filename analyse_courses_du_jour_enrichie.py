@@ -69,9 +69,9 @@ else:  # pragma: no cover - Cloud sync explicitly disabled
     push_tree = None  # type: ignore[assignment]
 
 
-# --- RÈGLES ANTI-COTES FAIBLES (SP min 4/1 ; CP somme > 6/1) -----------------
-MIN_SP_DEC_ODDS = 5.0        # 4/1 = 5.0
-MIN_CP_SUM_DEC = 8.0         # (o1-1)+(o2-1) > 6  <=> (o1+o2) > 8.0
+# --- RÈGLES ANTI-COTES FAIBLES (SP min 3/1 ; CP somme ≥ 4/1) ------------------
+MIN_SP_DEC_ODDS = 4.0        # 3/1 = 4.0
+MIN_CP_SUM_DEC = 6.0         # (o1-1)+(o2-1) ≥ 4  <=> (o1+o2) ≥ 6.0
 
 
 def _write_json_file(path: Path, payload: Any) -> None:
@@ -219,7 +219,7 @@ def _filter_sp_and_cp_by_odds(payload: dict[str, Any]) -> None:
                 ticket_filtered["legs"] = new_legs
                 kept.append(ticket_filtered)
             else:
-                _append_note("SP retiré: toutes les cotes < 4/1 (5.0 déc).")
+                _append_note("SP retiré: toutes les cotes < 3/1 (4.0 déc).")
             continue
 
         # 2) COUPLÉ PLACÉ (ou libellés équivalents)
@@ -265,10 +265,10 @@ def _filter_sp_and_cp_by_odds(payload: dict[str, Any]) -> None:
                 else:
                     _append_note(
                         "CP retiré: somme des cotes décimales"
-                        f" {odds_list[0]:.2f}+{odds_list[1]:.2f} ≤ 8.00 (règle > 6/1 cumulés)."
+                        f" {odds_list[0]:.2f}+{odds_list[1]:.2f} ≤ 6.00 (règle ≥ 4/1 cumulés)."
                     )
             else:
-                _append_note("CP retiré: cotes manquantes (règle >6/1 non vérifiable).")
+                _append_note("CP retiré: cotes manquantes (règle ≥4/1 non vérifiable).")
             continue
 
         kept.append(ticket)
