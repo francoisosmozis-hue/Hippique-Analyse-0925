@@ -200,9 +200,11 @@ def test_safe_enrich_h5_retries_when_rebuild_impossible(tmp_path, monkeypatch):
     assert calls["enrich"] == 2, "enrich_h5 should be retried when rebuild fails"
     
 
-    def test_filter_cp_accepts_threshold_sum():
+def test_filter_cp_accepts_threshold_sum():
     """Couplé placé odds summing to the threshold should be preserved."""
 
+    import analyse_courses_du_jour_enrichie as acd
+    
     ticket = {
         "type": "COUPLE_PLACE",
         "legs": [{"cote": "3.0"}, {"cote": "3.0"}],
