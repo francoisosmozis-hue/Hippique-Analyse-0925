@@ -500,7 +500,7 @@ def test_overround_cap_uses_metadata_fallbacks(
         "runners": runners_override,
     }
 
-    _run_analysis(
+    meta, log_entry, _ = _run_analysis(
         monkeypatch,
         tmp_path,
         eval_stats,
@@ -513,4 +513,86 @@ def test_overround_cap_uses_metadata_fallbacks(
     assert isinstance(last_call["discipline"], str)
     assert "handicap" in last_call["discipline"].lower()
     assert int(last_call["partants"]) == 14
-    assert last_call["default_cap"] == pytest.approx(1.30)
+    assert last_call["default_cap"] == pytest.approx(1.25)
+
+    thresholds_meta = meta["exotics"]["thresholds"]
+    assert thresholds_meta["overround_cap_default"] == pytest.approx(1.25)
+    assert thresholds_meta["overround_max"] == pytest.approx(1.30)
+
+    log_thresholds = log_entry["exotics"]["thresholds"]
+    assert log_thresholds["overround_cap_default"] == pytest.approx(1.25)
+    assert log_thresholds["overround_max"] == pytest.approx(1.30)
+
+
+def test_overround_cap_env_override_above_default(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    eval_stats = {
+        "status": "ok",
+        "ev_ratio": 0.6,
+        "payout_expected": 20.0,
+        "roi": 0.3,
+        "sharpe": 0.5,
+    }
+
+    monkeypatch.setenv("MAX_COMBO_OVERROUND", "1.42")
+
+    calls: list[float] = []
+
+    def echo_cap(*_args, default_cap: float, **_kwargs) -> float:
+        calls.append(default_cap)
+        return default_cap
+
+    meta, log_entry, _ = _run_analysis(
+        monkeypatch,
+        tmp_path,
+        eval_stats,
+        compute_cap_stub=echo_cap,
+    )
+
+    assert calls and calls[-1] == pytest.approx(1.42)
+
+    thresholds_meta = meta["exotics"]["thresholds"]
+    assert thresholds_meta["overround_cap_default"] == pytest.approx(1.42)
+    assert thresholds_meta["overround_max"] == pytest.approx(1.42)
+
+    log_thresholds = log_entry["exotics"]["thresholds"]
+    assert log_thresholds["overround_cap_default"] == pytest.approx(1.42)
+    assert log_thresholds["overround_max"] == pytest.approx(1.42)
+
+
+def test_overround_cap_env_override_below_default(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    eval_stats = {
+        "status": "ok",
+        "ev_ratio": 0.6,
+        "payout_expected": 20.0,
+        "roi": 0.3,
+        "sharpe": 0.5,
+    }
+
+    monkeypatch.setenv("MAX_COMBO_OVERROUND", "1.10")
+
+    calls: list[float] = []
+
+    def echo_cap(*_args, default_cap: float, **_kwargs) -> float:
+        calls.append(default_cap)
+        return default_cap
+
+    meta, log_entry, _ = _run_analysis(
+        monkeypatch,
+        tmp_path,
+        eval_stats,
+        compute_cap_stub=echo_cap,
+    )
+
+    assert calls and calls[-1] == pytest.approx(1.10)
+
+    thresholds_meta = meta["exotics"]["thresholds"]
+    assert thresholds_meta["overround_cap_default"] == pytest.approx(1.10)
+    assert thresholds_meta["overround_max"] == pytest.approx(1.10)
+
+    log_thresholds = log_entry["exotics"]["thresholds"]
+    assert log_thresholds["overround_cap_default"] == pytest.approx(1.10)
+    assert log_thresholds["overround_max"] == pytest.approx(1.10)
