@@ -299,6 +299,15 @@ def test_fetch_race_snapshot_accepts_direct_url(monkeypatch: pytest.MonkeyPatch)
     assert snapshot["course_id"] == "12345"
 
 
+def test_fallback_parse_handles_singular_partant() -> None:
+    """The HTML fallback should recognise singular ``partant`` mentions."""
+
+    html = "<div class='meta'>9 partant annoncé</div>"
+
+    parsed = cli._fallback_parse_html(html)
+
+    assert parsed["partants"] == 9
+
 def _stub_sources_config() -> dict[str, Any]:
     return {
         "rc_map": {
