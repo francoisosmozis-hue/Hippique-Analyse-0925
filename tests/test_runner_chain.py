@@ -1,3 +1,5 @@
+import logging
+
 import pytest
 
 import runner_chain
@@ -195,6 +197,32 @@ def test_validate_exotics_with_simwrapper_rejects_low_sharpe(monkeypatch):
 
     assert tickets == []
     assert 'sharpe_below_threshold' in info['flags']['reasons']['combo']
+
+
+def test_validate_exotics_with_simwrapper_logs_rejected_status(monkeypatch, caplog):
+    def fake_eval(tickets, bankroll, allow_heuristic=True):
+        return {
+            'status': 'KO',
+            'notes': [],
+        }
+
+    monkeypatch.setattr(runner_chain, 'evaluate_combo', fake_eval)
+
+    caplog.set_level(logging.WARNING)
+
+    tickets, info = runner_chain.validate_exotics_with_simwrapper(
+        [[{'id': 'bad_combo', 'p': 0.4, 'odds': 3.0, 'stake': 1.0}]],
+        bankroll=10,
+    )
+
+    assert tickets == []
+    assert info['flags']['combo'] is False
+    assert any(reason.startswith('status_') for reason in info['flags']['reasons']['combo'])
+
+    messages = [record.message for record in caplog.records if 'Simwrapper rejected candidate' in record.message]
+    assert messages, 'Expected rejection warning to be logged'
+    assert 'status=ko' in messages[0]
+    assert 'bad_combo' in messages[0]
 
 
 def test_export_tracking_csv_line(tmp_path):
