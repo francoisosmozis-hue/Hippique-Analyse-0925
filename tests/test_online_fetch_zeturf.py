@@ -85,6 +85,7 @@ def test_race_snapshot_as_dict_includes_aliases() -> None:
         c_label="C3",
         source_url="https://www.zeturf.fr/fr/course/2024-09-15/R1C3-paris",
         course_id="987654",
+        heure_officielle="13:45",
     )
 
     payload = snapshot.as_dict()
@@ -99,6 +100,7 @@ def test_race_snapshot_as_dict_includes_aliases() -> None:
     assert payload["course_id"] == "987654"
     assert payload["partants"] is payload["runners"]
     assert payload["partants_count"] == 14
+    assert payload["heure_officielle"] == "13:45"
 
 
 def test_resolve_source_url_new_structure() -> None:
@@ -602,6 +604,7 @@ def test_cli_fetch_race_snapshot_meta_fallback(
                 "discipline": "plat",
                 "partants": "16 partants",
                 "date": "2024-11-02",
+                "course": {"heure_officielle": "13:15"},
             },
         }
 
@@ -616,6 +619,7 @@ def test_cli_fetch_race_snapshot_meta_fallback(
     assert snapshot["partants_count"] == 16
     assert snapshot["partants"] == snapshot["runners"]
     assert snapshot["date"] == "2024-11-02"
+    assert snapshot["heure_officielle"] == "13:15"
     assert snapshot["reunion"] == "R2"
     assert snapshot["course"] == "C3"
     assert calls["phase"] == "H5"
