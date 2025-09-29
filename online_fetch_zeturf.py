@@ -82,6 +82,7 @@ class RaceSnapshot:
     c_label: str
     source_url: str | None = None
     course_id: str | None = None
+    heure_officielle: str | None = None
 
     def as_dict(self) -> Dict[str, Any]:
         payload: Dict[str, Any] = {
@@ -96,6 +97,7 @@ class RaceSnapshot:
             "partants_count": self.partants_count,
             "phase": self.phase,
             "rc": self.rc,
+            "heure_officielle": self.heure_officielle,
         }
         payload["partants"] = payload["runners"]
         # ``hippodrome`` is often used as an alias for ``meeting`` downstream.
@@ -679,6 +681,11 @@ def _build_snapshot_payload(
     meeting = _coerce_str(raw_snapshot.get("hippodrome") or raw_snapshot.get("meeting"))
     date = _coerce_str(raw_snapshot.get("date"))
     discipline = _coerce_str(raw_snapshot.get("discipline"))
+    heure_officielle = _coerce_str(
+        raw_snapshot.get("heure_officielle")
+        or raw_snapshot.get("official_time")
+        or raw_snapshot.get("start_time")
+    )
     course_id = raw_snapshot.get("course_id") or raw_snapshot.get("id_course")
     runners_raw = raw_snapshot.get("runners")
     runners: list[dict[str, Any]] = []
@@ -740,6 +747,22 @@ def _build_snapshot_payload(
         if candidate:
             discipline = candidate
 
+    if heure_officielle is None:
+        candidate = _first_meta_value(
+            meta_raw,
+            "heure_officielle",
+            "official_time",
+            "start_time",
+        )
+        if candidate is None:
+            candidate = _first_meta_value(
+                course_meta,
+                "heure_officielle",
+                "official_time",
+                "start_time",
+            )
+        heure_officielle = _coerce_str(candidate)
+        
     if partants_count is None:
         candidate = _first_meta_value(meta_raw, "partants", "nb_partants", "n_partants", "participants")
         if candidate is None:
@@ -764,6 +787,7 @@ def _build_snapshot_payload(
         c_label=course,
         source_url=source_url,
         course_id=str(course_id) if course_id else None,
+        heure_officielle=heure_officielle,
     )
 
     missing_fields = []
