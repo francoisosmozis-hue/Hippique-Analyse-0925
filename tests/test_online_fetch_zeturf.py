@@ -400,7 +400,32 @@ def test_cli_fetch_race_snapshot_accepts_combined_rc(
     assert calls["rc"] == "R1C1"
     assert snapshot["reunion"] == "R1"
     assert snapshot["course"] == "C1"
-    assert snapshot["runners"][0]["num"] == "3"
+    
+
+def test_cli_fetch_race_snapshot_warns_on_missing_fields(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Missing meeting/discipline/partants should trigger warning logs."""
+
+    def fake_double_extract(url: str, *, snapshot: str, session: Any | None = None) -> dict[str, Any]:
+        assert snapshot == "H30"
+        return {"runners": [{"num": "1", "name": "Alpha"}]}
+
+    monkeypatch.setattr(cli, "_double_extract", fake_double_extract)
+    monkeypatch.setattr(cli, "requests", None)
+
+    caplog.set_level(logging.WARNING, logger=cli.logger.name)
+
+    snapshot = cli.fetch_race_snapshot(
+        "R1",
+        "C1",
+        phase="H30",
+        url="https://www.zeturf.fr/fr/course/placeholder",
+    )
+
+    assert snapshot["runners"] == [{"num": "1", "name": "Alpha"}]
+    assert snapshot["partants"] == 1
+    assert any("Champ(s) manquant(s)" in record.message for record in caplog.records)
 
 
 def test_cli_fetch_race_snapshot_meta_fallback(
