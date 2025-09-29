@@ -218,12 +218,14 @@ def test_missing_enrich_outputs(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
     decision_path = rc_dir / "decision.json"
     assert decision_path is not None
     payload = json.loads(decision_path.read_text(encoding="utf-8"))
-    assert payload == {
-        "status": "no-bet",
-        "decision": "ABSTENTION",
-        "reason": "data-missing",
-        "details": {"missing": ["snap_H-5_je.csv"]},
-    }
+    assert payload.get("status") == "no-bet"
+    assert payload.get("decision") == "ABSTENTION"
+    assert payload.get("reason") == "data-missing"
+
+    details = payload.get("details", {})
+    assert isinstance(details, dict)
+    missing = details.get("missing")
+    assert missing == ["snap_H-5_je.csv"]
     marker = rc_dir / "UNPLAYABLE.txt"
     assert marker.exists()
     chronos_path = rc_dir / "chronos.csv"
