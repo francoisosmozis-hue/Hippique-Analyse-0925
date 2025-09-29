@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import logging
 import os
 import re
 import subprocess
@@ -36,6 +37,8 @@ if _fetch_module is not None and not hasattr(_fetch_module, "fetch_race_snapshot
 from scripts.fetch_je_stats import collect_stats
 
 import pipeline_run
+
+logger = logging.getLogger(__name__)
 
 USE_GCS = is_gcs_enabled()
 
@@ -1032,6 +1035,18 @@ def _mark_course_unplayable(rc_dir: Path, missing: Iterable[str]) -> None:
             f"[WARN] impossible d'écrire {marker.name} dans {rc_dir.name}: {exc}",
             file=sys.stderr,
         )
+        logger.warning(
+            "[H-5] impossible d'écrire le marqueur %s pour %s: %s",
+            marker.name,
+            rc_dir,
+            exc,
+        )
+    else:
+        logger.warning(
+            "[H-5] course marquée non jouable (rc=%s, raison=%s)",
+            rc_dir.name or "?",
+            marker_message,
+        )
 
     label = rc_dir.name or "?"
     print(
@@ -1165,6 +1180,11 @@ def safe_enrich_h5(
         except OSError:  # pragma: no cover - file removed between exists/read
             marker_message = ""
         details = {"marker": marker_message or None}
+        logger.warning(
+            "[H-5] course déjà marquée non jouable (rc=%s, marker=%s)",
+            rc_dir.name or "?",
+            marker_message or "UNPLAYABLE",
+        )
         print(
             f"[ABSTAIN] Course déjà marquée non jouable – {rc_dir.name}",
             file=sys.stderr,
