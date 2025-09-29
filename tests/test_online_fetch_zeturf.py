@@ -404,6 +404,29 @@ def test_double_extract_populates_hippodrome_from_fallback(
     assert data["runners"]
 
 
+def test_double_extract_warns_when_no_runners(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The helper should warn when the DOM yields no runner entries."""
+
+    html = "<html><body><p>Course indisponible</p></body></html>"
+
+    monkeypatch.setattr(cli, "_http_get", lambda url, session=None: html)
+
+    def fake_parse(url: str, snapshot: str) -> dict[str, Any]:
+        assert snapshot in {"H-30", "H-5"}
+        return {}
+
+    monkeypatch.setattr(cli._impl, "parse_course_page", fake_parse, raising=False)
+
+    with caplog.at_level(logging.WARNING, logger=cli.logger.name):
+        data = cli._double_extract("https://example.test/R9C9", snapshot="H-5")
+
+    assert data["runners"] == []
+    assert any("Aucun partant détecté" in record.message for record in caplog.records)
+
+
 def test_fallback_parse_handles_singular_partant() -> None:
     """The HTML fallback should recognise singular ``partant`` mentions."""
 
