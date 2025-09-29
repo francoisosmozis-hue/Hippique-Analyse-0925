@@ -14,8 +14,10 @@ optional ``ALERTE_VALUE`` column when the alert flag is present.
 from __future__ import annotations
 
 import logging
+import os
 import re
 import unicodedata
+from pathlib import Path
 
 
 from typing import Any, Dict, Iterable, List, Mapping, Sequence, Tuple
@@ -26,6 +28,34 @@ from logging_io import append_csv_line, CSV_HEADER
 
 logger = logging.getLogger(__name__)
 
+try:
+    MAX_COMBO_OVERROUND = float(os.getenv("MAX_COMBO_OVERROUND", "1.25"))
+except (TypeError, ValueError):  # pragma: no cover - defensive fallback
+    MAX_COMBO_OVERROUND = 1.25
+
+CALIB_PATH = os.getenv("CALIB_PATH", "config/payout_calibration.yaml")
+
+
+def _resolve_calibration_path() -> tuple[Path, bool]:
+    """Return the payout calibration path and whether it exists."""
+
+    candidates: list[Path] = []
+    if CALIB_PATH:
+        try:
+            candidates.append(Path(CALIB_PATH))
+        except TypeError:  # pragma: no cover - defensive guard
+            pass
+    candidates.append(Path("config/payout_calibration.yaml"))
+    candidates.append(Path("calibration/payout_calibration.yaml"))
+
+    for candidate in candidates:
+        try:
+            if candidate.exists():
+                return candidate, True
+        except OSError:  # pragma: no cover - filesystem issues
+            continue
+
+    return candidates[0], False
 
 def compute_overround_cap(
     discipline: str | None,
@@ -143,7 +173,7 @@ def filter_exotics_by_overround(
     exotics: Iterable[List[Dict[str, Any]]],
     *,
     overround: float | None,
-    overround_max: float = 1.30,
+    overround_max: float | None = None,
     discipline: str | None = None,
     partants: Any = None,
     course_label: str | None = None,
@@ -151,10 +181,15 @@ def filter_exotics_by_overround(
     """Filter exotic tickets when the market overround exceeds the cap."""
 
     context: Dict[str, Any] = {}
+    try:
+        default_cap = float(overround_max) if overround_max is not None else MAX_COMBO_OVERROUND
+    except (TypeError, ValueError):  # pragma: no cover - defensive fallback
+        default_cap = MAX_COMBO_OVERROUND
+
     cap = compute_overround_cap(
         discipline,
         partants,
-        default_cap=overround_max,
+        default_cap=default_cap,
         course_label=course_label,
         context=context,        
     )
@@ -225,6 +260,21 @@ def validate_exotics_with_simwrapper(
     notes_seen: set[str] = set()
     reasons: List[str] = []
     alerte = False
+
+    calib_path, has_calib = _resolve_calibration_path()
+    if not has_calib:
+        logger.warning(
+            "[COMBO] Calibration payout introuvable (%s) → combinés désactivés.",
+            calib_path,
+        )
+        reason = "calibration_missing"
+        info = {
+            "notes": [reason],
+            "flags": {"combo": False, "reasons": {"combo": [reason]}},
+            "decision": f"reject:{reason}",
+            "status": "insufficient_data",
+        }
+        return [], info
 
     def add_note(label: str) -> None:
         if label not in notes_seen:
