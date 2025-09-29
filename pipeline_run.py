@@ -2052,13 +2052,17 @@ def cmd_analyse(args: argparse.Namespace) -> None:
         elif partants:
             partants_hint = len(partants)
 
+    overround_context: Dict[str, Any] = {}
     overround_cap = compute_overround_cap(
         discipline_hint,
         partants_hint,
         default_cap=1.30,
         course_label=course_label_text,
+        context=overround_context,
     )
     combo_info["thresholds"]["overround_max"] = overround_cap
+    if overround_context:
+        combo_info["thresholds"]["overround_context"] = overround_context
     metrics = combo_info.setdefault("metrics", {})
     if market_overround is not None:
         metrics["overround"] = market_overround
