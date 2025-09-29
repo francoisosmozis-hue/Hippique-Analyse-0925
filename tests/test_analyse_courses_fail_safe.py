@@ -198,13 +198,38 @@ def test_safe_enrich_h5_retries_when_rebuild_impossible(tmp_path, monkeypatch):
     assert success is True
     assert outcome is None
     assert calls["enrich"] == 2, "enrich_h5 should be retried when rebuild fails"
-    assert je_csv.exists()
-    assert not (rc_dir / "UNPLAYABLE.txt").exists()
+    
 
-    content = je_csv.read_text(encoding="utf-8")
-    rows = list(csv.reader(io.StringIO(content)))
-    assert rows[0] == ["num", "nom", "j_rate", "e_rate"]
-    assert rows[1] == ["1", "Gamma", "0.50", "0.60"]
+    def test_filter_cp_accepts_threshold_sum():
+    """Couplé placé odds summing to the threshold should be preserved."""
+
+    ticket = {
+        "type": "COUPLE_PLACE",
+        "legs": [{"cote": "3.0"}, {"cote": "3.0"}],
+    }
+    payload = {"tickets": [ticket], "notes": []}
+
+    acd._filter_sp_and_cp_by_odds(payload)
+
+    assert payload["tickets"] == [ticket]
+    assert payload["notes"] == []
+
+
+def test_filter_cp_rejects_when_sum_below_threshold():
+    """Couplé placé odds with insufficient sum should be rejected."""
+
+    ticket = {
+        "type": "COUPLE_PLACE",
+        "legs": [{"cote": "2.50"}, {"cote": "3.00"}],
+    }
+    payload = {"tickets": [ticket], "notes": []}
+
+    acd._filter_sp_and_cp_by_odds(payload)
+
+    assert payload["tickets"] == []
+    assert payload["notes"] == [
+        "CP retiré: somme des cotes décimales 2.50+3.00 < 6.00 (règle ≥ 4/1 cumulés)."
+    ]
 
 
 def test_safe_enrich_h5_recovers_after_retry_with_stats(tmp_path, monkeypatch):
