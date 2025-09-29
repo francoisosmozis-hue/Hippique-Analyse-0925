@@ -147,6 +147,44 @@ def _evaluate_combo_strict(
     return keep, enriched, reasons, raw_stats
 
 
+def filter_combos_strict(
+    templates: Sequence[Mapping[str, Any]],
+    *,
+    sim_wrapper,
+    bankroll_lookup: Callable[[Mapping[str, Any]], float],
+    ev_min: float,
+    payout_min: float,
+    allow_heuristic: bool = False,
+) -> tuple[list[dict[str, Any]], list[str]]:
+    """Filter exotic combo templates enforcing strict EV/payout guards."""
+
+    kept: list[dict[str, Any]] = []
+    rejection_reasons: list[str] = []
+
+    for template in templates:
+        bankroll = bankroll_lookup(template)
+        keep, enriched, reasons, raw_stats = _evaluate_combo_strict(
+            template,
+            bankroll,
+            sim_wrapper=sim_wrapper,
+            ev_min=ev_min,
+            payout_min=payout_min,
+            allow_heuristic=allow_heuristic,
+        )
+
+        template_copy = dict(template)
+        template_copy["ev_check"] = enriched
+        if raw_stats:
+            template_copy["_sim"] = raw_stats
+
+        if keep:
+            kept.append(template_copy)
+        else:
+            rejection_reasons.extend(reasons)
+
+    return kept, rejection_reasons
+
+
 def _maybe_load_dotenv() -> None:
     """Load environment variables from a .env file when available."""
 
@@ -1921,7 +1959,6 @@ def cmd_analyse(args: argparse.Namespace) -> None:
         "payout_accept_min": EXOTIC_BASE_PAYOUT,
     }
 
-    filtered_templates: list[dict] = []
     filter_reasons: list[str] = []
 
     market_overround = _compute_market_overround(odds_h5)
@@ -1950,19 +1987,24 @@ def cmd_analyse(args: argparse.Namespace) -> None:
                 reasons_list.append("overround_above_threshold")
             filter_reasons.append("overround_above_threshold")
             combo_templates = []
-    for template in combo_templates:
-        bankroll_for_eval = combo_budget if combo_budget > 0 else float(template.get("stake", 0.0))
-        if bankroll_for_eval <= 0:
-            bankroll_for_eval = 1.0
             
-        keep, enriched, reasons, raw_stats = _evaluate_combo_strict(
-            template,
-            bankroll_for_eval,
+    filtered_templates: list[dict[str, Any]] = []
+    if combo_templates:
+        def _combo_bankroll(template: Mapping[str, Any]) -> float:
+            bankroll_for_eval = combo_budget if combo_budget > 0 else float(template.get("stake", 0.0))
+            if bankroll_for_eval <= 0:
+                return 1.0
+            return bankroll_for_eval
+
+        filtered_templates, eval_reasons = filter_combos_strict(
+            combo_templates,
             sim_wrapper=sw,
+            bankroll_lookup=_combo_bankroll,
             ev_min=ev_min_exotic,
             payout_min=payout_min_exotic,
             allow_heuristic=allow_heuristic,
         )
+        filter_reasons.extend(eval_reasons)
 
         template_copy = dict(template)
         template_copy["ev_check"] = enriched
