@@ -1326,7 +1326,6 @@ def _ensure_h5_artifacts(
         phase=phase,
         budget=budget,
     )
-        outcome_details.update(marker_details)
     return outcome
 
 
