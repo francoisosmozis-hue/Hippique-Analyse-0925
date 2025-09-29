@@ -1019,14 +1019,25 @@ def _regenerate_chronos_csv(rc_dir: Path) -> bool:
     return False
 
 
-def _mark_course_unplayable(rc_dir: Path, missing: Iterable[str]) -> None:
-    """Write the abstention marker and emit the canonical abstain log."""
+def _mark_course_unplayable(rc_dir: Path, missing: Iterable[str]) -> dict[str, Any]:
+    """Write the abstention marker and emit the canonical abstain log.
+
+    Returns a mapping containing diagnostic information (marker path, message and
+    whether the file was written successfully) so callers can enrich their
+    ``decision.json`` payload with the same context.
+    """
 
     marker = rc_dir / "UNPLAYABLE.txt"
     marker_message = "non jouable: data JE/chronos manquante"
     missing_items = [str(item) for item in missing if item]
     if missing_items:
         marker_message = f"{marker_message} ({', '.join(missing_items)})"
+
+    details: dict[str, Any] = {
+        "marker_path": str(marker),
+        "marker_message": marker_message,
+        "marker_written": False,
+    }
 
     try:
         marker.write_text(marker_message + "\n", encoding="utf-8")
@@ -1042,6 +1053,7 @@ def _mark_course_unplayable(rc_dir: Path, missing: Iterable[str]) -> None:
             exc,
         )
     else:
+        details["marker_written"] = True
         logger.warning(
             "[H-5] course marquée non jouable (rc=%s, raison=%s)",
             rc_dir.name or "?",
@@ -1053,6 +1065,8 @@ def _mark_course_unplayable(rc_dir: Path, missing: Iterable[str]) -> None:
         f"[ABSTAIN] Course non jouable (data manquante) – {label}",
         file=sys.stderr,
     )
+
+    return details
 
 
 def _ensure_h5_artifacts(
@@ -1160,7 +1174,10 @@ def _ensure_h5_artifacts(
                 return None
             missing = list(outcome.get("details", {}).get("missing", []))
 
-    _mark_course_unplayable(rc_dir, missing)
+    marker_details = _mark_course_unplayable(rc_dir, missing)
+    outcome_details = outcome.setdefault("details", {})
+    if isinstance(outcome_details, dict):
+        outcome_details.update(marker_details)
     return outcome
 
 
