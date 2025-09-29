@@ -477,13 +477,14 @@ def test_overround_cap_uses_metadata_fallbacks(
 
     calls: list[dict[str, Any]] = []
 
-    def record_cap(discipline, partants, *, default_cap, course_label):
+    def record_cap(discipline, partants, *, default_cap, course_label, **kwargs):
         calls.append(
             {
                 "discipline": discipline,
                 "partants": partants,
                 "default_cap": default_cap,
                 "course_label": course_label,
+                "context": kwargs.get("context"),
             }
         )
         return 1.30
