@@ -120,6 +120,13 @@ def _evaluate_combo_strict(
     roi_val = _coerce_float(raw_stats.get("roi"))
     sharpe_val = _coerce_float(raw_stats.get("sharpe"))
 
+    notes_raw = raw_stats.get("notes")
+    notes: list[str] = []
+    if isinstance(notes_raw, (list, tuple, set)):
+        notes = [str(value) for value in notes_raw if value not in (None, "")]
+    elif notes_raw not in (None, ""):
+        notes = [str(notes_raw)]
+        
     keep = True
     reasons: list[str] = []
 
@@ -138,6 +145,9 @@ def _evaluate_combo_strict(
     if payout_expected < payout_min:
         reasons.append("payout_below_pipeline_threshold")
         keep = False
+    if "combo_probabilities_unreliable" in notes:
+        reasons.append("probabilities_unreliable")
+        keep = False
 
     if not keep:
         logger.info(
@@ -153,6 +163,7 @@ def _evaluate_combo_strict(
         "payout_expected": payout_expected,
         "roi": roi_val,
         "sharpe": sharpe_val,
+        "notes": notes,
     }
 
     return keep, enriched, reasons, raw_stats
@@ -192,6 +203,16 @@ def filter_combos_strict(
             kept.append(template_copy)
         else:
             rejection_reasons.extend(reasons)
+
+    if rejection_reasons:
+        seen: set[str] = set()
+        deduped: list[str] = []
+        for reason in rejection_reasons:
+            if reason in seen:
+                continue
+            deduped.append(reason)
+            seen.add(reason)
+        rejection_reasons = deduped
 
     return kept, rejection_reasons
 
