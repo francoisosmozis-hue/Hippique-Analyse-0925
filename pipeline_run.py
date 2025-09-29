@@ -176,6 +176,7 @@ def filter_combos_strict(
     bankroll_lookup: Callable[[Mapping[str, Any]], float],
     ev_min: float,
     payout_min: float,
+    max_keep: int = 1,
     allow_heuristic: bool = False,
 ) -> tuple[list[dict[str, Any]], list[str]]:
     """Filter exotic combo templates enforcing strict EV/payout guards."""
@@ -204,7 +205,9 @@ def filter_combos_strict(
         else:
             rejection_reasons.extend(reasons)
 
-    if len(kept) > 1:
+    keep_cap = max(1, int(max_keep))
+
+    if len(kept) > keep_cap:
         def _sort_key(entry: Mapping[str, Any]) -> tuple[float, float]:
             ev_meta = entry.get("ev_check") if isinstance(entry, Mapping) else {}
             if not isinstance(ev_meta, Mapping):
@@ -215,14 +218,15 @@ def filter_combos_strict(
             )
 
         kept.sort(key=_sort_key, reverse=True)
-        dropped = kept[1:]
-        kept = kept[:1]
+        dropped = kept[keep_cap:]
+        kept = kept[:keep_cap]
 
         if dropped:
             dropped_ids = [str(entry.get("id") or entry.get("type") or "?") for entry in dropped]
             logger.info(
-                "[COMBO] Limitation à la meilleure combinaison: conservé %s, ignoré %s",
-                kept[0].get("id") if kept else "?",
+                "[COMBO] Limitation aux %d meilleures combinaisons: conservées %s, ignorées %s",
+                keep_cap,
+                ", ".join(str(entry.get("id") or entry.get("type") or "?") for entry in kept),
                 ", ".join(dropped_ids),
             )
             rejection_reasons.append("combo_limit_enforced")
@@ -2082,6 +2086,7 @@ def cmd_analyse(args: argparse.Namespace) -> None:
             bankroll_lookup=_combo_bankroll,
             ev_min=ev_min_exotic,
             payout_min=payout_min_exotic,
+            max_keep=2,
             allow_heuristic=allow_heuristic,
         )
         filter_reasons.extend(eval_reasons)      
