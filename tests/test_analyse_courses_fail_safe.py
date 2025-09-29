@@ -363,6 +363,30 @@ def test_ensure_h5_artifacts_rebuilds_after_retry_cb(tmp_path, monkeypatch):
     assert rows[1] == ["7", "Juliet", "0.55", "0.65"]
 
 
+def test_safe_enrich_h5_skips_when_marker_exists(tmp_path, monkeypatch):
+    """Existing UNPLAYABLE marker should short-circuit further processing."""
+
+    rc_dir = tmp_path / "R2C4"
+    rc_dir.mkdir(parents=True, exist_ok=True)
+    marker = rc_dir / "UNPLAYABLE.txt"
+    marker.write_text("non jouable: data JE/chronos manquante\n", encoding="utf-8")
+
+    def forbidden(*_args, **_kwargs):
+        raise AssertionError("enrich_h5 should not run when a marker is present")
+
+    monkeypatch.setattr(acd, "enrich_h5", forbidden)
+
+    success, outcome = acd.safe_enrich_h5(rc_dir, budget=5.0, kelly=0.05)
+
+    assert success is False
+    assert outcome == {
+        "status": "no-bet",
+        "decision": "ABSTENTION",
+        "reason": "unplayable-marker",
+        "details": {"marker": "non jouable: data JE/chronos manquante"},
+    }
+
+
 def test_ensure_h5_artifacts_rebuilds_when_retry_creates_stats(tmp_path, monkeypatch):
     """A retry callback providing stats should trigger a rebuild even if fetch failed."""
 
