@@ -25,6 +25,7 @@ from typing import Any, Callable, Iterable
 import requests
 from bs4 import BeautifulSoup
 
+from logging_io import append_csv_line, CSV_HEADER
 from scripts.gcs_utils import disabled_reason, is_gcs_enabled
 from scripts.online_fetch_zeturf import normalize_snapshot
 
@@ -41,6 +42,8 @@ import pipeline_run
 logger = logging.getLogger(__name__)
 
 USE_GCS = is_gcs_enabled()
+
+TRACKING_HEADER = CSV_HEADER + ["phase", "status", "reason"]
 
 try:  # pragma: no cover - optional dependency in tests
     from scripts.online_fetch_zeturf import write_snapshot_from_geny
@@ -76,6 +79,128 @@ MIN_CP_SUM_DEC = 6.0         # (o1-1)+(o2-1) ≥ 4  <=> (o1+o2) ≥ 6.0
 
 def _write_json_file(path: Path, payload: Any) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _load_json_if_exists(path: Path) -> dict[str, Any] | None:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _coerce_int(value: Any) -> int | None:
+    try:
+        if isinstance(value, bool):
+            return None
+        if isinstance(value, (int, float)):
+            return int(value)
+        if isinstance(value, str):
+            text = value.strip()
+            match = re.search(r"\d+", text)
+            if match:
+                return int(match.group(0))
+    except Exception:  # pragma: no cover - defensive
+        return None
+    return None
+
+
+def _derive_rc_parts(label: str) -> tuple[str, str]:
+    text = str(label or "").replace(" ", "").upper()
+    match = re.match(r"^(R\d+)(C\d+)$", text)
+    if match:
+        return match.group(1), match.group(2)
+    if text.startswith("R") and "C" in text:
+        r_part, c_part = text.split("C", 1)
+        return r_part, f"C{c_part}"
+    return text or "", ""
+
+
+def _gather_tracking_base(rc_dir: Path) -> dict[str, Any]:
+    payloads: list[dict[str, Any]] = []
+    for name in ("p_finale.json", "partants.json", "normalized_h5.json"):
+        data = _load_json_if_exists(rc_dir / name)
+        if not data:
+            continue
+        payloads.append(data)
+        meta = data.get("meta")
+        if isinstance(meta, dict):
+            payloads.append(meta)
+
+    def _first(*keys: str) -> Any:
+        for mapping in payloads:
+            for key in keys:
+                value = mapping.get(key)
+                if value not in (None, ""):
+                    return value
+        return None
+
+    rc_value = _first("rc") or rc_dir.name
+    reunion, course = _derive_rc_parts(rc_value)
+    hippo = _first("hippodrome", "meeting") or ""
+    date = _first("date", "jour", "day") or ""
+    discipline = _first("discipline", "type", "categorie", "category") or ""
+    model = _first("model") or ""
+
+    partants_value = _first(
+        "partants",
+        "nb_participants",
+        "nb_partants",
+        "nombre_partants",
+        "participants",
+        "number_of_runners",
+    )
+    partants_count = _coerce_int(partants_value)
+    if partants_count is None:
+        for mapping in payloads:
+            runners = mapping.get("runners")
+            if isinstance(runners, list) and runners:
+                partants_count = len(runners)
+                break
+
+    base = {
+        "reunion": reunion,
+        "course": course,
+        "hippodrome": hippo,
+        "date": date,
+        "discipline": discipline,
+        "partants": partants_count or "",
+        "nb_tickets": 0,
+        "total_stake": 0,
+        "total_optimized_stake": 0,
+        "ev_sp": 0,
+        "ev_global": 0,
+        "roi_sp": 0,
+        "roi_global": 0,
+        "risk_of_ruin": 0,
+        "clv_moyen": 0,
+        "model": model,
+    }
+    return base
+
+
+def _log_tracking_missing(
+    rc_dir: Path,
+    *,
+    status: str,
+    reason: str,
+    phase: str,
+    budget: float | None = None,
+    ev: float | None = None,
+    roi: float | None = None,
+) -> None:
+    base = _gather_tracking_base(rc_dir)
+    if budget is not None and budget > 0:
+        base["total_stake"] = f"{float(budget):.2f}"
+        base["total_optimized_stake"] = f"{float(budget):.2f}"
+    if ev is not None:
+        base["ev_sp"] = base["ev_global"] = ev
+    if roi is not None:
+        base["roi_sp"] = base["roi_global"] = roi
+    base["phase"] = phase
+    base["status"] = status
+    base["reason"] = reason
+    append_csv_line(str(rc_dir / "tracking.csv"), base, header=TRACKING_HEADER)
 
 
 def _extract_id2name(payload: Any) -> dict[str, str]:
@@ -1070,7 +1195,11 @@ def _mark_course_unplayable(rc_dir: Path, missing: Iterable[str]) -> dict[str, A
 
 
 def _ensure_h5_artifacts(
-    rc_dir: Path, *, retry_cb: Callable[[], None] | None = None
+    rc_dir: Path,
+    *,
+    retry_cb: Callable[[], None] | None = None,
+    budget: float | None = None,
+    phase: str = "H5",
 ) -> dict[str, Any] | None:
     """Ensure H-5 enrichment produced JE/chronos files or mark course unplayable."""
 
@@ -1175,8 +1304,28 @@ def _ensure_h5_artifacts(
             missing = list(outcome.get("details", {}).get("missing", []))
 
     marker_details = _mark_course_unplayable(rc_dir, missing)
+    status_label = "NO_PLAY_DATA_MISSING"
+    reason_label = "DATA_MISSING"
+    if not outcome.get("status"):
+        outcome["status"] = "no-bet"
+    if not outcome.get("reason"):
+        outcome["reason"] = "data-missing"
+    analysis_block = outcome.setdefault("analysis", {})
+    if isinstance(analysis_block, dict):
+        analysis_block["status"] = status_label
     outcome_details = outcome.setdefault("details", {})
     if isinstance(outcome_details, dict):
+        outcome_details.update(marker_details)
+        outcome_details.setdefault("phase", phase)
+        outcome_details.setdefault("reason", reason_label)
+        outcome_details.setdefault("status_label", status_label)
+    _log_tracking_missing(
+        rc_dir,
+        status=status_label,
+        reason=reason_label,
+        phase=phase,
+        budget=budget,
+    )
         outcome_details.update(marker_details)
     return outcome
 
@@ -1217,6 +1366,8 @@ def safe_enrich_h5(
     outcome = _ensure_h5_artifacts(
         rc_dir,
         retry_cb=lambda d=rc_dir: enrich_h5(d, budget=budget, kelly=kelly),
+        budget=budget,
+        phase="H5",
     )
     if outcome is not None:
         return False, outcome
