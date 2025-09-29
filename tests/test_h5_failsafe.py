@@ -173,4 +173,4 @@ def test_mark_course_unplayable_writes_marker(
         assert item in content
 
     captured = capsys.readouterr()
-    assert "Course marquée non jouable" in captured.err
+    assert "Course non jouable" in captured.err
