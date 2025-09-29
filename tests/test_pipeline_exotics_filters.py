@@ -56,7 +56,7 @@ def _prepare_stubs(
     eval_stats: dict[str, float | str],
     *,
     overround_cap: float = 5.0,
-    market_overround: float | None = None
+    market_overround: float | None = None,
     compute_cap_stub: Callable[..., float] | None = None,
 ):
     pipeline_run._load_simulate_ev.cache_clear()
