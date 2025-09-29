@@ -986,26 +986,36 @@ def fetch_race_snapshot(
         html_snapshot: dict[str, Any] | None = None
         if url:
             direct_url = _ensure_absolute_url(url) or url
-            try:
-                html_snapshot = _double_extract(
-                    direct_url,
-                    snapshot=phase_norm,
-                    session=session_obj,
-                )
-            except Exception as exc:  # pragma: no cover - defensive logging
-                last_error = exc
-                logger.warning(
-                    "[ZEturf] lecture directe échouée pour %s: %s",
-                    direct_url,
-                    exc,
-                )
+            base_delay = backoff if backoff > 0 else 1.0
+            for attempt in range(1, retry_count_int + 1):
+                try:
+                    html_snapshot = _double_extract(
+                        direct_url,
+                        snapshot=phase_norm,
+                        session=session_obj,
+                    )
+                except Exception as exc:  # pragma: no cover - defensive logging
+                    last_error = exc
+                    logger.warning(
+                        "[ZEturf] lecture directe échouée pour %s (tentative %d/%d): %s",
+                        direct_url,
+                        attempt,
+                        retry_count_int,
+                        exc,
+                    )
+                    if attempt < retry_count_int:
+                        _exp_backoff_sleep(attempt, base=base_delay)
+                    continue
+                else:
+                    html_attempted.add(direct_url)
+                    if html_snapshot:
+                        html_snapshot.setdefault("source_url", direct_url)
+                        html_snapshot.setdefault("phase", phase_norm)
+                        raw_snapshot = dict(html_snapshot)
+                    break            
             else:
                 html_attempted.add(direct_url)
-                if html_snapshot:
-                    html_snapshot.setdefault("source_url", direct_url)
-                    html_snapshot.setdefault("phase", phase_norm)
-                    raw_snapshot = dict(html_snapshot)
-
+                
         if html_snapshot is None:
             html_snapshot = _try_html(fallback_urls)
         if isinstance(html_snapshot, dict) and html_snapshot:
