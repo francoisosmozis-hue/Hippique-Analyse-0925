@@ -330,6 +330,33 @@ def test_fetch_race_snapshot_accepts_direct_url(monkeypatch: pytest.MonkeyPatch)
     assert snapshot["course_id"] == "12345"
 
 
+def test_double_extract_populates_hippodrome_from_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Fallback extraction should backfill both meeting and hippodrome."""
+
+    html = """
+    <html>
+      <body data-meeting-name="Paris-Vincennes">
+        <div data-runner-num="1" data-runner-name="Alpha" data-odds="4.2"></div>
+      </body>
+    </html>
+    """
+
+    monkeypatch.setattr(cli, "_http_get", lambda url, session=None: html)
+
+    def fake_parse(url: str, snapshot: str) -> dict[str, Any]:
+        return {"runners": [{"num": "1", "name": "Alpha"}]}
+
+    monkeypatch.setattr(cli._impl, "parse_course_page", fake_parse, raising=False)
+
+    data = cli._double_extract("https://example.test/R1C1", snapshot="H-30")
+
+    assert data["meeting"] == "Paris-Vincennes"
+    assert data["hippodrome"] == "Paris-Vincennes"
+    assert data["runners"]
+
+
 def test_fallback_parse_handles_singular_partant() -> None:
     """The HTML fallback should recognise singular ``partant`` mentions."""
 
