@@ -9,13 +9,38 @@ from simulate_wrapper import evaluate_combo
 TICKETS = [{"legs": ["a", "b"], "odds": 10.0, "stake": 1.0}]
 
 
-def test_default_path_missing(monkeypatch, tmp_path):
-    """When calibration file is absent and no override, evaluation is gated."""
+def test_default_config_path_missing(monkeypatch, tmp_path):
+    """When env var unset we fall back to config/ path."""
     monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("CALIB_PATH", raising=False)
     monkeypatch.delenv("ALLOW_HEURISTIC", raising=False)
     res = evaluate_combo(TICKETS, bankroll=10.0)
     assert res["status"] == "insufficient_data"
-    assert "no_calibration_yaml" in res["notes"]
+    assert str(Path("config/payout_calibration.yaml")) in res["requirements"]
+
+
+def test_env_path_missing(monkeypatch, tmp_path):
+    """Env var pointing to missing file should gate evaluation."""
+    calib = tmp_path / "custom_payout.yaml"
+    if calib.exists():
+        calib.unlink()
+    monkeypatch.setenv("CALIB_PATH", str(calib))
+    monkeypatch.delenv("ALLOW_HEURISTIC", raising=False)
+    res = evaluate_combo(TICKETS, bankroll=10.0)
+    assert res["status"] == "insufficient_data"
+    assert str(calib) in res["requirements"]
+
+
+def test_env_path_present(monkeypatch, tmp_path):
+    """Env var should be honoured when file exists."""
+    calib = tmp_path / "custom_payout.yaml"
+    calib.write_text("{}", encoding="utf-8")
+    monkeypatch.setenv("CALIB_PATH", str(calib))
+    monkeypatch.delenv("ALLOW_HEURISTIC", raising=False)
+    res = evaluate_combo(TICKETS, bankroll=10.0)
+    assert res["status"] == "ok"
+    assert res["notes"] == []
+    assert res["requirements"] == []
     assert str(Path("payout_calibration.yaml")) in res["requirements"]
 
 
@@ -23,6 +48,7 @@ def test_gates_when_calibration_missing(tmp_path, monkeypatch):
     calib = tmp_path / "payout_calibration.yaml"
     if calib.exists():
         calib.unlink()
+    monkeypatch.delenv("CALIB_PATH", raising=False)
     monkeypatch.delenv("ALLOW_HEURISTIC", raising=False)
     res = evaluate_combo(TICKETS, bankroll=10.0, calibration=calib)
     assert res["status"] == "insufficient_data"
@@ -37,6 +63,7 @@ def test_override_missing_calibration(tmp_path, monkeypatch):
     calib = tmp_path / "payout_calibration.yaml"
     if calib.exists():
         calib.unlink()
+    monkeypatch.delenv("CALIB_PATH", raising=False)
     monkeypatch.setenv("ALLOW_HEURISTIC", "1")
     res = evaluate_combo(TICKETS, bankroll=10.0, calibration=calib)
     assert res["status"] == "ok"
@@ -49,6 +76,7 @@ def test_override_missing_calibration(tmp_path, monkeypatch):
 def test_with_calibration(tmp_path, monkeypatch):
     calib = tmp_path / "payout_calibration.yaml"
     calib.write_text("{}", encoding="utf-8")
+    monkeypatch.delenv("CALIB_PATH", raising=False)
     monkeypatch.delenv("ALLOW_HEURISTIC", raising=False)
     res = evaluate_combo(TICKETS, bankroll=10.0, calibration=calib)
     assert res["status"] == "ok"
@@ -81,6 +109,7 @@ def test_marks_unreliable_probabilities(monkeypatch, tmp_path):
     calib_path = tmp_path / "payout_calibration.yaml"
     if calib_path.exists():
         calib_path.unlink()
+    monkeypatch.delenv("CALIB_PATH", raising=False)
 
     res = evaluate_combo(
         tickets,
