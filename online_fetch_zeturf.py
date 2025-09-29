@@ -75,7 +75,7 @@ class RaceSnapshot:
     course: str
     discipline: str | None
     runners: list[dict[str, Any]]
-    partants: int | None
+    partants_count: int | None
     phase: str
     rc: str
     r_label: str
@@ -93,10 +93,11 @@ class RaceSnapshot:
             "c_label": self.c_label,
             "discipline": self.discipline,
             "runners": self.runners,
-            "partants": self.partants,
+            "partants_count": self.partants_count,
             "phase": self.phase,
             "rc": self.rc,
         }
+        payload["partants"] = payload["runners"]
         # ``hippodrome`` is often used as an alias for ``meeting`` downstream.
         # Persist it whenever available so callers no longer need to duplicate
         # the fallback logic.
@@ -709,7 +710,7 @@ def _build_snapshot_payload(
         deduped.sort(key=_runner_sort_key)
         runners = deduped
         
-    partants_val = _coerce_int(raw_snapshot.get("partants"))
+    partants_count = _coerce_int(raw_snapshot.get("partants"))
 
     meta_raw = raw_snapshot.get("meta") if isinstance(raw_snapshot.get("meta"), Mapping) else None
     course_meta = (
@@ -739,14 +740,14 @@ def _build_snapshot_payload(
         if candidate:
             discipline = candidate
 
-    if partants_val is None:
+    if partants_count is None:
         candidate = _first_meta_value(meta_raw, "partants", "nb_partants", "n_partants", "participants")
         if candidate is None:
             candidate = _first_meta_value(course_meta, "partants", "participants", "nb_partants")
-        partants_val = _coerce_int(candidate)
+        partants_count = _coerce_int(candidate)
 
-    if partants_val is None and runners:
-        partants_val = len(runners)
+    if partants_count is None and runners:
+        partants_count = len(runners)
 
     rc = f"{reunion}{course}"
     snapshot = RaceSnapshot(
@@ -756,7 +757,7 @@ def _build_snapshot_payload(
         course=course,
         discipline=discipline,
         runners=runners,
-        partants=partants_val,
+        partants_count=partants_count,
         phase=phase,
         rc=rc,
         r_label=reunion,
@@ -769,7 +770,7 @@ def _build_snapshot_payload(
     for name, value in (
         ("meeting", snapshot.meeting),
         ("discipline", snapshot.discipline),
-        ("partants", snapshot.partants),
+        ("partants", snapshot.partants_count),
     ):
         if value in (None, "", 0):
             missing_fields.append(name)
@@ -1097,7 +1098,7 @@ def fetch_race_snapshot(
                 course=course_norm,
                 discipline=None,
                 runners=[],
-                partants=None,
+                partants_count=None,
                 phase=phase_norm,
                 rc=rc,
                 r_label=reunion_norm,
