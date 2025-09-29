@@ -75,6 +75,17 @@ def _compute_market_overround(odds: Mapping[str, Any]) -> float | None:
     return total
 
 
+def _coerce_float(value: Any, default: float = 0.0) -> float:
+    """Return ``value`` as ``float`` falling back to ``default`` when invalid."""
+
+    try:
+        if value is None:
+            raise TypeError
+        return float(value)
+    except (TypeError, ValueError):
+        return float(default)
+
+
 def _evaluate_combo_strict(
     template: Mapping[str, Any],
     bankroll: float,
@@ -104,10 +115,10 @@ def _evaluate_combo_strict(
         raw_stats = {}
 
     status = str(raw_stats.get("status") or "").lower()
-    ev_ratio = float(raw_stats.get("ev_ratio", 0.0))
-    payout_expected = float(raw_stats.get("payout_expected", 0.0))
-    roi_val = float(raw_stats.get("roi", 0.0))
-    sharpe_val = float(raw_stats.get("sharpe", 0.0))
+    ev_ratio = _coerce_float(raw_stats.get("ev_ratio"))
+    payout_expected = _coerce_float(raw_stats.get("payout_expected"))
+    roi_val = _coerce_float(raw_stats.get("roi"))
+    sharpe_val = _coerce_float(raw_stats.get("sharpe"))
 
     keep = True
     reasons: list[str] = []
