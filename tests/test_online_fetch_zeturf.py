@@ -68,6 +68,37 @@ def test_import_guard_when_requests_missing(monkeypatch: pytest.MonkeyPatch) -> 
     assert "urllib" in message
 
 
+def test_race_snapshot_as_dict_includes_aliases() -> None:
+    """The lightweight dataclass should expose aliases expected downstream."""
+
+    snapshot = cli.RaceSnapshot(
+        meeting="Paris-Vincennes",
+        date="2024-09-15",
+        reunion="R1",
+        course="C3",
+        discipline="trot",
+        runners=[{"num": "1", "name": "Alpha"}],
+        partants=14,
+        phase="H30",
+        rc="R1C3",
+        r_label="R1",
+        c_label="C3",
+        source_url="https://www.zeturf.fr/fr/course/2024-09-15/R1C3-paris",
+        course_id="987654",
+    )
+
+    payload = snapshot.as_dict()
+
+    assert payload["meeting"] == "Paris-Vincennes"
+    assert payload["hippodrome"] == "Paris-Vincennes"
+    assert payload["r_label"] == "R1"
+    assert payload["c_label"] == "C3"
+    assert payload["phase"] == "H30"
+    assert payload["rc"] == "R1C3"
+    assert payload["source_url"].endswith("R1C3-paris")
+    assert payload["course_id"] == "987654"
+
+
 def test_resolve_source_url_new_structure() -> None:
     """The resolver should pick Geny/PMU entries from the new layout."""
 
