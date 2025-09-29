@@ -8,6 +8,14 @@ def test_compute_overround_cap_flat_handicap_string_partants() -> None:
     assert cap == pytest.approx(1.25)
 
 
+def test_compute_overround_cap_flat_large_field() -> None:
+    """Open flat races with large fields should trigger the stricter cap."""
+
+    cap = runner_chain.compute_overround_cap("Plat", 14)
+
+    assert cap == pytest.approx(1.25)
+
+
 def test_compute_overround_cap_context_reports_reason() -> None:
     context: dict[str, object] = {}
     cap = runner_chain.compute_overround_cap(
@@ -36,6 +44,22 @@ def test_compute_overround_cap_detects_handicap_from_course_label() -> None:
         course_label="Grand Handicap de Paris",
     )
     assert cap == pytest.approx(1.25)
+
+
+def test_filter_exotics_by_overround_applies_flat_cap() -> None:
+    """Flat handicaps with many runners should discard high overround combos."""
+
+    tickets = [[{"id": "combo"}]]
+
+    filtered = runner_chain.filter_exotics_by_overround(
+        tickets,
+        overround=1.26,
+        overround_max=1.30,
+        discipline="Plat",
+        partants=14,
+    )
+
+    assert filtered == []
 
 
 def test_compute_overround_cap_handles_accents() -> None:
