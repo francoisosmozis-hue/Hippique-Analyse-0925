@@ -1145,6 +1145,19 @@ def fetch_race_snapshot(
             source_url=source_url,
         )
         
+        # ``runner_chain`` expects ``partants`` to always hold a list of runner
+        # dictionaries.  Some legacy payloads expose ``partants`` as an integer
+        # count which would cascade into downstream failures (``list`` is
+        # required for the pre-enrichment step).  Normalise the field eagerly to
+        # make the contract explicit and resilient to upstream variations.
+        partants_field = snapshot.get("partants")
+        if not isinstance(partants_field, list):
+            runners_list = snapshot.get("runners")
+            if isinstance(runners_list, list):
+                snapshot["partants"] = runners_list
+            else:
+                snapshot["partants"] = []
+
         meta = raw_snapshot.get("meta") if isinstance(raw_snapshot, Mapping) else None
         if isinstance(meta, dict):
             thresholds = meta.setdefault("exotic_thresholds", {})
