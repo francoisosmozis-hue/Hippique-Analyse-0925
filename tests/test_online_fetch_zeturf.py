@@ -78,7 +78,7 @@ def test_race_snapshot_as_dict_includes_aliases() -> None:
         course="C3",
         discipline="trot",
         runners=[{"num": "1", "name": "Alpha"}],
-        partants=14,
+        partants_count=14,
         phase="H30",
         rc="R1C3",
         r_label="R1",
@@ -97,6 +97,8 @@ def test_race_snapshot_as_dict_includes_aliases() -> None:
     assert payload["rc"] == "R1C3"
     assert payload["source_url"].endswith("R1C3-paris")
     assert payload["course_id"] == "987654"
+    assert payload["partants"] is payload["runners"]
+    assert payload["partants_count"] == 14
 
 
 def test_resolve_source_url_new_structure() -> None:
@@ -370,7 +372,8 @@ def test_fetch_race_snapshot_returns_minimal_snapshot_on_failure(
     assert snapshot["reunion"] == "R1"
     assert snapshot["course"] == "C2"
     assert snapshot["runners"] == []
-    assert snapshot["partants"] is None
+    assert snapshot["partants"] == []
+    assert snapshot.get("partants_count") is None
     assert any(
         "échec fetch_race_snapshot" in record.getMessage()
         for record in caplog.records
@@ -552,7 +555,8 @@ def test_cli_fetch_race_snapshot_warns_on_missing_fields(
     )
 
     assert snapshot["runners"] == [{"num": "1", "name": "Alpha"}]
-    assert snapshot["partants"] == 1
+    assert snapshot["partants"] == snapshot["runners"]
+    assert snapshot["partants_count"] == 1
     assert any("Champ(s) manquant(s)" in record.message for record in caplog.records)
 
 
@@ -609,7 +613,8 @@ def test_cli_fetch_race_snapshot_meta_fallback(
 
     assert snapshot["meeting"] == "Fallback City"
     assert snapshot["discipline"] == "plat"
-    assert snapshot["partants"] == 16
+    assert snapshot["partants_count"] == 16
+    assert snapshot["partants"] == snapshot["runners"]
     assert snapshot["date"] == "2024-11-02"
     assert snapshot["reunion"] == "R2"
     assert snapshot["course"] == "C3"
