@@ -654,7 +654,7 @@ def evaluate_combo(
     tickets: List[Dict[str, Any]],
     bankroll: float,
     *,
-    calibration: str | os.PathLike[str] = "payout_calibration.yaml",
+    calibration: str | os.PathLike[str] | None = None,
     allow_heuristic: bool | None = None,
 ) -> Dict[str, Any]:
     """Return EV ratio and expected payout for combined ``tickets``.
@@ -686,7 +686,11 @@ def evaluate_combo(
             "yes",
         }
 
-    calib_path = Path(calibration)
+    if calibration is None:
+        env_calib = os.getenv("CALIB_PATH")
+        calib_path = Path(env_calib) if env_calib else Path("config/payout_calibration.yaml")
+    else:
+        calib_path = Path(calibration)
     notes: List[str] = []
     requirements: List[str] = []
     if not calib_path.exists():
