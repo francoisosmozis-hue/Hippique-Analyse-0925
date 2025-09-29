@@ -204,6 +204,29 @@ def filter_combos_strict(
         else:
             rejection_reasons.extend(reasons)
 
+    if len(kept) > 1:
+        def _sort_key(entry: Mapping[str, Any]) -> tuple[float, float]:
+            ev_meta = entry.get("ev_check") if isinstance(entry, Mapping) else {}
+            if not isinstance(ev_meta, Mapping):
+                ev_meta = {}
+            return (
+                _coerce_float(ev_meta.get("ev_ratio"), default=0.0),
+                _coerce_float(ev_meta.get("payout_expected"), default=0.0),
+            )
+
+        kept.sort(key=_sort_key, reverse=True)
+        dropped = kept[1:]
+        kept = kept[:1]
+
+        if dropped:
+            dropped_ids = [str(entry.get("id") or entry.get("type") or "?") for entry in dropped]
+            logger.info(
+                "[COMBO] Limitation à la meilleure combinaison: conservé %s, ignoré %s",
+                kept[0].get("id") if kept else "?",
+                ", ".join(dropped_ids),
+            )
+            rejection_reasons.append("combo_limit_enforced")
+            
     if rejection_reasons:
         seen: set[str] = set()
         deduped: list[str] = []
