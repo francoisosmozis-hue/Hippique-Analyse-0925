@@ -330,6 +330,53 @@ def test_fetch_race_snapshot_accepts_direct_url(monkeypatch: pytest.MonkeyPatch)
     assert snapshot["course_id"] == "12345"
 
 
+def test_fetch_race_snapshot_returns_minimal_snapshot_on_failure(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Total failures should yield a minimal snapshot without raising."""
+
+    attempts: list[tuple[str, str]] = []
+
+    def failing_double_extract(
+        url: str, *, snapshot: str, session: Any | None = None
+    ) -> dict[str, Any]:
+        attempts.append((url, snapshot))
+        raise RuntimeError("html failure")
+
+    def failing_impl_fetch(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
+        raise RuntimeError("impl failure")
+
+    monkeypatch.setattr(cli, "_double_extract", failing_double_extract)
+    monkeypatch.setattr(cli, "_fetch_snapshot_via_html", lambda *a, **k: None)
+    monkeypatch.setattr(cli, "_exp_backoff_sleep", lambda *a, **k: None)
+    monkeypatch.setattr(cli._impl, "fetch_race_snapshot", failing_impl_fetch)
+    monkeypatch.setattr(cli._impl, "discover_course_id", lambda *_args, **_kw: None, raising=False)
+
+    caplog.set_level(logging.ERROR, logger=cli.logger.name)
+
+    snapshot = cli.fetch_race_snapshot(
+        "R1",
+        "C2",
+        phase="H30",
+        url="https://www.zeturf.fr/fr/course/placeholder",
+        retries=2,
+        backoff=0.0,
+        sources={"rc_map": {}},
+    )
+
+    assert attempts, "at least one direct HTML attempt should be recorded"
+    assert all(url == "https://www.zeturf.fr/fr/course/placeholder" for url, _ in attempts)
+    assert {label for _, label in attempts} <= {"H30", "H-30"}
+    assert snapshot["reunion"] == "R1"
+    assert snapshot["course"] == "C2"
+    assert snapshot["runners"] == []
+    assert snapshot["partants"] is None
+    assert any(
+        "échec fetch_race_snapshot" in record.getMessage()
+        for record in caplog.records
+    )
+
+
 def test_double_extract_populates_hippodrome_from_fallback(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
