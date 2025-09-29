@@ -304,7 +304,8 @@ def validate_exotics_with_simwrapper(
         stats_notes = [str(n) for n in stats.get("notes", [])]
         for note in stats_notes:
             add_note(note)
-        if status != "ok":ticket_label = "?"
+        if status != "ok":
+            ticket_label = "?"
             if isinstance(base_meta, Mapping):
                 raw_ticket_id = base_meta.get("id")
                 if raw_ticket_id not in (None, ""):
