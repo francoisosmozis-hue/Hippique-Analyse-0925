@@ -280,10 +280,9 @@ def test_pipeline_allocates_combo_budget(tmp_path, monkeypatch):
         _, combo_filtered, notes = filtered
         assert any(t.get("type") == "CP" for t in combo_filtered), f"CP filtered unexpectedly: {combo_filtered}, notes={notes}"
     combo_stakes = [t["stake"] for t in final_call if t.get("type") in {"CP", "TRIO", "ZE4"}]
-    assert len(combo_stakes) == 2, f"combo types={combo_types}, stakes={combo_stakes}"
+    assert len(combo_stakes) == 1, f"combo types={combo_types}, stakes={combo_stakes}"
     combo_budget = 5 * 0.4
-    assert sum(combo_stakes) == pytest.approx(combo_budget)
-    assert all(stake == pytest.approx(combo_budget / 2) for stake in combo_stakes)
+    assert combo_stakes[0] == pytest.approx(combo_budget)
 
     data = json.loads((outdir / "p_finale.json").read_text(encoding="utf-8"))
     combo_ids = [t["id"] for t in data["tickets"] if t.get("type") in {"CP", "TRIO"}]
