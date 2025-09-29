@@ -164,7 +164,7 @@ def test_mark_course_unplayable_writes_marker(
     rc_dir.mkdir()
 
     missing = ["chronos.csv", "R1C1_H-5_je.csv"]
-    acde._mark_course_unplayable(rc_dir, missing)
+    info = acde._mark_course_unplayable(rc_dir, missing)
 
     marker = rc_dir / "UNPLAYABLE.txt"
     assert marker.exists()
@@ -172,5 +172,9 @@ def test_mark_course_unplayable_writes_marker(
     for item in missing:
         assert item in content
 
+    assert info["marker_path"].endswith("UNPLAYABLE.txt")
+    assert info["marker_written"] is True
+    assert "chronos.csv" in info["marker_message"]
+    
     captured = capsys.readouterr()
     assert "Course non jouable" in captured.err
