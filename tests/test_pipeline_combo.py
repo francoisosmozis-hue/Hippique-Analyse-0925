@@ -386,27 +386,51 @@ def test_pipeline_recomputes_after_combo_rejection(tmp_path, monkeypatch):
     assert data["ev"]["global"] == pytest.approx(final_total * 0.1)
     assert data["ev"]["combined_expected_payout"] == pytest.approx(final_total * 2.0)
 
-def test_filter_sp_and_cp_tickets_removes_low_odds_cp():
+def test_filter_sp_and_cp_tickets_apply_cp_threshold():
     runners = [
         {"id": "1", "odds": 2.2},
         {"id": "2", "odds": 3.1},
-        {"id": "5", "odds": 9.0},
+        {"id": "3", "odds": 3.0},
+        {"id": "4", "odds": 3.0},
     ]
     partants = {"runners": runners}
 
     sp_ticket = {"type": "SP", "id": "5", "odds": 9.0, "stake": 1.0}
-    combo_ticket = {"type": "CP", "legs": ["1", "2"], "stake": 1.0}
+    combo_low = {"type": "CP", "legs": ["1", "2"], "stake": 1.0}
+    combo_threshold = {"type": "CP", "legs": ["3", "4"], "stake": 1.0}
 
     sp_filtered, combo_filtered, notes = pipeline_run._filter_sp_and_cp_tickets(
         [sp_ticket],
-        [combo_ticket],
+        [combo_low, combo_threshold],
         runners,
         partants,
     )
 
     assert sp_filtered and sp_filtered[0]["id"] == "5"
-    assert combo_filtered == []
+    assert combo_filtered == [combo_threshold]
     assert any("CP retiré" in str(note) for note in notes)
+
+
+def test_filter_sp_tickets_apply_sp_threshold():
+    runners = [
+        {"id": "1", "odds": 3.5},
+        {"id": "2", "odds": 4.0},
+    ]
+    partants = {"runners": runners}
+
+    sp_low = {"type": "SP", "id": "1", "odds": 3.9, "stake": 1.0}
+    sp_threshold = {"type": "SP", "id": "2", "odds": 4.0, "stake": 1.0}
+
+    sp_filtered, combo_filtered, notes = pipeline_run._filter_sp_and_cp_tickets(
+        [sp_low, sp_threshold],
+        [],
+        runners,
+        partants,
+    )
+
+    assert combo_filtered == []
+    assert [ticket["id"] for ticket in sp_filtered] == ["2"]
+    assert any("3/1" in str(note) for note in notes)
 
 
 def test_pipeline_uses_capped_stake_in_exports(tmp_path, monkeypatch):
