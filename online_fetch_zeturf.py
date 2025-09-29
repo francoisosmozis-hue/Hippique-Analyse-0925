@@ -3,9 +3,11 @@
 
 from __future__ import annotations
 
+import importlib.util
 import logging
 import os
 import re
+import sys
 import time
 import unicodedata
 from dataclasses import dataclass
@@ -17,6 +19,43 @@ from typing import Any, Dict, Iterable, Mapping
 import yaml
 
 from scripts import online_fetch_zeturf as _impl
+
+
+def _load_full_impl() -> Any:
+    """Return the fully-featured ``scripts.online_fetch_zeturf`` module."""
+
+    module_name = "scripts.online_fetch_zeturf"
+    module_path = Path(__file__).resolve().with_name("scripts").joinpath("online_fetch_zeturf.py")
+
+    spec = importlib.util.spec_from_file_location(module_name, module_path)
+    if spec is None or spec.loader is None:  # pragma: no cover - defensive guard
+        raise ImportError(f"Unable to locate {module_name} implementation at {module_path}")
+
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def _resolve_impl() -> Any:
+    """Ensure the implementation module exposes the expected public API."""
+
+    required_attrs = {
+        "fetch_race_snapshot",
+        "fetch_runners",
+        "fetch_meetings",
+        "resolve_source_url",
+        "normalize_snapshot",
+        "requests",
+        "time",
+    }
+
+    if not all(hasattr(_impl, attr) for attr in required_attrs):
+        return _load_full_impl()
+    return _impl
+
+
+_impl = _resolve_impl()
 
 try:  # pragma: no cover - requests is always available in production
     import requests
