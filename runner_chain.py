@@ -284,7 +284,17 @@ def validate_exotics_with_simwrapper(
     for candidate in exotics:
         if not candidate:
             continue
-            
+        
+        base_meta: Mapping[str, Any] = {}
+        candidate_ids: List[str] = []
+        for entry in candidate:
+            if isinstance(entry, Mapping):
+                if not base_meta:
+                    base_meta = entry
+                entry_id = entry.get("id")
+                if entry_id not in (None, ""):
+                    candidate_ids.append(str(entry_id))
+
         stats = evaluate_combo(candidate, bankroll, allow_heuristic=allow_heuristic)
         status = str(stats.get("status") or "ok").lower()
         ev_ratio = float(stats.get("ev_ratio", 0.0))
@@ -294,7 +304,34 @@ def validate_exotics_with_simwrapper(
         stats_notes = [str(n) for n in stats.get("notes", [])]
         for note in stats_notes:
             add_note(note)
-        if status != "ok":
+        if status != "ok":ticket_label = "?"
+            if isinstance(base_meta, Mapping):
+                raw_ticket_id = base_meta.get("id")
+                if raw_ticket_id not in (None, ""):
+                    ticket_label = str(raw_ticket_id)
+            if ticket_label == "?" and candidate_ids:
+                ticket_label = ", ".join(candidate_ids)
+
+            legs_for_log = "?"
+            legs_meta = None
+            if isinstance(base_meta, Mapping):
+                legs_meta = base_meta.get("legs")
+            if isinstance(legs_meta, Sequence) and not isinstance(
+                legs_meta, (str, bytes, bytearray)
+            ):
+                legs_for_log = ", ".join(str(val) for val in legs_meta)
+            elif legs_meta not in (None, ""):
+                legs_for_log = str(legs_meta)
+            elif candidate_ids:
+                legs_for_log = ", ".join(candidate_ids)
+
+            logger.warning(
+                "[COMBO] Simwrapper rejected candidate (status=%s, ticket=%s, legs=%s)",
+                status,
+                ticket_label,
+                legs_for_log,
+            )
+            
             reasons.append(f"status_{status or 'unknown'}")
             continue
         if ev_ratio < 0.40:
@@ -318,12 +355,6 @@ def validate_exotics_with_simwrapper(
         if sharpe < sharpe_min:
             reasons.append("sharpe_below_threshold")
             continue
-        base_meta: Mapping[str, Any] = {}
-        for entry in candidate:
-            if isinstance(entry, Mapping):
-                base_meta = entry
-                break
-
         combo_type = str(base_meta.get("type", "CP")).upper()
 
         legs_raw = base_meta.get("legs")
