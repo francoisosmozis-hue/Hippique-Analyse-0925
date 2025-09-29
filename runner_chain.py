@@ -31,7 +31,7 @@ def compute_overround_cap(
     discipline: str | None,
     partants: Any,
     *,
-    default_cap: float = 1.30,
+    default_cap: float = 1.25,
     course_label: str | None = None,
     context: Dict[str, Any] | None = None,
 ) -> float:
@@ -94,19 +94,24 @@ def compute_overround_cap(
     reason: str | None = None
     adjusted = cap
 
+    def _mark_adjustment(candidate: float, reason_label: str) -> None:
+        nonlocal adjusted, triggered, reason
+        if candidate < adjusted:
+            adjusted = candidate
+            triggered = True
+            reason = reason_label
+        elif candidate == adjusted:
+            triggered = True
+            if not reason:
+                reason = reason_label
+
     if is_flat:
         if is_handicap:
             candidate = min(adjusted, 1.25)
-            if candidate < adjusted:
-                adjusted = candidate
-                triggered = True
-                reason = "flat_handicap"
+            _mark_adjustment(candidate, "flat_handicap")
         elif partants_int is not None and partants_int >= 14:
             candidate = min(adjusted, 1.25)
-            if candidate < adjusted:
-                adjusted = candidate
-                triggered = True
-                reason = "flat_large_field"
+            _mark_adjustment(candidate, "flat_large_field")
 
     if context is not None:
         context["default_cap"] = default_cap_value
