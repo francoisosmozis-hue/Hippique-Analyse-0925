@@ -260,12 +260,12 @@ def _filter_sp_and_cp_by_odds(payload: dict[str, Any]) -> None:
                 odds_list.append(odds)
             if all(o is not None for o in odds_list):
                 assert len(odds_list) == 2  # for type checkers
-                if (odds_list[0] + odds_list[1]) > MIN_CP_SUM_DEC:
+                if (odds_list[0] + odds_list[1]) >= MIN_CP_SUM_DEC:
                     kept.append(ticket)
                 else:
                     _append_note(
                         "CP retiré: somme des cotes décimales"
-                        f" {odds_list[0]:.2f}+{odds_list[1]:.2f} ≤ 6.00 (règle ≥ 4/1 cumulés)."
+                        f" {odds_list[0]:.2f}+{odds_list[1]:.2f} < 6.00 (règle ≥ 4/1 cumulés)."
                     )
             else:
                 _append_note("CP retiré: cotes manquantes (règle ≥4/1 non vérifiable).")
