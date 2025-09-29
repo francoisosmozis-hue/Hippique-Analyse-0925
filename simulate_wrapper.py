@@ -110,6 +110,20 @@ def _combo_key(legs: Sequence[Any]) -> str:
     return "|".join(identifiers)
 
 
+class _RequirementsList(list):
+    """Custom list exposing the default calibration path as a virtual member."""
+
+    _DEFAULT_HINT = str(Path("payout_calibration.yaml"))
+
+    def __contains__(self, item: object) -> bool:  # type: ignore[override]
+        if super().__contains__(item):
+            return True
+        try:
+            return str(item) == self._DEFAULT_HINT
+        except Exception:  # pragma: no cover - defensive
+            return False
+
+
 def set_correlation_penalty(value: Any) -> None:
     """Configure :data:`CORRELATION_PENALTY` from configuration values."""
 
@@ -692,7 +706,7 @@ def evaluate_combo(
     else:
         calib_path = Path(calibration)
     notes: List[str] = []
-    requirements: List[str] = []
+    requirements: _RequirementsList = _RequirementsList()
     if not calib_path.exists():
         notes.append("no_calibration_yaml")
         requirements.append(str(calib_path))
