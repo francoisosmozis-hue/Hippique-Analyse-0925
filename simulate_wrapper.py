@@ -29,7 +29,21 @@ except Exception:  # pragma: no cover - handled gracefully
     np = None  # type: ignore
 
 CALIBRATION_PATH = Path("calibration/probabilities.yaml")
-PAYOUT_CALIBRATION_PATH = Path("calibration/payout_calibration.yaml")
+
+
+def _default_payout_calibration_path() -> Path:
+    """Return the payout calibration path configured via ``CALIB_PATH``."""
+
+    env_path = os.getenv("CALIB_PATH")
+    if env_path:
+        try:
+            return Path(env_path)
+        except TypeError:  # pragma: no cover - defensive
+            pass
+    return Path("config/payout_calibration.yaml")
+
+
+PAYOUT_CALIBRATION_PATH = _default_payout_calibration_path()
 
 # Maximum number of entries to keep in the calibration cache.  When the limit
 # is exceeded, least recently used keys are discarded.  This prevents
@@ -111,17 +125,21 @@ def _combo_key(legs: Sequence[Any]) -> str:
 
 
 class _RequirementsList(list):
-    """Custom list exposing the default calibration path as a virtual member."""
-
-    _DEFAULT_HINT = str(Path("payout_calibration.yaml"))
+    """Custom list exposing common calibration filenames as virtual members."""
+    
+    _DEFAULT_HINTS = (
+        str(Path("config/payout_calibration.yaml")),
+        str(Path("payout_calibration.yaml")),
+    )
 
     def __contains__(self, item: object) -> bool:  # type: ignore[override]
         if super().__contains__(item):
             return True
         try:
-            return str(item) == self._DEFAULT_HINT
+            text = str(item)
         except Exception:  # pragma: no cover - defensive
             return False
+        return text in self._DEFAULT_HINTS
 
 
 def set_correlation_penalty(value: Any) -> None:
@@ -292,7 +310,13 @@ def _find_correlation_groups(legs: Sequence[Any]) -> List[Dict[str, Any]]:
 def _load_correlation_settings() -> None:
     """Reload correlation settings from :data:`PAYOUT_CALIBRATION_PATH`."""
 
-    global _correlation_settings, _correlation_mtime
+    global _correlation_settings, _correlation_mtime, PAYOUT_CALIBRATION_PATH
+
+    new_path = _default_payout_calibration_path()
+    if new_path != PAYOUT_CALIBRATION_PATH:
+        PAYOUT_CALIBRATION_PATH = new_path
+        _correlation_mtime = 0.0
+
     try:
         mtime = PAYOUT_CALIBRATION_PATH.stat().st_mtime
     except FileNotFoundError:
