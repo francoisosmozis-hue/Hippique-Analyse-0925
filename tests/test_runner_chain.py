@@ -8,6 +8,22 @@ def test_compute_overround_cap_flat_handicap_string_partants() -> None:
     assert cap == pytest.approx(1.25)
 
 
+def test_compute_overround_cap_context_reports_reason() -> None:
+    context: dict[str, object] = {}
+    cap = runner_chain.compute_overround_cap(
+        "Handicap de Plat",
+        16,
+        context=context,
+        course_label="Grand Handicap de Paris",
+    )
+    assert cap == pytest.approx(1.25)
+    assert context.get("triggered") is True
+    assert context.get("reason") == "flat_handicap"
+    assert context.get("default_cap") == pytest.approx(1.30)
+    assert context.get("partants") == 16
+    assert context.get("discipline") == "handicap de plat"
+
+
 def test_compute_overround_cap_other_disciplines() -> None:
     cap = runner_chain.compute_overround_cap("Trot Attelé", 12)
     assert cap == pytest.approx(1.30)
