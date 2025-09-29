@@ -442,7 +442,7 @@ def _build_canonical_course_url(
 _RUNNER_NUM_RE = re.compile(r"data-runner-num=['\"]?(\d+)", re.IGNORECASE)
 _RUNNER_NAME_RE = re.compile(r"data-runner-name=['\"]?([^'\"]+)", re.IGNORECASE)
 _RUNNER_ODDS_RE = re.compile(r"data-odds=(?:'|\")?([0-9]+(?:[.,][0-9]+)?)", re.IGNORECASE)
-_PARTANTS_RE = re.compile(r"(\d{1,2})\s+partants", re.IGNORECASE)
+_PARTANTS_RE = re.compile(r"(?:\b|\D)(\d{1,2})\s+partant(?:e?s?)?\b", re.IGNORECASE)
 _DISCIPLINE_RE = re.compile(r"(trot|plat|obstacles?|mont[ée])", re.IGNORECASE)
 _MEETING_RE = re.compile(
     r"(?:data-)?(?:meeting|hippodrome)[-_]?name\s*[=:]\s*['\"]([^'\"]+)",
