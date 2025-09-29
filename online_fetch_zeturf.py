@@ -129,6 +129,21 @@ def _fallback_parse_html(html: Any) -> dict[str, Any]:
     if not isinstance(html, str):
         html = str(html or "")
 
+    def _clean_text(value: str | None, *, lowercase: bool = False, strip_accents: bool = False) -> str | None:
+        if value in (None, ""):
+            return None
+        text = unicodedata.normalize("NFKC", str(value))
+        text = re.sub(r"\s+", " ", text).strip()
+        if not text:
+            return None
+        if strip_accents:
+            text = "".join(
+                ch for ch in unicodedata.normalize("NFKD", text) if not unicodedata.combining(ch)
+            )
+        if lowercase:
+            text = text.lower()
+        return text
+
     runners: list[dict[str, Any]] = []
     numbers = _RUNNER_NUM_RE.findall(html)
     names = _RUNNER_NAME_RE.findall(html)
@@ -137,7 +152,11 @@ def _fallback_parse_html(html: Any) -> dict[str, Any]:
     for idx, number in enumerate(numbers):
         runner: dict[str, Any] = {"num": str(number)}
         if idx < len(names):
-            runner["name"] = names[idx].strip()
+            runner_name = _clean_text(names[idx])
+            if runner_name:
+                runner["name"] = runner_name
+            else:
+                runner["name"] = names[idx].strip()
         if idx < len(odds):
             try:
                 runner["cote"] = float(odds[idx].replace(",", "."))
@@ -156,17 +175,17 @@ def _fallback_parse_html(html: Any) -> dict[str, Any]:
     discipline: str | None = None
     discipline_match = _DISCIPLINE_RE.search(html)
     if discipline_match:
-        discipline = discipline_match.group(1).lower()
+        discipline = _clean_text(discipline_match.group(1), lowercase=True, strip_accents=True)
 
     meeting: str | None = None
     meeting_match = _MEETING_RE.search(html)
     if meeting_match:
-        meeting = meeting_match.group(1).strip() or None
+        meeting = _clean_text(meeting_match.group(1))
 
     date: str | None = None
     date_match = _DATE_RE.search(html)
     if date_match:
-        date = date_match.group(1)
+        date = _clean_text(date_match.group(1))
 
     return {
         "meeting": meeting,
