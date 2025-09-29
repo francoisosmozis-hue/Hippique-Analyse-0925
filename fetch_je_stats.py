@@ -1,24 +1,32 @@
-"""Lightweight wrapper around :mod:`scripts.fetch_je_stats`.
-
-This module exposes :func:`enrich_from_snapshot` which mirrors the behaviour
-expected by the H-5 automation pipeline: starting from a normalised snapshot it
-invokes the existing scraping helpers, materialises the ``*_je.csv`` artefact
-and returns a structured status dictionary.
-"""
+"""Lightweight wrapper around :mod:`scripts.fetch_je_stats`."""
 
 from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Dict, Mapping
 
-from analyse_courses_du_jour_enrichie import (
-    _extract_id2name,
-    _write_je_csv_file,
-)
+from analyse_courses_du_jour_enrichie import _extract_id2name, _write_je_csv_file
 from scripts.fetch_je_stats import collect_stats
 
-StatusDict = dict[str, Any]
+StatusDict = Dict[str, Any]
+
+
+class _PathsDict(dict[str, str]):
+    """Dictionary exposing legacy keys while providing ``je``/``stats`` aliases."""
+
+    _ALIASES = {"je": "je_csv", "stats": "stats_json"}
+
+    def __getitem__(self, key: str) -> str:  # type: ignore[override]
+        return super().__getitem__(self._ALIASES.get(key, key))
+
+    def get(self, key: str, default: Any = None) -> Any:  # type: ignore[override]
+        return super().get(self._ALIASES.get(key, key), default)
+
+    def __contains__(self, key: object) -> bool:  # type: ignore[override]
+        if not isinstance(key, str):
+            return False
+        return super().__contains__(self._ALIASES.get(key, key))
 
 
 def _extract_course_id(snapshot: Mapping[str, Any]) -> str | None:
@@ -37,18 +45,9 @@ def _extract_course_id(snapshot: Mapping[str, Any]) -> str | None:
 
 
 def enrich_from_snapshot(snapshot_path: str | Path, reunion: str, course: str) -> StatusDict:
-    """Fetch jockey/entraineur stats and materialise the JE CSV.
+    """Materialise jockey/entraineur statistics from a stored snapshot."""
 
-    Parameters
-    ----------
-    snapshot_path:
-        Path to the normalised H-5 snapshot (JSON).
-    reunion, course:
-        Meeting/course identifiers.  They are currently informative only but
-        retained for signature compatibility with the caller.
-    """
-
-    del reunion, course  # currently unused but kept for API parity
+    del reunion, course  # signature kept for compatibility with caller
 
     snapshot_file = Path(snapshot_path)
 
@@ -66,10 +65,10 @@ def enrich_from_snapshot(snapshot_path: str | Path, reunion: str, course: str) -
 
     try:
         coverage, mapped = collect_stats(course_id, h5_path=str(snapshot_file))
-    except Exception as exc:  # network/HTTP errors bubble up here
+    except Exception as exc:  # pragma: no cover - external dependency failures
         return {"ok": False, "reason": str(exc)}
 
-    stats_payload: dict[str, Any] = {"coverage": coverage}
+    stats_payload: Dict[str, Any] = {"coverage": coverage}
     stats_payload.update(mapped)
 
     course_dir = snapshot_file.parent
@@ -97,10 +96,12 @@ def enrich_from_snapshot(snapshot_path: str | Path, reunion: str, course: str) -
     return {
         "ok": True,
         "coverage": coverage,
-        "paths": {
-            "stats_json": str(stats_path),
-            "je_csv": str(je_csv_path),
-        },
+        "paths": _PathsDict(
+            {
+                "je_csv": str(je_csv_path),
+                "stats_json": str(stats_path),
+            }
+        ),
     }
 
 
