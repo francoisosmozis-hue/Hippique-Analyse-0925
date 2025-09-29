@@ -2053,14 +2053,22 @@ def cmd_analyse(args: argparse.Namespace) -> None:
             partants_hint = len(partants)
 
     overround_context: Dict[str, Any] = {}
+    default_overround_cap = float(
+        get_env("MAX_COMBO_OVERROUND", 1.25, cast=float)
+    )
+    logger.info(
+        "Effective combo overround default cap set to %.2f",
+        default_overround_cap,
+    )
     overround_cap = compute_overround_cap(
         discipline_hint,
         partants_hint,
-        default_cap=1.30,
+        default_cap=default_overround_cap,
         course_label=course_label_text,
         context=overround_context,
     )
     combo_info["thresholds"]["overround_max"] = overround_cap
+    combo_info["thresholds"]["overround_cap_default"] = default_overround_cap
     if overround_context:
         combo_info["thresholds"]["overround_context"] = overround_context
     metrics = combo_info.setdefault("metrics", {})
