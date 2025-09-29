@@ -14,6 +14,8 @@ optional ``ALERTE_VALUE`` column when the alert flag is present.
 from __future__ import annotations
 
 import re
+import unicodedata
+
 
 from typing import Any, Dict, Iterable, List, Mapping, Sequence, Tuple
 
@@ -57,10 +59,9 @@ def compute_overround_cap(
     def _normalise_text(value: str | None) -> str:
         if not value:
             return ""
-        lowered = value.lower()
-        for src, dst in (("é", "e"), ("è", "e"), ("ê", "e"), ("à", "a")):
-            lowered = lowered.replace(src, dst)
-        return lowered
+        normalised = unicodedata.normalize("NFKD", value)
+        ascii_only = normalised.encode("ascii", "ignore").decode("ascii")
+        return ascii_only.lower()
 
     discipline_text = _normalise_text(discipline)
     course_text = _normalise_text(course_label)
