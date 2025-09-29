@@ -145,14 +145,36 @@ def filter_exotics_by_overround(
 ) -> List[List[Dict[str, Any]]]:
     """Filter exotic tickets when the market overround exceeds the cap."""
 
+    context: Dict[str, Any] = {}
     cap = compute_overround_cap(
         discipline,
         partants,
         default_cap=overround_max,
         course_label=course_label,
+        context=context,        
     )
-    if overround is None or overround <= cap:
+    
+    try:
+        overround_value = float(overround) if overround is not None else None
+    except (TypeError, ValueError):  # pragma: no cover - defensive fallback
+        logger.debug(
+            "Overround value %r could not be coerced to float; ignoring cap", overround
+        )
+        overround_value = None
+
+    if overround_value is None or overround_value <= cap:
         return [list(ticket) for ticket in exotics]
+        
+    reason = context.get("reason") if context.get("triggered") else None
+    logger.info(
+        "[OVERROUND] combinés filtrés (overround=%.3f, cap=%.2f, discipline=%s, partants=%s, course=%s, reason=%s)",
+        overround_value,
+        cap,
+        context.get("discipline") or (discipline or "?"),
+        context.get("partants") or partants or "?",
+        context.get("course_label") or course_label or "?",
+        reason or "default_cap",
+    )
     return []
 
 def validate_exotics_with_simwrapper(
