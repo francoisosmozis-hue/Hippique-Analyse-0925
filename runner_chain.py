@@ -13,6 +13,7 @@ optional ``ALERTE_VALUE`` column when the alert flag is present.
 
 from __future__ import annotations
 
+import logging
 import re
 import unicodedata
 
@@ -23,14 +24,23 @@ from simulate_wrapper import evaluate_combo
 from logging_io import append_csv_line, CSV_HEADER
 
 
+logger = logging.getLogger(__name__)
+
+
 def compute_overround_cap(
     discipline: str | None,
     partants: Any,
     *,
     default_cap: float = 1.30,
     course_label: str | None = None,
+    context: Dict[str, Any] | None = None,
 ) -> float:
-    """Return the overround ceiling adjusted for flat-handicap races."""
+    """Return the overround ceiling adjusted for flat-handicap races.
+
+    When ``context`` is provided it is populated with diagnostic information
+    describing the evaluation (normalised discipline/course labels, partants
+    count, default cap and whether the stricter threshold was triggered).
+    """
     
     try:
         cap = float(default_cap)
@@ -38,6 +48,7 @@ def compute_overround_cap(
         cap = 1.30
     if cap <= 0:
         cap = 1.30
+    default_cap_value = cap
 
     def _coerce_partants(value: Any) -> int | None:
         if isinstance(value, (int, float)):
@@ -79,10 +90,48 @@ def compute_overround_cap(
 
     is_flat = flat_hint or (is_handicap and not is_obstacle and not is_trot)
 
-    if is_flat and (is_handicap or (partants_int is not None and partants_int >= 14)):
-        return min(cap, 1.25)
+    triggered = False
+    reason: str | None = None
+    adjusted = cap
 
-    return cap
+    if is_flat:
+        if is_handicap:
+            candidate = min(adjusted, 1.25)
+            if candidate < adjusted:
+                adjusted = candidate
+                triggered = True
+                reason = "flat_handicap"
+        elif partants_int is not None and partants_int >= 14:
+            candidate = min(adjusted, 1.25)
+            if candidate < adjusted:
+                adjusted = candidate
+                triggered = True
+                reason = "flat_large_field"
+
+    if context is not None:
+        context["default_cap"] = default_cap_value
+        context["cap"] = adjusted
+        if discipline_text:
+            context["discipline"] = discipline_text
+        if course_text:
+            context["course_label"] = course_text
+        if partants_int is not None:
+            context["partants"] = partants_int
+        context["triggered"] = triggered
+        if reason:
+            context["reason"] = reason
+
+    if triggered and reason:
+        logger.debug(
+            "Overround cap auto-adjusted to %.2f (reason=%s, discipline=%s, partants=%s, course=%s)",
+            adjusted,
+            reason,
+            discipline_text or "?",
+            partants_int if partants_int is not None else "?",
+            course_text or "?",
+        )
+
+    return adjusted
 
 
 def filter_exotics_by_overround(
