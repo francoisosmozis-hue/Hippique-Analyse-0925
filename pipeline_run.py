@@ -426,11 +426,11 @@ OPTIONAL_KEYS = {
 STEAM_UP = 0.03
 STEAM_DOWN = -0.03
 
-MIN_SP_DEC_ODDS = 5.0
-"""Minimum decimal odds allowed for Simple Placé tickets (4/1)."""
+MIN_SP_DEC_ODDS = 4.0
+"""Minimum decimal odds allowed for Simple Placé tickets (3/1)."""
 
-MIN_CP_SUM_DEC = 8.0
-"""Minimum combined decimal odds allowed for Couplé Placé tickets (>6/1)."""
+MIN_CP_SUM_DEC = 6.0
+"""Minimum combined decimal odds allowed for Couplé Placé tickets (≥4/1)."""
 
 _ODDS_KEYS = (
     "cote_place",
@@ -646,15 +646,15 @@ def _filter_sp_and_cp_tickets(
                         ]
                     filtered_sp.append(ticket_copy)
                 else:
-                    notes.append("SP retiré: toutes les cotes < 4/1 (5.0 déc).")
+                    notes.append("SP retiré: toutes les cotes < 3/1 (4.0 déc).")
                 continue
 
             odds_value = _extract_ticket_odds(ticket, odds_lookup)
             if odds_value is None:
-                notes.append("SP retiré: cotes manquantes (règle 4/1 non vérifiable).")
+                notes.append("SP retiré: cotes manquantes (règle 3/1 non vérifiable).")
                 continue
             if odds_value < MIN_SP_DEC_ODDS:
-                notes.append("SP retiré: toutes les cotes < 4/1 (5.0 déc).")
+                notes.append("SP retiré: toutes les cotes < 3/1 (4.0 déc).")
                 continue
         filtered_sp.append(dict(ticket))
 
@@ -679,17 +679,17 @@ def _filter_sp_and_cp_tickets(
             if all(value is not None for value in odds_values):
                 assert len(odds_values) == 2
                 total = float(odds_values[0]) + float(odds_values[1])
-                if total > MIN_CP_SUM_DEC:
+                if total >= MIN_CP_SUM_DEC:
                     filtered_combo.append(dict(ticket))
                 else:
                     notes.append(
                         (
                             "CP retiré: somme des cotes décimales "
-                            f"{float(odds_values[0]):.2f}+{float(odds_values[1]):.2f} ≤ 8.00 (règle > 6/1 cumulés)."
+                            f"{float(odds_values[0]):.2f}+{float(odds_values[1]):.2f} < 6.00 (règle ≥ 4/1 cumulés)."
                         )
                     )
             else:
-                notes.append("CP retiré: cotes manquantes (règle >6/1 non vérifiable).")
+                notes.append("CP retiré: cotes manquantes (règle ≥ 4/1 non vérifiable).")
             continue
         filtered_combo.append(dict(ticket))
 
