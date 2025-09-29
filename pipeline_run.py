@@ -1656,6 +1656,12 @@ def cmd_analyse(args: argparse.Namespace) -> None:
     module_self = sys.modules[__name__]
     module_vars = getattr(module_self, "__dict__", {})
 
+    # Tests may temporarily monkeypatch the heavy ``simulate_ev`` helpers.  When
+    # they do so the cached loader would otherwise retain the stubbed functions
+    # beyond the scope of the monkeypatch.  Clear the cache proactively so each
+    # invocation observes the current implementation.
+    _load_simulate_ev.cache_clear()
+
     global _DEFAULT_ALLOW_COMBO, _DEFAULT_APPLY_TICKET_POLICY
     _ALLOW_COMBO_BASELINES.add(_allow_combo_impl)
     _APPLY_POLICY_BASELINES.add(_apply_ticket_policy_impl)
