@@ -294,7 +294,7 @@ def _double_extract(
         return {}
 
     missing_keys: list[str] = []
-    for key in ("meeting", "discipline", "partants"):
+    for key in ("meeting", "hippodrome", "discipline", "partants"):
         value = data.get(key)
         if value in (None, "", 0):
             missing_keys.append(key)
@@ -303,6 +303,10 @@ def _double_extract(
         fallback = _ensure_fallback()
         for key in missing_keys:
             candidate = fallback.get(key)
+            if candidate in (None, "", 0) and key == "hippodrome":
+                candidate = fallback.get("meeting")
+            if candidate in (None, "", 0) and key == "meeting":
+                candidate = fallback.get("hippodrome")
             if candidate not in (None, "", 0):
                 data[key] = candidate
                 fallback_used = True
