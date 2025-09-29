@@ -21,6 +21,12 @@ def test_compute_overround_cap_detects_handicap_from_course_label() -> None:
     )
     assert cap == pytest.approx(1.25)
 
+
+def test_compute_overround_cap_handles_accents() -> None:
+    cap = runner_chain.compute_overround_cap("Handicap de Plât", "14 partants")
+    assert cap == pytest.approx(1.25) 
+
+
 def test_validate_exotics_with_simwrapper_filters_and_alert(monkeypatch):
     def fake_eval(tickets, bankroll, allow_heuristic=True):
         if tickets[0]['id'] == 'fail':
