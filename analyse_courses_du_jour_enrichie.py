@@ -1157,6 +1157,25 @@ def safe_enrich_h5(
 ) -> tuple[bool, dict[str, Any] | None]:
     """Execute ``enrich_h5`` ensuring JE/chronos data or mark the course out."""
 
+    rc_dir = Path(rc_dir)
+    marker = rc_dir / "UNPLAYABLE.txt"
+    if marker.exists():
+        try:
+            marker_message = marker.read_text(encoding="utf-8").strip()
+        except OSError:  # pragma: no cover - file removed between exists/read
+            marker_message = ""
+        details = {"marker": marker_message or None}
+        print(
+            f"[ABSTAIN] Course déjà marquée non jouable – {rc_dir.name}",
+            file=sys.stderr,
+        )
+        return False, {
+            "status": "no-bet",
+            "decision": "ABSTENTION",
+            "reason": "unplayable-marker",
+            "details": details,
+        }
+        
     enrich_h5(rc_dir, budget=budget, kelly=kelly)
     outcome = _ensure_h5_artifacts(
         rc_dir,
