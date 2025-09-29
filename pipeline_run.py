@@ -1979,9 +1979,34 @@ def cmd_analyse(args: argparse.Namespace) -> None:
         or partants_data.get("name")
         or meta.get("course")
     )
+
+    discipline_hint = (
+        meta.get("discipline")
+        or partants_data.get("discipline")
+        or partants_data.get("discipline_label")
+        or partants_data.get("type_course")
+        or partants_data.get("type")
+        or partants_data.get("categorie")
+        or partants_data.get("category")
+    )
+
+    partants_hint: Any = (
+        meta.get("partants")
+        or partants_data.get("partants")
+        or partants_data.get("nombre_partants")
+        or partants_data.get("nb_partants")
+        or partants_data.get("number_of_runners")
+    )
+    if partants_hint in (None, "", 0):
+        runners_source = partants_data.get("runners")
+        if isinstance(runners_source, list) and runners_source:
+            partants_hint = len(runners_source)
+        elif partants:
+            partants_hint = len(partants)
+
     overround_cap = compute_overround_cap(
-        meta.get("discipline"),
-        meta.get("partants"),
+        discipline_hint,
+        partants_hint,
         default_cap=1.30,
         course_label=course_label_text,
     )
