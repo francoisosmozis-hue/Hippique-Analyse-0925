@@ -459,6 +459,21 @@ def test_cli_fetch_race_snapshot_warns_on_missing_fields(
     assert any("Champ(s) manquant(s)" in record.message for record in caplog.records)
 
 
+def test_fallback_parse_normalises_texts() -> None:
+    """Fallback extraction should normalise whitespace and accents."""
+
+    html = (
+        '<div data-meeting-name="Paris-Vincennes \t">'
+        '<span data-runner-num="1" data-runner-name="  Alpha  " data-odds="5,0"></span>'
+        "Montée – 16 partants"
+    )
+
+    parsed = cli._fallback_parse_html(html)
+
+    assert parsed["meeting"] == "Paris-Vincennes"
+    assert parsed["discipline"] == "monte"
+    assert parsed["runners"][0]["name"] == "Alpha"
+    assert parsed["partants"] == 16
 def test_cli_fetch_race_snapshot_meta_fallback(
     monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
