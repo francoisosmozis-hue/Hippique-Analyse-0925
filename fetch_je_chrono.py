@@ -20,7 +20,7 @@ def _load_json(path: Path) -> Mapping[str, Any] | None:
     return payload if isinstance(payload, Mapping) else None
 
 
-    def _iter_runners(snapshot: Mapping[str, Any]) -> Iterable[Mapping[str, Any]]:
+def _iter_runners(snapshot: Mapping[str, Any]) -> Iterable[Mapping[str, Any]]:
     runners = snapshot.get("runners")
     if isinstance(runners, list):
         for runner in runners:
@@ -61,7 +61,7 @@ def _materialise_chronos(snapshot_dir: Path, reunion: str, course: str) -> Path:
     return chronos_path
     
     
-    enrich_from_snapshot(snapshot_dir: str | Path, reunion: str, course: str) -> Path:
+def enrich_from_snapshot(snapshot_dir: str | Path, reunion: str, course: str) -> Path:
     """Spawn the CLI helper to generate chronos artefacts for ``snapshot_dir``."""
 
     out_dir = Path(snapshot_dir)
@@ -107,7 +107,7 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
     
-    if __name__ == "__main__":  # pragma: no cover - CLI entry point
+if __name__ == "__main__":  # pragma: no cover - CLI entry point
     raise SystemExit(main())
 
 
