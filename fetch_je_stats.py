@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import subprocess
 import sys
 from pathlib import Path
@@ -11,6 +12,9 @@ from typing import Any, Mapping
 
 from analyse_courses_du_jour_enrichie import _extract_id2name, _write_je_csv_file
 from scripts.fetch_je_stats import collect_stats
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 def _load_json(path: Path) -> Mapping[str, Any] | None:
@@ -126,7 +130,14 @@ def enrich_from_snapshot(snapshot_dir: str | Path, reunion: str, course: str) ->
         course_code,
     ]
 
-    subprocess.run(cmd, check=True)
+    result = subprocess.run(cmd, check=False)
+    if result.returncode != 0:
+        LOGGER.warning(
+            "fetch_je_stats CLI exited with code %s for %s%s",
+            result.returncode,
+            reunion_code,
+            course_code,
+        )
     return out_dir / f"{reunion_code}{course_code}_je.csv"
 
 
