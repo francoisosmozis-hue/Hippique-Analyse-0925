@@ -54,7 +54,7 @@ def _patch_combo_eval(monkeypatch, *, stats=None):
     if stats:
         payload.update(stats)
 
-    def fake_eval(tickets, bankroll, allow_heuristic=False):
+    def fake_eval(tickets, bankroll, calibration=None, allow_heuristic=False):
         result = dict(payload)
         result.setdefault("status", "ok")
         result.setdefault("ev_ratio", 0.0)
@@ -689,7 +689,7 @@ def test_pipeline_optimization_preserves_ev_and_budget(tmp_path, monkeypatch):
 
 def test_filter_combos_strict_handles_missing_metrics():
     class DummyWrapper:
-        def evaluate_combo(self, combo, bankroll, allow_heuristic=False):
+        def evaluate_combo(self, combo, bankroll, calibration=None, allow_heuristic=False):
             return {
                 "status": "insufficient_data",
                 "ev_ratio": None,
