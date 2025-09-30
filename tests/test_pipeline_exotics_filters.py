@@ -119,8 +119,8 @@ def _prepare_stubs(
     if market_overround is not None:
         monkeypatch.setattr(
             pipeline_run,
-            "_compute_market_overround",
-            lambda *_args, **_kwargs: market_overround,
+            "_build_market",
+            lambda *_args, **_kwargs: {"overround_win": market_overround},
         )
         
     def fake_enforce(cfg_local, runners_local, combos_local, bankroll, **_kwargs):
@@ -490,7 +490,12 @@ def test_overround_cap_uses_metadata_fallbacks(
         return 1.30
 
     runners_override = [
-        {"id": str(idx), "name": f"Runner {idx}"}
+        {
+            "id": str(idx),
+            "name": f"Runner {idx}",
+            "odds_place": 1.5 + 0.1 * idx,
+            "odds_place_h30": 1.4 + 0.1 * idx,
+        }
         for idx in range(1, 15)
     ]
     partants_override = {
