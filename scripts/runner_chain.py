@@ -246,11 +246,46 @@ def _write_analysis(
     ev_min: float,
     roi_min: float,
     mode: str,
+    calibration: Path,
+    calibration_available: bool,
 ) -> None:
-    """Compute a dummy EV/ROI analysis and write it to disk."""
+    """Compute a dummy EV/ROI analysis and write it to disk.
+
+    When the payout calibration file is missing the combo generation is skipped
+    and an ``insufficient_data`` payload mirroring the behaviour of the main
+    pipeline is written instead of running the EV simulation.
+    """
     dest = base / race_id
     dest.mkdir(parents=True, exist_ok=True)
     print(f"[runner] Mode={mode} RC={race_id} → {dest}")
+
+    path = dest / "analysis.json"
+    if not calibration_available:
+        calibration_available = calibration.exists()
+    if not calibration_available:
+        logger.warning(
+            "[runner] Payout calibration missing (%s); combos disabled for %s",
+            calibration,
+            race_id,
+        )
+        payload = {
+            "race_id": race_id,
+            "status": "insufficient_data",
+            "notes": ["calibration_missing"],
+            "calibration": str(calibration),
+        }
+        with path.open("w", encoding="utf-8") as fh:
+            json.dump(payload, fh, ensure_ascii=False, indent=2)
+        if USE_GCS and upload_file:
+            try:
+                upload_file(path)
+            except EnvironmentError as exc:
+                logger.warning("Skipping cloud upload for %s: %s", path, exc)
+        else:
+            reason = disabled_reason()
+            detail = f"{reason}=false" if reason else "USE_GCS disabled"
+            logger.info("[gcs] Skipping upload for %s (%s)", path, detail)
+        return
 
     tickets = [{"p": 0.5, "odds": 2.0, "stake": 1.0}]
     stats = simulate_ev_batch(tickets, bankroll=budget)
@@ -260,11 +295,12 @@ def _write_analysis(
         return
     payload = {
         "race_id": race_id,
+        "status": "ok",
         "ev": stats.get("ev"),
         "roi": stats.get("roi"),
         "green": stats.get("green"),
+        "calibration": str(calibration),
     }
-    path = dest / "analysis.json"
     with path.open("w", encoding="utf-8") as fh:
         json.dump(payload, fh, ensure_ascii=False, indent=2)
     if USE_GCS and upload_file:    
@@ -286,6 +322,8 @@ def _trigger_phase(
     ev_min: float,
     roi_min: float,
     mode: str,
+    calibration: Path,
+    calibration_available: bool,
 ) -> None:
     """Run snapshot and/or analysis tasks for ``phase``."""
 
@@ -304,6 +342,8 @@ def _trigger_phase(
             ev_min=ev_min,
             roi_min=roi_min,
             mode=mode,
+            calibration=calibration,
+            calibration_available=calibration_available,
         )
         return
 
@@ -332,7 +372,9 @@ def main() -> None:
     parser.add_argument("--pastille-rule", default="", help="Unused placeholder")
     parser.add_argument("--gpi-config", default="", help="Path to GPI config (unused)")
     parser.add_argument(
-        "--payout-calib", default="", help="Path to payout calibration (unused)"
+        "--calibration",
+        default="config/payout_calibration.yaml",
+        help="Path to payout_calibration.yaml used for combo validation.",
     )
     parser.add_argument(
         "--mode", default="hminus5", help="Mode de traitement (log only)"
@@ -347,7 +389,9 @@ def main() -> None:
     snap_dir = Path(args.snap_dir)
     analysis_root = args.output or os.getenv("OUTPUT_DIR") or args.analysis_dir
     analysis_dir = Path(analysis_root)
-
+    calibration_path = Path(args.calibration).expanduser()
+    calibration_exists = calibration_path.exists()
+    
     if args.planning:
         for name in ("course_id", "reunion", "course", "phase", "start_time"):
             if getattr(args, name):
@@ -415,6 +459,8 @@ def main() -> None:
                         ev_min=args.ev_min,
                         roi_min=args.roi_min,
                         mode=args.mode,
+                        calibration=calibration_path,
+                        calibration_available=calibration_exists,
                     )
                 if args.h5_window_min <= delta <= args.h5_window_max:
                     payload_dict = {
@@ -435,6 +481,8 @@ def main() -> None:
                         ev_min=args.ev_min,
                         roi_min=args.roi_min,
                         mode=args.mode,
+                        calibration=calibration_path,
+                        calibration_available=calibration_exists,
                     )
         except PayloadValidationError as exc:
             logger.error("[runner] %s", exc)
@@ -473,7 +521,9 @@ def main() -> None:
             ev_min=args.ev_min,
             roi_min=args.roi_min,
             mode=args.mode,
-        )        
+            calibration=calibration_path,
+            calibration_available=calibration_exists,
+        )    
     except PayloadValidationError as exc:
         logger.error("[runner] %s", exc)
         raise SystemExit(1) from exc
