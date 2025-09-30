@@ -9,6 +9,7 @@ from pathlib import Path
 import json
 import importlib.util
 import logging
+import shutil
 
 import pytest
 
@@ -332,6 +333,54 @@ def test_fetch_race_snapshot_accepts_direct_url(monkeypatch: pytest.MonkeyPatch)
     assert callable(called["operation"])
     assert snapshot["rc"] == "R1C1"
     assert snapshot["course_id"] == "12345"
+
+
+def test_fetch_race_snapshot_merges_h30_odds_map(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Snapshots should merge odds from local maps produced by the analyser."""
+
+    rc_dir = Path("data") / "R7C8"
+    try:
+        rc_dir.mkdir(parents=True, exist_ok=True)
+        (rc_dir / "h30.json").write_text(json.dumps({"1": 4.2, "2": 9.0}), encoding="utf-8")
+        (rc_dir / "normalized_h30.json").write_text(
+            json.dumps(
+                {
+                    "runners": [
+                        {"num": "1", "odds_place_h30": 1.85},
+                        {"num": "2"},
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        def fake_fetch(
+            reunion: str | None,
+            course: str | None,
+            *,
+            phase: str,
+            **_kwargs: Any,
+        ) -> Mapping[str, Any]:
+            assert phase == "H5"
+            return {
+                "runners": [
+                    {"num": "1", "name": "Alpha"},
+                    {"num": "2", "name": "Bravo"},
+                ]
+            }
+
+        monkeypatch.setattr(cli._impl, "fetch_race_snapshot", fake_fetch)
+
+        snapshot = cli.fetch_race_snapshot("R7", "C8", phase="H5", sources={})
+
+        assert snapshot["runners"][0]["odds_win_h30"] == 4.2
+        assert snapshot["runners"][0]["odds_place_h30"] == 1.85
+        assert snapshot["runners"][1]["odds_win_h30"] == 9.0
+        assert "odds_place_h30" not in snapshot["runners"][1]
+    finally:
+        shutil.rmtree(rc_dir, ignore_errors=True)
 
 
 def test_fetch_race_snapshot_returns_minimal_snapshot_on_failure(
