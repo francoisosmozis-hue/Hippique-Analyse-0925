@@ -1,17 +1,26 @@
-"""Chronos enrichment helper."""
+"""Helpers to materialise chronos artefacts from stored snapshots."""
 
 from __future__ import annotations
 
+import argparse
 import json
+import subprocess
+import sys
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
 from analyse_courses_du_jour_enrichie import _write_chronos_csv
 
 
-def _iter_runners(snapshot: Mapping[str, Any]) -> Iterable[Mapping[str, Any]]:
-    """Yield runner dictionaries from the snapshot payload."""
+def _load_json(path: Path) -> Mapping[str, Any] | None:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return payload if isinstance(payload, Mapping) else None
 
+
+    def _iter_runners(snapshot: Mapping[str, Any]) -> Iterable[Mapping[str, Any]]:
     runners = snapshot.get("runners")
     if isinstance(runners, list):
         for runner in runners:
@@ -27,30 +36,79 @@ def _iter_runners(snapshot: Mapping[str, Any]) -> Iterable[Mapping[str, Any]]:
                     yield runner
 
 
-def enrich_from_snapshot(snapshot_path: str | Path, reunion: str, course: str) -> dict[str, Any]:
-    """Materialise ``chronos.csv`` based on the provided snapshot."""
+def _discover_payload(snapshot_dir: Path) -> Mapping[str, Any]:
+    candidates = [snapshot_dir / "partants.json", snapshot_dir / "normalized_h5.json"]
+    candidates.extend(sorted(snapshot_dir.glob("*_H-5.json"), reverse=True))
 
-    del reunion, course  # signature parity
+    for candidate in candidates:
+        payload = _load_json(candidate)
+        if payload:
+            return payload
 
-    snapshot_file = Path(snapshot_path)
+    raise RuntimeError("snapshot-missing")
+
+
+def _materialise_chronos(snapshot_dir: Path, reunion: str, course: str) -> Path:
+    payload = _discover_payload(snapshot_dir)
+    runners = list(_iter_runners(payload))
+    chronos_path = snapshot_dir / f"{reunion}{course}_chronos.csv"
+    _write_chronos_csv(chronos_path, runners)
+
+    legacy_path = snapshot_dir / "chronos.csv"
+    if legacy_path != chronos_path:
+        _write_chronos_csv(legacy_path, runners)
+
+    return chronos_path
+    
+    
+    enrich_from_snapshot(snapshot_dir: str | Path, reunion: str, course: str) -> Path:
+    """Spawn the CLI helper to generate chronos artefacts for ``snapshot_dir``."""
+
+    out_dir = Path(snapshot_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    reunion_code = reunion.upper()
+    course_code = course.upper()
+
+    cmd = [
+        sys.executable,
+        str(Path(__file__).resolve()),
+        "--out",
+        str(out_dir),
+        "--reunion",
+        reunion_code,
+        "--course",
+        course_code,
+    ]
+
+    subprocess.run(cmd, check=True)
+    return out_dir / f"{reunion_code}{course_code}_chronos.csv"
+
+
+def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Build chronos artefacts")
+    parser.add_argument("--out", required=True, help="Répertoire destination")
+    parser.add_argument("--reunion", required=True, help="Identifiant réunion (ex: R1)")
+    parser.add_argument("--course", required=True, help="Identifiant course (ex: C1)")
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = _parse_args(argv)
+    snapshot_dir = Path(args.out)
+    snapshot_dir.mkdir(parents=True, exist_ok=True)
+
     try:
-        payload = json.loads(snapshot_file.read_text(encoding="utf-8"))
-    except Exception as exc:  # pragma: no cover - defensive
-        return {"ok": False, "reason": f"snapshot-error: {exc}"}
+        _materialise_chronos(snapshot_dir, args.reunion.upper(), args.course.upper())
+    except RuntimeError as exc:
+        print(f"[ERROR] fetch_je_chrono: {exc}", file=sys.stderr)
+        return 1
 
-    if not isinstance(payload, Mapping):
-        return {"ok": False, "reason": "snapshot-invalid"}
+    return 0
 
-    course_dir = snapshot_file.parent
-    chronos_path = course_dir / "chronos.csv"
-
-    try:
-        course_dir.mkdir(parents=True, exist_ok=True)
-        _write_chronos_csv(chronos_path, _iter_runners(payload))
-    except Exception as exc:
-        return {"ok": False, "reason": f"io-error: {exc}"}
-
-    return {"ok": True, "paths": {"chronos": str(chronos_path)}}
+    
+    if __name__ == "__main__":  # pragma: no cover - CLI entry point
+    raise SystemExit(main())
 
 
 __all__ = ["enrich_from_snapshot"]
