@@ -407,6 +407,7 @@ def test_cmd_analyse_enriches_runners(tmp_path, monkeypatch: pytest.MonkeyPatch)
         payout_min_exotic=None,
         allow_heuristic=False,
         allow_je_na=True,
+        calibration="config/payout_calibration.yaml",
     )
 
     pipeline_run.cmd_analyse(args)
@@ -484,6 +485,7 @@ def test_pipeline_validation_failure_reports_summary(tmp_path, monkeypatch):
         payout_min_exotic=None,
         allow_heuristic=False,
         allow_je_na=False,
+        calibration="config/payout_calibration.yaml",
     )
 
     with pytest.raises(validator_ev.ValidationError, match="Nombre de partants"):
@@ -676,6 +678,7 @@ def test_high_risk_pack_is_trimmed(tmp_path, monkeypatch):
         payout_min_exotic=None,
         allow_heuristic=False,
         allow_je_na=True,
+        calibration="config/payout_calibration.yaml",
     )
 
     pipeline_run.cmd_analyse(args)
@@ -795,6 +798,7 @@ def test_combo_pack_scaled_not_removed(tmp_path, monkeypatch):
         payout_min_exotic=None,
         allow_heuristic=False,
         allow_je_na=True,
+        calibration="config/payout_calibration.yaml",
     )
 
     pipeline_run.cmd_analyse(args)
