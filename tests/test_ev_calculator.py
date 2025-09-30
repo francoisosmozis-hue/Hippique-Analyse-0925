@@ -273,8 +273,8 @@ def test_enforce_ror_threshold_reduces_high_risk_pack() -> None:
         "ROR_MAX": 0.01,
     }
     runners = [
-        {"id": "1", "name": "A", "odds": 2.0, "p": 0.52},
-        {"id": "2", "name": "B", "odds": 3.5, "p": 0.30},
+        {"id": "1", "name": "A", "odds": 2.0, "p": 0.52, "odds_place": 1.6},
+        {"id": "2", "name": "B", "odds": 3.5, "p": 0.30, "odds_place": 1.9},
     ]
 
     baseline, _ = allocate_dutching_sp(cfg, runners)
@@ -311,8 +311,8 @@ def test_enforce_ror_threshold_preserves_safe_pack() -> None:
         "ROR_MAX": 0.01,
     }
     runners = [
-        {"id": "1", "name": "A", "odds": 2.0, "p": 0.52},
-        {"id": "2", "name": "B", "odds": 3.5, "p": 0.30},
+        {"id": "1", "name": "A", "odds": 2.0, "p": 0.52, "odds_place": 1.6},
+        {"id": "2", "name": "B", "odds": 3.5, "p": 0.30, "odds_place": 1.9},
     ]
 
     baseline, _ = allocate_dutching_sp(cfg, runners)
