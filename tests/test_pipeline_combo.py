@@ -390,23 +390,24 @@ def test_filter_sp_and_cp_tickets_apply_cp_threshold():
     runners = [
         {"id": "1", "odds": 2.2},
         {"id": "2", "odds": 3.1},
-        {"id": "3", "odds": 3.0},
-        {"id": "4", "odds": 3.0},
+        {"id": "3", "odds": 3.2},
+        {"id": "4", "odds": 3.2},
     ]
     partants = {"runners": runners}
 
     sp_ticket = {"type": "SP", "id": "5", "odds": 9.0, "stake": 1.0}
+    sp_ticket_alt = {"type": "SP", "id": "6", "odds": 6.0, "stake": 1.0}
     combo_low = {"type": "CP", "legs": ["1", "2"], "stake": 1.0}
     combo_threshold = {"type": "CP", "legs": ["3", "4"], "stake": 1.0}
 
     sp_filtered, combo_filtered, notes = pipeline_run._filter_sp_and_cp_tickets(
-        [sp_ticket],
+        [sp_ticket, sp_ticket_alt],
         [combo_low, combo_threshold],
         runners,
         partants,
     )
 
-    assert sp_filtered and sp_filtered[0]["id"] == "5"
+    assert any(ticket["id"] == "5" for ticket in sp_filtered)
     assert combo_filtered == [combo_threshold]
     assert any("CP retiré" in str(note) for note in notes)
 
@@ -419,19 +420,19 @@ def test_filter_sp_tickets_apply_sp_threshold():
     partants = {"runners": runners}
 
     sp_low = {"type": "SP", "id": "1", "odds": 3.9, "stake": 1.0}
-    sp_threshold = {"type": "SP", "id": "2", "odds": 4.0, "stake": 1.0}
+    sp_threshold = {"type": "SP", "id": "2", "odds": 5.0, "stake": 1.0}
+    sp_high = {"type": "SP", "id": "3", "odds": 6.0, "stake": 1.0}
 
     sp_filtered, combo_filtered, notes = pipeline_run._filter_sp_and_cp_tickets(
-        [sp_low, sp_threshold],
+        [sp_low, sp_threshold, sp_high],
         [],
         runners,
         partants,
     )
 
     assert combo_filtered == []
-    assert [ticket["id"] for ticket in sp_filtered] == ["2"]
-    assert any("3/1" in str(note) for note in notes)
-
+    assert sorted(ticket["id"] for ticket in sp_filtered) == ["2", "3"]
+    assert any("4/1" in str(note) for note in notes)
 
 def test_pipeline_uses_capped_stake_in_exports(tmp_path, monkeypatch):
     partants = partants_sample()
