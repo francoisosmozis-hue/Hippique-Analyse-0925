@@ -154,6 +154,7 @@ def _evaluate_combo_strict(
     ev_min: float,
     payout_min: float,
     allow_heuristic: bool = False,
+    calibration: str | os.PathLike[str] | None = None,
 ) -> tuple[bool, dict[str, Any], list[str], dict[str, Any]]:
     """Evaluate a combo candidate enforcing strict EV/payout guards.
 
@@ -166,6 +167,7 @@ def _evaluate_combo_strict(
     result = sim_wrapper.evaluate_combo(
         [template],
         bankroll,
+        calibration=calibration,
         allow_heuristic=allow_heuristic,
     )
 
@@ -238,6 +240,7 @@ def filter_combos_strict(
     payout_min: float,
     max_keep: int = 1,
     allow_heuristic: bool = False,
+    calibration: str | os.PathLike[str] | None = None,
 ) -> tuple[list[dict[str, Any]], list[str]]:
     """Filter exotic combo templates enforcing strict EV/payout guards."""
 
@@ -253,6 +256,7 @@ def filter_combos_strict(
             ev_min=ev_min,
             payout_min=payout_min,
             allow_heuristic=allow_heuristic,
+            calibration=calibration,
         )
 
         template_copy = dict(template)
@@ -2152,6 +2156,7 @@ def cmd_analyse(args: argparse.Namespace) -> None:
             "ev_threshold": ev_min_exotic,
             "payout_threshold": payout_min_exotic,
             "allow_heuristic": allow_heuristic,
+            "calibration": args.calibration,
         },
     )
     sp_tickets, combo_templates, _combo_info = apply_ticket_policy_fn(
@@ -2317,6 +2322,7 @@ def cmd_analyse(args: argparse.Namespace) -> None:
             # Conform to the "SP + 1 combiné" rule of the GPI v5.1 playbook.
             max_keep=1,
             allow_heuristic=allow_heuristic,
+            calibration=args.calibration,
         )
         filter_reasons.extend(eval_reasons)      
 
@@ -2775,6 +2781,11 @@ def main() -> None:
         "--allow-heuristic", dest="allow_heuristic", action="store_true"
     )
     ana.add_argument("--allow-je-na", dest="allow_je_na", action="store_true")
+    ana.add_argument(
+        "--calibration",
+        default="config/payout_calibration.yaml",
+        help="Chemin vers payout_calibration.yaml pour l'évaluation des combinés.",
+    )
     ana.set_defaults(func=cmd_analyse)
 
     args = parser.parse_args()
