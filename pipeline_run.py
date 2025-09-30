@@ -75,6 +75,66 @@ def _compute_market_overround(odds: Mapping[str, Any]) -> float | None:
     return total
 
 
+def _build_market(
+    runners: Sequence[Mapping[str, Any]],
+    slots_place: Any,
+) -> dict[str, float | int]:
+    """Return market metrics for win and place books."""
+
+    win_total = 0.0
+    place_total = 0.0
+    has_win = False
+    has_place = False
+
+    for entry in runners:
+        if not isinstance(entry, Mapping):
+            continue
+
+        win_odds = None
+        for key in ("odds", "decimal_odds", "odds_dec", "odds_win", "win_odds", "cote", "odd"):
+            if key in entry:
+                candidate = _coerce_odds(entry.get(key))
+                if candidate > 0:
+                    win_odds = candidate
+                    break
+        if win_odds:
+            win_total += 1.0 / win_odds
+            has_win = True
+
+        place_odds = None
+        for key in ("odds_place", "place_odds", "cote_place"):
+            if key in entry:
+                candidate = _coerce_odds(entry.get(key))
+                if candidate > 0:
+                    place_odds = candidate
+                    break
+        if place_odds:
+            place_total += 1.0 / place_odds
+            has_place = True
+
+    metrics: dict[str, float | int] = {}
+    if has_win:
+        metrics["overround_win"] = win_total
+
+    slots_value: float | None
+    try:
+        slots_value = float(slots_place)
+    except (TypeError, ValueError):
+        slots_value = None
+    if slots_value is not None:
+        if not math.isfinite(slots_value) or slots_value <= 0:
+            slots_value = None
+
+    if slots_value is not None:
+        int_candidate = int(slots_value)
+        metrics["slots_place"] = int_candidate if abs(slots_value - int_candidate) < 1e-9 else slots_value
+
+    if has_place and slots_value:
+        metrics["overround_place"] = place_total / slots_value
+
+    return metrics
+
+
 def _coerce_float(value: Any, default: float = 0.0) -> float:
     """Return ``value`` as ``float`` falling back to ``default`` when invalid."""
 
@@ -600,6 +660,32 @@ def _build_runner_odds_lookup(
     return lookup
 
 
+def _ensure_place_odds(runners: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """Return runners enriched with place odds, discarding incomplete entries."""
+
+    sanitized: list[dict[str, Any]] = []
+    for entry in runners:
+        if not isinstance(entry, Mapping):
+            continue
+
+        record = dict(entry)
+        place_odds = _coerce_odds(record.get("odds_place"))
+        if place_odds <= 0.0:
+            fallback = _coerce_odds(record.get("odds_place_h30"))
+            if fallback > 0.0:
+                record["odds_place"] = fallback
+                place_odds = fallback
+        else:
+            record["odds_place"] = place_odds
+
+        if place_odds <= 0.0:
+            continue
+
+        sanitized.append(record)
+
+    return sanitized
+
+           
 def _resolve_leg_odds(
     leg: Any,
     odds_lookup: Mapping[str, float],
@@ -1158,7 +1244,16 @@ def enforce_ror_threshold(
     except (TypeError, ValueError):  # pragma: no cover - defensive
         min_stake = 0.0
 
-    sp_tickets, _ = allocate_dutching_sp_fn(cfg_iter, runners)
+    runners_sp = _ensure_place_odds(runners)
+    if len(runners_sp) >= 2:
+        sp_tickets, _ = allocate_dutching_sp_fn(cfg_iter, runners_sp)
+    else:
+        if runners and len(runners_sp) < 2:
+            logger.warning(
+                "SP dutching skipped: insufficient place odds (kept=%d)",
+                len(runners_sp),
+            )
+        sp_tickets = []
     sp_tickets.sort(key=lambda t: t.get("ev_ticket", 0.0), reverse=True)
     try:
         max_count = int(cfg_iter.get("MAX_TICKETS_SP", len(sp_tickets)))
@@ -2025,6 +2120,10 @@ def cmd_analyse(args: argparse.Namespace) -> None:
             raw_drift_odds = odds_current - odds_prev
             raw_stats = stats_je.get(cid) if isinstance(stats_je, dict) else None
             je_stats = raw_stats if isinstance(raw_stats, dict) else {}
+            odds_place_current = _coerce_odds(p.get("odds_place"))
+            if odds_place_current <= 0.0:
+                odds_place_current = _coerce_odds(p.get("place_odds"))
+            odds_place_h30 = _coerce_odds(p.get("odds_place_h30"))
             runner = {
                 "id": cid,
                 "name": p.get("name", cid),
@@ -2039,8 +2138,14 @@ def cmd_analyse(args: argparse.Namespace) -> None:
                 "last2_top3": _as_recent_form_flag(je_stats.get("last2_top3")),
                 "is_favorite": cid in favorite_ids,
             }
+            if odds_place_current > 0.0:
+                runner["odds_place"] = odds_place_current
+            if odds_place_h30 > 0.0 and odds_place_current <= 0.0:
+                runner["odds_place_h30"] = odds_place_h30
             runners.append(runner)
 
+    runners_sp_candidates = _ensure_place_odds(runners)
+    
     policy_kwargs = _filter_kwargs(
         apply_ticket_policy_fn,
         {
@@ -2089,7 +2194,43 @@ def cmd_analyse(args: argparse.Namespace) -> None:
 
     filter_reasons: list[str] = []
 
-    market_overround = _compute_market_overround(odds_h5)
+    market_payload = partants_data.get("market") if isinstance(partants_data, Mapping) else None
+    market_runners_raw: Sequence[Mapping[str, Any]] = []
+    slots_place_hint: Any = None
+    if isinstance(market_payload, Mapping):
+        horses = market_payload.get("horses")
+        if isinstance(horses, Sequence):
+            market_runners_raw = [horse for horse in horses if isinstance(horse, Mapping)]
+        for key in (
+            "slots_place",
+            "places_payees",
+            "places_payees_h5",
+            "paid_places",
+            "paid_slots",
+        ):
+            if key in market_payload and market_payload.get(key) not in (None, ""):
+                slots_place_hint = market_payload.get(key)
+                break
+    if slots_place_hint is None and isinstance(partants_data, Mapping):
+        for key in (
+            "slots_place",
+            "places_payees",
+            "places_payees_h5",
+            "paid_places",
+            "paid_slots",
+        ):
+            if key in partants_data and partants_data.get(key) not in (None, ""):
+                slots_place_hint = partants_data.get(key)
+                break
+    if not market_runners_raw:
+        market_runners_raw = runners_sp_candidates
+
+    market_metrics = _build_market(market_runners_raw, slots_place_hint)
+    if market_metrics.get("overround_win") is None:
+        fallback_overround = _compute_market_overround(odds_h5)
+        if fallback_overround is not None:
+            market_metrics["overround_win"] = fallback_overround
+    market_overround = cast(float | None, market_metrics.get("overround_win"))
     course_label_text = (
         partants_data.get("course_label")
         or partants_data.get("label")
@@ -2141,6 +2282,12 @@ def cmd_analyse(args: argparse.Namespace) -> None:
     if overround_context:
         combo_info["thresholds"]["overround_context"] = overround_context
     metrics = combo_info.setdefault("metrics", {})
+    if market_metrics:
+        metrics_market = metrics.setdefault("market", {})
+        for key, value in market_metrics.items():
+            if value is None:
+                continue
+            metrics_market[key] = value
     if market_overround is not None:
         metrics["overround"] = market_overround
         if market_overround > overround_cap:
@@ -2340,7 +2487,10 @@ def cmd_analyse(args: argparse.Namespace) -> None:
         cfg_sp = dict(cfg)
         cfg_sp["SP_RATIO"] = float(cfg.get("SP_RATIO", 0.0)) + float(cfg.get("COMBO_RATIO", 0.0))
         cfg_sp["COMBO_RATIO"] = 0.0
-        sp_tickets, _ = allocate_dutching_sp_fn(cfg_sp, runners)
+        if len(runners_sp_candidates) >= 2:
+            sp_tickets, _ = allocate_dutching_sp_fn(cfg_sp, runners_sp_candidates)
+        else:
+            sp_tickets = []
         sp_tickets, stats_ev, reduction_info = adjust_pack(cfg_sp, [])
         last_reduction_info = reduction_info
         ev_sp, roi_sp, total_stake_sp = summarize_sp_tickets(sp_tickets)
