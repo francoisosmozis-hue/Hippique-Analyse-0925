@@ -169,9 +169,14 @@ def _prepare_stubs(
 
     eval_calls: list[dict] = []
 
-    def fake_evaluate(tickets, bankroll, allow_heuristic=False):
+    def fake_evaluate(tickets, bankroll, calibration=None, allow_heuristic=False):
         eval_calls.append(
-            {"tickets": [dict(t) for t in tickets], "bankroll": bankroll, "allow_heuristic": allow_heuristic}
+            {
+                "tickets": [dict(t) for t in tickets],
+                "bankroll": bankroll,
+                "calibration": calibration,
+                "allow_heuristic": allow_heuristic,
+            }
         )
         result = dict(eval_stats)
         result.setdefault("status", "ok")
@@ -224,6 +229,7 @@ def _run_analysis(
         payout_min_exotic=10.0,
         allow_heuristic=False,
         allow_je_na=False,
+        calibration="config/payout_calibration.yaml",
     )
 
     pipeline_run.cmd_analyse(args)
@@ -310,11 +316,19 @@ def test_filter_combos_strict_disables_heuristics_by_default() -> None:
         def __init__(self) -> None:
             self.calls: list[dict[str, Any]] = []
 
-        def evaluate_combo(self, tickets, bankroll, *, allow_heuristic=False):  # type: ignore[override]
+        def evaluate_combo(
+            self,
+            tickets,
+            bankroll,
+            *,
+            calibration=None,
+            allow_heuristic=False,
+        ):
             self.calls.append(
                 {
                     "tickets": [dict(t) for t in tickets],
                     "bankroll": bankroll,
+                    "calibration": calibration,
                     "allow_heuristic": allow_heuristic,
                 }
             )
@@ -340,11 +354,15 @@ def test_filter_combos_strict_disables_heuristics_by_default() -> None:
         bankroll_lookup=lambda _template: 5.0,
         ev_min=0.40,
         payout_min=10.0,
+        calibration="config/payout_calibration.yaml",
     )
 
     assert kept, "expected the combo to be retained"
     assert reasons == []
     assert wrapper.calls, "evaluate_combo should have been invoked"
+    assert (
+        wrapper.calls[0]["calibration"] == "config/payout_calibration.yaml"
+    )
     assert wrapper.calls[0]["allow_heuristic"] is False
 
 
@@ -354,12 +372,19 @@ def test_filter_combos_strict_limits_to_best_combo() -> None:
     class DummyWrapper:
         def __init__(self, responses: Mapping[str, Mapping[str, Any]]) -> None:
             self._responses = responses
-            self.calls: list[str] = []
+            self.calls: list[tuple[str, Any]] = []
 
-        def evaluate_combo(self, tickets, bankroll, *, allow_heuristic=False):  # type: ignore[override]
+        def evaluate_combo(
+            self,
+            tickets,
+            bankroll,
+            *,
+            calibration=None,
+            allow_heuristic=False,
+        ):
             assert len(tickets) == 1
             identifier = str(tickets[0].get("id") or tickets[0].get("type"))
-            self.calls.append(identifier)
+            self.calls.append((identifier, calibration))
             return dict(self._responses[identifier])
 
     templates = [
@@ -392,9 +417,13 @@ def test_filter_combos_strict_limits_to_best_combo() -> None:
         bankroll_lookup=lambda _template: 5.0,
         ev_min=0.40,
         payout_min=10.0,
+        calibration="config/payout_calibration.yaml",
     )
 
-    assert wrapper.calls == ["combo_a", "combo_b"]
+    assert wrapper.calls == [
+        ("combo_a", "config/payout_calibration.yaml"),
+        ("combo_b", "config/payout_calibration.yaml"),
+    ]
     assert len(kept) == 1
     assert kept[0]["id"] == "combo_b"
     assert "combo_limit_enforced" in reasons
