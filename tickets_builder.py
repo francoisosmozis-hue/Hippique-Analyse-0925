@@ -1,3 +1,4 @@
+import os
 from typing import Any, Dict, Iterable, List, Mapping, Sequence, Tuple
 
 from simulate_ev import allocate_dutching_sp
@@ -317,6 +318,7 @@ def apply_ticket_policy(
     roi_threshold: float | None = None,
     payout_threshold: float | None = None,
     allow_heuristic: bool | None = None,
+    calibration: str | os.PathLike[str] | None = None,
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], Dict[str, Any]]:
     """Allocate SP tickets and normalised combo templates.
     Parameters
@@ -336,6 +338,9 @@ def apply_ticket_policy(
         are read from ``cfg``.
     allow_heuristic:
         Forwarded to :func:`runner_chain.validate_exotics_with_simwrapper`.
+        calibration:
+        Optional path to the payout calibration YAML forwarded to
+        :func:`runner_chain.validate_exotics_with_simwrapper`
 
     Returns
     -------
@@ -407,6 +412,7 @@ def apply_ticket_policy(
         payout_min=payout_threshold,
         sharpe_min=sharpe_threshold,
         allow_heuristic=allow_heuristic,
+        calibration=calibration,
     )
 
     if not validated:
