@@ -67,6 +67,51 @@ def test_single_race_h5_creates_snapshot_and_analysis(tmp_path, monkeypatch, run
     assert (analysis_dir / "R1C2" / "analysis.json").exists()
 
 
+def test_missing_calibration_disables_combos(tmp_path, monkeypatch, runner_chain_module):
+    calls: list[tuple] = []
+
+    def fake_simulation(*args, **kwargs):
+        calls.append((args, kwargs))
+        return {"ev": 0.4, "roi": 0.3, "green": True}
+
+    monkeypatch.setattr(runner_chain_module, "simulate_ev_batch", fake_simulation)
+    monkeypatch.setattr(runner_chain_module, "validate_ev", lambda *_, **__: True)
+
+    snap_dir = tmp_path / "snapshots"
+    analysis_dir = tmp_path / "analyses"
+    calibration_path = tmp_path / "missing_calibration.yaml"
+
+    _invoke(
+        runner_chain_module,
+        monkeypatch,
+        [
+            "--course-id",
+            "123456",
+            "--reunion",
+            "R1",
+            "--course",
+            "C2",
+            "--phase",
+            "H5",
+            "--start-time",
+            "2024-01-01T12:05:00",
+            "--snap-dir",
+            str(snap_dir),
+            "--analysis-dir",
+            str(analysis_dir),
+            "--calibration",
+            str(calibration_path),
+        ],
+    )
+
+    analysis_file = analysis_dir / "R1C2" / "analysis.json"
+    payload = json.loads(analysis_file.read_text(encoding="utf-8"))
+
+    assert payload["status"] == "insufficient_data"
+    assert "calibration_missing" in payload.get("notes", [])
+    assert not calls
+
+
 def test_single_race_h30_only_writes_snapshot(tmp_path, monkeypatch, runner_chain_module):
     _stub_analysis(monkeypatch, runner_chain_module)
 
