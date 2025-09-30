@@ -75,9 +75,35 @@ def _compute_market_overround(odds: Mapping[str, Any]) -> float | None:
     return total
 
 
+_DEFAULT_SLOTS_PLACE = 3
+
+
+def _coerce_slots_place(slots_place: Any, default: float = _DEFAULT_SLOTS_PLACE) -> float:
+    """Return a positive place slot count from ``slots_place`` or ``default``."""
+
+    candidate = slots_place
+    if isinstance(candidate, str):
+        digits = re.findall(r"\d+", candidate)
+        if digits:
+            candidate = digits[0]
+
+    if candidate in (None, "", 0):
+        candidate = default
+
+    try:
+        slots_value = float(candidate)
+    except (TypeError, ValueError):
+        slots_value = float(default)
+
+    if not math.isfinite(slots_value) or slots_value <= 0:
+        slots_value = float(default)
+
+    return slots_value
+
+
 def _build_market(
     runners: Sequence[Mapping[str, Any]],
-    slots_place: Any,
+    slots_place: Any = _DEFAULT_SLOTS_PLACE,
 ) -> dict[str, float | int]:
     """Return market metrics for win and place books."""
 
@@ -116,19 +142,14 @@ def _build_market(
     if has_win:
         metrics["overround_win"] = win_total
 
-    slots_value: float | None
-    try:
-        slots_value = float(slots_place)
-    except (TypeError, ValueError):
-        slots_value = None
-    if slots_value is not None:
-        if not math.isfinite(slots_value) or slots_value <= 0:
-            slots_value = None
+    slots_value = _coerce_slots_place(slots_place)
 
-    if slots_value is not None:
+    if slots_value:
         int_candidate = int(slots_value)
-        metrics["slots_place"] = int_candidate if abs(slots_value - int_candidate) < 1e-9 else slots_value
-
+        metrics["slots_place"] = (
+            int_candidate if abs(slots_value - int_candidate) < 1e-9 else slots_value
+        )
+        
     if has_place and slots_value:
         metrics["overround_place"] = place_total / slots_value
 
@@ -2230,7 +2251,10 @@ def cmd_analyse(args: argparse.Namespace) -> None:
     if not market_runners_raw:
         market_runners_raw = runners_sp_candidates
 
-    market_metrics = _build_market(market_runners_raw, slots_place_hint)
+    if slots_place_hint in (None, ""):
+        market_metrics = _build_market(market_runners_raw)
+    else:
+        market_metrics = _build_market(market_runners_raw, slots_place_hint)
     if market_metrics.get("overround_win") is None:
         fallback_overround = _compute_market_overround(odds_h5)
         if fallback_overround is not None:
