@@ -70,7 +70,7 @@ def test_compute_overround_cap_handles_accents() -> None:
 
 
 def test_validate_exotics_with_simwrapper_filters_and_alert(monkeypatch):
-    def fake_eval(tickets, bankroll, allow_heuristic=True):
+    def fake_eval(tickets, bankroll, calibration=None, allow_heuristic=True):
         if tickets[0]['id'] == 'fail':
             return {
                 'ev_ratio': 0.1,
@@ -104,7 +104,7 @@ def test_validate_exotics_with_simwrapper_filters_and_alert(monkeypatch):
 
 
 def test_validate_exotics_with_simwrapper_rejects_low_payout(monkeypatch):
-    def fake_eval(tickets, bankroll, allow_heuristic=True):
+    def fake_eval(tickets, bankroll, calibration=None, allow_heuristic=True):
         return {
             'ev_ratio': 0.8,
             'roi': 0.7,
@@ -134,7 +134,7 @@ def test_validate_exotics_with_simwrapper_caps_best_and_alert(monkeypatch):
         'b': {'ev_ratio': 0.8, 'roi': 0.9, 'payout_expected': 35.0, 'sharpe': 0.8, 'notes': [], 'requirements': []},
     }
 
-    def fake_eval(tickets, bankroll, allow_heuristic=True):
+    def fake_eval(tickets, bankroll, calibration=None, allow_heuristic=True):
         return results[tickets[0]['id']]
 
     monkeypatch.setattr(runner_chain, 'evaluate_combo', fake_eval)
@@ -153,7 +153,7 @@ def test_validate_exotics_with_simwrapper_caps_best_and_alert(monkeypatch):
 
 
 def test_validate_exotics_with_simwrapper_skips_unreliable(monkeypatch):
-    def fake_eval(tickets, bankroll, allow_heuristic=True):
+    def fake_eval(tickets, bankroll, calibration=None, allow_heuristic=True):
         return {
             'ev_ratio': 0.6,
             'roi': 0.6,
@@ -177,7 +177,7 @@ def test_validate_exotics_with_simwrapper_skips_unreliable(monkeypatch):
 
 
 def test_validate_exotics_with_simwrapper_rejects_low_sharpe(monkeypatch):
-    def fake_eval(tickets, bankroll, allow_heuristic=True):
+    def fake_eval(tickets, bankroll, calibration=None, allow_heuristic=True):
         return {
             'ev_ratio': 0.7,
             'roi': 0.8,
@@ -200,7 +200,7 @@ def test_validate_exotics_with_simwrapper_rejects_low_sharpe(monkeypatch):
 
 
 def test_validate_exotics_with_simwrapper_logs_rejected_status(monkeypatch, caplog):
-    def fake_eval(tickets, bankroll, allow_heuristic=True):
+    def fake_eval(tickets, bankroll, calibration=None, allow_heuristic=True):
         return {
             'status': 'KO',
             'notes': [],
