@@ -1179,7 +1179,7 @@ def _coerce_partants_int(value: Any) -> int | None:
     if isinstance(value, bool):
         return None
     if isinstance(value, list):
-        return len(value)
+        return len(value) if value else None
     if isinstance(value, (int, float)):
         try:
             return int(value)
@@ -1244,6 +1244,22 @@ def _merge_h30_odds(
         return
 
     h30_path = Path("data") / f"{reunion_norm}{course_norm}" / "h30.json"
+
+    def _coerce_number(value: Any) -> str | None:
+        if value in (None, ""):
+            return None
+        text = str(value).strip()
+        return text or None
+
+    def _pick(keys: tuple[str, ...], source: Mapping[str, Any]) -> Any | None:
+        for key in keys:
+            if key not in source:
+                continue
+            value = source.get(key)
+            if value not in (None, ""):
+                return value
+        return None
+
     try:
         raw_text = h30_path.read_text(encoding="utf-8")
     except OSError:
@@ -1258,66 +1274,149 @@ def _merge_h30_odds(
     if not isinstance(payload, Mapping):
         return
 
-    candidates = payload.get("runners")
-    if not isinstance(candidates, Iterable) or isinstance(candidates, (str, bytes)):
-        return
-
     odds_map: dict[str, dict[str, Any]] = {}
 
-    for entry in candidates:
-        if not isinstance(entry, Mapping):
-            continue
+   def _register(number: str, *, win: Any | None = None, place: Any | None = None) -> None:
+        updates = odds_map.setdefault(number, {})
+        if win is not None:
+            updates["odds_win_h30"] = win
+        if place is not None and "odds_place_h30" not in updates:
+            updates["odds_place_h30"] = place
+        if not updates:
+            odds_map.pop(number, None)
+            
+        candidates = payload.get("runners")
+    runners_iterable = (
+        candidates
+        if isinstance(candidates, Iterable) and not isinstance(candidates, (str, bytes))
+        else None
+    )
 
-        num_raw = (
-            entry.get("num")
-            or entry.get("id")
-            or entry.get("number")
-            or entry.get("runner_id")
-        )
-        if num_raw in (None, ""):
-            continue
+        if runners_iterable is not None:
+        for entry in runners_iterable:
+            if not isinstance(entry, Mapping):
+                continue
 
-        number = str(num_raw).strip()
-        if not number:
-            continue
+        number = _coerce_number(
+                entry.get("num")
+                or entry.get("id")
+                or entry.get("number")
+                or entry.get("runner_id")
+            )
+            if not number:
+                continue
 
-        def _pick(keys: tuple[str, ...]) -> Any | None:
-            for key in keys:
-                if key not in entry:
+            win_value = _pick(
+                (
+                    "odds_win",
+                    "odds",
+                    "cote",
+                    "gagnant",
+                    "win",
+                    "odds_win_h30",
+                ),
+                entry,
+            )
+            place_value = _pick(
+                (
+                    "odds_place",
+                    "place",
+                    "cote_place",
+                    "place_odds",
+                    "odds_place_h30",
+                ),
+                entry,
+            )
+
+            if win_value is not None or place_value is not None:
+                _register(number, win=win_value, place=place_value)
+    else:
+        for key, value in payload.items():
+            if key == "runners":
+                continue
+
+            number = _coerce_number(key)
+            if not number:
+                continue
+                
+            win_value: Any | None
+            place_value: Any | None = None
+            if isinstance(value, Mapping):
+                win_value = _pick(
+                    (
+                        "odds_win",
+                        "odds",
+                        "cote",
+                        "gagnant",
+                        "win",
+                        "odds_win_h30",
+                    ),
+                    value,
+                )
+                place_value = _pick(
+                    (
+                        "odds_place",
+                        "place",
+                        "cote_place",
+                        "place_odds",
+                        "odds_place_h30",
+                    ),
+                    value,
+                )
+            else:
+                win_value = value
+
+            if win_value is not None or place_value is not None:
+                _register(number, win=win_value, place=place_value)
+
+    normalized_places: dict[str, Any] = {}
+    normalized_path = h30_path.with_name("normalized_h30.json")
+    try:
+        normalized_raw = normalized_path.read_text(encoding="utf-8")
+    except OSError:
+        normalized_payload: Mapping[str, Any] | None = None
+    else:
+        try:
+            parsed = json.loads(normalized_raw)
+        except json.JSONDecodeError:
+            logger.debug("[ZEturf] unable to parse %s", normalized_path)
+            normalized_payload = None
+        else:
+            normalized_payload = parsed if isinstance(parsed, Mapping) else None
+
+    if normalized_payload:
+        normalized_runners = normalized_payload.get("runners")
+        if isinstance(normalized_runners, Iterable) and not isinstance(
+            normalized_runners, (str, bytes)
+        ):
+            for entry in normalized_runners:
+                if not isinstance(entry, Mapping):
                     continue
-                value = entry.get(key)
-                if value not in (None, ""):
-                    return value
-            return None
+                number = _coerce_number(
+                    entry.get("num")
+                    or entry.get("number")
+                    or entry.get("id")
+                    or entry.get("runner_id")
+                )
+                if not number:
+                    continue
+                place_value = _pick(
+                    (
+                        "odds_place_h30",
+                        "odds_place",
+                        "place",
+                        "cote_place",
+                        "place_odds",
+                    ),
+                    entry,
+                )
+                if place_value is not None:
+                    normalized_places[number] = place_value
 
-        win_value = _pick(
-            (
-                "odds_win",
-                "odds",
-                "cote",
-                "gagnant",
-                "win",
-                "odds_win_h30",
-            )
-        )
-        place_value = _pick(
-            (
-                "odds_place",
-                "place",
-                "cote_place",
-                "place_odds",
-                "odds_place_h30",
-            )
-        )
-
-        updates: dict[str, Any] = {}
-        if win_value is not None:
-            updates["odds_win_h30"] = win_value
-        if place_value is not None:
+    for number, place_value in normalized_places.items():
+        updates = odds_map.setdefault(number, {})
+        if "odds_place_h30" not in updates:
             updates["odds_place_h30"] = place_value
-
-        if updates:
-            odds_map[number] = updates
 
     if not odds_map:
         return
@@ -1397,6 +1496,7 @@ def fetch_race_snapshot(
     else:
         result = {}
 
+    original_partants_field = result.get("partants") if isinstance(result.get("partants"), list) else None
     runners_raw = result.get("runners")
     runners: list[dict[str, Any]] = []
     if isinstance(runners_raw, Iterable) and not isinstance(runners_raw, (str, bytes)):
@@ -1468,11 +1568,15 @@ def fetch_race_snapshot(
             partants_count = value
             break
 
-    if partants_count is None:
+    if partants_count is None and runners:
         partants_count = len(runners)
 
-    result["partants"] = partants_count
     result["partants_count"] = partants_count
+
+    if isinstance(original_partants_field, list):
+        result["partants"] = original_partants_field
+    else:
+        result["partants"] = runners
 
     if phase_norm == "H5":
         _merge_h30_odds(runners, reunion_meta, course_meta)
