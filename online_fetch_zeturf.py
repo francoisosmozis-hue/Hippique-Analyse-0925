@@ -12,6 +12,7 @@ import time
 import unicodedata
 from dataclasses import dataclass
 import inspect
+import json
 from pathlib import Path
 from urllib.parse import urljoin
 from typing import Any, Dict, Iterable, Mapping
@@ -816,7 +817,7 @@ def _build_snapshot_payload(
 _RC_COMBINED_RE = re.compile(r"R?\s*(\d+)\s*C\s*(\d+)", re.IGNORECASE)
 
 
-def fetch_race_snapshot(
+def _fetch_race_snapshot_impl(
     reunion: str,
     course: str | None = None,
     phase: str = "H30",
@@ -1173,6 +1174,328 @@ def fetch_race_snapshot(
             except Exception:  # pragma: no cover - best effort cleanup
                 pass
 
+
+def _coerce_partants_int(value: Any) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, list):
+        return len(value)
+    if isinstance(value, (int, float)):
+        try:
+            return int(value)
+        except (TypeError, ValueError):  # pragma: no cover - defensive
+            return None
+    if isinstance(value, str):
+        match = re.search(r"\d+", value)
+        if match:
+            try:
+                return int(match.group(0))
+            except ValueError:  # pragma: no cover - defensive
+                return None
+    return None
+
+
+def _format_source_url_from_template(
+    template: str,
+    *,
+    course_id: Any,
+    rc: str | None,
+    reunion: str | None,
+    course: str | None,
+) -> str | None:
+    if not isinstance(template, str) or not template:
+        return None
+
+    context: dict[str, Any] = {}
+    if course_id not in (None, ""):
+        context["course_id"] = course_id
+    if rc:
+        context["rc"] = rc
+    if reunion:
+        context["reunion"] = reunion
+    if course:
+        context["course"] = course
+
+    formatted = template
+    try:
+        formatted = template.format(**context)
+    except (KeyError, IndexError, ValueError):
+        # Leave ``formatted`` untouched so callers can detect unresolved placeholders.
+        pass
+
+    if "{" in formatted or "}" in formatted:
+        return None
+
+    return _ensure_absolute_url(formatted) or formatted
+
+
+def _merge_h30_odds(
+    runners: list[dict[str, Any]],
+    reunion_label: str | None,
+    course_label: str | None,
+) -> None:
+    if not runners or not reunion_label or not course_label:
+        return
+
+    try:
+        reunion_norm = _normalise_label(reunion_label, "R")
+        course_norm = _normalise_label(course_label, "C")
+    except ValueError:
+        return
+
+    h30_path = Path("data") / f"{reunion_norm}{course_norm}" / "h30.json"
+    try:
+        raw_text = h30_path.read_text(encoding="utf-8")
+    except OSError:
+        return
+
+    try:
+        payload = json.loads(raw_text)
+    except json.JSONDecodeError:
+        logger.debug("[ZEturf] unable to parse %s", h30_path)
+        return
+
+    if not isinstance(payload, Mapping):
+        return
+
+    candidates = payload.get("runners")
+    if not isinstance(candidates, Iterable) or isinstance(candidates, (str, bytes)):
+        return
+
+    odds_map: dict[str, dict[str, Any]] = {}
+
+    for entry in candidates:
+        if not isinstance(entry, Mapping):
+            continue
+
+        num_raw = (
+            entry.get("num")
+            or entry.get("id")
+            or entry.get("number")
+            or entry.get("runner_id")
+        )
+        if num_raw in (None, ""):
+            continue
+
+        number = str(num_raw).strip()
+        if not number:
+            continue
+
+        def _pick(keys: tuple[str, ...]) -> Any | None:
+            for key in keys:
+                if key not in entry:
+                    continue
+                value = entry.get(key)
+                if value not in (None, ""):
+                    return value
+            return None
+
+        win_value = _pick(
+            (
+                "odds_win",
+                "odds",
+                "cote",
+                "gagnant",
+                "win",
+                "odds_win_h30",
+            )
+        )
+        place_value = _pick(
+            (
+                "odds_place",
+                "place",
+                "cote_place",
+                "place_odds",
+                "odds_place_h30",
+            )
+        )
+
+        updates: dict[str, Any] = {}
+        if win_value is not None:
+            updates["odds_win_h30"] = win_value
+        if place_value is not None:
+            updates["odds_place_h30"] = place_value
+
+        if updates:
+            odds_map[number] = updates
+
+    if not odds_map:
+        return
+
+    for runner in runners:
+        if not isinstance(runner, dict):
+            continue
+        number = str(runner.get("num") or runner.get("id") or "").strip()
+        if not number:
+            continue
+        extras = odds_map.get(number)
+        if not extras:
+            continue
+        runner.update(extras)
+
+
+def fetch_race_snapshot(
+    reunion: str,
+    course: str | None = None,
+    phase: str = "H30",
+    **kwargs: Any,
+) -> dict[str, Any]:
+    """Return a snapshot decorated with metadata suitable for runner_chain."""
+
+    phase_norm = _normalise_phase_alias(phase)
+
+    reunion_text = str(reunion or "").strip()
+    course_text = "" if course is None else str(course).strip()
+
+    if not course_text:
+        match = _RC_COMBINED_RE.search(reunion_text.upper())
+        if match:
+            reunion_text = f"R{match.group(1)}"
+            course_text = f"C{match.group(2)}"
+
+    def _safe_normalise(value: str, prefix: str) -> str | None:
+        text = str(value or "").strip().upper()
+        if not text:
+            return None
+        try:
+            return _normalise_label(text, prefix)
+        except ValueError:
+            return text or None
+
+    reunion_norm = _safe_normalise(reunion_text, "R")
+    course_norm = _safe_normalise(course_text, "C") if course_text else None
+
+    reunion_arg = reunion_norm or reunion_text or str(reunion)
+    course_arg: str | None
+    if course is None:
+        course_arg = course_norm
+    else:
+        course_arg = _safe_normalise(str(course), "C") or str(course).strip() or None
+
+    fetch_kwargs = dict(kwargs)
+
+    sources_config = fetch_kwargs.get("sources")
+    if not isinstance(sources_config, Mapping):
+        try:
+            sources_config = _load_sources_config()
+        except Exception as exc:  # pragma: no cover - defensive logging
+            logger.debug("[ZEturf] unable to load sources configuration: %s", exc)
+            sources_config = None
+        else:
+            fetch_kwargs.setdefault("sources", sources_config)
+
+    raw_snapshot = _fetch_race_snapshot_impl(
+        reunion_arg,
+        course_arg,
+        phase=phase_norm,
+        **fetch_kwargs,
+    )
+
+    result: dict[str, Any]
+    if isinstance(raw_snapshot, Mapping):
+        result = dict(raw_snapshot)
+    else:
+        result = {}
+
+    runners_raw = result.get("runners")
+    runners: list[dict[str, Any]] = []
+    if isinstance(runners_raw, Iterable) and not isinstance(runners_raw, (str, bytes)):
+        for entry in runners_raw:
+            if isinstance(entry, Mapping):
+                runners.append(dict(entry))
+    result["runners"] = runners
+
+    existing_meta = result.get("meta") if isinstance(result.get("meta"), Mapping) else {}
+    meta: dict[str, Any] = dict(existing_meta) if isinstance(existing_meta, Mapping) else {}
+
+    def _clean_str(value: Any) -> str | None:
+        if value in (None, ""):
+            return None
+        return str(value).strip()
+
+    reunion_meta = _clean_str(meta.get("reunion")) or reunion_norm or _clean_str(result.get("reunion"))
+    course_meta = _clean_str(meta.get("course")) or course_norm or _clean_str(result.get("course"))
+    date_meta = _clean_str(meta.get("date")) or _clean_str(result.get("date"))
+    hippo_meta = _clean_str(
+        meta.get("hippodrome")
+        or meta.get("meeting")
+        or result.get("hippodrome")
+        or result.get("meeting")
+    )
+    discipline_meta = _clean_str(meta.get("discipline") or result.get("discipline"))
+
+    meta.update(
+        {
+            "date": date_meta,
+            "hippodrome": hippo_meta,
+            "discipline": discipline_meta,
+            "reunion": reunion_meta,
+            "course": course_meta,
+            "phase": phase_norm,
+        }
+    )
+    if hippo_meta and "meeting" not in meta:
+        meta["meeting"] = hippo_meta
+
+    result["meta"] = meta
+
+    if reunion_meta:
+        result["reunion"] = reunion_meta
+    if course_meta:
+        result["course"] = course_meta
+    if hippo_meta:
+        result.setdefault("hippodrome", hippo_meta)
+        result.setdefault("meeting", hippo_meta)
+
+    result["phase"] = phase_norm
+
+    rc_value = result.get("rc")
+    if not rc_value and reunion_meta and course_meta:
+        rc_value = f"{reunion_meta}{course_meta}"
+        result["rc"] = rc_value
+
+    partants_candidates = [
+        result.get("partants_count"),
+        result.get("partants"),
+        meta.get("partants"),
+        existing_meta.get("partants") if isinstance(existing_meta, Mapping) else None,
+    ]
+
+    partants_count = None
+    for candidate in partants_candidates:
+        value = _coerce_partants_int(candidate)
+        if value is not None:
+            partants_count = value
+            break
+
+    if partants_count is None:
+        partants_count = len(runners)
+
+    result["partants"] = partants_count
+    result["partants_count"] = partants_count
+
+    if phase_norm == "H5":
+        _merge_h30_odds(runners, reunion_meta, course_meta)
+
+    resolver = getattr(_impl, "resolve_source_url", None)
+    if callable(resolver) and isinstance(sources_config, Mapping):
+        try:
+            mode_key = "h5" if phase_norm == "H5" else "h30"
+            template = resolver(sources_config, mode_key)
+        except Exception as exc:  # pragma: no cover - defensive logging
+            logger.debug("[ZEturf] unable to resolve source url: %s", exc)
+        else:
+            formatted_url = _format_source_url_from_template(
+                template,
+                course_id=result.get("course_id") or result.get("id_course"),
+                rc=rc_value,
+                reunion=reunion_meta,
+                course=course_meta,
+            )
+            if formatted_url and not result.get("source_url"):
+                result["source_url"] = formatted_url
+
+    return result
 
 
 if hasattr(_impl, "main"):
