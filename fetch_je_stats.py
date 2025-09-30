@@ -63,7 +63,7 @@ def _extract_id_mapping(snapshot_dir: Path, payload: Mapping[str, Any]) -> Mappi
     return mapping or {}
 
     
-    def _materialise_stats(snapshot_dir: Path, reunion: str, course: str) -> Path:
+def _materialise_stats(snapshot_dir: Path, reunion: str, course: str) -> Path:
     snapshot_file, payload = _discover_snapshot(snapshot_dir)
 
     course_id = _extract_course_id(payload)
