@@ -53,13 +53,24 @@ def partants_sample():
         "date": "2025-09-10",
         "discipline": "trot",
         "runners": [
-            {"id": "1", "name": "A"},
-            {"id": "2", "name": "B"},
-            {"id": "3", "name": "C"},
-            {"id": "4", "name": "D"},
-            {"id": "5", "name": "E"},
-            {"id": "6", "name": "F"},
+            {"id": "1", "name": "A", "odds_place": 1.6, "odds_place_h30": 1.55},
+            {"id": "2", "name": "B", "odds_place": 1.7, "odds_place_h30": 1.65},
+            {"id": "3", "name": "C", "odds_place": 1.9, "odds_place_h30": 1.85},
+            {"id": "4", "name": "D", "odds_place": 2.4, "odds_place_h30": 2.3},
+            {"id": "5", "name": "E", "odds_place": 3.6, "odds_place_h30": 3.5},
+            {"id": "6", "name": "F", "odds_place": 4.2, "odds_place_h30": 4.0},
         ],
+        "market": {
+            "slots_place": 3,
+            "horses": [
+                {"id": "1", "odds": 2.2, "odds_place": 1.6},
+                {"id": "2", "odds": 3.1, "odds_place": 1.7},
+                {"id": "3", "odds": 4.2, "odds_place": 1.9},
+                {"id": "4", "odds": 6.0, "odds_place": 2.4},
+                {"id": "5", "odds": 9.0, "odds_place": 3.6},
+                {"id": "6", "odds": 11.0, "odds_place": 4.2},
+            ],
+        },
     }
 
 def odds_h30():
@@ -581,12 +592,12 @@ def test_high_risk_pack_is_trimmed(tmp_path, monkeypatch):
         "date": "2025-09-10",
         "discipline": "trot",
         "runners": [
-            {"id": "1", "name": "Alpha"},
-            {"id": "2", "name": "Bravo"},
-            {"id": "3", "name": "Charlie"},
-            {"id": "4", "name": "Delta"},
-            {"id": "5", "name": "Echo"},
-            {"id": "6", "name": "Foxtrot"},
+            {"id": "1", "name": "Alpha", "odds_place": 1.6, "odds_place_h30": 1.55},
+            {"id": "2", "name": "Bravo", "odds_place": 1.7, "odds_place_h30": 1.65},
+            {"id": "3", "name": "Charlie", "odds_place": 1.8, "odds_place_h30": 1.75},
+            {"id": "4", "name": "Delta", "odds_place": 2.1, "odds_place_h30": 2.0},
+            {"id": "5", "name": "Echo", "odds_place": 2.6, "odds_place_h30": 2.5},
+            {"id": "6", "name": "Foxtrot", "odds_place": 3.2, "odds_place_h30": 3.1},
         ],
     }
     h30 = {str(i): 2.0 + 0.4 * i for i in range(1, 7)}
@@ -639,6 +650,7 @@ def test_high_risk_pack_is_trimmed(tmp_path, monkeypatch):
             "name": runner["name"],
             "odds": float(h5[str(runner["id"])]) if str(runner["id"]) in h5 else 0.0,
             "p": p_stub[str(runner["id"])],
+            "odds_place": runner.get("odds_place", 0.0),
         }
         for runner in partants["runners"]
     ]
