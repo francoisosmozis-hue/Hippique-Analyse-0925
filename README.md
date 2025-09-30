@@ -475,11 +475,14 @@ Ces seuils peuvent être surchargés lors de l'exécution du pipeline avec les
 options `--ev-global`, `--roi-global` et `--min-payout` :
 
 ```bash
-python pipeline_run.py analyse --ev-global 0.35 --roi-global 0.25 --min-payout 12
+python pipeline_run.py analyse \
+  --ev-global 0.35 --roi-global 0.25 --min-payout 12 \
+  --calibration config/payout_calibration.yaml
 ```
 
 **SP Dutching (placé)** : EV(€) par jambe = `stake * [ p*(odds-1) − (1−p) ]
-**Combinés (CP/Trio/ZE4)** : via `simulate_wrapper` + calibration `payout_calibration.yaml`.
+**Combinés (CP/Trio/ZE4)** : via `simulate_wrapper` + calibration `payout_calibration.yaml` (par défaut `config/payout_calibration.yaml`, surchargeable via `--calibration`).
+
 
 ### Calibration, budget & `ALERTE_VALUE`
 
