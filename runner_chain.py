@@ -13,6 +13,7 @@ optional ``ALERTE_VALUE`` column when the alert flag is present.
 
 from __future__ import annotations
 
+import argparse
 import logging
 import os
 import re
@@ -226,6 +227,7 @@ def validate_exotics_with_simwrapper(
     payout_min: float = 0.0,
     sharpe_min: float = 0.0,
     allow_heuristic: bool = False,
+    calibration: str | os.PathLike[str] | None = None,
 ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     """Validate exotic ticket candidates using :func:`evaluate_combo`.
 
@@ -261,7 +263,14 @@ def validate_exotics_with_simwrapper(
     reasons: List[str] = []
     alerte = False
 
-    calib_path, has_calib = _resolve_calibration_path()
+    if calibration is not None:
+        try:
+            calib_path = Path(calibration)
+        except TypeError:  # pragma: no cover - defensive fallback
+            calib_path = Path(str(calibration))
+        has_calib = calib_path.exists()
+    else:
+        calib_path, has_calib = _resolve_calibration_path()
     if not has_calib:
         logger.warning(
             "[COMBO] Calibration payout introuvable (%s) → combinés désactivés.",
@@ -295,7 +304,12 @@ def validate_exotics_with_simwrapper(
                 if entry_id not in (None, ""):
                     candidate_ids.append(str(entry_id))
 
-        stats = evaluate_combo(candidate, bankroll, allow_heuristic=allow_heuristic)
+        stats = evaluate_combo(
+            candidate,
+            bankroll,
+            calibration=calib_path,
+            allow_heuristic=allow_heuristic,
+        )
         status = str(stats.get("status") or "ok").lower()
         ev_ratio = float(stats.get("ev_ratio", 0.0))
         roi = float(stats.get("roi", 0.0))
@@ -527,4 +541,33 @@ __all__ = [
     "filter_exotics_by_overround",
     "validate_exotics_with_simwrapper",
     "export_tracking_csv_line",
+    "build_cli_parser",
+    "main",
 ]
+
+
+def build_cli_parser() -> argparse.ArgumentParser:
+    """Return an argument parser exposing runner-chain utilities."""
+
+    parser = argparse.ArgumentParser(description="Runner chain utilities")
+    parser.add_argument(
+        "--calibration",
+        default="config/payout_calibration.yaml",
+        help="Path to payout_calibration.yaml used for combo validation.",
+    )
+    return parser
+
+
+def main(argv: Sequence[str] | None = None) -> None:
+    """CLI entry point configuring the payout calibration path."""
+
+    parser = build_cli_parser()
+    args = parser.parse_args(argv)
+
+    global CALIB_PATH
+    CALIB_PATH = str(args.calibration)
+    print(Path(CALIB_PATH))
+
+
+if __name__ == "__main__":
+    main()
