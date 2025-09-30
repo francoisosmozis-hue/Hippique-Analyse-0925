@@ -726,6 +726,7 @@ def _run_single_pipeline(rc_dir: Path, *, budget: float) -> None:
         payout_min_exotic=None,
         allow_heuristic=False,
         allow_je_na=allow_je_na,
+        calibration="config/payout_calibration.yaml",
     )
     pipeline_run.cmd_analyse(args)
 
