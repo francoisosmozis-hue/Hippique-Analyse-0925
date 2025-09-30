@@ -92,6 +92,24 @@ def stats_sample():
     }
 
 
+def test_build_market_overround_place_with_missing_or_textual_slots():
+    runners = [
+        {"odds": 2.0, "odds_place": 1.6},
+        {"odds": 3.0, "odds_place": 1.8},
+        {"odds": 4.0, "odds_place": 2.2},
+    ]
+
+    total_place_prob = sum(1.0 / runner["odds_place"] for runner in runners)
+
+    metrics_missing = pipeline_run._build_market(runners)
+    assert metrics_missing["slots_place"] == 3
+    assert metrics_missing["overround_place"] == pytest.approx(total_place_prob / 3)
+
+    metrics_textual = pipeline_run._build_market(runners, "3 places payees")
+    assert metrics_textual["slots_place"] == 3
+    assert metrics_textual["overround_place"] == pytest.approx(total_place_prob / 3)
+
+
 def test_market_drift_signal_thresholds():
     assert pipeline_run.market_drift_signal(3.0, 2.0, is_favorite=False) == 2
     assert pipeline_run.market_drift_signal(2.0, 2.6, is_favorite=True) == -2
