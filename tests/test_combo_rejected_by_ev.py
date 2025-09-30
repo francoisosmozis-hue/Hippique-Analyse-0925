@@ -2,7 +2,7 @@ import runner_chain
 
 
 def test_combo_rejected_by_ev(monkeypatch):
-    def fake_eval(tickets, bankroll, allow_heuristic=False):
+    def fake_eval(tickets, bankroll, calibration=None, allow_heuristic=False):
         return {
             'status': 'ok',
             'ev_ratio': 0.35,
