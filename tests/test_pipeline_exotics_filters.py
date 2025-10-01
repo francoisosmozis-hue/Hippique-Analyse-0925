@@ -13,6 +13,7 @@ import tickets_builder
 import validator_ev
 from test_pipeline_smoke import (
     GPI_YML,
+    DEFAULT_CALIBRATION,
     odds_h30,
     odds_h5,
     partants_sample,
@@ -229,7 +230,7 @@ def _run_analysis(
         payout_min_exotic=10.0,
         allow_heuristic=False,
         allow_je_na=False,
-        calibration="config/payout_calibration.yaml",
+        calibration=DEFAULT_CALIBRATION,
     )
 
     pipeline_run.cmd_analyse(args)
@@ -354,15 +355,13 @@ def test_filter_combos_strict_disables_heuristics_by_default() -> None:
         bankroll_lookup=lambda _template: 5.0,
         ev_min=0.40,
         payout_min=10.0,
-        calibration="config/payout_calibration.yaml",
+        calibration=DEFAULT_CALIBRATION,
     )
 
     assert kept, "expected the combo to be retained"
     assert reasons == []
     assert wrapper.calls, "evaluate_combo should have been invoked"
-    assert (
-        wrapper.calls[0]["calibration"] == "config/payout_calibration.yaml"
-    )
+    assert wrapper.calls[0]["calibration"] == DEFAULT_CALIBRATION
     assert wrapper.calls[0]["allow_heuristic"] is False
 
 
@@ -417,12 +416,12 @@ def test_filter_combos_strict_limits_to_best_combo() -> None:
         bankroll_lookup=lambda _template: 5.0,
         ev_min=0.40,
         payout_min=10.0,
-        calibration="config/payout_calibration.yaml",
+        calibration=DEFAULT_CALIBRATION,
     )
 
     assert wrapper.calls == [
-        ("combo_a", "config/payout_calibration.yaml"),
-        ("combo_b", "config/payout_calibration.yaml"),
+        ("combo_a", DEFAULT_CALIBRATION),
+        ("combo_b", DEFAULT_CALIBRATION),
     ]
     assert len(kept) == 1
     assert kept[0]["id"] == "combo_b"
