@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from datetime import date
 from pathlib import Path
 from typing import Iterable, List, Dict, Any
 
@@ -132,8 +133,25 @@ def main() -> None:
     )
     args = ap.parse_args()
 
-    arrivee_data = _load_json(args.arrivee)
-    tickets_data = _load_json(args.tickets)
+    arrivee_path = Path(args.arrivee)
+    tickets_path = Path(args.tickets)
+    tickets_data = _load_json(tickets_path)
+
+    if not arrivee_path.exists():
+        outdir = Path(args.outdir or tickets_path.parent)
+        meta = tickets_data.get("meta", {})
+        today = date.today().isoformat()
+        arrivee_out = {"status": "missing", "rc": meta.get("rc"), "date": today}
+        _save_json(outdir / "arrivee.json", arrivee_out)
+        _save_text(
+            outdir / "arrivee.csv",
+            "status;rc;date\n"
+            f"{arrivee_out['status']};{arrivee_out.get('rc', '')};{arrivee_out['date']}\n",
+        )
+        print(f"Arrivee file not found, produced minimal outputs in {outdir}")
+        return
+
+    arrivee_data = _load_json(arrivee_path)
 
     winners = [str(x) for x in arrivee_data.get("result", [])[: args.places]]
     (
