@@ -92,7 +92,9 @@ def enrich_from_snapshot(snapshot_dir: str | Path, reunion: str, course: str) ->
             "fetch_je_chrono CLI failed for %s%s: %s",
             reunion_code,
             course_code,
+            exc,
         )
+        raise
     return out_dir / f"{reunion_code}{course_code}_chronos.csv"
 
 
