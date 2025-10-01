@@ -1276,7 +1276,7 @@ def _merge_h30_odds(
 
     odds_map: dict[str, dict[str, Any]] = {}
 
-   def _register(number: str, *, win: Any | None = None, place: Any | None = None) -> None:
+    def _register(number: str, *, win: Any | None = None, place: Any | None = None) -> None:
         updates = odds_map.setdefault(number, {})
         if win is not None:
             updates["odds_win_h30"] = win
@@ -1285,19 +1285,19 @@ def _merge_h30_odds(
         if not updates:
             odds_map.pop(number, None)
             
-        candidates = payload.get("runners")
+    candidates = payload.get("runners")
     runners_iterable = (
         candidates
         if isinstance(candidates, Iterable) and not isinstance(candidates, (str, bytes))
         else None
     )
 
-        if runners_iterable is not None:
+    if runners_iterable is not None:
         for entry in runners_iterable:
             if not isinstance(entry, Mapping):
                 continue
 
-        number = _coerce_number(
+            number = _coerce_number(
                 entry.get("num")
                 or entry.get("id")
                 or entry.get("number")
