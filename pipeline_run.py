@@ -2262,7 +2262,21 @@ def cmd_analyse(args: argparse.Namespace) -> None:
         fallback_overround = _compute_market_overround(odds_h5)
         if fallback_overround is not None:
             market_metrics["overround_win"] = fallback_overround
-    market_overround = cast(float | None, market_metrics.get("overround_win"))
+    overround_source: str | None = None
+    market_overround: float | None = None
+    overround_place_candidate = market_metrics.get("overround_place")
+    if isinstance(overround_place_candidate, (int, float)):
+        place_value = float(overround_place_candidate)
+        if math.isfinite(place_value):
+            market_overround = place_value
+            overround_source = "place"
+    if market_overround is None:
+        overround_win_candidate = market_metrics.get("overround_win")
+        if isinstance(overround_win_candidate, (int, float)):
+            win_value = float(overround_win_candidate)
+            if math.isfinite(win_value):
+                market_overround = win_value
+                overround_source = "win"
     course_label_text = (
         partants_data.get("course_label")
         or partants_data.get("label")
@@ -2322,11 +2336,17 @@ def cmd_analyse(args: argparse.Namespace) -> None:
             metrics_market[key] = value
     if market_overround is not None:
         metrics["overround"] = market_overround
+        if overround_source:
+            metrics["overround_source"] = overround_source
         if market_overround > overround_cap:
-            combo_flags.setdefault(
+            overround_flag = combo_flags.setdefault(
                 "overround",
                 {"value": market_overround, "threshold": overround_cap},
             )
+            overround_flag["value"] = market_overround
+            overround_flag["threshold"] = overround_cap
+            if overround_source:
+                overround_flag["source"] = overround_source
             if "overround_above_threshold" not in reasons_list:
                 reasons_list.append("overround_above_threshold")
             filter_reasons.append("overround_above_threshold")
@@ -2639,6 +2659,7 @@ def cmd_analyse(args: argparse.Namespace) -> None:
         "flags": copy.deepcopy(combo_info.get("flags", {})),
         "thresholds": dict(combo_info.get("thresholds", {})),
         "available": final_combo_present,
+        "metrics": copy.deepcopy(combo_info.get("metrics", {})),
     }
     
     if flags.get("reasons", {}).get("sp"):
