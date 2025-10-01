@@ -10,12 +10,13 @@ TICKETS = [{"legs": ["a", "b"], "odds": 10.0, "stake": 1.0}]
 
 
 def test_default_config_path_missing(monkeypatch, tmp_path):
-    """When env var unset we fall back to config/ path."""
+    """When env var unset we fall back to bundled calibration hints."""
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("CALIB_PATH", raising=False)
     monkeypatch.delenv("ALLOW_HEURISTIC", raising=False)
     res = evaluate_combo(TICKETS, bankroll=10.0)
-    assert res["status"] == "insufficient_data"
+    assert res["status"] == "insufficient_data
+    assert str(sw.PAYOUT_CALIBRATION_PATH) in res["requirements"]
     assert str(Path("config/payout_calibration.yaml")) in res["requirements"]
 
 
