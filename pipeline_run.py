@@ -24,6 +24,36 @@ logger = logging.getLogger(__name__)
 LOG_LEVEL_ENV_VAR = "PIPELINE_LOG_LEVEL"
 DEFAULT_OUTPUT_DIR = "out/hminus5"
 
+_PLACE_FEE_DEFAULT = 0.10
+try:
+    _place_fee_candidate = float(get_env("PLACE_FEE", _PLACE_FEE_DEFAULT, cast=float))
+except RuntimeError:
+    logger.warning(
+        "Invalid PLACE_FEE environment override detected; falling back to %.2f",
+        _PLACE_FEE_DEFAULT,
+    )
+    _place_fee_candidate = _PLACE_FEE_DEFAULT
+if not math.isfinite(_place_fee_candidate):
+    logger.warning(
+        "Non-finite PLACE_FEE value %.3f encountered; resetting to %.2f",
+        _place_fee_candidate,
+        _PLACE_FEE_DEFAULT,
+    )
+    _place_fee_candidate = _PLACE_FEE_DEFAULT
+if _place_fee_candidate < 0.0:
+    logger.warning(
+        "PLACE_FEE %.3f below zero; clipping to 0.0",
+        _place_fee_candidate,
+    )
+    _place_fee_candidate = 0.0
+elif _place_fee_candidate >= 1.0:
+    logger.warning(
+        "PLACE_FEE %.3f exceeds or equals 1.0; clipping to 0.99",
+        _place_fee_candidate,
+    )
+    _place_fee_candidate = 0.99
+PLACE_FEE = _place_fee_candidate
+
 EXOTIC_BASE_EV = 0.40
 EXOTIC_BASE_PAYOUT = 10.0
 
@@ -704,14 +734,84 @@ def _ensure_place_odds(runners: Sequence[Mapping[str, Any]]) -> list[dict[str, A
         else:
             record["odds_place"] = place_odds
 
+        synthetic_used = False
+        if place_odds <= 0.0:
+            best_probability = _extract_best_place_probability(record)
+            probability_floor = max(best_probability, 1e-6)
+            implied_odds = (1.0 / probability_floor) * (1.0 - PLACE_FEE)
+            place_odds = max(1.1, implied_odds)
+            record["odds_place"] = place_odds
+            record["odds_place_source"] = "synthetic"
+            synthetic_used = True
+            
         if place_odds <= 0.0:
             continue
+
+        if synthetic_used:
+            runner_label = _format_runner_label(record)
+            logger.info(
+                "Synthetic place odds %.3f applied using probability %.5f for %s (fee=%.2f)",
+                place_odds,
+                best_probability,
+                runner_label,
+                PLACE_FEE,
+            )
 
         sanitized.append(record)
 
     return sanitized
 
            
+def _extract_best_place_probability(record: Mapping[str, Any]) -> float:
+    """Return the highest available probability hint for place odds synthesis."""
+
+    candidates: list[float] = []
+    probability_keys = (
+        "p_place",
+        "prob_place",
+        "probability_place",
+        "p",
+        "probability",
+        "prob",
+        "p_imp",
+        "p_imp_h5",
+        "p_true",
+    )
+
+    for key in probability_keys:
+        if key in record:
+            candidates.append(min(_coerce_probability(record.get(key)), 1.0))
+
+    probabilities = record.get("probabilities")
+    if isinstance(probabilities, Mapping):
+        for key in probability_keys:
+            if key in probabilities:
+                candidates.append(min(_coerce_probability(probabilities.get(key)), 1.0))
+        for value in probabilities.values():
+            candidates.append(min(_coerce_probability(value), 1.0))
+
+    if not candidates:
+        return 0.0
+
+    return max(candidates)
+
+
+def _format_runner_label(record: Mapping[str, Any]) -> str:
+    """Return a readable runner label for logging purposes."""
+
+    for key in ("name", "label", "runner", "horse"):
+        value = record.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+
+    for key in ("id", "runner_id", "num", "number"):
+        value = record.get(key)
+        if value not in (None, ""):
+            return str(value)
+
+    return "runner"
+
+
 def _resolve_leg_odds(
     leg: Any,
     odds_lookup: Mapping[str, float],
