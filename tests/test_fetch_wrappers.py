@@ -20,7 +20,7 @@ def test_fetch_je_stats_wrapper_invokes_cli(
 
     def fake_run(cmd: list[str], check: bool) -> subprocess.CompletedProcess[str]:
         calls.append(cmd)
-        assert check is True
+        assert check is False
         return subprocess.CompletedProcess(cmd, 0)
 
     monkeypatch.setattr(fetch_je_stats.subprocess, "run", fake_run)
@@ -95,6 +95,28 @@ def test_fetch_je_stats_materialise_propagates_failure(
         fetch_je_stats._materialise_stats(course_dir, "R1", "C1")
 
 
+def test_fetch_je_stats_wrapper_logs_warning(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    out_dir = tmp_path / "R1C1"
+
+    def fake_run(cmd: list[str], check: bool) -> subprocess.CompletedProcess[str]:
+        assert check is False
+        return subprocess.CompletedProcess(cmd, 1)
+
+    monkeypatch.setattr(fetch_je_stats.subprocess, "run", fake_run)
+
+    with caplog.at_level(logging.WARNING):
+        csv_path = fetch_je_stats.enrich_from_snapshot(out_dir, "R1", "C1")
+
+    assert csv_path == out_dir / "R1C1_je.csv"
+    assert out_dir.is_dir()
+    assert any(
+        "fetch_je_stats CLI failed for R1C1 (returncode=1)" in message
+        for message in caplog.messages
+    )
+
+
 def test_fetch_je_chrono_wrapper_invokes_cli(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -103,7 +125,7 @@ def test_fetch_je_chrono_wrapper_invokes_cli(
 
     def fake_run(cmd: list[str], check: bool) -> subprocess.CompletedProcess[str]:
         calls.append(cmd)
-        assert check is True
+        assert check is False
         return subprocess.CompletedProcess(cmd, 0)
 
     monkeypatch.setattr(fetch_je_chrono.subprocess, "run", fake_run)
@@ -128,6 +150,28 @@ def test_fetch_je_chrono_wrapper_invokes_cli(
     assert out_dir.is_dir()
 
     assert calls == [expected_command]
+
+
+def test_fetch_je_chrono_wrapper_logs_warning(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    out_dir = tmp_path / "R1C1"
+
+    def fake_run(cmd: list[str], check: bool) -> subprocess.CompletedProcess[str]:
+        assert check is False
+        return subprocess.CompletedProcess(cmd, 2)
+
+    monkeypatch.setattr(fetch_je_chrono.subprocess, "run", fake_run)
+
+    with caplog.at_level(logging.WARNING):
+        csv_path = fetch_je_chrono.enrich_from_snapshot(out_dir, "R1", "C1")
+
+    assert csv_path == out_dir / "R1C1_chronos.csv"
+    assert out_dir.is_dir()
+    assert any(
+        "fetch_je_chrono CLI failed for R1C1 (returncode=2)" in message
+        for message in caplog.messages
+    )
 
 
 def test_fetch_je_chrono_materialise_builds_csv(tmp_path: Path) -> None:
@@ -164,36 +208,3 @@ def test_fetch_je_chrono_materialise_requires_snapshot(tmp_path: Path) -> None:
         fetch_je_chrono._materialise_chronos(course_dir, "R1", "C1")
 
 
-def test_fetch_je_chrono_wrapper_logs_warning_on_failure(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    out_dir = tmp_path / "R1C1"
-    failure = subprocess.CalledProcessError(
-        returncode=2,
-        cmd=["python", "fetch_je_chrono.py"],
-    )
-
-    def failing_run(cmd: list[str], check: bool) -> subprocess.CompletedProcess[str]:
-        assert check is True
-        assert cmd[:2] == [sys.executable, str(Path(fetch_je_chrono.__file__).resolve())]
-        raise failure
-
-    monkeypatch.setattr(fetch_je_chrono.subprocess, "run", failing_run)
-
-    with caplog.at_level(logging.WARNING):
-        with pytest.raises(subprocess.CalledProcessError) as caught:
-            fetch_je_chrono.enrich_from_snapshot(out_dir, "r1", "c1")
-
-    assert caught.value is failure
-    warning_messages = [
-        record.getMessage()
-        for record in caplog.records
-        if record.levelno == logging.WARNING
-    ]
-    assert any(
-        "fetch_je_chrono CLI failed for R1C1" in message
-        and "non-zero exit status 2" in message
-        for message in warning_messages
-    )
