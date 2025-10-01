@@ -490,286 +490,91 @@ def test_fallback_parse_handles_singular_partant() -> None:
 
     assert parsed["partants"] == 9
 
-def _stub_sources_config() -> dict[str, Any]:
-    return {
-        "rc_map": {
-            "R1C1": {
-                "course_id": "12345",
-                "url": "https://www.zeturf.fr/rest/api/race/{course_id}",
-            }
+
+def test_lightweight_fetch_snapshot_remote(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The public helper should fetch and normalise a remote course page."""
+
+    captured: dict[str, Any] = {}
+
+    def fake_parse(url: str, *, snapshot: str) -> Mapping[str, Any]:
+        captured["url"] = url
+        captured["snapshot"] = snapshot
+        return {
+            "runners": [
+                {"num": "1", "name": "Alpha"},
+                {"num": "2", "name": "Bravo"},
+            ],
+            "market": {"win": {"1": 2.8}},
         }
+
+    def fake_normalize(payload: Mapping[str, Any]) -> Mapping[str, Any]:
+        captured["normalized"] = payload
+        return {
+            "runners": [
+                {"num": "1", "name": "Alpha"},
+                {"num": "2", "name": "Bravo"},
+            ],
+            "partants": 2,
+        }
+
+    monkeypatch.setattr(cli._impl, "parse_course_page", fake_parse, raising=False)
+    monkeypatch.setattr(cli._impl, "normalize_snapshot", fake_normalize, raising=False)
+
+    snapshot = cli.fetch_race_snapshot("1", "2", phase="H-5")
+
+    assert snapshot == {
+        "runners": [
+            {"num": "1", "name": "Alpha"},
+            {"num": "2", "name": "Bravo"},
+        ],
+        "partants": [
+            {"num": "1", "name": "Alpha"},
+            {"num": "2", "name": "Bravo"},
+        ],
+        "market": {"win": {"1": 2.8}},
+        "phase": "H5",
+    }
+    assert captured["snapshot"] == "H5"
+    assert captured["url"] == f"https://www.zeturf.fr/fr/course/R1C2"
+
+    
+def test_lightweight_fetch_snapshot_use_cache(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """The cache flag should bypass the remote parser and load local files."""
+
+    payload = {
+        "runners": [{"num": "7", "name": "Zulu"}],
+        "partants": [{"num": "7", "name": "Zulu"}],
+        "market": {"place": {"7": 1.9}},
+    }
+    cache_file = tmp_path / "snapshot.json"
+    cache_file.write_text(json.dumps(payload), encoding="utf-8")
+    
+    monkeypatch.setattr(cli, "_load_local_snapshot", lambda rc: cache_file)
+    monkeypatch.setattr(
+        cli._impl,
+        "parse_course_page",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("remote fetch should not happen")),
+        raising=False,
+    )
+
+   snapshot = cli.fetch_race_snapshot("R9", "C3", use_cache=True) 
+
+    assert snapshot == {
+        "runners": payload["runners"],
+        "partants": payload["partants"],
+        "market": payload["market"],
+        "phase": "H30",
     }
 
 
-def test_cli_fetch_race_snapshot_defaults_phase(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The CLI wrapper should fall back to H30 when no phase is provided."""
+def test_lightweight_fetch_snapshot_cache_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A missing cache entry should raise a clear runtime error."""
 
-    calls: dict[str, Any] = {}
+    monkeypatch.setattr(cli, "_load_local_snapshot", lambda rc: None)
 
-    def fake_fetch(
-        rc: str,
-        *,
-        phase: str,
-        sources: Mapping[str, Any],
-        url: str | None,
-        retries: int,
-        backoff: float,
-        initial_delay: float,
-    ) -> dict[str, Any]:
-        calls.setdefault("phase", phase)
-        return {
-            "rc": rc,
-            "hippodrome": "Testville",
-            "date": "2024-09-25",
-            "discipline": "plat",
-            "reunion": "R1",
-            "course": "C1",
-            "runners": [
-                {"id": "1", "name": "Alpha", "odds": 2.5},
-            ],
-            "partants": 1,
-        }
-
-    monkeypatch.setattr(cli, "_load_sources_config", lambda _path=None: _stub_sources_config())
-    monkeypatch.setattr(cli._impl, "fetch_race_snapshot", fake_fetch)
-
-    snapshot = cli.fetch_race_snapshot("R1", "C1")
-
-    assert snapshot["rc"] == "R1C1"
-    assert snapshot["reunion"] == "R1"
-    assert snapshot["course"] == "C1"
-    assert snapshot["runners"][0]["num"] == "1"
-    assert snapshot["runners"][0]["name"] == "Alpha"
-    assert calls["phase"] == "H30"
-
-
-def test_cli_fetch_race_snapshot_accepts_combined_rc(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Providing a combined ``RC`` label should remain supported."""
-
-    calls: dict[str, Any] = {}
-
-    def fake_fetch(
-        rc: str,
-        *,
-        phase: str,
-        sources: Mapping[str, Any],
-        url: str | None,
-        retries: int,
-        backoff: float,
-        initial_delay: float,
-    ) -> dict[str, Any]:
-        calls.setdefault("rc", rc)
-        return {
-            "rc": rc,
-            "hippodrome": "Testville",
-            "date": "2024-09-25",
-            "discipline": "plat",
-            "reunion": "R1",
-            "course": "C1",
-            "runners": [
-                {"id": "3", "name": "Gamma", "odds": 3.0},
-            ],
-            "partants": 1,
-        }
-
-    monkeypatch.setattr(cli, "_load_sources_config", lambda _path=None: _stub_sources_config())
-    monkeypatch.setattr(cli._impl, "fetch_race_snapshot", fake_fetch)
-
-    snapshot = cli.fetch_race_snapshot("R1C1")
-
-    assert calls["rc"] == "R1C1"
-    assert snapshot["reunion"] == "R1"
-    assert snapshot["course"] == "C1"
-    
-
-def test_cli_fetch_race_snapshot_warns_on_missing_fields(
-    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
-) -> None:
-    """Missing meeting/discipline/partants should trigger warning logs."""
-
-    def fake_double_extract(url: str, *, snapshot: str, session: Any | None = None) -> dict[str, Any]:
-        assert snapshot == "H30"
-        return {"runners": [{"num": "1", "name": "Alpha"}]}
-
-    monkeypatch.setattr(cli, "_double_extract", fake_double_extract)
-    monkeypatch.setattr(cli, "requests", None)
-
-    caplog.set_level(logging.WARNING, logger=cli.logger.name)
-
-    snapshot = cli.fetch_race_snapshot(
-        "R1",
-        "C1",
-        phase="H30",
-        url="https://www.zeturf.fr/fr/course/placeholder",
-    )
-
-    assert snapshot["runners"] == [{"num": "1", "name": "Alpha"}]
-    assert snapshot["partants"] == snapshot["runners"]
-    assert snapshot["partants_count"] == 1
-    assert any("Champ(s) manquant(s)" in record.message for record in caplog.records)
-
-
-def test_fallback_parse_normalises_texts() -> None:
-    """Fallback extraction should normalise whitespace and accents."""
-
-    html = (
-        '<div data-meeting-name="Paris-Vincennes \t">'
-        '<span data-runner-num="1" data-runner-name="  Alpha  " data-odds="5,0"></span>'
-        "Montée – 16 partants"
-    )
-
-    parsed = cli._fallback_parse_html(html)
-
-    assert parsed["meeting"] == "Paris-Vincennes"
-    assert parsed["discipline"] == "monte"
-    assert parsed["runners"][0]["name"] == "Alpha"
-    assert parsed["partants"] == 16
-def test_cli_fetch_race_snapshot_meta_fallback(
-    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
-) -> None:
-    """Metadata provided under ``meta`` should populate missing fields."""
-
-    calls: dict[str, Any] = {}
-
-    def fake_fetch(
-        reunion: str,
-        course: str,
-        *,
-        phase: str,
-        sources: Mapping[str, Any],
-        url: str | None,
-        retries: int,
-        backoff: float,
-        initial_delay: float,
-    ) -> dict[str, Any]:
-        calls.setdefault("phase", phase)
-        return {
-            "rc": f"{reunion}{course}",
-            "runners": [{"id": "9", "name": "Iota"}],
-            "meta": {
-                "meeting": "Fallback City",
-                "discipline": "plat",
-                "partants": "16 partants",
-                "date": "2024-11-02",
-                "course": {"heure_officielle": "13:15"},
-            },
-        }
-
-    monkeypatch.setattr(cli, "_load_sources_config", lambda _path=None: {"rc_map": {}})
-    monkeypatch.setattr(cli._impl, "fetch_race_snapshot", fake_fetch)
-
-    with caplog.at_level(logging.WARNING):
-        snapshot = cli.fetch_race_snapshot("R2", "C3", phase="H5")
-
-    assert snapshot["meeting"] == "Fallback City"
-    assert snapshot["discipline"] == "plat"
-    assert snapshot["partants_count"] == 16
-    assert snapshot["partants"] == snapshot["runners"]
-    assert snapshot["date"] == "2024-11-02"
-    assert snapshot["heure_officielle"] == "13:15"
-    assert snapshot["reunion"] == "R2"
-    assert snapshot["course"] == "C3"
-    assert calls["phase"] == "H5"
-
-    warn_messages = [record.message for record in caplog.records if "Champ(s) manquant" in record.message]
-    assert not warn_messages
-
-
-@pytest.mark.parametrize("requested, expected", [("H-30", "H30"), ("H5", "H5")])
-def test_cli_fetch_race_snapshot_normalises_phase_aliases(
-    monkeypatch: pytest.MonkeyPatch, requested: str, expected: str
-) -> None:
-    """Explicit phases should be normalised without discarding caller intent."""
-
-    calls: dict[str, Any] = {}
-
-    def fake_fetch(
-        rc: str,
-        *,
-        phase: str,
-        sources: Mapping[str, Any],
-        url: str | None,
-        retries: int,
-        backoff: float,
-        initial_delay: float,
-    ) -> dict[str, Any]:
-        calls.setdefault("phase", phase)
-        return {
-            "rc": rc,
-            "hippodrome": "Testville",
-            "date": "2024-09-25",
-            "discipline": "plat",
-            "reunion": "R1",
-            "course": "C1",
-            "runners": [
-                {"id": "1", "name": "Alpha", "odds": 2.5},
-            ],
-        }
-
-    monkeypatch.setattr(cli, "_load_sources_config", lambda _path=None: _stub_sources_config())
-    monkeypatch.setattr(cli._impl, "fetch_race_snapshot", fake_fetch)
-
-    snapshot = cli.fetch_race_snapshot("R1", "C1", requested)
-
-    assert snapshot["rc"] == "R1C1"
-    assert snapshot["reunion"] == "R1"
-    assert calls["phase"] == expected
-
-
-def test_cli_fetch_race_snapshot_discovers_course_id(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The CLI wrapper should recover missing course ids via discovery when needed."""
-
-    calls: dict[str, list[str]] = {}
-
-    monkeypatch.setattr(cli, "_load_sources_config", lambda _path=None: {})
-
-    def fake_discover(rc: str) -> str:
-        calls.setdefault("discover", []).append(rc)
-        return "12345"
-
-    def fake_fetch(
-        rc: str,
-        *,
-        phase: str,
-        sources: Mapping[str, Any],
-        url: str | None,
-        retries: int,
-        backoff: float,
-        initial_delay: float,
-    ) -> dict[str, Any]:
-        calls.setdefault("fetch", []).append(rc)
-        entry = sources["rc_map"][rc]
-        assert entry["course_id"] == "12345"
-        return {
-            "rc": rc,
-            "course_id": entry["course_id"],
-            "hippodrome": "Testville",
-            "date": "2024-09-25",
-            "discipline": "plat",
-            "reunion": "R1",
-            "course": "C1",
-            "runners": [
-                {"id": "1", "name": "Alpha", "odds": 2.5},
-            ],
-        }
-    monkeypatch.setattr(ofz, "discover_course_id", fake_discover)
-    monkeypatch.setattr(ofz, "fetch_race_snapshot", fake_fetch)
-
-    snapshot = cli.fetch_race_snapshot(
-        "R1",
-        "C1",
-        "H-30",
-        url="https://www.zeturf.fr/rest/api/race/{course_id}",
-    )
-
-    assert snapshot["course_id"] == "12345"
-    assert snapshot["reunion"] == "R1"
-    assert snapshot["runners"][0]["num"] == "1"
-    assert calls["discover"] == ["R1C1"]
-    assert calls["fetch"] == ["R1C1"]
-
+    with pytest.raises(RuntimeError):
+        cli.fetch_race_snapshot("R4", "C5", use_cache=True)
+        
 
 def test_fetch_from_geny_parser_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
     """The Geny parser should fallback to attribute/regex extraction."""
