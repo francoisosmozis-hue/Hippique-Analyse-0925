@@ -18,6 +18,7 @@ from typing import Any, Callable, Dict, Iterable, Mapping, Sequence, cast
 
 from config.env_utils import get_env
 from runner_chain import compute_overround_cap
+from simulate_wrapper import PAYOUT_CALIBRATION_PATH
 
 logger = logging.getLogger(__name__)
 LOG_LEVEL_ENV_VAR = "PIPELINE_LOG_LEVEL"
@@ -2852,7 +2853,7 @@ def main() -> None:
     ana.add_argument("--allow-je-na", dest="allow_je_na", action="store_true")
     ana.add_argument(
         "--calibration",
-        default="config/payout_calibration.yaml",
+        default=str(PAYOUT_CALIBRATION_PATH),
         help="Chemin vers payout_calibration.yaml pour l'évaluation des combinés.",
     )
     ana.set_defaults(func=cmd_analyse)
