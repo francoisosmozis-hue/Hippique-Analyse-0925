@@ -87,9 +87,24 @@ MIN_CP_SUM_DEC = 6.0         # (o1-1)+(o2-1) ≥ 4  <=> (o1+o2) ≥ 6.0
 
 
 def _write_json_file(path: Path, payload: Any) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def _write_minimal_csv(
+    path: Path, headers: Iterable[Any], rows: Iterable[Iterable[Any]] | None = None
+) -> None:
+    """Persist a tiny CSV artefact with the provided ``headers`` and ``rows``."""
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="", encoding="utf-8") as fh:
+        writer = csv.writer(fh)
+        writer.writerow(list(headers))
+        if rows:
+            for row in rows:
+                writer.writerow(list(row))
+
+    
 def _load_json_if_exists(path: Path) -> dict[str, Any] | None:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
@@ -259,6 +274,7 @@ def _write_je_csv_file(
     """Materialise the ``*_je.csv`` companion using the provided mappings."""
 
     stats_mapping = _extract_stats_mapping(stats_payload)
+    path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="", encoding="utf-8") as fh:
         writer = csv.writer(fh)
         writer.writerow(["num", "nom", "j_rate", "e_rate"])
@@ -534,17 +550,33 @@ def enrich_h5(
     course_id = str(partants_payload.get("course_id") or "").strip()
     if not course_id:
         raise ValueError("Impossible de déterminer l'identifiant course pour les stats J/E")
-    coverage, mapped = collect_stats(course_id, h5_path=rc_dir / "normalized_h5.json")
-    stats_payload: dict[str, Any] = {"coverage": coverage}
-    stats_payload.update(mapped)
-    _write_json_file(stats_path, stats_payload)
-
     snap_stem = h5_raw_path.stem
-    id2name = _extract_id2name(partants_payload)
-    _write_je_csv_file(rc_dir / f"{snap_stem}_je.csv", id2name=id2name, stats_payload=mapped)
+    je_path = rc_dir / f"{snap_stem}_je.csv"
+    try:
+        coverage, mapped = collect_stats(course_id, h5_path=rc_dir / "normalized_h5.json")
+    except Exception:  # pragma: no cover - network or scraping issues
+        logger.exception("collect_stats failed for course %s", course_id)
+        stats_payload = {"coverage": 0, "ok": 0}
+        _write_json_file(stats_path, stats_payload)
+        placeholder_headers = ["num", "nom", "j_rate", "e_rate", "ok"]
+        placeholder_rows = [["", "", "", "", 0]]
+        _write_minimal_csv(je_path, placeholder_headers, placeholder_rows)
+    else:
+        stats_payload = {"coverage": coverage}
+        stats_payload.update(mapped)
+        _write_json_file(stats_path, stats_payload)
+
+        id2name = _extract_id2name(partants_payload)
+        _write_je_csv_file(je_path, id2name=id2name, stats_payload=mapped)
 
     chronos_path = rc_dir / "chronos.csv"
-    _write_chronos_csv(chronos_path, partants_payload.get("runners", []))
+    try:
+        _write_chronos_csv(chronos_path, partants_payload.get("runners", []))
+    except Exception:  # pragma: no cover - defensive
+        logger.exception("Failed to materialise chronos CSV in %s", rc_dir)
+        placeholder_headers = ["num", "chrono", "ok"]
+        placeholder_rows = [["", "", 0]]
+        _write_minimal_csv(chronos_path, placeholder_headers, placeholder_rows)
 
 
 def build_p_finale(
@@ -676,6 +708,7 @@ def _is_number(value: Any) -> bool:
 def _write_chronos_csv(path: Path, runners: Iterable[Any]) -> None:
     """Persist a chronos CSV placeholder using runner identifiers."""
 
+    path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="", encoding="utf-8") as fh:
         writer = csv.writer(fh)
         writer.writerow(["num", "chrono"])
@@ -1142,7 +1175,13 @@ def _regenerate_chronos_csv(rc_dir: Path) -> bool:
         runners = _extract_runners(payload)
         if not runners:
             continue
-        _write_chronos_csv(chronos_path, runners)
+        try:
+            _write_chronos_csv(chronos_path, runners)
+        except Exception:  # pragma: no cover - defensive
+            logger.exception("Failed to materialise chronos CSV in %s", rc_dir)
+            placeholder_headers = ["num", "chrono", "ok"]
+            placeholder_rows = [["", "", 0]]
+            _write_minimal_csv(chronos_path, placeholder_headers, placeholder_rows)
         return True
 
     print(
