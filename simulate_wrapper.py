@@ -700,7 +700,7 @@ def evaluate_combo(
     bankroll: float,
     *,
     calibration: str | os.PathLike[str] | None = None,
-    allow_heuristic: bool | None = None,
+    allow_heuristic: bool = False,
 ) -> Dict[str, Any]:
     """Return EV ratio and expected payout for combined ``tickets``.
 
@@ -721,15 +721,12 @@ def evaluate_combo(
     -------
     dict
         Mapping with keys ``status``, ``ev_ratio``, ``payout_expected``,
+        ``notes`` and ``requirements``.  Successful evaluations also include
+        ``calibration_used`` and optionally ``calibration_metadata``.  When
+        the calibration file is missing and heuristics are disabled the
+        mapping only contains ``status``, ``message``, ``calibration_used``,
         ``notes`` and ``requirements``.
     """
-
-    if allow_heuristic is None:
-        allow_heuristic = os.getenv("ALLOW_HEURISTIC", "").lower() in {
-            "1",
-            "true",
-            "yes",
-        }
 
     if calibration is None:
         env_calib = os.getenv("CALIB_PATH")
@@ -738,15 +735,17 @@ def evaluate_combo(
         calib_path = Path(calibration)
     notes: List[str] = []
     requirements: _RequirementsList = _RequirementsList()
-    if not calib_path.exists():
+    calibration_used = calib_path.exists()
+    if not calibration_used:
         notes.append("no_calibration_yaml")
         requirements.append(str(calib_path))
         if not allow_heuristic:
             return {
                 "status": "insufficient_data",
-                "ev_ratio": 0.0,
-                "roi": 0.0,
-                "payout_expected": 0.0,
+                "message": (
+                    f"Calibration file '{calib_path}' is required to evaluate tickets"
+                ),
+                "calibration_used": False,
                 "notes": notes,
                 "requirements": requirements,
             }
@@ -777,7 +776,7 @@ def evaluate_combo(
         if note not in notes:
             notes.append(note)
 
-    return {
+    result = {
         "status": "ok",
         "ev_ratio": float(stats.get("ev_ratio", 0.0)),
         "roi": float(stats.get("roi", 0.0)),
@@ -786,5 +785,16 @@ def evaluate_combo(
         "ticket_metrics": stats.get("ticket_metrics", []), 
         "notes": notes,
         "requirements": requirements,
+        "calibration_used": calibration_used,
     }
 
+    if calibration_used and _calibration_metadata:
+        meta_detail = {
+            key: _calibration_metadata[key]
+            for key in ("decay", "half_life", "generated_at")
+            if key in _calibration_metadata
+        }
+        if meta_detail:
+            result["calibration_metadata"] = meta_detail
+
+    return result
