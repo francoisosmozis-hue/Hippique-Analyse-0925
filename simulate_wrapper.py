@@ -40,7 +40,13 @@ def _default_payout_calibration_path() -> Path:
             return Path(env_path)
         except TypeError:  # pragma: no cover - defensive
             pass
-    return Path("config/payout_calibration.yaml")
+    config_candidate = Path("config/payout_calibration.yaml")
+    if config_candidate.exists():
+        return config_candidate
+
+    # Fall back to the legacy location shipped with the repository so that the
+    # calibration remains available even when ``config/`` is not populated.
+    return Path("calibration/payout_calibration.yaml")
 
 
 PAYOUT_CALIBRATION_PATH = _default_payout_calibration_path()
@@ -129,6 +135,7 @@ class _RequirementsList(list):
     
     _DEFAULT_HINTS = (
         str(Path("config/payout_calibration.yaml")),
+        str(Path("calibration/payout_calibration.yaml")),
         str(Path("payout_calibration.yaml")),
     )
 
@@ -726,7 +733,7 @@ def evaluate_combo(
 
     if calibration is None:
         env_calib = os.getenv("CALIB_PATH")
-        calib_path = Path(env_calib) if env_calib else Path("config/payout_calibration.yaml")
+        calib_path = Path(env_calib) if env_calib else PAYOUT_CALIBRATION_PATH
     else:
         calib_path = Path(calibration)
     notes: List[str] = []
