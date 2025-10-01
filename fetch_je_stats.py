@@ -130,14 +130,16 @@ def enrich_from_snapshot(snapshot_dir: str | Path, reunion: str, course: str) ->
         course_code,
     ]
 
-    result = subprocess.run(cmd, check=False)
-    if result.returncode != 0:
+    try:
+        subprocess.run(cmd, check=True)
+    except subprocess.CalledProcessError as exc:
         LOGGER.warning(
-            "fetch_je_stats CLI exited with code %s for %s%s",
-            result.returncode,
+        "fetch_je_stats CLI failed for %s%s: %s",
             reunion_code,
             course_code,
+            exc,
         )
+        raise
     return out_dir / f"{reunion_code}{course_code}_je.csv"
 
 
