@@ -1,8 +1,10 @@
 import json
 import subprocess
 import sys
-import pytest
+from datetime import date
 from pathlib import Path
+
+import pytest
 
 
 def sample_tickets():
@@ -120,3 +122,42 @@ def test_post_course_flow_multi_places(tmp_path: Path):
     assert data["roi_reel_moyen"] == pytest.approx(3.0)
     assert data["brier_total"] == pytest.approx(1.13)
     assert data["brier_moyen"] == pytest.approx(0.565)
+
+
+def test_post_course_missing_arrivee(tmp_path: Path):
+    tickets_path = tmp_path / "tickets.json"
+    tickets_path.write_text(json.dumps(sample_tickets()), encoding="utf-8")
+
+    cmd = [
+        sys.executable,
+        str(Path(__file__).resolve().parent.parent / "post_course.py"),
+        "--arrivee",
+        str(tmp_path / "missing_arrivee.json"),
+        "--tickets",
+        str(tickets_path),
+        "--outdir",
+        str(tmp_path),
+    ]
+    res = subprocess.run(cmd, capture_output=True, text=True)
+    assert res.returncode == 0, res.stderr
+    assert "Arrivee file not found" in res.stdout
+
+    arrivee_json = tmp_path / "arrivee.json"
+    assert arrivee_json.exists()
+    arrivee_out = json.loads(arrivee_json.read_text(encoding="utf-8"))
+    assert arrivee_out["status"] == "missing"
+    assert arrivee_out["rc"] == sample_tickets()["meta"]["rc"]
+    assert arrivee_out["date"] == date.today().isoformat()
+
+    arrivee_csv = tmp_path / "arrivee.csv"
+    assert arrivee_csv.exists()
+    csv_lines = arrivee_csv.read_text(encoding="utf-8").strip().splitlines()
+    assert csv_lines[0] == "status;rc;date"
+    assert csv_lines[1].split(";") == [
+        "missing",
+        sample_tickets()["meta"]["rc"],
+        date.today().isoformat(),
+    ]
+
+    assert not (tmp_path / "cmd_update_excel.txt").exists()
+    assert not (tmp_path / "ligne_resultats.csv").exists()
