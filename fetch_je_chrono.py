@@ -10,8 +10,7 @@ import sys
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
-from analyse_courses_du_jour_enrichie import _write_chronos_csv
-
+from analyse_courses_du_jour_enrichie import _write_chronos_csv, _write_minimal_csv
 
 LOGGER = logging.getLogger(__name__)
 
@@ -56,11 +55,25 @@ def _materialise_chronos(snapshot_dir: Path, reunion: str, course: str) -> Path:
     payload = _discover_payload(snapshot_dir)
     runners = list(_iter_runners(payload))
     chronos_path = snapshot_dir / f"{reunion}{course}_chronos.csv"
-    _write_chronos_csv(chronos_path, runners)
+    try:
+        _write_chronos_csv(chronos_path, runners)
+    except Exception:  # pragma: no cover - defensive
+        LOGGER.exception(
+            "Failed to materialise chronos CSV for %s%s in %s", reunion, course, snapshot_dir
+        )
+        placeholder_headers = ["num", "chrono", "ok"]
+        placeholder_rows = [["", "", 0]]
+        _write_minimal_csv(chronos_path, placeholder_headers, placeholder_rows)
 
     legacy_path = snapshot_dir / "chronos.csv"
     if legacy_path != chronos_path:
-        _write_chronos_csv(legacy_path, runners)
+        try:
+            _write_chronos_csv(legacy_path, runners)
+        except Exception:  # pragma: no cover - defensive
+            LOGGER.exception("Failed to materialise legacy chronos CSV in %s", snapshot_dir)
+            placeholder_headers = ["num", "chrono", "ok"]
+            placeholder_rows = [["", "", 0]]
+            _write_minimal_csv(legacy_path, placeholder_headers, placeholder_rows)
 
     return chronos_path
     
