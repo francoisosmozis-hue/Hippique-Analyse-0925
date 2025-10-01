@@ -10,7 +10,12 @@ import sys
 from pathlib import Path
 from typing import Any, Mapping
 
-from analyse_courses_du_jour_enrichie import _extract_id2name, _write_je_csv_file
+from analyse_courses_du_jour_enrichie import (
+    _extract_id2name,
+    _write_je_csv_file,
+    _write_json_file,
+    _write_minimal_csv,
+)
 from scripts.fetch_je_stats import collect_stats
 
 
@@ -74,32 +79,38 @@ def _materialise_stats(snapshot_dir: Path, reunion: str, course: str) -> Path:
     if not course_id:
         raise RuntimeError("missing-course-id")
 
+    stats_path = snapshot_dir / "stats_je.json"
+    csv_path = snapshot_dir / f"{reunion}{course}_je.csv"
+    legacy_csv_path = snapshot_dir / f"{snapshot_file.stem}_je.csv"
+    
     try:
         coverage, mapped = collect_stats(course_id, h5_path=str(snapshot_file))
-    except Exception as exc:  # pragma: no cover - network or scraping issues
-        raise RuntimeError(str(exc)) from exc
-
+    except Exception:  # pragma: no cover - network or scraping issues
+        LOGGER.exception("collect_stats failed for course %s", course_id)
+        stats_payload = {"coverage": 0, "ok": 0}
+        _write_json_file(stats_path, stats_payload)
+        placeholder_headers = ["num", "nom", "j_rate", "e_rate", "ok"]
+        placeholder_rows = [["", "", "", "", 0]]
+        _write_minimal_csv(csv_path, placeholder_headers, placeholder_rows)
+        if legacy_csv_path != csv_path:
+            _write_minimal_csv(legacy_csv_path, placeholder_headers, placeholder_rows)
+        return csv_path
+        
     stats_payload: dict[str, Any] = {"coverage": coverage}
     stats_payload.update(mapped)
 
-    stats_path = snapshot_dir / "stats_je.json"
-    stats_path.write_text(
-        json.dumps(stats_payload, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+    _write_json_file(stats_path, stats_payload)
 
     id2name = _extract_id_mapping(snapshot_dir, payload)
     if not id2name:
         id2name = {cid: "" for cid in mapped.keys()}
 
-    csv_path = snapshot_dir / f"{reunion}{course}_je.csv"
     _write_je_csv_file(
         csv_path,
         id2name=id2name,
         stats_payload=stats_payload,
     )
 
-    legacy_csv_path = snapshot_dir / f"{snapshot_file.stem}_je.csv"
     if legacy_csv_path != csv_path:
         _write_je_csv_file(
             legacy_csv_path,
