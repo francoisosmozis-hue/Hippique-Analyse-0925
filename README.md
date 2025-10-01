@@ -141,6 +141,17 @@ Commandes usuelles :
     --excel modele_suivi_courses_hippiques.xlsx
   ```
 
+- **Vérifier la jouabilité d'une course** – réutilise le pipeline de garde-fous
+  `runner_chain` et affiche à la fois le JSON complet et un verdict lisible :
+
+  ```bash
+  python tools/check_course_playable.py --dir data/R4C5
+  ```
+
+  Les paramètres de garde (`--budget`, `--overround-max`, `--ev-min-exotic`,
+  etc.) sont identiques à ceux du CLI principal et permettent d'ajuster les
+  seuils lors des vérifications ponctuelles.
+
 Le script crée l'onglet s'il est absent, garantit la présence des colonnes
 standard (Date, Réunion, Course, Hippodrome, Heure, Partants, Discipline,
 Statuts H‑30/H‑5, Jouable H‑5, Tickets H‑5, Commentaires) et réalise une mise
