@@ -22,6 +22,63 @@ import yaml
 from scripts import online_fetch_zeturf as _impl
 
 
+_RC_COMBINED_RE = re.compile(r"R?\s*(\d+)\s*C\s*(\d+)", re.IGNORECASE)
+
+
+def _normalise_rc_tag(reunion: str | int, course: str | int | None) -> str:
+    """Return a canonical ``R?C?`` tag for the provided identifiers."""
+
+    reunion_text = str(reunion or "").strip()
+    course_text = "" if course is None else str(course).strip()
+
+    if not course_text:
+        match = _RC_COMBINED_RE.search(reunion_text.upper())
+        if match:
+            reunion_text = match.group(1)
+            course_text = match.group(2)
+
+    reunion_norm = _normalise_label(reunion_text, "R")
+    course_norm = _normalise_label(course_text, "C")
+    return f"{reunion_norm}{course_norm}"
+
+
+def _load_local_snapshot(rc_tag: str) -> Path | None:
+    """Return the latest snapshot path for ``rc_tag`` if it exists."""
+
+    snapshot_dir = Path("data") / rc_tag
+    if not snapshot_dir.is_dir():
+        return None
+
+    candidates = sorted(
+        snapshot_dir.glob("snapshot_*.json"),
+        key=lambda path: path.stat().st_mtime,
+        reverse=True,
+    )
+    return candidates[0] if candidates else None
+
+
+def fetch_race_snapshot(
+    reunion: str,
+    course: str | None = None,
+    phase: str = "H30",
+    **_: Any,
+) -> dict[str, Any]:
+    """Load the latest locally cached snapshot for ``reunion``/``course``."""
+
+    rc_tag = _normalise_rc_tag(reunion, course)
+    phase_tag = _normalise_phase_alias(phase)
+
+    snapshot_path = _load_local_snapshot(rc_tag)
+    if snapshot_path is None:
+        raise RuntimeError(
+            "Aucun snapshot local trouvé pour "
+            f"{rc_tag} (phase {phase_tag}). "
+            "Exécutez analyse_courses_du_jour_enrichie.py pour la phase souhaitée."
+        )
+
+    return json.loads(snapshot_path.read_text(encoding="utf-8"))
+
+
 def _load_full_impl() -> Any:
     """Return the fully-featured ``scripts.online_fetch_zeturf`` module."""
 
@@ -814,9 +871,6 @@ def _build_snapshot_payload(
     return snapshot.as_dict()
  
     
-_RC_COMBINED_RE = re.compile(r"R?\s*(\d+)\s*C\s*(\d+)", re.IGNORECASE)
-
-
 def _fetch_race_snapshot_impl(
     reunion: str,
     course: str | None = None,
@@ -1433,7 +1487,7 @@ def _merge_h30_odds(
         runner.update(extras)
 
 
-def fetch_race_snapshot(
+def fetch_race_snapshot_full(
     reunion: str,
     course: str | None = None,
     phase: str = "H30",
@@ -1606,7 +1660,7 @@ else:  # pragma: no cover - defensive fallback for stripped builds
         raise RuntimeError("scripts.online_fetch_zeturf.main is unavailable")
 
 
-__all__ = ["fetch_race_snapshot", "main"]
+__all__ = ["fetch_race_snapshot", "fetch_race_snapshot_full", "main"]
 
 # Re-export normalisation helper when available so downstream tooling can rely
 # on the same convenience shim regardless of whether it imports the lightweight
