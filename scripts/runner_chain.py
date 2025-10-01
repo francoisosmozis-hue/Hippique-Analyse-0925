@@ -166,6 +166,51 @@ def _load_sources_config() -> Dict[str, Any]:
     return {}
 
 
+def _write_json_file(path: Path, payload: Mapping[str, Any]) -> None:
+    """Write ``payload`` as JSON to ``path`` creating parents if needed."""
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _write_text_file(path: Path, content: str) -> None:
+    """Write ``content`` to ``path`` creating parents if needed."""
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+
+
+def _write_excel_update_command(
+    race_dir: Path,
+    *,
+    arrivee_path: Path,
+    tickets_path: Path | None = None,
+    excel_path: str | None = None,
+) -> None:
+    """Persist the Excel update command mirroring :mod:`post_course` output."""
+
+    if tickets_path is None:
+        for candidate in ("tickets.json", "p_finale.json", "analysis.json"):
+            maybe = race_dir / candidate
+            if maybe.exists():
+                tickets_path = maybe
+                break
+    if tickets_path is None:
+        logger.warning(
+            "[runner] No tickets file found in %s, skipping Excel command", race_dir
+        )
+        return
+
+    excel = excel_path or os.getenv("EXCEL_RESULTS_PATH") or "modele_suivi_courses_hippiques.xlsx"
+    cmd = (
+        f'python update_excel_with_results.py '
+        f'--excel "{excel}" '
+        f'--arrivee "{arrivee_path}" '
+        f'--tickets "{tickets_path}"\n'
+    )
+    _write_text_file(race_dir / "cmd_update_excel.txt", cmd)
+
+
 def _write_snapshot(payload: RunnerPayload, window: str, base: Path) -> None:
     """Write a snapshot file for ``race_id`` under ``base``.
 
@@ -344,6 +389,33 @@ def _trigger_phase(
             mode=mode,
             calibration=calibration,
             calibration_available=calibration_available,
+        )
+        return
+    if phase_norm == "RESULT":
+        race_dir = analysis_dir / race_id
+        arrivee_path = race_dir / "arrivee_officielle.json"
+        race_dir.mkdir(parents=True, exist_ok=True)
+        if not arrivee_path.exists():
+            logger.error(
+                "[KO] Arrivée absente… %s (recherché: %s)", race_id, arrivee_path
+            )
+            arrivee_missing = {
+                "status": "missing",
+                "R": payload.reunion,
+                "C": payload.course,
+                "date": payload.start_time.date().isoformat(),
+            }
+            _write_json_file(race_dir / "arrivee.json", arrivee_missing)
+            header = "status;R;C;date\n"
+            line = (
+                f"{arrivee_missing['status']};{arrivee_missing['R']};"
+                f"{arrivee_missing['C']};{arrivee_missing['date']}\n"
+            )
+            _write_text_file(race_dir / "arrivee_missing.csv", header + line)
+            return
+        _write_excel_update_command(
+            race_dir,
+            arrivee_path=arrivee_path,
         )
         return
 
