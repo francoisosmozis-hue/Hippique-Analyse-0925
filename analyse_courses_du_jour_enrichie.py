@@ -20,6 +20,7 @@ import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+from collections.abc import Mapping
 from typing import Any, Callable, Iterable
 
 import requests
@@ -38,7 +39,8 @@ if _fetch_module is not None and not hasattr(_fetch_module, "fetch_race_snapshot
 from scripts.fetch_je_stats import collect_stats
 
 import pipeline_run
-from simulate_wrapper import PAYOUT_CALIBRATION_PATH
+from runner_chain import compute_overround_cap
+from simulate_wrapper import PAYOUT_CALIBRATION_PATH, evaluate_combo
 
 logger = logging.getLogger(__name__)
 
@@ -810,6 +812,298 @@ def _run_single_pipeline(rc_dir: Path, *, budget: float) -> None:
     )
 
 
+def _find_je_csv(rc_dir: Path) -> Path | None:
+    """Return the JE CSV produced during enrichment when available."""
+
+    snap = _snap_prefix(rc_dir)
+    if snap:
+        candidate = rc_dir / f"{snap}_je.csv"
+        if candidate.exists():
+            return candidate
+    for candidate in rc_dir.glob("*je.csv"):
+        if candidate.name.lower().endswith("je.csv") and candidate.is_file():
+            return candidate
+    return None
+
+
+def _is_combo_ticket(ticket: Mapping[str, Any]) -> bool:
+    """Return ``True`` when ``ticket`` refers to an exotic combination."""
+
+    ticket_type = str(ticket.get("type") or "").upper()
+    if ticket_type.startswith("SP") or "SIMPLE" in ticket_type:
+        return False
+    if ticket.get("legs"):
+        return True
+    return ticket_type not in {"SP", "SIMPLE", "SIMPLE_PLACE", "PLACE"}
+
+
+def _evaluate_combo_guard(
+    ticket: Mapping[str, Any],
+    *,
+    bankroll: float,
+) -> dict[str, Any]:
+    """Evaluate ``ticket`` via :func:`simulate_wrapper.evaluate_combo`."""
+
+    try:
+        return evaluate_combo(
+            [dict(ticket)],
+            bankroll,
+            calibration=str(PAYOUT_CALIBRATION_PATH),
+            allow_heuristic=False,
+        )
+    except Exception as exc:  # pragma: no cover - defensive guard
+        logger.exception("Guard combo evaluation failed for %s", ticket.get("id"))
+        return {
+            "status": "error",
+            "ev_ratio": 0.0,
+            "roi": 0.0,
+            "payout_expected": 0.0,
+            "notes": [f"evaluation_error:{exc}"],
+        }
+
+
+def _run_h5_guard_phase(
+    rc_dir: Path,
+    *,
+    budget: float,
+    min_roi: float = 0.20,
+) -> tuple[bool, dict[str, Any], dict[str, Any] | None]:
+    """Evaluate post-enrichment guardrails returning analysis payload/outcome."""
+
+    rc_dir = Path(rc_dir)
+    je_csv = _find_je_csv(rc_dir)
+    chronos_path = rc_dir / "chronos.csv"
+    p_finale_path = rc_dir / "p_finale.json"
+    partants_path = rc_dir / "partants.json"
+    h5_odds_path = rc_dir / "h5.json"
+
+    try:
+        p_finale_payload = json.loads(p_finale_path.read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError):
+        p_finale_payload = {}
+
+    meta_block = p_finale_payload.get("meta")
+    meta: dict[str, Any] = dict(meta_block) if isinstance(meta_block, Mapping) else {}
+    if not meta:
+        base = _gather_tracking_base(rc_dir)
+        if isinstance(base, dict):
+            meta = {k: v for k, v in base.items() if k in {"reunion", "course", "hippodrome", "date", "discipline", "partants"}}
+        meta.setdefault("rc", rc_dir.name)
+    else:
+        meta.setdefault("rc", meta.get("rc") or rc_dir.name)
+
+    tickets_block = p_finale_payload.get("tickets")
+    tickets: list[dict[str, Any]] = []
+    if isinstance(tickets_block, list):
+        for ticket in tickets_block:
+            if isinstance(ticket, Mapping):
+                tickets.append({str(k): v for k, v in ticket.items()})
+
+    guards_context: dict[str, Any] = {}
+
+    data_missing: list[str] = []
+    data_ok = True
+    if je_csv is None:
+        data_missing.append("je_csv")
+        data_ok = False
+    if not chronos_path.exists():
+        data_missing.append("chronos")
+        data_ok = False
+
+    calibration_ok = PAYOUT_CALIBRATION_PATH.exists()
+    if not calibration_ok:
+        guards_context["calibration"] = str(PAYOUT_CALIBRATION_PATH)
+
+    overround_value: float | None = None
+    overround_cap: float | None = None
+    if h5_odds_path.exists():
+        try:
+            odds_payload = json.loads(h5_odds_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:  # pragma: no cover - defensive
+            odds_payload = {}
+        if isinstance(odds_payload, Mapping):
+            overround_value = pipeline_run._compute_market_overround(odds_payload)
+
+    partants_payload: Mapping[str, Any] = {}
+    if partants_path.exists():
+        try:
+            partants_data = json.loads(partants_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:  # pragma: no cover - defensive
+            partants_data = {}
+        if isinstance(partants_data, Mapping):
+            partants_payload = partants_data
+
+    discipline_hint = (
+        meta.get("discipline")
+        or partants_payload.get("discipline")
+        or partants_payload.get("discipline_label")
+        or partants_payload.get("type_course")
+        or partants_payload.get("type")
+        or partants_payload.get("categorie")
+        or partants_payload.get("category")
+    )
+    course_label_hint = (
+        partants_payload.get("course_label")
+        or partants_payload.get("label")
+        or partants_payload.get("name")
+        or meta.get("course")
+    )
+    partants_hint: Any = (
+        meta.get("partants")
+        or partants_payload.get("partants")
+        or partants_payload.get("nombre_partants")
+        or partants_payload.get("nb_partants")
+        or partants_payload.get("number_of_runners")
+    )
+    if partants_hint in (None, "", 0):
+        runners_source = partants_payload.get("runners")
+        if isinstance(runners_source, list) and runners_source:
+            partants_hint = len(runners_source)
+
+    try:
+        default_cap = float(os.getenv("MAX_COMBO_OVERROUND", "1.25"))
+    except (TypeError, ValueError):  # pragma: no cover - defensive
+        default_cap = 1.25
+
+    if overround_value is not None:
+        overround_cap = compute_overround_cap(
+            discipline_hint,
+            partants_hint,
+            default_cap=default_cap,
+            course_label=course_label_hint,
+        )
+        guards_context["overround"] = {
+            "value": overround_value,
+            "cap": overround_cap,
+        }
+    overround_ok = (
+        overround_value is None
+        or overround_cap is None
+        or overround_value <= overround_cap + 1e-9
+    )
+
+    combo_tickets = [ticket for ticket in tickets if _is_combo_ticket(ticket)]
+    combo_bankroll = sum(
+        float(ticket.get("stake", 0.0))
+        for ticket in combo_tickets
+        if isinstance(ticket.get("stake"), (int, float))
+    )
+    if combo_bankroll <= 0:
+        combo_bankroll = float(budget)
+
+    ev_ok = True
+    combo_results: list[dict[str, Any]] = []
+    for ticket in combo_tickets:
+        result = _evaluate_combo_guard(ticket, bankroll=combo_bankroll)
+        combo_results.append(
+            {
+                "id": ticket.get("id"),
+                "type": ticket.get("type"),
+                "status": result.get("status"),
+                "ev_ratio": result.get("ev_ratio"),
+                "roi": result.get("roi"),
+                "payout_expected": result.get("payout_expected"),
+                "notes": result.get("notes", []),
+            }
+        )
+        if str(result.get("status", "")).lower() != "ok":
+            ev_ok = False
+    if combo_results:
+        guards_context["combo_eval"] = combo_results
+        result_by_id = {}
+        for res in combo_results:
+            ticket_id = str(res.get("id") or "")
+            if ticket_id:
+                result_by_id[ticket_id] = res
+        for ticket in tickets:
+            if not _is_combo_ticket(ticket):
+                continue
+            ticket_id = str(ticket.get("id") or "")
+            if ticket_id and ticket_id in result_by_id:
+                ticket["guard_eval"] = result_by_id[ticket_id]
+
+    ev_block = p_finale_payload.get("ev")
+    roi_value: float | None = None
+    if isinstance(ev_block, Mapping):
+        roi_candidate = ev_block.get("roi_global")
+        try:
+            roi_value = float(roi_candidate)
+        except (TypeError, ValueError):
+            roi_value = None
+    guards_context["roi_global"] = roi_value
+    roi_ok = roi_value is not None and roi_value >= min_roi
+
+    existing_context = meta.get("guard_context")
+    if isinstance(existing_context, Mapping):
+        merged_context = {str(k): v for k, v in existing_context.items()}
+        merged_context.update(guards_context)
+        guards_context = merged_context
+    meta["guard_context"] = guards_context
+
+    guard_flags = {
+        "data_ok": data_ok,
+        "calibration_ok": calibration_ok,
+        "overround_ok": overround_ok,
+        "ev_ok": ev_ok,
+        "roi_ok": roi_ok,
+    }
+
+    analysis_payload = {
+        "meta": meta,
+        "guards": guard_flags,
+        "decision": "PLAY",
+        "tickets": tickets,
+    }
+
+    failure_reason: str | None = None
+    if not data_ok:
+        failure_reason = "data_missing"
+    elif not calibration_ok:
+        failure_reason = "calibration_missing"
+    elif not overround_ok:
+        failure_reason = "overround"
+    elif not ev_ok:
+        failure_reason = "combo_evaluation"
+    elif not roi_ok:
+        failure_reason = "roi_below_threshold"
+
+    if failure_reason:
+        analysis_payload["decision"] = "ABSTENTION"
+        if data_missing:
+            guards_context["missing"] = data_missing
+        outcome = {
+            "status": "no-bet",
+            "decision": "ABSTENTION",
+            "reason": failure_reason,
+            "jouable": False,
+            "analysis": {
+                "status": "NO_PLAY_GUARDRAIL",
+                "guards": guard_flags,
+                "decision": "ABSTENTION",
+            },
+            "details": {
+                "guards": guards_context,
+            },
+        }
+        if data_missing:
+            logger.warning(
+                "[H-5][guards] data missing for %s (reason=data_missing, missing=%s)",
+                rc_dir.name,
+                ",".join(data_missing),
+            )
+        else:
+            logger.warning(
+                "[H-5][guards] guard failure for %s (reason=%s)",
+                rc_dir.name,
+                failure_reason,
+            )
+        return False, analysis_payload, outcome
+
+    analysis_payload["decision"] = "PLAY"
+    logger.info("[H-5][guards] course %s validated", rc_dir.name)
+    return True, analysis_payload, None
+
+
 def _upload_artifacts(rc_dir: Path, *, gcs_prefix: str | None) -> None:
     """Upload ``rc_dir`` contents to Google Cloud Storage."""
 
@@ -1474,6 +1768,16 @@ def _execute_h5_chain(
         return False, outcome
 
     build_p_finale(rc_dir, budget=budget, kelly=kelly)
+    guard_ok, analysis_payload, guard_outcome = _run_h5_guard_phase(
+        rc_dir,
+        budget=budget,
+    )
+    try:
+        _write_json_file(rc_dir / "analysis_H5.json", analysis_payload)
+    except Exception as exc:  # pragma: no cover - defensive logging
+        logger.warning("[H-5] unable to persist analysis_H5.json for %s: %s", rc_dir, exc)
+    if not guard_ok:
+        return False, guard_outcome
     run_pipeline(rc_dir, budget=budget, kelly=kelly)
     build_prompt_from_meta(rc_dir, budget=budget, kelly=kelly)
     return True, None
