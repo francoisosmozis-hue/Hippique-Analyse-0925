@@ -136,6 +136,53 @@ def export(
 
     _save_json(out / "p_finale.json", p_finale)
 
+    p30_raw = p_finale.get("p30") if isinstance(p_finale.get("p30"), dict) else {}
+    p5_raw = p_finale.get("p5") if isinstance(p_finale.get("p5"), dict) else {}
+
+    def _coerce_float(value: Any) -> float:
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return 0.0
+
+    p30_map = {str(key): _coerce_float(val) for key, val in p30_raw.items()}
+    p5_map = {str(key): _coerce_float(val) for key, val in p5_raw.items()}
+
+    def _runner_sort_key(item: str) -> tuple[int, float | str]:
+        try:
+            return (0, float(item))
+        except ValueError:
+            return (1, item)
+
+    runners = sorted({*p30_map.keys(), *p5_map.keys()}, key=_runner_sort_key)
+
+    drift_lines = ["num;p30;p5;delta;flag"]
+    for runner in runners:
+        p30_val = p30_map.get(runner, 0.0)
+        p5_val = p5_map.get(runner, 0.0)
+        delta_val = p5_val - p30_val
+        if delta_val >= 0.02:
+            flag = "steam"
+        elif delta_val <= -0.02:
+            flag = "drift"
+        else:
+            flag = "stable"
+        drift_lines.append(
+            ";".join(
+                [
+                    runner,
+                    f"{p30_val:.3f}",
+                    f"{p5_val:.3f}",
+                    f"{delta_val:.3f}",
+                    flag,
+                ]
+            )
+        )
+
+    drift_path = out / "drift.csv"
+    _save_text(drift_path, "\n".join(drift_lines) + "\n")
+    print(f"[INFO] Exported drift data to {drift_path}")
+
     payload: JsonDict = {
         "meta": meta,
         "tickets": tickets,
