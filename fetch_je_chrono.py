@@ -85,16 +85,14 @@ def enrich_from_snapshot(snapshot_dir: str | Path, reunion: str, course: str) ->
         course_code,
     ]
 
-    try:
-        subprocess.run(cmd, check=True)
-    except subprocess.CalledProcessError as exc:
+    result = subprocess.run(cmd, check=False)
+    if result.returncode != 0:
         LOGGER.warning(
-            "fetch_je_chrono CLI failed for %s%s: %s",
+            "fetch_je_chrono CLI failed for %s%s (returncode=%s)",
             reunion_code,
             course_code,
-            exc,
+            result.returncode,
         )
-        raise
     return out_dir / f"{reunion_code}{course_code}_chronos.csv"
 
 
