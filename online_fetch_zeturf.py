@@ -63,7 +63,7 @@ def fetch_race_snapshot(
     phase: str = "H30",
     *,
     use_cache: bool = False,
-    **_: Any,
+    **extra: Any,
 ) -> dict[str, Any]:
     """Return a minimal snapshot for ``reunion``/``course``.
 
@@ -104,7 +104,13 @@ def fetch_race_snapshot(
 
     parse_fn = getattr(_impl, "parse_course_page", None)
     if not callable(parse_fn):  # pragma: no cover - defensive guard
-        raise RuntimeError("scripts.online_fetch_zeturf.parse_course_page indisponible")
+        fallback_kwargs = dict(extra)
+        return fetch_race_snapshot_full(
+            reunion,
+            course,
+            phase=phase,
+            **fallback_kwargs,
+        )
 
     raw_snapshot = parse_fn(course_url, snapshot=phase_tag) or {}
     if not isinstance(raw_snapshot, Mapping):
