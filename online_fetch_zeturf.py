@@ -61,22 +61,75 @@ def fetch_race_snapshot(
     reunion: str,
     course: str | None = None,
     phase: str = "H30",
+    *,
+    use_cache: bool = False,
     **_: Any,
 ) -> dict[str, Any]:
-    """Load the latest locally cached snapshot for ``reunion``/``course``."""
+    """Return a minimal snapshot for ``reunion``/``course``.
+
+    By default the helper fetches the live course page from ZEturf, parses it
+    through :func:`scripts.online_fetch_zeturf.parse_course_page` and returns a
+    trimmed payload containing the runner list, the raw ``partants`` entry, the
+    ``market`` block (when available) and the normalised ``phase`` label.  When
+    ``use_cache`` is set to :data:`True` the helper instead loads the most
+    recent local snapshot (``data/R?C?/snapshot_*.json``) without performing any
+    remote requests.
+    """
 
     rc_tag = _normalise_rc_tag(reunion, course)
     phase_tag = _normalise_phase_alias(phase)
 
-    snapshot_path = _load_local_snapshot(rc_tag)
-    if snapshot_path is None:
-        raise RuntimeError(
-            "Aucun snapshot local trouvé pour "
-            f"{rc_tag} (phase {phase_tag}). "
-            "Exécutez analyse_courses_du_jour_enrichie.py pour la phase souhaitée."
-        )
+    if use_cache:
+        snapshot_path = _load_local_snapshot(rc_tag)
+        if snapshot_path is None:
+            raise RuntimeError(
+                "Aucun snapshot local trouvé pour "
+                f"{rc_tag} (phase {phase_tag}). "
+                "Exécutez analyse_courses_du_jour_enrichie.py pour la phase souhaitée."
+            )
+        cached_payload = json.loads(snapshot_path.read_text(encoding="utf-8"))
+        return {
+            "runners": list(cached_payload.get("runners", [])),
+            "partants": cached_payload.get("partants")
+            if isinstance(cached_payload.get("partants"), list)
+            else list(cached_payload.get("runners", [])),
+            "market": cached_payload.get("market", {}),
+            "phase": phase_tag,
+        }
 
-    return json.loads(snapshot_path.read_text(encoding="utf-8"))
+    if not re.match(r"^(R\d+)(C\d+)$", rc_tag):  # pragma: no cover - defensive guard
+        raise ValueError(f"rc tag {rc_tag!r} is invalid")
+
+    course_url = _COURSE_PAGE_FROM_RC.format(rc=rc_tag)
+
+    parse_fn = getattr(_impl, "parse_course_page", None)
+    if not callable(parse_fn):  # pragma: no cover - defensive guard
+        raise RuntimeError("scripts.online_fetch_zeturf.parse_course_page indisponible")
+
+    raw_snapshot = parse_fn(course_url, snapshot=phase_tag) or {}
+    if not isinstance(raw_snapshot, Mapping):
+        raise RuntimeError("parse_course_page a retourné un payload inattendu")
+
+    normalise_fn = getattr(_impl, "normalize_snapshot", None)
+    if not callable(normalise_fn):  # pragma: no cover - defensive guard
+        raise RuntimeError("scripts.online_fetch_zeturf.normalize_snapshot indisponible")
+
+    normalized = normalise_fn(dict(raw_snapshot))
+    runners = list(
+        raw_snapshot.get("runners")
+        if isinstance(raw_snapshot.get("runners"), Iterable)
+        else normalized.get("runners", [])
+    )
+    partants_raw = raw_snapshot.get("partants")
+    if not isinstance(partants_raw, list):
+        partants_raw = runners
+
+    return {
+        "runners": runners,
+        "partants": partants_raw,
+        "market": raw_snapshot.get("market", {}),
+        "phase": phase_tag,
+    }
 
 
 def _load_full_impl() -> Any:
