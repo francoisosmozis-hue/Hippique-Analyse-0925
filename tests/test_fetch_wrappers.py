@@ -108,23 +108,26 @@ def test_fetch_je_chrono_wrapper_invokes_cli(
 
     monkeypatch.setattr(fetch_je_chrono.subprocess, "run", fake_run)
 
-    csv_path = fetch_je_chrono.enrich_from_snapshot(out_dir, "R1", "C1")
+    csv_path = fetch_je_chrono.enrich_from_snapshot(
+        out_dir,
+        "R1",
+        "C1",
+    )
 
+    expected_command = [
+        sys.executable,
+        str(Path(fetch_je_chrono.__file__).resolve()),
+        "--out",
+        str(out_dir),
+        "--reunion",
+        "R1",
+        "--course",
+        "C1",
+    ]
     assert csv_path == out_dir / "R1C1_chronos.csv"
     assert out_dir.is_dir()
 
-    assert calls == [
-        [
-            sys.executable,
-            str(Path(fetch_je_chrono.__file__).resolve()),
-            "--out",
-            str(out_dir),
-            "--reunion",
-            "R1",
-            "--course",
-            "C1",
-        ]
-    ]
+    assert calls == [expected_command]
 
 
 def test_fetch_je_chrono_materialise_builds_csv(tmp_path: Path) -> None:
