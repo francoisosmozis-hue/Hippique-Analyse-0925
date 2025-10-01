@@ -76,7 +76,7 @@ def test_fetch_je_stats_materialise_builds_outputs(
     assert lines == ["num,nom,j_rate,e_rate", "1,Alpha,12.3,45.6"]
 
 
-def test_fetch_je_stats_materialise_propagates_failure(
+def test_fetch_je_stats_materialise_persists_placeholder(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     course_dir = tmp_path / "R1C1"
@@ -91,8 +91,23 @@ def test_fetch_je_stats_materialise_propagates_failure(
 
     monkeypatch.setattr(fetch_je_stats, "collect_stats", failing_collect)
 
-    with pytest.raises(RuntimeError, match="network down"):
-        fetch_je_stats._materialise_stats(course_dir, "R1", "C1")
+    csv_path = fetch_je_stats._materialise_stats(course_dir, "R1", "C1")
+
+    assert csv_path == course_dir / "R1C1_je.csv"
+
+    stats_path = course_dir / "stats_je.json"
+    payload = json.loads(stats_path.read_text(encoding="utf-8"))
+    assert payload == {"coverage": 0, "ok": 0}
+
+    lines = csv_path.read_text(encoding="utf-8").splitlines()
+    assert lines == ["num,nom,j_rate,e_rate,ok", ",,,,0"]
+
+    legacy_path = course_dir / "normalized_h5_je.csv"
+    assert legacy_path.exists()
+    assert legacy_path.read_text(encoding="utf-8").splitlines() == [
+        "num,nom,j_rate,e_rate,ok",
+        ",,,,0",
+    ]
 
 
 def test_fetch_je_stats_wrapper_logs_warning(
