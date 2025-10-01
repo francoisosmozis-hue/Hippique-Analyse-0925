@@ -638,7 +638,7 @@ def filter_cp_candidates(
         odds_b = _extract_entry_odds(leg_b)
         if odds_a is None or odds_b is None:
             continue
-        if (odds_a + odds_b) >= MIN_CP_SUM_DEC:
+        if (odds_a + odds_b) > MIN_CP_SUM_DEC:
             kept.append((leg_a, leg_b))
     logger.info(
         "CP filter: kept=%d / total=%d (min_sum_place_odds=%.1f)",
