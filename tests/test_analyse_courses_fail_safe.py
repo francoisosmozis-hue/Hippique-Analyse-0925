@@ -79,6 +79,29 @@ def test_safe_enrich_h5_marks_course_unplayable(tmp_path, monkeypatch):
     assert "non jouable" in marker.read_text(encoding="utf-8")
 
 
+def test_safe_enrich_h5_abstains_without_h30(tmp_path, monkeypatch):
+    """Missing H-30 snapshot should trigger an abstention before retries."""
+
+    rc_dir = tmp_path / "R1C5"
+    snapshot = _write_snapshot(rc_dir)
+    snapshot.write_text(json.dumps({"id_course": "COURSE42"}), encoding="utf-8")
+
+    monkeypatch.setattr(acd, "normalize_snapshot", lambda payload: payload)
+
+    success, outcome = acd.safe_enrich_h5(rc_dir, budget=5.0, kelly=0.05)
+
+    assert success is False
+    assert isinstance(outcome, dict)
+    assert outcome.get("decision") == "ABSTENTION"
+    assert outcome.get("reason") == "data-missing"
+    details = outcome.get("details", {}) or {}
+    assert "snapshot-H30" in details.get("missing", [])
+    marker = rc_dir / "UNPLAYABLE.txt"
+    assert marker.exists()
+    marker_text = marker.read_text(encoding="utf-8")
+    assert "snapshot-H30" in marker_text
+
+
 def test_safe_enrich_h5_recovers_after_stats_fetch(tmp_path, monkeypatch):
     """Successful stats fetch should regenerate the JE CSV and resume."""
 
@@ -412,6 +435,33 @@ def test_safe_enrich_h5_skips_when_marker_exists(tmp_path, monkeypatch):
         "reason": "unplayable-marker",
         "details": {"marker": "non jouable: data JE/chronos manquante"},
     }
+
+
+def test_execute_h5_chain_skips_downstream_without_h30(tmp_path, monkeypatch):
+    """Downstream H-5 steps should be skipped when the H-30 snapshot is missing."""
+
+    rc_dir = tmp_path / "R3C5"
+    snapshot = _write_snapshot(rc_dir)
+    snapshot.write_text(json.dumps({"id_course": "COURSE84"}), encoding="utf-8")
+
+    monkeypatch.setattr(acd, "normalize_snapshot", lambda payload: payload)
+
+    def forbidden(*_args, **_kwargs):  # pragma: no cover - defensive assertion
+        raise AssertionError("downstream step should be skipped when H-30 is missing")
+
+    monkeypatch.setattr(acd, "build_p_finale", forbidden)
+    monkeypatch.setattr(acd, "run_pipeline", forbidden)
+    monkeypatch.setattr(acd, "build_prompt_from_meta", forbidden)
+
+    success, outcome = acd._execute_h5_chain(rc_dir, budget=5.0, kelly=0.05)
+
+    assert success is False
+    assert isinstance(outcome, dict)
+    assert outcome.get("reason") == "data-missing"
+    details = outcome.get("details", {}) or {}
+    assert "snapshot-H30" in details.get("missing", [])
+    marker = rc_dir / "UNPLAYABLE.txt"
+    assert marker.exists()
 
 
 def test_ensure_h5_artifacts_rebuilds_when_retry_creates_stats(tmp_path, monkeypatch):
