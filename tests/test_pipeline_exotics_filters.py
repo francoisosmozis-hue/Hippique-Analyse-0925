@@ -484,11 +484,87 @@ def test_exotics_rejects_when_overround_exceeds_cap(
     assert exotics_meta["available"] is False
     reasons = exotics_meta["flags"]["reasons"]["combo"]
     assert "overround_above_threshold" in reasons
+    overround_flag = exotics_meta["flags"]["overround"]
+    assert overround_flag["source"] == "win"
     assert exotics_meta["decision"].startswith("reject:"), exotics_meta
 
     log_decision = log_entry.get("exotics", {}).get("decision")
     assert isinstance(log_decision, str)
     assert "overround_above_threshold" in log_decision
+    log_overround = log_entry["exotics"]["flags"]["overround"]
+    assert log_overround["source"] == "win"
+
+
+def test_exotics_rejects_when_place_overround_exceeds_cap(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Place overrounds above the cap must trigger a rejection."""
+
+    eval_stats = {
+        "status": "ok",
+        "ev_ratio": 0.65,
+        "payout_expected": 25.0,
+        "roi": 0.2,
+        "sharpe": 0.4,
+    }
+
+    slots_place = 3
+    place_odds = [1.10, 1.15, 1.20, 1.25, 1.30, 1.35]
+    win_odds = [4.5, 5.0, 6.0, 8.0, 10.0, 12.0]
+    horses = [
+        {"id": str(idx), "odds": win, "odds_place": place}
+        for idx, (win, place) in enumerate(zip(win_odds, place_odds), start=1)
+    ]
+    runners_override = [
+        {
+            "id": str(idx),
+            "name": f"Runner {idx}",
+            "odds_place": place,
+            "odds_place_h30": place,
+        }
+        for idx, place in enumerate(place_odds, start=1)
+    ]
+    expected_place_overround = sum(1.0 / odd for odd in place_odds) / slots_place
+
+    partants_override = {
+        "market": {"slots_place": slots_place, "horses": horses},
+        "runners": runners_override,
+        "slots_place": slots_place,
+    }
+
+    meta, log_entry, eval_calls = _run_analysis(
+        monkeypatch,
+        tmp_path,
+        eval_stats,
+        overround_cap=1.25,
+        partants_override=partants_override,
+    )
+
+    assert not eval_calls, "evaluation should be skipped when place overround is too high"
+
+    exotics_meta = meta.get("exotics")
+    assert exotics_meta["available"] is False
+    reasons = exotics_meta["flags"]["reasons"]["combo"]
+    assert "overround_above_threshold" in reasons
+    overround_flag = exotics_meta["flags"]["overround"]
+    assert overround_flag["source"] == "place"
+    assert overround_flag["value"] == pytest.approx(expected_place_overround)
+    assert exotics_meta["decision"].startswith("reject:"), exotics_meta
+
+    metrics = exotics_meta.get("metrics")
+    assert metrics is not None, "expected exotics metrics to be populated"
+    assert metrics["overround"] == pytest.approx(expected_place_overround)
+    assert metrics["overround_source"] == "place"
+    market_metrics = metrics.get("market")
+    assert market_metrics is not None, "expected market metrics to be present"
+    assert market_metrics["overround_place"] == pytest.approx(expected_place_overround)
+
+    log_overround = log_entry["exotics"]["flags"]["overround"]
+    assert log_overround["source"] == "place"
+    log_metrics = log_entry["exotics"].get("metrics")
+    assert log_metrics is not None, "expected log metrics to be populated"
+    assert log_metrics["overround"] == pytest.approx(expected_place_overround)
+    assert log_metrics["overround_source"] == "place"
 
 
 def test_overround_cap_uses_metadata_fallbacks(
