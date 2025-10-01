@@ -23,7 +23,7 @@ from pathlib import Path
 
 from typing import Any, Dict, Iterable, List, Mapping, Sequence, Tuple
 
-from simulate_wrapper import evaluate_combo
+from simulate_wrapper import PAYOUT_CALIBRATION_PATH, evaluate_combo
 from logging_io import append_csv_line, CSV_HEADER
 
 
@@ -34,7 +34,7 @@ try:
 except (TypeError, ValueError):  # pragma: no cover - defensive fallback
     MAX_COMBO_OVERROUND = 1.25
 
-CALIB_PATH = os.getenv("CALIB_PATH", "config/payout_calibration.yaml")
+CALIB_PATH = os.getenv("CALIB_PATH", str(PAYOUT_CALIBRATION_PATH))
 
 
 def _resolve_calibration_path() -> tuple[Path, bool]:
@@ -46,8 +46,13 @@ def _resolve_calibration_path() -> tuple[Path, bool]:
             candidates.append(Path(CALIB_PATH))
         except TypeError:  # pragma: no cover - defensive guard
             pass
-    candidates.append(Path("config/payout_calibration.yaml"))
-    candidates.append(Path("calibration/payout_calibration.yaml"))
+    for candidate in (
+        PAYOUT_CALIBRATION_PATH,
+        Path("config/payout_calibration.yaml"),
+        Path("calibration/payout_calibration.yaml"),
+    ):
+        if candidate not in candidates:
+            candidates.append(candidate)
 
     for candidate in candidates:
         try:
@@ -552,7 +557,7 @@ def build_cli_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Runner chain utilities")
     parser.add_argument(
         "--calibration",
-        default="config/payout_calibration.yaml",
+        default=str(PAYOUT_CALIBRATION_PATH),
         help="Path to payout_calibration.yaml used for combo validation.",
     )
     return parser
