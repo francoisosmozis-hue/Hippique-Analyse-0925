@@ -38,6 +38,7 @@ if _fetch_module is not None and not hasattr(_fetch_module, "fetch_race_snapshot
 from scripts.fetch_je_stats import collect_stats
 
 import pipeline_run
+from simulate_wrapper import PAYOUT_CALIBRATION_PATH
 
 logger = logging.getLogger(__name__)
 
@@ -732,7 +733,7 @@ def _run_single_pipeline(rc_dir: Path, *, budget: float) -> None:
         payout_min_exotic=None,
         allow_heuristic=False,
         allow_je_na=allow_je_na,
-        calibration="config/payout_calibration.yaml",
+        calibration=str(PAYOUT_CALIBRATION_PATH),
     )
     pipeline_run.cmd_analyse(args)
 
