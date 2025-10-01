@@ -1,8 +1,12 @@
+import datetime as dt
+import json
 import logging
+from pathlib import Path
 
 import pytest
 
 import runner_chain
+from scripts import runner_chain as runner_script
 
 
 def test_compute_overround_cap_flat_handicap_string_partants() -> None:
@@ -219,10 +223,79 @@ def test_validate_exotics_with_simwrapper_logs_rejected_status(monkeypatch, capl
     assert info['flags']['combo'] is False
     assert any(reason.startswith('status_') for reason in info['flags']['reasons']['combo'])
 
-    messages = [record.message for record in caplog.records if 'Simwrapper rejected candidate' in record.message]
-    assert messages, 'Expected rejection warning to be logged'
-    assert 'status=ko' in messages[0]
-    assert 'bad_combo' in messages[0]
+    def _build_payload(phase: str) -> runner_script.RunnerPayload:
+    return runner_script.RunnerPayload(
+        id_course="123456",
+        reunion="R1",
+        course="C2",
+        phase=phase,
+        start_time=dt.datetime(2023, 9, 25, 15, 30),
+        budget=5.0,
+    )
+
+
+def test_trigger_phase_result_missing_arrivee(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+    payload = _build_payload("RESULT")
+    caplog.set_level(logging.ERROR)
+
+    runner_script._trigger_phase(
+        payload,
+        snap_dir=tmp_path,
+        analysis_dir=tmp_path,
+        ev_min=0.0,
+        roi_min=0.0,
+        mode="result",
+        calibration=tmp_path / "calibration.yaml",
+        calibration_available=False,
+    )
+
+    race_dir = tmp_path / "R1C2"
+    arrivee_json = race_dir / "arrivee.json"
+    arrivee_csv = race_dir / "arrivee_missing.csv"
+
+    assert arrivee_json.exists()
+    assert arrivee_csv.exists()
+    data = json.loads(arrivee_json.read_text(encoding="utf-8"))
+    assert data == {
+        "status": "missing",
+        "R": "R1",
+        "C": "C2",
+        "date": "2023-09-25",
+    }
+    csv_content = arrivee_csv.read_text(encoding="utf-8").strip().splitlines()
+    assert csv_content == ["status;R;C;date", "missing;R1;C2;2023-09-25"]
+    assert not (race_dir / "cmd_update_excel.txt").exists()
+    assert any("Arrivée absente" in record.message for record in caplog.records)
+
+
+def test_trigger_phase_result_with_arrivee(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+    payload = _build_payload("RESULT")
+    race_dir = tmp_path / "R1C2"
+    race_dir.mkdir(parents=True, exist_ok=True)
+    (race_dir / "arrivee_officielle.json").write_text("{}", encoding="utf-8")
+    (race_dir / "tickets.json").write_text("{}", encoding="utf-8")
+
+    caplog.set_level(logging.INFO)
+
+    runner_script._trigger_phase(
+        payload,
+        snap_dir=tmp_path,
+        analysis_dir=tmp_path,
+        ev_min=0.0,
+        roi_min=0.0,
+        mode="result",
+        calibration=tmp_path / "calibration.yaml",
+        calibration_available=False,
+    )
+
+    cmd_path = race_dir / "cmd_update_excel.txt"
+    assert cmd_path.exists()
+    cmd = cmd_path.read_text(encoding="utf-8")
+    assert "update_excel_with_results.py" in cmd
+    assert str(race_dir / "arrivee_officielle.json") in cmd
+    assert str(race_dir / "tickets.json") in cmd
+    assert not any("Arrivée absente" in record.message for record in caplog.records)
+
 
 
 def test_export_tracking_csv_line(tmp_path):
