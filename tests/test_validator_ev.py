@@ -40,6 +40,56 @@ def test_validate_ev_combo_required(monkeypatch):
         validate_ev(ev_sp=0.5, ev_global=0.2, need_combo=True)
 
 
+def test_validate_ev_logs_context(monkeypatch, caplog):
+    monkeypatch.delenv("EV_MIN_SP", raising=False)
+    monkeypatch.delenv("EV_MIN_GLOBAL", raising=False)
+    caplog.set_level("INFO", logger="validator_ev")
+
+    result = validate_ev(
+        ev_sp=0.5,
+        ev_global=0.6,
+        p_success=0.45,
+        payout_expected=18.0,
+        stake=10.0,
+        ev_ratio=0.35,
+    )
+
+    assert result is True
+    logged = [
+        record.message
+        for record in caplog.records
+        if "[validate_ev] context" in record.message
+    ]
+    assert logged, "validate_ev should log contextual metrics"
+    log_line = logged[-1]
+    assert "'p_success': 0.45" in log_line
+    assert "'payout_expected': 18.0" in log_line
+    assert "'stake': 10.0" in log_line
+    assert "'EV_ratio': 0.35" in log_line
+
+
+def test_validate_ev_invalid_input_for_missing_probability():
+    result = validate_ev(
+        ev_sp=0.5,
+        ev_global=0.6,
+        p_success=None,
+        payout_expected=25.0,
+    )
+
+    assert result == {"status": "invalid_input", "reason": "missing p_success"}
+
+
+def test_validate_ev_invalid_input_for_missing_payout():
+    result = validate_ev(
+        ev_sp=0.5,
+        ev_global=0.6,
+        p_success=0.45,
+        payout_expected=None,
+    )
+
+    assert result == {"status": "invalid_input", "reason": "missing payout_expected"}
+
+
 def test_validate_policy_pass():
     assert validate_policy(ev_global=0.5, roi_global=0.3, min_ev=0.4, min_roi=0.2)
 
