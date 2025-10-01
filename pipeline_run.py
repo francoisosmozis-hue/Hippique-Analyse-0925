@@ -1269,14 +1269,16 @@ def enforce_ror_threshold(
     except (TypeError, ValueError):  # pragma: no cover - defensive
         min_stake = 0.0
 
-    runners_sp = _ensure_place_odds(runners)
+    runners_sp_sanitized = _ensure_place_odds(runners)
+    runners_sp = filter_sp_candidates(runners_sp_sanitized)
     if len(runners_sp) >= 2:
         sp_tickets, _ = allocate_dutching_sp_fn(cfg_iter, runners_sp)
     else:
         if runners and len(runners_sp) < 2:
             logger.warning(
-                "SP dutching skipped: insufficient place odds (kept=%d)",
+                "SP dutching skipped: insufficient eligible place odds (kept=%d/%d)",
                 len(runners_sp),
+                len(runners_sp_sanitized),
             )
         sp_tickets = []
     sp_tickets.sort(key=lambda t: t.get("ev_ticket", 0.0), reverse=True)
@@ -2169,7 +2171,8 @@ def cmd_analyse(args: argparse.Namespace) -> None:
                 runner["odds_place_h30"] = odds_place_h30
             runners.append(runner)
 
-    runners_sp_candidates = _ensure_place_odds(runners)
+    runners_sp_sanitized = _ensure_place_odds(runners)
+    runners_sp_candidates = filter_sp_candidates(runners_sp_sanitized)
     
     policy_kwargs = _filter_kwargs(
         apply_ticket_policy_fn,
@@ -2249,7 +2252,7 @@ def cmd_analyse(args: argparse.Namespace) -> None:
                 slots_place_hint = partants_data.get(key)
                 break
     if not market_runners_raw:
-        market_runners_raw = runners_sp_candidates
+        market_runners_raw = runners_sp_sanitized
 
     if slots_place_hint in (None, ""):
         market_metrics = _build_market(market_runners_raw)
