@@ -41,6 +41,14 @@ import pipeline_run
 
 logger = logging.getLogger(__name__)
 
+
+class MissingH30SnapshotError(RuntimeError):
+    """Raised when the H-30 snapshot required for ``enrich_h5`` is missing."""
+
+    def __init__(self, message: str, *, rc_dir: Path | str | None = None) -> None:
+        super().__init__(message)
+        self.rc_dir = Path(rc_dir) if isinstance(rc_dir, (str, Path)) else None
+
 USE_GCS = is_gcs_enabled()
 
 TRACKING_HEADER = CSV_HEADER + ["phase", "status", "reason"]
@@ -74,7 +82,7 @@ else:  # pragma: no cover - Cloud sync explicitly disabled
 
 # --- RÈGLES ANTI-COTES FAIBLES (SP min 4/1 ; CP somme > 6.0 déc) ---------------
 MIN_SP_DEC_ODDS = 5.0        # 4/1 = 5.0
-MIN_CP_SUM_DEC = 6.0         # (o1-1)+(o2-1) > 4  <=> (o1+o2) > 6.0 (strict)
+MIN_CP_SUM_DEC = 6.0         # (o1-1)+(o2-1) ≥ 4  <=> (o1+o2) ≥ 6.0
 
 
 def _write_json_file(path: Path, payload: Any) -> None:
@@ -385,12 +393,12 @@ def _filter_sp_and_cp_by_odds(payload: dict[str, Any]) -> None:
                 odds_list.append(odds)
             if all(o is not None for o in odds_list):
                 assert len(odds_list) == 2  # for type checkers
-                if (odds_list[0] + odds_list[1]) > MIN_CP_SUM_DEC:
+                if (odds_list[0] + odds_list[1]) >= MIN_CP_SUM_DEC:
                     kept.append(ticket)
                 else:
                     _append_note(
                         "CP retiré: somme des cotes décimales"
-                        f" {odds_list[0]:.2f}+{odds_list[1]:.2f} ≤ 6.00 (règle > 6.0 déc / >4/1 cumulés)."
+                        f" {odds_list[0]:.2f}+{odds_list[1]:.2f} < 6.00 (règle ≥ 4/1 cumulés)."
                     )
             else:
                 _append_note("CP retiré: cotes manquantes (règle >4/1 non vérifiable).")
@@ -421,9 +429,9 @@ def enrich_h5(
 
     The function normalises the latest H-30/H-5 snapshots, extracts odds maps,
     fetches jockey/entraineur statistics and materialises CSV companions used
-    by downstream tooling.  When the H-30 snapshot is unavailable the H-5 odds
-    are reused as a conservative fallback which still allows the analysis to
-    run (the drift will simply be null).
+    by downstream tooling.  by downstream tooling.  The H-30 snapshot is a hard requirement; when it is
+    absent the function abstains and signals the caller to mark the course as
+    non playable.
     """
 
     rc_dir = ensure_dir(Path(rc_dir))
@@ -474,13 +482,11 @@ def enrich_h5(
         h30_payload = _load_snapshot(h30_raw_path)
         h30_normalised = _normalise_snapshot(h30_payload)
     else:
-        # Without H-30 we reuse H-5 odds so the pipeline can still proceed.
-        print(
-            f"[WARN] Snapshot H-30 manquant dans {rc_dir}, réutilisation des cotes H-5",
-            file=sys.stderr,
-        )
-        h30_payload = dict(h5_payload)
-        h30_normalised = dict(h5_normalised)
+        label = rc_dir.name or str(rc_dir)
+        message = f"Snapshot H-30 manquant dans {rc_dir}"
+        logger.warning("[H-5] %s", message)
+        print(f"[ABSTENTION] {message} – {label}", file=sys.stderr)
+        raise MissingH30SnapshotError(message, rc_dir=rc_dir)
 
     def _odds_map(snapshot: dict[str, Any]) -> dict[str, float]:
         odds = snapshot.get("odds")
@@ -1292,6 +1298,25 @@ def _ensure_h5_artifacts(
     if missing and retry_cb is not None and not retry_invoked:
         try:
             retry_cb()
+        except MissingH30SnapshotError as exc:
+            existing_missing = list(outcome.get("details", {}).get("missing", []))
+            merged_missing = list(dict.fromkeys(str(item) for item in existing_missing))
+            if "snapshot-H30" not in merged_missing:
+                merged_missing.append("snapshot-H30")
+            marker_details = _mark_course_unplayable(rc_dir, merged_missing)
+            outcome["status"] = "no-bet"
+            outcome["decision"] = "ABSTENTION"
+            outcome["reason"] = "data-missing"
+            analysis_block = outcome.setdefault("analysis", {})
+            if isinstance(analysis_block, dict):
+                analysis_block["status"] = "NO_PLAY_DATA_MISSING"
+            details_block = outcome.setdefault("details", {})
+            if isinstance(details_block, dict):
+                details_block["missing"] = merged_missing
+                details_block.setdefault("phase", phase)
+                details_block["message"] = str(exc)
+                details_block.update(marker_details)
+            return outcome
         except Exception as exc:  # pragma: no cover - defensive logging
             print(
                 f"[WARN] relance enrich_h5 a échoué pour {rc_dir.name}: {exc}",
@@ -1362,7 +1387,28 @@ def safe_enrich_h5(
             "details": details,
         }
         
-    enrich_h5(rc_dir, budget=budget, kelly=kelly)
+    try:
+        enrich_h5(rc_dir, budget=budget, kelly=kelly)
+    except MissingH30SnapshotError as exc:
+        missing = ["snapshot-H30"]
+        marker_details = _mark_course_unplayable(rc_dir, missing)
+        details: dict[str, Any] = {
+            "missing": missing,
+            "phase": "H5",
+            "message": str(exc),
+        }
+        details.update(marker_details)
+        logger.warning(
+            "[H-5] course non jouable faute de snapshot H-30 (rc=%s)",
+            rc_dir.name or "?",
+        )
+        return False, {
+            "status": "no-bet",
+            "decision": "ABSTENTION",
+            "reason": "data-missing",
+            "analysis": {"status": "NO_PLAY_DATA_MISSING"},
+            "details": details,
+        }
     outcome = _ensure_h5_artifacts(
         rc_dir,
         retry_cb=lambda d=rc_dir: enrich_h5(d, budget=budget, kelly=kelly),
