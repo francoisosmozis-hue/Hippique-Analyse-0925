@@ -1572,7 +1572,8 @@ def fetch_race_snapshot(
 
     result["partants_count"] = partants_count
 
-    result["partants"] = partants_count
+    result["partants"] = list(runners)
+
 
     if phase_norm == "H5":
         _merge_h30_odds(runners, reunion_meta, course_meta)
