@@ -221,7 +221,12 @@ def test_smoke_run(tmp_path):
     assert (outdir / "diff_drift.json").exists()
     assert (outdir / "ligne.csv").exists()
     assert (outdir / "cmd_update_excel.txt").exists()
-
+    drift_csv = outdir / "drift.csv"
+    assert drift_csv.exists()
+    drift_rows = drift_csv.read_text(encoding="utf-8").strip().splitlines()
+    assert drift_rows
+    assert drift_rows[0] == "num;p30;p5;delta;flag"
+    
     data = json.loads((outdir / "p_finale.json").read_text(encoding="utf-8"))
     assert data["meta"].get("validation") == {"ok": True, "reason": ""}
     assert data["meta"]["snapshots"] == "H30,H5"
