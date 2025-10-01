@@ -7,6 +7,7 @@ import datetime as dt
 import json
 import logging
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -1806,6 +1807,12 @@ def main() -> None:  # pragma: no cover - minimal CLI wrapper
         written = 0
         for course_id in course_ids:
             api_url = _inject_course_id(url_template, course_id)
+            
+            temp_dir = out_dir / str(course_id)
+            temp_dir.mkdir(parents=True, exist_ok=True)
+            temp_url_file = temp_dir / "source_url.txt"
+            temp_url_file.write_text(api_url, encoding="utf-8")
+            
             payload = fetch_runners(api_url)
             data = normalize_snapshot(payload)
             data.setdefault("course_id", str(course_id))
@@ -1822,7 +1829,21 @@ def main() -> None:  # pragma: no cover - minimal CLI wrapper
 
             dest_dir = out_dir / folder_name
             dest_dir.mkdir(parents=True, exist_ok=True)
-            dest = dest_dir / f"snapshot_{file_label}.json"
+            
+            target_url_file = dest_dir / "source_url.txt"
+            if dest_dir != temp_dir:
+                try:
+                    shutil.move(str(temp_url_file), target_url_file)
+                except (FileNotFoundError, shutil.Error):
+                    target_url_file.write_text(api_url, encoding="utf-8")
+                try:
+                    temp_dir.rmdir()
+                except OSError:
+                    pass
+            else:
+                if not target_url_file.exists():
+                    target_url_file.write_text(api_url, encoding="utf-8")
+
             dest.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
             written += 1
 
@@ -1839,14 +1860,18 @@ def main() -> None:  # pragma: no cover - minimal CLI wrapper
             url = resolve_source_url(config, args.mode)
         except ValueError as exc:  # pragma: no cover - defensive branch
             raise ValueError(str(exc)) from exc
+        out_path = Path(args.out)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        url_path = out_path.with_name(out_path.name + ".url")
+        url_path.write_text(url, encoding="utf-8")
+        
         if args.mode == "planning":
             meetings = fetch_meetings(url)
             data = filter_today(meetings)
         else:
             payload = fetch_runners(url)
             data = normalize_snapshot(payload)
-        Path(args.out).parent.mkdir(parents=True, exist_ok=True)
-        Path(args.out).write_text(
+        out_path.write_text(
             json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
         )
     else:  # diff mode
