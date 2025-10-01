@@ -1496,7 +1496,6 @@ def fetch_race_snapshot(
     else:
         result = {}
 
-    original_partants_field = result.get("partants") if isinstance(result.get("partants"), list) else None
     runners_raw = result.get("runners")
     runners: list[dict[str, Any]] = []
     if isinstance(runners_raw, Iterable) and not isinstance(runners_raw, (str, bytes)):
@@ -1573,10 +1572,7 @@ def fetch_race_snapshot(
 
     result["partants_count"] = partants_count
 
-    if isinstance(original_partants_field, list):
-        result["partants"] = original_partants_field
-    else:
-        result["partants"] = runners
+    result["partants"] = partants_count
 
     if phase_norm == "H5":
         _merge_h30_odds(runners, reunion_meta, course_meta)
