@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import os
 import sys
 from collections.abc import Callable
@@ -19,7 +20,35 @@ except Exception:  # pragma: no cover - yaml is optional for the CLI
 
 
 class ValidationError(Exception):
-    """Raised when EV metrics do not meet required thresholds."""    
+    """Raised when EV metrics do not meet required thresholds."""
+
+
+_LOG = logging.getLogger(__name__)
+_MISSING = object()
+
+
+def _log_ev_metrics(
+    p_success: float | None,
+    payout_expected: float | None,
+    stake: float | None,
+    ev_ratio: float | None,
+) -> None:
+    """Log the EV context associated with a validation run.
+
+    Parameters
+    ----------
+    p_success, payout_expected, stake, ev_ratio:
+        Contextual metrics associated with the EV computation.  ``None`` values
+        are logged verbatim so that missing data can be inspected downstream.
+    """
+
+    payload = {
+        "p_success": p_success,
+        "payout_expected": payout_expected,
+        "stake": stake,
+        "EV_ratio": ev_ratio,
+    }
+    _LOG.info("[validate_ev] context %s", payload)    
 
 
 def summarise_validation(*validators: Callable[[], object]) -> dict[str, bool | str]:
@@ -122,7 +151,16 @@ def validate(h30: dict, h5: dict, allow_je_na: bool) -> bool:
     return True
 
 
-def validate_ev(ev_sp: float, ev_global: float | None, need_combo: bool = True) -> bool:
+def validate_ev(
+    ev_sp: float,
+    ev_global: float | None,
+    need_combo: bool = True,
+    *,
+    p_success: float | None = _MISSING,
+    payout_expected: float | None = _MISSING,
+    stake: float | None = _MISSING,
+    ev_ratio: float | None = _MISSING,
+) -> bool | dict[str, str]:
     """Validate SP and combined EVs against environment thresholds.
     
     Parameters
@@ -136,10 +174,18 @@ def validate_ev(ev_sp: float, ev_global: float | None, need_combo: bool = True) 
         When ``True`` both SP and combined EVs must satisfy their respective
         thresholds.
 
+    Other Parameters
+    ----------------
+    p_success, payout_expected, stake, ev_ratio:
+        Optional contextual metrics associated with the EV computation. When
+        provided they are logged and validated for completeness.
+        
     Returns
     -------
-    bool
-        ``True`` if all required thresholds are met.
+    bool or dict
+        ``True`` if all required thresholds are met.  When contextual metrics
+        are provided but missing the function returns a payload describing the
+        ``invalid_input`` status instead of raising an exception.
 
     Raises
     ------
@@ -147,6 +193,28 @@ def validate_ev(ev_sp: float, ev_global: float | None, need_combo: bool = True) 
         If any required EV is below its threshold.
     """
 
+    metrics_supplied = any(
+        value is not _MISSING for value in (p_success, payout_expected, stake, ev_ratio)
+    )
+    _log_ev_metrics(
+        None if p_success is _MISSING else p_success,
+        None if payout_expected is _MISSING else payout_expected,
+        None if stake is _MISSING else stake,
+        None if ev_ratio is _MISSING else ev_ratio,
+    )
+
+    if metrics_supplied:
+        if p_success in (_MISSING, None):
+            return {
+                "status": "invalid_input",
+                "reason": "missing p_success",
+            }
+        if payout_expected in (_MISSING, None):
+            return {
+                "status": "invalid_input",
+                "reason": "missing payout_expected",
+            }
+            
     min_sp = float(os.getenv("EV_MIN_SP", 0.15))
     min_global = float(os.getenv("EV_MIN_GLOBAL", 0.35))
 
