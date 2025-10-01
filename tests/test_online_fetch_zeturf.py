@@ -940,6 +940,10 @@ def test_main_snapshot_modes(mode: str, tmp_path: Path, monkeypatch: pytest.Monk
     assert data["runners"][0]["p_imp"] > 0
     assert sum(data["p_imp"].values()) == pytest.approx(1.0)
 
+    url_file = out.with_name(out.name + ".url")
+    assert url_file.exists()
+    assert url_file.read_text(encoding="utf-8") == "http://x"
+
 
 def test_main_diff_mode(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """``main`` should compute drifts when run with ``--mode diff``."""
@@ -1043,6 +1047,11 @@ def test_reunion_snapshot_cli(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
     assert data1["reunion"] == "R1"
     assert data2["course"] == "C2"
 
+    url1 = out_dir / "R1C1" / "source_url.txt"
+    url2 = out_dir / "R1C2" / "source_url.txt"
+    assert url1.read_text(encoding="utf-8") == "https://api.example/race/11111"
+    assert url2.read_text(encoding="utf-8") == "https://api.example/race/22222"
+
 
 def test_main_planning_mode(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """``main`` should fetch and filter today's meetings in planning mode."""
@@ -1068,6 +1077,10 @@ def test_main_planning_mode(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     ofz.main()
     data = json.loads(out.read_text(encoding="utf-8"))
     assert data == [{"id": "R1", "name": "Meeting A", "date": today}]
+
+    url_file = out.with_name(out.name + ".url")
+    assert url_file.exists()
+    assert url_file.read_text(encoding="utf-8") == "http://x"
 
 
 def test_fetch_from_geny_idcourse(monkeypatch: pytest.MonkeyPatch) -> None:
