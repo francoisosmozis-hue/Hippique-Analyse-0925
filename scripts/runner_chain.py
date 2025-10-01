@@ -24,6 +24,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from simulate_ev import simulate_ev_batch
+from simulate_wrapper import PAYOUT_CALIBRATION_PATH
 from validator_ev import ValidationError, validate_ev
 
 from scripts import online_fetch_zeturf as ofz
@@ -445,7 +446,7 @@ def main() -> None:
     parser.add_argument("--gpi-config", default="", help="Path to GPI config (unused)")
     parser.add_argument(
         "--calibration",
-        default="config/payout_calibration.yaml",
+        default=str(PAYOUT_CALIBRATION_PATH),
         help="Path to payout_calibration.yaml used for combo validation.",
     )
     parser.add_argument(
