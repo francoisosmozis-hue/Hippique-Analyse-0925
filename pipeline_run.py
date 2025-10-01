@@ -1834,6 +1834,7 @@ def export(
     p_true: dict,
     drift: dict,
     cfg: dict,
+    runners: Sequence[Mapping[str, Any]] | None = None,
     *,
     stake_reduction_applied: bool = False,
     stake_reduction_details: dict | None = None,
@@ -1904,6 +1905,25 @@ def export(
         "min_delta": cfg.get("DRIFT_MIN_DELTA"),
     }
     save_json(outdir / "diff_drift.json", drift_out)
+
+    drift_csv_path = outdir / "drift.csv"
+    drift_lines = ["num;p30;p5;delta;flag"]
+    for runner in runners or []:
+        cid = str(runner.get("id", ""))
+        p30 = _coerce_probability(runner.get("p_imp_h30", 0.0))
+        p5 = _coerce_probability(runner.get("p_imp_h5", 0.0))
+        delta = p5 - p30
+        if delta > 0.02:
+            flag = "steam"
+        elif delta < -0.02:
+            flag = "drift"
+        else:
+            flag = "stable"
+        drift_lines.append(
+            f"{cid};{p30:.6f};{p5:.6f};{delta:.6f};{flag}"
+        )
+    save_text(drift_csv_path, "\n".join(drift_lines) + "\n")
+    
     total = sum(t.get("stake", 0) for t in tickets)
     ligne = (
         f'{meta.get("rc", "R?C?")};{meta.get("hippodrome", "")};'
@@ -2770,6 +2790,7 @@ def cmd_analyse(args: argparse.Namespace) -> None:
         p_true,
         drift,
         cfg,
+        runners,
         stake_reduction_applied=stake_reduction_flag,
         stake_reduction_details=stake_reduction_details,
         optimization_details=optimization_summary,
