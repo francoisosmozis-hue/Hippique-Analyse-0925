@@ -14,6 +14,8 @@ optional ``ALERTE_VALUE`` column when the alert flag is present.
 from __future__ import annotations
 
 import argparse
+import csv
+import json
 import logging
 import os
 import re
@@ -23,6 +25,7 @@ from pathlib import Path
 
 from typing import Any, Dict, Iterable, List, Mapping, Sequence, Tuple
 
+from simulate_ev import allocate_dutching_sp, simulate_ev_batch
 from simulate_wrapper import PAYOUT_CALIBRATION_PATH, evaluate_combo
 from logging_io import append_csv_line, CSV_HEADER
 
@@ -541,6 +544,236 @@ def export_tracking_csv_line(
     append_csv_line(path, data, header=header)
 
 
+def _coerce_float(value: Any) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _coerce_probability(value: Any) -> float | None:
+    prob = _coerce_float(value)
+    if prob is None:
+        return None
+    if prob <= 0.0 or prob >= 1.0:
+        return None
+    return prob
+
+
+def _normalise_runner_id(record: Mapping[str, Any], fallback_index: int) -> str:
+    for key in ("id", "runner_id", "num", "number", "participant", "code"):
+        value = record.get(key)
+        if value not in (None, ""):
+            return str(value)
+    return str(fallback_index)
+
+
+def _normalise_runner_name(record: Mapping[str, Any]) -> str | None:
+    for key in ("name", "nom", "horse", "runner", "participant_label"):
+        value = record.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    value = record.get("id")
+    if value not in (None, ""):
+        return str(value)
+    return None
+
+
+def _resolve_odds(record: Mapping[str, Any]) -> float | None:
+    odds_keys = (
+        "odds_place",
+        "place_odds",
+        "odds_sp",
+        "odds",
+        "cote_place",
+        "expected_odds",
+        "closing_odds",
+    )
+    for key in odds_keys:
+        if key not in record:
+            continue
+        value = _coerce_float(record.get(key))
+        if value is None or value <= 1.0:
+            continue
+        return value
+    return None
+
+
+def _resolve_probability(record: Mapping[str, Any]) -> float | None:
+    prob_keys = (
+        "p_place",
+        "prob_place",
+        "p",
+        "probability",
+        "prob",
+        "p_true",
+        "p_imp",
+        "p_imp_h5",
+    )
+    for key in prob_keys:
+        if key not in record:
+            continue
+        prob = _coerce_probability(record.get(key))
+        if prob is not None:
+            return prob
+    return None
+
+
+def _load_csv_rows(path: Path) -> list[dict[str, Any]]:
+    with path.open("r", encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle)
+        return [dict(row) for row in reader]
+
+
+def _extract_sp_candidates(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    candidates: list[dict[str, Any]] = []
+    for idx, row in enumerate(rows):
+        odds = _resolve_odds(row)
+        if odds is None:
+            continue
+        probability = _resolve_probability(row)
+        candidate = {
+            "id": _normalise_runner_id(row, idx),
+            "name": _normalise_runner_name(row),
+            "odds": odds,
+        }
+        if probability is not None:
+            candidate["p"] = probability
+        candidates.append(candidate)
+    return candidates
+
+
+def _split_legs(text: str) -> list[str]:
+    if not text:
+        return []
+    cleaned = text.strip()
+    if not cleaned:
+        return []
+    if cleaned.startswith("[") or cleaned.startswith("{"):
+        try:
+            parsed = json.loads(cleaned)
+        except json.JSONDecodeError:
+            pass
+        else:
+            if isinstance(parsed, list):
+                return [str(item) for item in parsed if str(item).strip()]
+    if "|" in cleaned:
+        parts = cleaned.split("|")
+    else:
+        parts = cleaned.split(",")
+    legs = [part.strip() for part in parts if part.strip()]
+    return [str(part) for part in legs]
+
+
+def _extract_combo_candidates(rows: Sequence[Mapping[str, Any]]) -> list[list[dict[str, Any]]]:
+    combos: list[list[dict[str, Any]]] = []
+    json_fields = ("combo_json", "combo_candidates", "exotics", "combinaisons", "combos")
+    for row in rows:
+        for field in json_fields:
+            value = row.get(field)
+            if not isinstance(value, str) or not value.strip():
+                continue
+            try:
+                parsed = json.loads(value)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(parsed, list):
+                for item in parsed:
+                    if isinstance(item, Mapping):
+                        combo = _normalize_combo_record(item)
+                        if combo:
+                            combos.append([combo])
+            elif isinstance(parsed, Mapping):
+                combo = _normalize_combo_record(parsed)
+                if combo:
+                    combos.append([combo])
+        combo = _normalize_combo_record(row)
+        if combo:
+            combos.append([combo])
+    # Deduplicate combos by identifier/legs/type triplet
+    seen: set[tuple[str, tuple[str, ...]]] = set()
+    unique: list[list[dict[str, Any]]] = []
+    for candidate in combos:
+        if not candidate:
+            continue
+        ticket = candidate[0]
+        key = (str(ticket.get("type", "")), tuple(sorted(ticket.get("legs", []))))
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(candidate)
+    return unique
+
+
+def _normalize_combo_record(record: Mapping[str, Any]) -> dict[str, Any] | None:
+    legs_value: Any = None
+    for key in ("combo_legs", "legs", "participants", "combination", "combinaison"):
+        value = record.get(key)
+        if value:
+            legs_value = value
+            break
+    legs: list[str] = []
+    if isinstance(legs_value, str):
+        legs = _split_legs(legs_value)
+    elif isinstance(legs_value, Sequence) and not isinstance(legs_value, (bytes, bytearray, str)):
+        legs = [str(item) for item in legs_value if str(item).strip()]
+    elif isinstance(legs_value, Mapping):
+        legs = [str(v) for v in legs_value.values() if str(v).strip()]
+    if not legs:
+        return None
+    odds_value: float | None = None
+    for key in ("combo_odds", "odds", "payout", "expected_odds", "cote"):
+        odds_value = _coerce_float(record.get(key))
+        if odds_value is not None and odds_value > 1.0:
+            break
+    if odds_value is None or odds_value <= 1.0:
+        return None
+    stake_value = _coerce_float(record.get("combo_stake"))
+    if stake_value is None or stake_value <= 0.0:
+        stake_value = 1.0
+    combo_type = str(record.get("combo_type") or record.get("type") or "CP").upper()
+    ticket = {
+        "id": str(record.get("combo_id") or record.get("id") or "|".join(legs)),
+        "type": combo_type,
+        "legs": legs,
+        "odds": float(odds_value),
+        "stake": float(stake_value),
+    }
+    prob = _coerce_probability(record.get("combo_p") or record.get("p"))
+    if prob is not None:
+        ticket["p"] = prob
+    return ticket
+
+
+def _extract_overround(rows: Sequence[Mapping[str, Any]]) -> float | None:
+    for row in rows:
+        for key in ("overround", "combo_overround", "overround_cp", "overround_total"):
+            value = _coerce_float(row.get(key))
+            if value is not None and value > 0:
+                return value
+    return None
+
+
+def _safe_json_dumps(data: Any) -> str:
+    return json.dumps(data, ensure_ascii=False, sort_keys=False)
+
+
+def _write_tracking_snapshot(path: Path, payload: Mapping[str, Any]) -> None:
+    header = ("status", "reasons", "guards", "tickets")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=header)
+        writer.writeheader()
+        writer.writerow(
+            {
+                "status": payload.get("status", ""),
+                "reasons": _safe_json_dumps(payload.get("reasons", [])),
+                "guards": _safe_json_dumps(payload.get("guards", {})),
+                "tickets": _safe_json_dumps(payload.get("tickets", [])),
+            }
+        )
+
+
 __all__ = [
     "compute_overround_cap",
     "filter_exotics_by_overround",
@@ -554,13 +787,260 @@ __all__ = [
 def build_cli_parser() -> argparse.ArgumentParser:
     """Return an argument parser exposing runner-chain utilities."""
 
-    parser = argparse.ArgumentParser(description="Runner chain utilities")
+    parser = argparse.ArgumentParser(description="Evaluate runner chain tickets for a course")
+    parser.add_argument(
+        "course_dir",
+        help="Directory containing je_stats.csv and chronos.csv for the course",
+    )
+    parser.add_argument(
+        "--budget",
+        type=float,
+        default=5.0,
+        help="Total bankroll dedicated to the course (default: 5)",
+    )
+    parser.add_argument(
+        "--overround-max",
+        dest="overround_max",
+        type=float,
+        default=1.30,
+        help="Maximum accepted market overround for exotic tickets (default: 1.30)",
+    )
+    parser.add_argument(
+        "--ev-min-exotic",
+        dest="ev_min_exotic",
+        type=float,
+        default=0.40,
+        help="Minimum EV ratio required for exotic tickets (default: 0.40)",
+    )
+    parser.add_argument(
+        "--payout-min-exotic",
+        dest="payout_min_exotic",
+        type=float,
+        default=10.0,
+        help="Minimum expected payout required for exotic tickets (default: 10)",
+    )
+    parser.add_argument(
+        "--ev-min-sp",
+        dest="ev_min_sp",
+        type=float,
+        default=0.40,
+        help="Minimum EV ratio required for SP dutching (default: 0.40)",
+    )
+    parser.add_argument(
+        "--roi-min-global",
+        dest="roi_min_global",
+        type=float,
+        default=0.20,
+        help="Minimum ROI required for the global ticket pack (default: 0.20)",
+    )
+    parser.add_argument(
+        "--kelly-frac",
+        dest="kelly_frac",
+        type=float,
+        default=0.4,
+        help="Kelly fraction applied to SP dutching (default: 0.4)",
+    )
+    parser.add_argument(
+        "--analysis-path",
+        dest="analysis_path",
+        default=None,
+        help="Optional override for the analysis_H5.json destination",
+    )
+    parser.add_argument(
+        "--tracking-path",
+        dest="tracking_path",
+        default=None,
+        help="Optional override for the tracking.csv destination",
+    )
     parser.add_argument(
         "--calibration",
         default=str(PAYOUT_CALIBRATION_PATH),
-        help="Path to payout_calibration.yaml used for combo validation.",
+        help="Path to payout_calibration.yaml used for combo validation (default: repository calibration)",
     )
     return parser
+
+
+def _analyse_course(
+    course_dir: Path,
+    *,
+    budget: float,
+    overround_max: float,
+    ev_min_exotic: float,
+    payout_min_exotic: float,
+    ev_min_sp: float,
+    roi_min_global: float,
+    kelly_frac: float,
+    calibration: str | None,
+) -> Dict[str, Any]:
+    course_dir = course_dir.resolve()
+    je_path = course_dir / "je_stats.csv"
+    chronos_path = course_dir / "chronos.csv"
+
+    missing: list[str] = []
+    for path, label in ((je_path, "je_stats"), (chronos_path, "chronos")):
+        if not path.is_file():
+            missing.append(label)
+    if missing:
+        guards = {
+            "jouable": False,
+            "reason": "data_missing",
+            "missing": missing,
+        }
+        return {
+            "status": "aborted",
+            "reasons": ["data_missing"],
+            "guards": guards,
+            "tickets": [],
+        }
+
+    rows = _load_csv_rows(je_path)
+    try:
+        chronos_rows = _load_csv_rows(chronos_path)
+    except Exception:  # pragma: no cover - resilience for malformed chronos
+        chronos_rows = []
+
+    guards: Dict[str, Any] = {
+        "course_dir": str(course_dir),
+        "je_rows": len(rows),
+        "chronos_rows": len(chronos_rows),
+        "calibration": calibration,
+    }
+    meta: Dict[str, Any] = {"course_dir": str(course_dir)}
+    rc_match = re.match(r"^(R\d+)(C\d+)$", course_dir.name.upper())
+    if rc_match:
+        meta["reunion"], meta["course"] = rc_match.groups()
+
+    reasons: list[str] = []
+
+    sp_candidates = _extract_sp_candidates(rows)
+    guards["sp_candidates"] = len(sp_candidates)
+    sp_tickets: list[dict[str, Any]] = []
+    ev_sp_total = 0.0
+    if len(sp_candidates) < 2:
+        reasons.append("sp_insufficient_candidates")
+    else:
+        cfg = {
+            "BUDGET_TOTAL": float(budget),
+            "SP_RATIO": 1.0,
+            "KELLY_FRACTION": float(kelly_frac),
+            "MAX_VOL_PAR_CHEVAL": 0.60,
+        }
+        sp_tickets_alloc, ev_sp = allocate_dutching_sp(cfg, sp_candidates)
+        sp_tickets = [dict(ticket) for ticket in sp_tickets_alloc]
+        guards["sp_tickets"] = len(sp_tickets)
+        ev_sp_total = ev_sp
+        if len(sp_tickets) < 2:
+            reasons.append("sp_insufficient_after_allocation")
+            sp_tickets = []
+        else:
+            cap = float(budget) * 0.60
+            for ticket in sp_tickets:
+                stake = float(ticket.get("stake", 0.0))
+                if stake > cap:
+                    ticket["stake"] = cap
+            ev_sp_ratio = (ev_sp / budget) if budget > 0 else 0.0
+            guards["ev_sp_ratio"] = ev_sp_ratio
+            if ev_sp_ratio < ev_min_sp:
+                reasons.append("sp_ev_below_min")
+                sp_tickets = []
+    combo_candidates = _extract_combo_candidates(rows)
+    guards["combo_candidates"] = len(combo_candidates)
+    combo_overround = _extract_overround(rows)
+    if combo_overround is not None:
+        guards["combo_overround"] = combo_overround
+
+    combo_tickets: list[dict[str, Any]] = []
+    combo_info: Dict[str, Any] = {"notes": [], "flags": {}}
+    guards.setdefault("combo_notes", [])
+    guards.setdefault("combo_flags", {})
+    guards.setdefault("combo_decision", None)
+    if combo_candidates:
+        if combo_overround is not None and combo_overround > overround_max:
+            reasons.append("combo_overround_exceeded")
+        else:
+            combo_tickets, combo_info = validate_exotics_with_simwrapper(
+                combo_candidates,
+                bankroll=float(budget),
+                ev_min=float(ev_min_exotic),
+                roi_min=float(roi_min_global),
+                payout_min=float(payout_min_exotic),
+                sharpe_min=0.0,
+                allow_heuristic=False,
+                calibration=calibration,
+            )
+            guards["combo_notes"] = list(combo_info.get("notes", []))
+            guards["combo_flags"] = combo_info.get("flags", {})
+            guards["combo_decision"] = combo_info.get("decision")
+            if not combo_tickets:
+                decision = combo_info.get("decision")
+                if decision:
+                    reasons.append(f"combo_{decision}")
+    tickets = sp_tickets + combo_tickets
+
+    stats: Dict[str, Any] = {}
+    if tickets:
+        try:
+            stats = simulate_ev_batch(
+                [dict(ticket) for ticket in tickets],
+                bankroll=float(budget),
+                kelly_cap=float(kelly_frac),
+            )
+        except Exception as exc:  # pragma: no cover - robustness guard
+            logger.exception("EV simulation failed: %s", exc)
+            reasons.append("ev_simulation_failed")
+            tickets = []
+            stats = {}
+    guards["ev_sp_total"] = ev_sp_total
+    if stats:
+        guards["ev_global"] = stats.get("ev", 0.0)
+        guards["ev_ratio"] = stats.get("ev_ratio", 0.0)
+        guards["roi_global"] = stats.get("roi", 0.0)
+        if float(stats.get("roi", 0.0)) < roi_min_global:
+            reasons.append("roi_global_below_min")
+            sp_tickets = []
+            combo_tickets = []
+            tickets = []
+
+    jouable = bool(tickets)
+    guards["jouable"] = jouable
+    if not jouable and reasons:
+        guards.setdefault("reason", reasons[0])
+
+    guards["sp_final"] = len(sp_tickets)
+    guards["combo_final"] = len(combo_tickets)
+
+    status = "ok" if jouable else "abstain"
+    payload: Dict[str, Any] = {
+        "status": status,
+        "reasons": list(dict.fromkeys(reasons)),
+        "guards": guards,
+        "tickets": tickets,
+    }
+    if meta:
+        payload["meta"] = meta
+    if stats:
+        payload["stats"] = {
+            "ev": stats.get("ev", 0.0),
+            "roi": stats.get("roi", 0.0),
+            "ev_ratio": stats.get("ev_ratio", 0.0),
+        }
+    return payload
+
+
+def _format_excel_command(course_dir: Path, analysis_path: Path) -> str:
+    rc = course_dir.name.upper()
+    meeting: str | None = None
+    race: str | None = None
+    match = re.match(r"^(R\d+)(C\d+)$", rc)
+    if match:
+        meeting, race = match.groups()
+    arrivee = course_dir / "arrivee.json"
+    parts = ["python", "post_course.py", "--arrivee", str(arrivee), "--tickets", str(analysis_path)]
+    if meeting:
+        parts.extend(["--reunion", meeting])
+    if race:
+        parts.extend(["--course", race])
+    return " ".join(parts)
 
 
 def main(argv: Sequence[str] | None = None) -> None:
@@ -569,9 +1049,35 @@ def main(argv: Sequence[str] | None = None) -> None:
     parser = build_cli_parser()
     args = parser.parse_args(argv)
 
+    course_dir = Path(args.course_dir)
+    analysis_path = Path(args.analysis_path) if args.analysis_path else course_dir / "analysis_H5.json"
+    tracking_path = Path(args.tracking_path) if args.tracking_path else course_dir / "tracking.csv"
+
     global CALIB_PATH
     CALIB_PATH = str(args.calibration)
-    print(Path(CALIB_PATH))
+    os.environ["CALIB_PATH"] = CALIB_PATH
+
+    payload = _analyse_course(
+        course_dir,
+        budget=float(args.budget),
+        overround_max=float(args.overround_max),
+        ev_min_exotic=float(args.ev_min_exotic),
+        payout_min_exotic=float(args.payout_min_exotic),
+        ev_min_sp=float(args.ev_min_sp),
+        roi_min_global=float(args.roi_min_global),
+        kelly_frac=float(args.kelly_frac),
+        calibration=CALIB_PATH,
+    )
+
+    analysis_path.parent.mkdir(parents=True, exist_ok=True)
+    analysis_path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    _write_tracking_snapshot(tracking_path, payload)
+
+    command = _format_excel_command(course_dir, analysis_path)
+    print(command)
 
 
 if __name__ == "__main__":
