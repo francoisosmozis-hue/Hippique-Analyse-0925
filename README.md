@@ -481,7 +481,7 @@ python pipeline_run.py analyse \
 ```
 
 **SP Dutching (placé)** : EV(€) par jambe = `stake * [ p*(odds-1) − (1−p) ]
-**Combinés (CP/Trio/ZE4)** : via `simulate_wrapper` + calibration `payout_calibration.yaml` (par défaut `config/payout_calibration.yaml`, surchargeable via `--calibration`).
+**Combinés (CP/Trio/ZE4)** : via `simulate_wrapper` + calibration `payout_calibration.yaml` (par défaut `config/payout_calibration.yaml`, avec repli automatique vers `calibration/payout_calibration.yaml`, surchargeable via `--calibration`).
 
 
 ### Calibration, budget & `ALERTE_VALUE`
