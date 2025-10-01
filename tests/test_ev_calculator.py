@@ -273,8 +273,8 @@ def test_enforce_ror_threshold_reduces_high_risk_pack() -> None:
         "ROR_MAX": 0.01,
     }
     runners = [
-        {"id": "1", "name": "A", "odds": 2.0, "p": 0.52, "odds_place": 1.6},
-        {"id": "2", "name": "B", "odds": 3.5, "p": 0.30, "odds_place": 1.9},
+        {"id": "1", "name": "A", "odds": 2.0, "p": 0.52, "odds_place": 5.6},
+        {"id": "2", "name": "B", "odds": 3.5, "p": 0.30, "odds_place": 6.2},
     ]
 
     baseline, _ = allocate_dutching_sp(cfg, runners)
@@ -311,8 +311,8 @@ def test_enforce_ror_threshold_preserves_safe_pack() -> None:
         "ROR_MAX": 0.01,
     }
     runners = [
-        {"id": "1", "name": "A", "odds": 2.0, "p": 0.52, "odds_place": 1.6},
-        {"id": "2", "name": "B", "odds": 3.5, "p": 0.30, "odds_place": 1.9},
+        {"id": "1", "name": "A", "odds": 2.0, "p": 0.52, "odds_place": 5.6},
+        {"id": "2", "name": "B", "odds": 3.5, "p": 0.30, "odds_place": 6.2},
     ]
 
     baseline, _ = allocate_dutching_sp(cfg, runners)
@@ -336,6 +336,36 @@ def test_enforce_ror_threshold_preserves_safe_pack() -> None:
     assert [rid for rid, _ in result] == [rid for rid, _ in expected]
     for (_, stake_expected), (_, stake_actual) in zip(expected, result):
         assert stake_actual == pytest.approx(stake_expected)
+
+
+def test_enforce_ror_threshold_filters_low_place_odds() -> None:
+    """Legs below the SP place threshold must be excluded before staking."""
+
+    cfg = {
+        "BUDGET_TOTAL": 40.0,
+        "SP_RATIO": 1.0,
+        "COMBO_RATIO": 0.0,
+        "KELLY_FRACTION": 0.5,
+        "MAX_VOL_PAR_CHEVAL": 0.5,
+        "ROUND_TO_SP": 0.1,
+        "MIN_STAKE_SP": 0.1,
+        "MAX_TICKETS_SP": 3,
+        "ROR_MAX": 0.05,
+    }
+
+    runners = [
+        {"id": "1", "name": "Low", "odds": 8.0, "p": 0.18, "odds_place": 4.8},
+        {"id": "2", "name": "High", "odds": 6.0, "p": 0.22, "odds_place": 5.2},
+    ]
+
+    sp_tickets, stats, info = enforce_ror_threshold(
+        cfg, runners, [], bankroll=cfg["BUDGET_TOTAL"]
+    )
+
+    assert not sp_tickets
+    assert info["applied"] is False
+    assert stats["ev"] == pytest.approx(0.0)
+    assert stats["risk_of_ruin"] == pytest.approx(0.0)
 
 
 def test_enforce_ror_threshold_respects_minimum_after_scaling(monkeypatch) -> None:
