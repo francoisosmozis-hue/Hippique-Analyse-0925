@@ -40,9 +40,19 @@ def _iter_runners(snapshot: Mapping[str, Any]) -> Iterable[Mapping[str, Any]]:
 
 def _discover_payload(snapshot_dir: Path) -> Mapping[str, Any]:
     candidates = [snapshot_dir / "partants.json", snapshot_dir / "normalized_h5.json"]
-    candidates.extend(sorted(snapshot_dir.glob("*_H-5.json"), reverse=True))
+    snapshot_candidates = {
+        candidate
+        for pattern in ("*_H-5.json", "*_H5.json")
+        for candidate in snapshot_dir.glob(pattern)
+    }
+    candidates.extend(sorted(snapshot_candidates, reverse=True))
+
+    seen: set[Path] = set()
 
     for candidate in candidates:
+        if candidate in seen:
+            continue
+        seen.add(candidate)
         payload = _load_json(candidate)
         if payload:
             return payload
