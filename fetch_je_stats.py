@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-import subprocess
 import sys
 from pathlib import Path
 from typing import Any, Mapping
@@ -121,35 +120,56 @@ def _materialise_stats(snapshot_dir: Path, reunion: str, course: str) -> Path:
     return csv_path
 
 
-def enrich_from_snapshot(snapshot_dir: str | Path, reunion: str, course: str) -> Path:
-    """Spawn the CLI helper to generate J/E statistics for ``snapshot_dir``."""
+def _discover_course_dir(snapshot_path: Path) -> Path:
+    payload = _load_json(snapshot_path)
 
-    out_dir = Path(snapshot_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
+    def _extract(mapping: Mapping[str, Any]) -> str | None:
+        stack: list[Mapping[str, Any]] = [mapping]
+        seen: set[int] = set()
+        keys = {
+            "course_dir",
+            "course_directory",
+            "course_path",
+            "coursePath",
+        }
+        while stack:
+            current = stack.pop()
+            marker = id(current)
+            if marker in seen:
+                continue
+            seen.add(marker)
+            for key, value in current.items():
+                if isinstance(value, str) and key in keys and value.strip():
+                    return value.strip()
+                if isinstance(value, Mapping):
+                    stack.append(value)
+        return None
 
+    if isinstance(payload, Mapping):
+        candidate = _extract(payload)
+        if candidate:
+            course_dir = Path(candidate)
+            if not course_dir.is_absolute():
+                return (snapshot_path.parent / course_dir).resolve()
+            return course_dir
+
+    return snapshot_path.parent
+
+
+def enrich_from_snapshot(snapshot_path: str | Path, reunion: str, course: str) -> Path:
+    """Materialise J/E statistics for the course referenced by ``snapshot_path``."""
+
+    snapshot_path = Path(snapshot_path)
+    course_dir = _discover_course_dir(snapshot_path)
+    
     reunion_code = reunion.upper()
     course_code = course.upper()
 
-    cmd = [
-        sys.executable,
-        str(Path(__file__).resolve()),
-        "--out",
-        str(out_dir),
-        "--reunion",
-        reunion_code,
-        "--course",
-        course_code,
-    ]
+    target_csv = course_dir / f"{reunion_code}{course_code}_je.csv"
+    if target_csv.exists():
+        return target_csv
 
-    result = subprocess.run(cmd, check=False)
-    if result.returncode != 0:
-        LOGGER.warning(
-            "fetch_je_stats CLI failed for %s%s (returncode=%s)",
-            reunion_code,
-            course_code,
-            result.returncode,
-        )
-    return out_dir / f"{reunion_code}{course_code}_je.csv"
+    return _materialise_stats(course_dir, reunion_code, course_code)
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
