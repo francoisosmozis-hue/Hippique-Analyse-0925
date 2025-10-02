@@ -24,7 +24,7 @@ Pipeline **pro** pour planifier, capturer H‑30 / H‑5, analyser et consigner 
 - `online_fetch_zeturf.fetch_race_snapshot()` expose l'API de snapshot Python attendue par `runner_chain`. Elle parcourt désormais directement la page publique ZEturf d'une course (ou bascule sur le cache local via `use_cache=True`) puis retourne uniquement les blocs `runners`, `partants`, `market` et `phase` attendus par les consommateurs CLI.
 - La phase **H‑5** réessaie automatiquement les collectes `JE`/`chronos` en cas d'absence des CSV, marque la course « non jouable » via `UNPLAYABLE.txt` si la régénération échoue et évite ainsi que le pipeline plante.
 - Les combinés sont désormais filtrés strictement dans `pipeline_run.py` : statut `"ok"` obligatoire, EV ≥ +40 % et payout attendu ≥ 10 € sans heuristique. Le runner et le pipeline partagent la même règle, ce qui garantit un comportement homogène en CLI comme dans les automatisations.
-- Le seuil d'overround est adapté automatiquement (`1.30` standard, `1.25` pour les handicaps plats ouverts ≥ 14 partants) pour réduire les tickets exotiques à faible espérance.
+- Le seuil d'overround est adapté automatiquement (`1.30` standard désormais aligné sur la garde ROI, `1.25` pour les handicaps plats ouverts ≥ 14 partants) pour réduire les tickets exotiques à faible espérance.
 
 ### API `/analyse`
 
