@@ -33,14 +33,14 @@ def test_compute_overround_cap_context_reports_reason() -> None:
     assert cap == pytest.approx(1.25)
     assert context.get("triggered") is True
     assert context.get("reason") == "flat_handicap"
-    assert context.get("default_cap") == pytest.approx(1.25)
+    assert context.get("default_cap") == pytest.approx(1.30)
     assert context.get("partants") == 16
     assert context.get("discipline") == "handicap de plat"
 
 
 def test_compute_overround_cap_other_disciplines() -> None:
     cap = runner_chain.compute_overround_cap("Trot Attelé", 12)
-    assert cap == pytest.approx(1.25)
+    assert cap == pytest.approx(1.30)
     
 
 def test_compute_overround_cap_detects_handicap_from_course_label() -> None:
