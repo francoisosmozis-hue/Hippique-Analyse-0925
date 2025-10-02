@@ -106,11 +106,25 @@ def test_build_market_overround_place_with_missing_or_textual_slots():
 
     metrics_missing = pipeline_run._build_market(runners)
     assert metrics_missing["slots_place"] == 3
-    assert metrics_missing["overround_place"] == pytest.approx(total_place_prob / 3)
+    assert metrics_missing["overround_place"] == pytest.approx(total_place_prob)
 
     metrics_textual = pipeline_run._build_market(runners, "3 places payees")
     assert metrics_textual["slots_place"] == 3
-    assert metrics_textual["overround_place"] == pytest.approx(total_place_prob / 3)
+    assert metrics_textual["overround_place"] == pytest.approx(total_place_prob)
+
+
+def test_build_market_overround_place_falls_back_to_win_odds():
+    runners = [
+        {"odds": 2.0},
+        {"odds": 3.0, "odds_place": 1.7},
+        {"odds": 4.0},
+    ]
+
+    expected = (1.0 / 2.0) + (1.0 / 1.7) + (1.0 / 4.0)
+
+    metrics = pipeline_run._build_market(runners)
+    assert metrics["slots_place"] == 3
+    assert metrics["overround_place"] == pytest.approx(expected)
 
 
 def test_market_drift_signal_thresholds():
@@ -235,6 +249,14 @@ def test_smoke_run(tmp_path):
     assert data["meta"]["snapshots"] == "H30,H5"
     assert data["meta"]["drift_top_n"] == 5
     assert data["meta"]["drift_min_delta"] == 0.8
+    market_meta = data["meta"].get("market", {})
+    assert market_meta.get("overround") is not None
+    if market_meta.get("overround") is not None:
+        expected_market_overround = sum(
+            1.0 / horse["odds_place"]
+            for horse in partants["market"]["horses"]
+        )
+        assert market_meta["overround"] == pytest.approx(expected_market_overround)
     diff_params = json.loads(
         (outdir / "diff_drift.json").read_text(encoding="utf-8")
     )["params"]
