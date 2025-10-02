@@ -9,7 +9,7 @@ import runner_chain
 
 _DEF_PARAMS = {
     "budget": 100.0,
-    "overround_max": 1.25,
+    "overround_max": 1.30,
     "ev_min_exotic": 0.4,
     "payout_min_exotic": 15.0,
     "ev_min_sp": 0.0,
