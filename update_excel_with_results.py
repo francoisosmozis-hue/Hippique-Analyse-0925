@@ -10,8 +10,13 @@ from typing import Any, Iterable
 from openpyxl import Workbook, load_workbook
 from openpyxl.worksheet.worksheet import Worksheet
 
-
-JsonDict = dict[str, Any]
+from post_course_payload import (
+    JsonDict,
+    PostCourseSummary,
+    build_payload_from_sources,
+    merge_meta,
+    summarise_ticket_metrics,
+)
 
 
 PREVISION_HEADERS = [
@@ -117,71 +122,11 @@ def _upsert_row(
         ws.cell(row=target_row, column=col_idx, value=values.get(header))
 
 
-def _merge_meta(arrivee: JsonDict, tickets: JsonDict) -> JsonDict:
-    meta: JsonDict = {}
-    tickets_meta = tickets.get("meta")
-    if isinstance(tickets_meta, dict):
-        meta.update(tickets_meta)
-    arrivee_meta = arrivee.get("meta")
-    if isinstance(arrivee_meta, dict):
-        for key, value in arrivee_meta.items():
-            meta.setdefault(key, value)
-    for key in ("rc", "hippodrome", "date", "discipline", "model", "MODEL"):
-        if not meta.get(key):
-            value = arrivee.get(key)
-            if value is None and isinstance(arrivee_meta, dict):
-                value = arrivee_meta.get(key)
-            if value is None and isinstance(tickets, dict):
-                value = tickets.get(key)
-            if value is not None:
-                meta[key] = value
-    if "model" not in meta and "MODEL" in meta:
-        meta["model"] = meta["MODEL"]
-    return meta
-
-
-def _compute_ticket_metrics(tickets: Iterable[dict[str, Any]]) -> tuple[float, ...]:
-    total_stake = 0.0
-    total_gain = 0.0
-    total_ev = 0.0
-    total_diff_ev = 0.0
-    mean_result = 0.0
-    mean_roi_ticket = 0.0
-    mean_brier = 0.0
-    count = 0
-
-    for ticket in tickets:
-        stake = float(ticket.get("stake", 0.0) or 0.0)
-        odds = float(ticket.get("odds", 0.0) or 0.0)
-        prob = float(ticket.get("p", 0.0) or 0.0)
-        result = float(ticket.get("result", ticket.get("gain_reel", 0.0) > 0))
-        gain = float(ticket.get("gain_reel", 0.0) or 0.0)
-        roi_ticket = float(ticket.get("roi_reel", 0.0) or 0.0)
-        brier = float(ticket.get("brier", 0.0) or 0.0)
-
-        total_stake += stake
-        total_gain += gain
-        total_ev += stake * (prob * odds - 1.0)
-        total_diff_ev += gain - stake
-        mean_result += result
-        mean_roi_ticket += roi_ticket
-        mean_brier += brier
-        count += 1
-
-    if count:
-        mean_result /= count
-        mean_roi_ticket /= count
-        mean_brier /= count
-
-    return (
-        total_stake,
-        total_gain,
-        total_ev,
-        total_diff_ev,
-        mean_result,
-        mean_roi_ticket,
-        mean_brier,
-    )
+def _as_float(value: Any, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
 
 
 def _update_previsionnel_sheet(
@@ -194,22 +139,23 @@ def _update_previsionnel_sheet(
     if not rc:
         return
     ws = _get_sheet(wb, sheet_name)
-    total_stake, _, _, _, _, _, _ = _compute_ticket_metrics(tickets.get("tickets", []))
-    ev_data = tickets.get("ev", {}) if isinstance(tickets, dict) else {}
+    *,
+    total_stake: float,
+    ev_data: JsonDict | None,
     row = {
         "R/C": rc,
         "hippodrome": meta.get("hippodrome", ""),
         "date": meta.get("date", ""),
         "discipline": meta.get("discipline", ""),
         "mises": round(total_stake, 2) if total_stake else 0.0,
-        "EV_sp": ev_data.get("sp"),
-        "EV_global": ev_data.get("global"),
-        "ROI_sp": ev_data.get("roi_sp"),
-        "ROI_global": ev_data.get("roi_global"),
-        "risk_of_ruin": ev_data.get("risk_of_ruin"),
-        "clv_moyen": ev_data.get("clv_moyen"),
-        "variance": ev_data.get("variance"),
-        "payout_attendu": ev_data.get("combined_expected_payout"),
+        "EV_sp": ev_section.get("sp"),
+        "EV_global": ev_section.get("global"),
+        "ROI_sp": ev_section.get("roi_sp"),
+        "ROI_global": ev_section.get("roi_global"),
+        "risk_of_ruin": ev_section.get("risk_of_ruin"),
+        "clv_moyen": ev_section.get("clv_moyen"),
+        "variance": ev_section.get("variance"),
+        "payout_attendu": ev_section.get("combined_expected_payout"),
         "model": meta.get("model") or meta.get("MODEL", ""),
     }
     _upsert_row(ws, PREVISION_HEADERS, row)
@@ -219,30 +165,25 @@ def _update_observe_sheet(
     wb: Workbook,
     sheet_name: str,
     meta: JsonDict,
-    tickets: JsonDict,
+    *,
+    tickets: list[JsonDict],
+    summary: PostCourseSummary,
+    observed: JsonDict | None,
+    total_stake: float,
+    total_gain: float,
 ) -> None:
     rc = meta.get("rc")
     if not rc:
         return
-    tickets_list = tickets.get("tickets", []) if isinstance(tickets, dict) else []
-    (
-        total_stake,
-        total_gain,
-        total_ev,
-        total_diff_ev,
-        mean_result,
-        mean_roi_ticket,
-        mean_brier,
-    ) = _compute_ticket_metrics(tickets_list)
-
-    roi_observed = tickets.get("roi_reel")
+    observed_section = observed or {}
+    roi_observed = observed_section.get("roi_reel", summary.roi)
     if roi_observed is None and total_stake:
         roi_observed = (total_gain - total_stake) / total_stake if total_stake else 0.0
     has_observed_metrics = any(
         (
             roi_observed,
             total_gain,
-            any("gain_reel" in t for t in tickets_list),
+            any("gain_reel" in t for t in tickets),
         )
     )
     if not has_observed_metrics:
@@ -256,12 +197,18 @@ def _update_observe_sheet(
         "mises": round(total_stake, 2) if total_stake else 0.0,
         "gains": round(total_gain, 2) if total_gain else 0.0,
         "ROI_reel": roi_observed,
-        "result_moyen": tickets.get("result_moyen", mean_result),
-        "ROI_reel_moyen": tickets.get("roi_reel_moyen", mean_roi_ticket),
-        "Brier_total": tickets.get("brier_total", mean_brier * len(tickets_list)),
-        "Brier_moyen": tickets.get("brier_moyen", mean_brier),
-        "EV_total": total_ev,
-        "EV_ecart": total_diff_ev,
+        "result_moyen": observed_section.get("result_moyen", summary.result_mean),
+        "ROI_reel_moyen": observed_section.get(
+            "roi_reel_moyen", summary.roi_ticket_mean
+        ),
+        "Brier_total": observed_section.get(
+            "brier_total", summary.brier_total
+        ),
+        "Brier_moyen": observed_section.get("brier_moyen", summary.brier_mean),
+        "EV_total": observed_section.get("ev_total", summary.ev_total),
+        "EV_ecart": observed_section.get(
+            "ev_ecart_total", summary.ev_diff_total
+        ),
         "model": meta.get("model") or meta.get("MODEL", ""),
     }
     ws = _get_sheet(wb, sheet_name)
@@ -275,8 +222,9 @@ def main(argv: list[str] | None = None) -> None:
         default="modele_suivi_courses_hippiques.xlsx",
         help="Chemin du classeur Excel à mettre à jour",
     )
-    parser.add_argument("--arrivee", required=True, help="JSON de l'arrivée officielle")
-    parser.add_argument("--tickets", required=True, help="JSON des tickets (p_finale.json)")
+    parser.add_argument("--payload", help="JSON normalisé généré après le post-course")
+    parser.add_argument("--arrivee", help="JSON de l'arrivée officielle")
+    parser.add_argument("--tickets", help="JSON des tickets (p_finale.json)")
     parser.add_argument(
         "--sheet-prevision",
         default="ROI Prévisionnel",
@@ -289,13 +237,44 @@ def main(argv: list[str] | None = None) -> None:
     )
     args = parser.parse_args(argv)
 
-    arrivee_path = Path(args.arrivee)
-    tickets_path = Path(args.tickets)
     excel_path = Path(args.excel)
 
-    arrivee_data = _load_json(arrivee_path)
-    tickets_data = _load_json(tickets_path)
-    meta = _merge_meta(arrivee_data, tickets_data)
+    if not args.payload and (not args.arrivee or not args.tickets):
+        parser.error("--payload ou le duo --arrivee/--tickets doit être fourni")
+
+    if args.payload:
+        payload_path = Path(args.payload)
+        payload = _load_json(payload_path)
+    else:
+        arrivee_path = Path(args.arrivee)
+        tickets_path = Path(args.tickets)
+        arrivee_data = _load_json(arrivee_path)
+        tickets_data = _load_json(tickets_path)
+        payload = build_payload_from_sources(arrivee_data, tickets_data)
+
+    if not isinstance(payload, dict):
+        raise ValueError("Le payload post-course doit être un objet JSON.")
+
+    meta_source = payload.get("meta", {}) if isinstance(payload, dict) else {}
+    payload_arrivee = payload.get("arrivee") if isinstance(payload, dict) else {}
+    meta = merge_meta(payload_arrivee or {}, {"meta": meta_source})
+
+    raw_tickets = payload.get("tickets")
+    tickets_list = [t for t in raw_tickets if isinstance(t, dict)] if isinstance(raw_tickets, list) else []
+    summary = summarise_ticket_metrics(tickets_list)
+
+    mises_raw = payload.get("mises")
+    mises_section = mises_raw if isinstance(mises_raw, dict) else {}
+    total_stake_value = mises_section.get("total") if mises_section else None
+    if total_stake_value is None and mises_section:
+        total_stake_value = mises_section.get("totales")
+    total_stake = _as_float(total_stake_value, summary.total_stake)
+    total_gain = _as_float(mises_section.get("gains") if mises_section else None, summary.total_gain)
+
+    ev_raw = payload.get("ev_estimees")
+    ev_data = ev_raw if isinstance(ev_raw, dict) else {}
+    observed_raw = payload.get("ev_observees")
+    observed = observed_raw if isinstance(observed_raw, dict) else {}
 
     wb, created = _load_workbook(excel_path)
     if created and "Sheet" in wb.sheetnames and len(wb.sheetnames) == 1:
@@ -303,8 +282,23 @@ def main(argv: list[str] | None = None) -> None:
         if default_ws.max_row <= 1 and default_ws.cell(row=1, column=1).value in (None, ""):
             wb.remove(default_ws)
 
-    _update_previsionnel_sheet(wb, args.sheet_prevision, meta, tickets_data)
-    _update_observe_sheet(wb, args.sheet_observe, meta, tickets_data)
+    _update_previsionnel_sheet(
+        wb,
+        args.sheet_prevision,
+        meta,
+        total_stake=total_stake,
+        ev_data=ev_data,
+    )
+    _update_observe_sheet(
+        wb,
+        args.sheet_observe,
+        meta,
+        tickets=tickets_list,
+        summary=summary,
+        observed=observed,
+        total_stake=total_stake,
+        total_gain=total_gain,
+    )
 
     excel_path.parent.mkdir(parents=True, exist_ok=True)
     wb.save(excel_path)
