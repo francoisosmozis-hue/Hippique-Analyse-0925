@@ -1263,7 +1263,7 @@ def _fetch_race_snapshot_impl(
                 thresholds.setdefault("ev_min", _BASE_EV_THRESHOLD)
                 thresholds.setdefault("payout_min", _BASE_PAYOUT_THRESHOLD)
 
-            if isinstance(raw_snapshot, Mapping):
+        if isinstance(raw_snapshot, Mapping):
             market_block = raw_snapshot.get("market")
             if market_block is not None and "market" not in snapshot:
                 snapshot["market"] = market_block
@@ -1549,7 +1549,7 @@ def _normalise_snapshot_result(
     else:
         result = {}
 
-        if "market" not in result:
+    if "market" not in result:
         result["market"] = {}
 
     runners_raw = result.get("runners")
