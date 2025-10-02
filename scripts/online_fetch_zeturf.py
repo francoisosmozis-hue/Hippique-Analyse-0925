@@ -1829,7 +1829,8 @@ def main() -> None:  # pragma: no cover - minimal CLI wrapper
 
             dest_dir = out_dir / folder_name
             dest_dir.mkdir(parents=True, exist_ok=True)
-            
+
+            dest = dest_dir / f"snapshot_{file_label}.json"
             target_url_file = dest_dir / "source_url.txt"
             if dest_dir != temp_dir:
                 try:
