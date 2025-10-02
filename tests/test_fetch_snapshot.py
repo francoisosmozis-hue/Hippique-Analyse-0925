@@ -23,12 +23,12 @@ def test_fetch_race_snapshot_returns_list_of_partants(monkeypatch: Any) -> None:
         rc_dir.mkdir(parents=True, exist_ok=True)
         (rc_dir / "h30.json").write_text(json.dumps(h30_payload), encoding="utf-8")
 
-    def fake_parse(url: str, *, snapshot: str) -> dict[str, Any]:
+        def fake_parse(url: str, *, snapshot: str) -> dict[str, Any]:
             captured["url"] = url
             captured["snapshot"] = snapshot
             return dict(fake_payload)
 
-    sdef fake_normalize(payload: dict[str, Any]) -> dict[str, Any]:
+        def fake_normalize(payload: dict[str, Any]) -> dict[str, Any]:
             captured["normalized"] = payload
             return {
                 "runners": payload["runners"],
