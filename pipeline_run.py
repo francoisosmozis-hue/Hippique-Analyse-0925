@@ -2450,7 +2450,7 @@ def cmd_analyse(args: argparse.Namespace) -> None:
 
     overround_context: Dict[str, Any] = {}
     default_overround_cap = float(
-        get_env("MAX_COMBO_OVERROUND", 1.25, cast=float)
+        get_env("MAX_COMBO_OVERROUND", 1.30, cast=float)
     )
     logger.info(
         "Effective combo overround default cap set to %.2f",
