@@ -186,6 +186,11 @@ class RaceSnapshot:
     heure_officielle: str | None = None
 
     def as_dict(self) -> Dict[str, Any]:
+        runners = self.runners
+        partants_count = self.partants_count
+        if partants_count is None and isinstance(runners, list):
+            partants_count = len(runners)
+            
         payload: Dict[str, Any] = {
             "meeting": self.meeting,
             "date": self.date,
@@ -194,13 +199,13 @@ class RaceSnapshot:
             "r_label": self.r_label,
             "c_label": self.c_label,
             "discipline": self.discipline,
-            "runners": self.runners,
-            "partants_count": self.partants_count,
+            "runners": runners,
+            "partants_count": partants_count,
             "phase": self.phase,
             "rc": self.rc,
             "heure_officielle": self.heure_officielle,
         }
-        payload["partants"] = payload["runners"]
+        payload["partants"] = partants_count
         # ``hippodrome`` is often used as an alias for ``meeting`` downstream.
         # Persist it whenever available so callers no longer need to duplicate
         # the fallback logic.
@@ -1243,19 +1248,6 @@ def _fetch_race_snapshot_impl(
             source_url=source_url,
         )
         
-        # ``runner_chain`` expects ``partants`` to always hold a list of runner
-        # dictionaries.  Some legacy payloads expose ``partants`` as an integer
-        # count which would cascade into downstream failures (``list`` is
-        # required for the pre-enrichment step).  Normalise the field eagerly to
-        # make the contract explicit and resilient to upstream variations.
-        partants_field = snapshot.get("partants")
-        if not isinstance(partants_field, list):
-            runners_list = snapshot.get("runners")
-            if isinstance(runners_list, list):
-                snapshot["partants"] = runners_list
-            else:
-                snapshot["partants"] = []
-
         meta = raw_snapshot.get("meta") if isinstance(raw_snapshot, Mapping) else None
         if isinstance(meta, dict):
             thresholds = meta.setdefault("exotic_thresholds", {})
@@ -1631,7 +1623,7 @@ def _normalise_snapshot_result(
 
     result["partants_count"] = partants_count
 
-    result["partants"] = list(runners)
+    result["partants"] = partants_count
 
     if phase_norm == "H5":
         _merge_h30_odds(runners, reunion_meta, course_meta)
