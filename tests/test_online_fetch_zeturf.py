@@ -366,8 +366,8 @@ def test_fetch_race_snapshot_merges_h30_odds_map(
             assert phase == "H5"
             return {
                 "runners": [
-                    {"num": "1", "name": "Alpha"},
-                    {"num": "2", "name": "Bravo"},
+                    {"num": "1", "name": "Alpha", "odds": 3.7, "odds_place": 1.65},
+                    {"num": "2", "name": "Bravo", "cote": 9.0, "placeOdds": 3.1},
                 ]
             }
 
@@ -379,6 +379,9 @@ def test_fetch_race_snapshot_merges_h30_odds_map(
         assert snapshot["runners"][0]["odds_place_h30"] == 1.85
         assert snapshot["runners"][1]["odds_win_h30"] == 9.0
         assert "odds_place_h30" not in snapshot["runners"][1]
+        assert snapshot["runners"][0]["odds_place"] == pytest.approx(1.65)
+        assert snapshot["runners"][1]["odds_place"] == pytest.approx(3.1)
+        assert snapshot["runners"][0]["cote"] == pytest.approx(3.7)
     finally:
         shutil.rmtree(rc_dir, ignore_errors=True)
 
@@ -589,7 +592,12 @@ def test_fetch_from_geny_parser_fallback(monkeypatch: pytest.MonkeyPatch) -> Non
         <div data-num="2" data-name="Bravo"></div>
     </section>
     """
-    cotes_payload = {"runners": [{"num": "1", "cote": "3"}, {"num": "2", "cote": "5"}]}
+    cotes_payload = {
+        "runners": [
+            {"num": "1", "cote": "3", "odds_place": "1,8"},
+            {"num": "2", "cote": "5", "placeOdds": 2.7},
+        ]
+    }
     calls: list[str] = []
 
     def fake_get(url: str, headers: Any | None = None, timeout: int = 10) -> DummyResp:
@@ -609,6 +617,8 @@ def test_fetch_from_geny_parser_fallback(monkeypatch: pytest.MonkeyPatch) -> Non
     assert snap["runners"][0]["entraineur"] == "T1"
     assert snap["partants"] == 2
     assert calls.count(f"{ofz.GENY_BASE}/partants-pmu/_c{id_course}") == 1
+    assert snap["runners"][0]["odds_place"] == pytest.approx(1.8)
+    assert snap["runners"][1]["odds_place"] == pytest.approx(2.7)
 
 
 def test_fetch_from_geny_retries_on_empty_dom(monkeypatch: pytest.MonkeyPatch) -> None:
