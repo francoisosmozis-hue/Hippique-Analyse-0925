@@ -719,6 +719,19 @@ def _coerce_runner_entry(entry: Mapping[str, Any]) -> dict[str, Any] | None:
 
     runner: dict[str, Any] = {"num": number, "name": name}
 
+    def _coerce_metadata_value(value: Any) -> Any:
+        if value in (None, ""):
+            return None
+        if isinstance(value, (str, int, float, bool)):
+            return value
+        if isinstance(value, Mapping):
+            for key in ("name", "label", "value", "text"):
+                candidate = value.get(key)
+                if candidate not in (None, ""):
+                    return candidate
+            return None
+        return None
+        
     def _coerce_float(value: Any) -> float | None:
         if value in (None, ""):
             return None
@@ -779,6 +792,43 @@ def _coerce_runner_entry(entry: Mapping[str, Any]) -> dict[str, Any] | None:
     if "cote" not in runner and "odds" in runner:
         runner["cote"] = runner["odds"]
 
+    handled_keys = {
+        "num",
+        "number",
+        "name",
+        "horse",
+        "label",
+        "runner",
+        "cote",
+        "odds",
+        "odd",
+        "cote_dec",
+        "price",
+        "odds_place",
+        "place_odds",
+        "placeOdds",
+        "place",
+        "cote_place",
+        "odds_place_h30",
+        "odds_win_h30",
+        "odds_win",
+        "p",
+        "probability",
+        "p_imp",
+        "p_imp_h5",
+        "p_true",
+        "id",
+        "runner_id",
+        "market",
+    }
+
+    for key, value in entry.items():
+        if key in handled_keys or key in runner:
+            continue
+        coerced = _coerce_metadata_value(value)
+        if coerced is not None:
+            runner[key] = coerced
+            
     return runner
 
 
@@ -840,16 +890,32 @@ def _build_snapshot_payload(
                     
     if runners:
         deduped: list[dict[str, Any]] = []
-        seen_numbers: set[str] = set()
+        by_number: dict[str, dict[str, Any]] = {}
+
+        def _is_missing(value: Any) -> bool:
+            if value in (None, ""):
+                return True
+            if isinstance(value, (list, tuple, dict, set)):
+                return len(value) == 0
+            return False
+
+        def _merge_runner(existing: dict[str, Any], new_data: Mapping[str, Any]) -> None:
+            for key, value in new_data.items():
+                if key in existing:
+                    if _is_missing(existing[key]) and not _is_missing(value):
+                        existing[key] = value
+                elif not _is_missing(value):
+                    existing[key] = value
 
         for runner in runners:
             number = str(runner.get("num") or runner.get("id") or "").strip()
-            if number:
-                if number in seen_numbers:
-                    continue
-                seen_numbers.add(number)
+            if number and number in by_number:
+                _merge_runner(by_number[number], runner)
+                continue
             deduped.append(runner)
-
+            if number:
+                by_number[number] = runner
+                
         def _runner_sort_key(item: Mapping[str, Any]) -> tuple[int, str]:
             raw_number = str(item.get("num") or item.get("id") or "").strip()
             match = re.search(r"\d+", raw_number)
