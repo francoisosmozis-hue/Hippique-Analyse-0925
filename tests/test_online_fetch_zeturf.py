@@ -99,7 +99,7 @@ def test_race_snapshot_as_dict_includes_aliases() -> None:
     assert payload["rc"] == "R1C3"
     assert payload["source_url"].endswith("R1C3-paris")
     assert payload["course_id"] == "987654"
-    assert payload["partants"] is payload["runners"]
+    assert payload["partants"] == 14
     assert payload["partants_count"] == 14
     assert payload["heure_officielle"] == "13:45"
 
@@ -423,8 +423,8 @@ def test_fetch_race_snapshot_returns_minimal_snapshot_on_failure(
     assert snapshot["reunion"] == "R1"
     assert snapshot["course"] == "C2"
     assert snapshot["runners"] == []
-    assert snapshot["partants"] == []
-    assert snapshot.get("partants_count") is None
+    assert snapshot["partants"] == 0
+    assert snapshot.get("partants_count") == 0
     assert any(
         "échec fetch_race_snapshot" in record.getMessage()
         for record in caplog.records
@@ -528,7 +528,7 @@ def test_lightweight_fetch_snapshot_remote(monkeypatch: pytest.MonkeyPatch) -> N
     snapshot = cli.fetch_race_snapshot("1", "2", phase="H-5")
 
     assert [runner["num"] for runner in snapshot["runners"]] == ["1", "2"]
-    assert snapshot["partants"] == snapshot["runners"]
+    assert snapshot["partants"] == 2
     assert snapshot["market"] == {"win": {"1": 2.8}}
     assert snapshot["phase"] == "H5"
     assert snapshot["partants_count"] == 2
@@ -561,7 +561,7 @@ def test_lightweight_fetch_snapshot_use_cache(monkeypatch: pytest.MonkeyPatch, t
     snapshot = cli.fetch_race_snapshot("R9", "C3", use_cache=True) 
 
     assert snapshot["runners"] == payload["runners"]
-    assert snapshot["partants"] == payload["partants"]
+    assert snapshot["partants"] == 1
     assert snapshot["market"] == payload["market"]
     assert snapshot["phase"] == "H30"
     assert snapshot["partants_count"] == 1
