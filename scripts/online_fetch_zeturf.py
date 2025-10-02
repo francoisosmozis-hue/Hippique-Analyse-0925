@@ -159,6 +159,10 @@ _SUSPICIOUS_HTML_PATTERNS: tuple[str, ...] = (
 _ZT_NUM_RE = re.compile(r'data-runner-num=["\']?(\d+)', re.IGNORECASE)
 _ZT_NAME_RE = re.compile(r'data-runner-name=["\']?([^"\']+)', re.IGNORECASE)
 _ZT_ODDS_RE = re.compile(r'data-odds=(?:"|\')?([0-9]+(?:[.,][0-9]+)?)', re.IGNORECASE)
+_ZT_PLACE_ODDS_RE = re.compile(
+    r'data-(?:odds-place|place-odds|place)=(?:"|\')?([0-9]+(?:[.,][0-9]+)?)',
+    re.IGNORECASE,
+)
 _ZT_PARTANTS_RE = re.compile(r'(?:\b|\D)([0-9]{1,2})\s+partants?', re.IGNORECASE)
 _ZT_DISCIPLINE_RE = re.compile(r'(trot|plat|obstacles?|mont[ée])', re.IGNORECASE)
 
@@ -241,9 +245,23 @@ def _fallback_parse_course_html(html: Any) -> Dict[str, Any]:
                 odds = float(str(odds_val).replace(",", ".")) if odds_val else None
             except (TypeError, ValueError):
                 odds = None
+            place_val = (
+                tag.get("data-odds-place")
+                or tag.get("data-place")
+                or tag.get("data-place-odds")
+                or tag.get("data-place-dec")
+                or tag.get("data-odds-place-dec")
+            )
+            place: float | None
+            try:
+                place = float(str(place_val).replace(",", ".")) if place_val else None
+            except (TypeError, ValueError):
+                place = None
             runner: Dict[str, Any] = {"num": num_text, "name": str(name).strip() or num_text}
             if odds is not None:
                 runner["cote"] = odds
+            if place is not None:
+                runner["odds_place"] = place
             runners.append(runner)
 
         # Try to locate metadata if present in data attributes
@@ -266,6 +284,7 @@ def _fallback_parse_course_html(html: Any) -> Dict[str, Any]:
         nums = _ZT_NUM_RE.findall(html)
         names = _ZT_NAME_RE.findall(html)
         odds = _ZT_ODDS_RE.findall(html)
+        place_odds = _ZT_PLACE_ODDS_RE.findall(html)
         for idx, num in enumerate(nums):
             runner: Dict[str, Any] = {"num": str(num)}
             if idx < len(names):
@@ -275,6 +294,11 @@ def _fallback_parse_course_html(html: Any) -> Dict[str, Any]:
                     runner["cote"] = float(odds[idx].replace(",", "."))
                 except Exception:  # pragma: no cover - defensive
                     runner["cote"] = None
+            if idx < len(place_odds):
+                try:
+                    runner["odds_place"] = float(place_odds[idx].replace(",", "."))
+                except Exception:  # pragma: no cover - defensive
+                    runner["odds_place"] = None
             runners.append(runner)
 
     match_partants = _ZT_PARTANTS_RE.search(html)
@@ -1028,6 +1052,14 @@ def _rows_to_runners(rows: Iterable[Any]) -> List[Dict[str, Any]]:
 def _parse_geny_runners(soup: BeautifulSoup, html: str) -> List[Dict[str, Any]]:
     """Parse runner information from Geny partants HTML."""
 
+    def _coerce_place(value: Any) -> float | None:
+        if value in (None, ""):
+            return None
+        try:
+            return float(str(value).replace(",", "."))
+        except (TypeError, ValueError):  # pragma: no cover - defensive
+            return None
+            
     runners = _rows_to_runners(soup.select("tr"))
     if runners:
         return runners
@@ -1059,6 +1091,15 @@ def _parse_geny_runners(soup: BeautifulSoup, html: str) -> List[Dict[str, Any]]:
             runner["jockey"] = str(jockey).strip()
         if trainer:
             runner["entraineur"] = str(trainer).strip()
+        place_attr = (
+            tag.get("data-odds-place")
+            or tag.get("data-place")
+            or tag.get("data-place-odds")
+            or tag.get("data-place-dec")
+        )
+        place_value = _coerce_place(place_attr)
+        if place_value is not None:
+            runner["odds_place"] = place_value
         attr_based.append(runner)
         seen.add(num)
     if attr_based:
@@ -1120,6 +1161,15 @@ def _parse_geny_runners(soup: BeautifulSoup, html: str) -> List[Dict[str, Any]]:
             runner["jockey"] = jockey_match.group(1).strip()
         if trainer_match:
             runner["entraineur"] = trainer_match.group(1).strip()
+        place_match = re.search(
+            r"data-(?:odds-place|place-odds|place)=[\"']([^\"']+)[\"']",
+            body,
+            re.IGNORECASE,
+        )
+        if place_match:
+            place_value = _coerce_place(place_match.group(1))
+            if place_value is not None:
+                runner["odds_place"] = place_value
         parsed.append(runner)
         seen.add(num)
     if parsed:
@@ -1174,6 +1224,37 @@ def fetch_from_geny_idcourse(id_course: str) -> Dict[str, Any]:
     resp_cotes = requests.get(cotes_url, headers=HDRS, timeout=10)
     resp_cotes.raise_for_status()
     odds_map: Dict[str, float] = {}
+    place_map: Dict[str, float] = {}
+
+    def _coerce_float(value: Any) -> float | None:
+        if isinstance(value, Mapping):
+            for key in (
+                "value",
+                "odds",
+                "cote",
+                "win",
+                "gagnant",
+                "price",
+                "rapport",
+            ):
+                nested = _coerce_float(value.get(key))
+                if nested is not None:
+                    return nested
+            return None
+        if isinstance(value, (list, tuple, set)):
+            for item in value:
+                nested = _coerce_float(item)
+                if nested is not None:
+                    return nested
+            return None
+        if value in (None, ""):
+            return None
+        try:
+            if isinstance(value, str):
+                value = value.replace(",", ".")
+            return float(value)
+        except (TypeError, ValueError):
+            return None
     try:
         data = resp_cotes.json()
     except ValueError:
@@ -1186,6 +1267,10 @@ def fetch_from_geny_idcourse(id_course: str) -> Dict[str, Any]:
                 odds_map[cols[0]] = float(cols[1].replace(",", "."))
             except ValueError:
                 continue
+            if len(cols) > 2:
+                place_val = _coerce_float(cols[2])
+                if place_val is not None:
+                    place_map[cols[0]] = place_val
     else:
         items: Any
         if isinstance(data, dict):
@@ -1196,18 +1281,56 @@ def fetch_from_geny_idcourse(id_course: str) -> Dict[str, Any]:
             num = str(item.get("num") or item.get("numero") or item.get("id") or item.get("number"))
             if not num:
                 continue
-            val = item.get("cote") or item.get("odds") or item.get("rapport") or item.get("value")
-            if isinstance(val, str):
-                val = val.replace(",", ".")
-            try:
-                odds_map[num] = float(val)
-            except (TypeError, ValueError):
-                continue
+            win_val = _coerce_float(
+                item.get("odds_win")
+                or item.get("cote")
+                or item.get("odds")
+                or item.get("rapport")
+                or item.get("win")
+                or item.get("value")
+                or item.get("gagnant")
+            )
+            odds_block = item.get("odds") if isinstance(item.get("odds"), Mapping) else None
+            if win_val is None and isinstance(odds_block, Mapping):
+                win_val = _coerce_float(
+                    odds_block.get("win")
+                    or odds_block.get("gagnant")
+                    or odds_block.get("cote")
+                    or odds_block.get("value")
+                )
+
+            place_val = _coerce_float(
+                item.get("odds_place")
+                or item.get("place")
+                or item.get("cote_place")
+                or item.get("place_odds")
+                or item.get("placeOdds")
+            )
+            if place_val is None and isinstance(odds_block, Mapping):
+                place_val = _coerce_float(
+                    odds_block.get("place")
+                    or odds_block.get("place_odds")
+                    or odds_block.get("placeOdds")
+                )
+            market_block = item.get("market") if isinstance(item.get("market"), Mapping) else None
+            if place_val is None and market_block:
+                place_val = _coerce_float(
+                    market_block.get("place")
+                    or market_block.get("place_odds")
+                    or market_block.get("placeOdds")
+                )
+
+            if win_val is not None:
+                odds_map[num] = win_val
+            if place_val is not None:
+                place_map[num] = place_val
 
     for r in runners:
         num = r.get("num")
         if num in odds_map:
             r["odds"] = odds_map[num]
+        if num in place_map:
+            r["odds_place"] = place_map[num]
 
     snapshot = {
         "date": dt.date.today().isoformat(),
