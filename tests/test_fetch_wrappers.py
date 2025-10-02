@@ -1,9 +1,6 @@
 from __future__ import annotations
 
-import logging
 import json
-import subprocess
-import sys
 from pathlib import Path
 
 import pytest
@@ -12,36 +9,53 @@ import fetch_je_chrono
 import fetch_je_stats
 
 
-def test_fetch_je_stats_wrapper_invokes_cli(
+def test_fetch_je_stats_wrapper_uses_snapshot_metadata(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    out_dir = tmp_path / "R1C1"
-    calls: list[list[str]] = []
+    course_dir = tmp_path / "R1C1"
+    course_dir.mkdir()
+    snapshot = tmp_path / "R1C1_H-5.json"
+    snapshot.write_text(
+        json.dumps({"meta": {"course_dir": str(course_dir)}}),
+        encoding="utf-8",
+    )
 
-    def fake_run(cmd: list[str], check: bool) -> subprocess.CompletedProcess[str]:
-        calls.append(cmd)
-        assert check is False
-        return subprocess.CompletedProcess(cmd, 0)
+    calls: list[tuple[Path, str, str]] = []
 
-    monkeypatch.setattr(fetch_je_stats.subprocess, "run", fake_run)
+    def fake_materialise(directory: Path, reunion: str, course: str) -> Path:
+        calls.append((directory, reunion, course))
+        return directory / f"{reunion}{course}_je.csv"
 
-    csv_path = fetch_je_stats.enrich_from_snapshot(out_dir, "R1", "C1")
+    monkeypatch.setattr(fetch_je_stats, "_materialise_stats", fake_materialise)
 
-    assert csv_path == out_dir / "R1C1_je.csv"
-    assert out_dir.is_dir()
+    csv_path = fetch_je_stats.enrich_from_snapshot(snapshot, "r1", "c1")
 
-    assert calls == [
-        [
-            sys.executable,
-            str(Path(fetch_je_stats.__file__).resolve()),
-            "--out",
-            str(out_dir),
-            "--reunion",
-            "R1",
-            "--course",
-            "C1",
-        ]
-    ]
+    assert csv_path == course_dir / "R1C1_je.csv"
+    assert calls == [(course_dir, "R1", "C1")]
+
+
+def test_fetch_je_stats_wrapper_is_idempotent(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    course_dir = tmp_path / "R1C1"
+    course_dir.mkdir()
+    snapshot = tmp_path / "R1C1_H-5.json"
+    snapshot.write_text(
+        json.dumps({"meta": {"course_dir": str(course_dir)}}),
+        encoding="utf-8",
+    )
+
+    csv_path = course_dir / "R1C1_je.csv"
+    csv_path.write_text("num,nom\n", encoding="utf-8")
+
+    def forbidden(*_args, **_kwargs):  # pragma: no cover - defensive guard
+        raise AssertionError("_materialise_stats should not be called when CSV exists")
+
+    monkeypatch.setattr(fetch_je_stats, "_materialise_stats", forbidden)
+
+    result = fetch_je_stats.enrich_from_snapshot(snapshot, "R1", "C1")
+
+    assert result == csv_path
 
 
 def test_fetch_je_stats_materialise_builds_outputs(
@@ -110,83 +124,53 @@ def test_fetch_je_stats_materialise_persists_placeholder(
     ]
 
 
-def test_fetch_je_stats_wrapper_logs_warning(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, caplog: pytest.LogCaptureFixture
-) -> None:
-    out_dir = tmp_path / "R1C1"
-
-    def fake_run(cmd: list[str], check: bool) -> subprocess.CompletedProcess[str]:
-        assert check is False
-        return subprocess.CompletedProcess(cmd, 1)
-
-    monkeypatch.setattr(fetch_je_stats.subprocess, "run", fake_run)
-
-    with caplog.at_level(logging.WARNING):
-        csv_path = fetch_je_stats.enrich_from_snapshot(out_dir, "R1", "C1")
-
-    assert csv_path == out_dir / "R1C1_je.csv"
-    assert out_dir.is_dir()
-    assert any(
-        "fetch_je_stats CLI failed for R1C1 (returncode=1)" in message
-        for message in caplog.messages
-    )
-
-
-def test_fetch_je_chrono_wrapper_invokes_cli(
+def test_fetch_je_chrono_wrapper_uses_snapshot_metadata(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    out_dir = tmp_path / "R1C1"
-    calls: list[list[str]] = []
-
-    def fake_run(cmd: list[str], check: bool) -> subprocess.CompletedProcess[str]:
-        calls.append(cmd)
-        assert check is False
-        return subprocess.CompletedProcess(cmd, 0)
-
-    monkeypatch.setattr(fetch_je_chrono.subprocess, "run", fake_run)
-
-    csv_path = fetch_je_chrono.enrich_from_snapshot(
-        out_dir,
-        "R1",
-        "C1",
+    course_dir = tmp_path / "R1C1"
+    course_dir.mkdir()
+    snapshot = tmp_path / "R1C1_H-5.json"
+    snapshot.write_text(
+        json.dumps({"meta": {"course_dir": str(course_dir)}}),
+        encoding="utf-8",
     )
 
-    expected_command = [
-        sys.executable,
-        str(Path(fetch_je_chrono.__file__).resolve()),
-        "--out",
-        str(out_dir),
-        "--reunion",
-        "R1",
-        "--course",
-        "C1",
-    ]
-    assert csv_path == out_dir / "R1C1_chronos.csv"
-    assert out_dir.is_dir()
+    calls: list[tuple[Path, str, str]] = []
 
-    assert calls == [expected_command]
+    def fake_materialise(directory: Path, reunion: str, course: str) -> Path:
+        calls.append((directory, reunion, course))
+        return directory / f"{reunion}{course}_chronos.csv"
+
+    monkeypatch.setattr(fetch_je_chrono, "_materialise_chronos", fake_materialise)
+
+    csv_path = fetch_je_chrono.enrich_from_snapshot(snapshot, "r1", "c1")
+
+    assert csv_path == course_dir / "R1C1_chronos.csv"
+    assert calls == [(course_dir, "R1", "C1")]
 
 
-def test_fetch_je_chrono_wrapper_logs_warning(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, caplog: pytest.LogCaptureFixture
+def test_fetch_je_chrono_wrapper_is_idempotent(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    out_dir = tmp_path / "R1C1"
-
-    def fake_run(cmd: list[str], check: bool) -> subprocess.CompletedProcess[str]:
-        assert check is False
-        return subprocess.CompletedProcess(cmd, 2)
-
-    monkeypatch.setattr(fetch_je_chrono.subprocess, "run", fake_run)
-
-    with caplog.at_level(logging.WARNING):
-        csv_path = fetch_je_chrono.enrich_from_snapshot(out_dir, "R1", "C1")
-
-    assert csv_path == out_dir / "R1C1_chronos.csv"
-    assert out_dir.is_dir()
-    assert any(
-        "fetch_je_chrono CLI failed for R1C1 (returncode=2)" in message
-        for message in caplog.messages
+    course_dir = tmp_path / "R1C1"
+    course_dir.mkdir()
+    snapshot = tmp_path / "R1C1_H-5.json"
+    snapshot.write_text(
+        json.dumps({"meta": {"course_dir": str(course_dir)}}),
+        encoding="utf-8",
     )
+
+    csv_path = course_dir / "R1C1_chronos.csv"
+    csv_path.write_text("num,chrono\n", encoding="utf-8")
+
+def forbidden(*_args, **_kwargs):  # pragma: no cover - defensive guard
+        raise AssertionError("_materialise_chronos should not be called when CSV exists")
+    
+    monkeypatch.setattr(fetch_je_chrono, "_materialise_chronos", forbidden)
+
+    result = fetch_je_chrono.enrich_from_snapshot(snapshot, "R1", "C1")
+
+    assert result == csv_path
 
 
 def test_fetch_je_chrono_materialise_builds_csv(tmp_path: Path) -> None:
