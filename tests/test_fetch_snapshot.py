@@ -8,7 +8,15 @@ def test_fetch_race_snapshot_returns_list_of_partants(monkeypatch: Any) -> None:
     import online_fetch_zeturf as ofz
 
     fake_payload = {
-        "runners": [{"num": "1", "name": "Alpha"}],
+        "runners": [
+            {
+                "num": "1",
+                "name": "Alpha",
+                "jockey": "John Doe",
+                "entraineur": "Trainer 1",
+                "music": "1a1a",
+            }
+        ],
         "meeting": "Test",
         "discipline": "Plat",
         "date": "2023-09-25",
@@ -59,8 +67,50 @@ def test_fetch_race_snapshot_returns_list_of_partants(monkeypatch: Any) -> None:
         assert snap["meta"]["date"] == "2023-09-25"
         assert snap["runners"][0]["odds_win_h30"] == 3.4
         assert snap["runners"][0]["odds_place_h30"] == 1.6
+        assert snap["runners"][0]["jockey"] == "John Doe"
+        assert snap["runners"][0]["entraineur"] == "Trainer 1"
+        assert snap["runners"][0]["music"] == "1a1a"
         assert captured["snapshot"] == "H-5"
         assert captured["url"] == "https://example.com/course/mock"
     finally:
         shutil.rmtree(rc_dir, ignore_errors=True)
+
+
+def test_fetch_race_snapshot_merges_runner_metadata(monkeypatch: Any) -> None:
+    import online_fetch_zeturf as ofz
+
+    raw_snapshot = {
+        "runners": [
+            {"num": "1", "name": "Alpha", "jockey": "Jane Rider"},
+            {
+                "number": "1",
+                "name": "Alpha",
+                "trainer": "Trainer 1",
+                "music": "1a1a",
+                "sex": "F",
+            },
+        ],
+        "meeting": "Test",
+        "discipline": "Plat",
+        "date": "2023-09-25",
+        "partants": 1,
+    }
+
+    def fake_fetch(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        return raw_snapshot
+
+    monkeypatch.setattr(ofz._impl, "fetch_race_snapshot", fake_fetch, raising=False)
+    monkeypatch.setattr(ofz, "_fetch_snapshot_via_html", lambda *a, **k: None)
+
+    snapshot = ofz.fetch_race_snapshot("R1", "C1", phase="H5", sources={})
+
+    runners = snapshot["runners"]
+    assert len(runners) == 1
+    runner = runners[0]
+    assert runner["num"] == "1"
+    assert runner["name"] == "Alpha"
+    assert runner["jockey"] == "Jane Rider"
+    assert runner["trainer"] == "Trainer 1"
+    assert runner["music"] == "1a1a"
+    assert runner["sex"] == "F"
     
