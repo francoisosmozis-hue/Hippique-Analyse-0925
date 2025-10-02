@@ -33,9 +33,9 @@ from logging_io import append_csv_line, CSV_HEADER
 logger = logging.getLogger(__name__)
 
 try:
-    MAX_COMBO_OVERROUND = float(os.getenv("MAX_COMBO_OVERROUND", "1.25"))
+    MAX_COMBO_OVERROUND = float(os.getenv("MAX_COMBO_OVERROUND", "1.30"))
 except (TypeError, ValueError):  # pragma: no cover - defensive fallback
-    MAX_COMBO_OVERROUND = 1.25
+    MAX_COMBO_OVERROUND = 1.30
 
 CALIB_PATH = os.getenv("CALIB_PATH", str(PAYOUT_CALIBRATION_PATH))
 
@@ -70,7 +70,7 @@ def compute_overround_cap(
     discipline: str | None,
     partants: Any,
     *,
-    default_cap: float = 1.25,
+    default_cap: float = 1.30,
     course_label: str | None = None,
     context: Dict[str, Any] | None = None,
 ) -> float:
