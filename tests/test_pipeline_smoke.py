@@ -113,6 +113,21 @@ def test_build_market_overround_place_with_missing_or_textual_slots():
     assert metrics_textual["overround_place"] == pytest.approx(total_place_prob)
 
 
+def test_build_market_normalizes_comma_separated_place_odds():
+    runners = [
+        {"odds": 2.0, "odds_place": "1,6"},
+        {"odds": 3.0, "odds_place": "1,7"},
+        {"odds": 4.0, "odds_place": "1,8"},
+    ]
+
+    expected = sum(1.0 / float(runner["odds_place"].replace(",", ".")) for runner in runners)
+
+    metrics = pipeline_run._build_market(runners)
+
+    assert metrics["slots_place"] == 3
+    assert metrics["overround_place"] == pytest.approx(expected)
+
+
 def test_build_market_overround_place_falls_back_to_win_odds():
     runners = [
         {"odds": 2.0},
