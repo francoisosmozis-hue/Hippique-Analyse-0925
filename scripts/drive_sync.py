@@ -58,6 +58,19 @@ import sys
 from pathlib import Path
 from typing import Any, Callable, Iterable, Optional
 
+REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.append(str(REPO_ROOT))
+
+from post_course_payload import (
+    CSV_HEADER,
+    apply_summary_to_ticket_container,
+    build_payload,
+    compute_post_course_summary,
+    format_csv_line,
+    merge_meta,
+)
+
 # Keep these imports on separate lines to avoid syntax issues when running
 # under stripped/concatenated builds.
 
@@ -275,65 +288,34 @@ def _run_local_post_course(
     tickets_data = post_course._load_json(tickets_path)
 
     winners = [str(x) for x in arrivee_data.get("result", [])[: max(places, 0)]]
-    (
-        total_gain,
-        total_stake,
-        roi,
-        ev_total,
-        diff_ev_total,
-        result_moyen,
-        roi_reel_moyen,
-        brier_total,
-        brier_moyen,
-    ) = post_course._compute_gains(tickets_data.get("tickets", []), winners)
-
-    tickets_data["roi_reel"] = roi
-    tickets_data["result_moyen"] = result_moyen
-    tickets_data["roi_reel_moyen"] = roi_reel_moyen
-    tickets_data["brier_total"] = brier_total
-    tickets_data["brier_moyen"] = brier_moyen
+    summary = compute_post_course_summary(tickets_data.get("tickets", []), winners)
+    apply_summary_to_ticket_container(tickets_data, summary)
     post_course._save_json(tickets_path, tickets_data)
 
     target_out.mkdir(parents=True, exist_ok=True)
-    meta = tickets_data.get("meta", {}) if isinstance(tickets_data, dict) else {}
-    arrivee_out = {
-        "rc": arrivee_data.get("rc") or meta.get("rc"),
-        "date": arrivee_data.get("date") or meta.get("date"),
-        "result": winners,
-        "gains": total_gain,
-        "roi_reel": roi,
-        "result_moyen": result_moyen,
-        "roi_reel_moyen": roi_reel_moyen,
-        "brier_total": brier_total,
-        "brier_moyen": brier_moyen,
-        "ev_total": ev_total,
-        "ev_ecart_total": diff_ev_total,
-    }
+     meta = merge_meta(arrivee_data, tickets_data)
+    payload = build_payload(
+        meta=meta,
+        arrivee=arrivee_data,
+        tickets=tickets_data.get("tickets", []),
+        summary=summary,
+        winners=winners,
+        ev_estimees=tickets_data.get("ev"),
+        places=places,
+    )
     arrivee_output = target_out / "arrivee.json"
-    
-    ligne = (
-        f'{meta.get("rc", "")};{meta.get("hippodrome", "")};{meta.get("date", "")};'
-        f'{meta.get("discipline", "")};{total_stake:.2f};{roi:.4f};'
-        f'{result_moyen:.4f};{roi_reel_moyen:.4f};'
-        f'{brier_total:.4f};{brier_moyen:.4f};'
-        f'{ev_total:.2f};{diff_ev_total:.2f};'
-        f'{meta.get("model", meta.get("MODEL", ""))}'
-    )
-    header = (
-        "R/C;hippodrome;date;discipline;mises;ROI_reel;result_moyen;"
-        "ROI_reel_moyen;Brier_total;Brier_moyen;EV_total;EV_ecart;model\n"
-    )
-    post_course._save_json(arrivee_output, arrivee_out)
+    post_course._save_json(arrivee_output, payload)
+
+    ligne = format_csv_line(meta, summary)
     csv_line = target_out / "ligne_resultats.csv"
-    post_course._save_text(csv_line, header + ligne + "\n")
+    post_course._save_text(csv_line, CSV_HEADER + "\n" + ligne + "\n")
     outputs["arrivee"] = arrivee_output
     outputs["csv_line"] = csv_line
 
     cmd = (
         "python update_excel_with_results.py "
         f'--excel "{excel_path}" '
-        f'--arrivee "{arrivee_output}" '
-        f'--tickets "{tickets_path}"\n'
+        f'--payload "{arrivee_output}"\n'
     )
     cmd_path = target_out / "cmd_update_excel.txt"
     post_course._save_text(cmd_path, cmd)
@@ -341,16 +323,12 @@ def _run_local_post_course(
     
     runner = excel_runner or update_excel_with_results.main
     try:
-        runner(
-            [
-                "--excel",
-                str(excel_path),
-                "--arrivee",
-                str(arrivee_output),
-                "--tickets",
-                str(tickets_path),
-            ]
-        )
+        runner([
+            "--excel",
+            str(excel_path),
+            "--payload",
+            str(arrivee_output),
+        ])
     except SystemExit:  # pragma: no cover - align with CLI style
         pass
 
@@ -547,6 +525,11 @@ def main() -> int | None:
         help="Fichiers additionnels à téléverser sur Drive",
     )
     parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Afficher les actions sans effectuer les transferts distants",
+    )
+    parser.add_argument(
         "--local-only",
         action="store_true",
         help="N'exécuter que les actions locales (aucun appel GCS)",
@@ -573,7 +556,10 @@ def main() -> int | None:
     args = parser.parse_args()
 
     excel_path = _resolve_excel_path(args.excel, args.outdir)
-
+    dry_run = args.dry_run
+    if dry_run:
+        print("[drive_sync] --dry-run → les opérations réseau seront simulées.")
+        
     drive_requested = bool(
         not args.local_only
         and (
@@ -586,24 +572,32 @@ def main() -> int | None:
 
     drive_service = None
     if drive_requested:
-        credentials_arg = args.drive_credentials or args.credentials_json
-        try:
-            drive_service = _build_drive_service(
-                credentials_arg, subject=args.drive_subject
-            )
-        except Exception as exc:  # pragma: no cover - logged for operator visibility
-            print(f"[drive_sync] Drive sync désactivée: {exc}")
-            drive_service = None
-        else:
+        if dry_run:
+            print("[drive_sync] --dry-run → client Google Drive non initialisé.")
             if args.excel_file_id:
-                try:
-                    drive_download_file(drive_service, args.excel_file_id, excel_path)
-                except Exception as exc:  # pragma: no cover - best effort
-                    print(
-                        f"[drive_sync] Impossible de télécharger l'Excel Drive: {exc}",
-                        file=sys.stderr,
-                    )
-
+                print(
+                    "[drive_sync] --dry-run: téléchargerait le classeur Drive "
+                    f"{args.excel_file_id} vers {excel_path}"
+                )
+        else:
+            credentials_arg = args.drive_credentials or args.credentials_json
+            try:
+                drive_service = _build_drive_service(
+                    credentials_arg, subject=args.drive_subject
+                )
+            except Exception as exc:  # pragma: no cover - logged for operator visibility
+                print(f"[drive_sync] Drive sync désactivée: {exc}")
+                drive_service = None
+            else:
+                if args.excel_file_id:
+                    try:
+                        drive_download_file(drive_service, args.excel_file_id, excel_path)
+                    except Exception as exc:  # pragma: no cover - best effort
+                        print(
+                            f"[drive_sync] Impossible de télécharger l'Excel Drive: {exc}",
+                            file=sys.stderr,
+                        )
+                        
     outputs = _run_local_post_course(
         args.arrivee,
         args.tickets,
@@ -612,11 +606,16 @@ def main() -> int | None:
         places=args.places,
     )
 
-    if drive_service:
-        folder_id = args.prefix
-        excel_file = outputs.get("excel", excel_path)
-        mime_xlsx = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        if args.excel_file_id:
+    folder_id = args.prefix
+    excel_file = outputs.get("excel", excel_path)
+    mime_xlsx = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    if args.excel_file_id:
+        if dry_run and drive_requested:
+            print(
+                "[drive_sync] --dry-run: téléverserait l'Excel local vers le fichier "
+                f"Drive {args.excel_file_id}"
+            )
+        elif drive_service:
             try:
                 drive_upload_file(
                     drive_service,
@@ -631,6 +630,12 @@ def main() -> int | None:
                     file=sys.stderr,
                 )
         elif folder_id:
+        if dry_run and drive_requested:
+            print(
+                "[drive_sync] --dry-run: téléverserait l'Excel local dans le dossier "
+                f"Drive {folder_id}"
+            )
+        elif drive_service:
             try:
                 drive_upload_file(
                     drive_service,
@@ -644,14 +649,26 @@ def main() -> int | None:
                     file=sys.stderr,
                 )
         elif args.upload_result or args.upload_line or args.upload_file:
-            print(
-                "[drive_sync] Upload Drive ignoré: --folder-id manquant pour les créations.",
-                file=sys.stderr,
-            )
+        msg = "[drive_sync] Upload Drive ignoré: --folder-id manquant pour les créations."
+        if dry_run:
+            print("[drive_sync] --dry-run: " + msg.split(": ")[1])
+        else:
+            print(msg, file=sys.stderr)
 
         if args.upload_result:
-            arrivee_path = outputs.get("arrivee")
-            if arrivee_path and arrivee_path.exists() and folder_id:
+        arrivee_path = outputs.get("arrivee")
+        if arrivee_path and arrivee_path.exists():
+            if dry_run and drive_requested:
+                if folder_id:
+                    print(
+                        "[drive_sync] --dry-run: téléverserait arrivee.json dans "
+                        f"Drive {folder_id}"
+                    )
+                else:
+                    print(
+                        "[drive_sync] --dry-run: arrivee.json ignoré faute de folder-id"
+                    )
+            elif drive_service and folder_id:
                 try:
                     drive_upload_file(drive_service, folder_id, arrivee_path)
                 except Exception as exc:  # pragma: no cover
@@ -660,8 +677,19 @@ def main() -> int | None:
                         file=sys.stderr,
                     )
         if args.upload_line:
-            csv_line = outputs.get("csv_line")
-            if csv_line and csv_line.exists() and folder_id:
+        csv_line = outputs.get("csv_line")
+        if csv_line and csv_line.exists():
+            if dry_run and drive_requested:
+                if folder_id:
+                    print(
+                        "[drive_sync] --dry-run: téléverserait ligne_resultats.csv dans "
+                        f"Drive {folder_id}"
+                    )
+                else:
+                    print(
+                        "[drive_sync] --dry-run: ligne_resultats.csv ignoré faute de folder-id"
+                    )
+            elif drive_service and folder_id:
                 try:
                     drive_upload_file(drive_service, folder_id, csv_line)
                 except Exception as exc:  # pragma: no cover
@@ -670,30 +698,62 @@ def main() -> int | None:
                         file=sys.stderr,
                     )
 
-        for extra in args.upload_file:
-            extra_path = Path(extra)
-            if not extra_path.exists():
+        ffor extra in args.upload_file:
+        extra_path = Path(extra)
+        if not extra_path.exists():
+            print(
+                f"[drive_sync] Fichier introuvable, upload ignoré: {extra_path}",
+                file=sys.stderr,
+            )
+            continue
+        if folder_id:
+            if dry_run and drive_requested:
                 print(
-                    f"[drive_sync] Fichier introuvable, upload ignoré: {extra_path}",
-                    file=sys.stderr,
+                    "[drive_sync] --dry-run: téléverserait "
+                    f"{extra_path} dans Drive {folder_id}"
                 )
-                continue
-            if not folder_id:
+            elif drive_service:
+                try:
+                    drive_upload_file(drive_service, folder_id, extra_path)
+                except Exception as exc:  # pragma: no cover
+                    print(
+                        f"[drive_sync] Upload Drive échoué pour {extra_path}: {exc}",
+                        file=sys.stderr,
+                    )
+        else:
+            if dry_run:
+                print(
+                    "[drive_sync] --dry-run: upload ignoré (folder-id manquant) pour "
+                    f"{extra_path}"
+                )
+            else:
                 print(
                     f"[drive_sync] Upload ignoré (folder-id manquant): {extra_path}",
-                    file=sys.stderr,
-                )
-                continue
-            try:
-                drive_upload_file(drive_service, folder_id, extra_path)
-            except Exception as exc:  # pragma: no cover
-                print(
-                    f"[drive_sync] Upload Drive échoué pour {extra_path}: {exc}",
                     file=sys.stderr,
                 )
 
     if args.local_only:
         print("[drive_sync] --local-only → skipping Google Cloud Storage synchronisation.")
+        return 0
+
+    if dry_run:
+        bucket_display = args.bucket or os.environ.get(BUCKET_ENV) or "<bucket?>"
+        prefix_display = args.prefix or ""
+        for base in args.push:
+            print(
+                "[drive_sync] --dry-run: enverrait le répertoire "
+                f"{base} vers gs://{bucket_display}/{prefix_display}"
+            )
+        for path in _iter_uploads(args.upload_glob):
+            print(
+                "[drive_sync] --dry-run: téléverserait le fichier "
+                f"{path} vers gs://{bucket_display}/{prefix_display}"
+            )
+        for object_name, dest in args.download:
+            print(
+                "[drive_sync] --dry-run: téléchargerait gs://"
+                f"{bucket_display}/{object_name} vers {dest}"
+            )
         return 0
 
     if not is_gcs_enabled():
