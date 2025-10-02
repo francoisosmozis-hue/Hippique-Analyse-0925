@@ -136,8 +136,14 @@ def _build_market(
     runners: Sequence[Mapping[str, Any]],
     slots_place: Any = _DEFAULT_SLOTS_PLACE,
 ) -> dict[str, float | int]:
-    """Return market metrics for win and place books."""
+    """Return market metrics for win and place books.
 
+    The place overround is the *raw* sum of the implied probabilities
+    (``1 / odds``) for each runner.  When a runner is missing a place quote the
+    win odds are used as a conservative fallback so downstream consumers can
+    still derive an indicative overround.  Non-finite aggregates are ignored.
+    """
+    
     win_total = 0.0
     place_total = 0.0
     has_win = False
@@ -165,6 +171,8 @@ def _build_market(
                 if candidate > 0:
                     place_odds = candidate
                     break
+        if place_odds is None and win_odds:
+            place_odds = win_odds
         if place_odds:
             place_total += 1.0 / place_odds
             has_place = True
@@ -181,8 +189,11 @@ def _build_market(
             int_candidate if abs(slots_value - int_candidate) < 1e-9 else slots_value
         )
         
-    if has_place and slots_value:
-        metrics["overround_place"] = place_total / slots_value
+    if has_place:
+        if math.isfinite(place_total) and place_total > 0.0:
+            metrics["overround_place"] = place_total
+        elif math.isfinite(place_total):
+            metrics["overround_place"] = 0.0
 
     return metrics
 
@@ -2455,6 +2466,24 @@ def cmd_analyse(args: argparse.Namespace) -> None:
             if value is None:
                 continue
             metrics_market[key] = value
+    market_payload_dict: dict[str, Any] | None = None
+    if isinstance(market_payload, dict):
+        market_payload_dict = market_payload
+    elif isinstance(market_payload, Mapping):
+        try:
+            market_payload_dict = dict(market_payload)
+        except TypeError:
+            market_payload_dict = None
+        else:
+            if isinstance(partants_data, dict):
+                partants_data["market"] = market_payload_dict
+    if market_overround is not None and market_payload_dict is not None:
+        market_payload_dict["overround"] = market_overround
+    if market_payload_dict is not None:
+        try:
+            meta["market"] = copy.deepcopy(market_payload_dict)
+        except TypeError:
+            meta["market"] = dict(market_payload_dict)
     if market_overround is not None:
         metrics["overround"] = market_overround
         if overround_source:
