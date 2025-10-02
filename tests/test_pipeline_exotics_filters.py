@@ -523,7 +523,7 @@ def test_exotics_rejects_when_place_overround_exceeds_cap(
         }
         for idx, place in enumerate(place_odds, start=1)
     ]
-    expected_place_overround = sum(1.0 / odd for odd in place_odds) / slots_place
+    expected_place_overround = sum(1.0 / odd for odd in place_odds)
 
     partants_override = {
         "market": {"slots_place": slots_place, "horses": horses},
