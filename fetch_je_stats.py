@@ -34,7 +34,12 @@ def _iter_snapshot_candidates(snapshot_dir: Path) -> list[Path]:
     normalized = snapshot_dir / "normalized_h5.json"
     if normalized.exists():
         candidates.append(normalized)
-    candidates.extend(sorted(snapshot_dir.glob("*_H-5.json"), reverse=True))
+    snapshot_candidates = {
+        candidate
+        for pattern in ("*_H-5.json", "*_H5.json")
+        for candidate in snapshot_dir.glob(pattern)
+    }
+    candidates.extend(sorted(snapshot_candidates, reverse=True))
     return candidates
 
 
