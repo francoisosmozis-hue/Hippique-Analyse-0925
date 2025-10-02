@@ -622,14 +622,14 @@ def test_overround_cap_uses_metadata_fallbacks(
     assert isinstance(last_call["discipline"], str)
     assert "handicap" in last_call["discipline"].lower()
     assert int(last_call["partants"]) == 14
-    assert last_call["default_cap"] == pytest.approx(1.25)
+    assert last_call["default_cap"] == pytest.approx(1.30)
 
     thresholds_meta = meta["exotics"]["thresholds"]
-    assert thresholds_meta["overround_cap_default"] == pytest.approx(1.25)
+    assert thresholds_meta["overround_cap_default"] == pytest.approx(1.30)
     assert thresholds_meta["overround_max"] == pytest.approx(1.30)
 
     log_thresholds = log_entry["exotics"]["thresholds"]
-    assert log_thresholds["overround_cap_default"] == pytest.approx(1.25)
+    assert log_thresholds["overround_cap_default"] == pytest.approx(1.30)
     assert log_thresholds["overround_max"] == pytest.approx(1.30)
 
 
