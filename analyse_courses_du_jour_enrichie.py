@@ -961,9 +961,9 @@ def _run_h5_guard_phase(
             partants_hint = len(runners_source)
 
     try:
-        default_cap = float(os.getenv("MAX_COMBO_OVERROUND", "1.25"))
+        default_cap = float(os.getenv("MAX_COMBO_OVERROUND", "1.30"))
     except (TypeError, ValueError):  # pragma: no cover - defensive
-        default_cap = 1.25
+        default_cap = 1.30
 
     if overround_value is not None:
         overround_cap = compute_overround_cap(
