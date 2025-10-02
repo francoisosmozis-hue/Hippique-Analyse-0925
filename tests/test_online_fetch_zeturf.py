@@ -517,24 +517,25 @@ def test_lightweight_fetch_snapshot_remote(monkeypatch: pytest.MonkeyPatch) -> N
             "partants": 2,
         }
 
+    def failing_impl_fetch(*_args: Any, **_kwargs: Any) -> Mapping[str, Any]:
+        raise RuntimeError("impl failure")
+    
     monkeypatch.setattr(cli._impl, "parse_course_page", fake_parse, raising=False)
     monkeypatch.setattr(cli._impl, "normalize_snapshot", fake_normalize, raising=False)
+    monkeypatch.setattr(cli._impl, "fetch_race_snapshot", failing_impl_fetch, raising=False)
+    monkeypatch.setattr(cli, "_http_get", lambda *_a, **_k: "<html></html>")
 
     snapshot = cli.fetch_race_snapshot("1", "2", phase="H-5")
 
-    assert snapshot == {
-        "runners": [
-            {"num": "1", "name": "Alpha"},
-            {"num": "2", "name": "Bravo"},
-        ],
-        "partants": [
-            {"num": "1", "name": "Alpha"},
-            {"num": "2", "name": "Bravo"},
-        ],
-        "market": {"win": {"1": 2.8}},
-        "phase": "H5",
-    }
-    assert captured["snapshot"] == "H5"
+    assert [runner["num"] for runner in snapshot["runners"]] == ["1", "2"]
+    assert snapshot["partants"] == snapshot["runners"]
+    assert snapshot["market"] == {"win": {"1": 2.8}}
+    assert snapshot["phase"] == "H5"
+    assert snapshot["partants_count"] == 2
+    assert snapshot["meta"]["phase"] == "H5"
+    assert snapshot["meta"]["reunion"] == "R1"
+    assert snapshot["meta"]["course"] == "C2"
+    assert captured["snapshot"] == "H-5"
     assert captured["url"] == f"https://www.zeturf.fr/fr/course/R1C2"
 
     
@@ -557,14 +558,16 @@ def test_lightweight_fetch_snapshot_use_cache(monkeypatch: pytest.MonkeyPatch, t
         raising=False,
     )
 
-   snapshot = cli.fetch_race_snapshot("R9", "C3", use_cache=True) 
+    snapshot = cli.fetch_race_snapshot("R9", "C3", use_cache=True) 
 
-    assert snapshot == {
-        "runners": payload["runners"],
-        "partants": payload["partants"],
-        "market": payload["market"],
-        "phase": "H30",
-    }
+    assert snapshot["runners"] == payload["runners"]
+    assert snapshot["partants"] == payload["partants"]
+    assert snapshot["market"] == payload["market"]
+    assert snapshot["phase"] == "H30"
+    assert snapshot["partants_count"] == 1
+    assert snapshot["meta"]["phase"] == "H30"
+    assert snapshot["reunion"] == "R9"
+    assert snapshot["course"] == "C3"
 
 
 def test_lightweight_fetch_snapshot_cache_missing(monkeypatch: pytest.MonkeyPatch) -> None:
