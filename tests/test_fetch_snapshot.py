@@ -48,10 +48,11 @@ def test_fetch_race_snapshot_returns_list_of_partants(monkeypatch: Any) -> None:
 
         snap = ofz.fetch_race_snapshot("R1", "C1", "H5", url="https://example.com/course/mock")
 
-        assert isinstance(snap["partants"], list)
+        assert isinstance(snap["runners"], list)
         assert snap["phase"] == "H5"
         assert snap["market"] == {}
         assert snap["partants_count"] == 1
+        assert snap["partants"] == snap["partants_count"]
         assert snap["meeting"] == "Test"
         assert snap["discipline"] == "Plat"
         assert "meta" in snap and snap["meta"]["phase"] == "H5"
