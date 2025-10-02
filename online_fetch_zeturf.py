@@ -79,6 +79,14 @@ def fetch_race_snapshot(
     rc_tag = _normalise_rc_tag(reunion, course)
     phase_tag = _normalise_phase_alias(phase)
 
+    reunion_hint = None
+    course_hint = None
+    match = re.match(r"^(R\d+)(C\d+)$", rc_tag)
+    if match:
+        reunion_hint, course_hint = match.group(1), match.group(2)
+    else:  # pragma: no cover - defensive guard
+        raise ValueError(f"rc tag {rc_tag!r} is invalid")
+
     if use_cache:
         snapshot_path = _load_local_snapshot(rc_tag)
         if snapshot_path is None:
@@ -88,55 +96,31 @@ def fetch_race_snapshot(
                 "Exécutez analyse_courses_du_jour_enrichie.py pour la phase souhaitée."
             )
         cached_payload = json.loads(snapshot_path.read_text(encoding="utf-8"))
-        return {
-            "runners": list(cached_payload.get("runners", [])),
-            "partants": cached_payload.get("partants")
-            if isinstance(cached_payload.get("partants"), list)
-            else list(cached_payload.get("runners", [])),
-            "market": cached_payload.get("market", {}),
-            "phase": phase_tag,
-        }
+        if not isinstance(cached_payload, Mapping):
+            cached_payload = {}
+            
+        sources_config = extra.get("sources") if isinstance(extra.get("sources"), Mapping) else None
+        if sources_config is None:
+            try:
+                sources_config = _load_sources_config()
+            except Exception:  # pragma: no cover - best effort cache hydration
+                sources_config = None
 
-    if not re.match(r"^(R\d+)(C\d+)$", rc_tag):  # pragma: no cover - defensive guard
-        raise ValueError(f"rc tag {rc_tag!r} is invalid")
-
-    course_url = _COURSE_PAGE_FROM_RC.format(rc=rc_tag)
-
-    parse_fn = getattr(_impl, "parse_course_page", None)
-    if not callable(parse_fn):  # pragma: no cover - defensive guard
-        fallback_kwargs = dict(extra)
-        return fetch_race_snapshot_full(
-            reunion,
-            course,
-            phase=phase,
-            **fallback_kwargs,
+        return _normalise_snapshot_result(
+            cached_payload,
+            reunion_hint=reunion_hint,
+            course_hint=course_hint,
+            phase_norm=phase_tag,
+            sources_config=sources_config,  
         )
 
-    raw_snapshot = parse_fn(course_url, snapshot=phase_tag) or {}
-    if not isinstance(raw_snapshot, Mapping):
-        raise RuntimeError("parse_course_page a retourné un payload inattendu")
-
-    normalise_fn = getattr(_impl, "normalize_snapshot", None)
-    if not callable(normalise_fn):  # pragma: no cover - defensive guard
-        raise RuntimeError("scripts.online_fetch_zeturf.normalize_snapshot indisponible")
-
-    normalized = normalise_fn(dict(raw_snapshot))
-    runners = list(
-        raw_snapshot.get("runners")
-        if isinstance(raw_snapshot.get("runners"), Iterable)
-        else normalized.get("runners", [])
+    return fetch_race_snapshot_full(
+        reunion,
+        course,
+        phase=phase,
+        **extra,
     )
-    partants_raw = raw_snapshot.get("partants")
-    if not isinstance(partants_raw, list):
-        partants_raw = runners
-
-    return {
-        "runners": runners,
-        "partants": partants_raw,
-        "market": raw_snapshot.get("market", {}),
-        "phase": phase_tag,
-    }
-
+    
 
 def _load_full_impl() -> Any:
     """Return the fully-featured ``scripts.online_fetch_zeturf`` module."""
@@ -1279,6 +1263,11 @@ def _fetch_race_snapshot_impl(
                 thresholds.setdefault("ev_min", _BASE_EV_THRESHOLD)
                 thresholds.setdefault("payout_min", _BASE_PAYOUT_THRESHOLD)
 
+            if isinstance(raw_snapshot, Mapping):
+            market_block = raw_snapshot.get("market")
+            if market_block is not None and "market" not in snapshot:
+                snapshot["market"] = market_block
+
         return snapshot
     finally:
         if owns_session and session_obj is not None:
@@ -1546,68 +1535,22 @@ def _merge_h30_odds(
         runner.update(extras)
 
 
-def fetch_race_snapshot_full(
-    reunion: str,
-    course: str | None = None,
-    phase: str = "H30",
-    **kwargs: Any,
+def _normalise_snapshot_result(
+    raw_snapshot: Mapping[str, Any] | None,
+    *,
+    reunion_hint: str | None,
+    course_hint: str | None,
+    phase_norm: str,
+    sources_config: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Return a snapshot decorated with metadata suitable for runner_chain."""
-
-    phase_norm = _normalise_phase_alias(phase)
-
-    reunion_text = str(reunion or "").strip()
-    course_text = "" if course is None else str(course).strip()
-
-    if not course_text:
-        match = _RC_COMBINED_RE.search(reunion_text.upper())
-        if match:
-            reunion_text = f"R{match.group(1)}"
-            course_text = f"C{match.group(2)}"
-
-    def _safe_normalise(value: str, prefix: str) -> str | None:
-        text = str(value or "").strip().upper()
-        if not text:
-            return None
-        try:
-            return _normalise_label(text, prefix)
-        except ValueError:
-            return text or None
-
-    reunion_norm = _safe_normalise(reunion_text, "R")
-    course_norm = _safe_normalise(course_text, "C") if course_text else None
-
-    reunion_arg = reunion_norm or reunion_text or str(reunion)
-    course_arg: str | None
-    if course is None:
-        course_arg = course_norm
-    else:
-        course_arg = _safe_normalise(str(course), "C") or str(course).strip() or None
-
-    fetch_kwargs = dict(kwargs)
-
-    sources_config = fetch_kwargs.get("sources")
-    if not isinstance(sources_config, Mapping):
-        try:
-            sources_config = _load_sources_config()
-        except Exception as exc:  # pragma: no cover - defensive logging
-            logger.debug("[ZEturf] unable to load sources configuration: %s", exc)
-            sources_config = None
-        else:
-            fetch_kwargs.setdefault("sources", sources_config)
-
-    raw_snapshot = _fetch_race_snapshot_impl(
-        reunion_arg,
-        course_arg,
-        phase=phase_norm,
-        **fetch_kwargs,
-    )
-
     result: dict[str, Any]
     if isinstance(raw_snapshot, Mapping):
         result = dict(raw_snapshot)
     else:
         result = {}
+
+        if "market" not in result:
+        result["market"] = {}
 
     runners_raw = result.get("runners")
     runners: list[dict[str, Any]] = []
@@ -1625,8 +1568,11 @@ def fetch_race_snapshot_full(
             return None
         return str(value).strip()
 
-    reunion_meta = _clean_str(meta.get("reunion")) or reunion_norm or _clean_str(result.get("reunion"))
-    course_meta = _clean_str(meta.get("course")) or course_norm or _clean_str(result.get("course"))
+    reunion_hint_clean = _clean_str(reunion_hint)
+    course_hint_clean = _clean_str(course_hint)
+
+    reunion_meta = _clean_str(meta.get("reunion")) or reunion_hint_clean or _clean_str(result.get("reunion"))
+    course_meta = _clean_str(meta.get("course")) or course_hint_clean or _clean_str(result.get("course"))
     date_meta = _clean_str(meta.get("date")) or _clean_str(result.get("date"))
     hippo_meta = _clean_str(
         meta.get("hippodrome")
@@ -1687,7 +1633,6 @@ def fetch_race_snapshot_full(
 
     result["partants"] = list(runners)
 
-
     if phase_norm == "H5":
         _merge_h30_odds(runners, reunion_meta, course_meta)
 
@@ -1710,6 +1655,72 @@ def fetch_race_snapshot_full(
                 result["source_url"] = formatted_url
 
     return result
+
+
+def fetch_race_snapshot_full(
+    reunion: str,
+    course: str | None = None,
+    phase: str = "H30",
+    **kwargs: Any,
+) -> dict[str, Any]:
+    """Return a snapshot decorated with metadata suitable for runner_chain."""
+
+    phase_norm = _normalise_phase_alias(phase)
+
+    reunion_text = str(reunion or "").strip()
+    course_text = "" if course is None else str(course).strip()
+
+    if not course_text:
+        match = _RC_COMBINED_RE.search(reunion_text.upper())
+        if match:
+            reunion_text = f"R{match.group(1)}"
+            course_text = f"C{match.group(2)}"
+
+    def _safe_normalise(value: str, prefix: str) -> str | None:
+        text = str(value or "").strip().upper()
+        if not text:
+            return None
+        try:
+            return _normalise_label(text, prefix)
+        except ValueError:
+            return text or None
+
+    reunion_norm = _safe_normalise(reunion_text, "R")
+    course_norm = _safe_normalise(course_text, "C") if course_text else None
+
+    reunion_arg = reunion_norm or reunion_text or str(reunion)
+    course_arg: str | None
+    if course is None:
+        course_arg = course_norm
+    else:
+        course_arg = _safe_normalise(str(course), "C") or str(course).strip() or None
+
+    fetch_kwargs = dict(kwargs)
+
+    sources_config = fetch_kwargs.get("sources")
+    if not isinstance(sources_config, Mapping):
+        try:
+            sources_config = _load_sources_config()
+        except Exception as exc:  # pragma: no cover - defensive logging
+            logger.debug("[ZEturf] unable to load sources configuration: %s", exc)
+            sources_config = None
+        else:
+            fetch_kwargs.setdefault("sources", sources_config)
+
+    raw_snapshot = _fetch_race_snapshot_impl(
+        reunion_arg,
+        course_arg,
+        phase=phase_norm,
+        **fetch_kwargs,
+    )
+
+    return _normalise_snapshot_result(
+        raw_snapshot,
+        reunion_hint=reunion_norm or reunion_arg,
+        course_hint=course_norm or course_arg,
+        phase_norm=phase_norm,
+        sources_config=sources_config if isinstance(sources_config, Mapping) else None,
+    )
 
 
 if hasattr(_impl, "main"):
