@@ -1643,10 +1643,18 @@ def save_text(path: Path, txt: str) -> None:
 
 
 def _coerce_odds(value) -> float:
+    if isinstance(value, str):
+        normalized = value.replace(",", ".")
+    else:
+        normalized = value
+        
     try:
-        odds = float(value)
+        odds = float(normalized)
     except (TypeError, ValueError):
-        return 0.0
+        try:
+            odds = float(str(value).replace(",", "."))
+        except (TypeError, ValueError):
+            return 0.0
     if not math.isfinite(odds):
         return 0.0
     return max(odds, 0.0)
