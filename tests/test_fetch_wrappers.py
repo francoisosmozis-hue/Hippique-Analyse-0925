@@ -34,6 +34,31 @@ def test_fetch_je_stats_wrapper_uses_snapshot_metadata(
     assert calls == [(course_dir, "R1", "C1")]
 
 
+def test_fetch_je_stats_wrapper_accepts_snapshot_h5(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    course_dir = tmp_path / "R1C1"
+    course_dir.mkdir()
+    snapshot = tmp_path / "snapshot_H5.json"
+    snapshot.write_text(
+        json.dumps({"meta": {"course_dir": str(course_dir)}}),
+        encoding="utf-8",
+    )
+
+    calls: list[tuple[Path, str, str]] = []
+
+    def fake_materialise(directory: Path, reunion: str, course: str) -> Path:
+        calls.append((directory, reunion, course))
+        return directory / f"{reunion}{course}_je.csv"
+
+    monkeypatch.setattr(fetch_je_stats, "_materialise_stats", fake_materialise)
+
+    csv_path = fetch_je_stats.enrich_from_snapshot(snapshot, "r1", "c1")
+
+    assert csv_path == course_dir / "R1C1_je.csv"
+    assert calls == [(course_dir, "R1", "C1")]
+
+
 def test_fetch_je_stats_wrapper_is_idempotent(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -149,6 +174,31 @@ def test_fetch_je_chrono_wrapper_uses_snapshot_metadata(
     assert calls == [(course_dir, "R1", "C1")]
 
 
+def test_fetch_je_chrono_wrapper_accepts_snapshot_h5(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    course_dir = tmp_path / "R1C1"
+    course_dir.mkdir()
+    snapshot = tmp_path / "snapshot_H5.json"
+    snapshot.write_text(
+        json.dumps({"meta": {"course_dir": str(course_dir)}}),
+        encoding="utf-8",
+    )
+
+    calls: list[tuple[Path, str, str]] = []
+
+    def fake_materialise(directory: Path, reunion: str, course: str) -> Path:
+        calls.append((directory, reunion, course))
+        return directory / f"{reunion}{course}_chronos.csv"
+
+    monkeypatch.setattr(fetch_je_chrono, "_materialise_chronos", fake_materialise)
+
+    csv_path = fetch_je_chrono.enrich_from_snapshot(snapshot, "r1", "c1")
+
+    assert csv_path == course_dir / "R1C1_chronos.csv"
+    assert calls == [(course_dir, "R1", "C1")]
+
+
 def test_fetch_je_chrono_wrapper_is_idempotent(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -163,7 +213,7 @@ def test_fetch_je_chrono_wrapper_is_idempotent(
     csv_path = course_dir / "R1C1_chronos.csv"
     csv_path.write_text("num,chrono\n", encoding="utf-8")
 
-def forbidden(*_args, **_kwargs):  # pragma: no cover - defensive guard
+    def forbidden(*_args, **_kwargs):  # pragma: no cover - defensive guard
         raise AssertionError("_materialise_chronos should not be called when CSV exists")
     
     monkeypatch.setattr(fetch_je_chrono, "_materialise_chronos", forbidden)
