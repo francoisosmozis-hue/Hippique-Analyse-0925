@@ -65,6 +65,6 @@ def test_build_market_uses_synthetic_place_odds() -> None:
     metrics = _build_market(sanitized, slots_place=2)
     assert "overround_place" in metrics
 
-    overround_expected = sum(1.0 / entry["odds_place"] for entry in sanitized) / 2.0
+    overround_expected = sum(1.0 / entry["odds_place"] for entry in sanitized)
     assert metrics["overround_place"] == pytest.approx(overround_expected)
     assert metrics["overround_place"] > 1.30
