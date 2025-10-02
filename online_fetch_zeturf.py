@@ -257,6 +257,7 @@ def _fallback_parse_html(html: Any) -> dict[str, Any]:
     numbers = _RUNNER_NUM_RE.findall(html)
     names = _RUNNER_NAME_RE.findall(html)
     odds = _RUNNER_ODDS_RE.findall(html)
+    place_odds = _RUNNER_PLACE_RE.findall(html)
 
     for idx, number in enumerate(numbers):
         runner: dict[str, Any] = {"num": str(number)}
@@ -271,6 +272,11 @@ def _fallback_parse_html(html: Any) -> dict[str, Any]:
                 runner["cote"] = float(odds[idx].replace(",", "."))
             except Exception:  # pragma: no cover - defensive conversion
                 runner["cote"] = None
+        if idx < len(place_odds):
+            try:
+                runner["odds_place"] = float(place_odds[idx].replace(",", "."))
+            except Exception:  # pragma: no cover - defensive conversion
+                runner["odds_place"] = None
         runners.append(runner)
 
     partants: int | None = None
@@ -596,6 +602,10 @@ def _build_canonical_course_url(
 _RUNNER_NUM_RE = re.compile(r"data-runner-num=['\"]?(\d+)", re.IGNORECASE)
 _RUNNER_NAME_RE = re.compile(r"data-runner-name=['\"]?([^'\"]+)", re.IGNORECASE)
 _RUNNER_ODDS_RE = re.compile(r"data-odds=(?:'|\")?([0-9]+(?:[.,][0-9]+)?)", re.IGNORECASE)
+_RUNNER_PLACE_RE = re.compile(
+    r"data-(?:odds-place|place-odds|place)=(?:'|\")?([0-9]+(?:[.,][0-9]+)?)",
+    re.IGNORECASE,
+)
 _PARTANTS_RE = re.compile(r"(?:\b|\D)(\d{1,2})\s+partant(?:e?s?)?\b", re.IGNORECASE)
 _DISCIPLINE_RE = re.compile(r"(trot|plat|obstacles?|mont[ée])", re.IGNORECASE)
 _MEETING_RE = re.compile(
@@ -723,6 +733,12 @@ def _coerce_runner_entry(entry: Mapping[str, Any]) -> dict[str, Any] | None:
             runner.setdefault("cote", odds_val)
             break
 
+    for place_key in ("odds_place", "place_odds", "placeOdds", "place", "cote_place"):
+        place_val = _coerce_float(entry.get(place_key))
+        if place_val is not None:
+            runner.setdefault("odds_place", place_val)
+            break
+            
     for prob_key in ("p", "probability", "p_imp", "p_imp_h5", "p_true"):
         prob_val = _coerce_float(entry.get(prob_key))
         if prob_val is not None:
@@ -740,6 +756,26 @@ def _coerce_runner_entry(entry: Mapping[str, Any]) -> dict[str, Any] | None:
         if odds_val is not None:
             runner["odds"] = odds_val
 
+    if "odds_place" not in runner:
+        odds_block = entry.get("odds") if isinstance(entry.get("odds"), Mapping) else None
+        if isinstance(odds_block, Mapping):
+            place_val = _coerce_float(
+                odds_block.get("place")
+                or odds_block.get("place_odds")
+                or odds_block.get("placeOdds")
+            )
+            if place_val is not None:
+                runner["odds_place"] = place_val
+
+    if "odds_place" not in runner:
+        market_block = entry.get("market") if isinstance(entry.get("market"), Mapping) else None
+        if isinstance(market_block, Mapping):
+            place_market = market_block.get("place")
+            if isinstance(place_market, Mapping):
+                candidate = place_market.get(number) or place_market.get(str(number))
+                place_val = _coerce_float(candidate)
+                if place_val is not None:
+                    runner["odds_place"] = place_val
     if "cote" not in runner and "odds" in runner:
         runner["cote"] = runner["odds"]
 
