@@ -31,7 +31,7 @@ endif
 
 run-h30: venv
 	@test -n "$(URL)" || (echo "URL variable is required" >&2; exit 1)
-	$(RUN_ENV)$(PYTHON) analyse_courses_du_jour_enrichie.py --course-url "$(URL)" --phase H30 --budget $(BUDGET)
+	$(RUN_ENV) $(PYTHON) analyse_courses_du_jour_enrichie.py --course-url "$(URL)" --phase H30 --budget $(BUDGET)
 
 run-h5: venv
 	@test -n "$(URL)" || (echo "URL variable is required" >&2; exit 1)
