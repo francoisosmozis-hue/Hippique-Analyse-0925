@@ -58,7 +58,7 @@ def _load_local_snapshot(rc_tag: str) -> Path | None:
 
 
 def fetch_race_snapshot(
-    reunion: str,
+    reunion: str | None,
     course: str | None = None,
     phase: str = "H30",
     *,
@@ -77,8 +77,30 @@ def fetch_race_snapshot(
     remote requests.
     """
 
-    rc_tag = _normalise_rc_tag(reunion, course)
     phase_tag = _normalise_phase_alias(phase)
+
+    reunion_text = str(reunion).strip() if reunion not in (None, "") else ""
+    course_text = str(course).strip() if course not in (None, "") else ""
+
+    if not reunion_text and course_url is None:
+        raise NotImplementedError(
+            "fetch_race_snapshot requires reunion/course identifiers or a course_url",
+        )
+
+    if course_url and (not reunion_text or not course_text):
+        minimal_snapshot = {
+            "runners": [],
+            "partants": None,
+            "source_url": course_url,
+        }
+        return _normalise_snapshot_result(
+            minimal_snapshot,
+            reunion_hint=reunion_text or None,
+            course_hint=course_text or None,
+            phase_norm=phase_tag,
+        )
+
+    rc_tag = _normalise_rc_tag(reunion_text, course_text or None)
 
     reunion_hint = None
     course_hint = None
