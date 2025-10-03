@@ -121,7 +121,11 @@ def _prepare_stubs(
         monkeypatch.setattr(
             pipeline_run,
             "_build_market",
-            lambda *_args, **_kwargs: {"overround_win": market_overround},
+            lambda *_args, **_kwargs: {
+                "overround_win": market_overround,
+                "overround": market_overround,
+                "win_coverage_sufficient": True,
+            },
         )
         
     def fake_enforce(cfg_local, runners_local, combos_local, bankroll, **_kwargs):
