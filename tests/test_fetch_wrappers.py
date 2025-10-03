@@ -30,7 +30,7 @@ def test_fetch_je_stats_wrapper_uses_snapshot_metadata(
 
     csv_path = fetch_je_stats.enrich_from_snapshot(snapshot, "r1", "c1")
 
-    assert csv_path == course_dir / "R1C1_je.csv"
+    assert csv_path == str(course_dir / "R1C1_je.csv")
     assert calls == [(course_dir, "R1", "C1")]
 
 
@@ -55,7 +55,7 @@ def test_fetch_je_stats_wrapper_accepts_snapshot_h5(
 
     csv_path = fetch_je_stats.enrich_from_snapshot(snapshot, "r1", "c1")
 
-    assert csv_path == course_dir / "R1C1_je.csv"
+    assert csv_path == str(course_dir / "R1C1_je.csv")
     assert calls == [(course_dir, "R1", "C1")]
 
 
@@ -80,7 +80,7 @@ def test_fetch_je_stats_wrapper_is_idempotent(
 
     result = fetch_je_stats.enrich_from_snapshot(snapshot, "R1", "C1")
 
-    assert result == csv_path
+    assert result == str(csv_path)
 
 
 def test_fetch_je_stats_materialise_builds_outputs(
@@ -170,7 +170,7 @@ def test_fetch_je_chrono_wrapper_uses_snapshot_metadata(
 
     csv_path = fetch_je_chrono.enrich_from_snapshot(snapshot, "r1", "c1")
 
-    assert csv_path == course_dir / "R1C1_chronos.csv"
+    assert csv_path == str(course_dir / "R1C1_chronos.csv")
     assert calls == [(course_dir, "R1", "C1")]
 
 
@@ -195,7 +195,7 @@ def test_fetch_je_chrono_wrapper_accepts_snapshot_h5(
 
     csv_path = fetch_je_chrono.enrich_from_snapshot(snapshot, "r1", "c1")
 
-    assert csv_path == course_dir / "R1C1_chronos.csv"
+    assert csv_path == str(course_dir / "R1C1_chronos.csv")
     assert calls == [(course_dir, "R1", "C1")]
 
 
@@ -220,7 +220,7 @@ def test_fetch_je_chrono_wrapper_is_idempotent(
 
     result = fetch_je_chrono.enrich_from_snapshot(snapshot, "R1", "C1")
 
-    assert result == csv_path
+    assert result == str(csv_path)
 
 
 def test_fetch_je_chrono_materialise_builds_csv(tmp_path: Path) -> None:
