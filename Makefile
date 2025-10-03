@@ -35,4 +35,4 @@ run-h30: venv
 
 run-h5: venv
 	@test -n "$(URL)" || (echo "URL variable is required" >&2; exit 1)
-	$(RUN_ENV)$(PYTHON) analyse_courses_du_jour_enrichie.py --course-url "$(URL)" --phase H5 --budget $(BUDGET)
+	$(RUN_ENV) $(PYTHON) analyse_courses_du_jour_enrichie.py --course-url "$(URL)" --phase H5 --budget $(BUDGET)
