@@ -3,6 +3,7 @@ import sys
 import json
 import types
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -40,17 +41,24 @@ def test_single_reunion(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, phase: 
 
     monkeypatch.setattr(acde.requests, "get", fake_get)
 
-    snaps: list[tuple[str, str, Path]] = []
+    snaps: list[tuple[str, str, Path, str | None]] = []
 
-    def fake_snapshot(cid: str, ph: str, rc_dir: Path) -> Path:
+    def fake_snapshot(
+        cid: str, ph: str, rc_dir: Path, *, course_url: str | None = None
+    ) -> Path:
         suffix = "H-5" if ph.upper() == "H5" else "H-30"
         dest = rc_dir / f"snap_{cid}_{suffix}.json"
         dest.write_text("{}", encoding="utf-8")
-        snaps.append((cid, ph, rc_dir))
+        snaps.append((cid, ph, rc_dir, course_url))
         return dest
 
     monkeypatch.setattr(acde, "write_snapshot_from_geny", fake_snapshot)
 
+    def fake_guard(rc_dir: Path, *, budget: float) -> tuple[bool, dict[str, Any], None]:
+        return True, {}, None
+
+    monkeypatch.setattr(acde, "_run_h5_guard_phase", fake_guard)
+    
     enrich_calls: list[Path] = []
 
     def fake_enrich(rc_dir: Path, **kw) -> None:
@@ -80,7 +88,7 @@ def test_single_reunion(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, phase: 
     
     argv = [
         "analyse_courses_du_jour_enrichie.py",
-        "--reunion-url",
+        "--course-url",
         "https://www.zeturf.fr/fr/reunion/2024-09-25/R1-test",
         "--phase",
         phase,
@@ -90,7 +98,11 @@ def test_single_reunion(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, phase: 
     monkeypatch.setattr(sys, "argv", argv)
     acde.main()
 
-    assert [(c, p) for c, p, _ in snaps] == [("123", phase), ("456", phase)]
+    aassert [(c, p) for c, p, *_ in snaps] == [("123", phase), ("456", phase)]
+    assert [url for *_rest, url in snaps] == [
+        "https://www.zeturf.fr/fr/course/123",
+        "https://www.zeturf.fr/fr/course/456",
+    ]
     if expect_pipeline:
         assert len(enrich_calls) == 2
         assert len(pipeline_calls) == 6  # 3 funcs * 2 courses
@@ -99,6 +111,65 @@ def test_single_reunion(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, phase: 
         assert not enrich_calls
         assert not pipeline_calls
         assert not csv_calls
+
+
+def test_course_url_shortcuts_single_course(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    html = """
+    <html>
+      <body>
+        <h1>R1 - C3</h1>
+      </body>
+    </html>
+    """
+
+    requested: list[str] = []
+
+    def fake_get(url: str, headers: dict | None = None, timeout: int = 10) -> DummyResp:
+        requested.append(url)
+        return DummyResp(html)
+
+    monkeypatch.setattr(acde.requests, "get", fake_get)
+
+    captured: dict[str, Any] = {}
+
+    def fake_snapshot(
+        cid: str, ph: str, rc_dir: Path, *, course_url: str | None = None
+    ) -> Path:
+        captured.update(
+            {
+                "course_id": cid,
+                "phase": ph,
+                "rc_dir": rc_dir,
+                "course_url": course_url,
+            }
+        )
+        rc_dir.mkdir(parents=True, exist_ok=True)
+        dest = rc_dir / "snap.json"
+        dest.write_text("{}", encoding="utf-8")
+        return dest
+
+    monkeypatch.setattr(acde, "write_snapshot_from_geny", fake_snapshot)
+
+    argv = [
+        "analyse_courses_du_jour_enrichie.py",
+        "--course-url",
+        "https://www.zeturf.fr/fr/course/654321",
+        "--phase",
+        "H30",
+        "--data-dir",
+        str(tmp_path),
+    ]
+    monkeypatch.setattr(sys, "argv", argv)
+
+    acde.main()
+
+    assert requested == ["https://www.zeturf.fr/fr/course/654321"]
+    assert captured["course_id"] == "654321"
+    assert captured["phase"].upper() == "H30"
+    assert captured["course_url"] == "https://www.zeturf.fr/fr/course/654321"
+    assert captured["rc_dir"].relative_to(tmp_path) == Path("R1C3")
 
 
 def test_batch_mode(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -125,7 +196,7 @@ def test_batch_mode(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         [
             sys.executable,
             script_path,
-            "--reunion-url",
+            "--course-url",
             "http://r1",
             "--phase",
             "H30",
@@ -139,7 +210,7 @@ def test_batch_mode(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         [
             sys.executable,
             script_path,
-            "--reunion-url",
+            "--course-url",
             "http://r1",
             "--phase",
             "H5",
@@ -163,7 +234,9 @@ def test_missing_enrich_outputs(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
 
     monkeypatch.setattr(acde.requests, "get", fake_get)
 
-    def fake_snapshot(cid: str, ph: str, rc_dir: Path) -> Path:
+    def fake_snapshot(
+        cid: str, ph: str, rc_dir: Path, *, course_url: str | None = None
+    ) -> Path:
         dest = rc_dir / "snap_H-5.json"
         payload = {"id_course": cid, "course_id": cid}
         dest.write_text(json.dumps(payload), encoding="utf-8")
@@ -204,7 +277,7 @@ def test_missing_enrich_outputs(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
 
     argv = [
         "analyse_courses_du_jour_enrichie.py",
-        "--reunion-url",
+        "--course-url",
         "https://www.zeturf.fr/fr/reunion/2024-09-25/R1-test",
         "--phase",
         "H5",
@@ -256,7 +329,9 @@ def test_missing_enrich_outputs_recovers_after_fetch(
 
     monkeypatch.setattr(acde.requests, "get", lambda *a, **k: DummyResp(html))
 
-    def fake_snapshot(cid: str, ph: str, rc_dir: Path) -> Path:
+    def fake_snapshot(
+        cid: str, ph: str, rc_dir: Path, *, course_url: str | None = None
+    ) -> Path:
         dest = rc_dir / "snap_H-5.json"
         payload = {"id_course": cid, "course_id": cid}
         dest.write_text(json.dumps(payload), encoding="utf-8")
@@ -264,6 +339,11 @@ def test_missing_enrich_outputs_recovers_after_fetch(
 
     monkeypatch.setattr(acde, "write_snapshot_from_geny", fake_snapshot)
     monkeypatch.setattr(acde, "enrich_h5", lambda rc_dir, **kw: None)
+    
+    def fake_guard(rc_dir: Path, *, budget: float) -> tuple[bool, dict[str, Any], None]:
+        return True, {}, None
+
+    monkeypatch.setattr(acde, "_run_h5_guard_phase", fake_guard)
     def fake_enrich(rc_dir: Path, **kw) -> None:
         snap_path = rc_dir / "snap_H-5.json"
         course_id = ""
@@ -322,7 +402,7 @@ def test_missing_enrich_outputs_recovers_after_fetch(
 
     argv = [
         "analyse_courses_du_jour_enrichie.py",
-        "--reunion-url",
+        "--course-url",
         "https://www.zeturf.fr/fr/reunion/2024-09-25/R1-test",
         "--phase",
         "H5",
@@ -429,7 +509,9 @@ def test_h5_pipeline_produces_outputs(
     h30_filename = "20250910T150000_R1C1_H-30.json"
     h5_filename = "20250910T155000_R1C1_H-5.json"
 
-    def fake_write_snapshot(course_id: str, phase: str, rc_dir: Path) -> Path:
+    def fake_write_snapshot(
+        course_id: str, phase: str, rc_dir: Path, *, course_url: str | None = None
+    ) -> Path:
         rc_dir.mkdir(parents=True, exist_ok=True)
         if phase.upper() == "H30":
             dest = rc_dir / h30_filename
@@ -447,6 +529,10 @@ def test_h5_pipeline_produces_outputs(
 
     monkeypatch.setattr(acde, "write_snapshot_from_geny", fake_write_snapshot)
 
+    def fake_guard(rc_dir: Path, *, budget: float) -> tuple[bool, dict[str, Any], None]:
+        return True, {}, None
+
+    monkeypatch.setattr(acde, "_run_h5_guard_phase", fake_guard)
     stats_map = {
         str(idx): {"j_win": 20 + idx, "e_win": 15 + idx}
         for idx in range(1, 7)
