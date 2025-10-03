@@ -146,13 +146,16 @@ def _build_market(
     
     win_total = 0.0
     place_total = 0.0
-    has_win = False
+    total_runners = 0
+    win_runners = 0
     has_place = False
 
     for entry in runners:
         if not isinstance(entry, Mapping):
             continue
 
+        total_runners += 1
+        
         win_odds = None
         for key in ("odds", "decimal_odds", "odds_dec", "odds_win", "win_odds", "cote", "odd"):
             if key in entry:
@@ -160,9 +163,9 @@ def _build_market(
                 if candidate > 0:
                     win_odds = candidate
                     break
-        if win_odds:
+        if win_odds is not None:
             win_total += 1.0 / win_odds
-            has_win = True
+            win_runners += 1
 
         place_odds = None
         for key in ("odds_place", "place_odds", "cote_place"):
@@ -171,15 +174,24 @@ def _build_market(
                 if candidate > 0:
                     place_odds = candidate
                     break
-        if place_odds is None and win_odds:
+        if place_odds is None and win_odds is not None:
             place_odds = win_odds
-        if place_odds:
+        if place_odds is not None:
             place_total += 1.0 / place_odds
             has_place = True
 
-    metrics: dict[str, float | int] = {}
-    if has_win:
-        metrics["overround_win"] = win_total
+    metrics: dict[str, float | int] = {
+        "runner_count_total": total_runners,
+        "runner_count_with_win_odds": win_runners,
+    }
+
+    coverage_ratio: float | None = None
+    if total_runners:
+        coverage_ratio = win_runners / total_runners
+        metrics["win_coverage_ratio"] = round(coverage_ratio, 4)
+
+    if coverage_ratio is not None and coverage_ratio >= 0.70 and math.isfinite(win_total):
+        metrics["overround_win"] = round(win_total, 4)
 
     slots_value = _coerce_slots_place(slots_place)
 
