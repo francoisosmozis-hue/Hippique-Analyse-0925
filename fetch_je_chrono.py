@@ -123,8 +123,11 @@ def _discover_course_dir(snapshot_path: Path) -> Path:
     return snapshot_path.parent
 
 
-def enrich_from_snapshot(snapshot_path: str | Path, reunion: str, course: str) -> Path:
-    """Materialise chronos artefacts for the course referenced by ``snapshot_path``."""
+def enrich_from_snapshot(snapshot_path: str | Path, reunion: str, course: str) -> str:
+    """Materialise chronos artefacts for the course referenced by ``snapshot_path``.
+
+    Returns the path to the generated CSV as a string.
+    """
 
     snapshot_path = Path(snapshot_path)
     course_dir = _discover_course_dir(snapshot_path)
