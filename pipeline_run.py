@@ -239,11 +239,18 @@ def _evaluate_combo_strict(
 ) -> tuple[bool, dict[str, Any], list[str], dict[str, Any]]:
     """Evaluate a combo candidate enforcing strict EV/payout guards.
 
-    ``allow_heuristic`` mirrors the CLI flag while keeping the default behaviour
-    strictly factual.  When ``False`` (default) any calibration gap immediately
-    translates into an ``insufficient_data`` status which is then rejected by
-    the guard rails below.
+    ``allow_heuristic`` is preserved for backwards compatibility but always
+    coerced to ``False``.  Combo evaluation now strictly requires a payout
+    calibration file; missing calibrations yield an ``insufficient_data`` status
+    that the guard rails reject.
     """
+
+    if allow_heuristic:
+        logger.warning(
+            "[COMBO] allow_heuristic override ignored; combos demand a valid "
+            "payout calibration (version: 1 skeleton)."
+        )
+        allow_heuristic = False
 
     result = sim_wrapper.evaluate_combo(
         [template],
@@ -2277,7 +2284,12 @@ def cmd_analyse(args: argparse.Namespace) -> None:
     payout_min_exotic = max(payout_min_exotic, EXOTIC_BASE_PAYOUT)
     cfg["PAYOUT_MIN_EXOTIC"] = payout_min_exotic
 
-    allow_heuristic = bool(args.allow_heuristic)
+    if args.allow_heuristic:
+        logger.warning(
+            "[COMBO] --allow-heuristic est ignoré : fournissez une calibration "
+            "payout conforme au squelette versionné (version: 1)."
+        )
+    allow_heuristic = False
 
     sim_helpers = _load_simulate_ev()
     allocate_dutching_sp_fn = cast(
@@ -3218,7 +3230,11 @@ def main() -> None:
         "--payout-min-exotic", dest="payout_min_exotic", type=float, default=None
     )
     ana.add_argument(
-        "--allow-heuristic", dest="allow_heuristic", action="store_true"
+        "--allow-heuristic",
+        dest="allow_heuristic",
+        action="store_true",
+        help="(obsolète) Conservé pour compatibilité mais ignoré : les combinés "
+        "exigent une calibration payout valide.",
     )
     ana.add_argument("--allow-je-na", dest="allow_je_na", action="store_true")
     ana.add_argument(
