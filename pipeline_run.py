@@ -1642,6 +1642,43 @@ def save_text(path: Path, txt: str) -> None:
     path.write_text(txt, encoding="utf-8")
 
 
+def _discover_p_finale_path(source: str | os.PathLike[str] | None) -> Path | None:
+    """Return the most likely ``*_p_finale.json`` sibling for ``source``."""
+
+    if not source:
+        return None
+
+    base = Path(source)
+    directory = base.parent if base.parent != Path("") else Path(".")
+    suffix = base.suffix or ".json"
+
+    candidates: list[Path] = []
+    stem = base.stem
+    if stem.endswith("_partants"):
+        prefix = stem[: -len("_partants")]
+        if prefix:
+            candidate = directory / f"{prefix}_p_finale{suffix}"
+            if candidate.is_file():
+                candidates.append(candidate)
+
+    candidate_same = directory / f"{stem}_p_finale{suffix}"
+    if candidate_same.is_file() and candidate_same not in candidates:
+        candidates.append(candidate_same)
+
+    if candidates:
+        deduped: list[Path] = []
+        for candidate in candidates:
+            if candidate not in deduped:
+                deduped.append(candidate)
+        return deduped[0]
+
+    matches = sorted(p for p in directory.glob("*_p_finale.json") if p.is_file())
+    if len(matches) == 1:
+        return matches[0]
+
+    return None
+
+
 def _coerce_odds(value) -> float:
     if isinstance(value, str):
         normalized = value.replace(",", ".")
@@ -1670,12 +1707,82 @@ def _coerce_probability(value) -> float:
     return max(prob, 0.0)
 
 
+def _resolve_paid_places(*sources: Mapping[str, Any] | None) -> float:
+    """Return the declared number of paid places from ``sources``."""
+
+    keys = ("slots_place", "slotsPlace", "places_paid", "placesPayees", "nb_places", "places")
+    for source in sources:
+        if not isinstance(source, Mapping):
+            continue
+        for key in keys:
+            if key in source:
+                return _coerce_slots_place(source.get(key))
+        market = source.get("market")
+        if isinstance(market, Mapping):
+            for key in keys:
+                if key in market:
+                    return _coerce_slots_place(market.get(key))
+    return float(_DEFAULT_SLOTS_PLACE)
+
+
 def _normalize_probability_map(prob_map: dict[str, float], ids: list[str]) -> dict[str, float]:
     sanitized = {cid: _coerce_probability(prob_map.get(cid, 0.0)) for cid in ids}
     total = sum(sanitized.values())
     if total <= 0:
         return {cid: 0.0 for cid in ids}
     return {cid: value / total for cid, value in sanitized.items()}
+
+
+def _load_p_finale_probabilities(
+    path: Path,
+    runner_ids: Sequence[str],
+    *,
+    partants_data: Mapping[str, Any] | None = None,
+) -> tuple[dict[str, float] | None, dict[str, float] | None, float | None]:
+    """Return ``p_true`` and ``p_place`` overrides extracted from ``path``."""
+
+    if not runner_ids:
+        return None, None, None
+
+    try:
+        payload = load_json(str(path))
+    except FileNotFoundError:
+        return None, None, None
+    except Exception as exc:  # pragma: no cover - defensive logging
+        logger.warning("Impossible de charger %s: %s", path, exc)
+        return None, None, None
+
+    if not isinstance(payload, Mapping):
+        return None, None, None
+
+    unique_ids = [cid for cid in dict.fromkeys(str(cid) for cid in runner_ids if cid)]
+    if not unique_ids:
+        return None, None, None
+
+    p_true_override: dict[str, float] | None = None
+    p_true_raw = payload.get("p_true")
+    if isinstance(p_true_raw, Mapping):
+        normalized = _normalize_probability_map(
+            {cid: _coerce_probability(p_true_raw.get(cid, 0.0)) for cid in unique_ids},
+            unique_ids,
+        )
+        if sum(normalized.values()) > 0:
+            p_true_override = normalized
+
+    p_place_override: dict[str, float] | None = None
+    p_place_raw = payload.get("p_place")
+    paid_places = _resolve_paid_places(payload.get("meta"), partants_data)
+    if isinstance(p_place_raw, Mapping):
+        sanitized = {cid: _coerce_probability(p_place_raw.get(cid, 0.0)) for cid in unique_ids}
+        total = sum(sanitized.values())
+        if total > 0 and paid_places > 0:
+            scale = paid_places / total
+            normalized_place = {
+                cid: min(value * scale, 1.0) for cid, value in sanitized.items()
+            }
+            p_place_override = normalized_place
+
+    return p_true_override, p_place_override, paid_places if p_place_override else None
 
 
 def _implied_from_odds_map(odds_map: dict[str, float]) -> dict[str, float]:
@@ -2173,6 +2280,19 @@ def cmd_analyse(args: argparse.Namespace) -> None:
     partants_data = load_json(args.partants)
 
     partants = partants_data.get("runners", [])
+    runner_ids: list[str] = []
+    seen_ids: set[str] = set()
+    for entry in partants:
+        if not isinstance(entry, Mapping):
+            continue
+        cid = entry.get("id")
+        if cid is None:
+            continue
+        cid_text = str(cid)
+        if cid_text not in seen_ids:
+            seen_ids.add(cid_text)
+            runner_ids.append(cid_text)
+            
     id2name = partants_data.get(
         "id2name", {str(p["id"]): p.get("name", str(p["id"])) for p in partants}
     )
@@ -2243,6 +2363,44 @@ def cmd_analyse(args: argparse.Namespace) -> None:
         )
     p_true = build_p_true(cfg, partants, odds_h5, odds_h30, stats_je)
 
+    p_place_override: dict[str, float] | None = None
+    override_paid_places: float | None = None
+    override_path: Path | None = None
+    explicit_override = bool(getattr(args, "p_finale", None))
+    if explicit_override:
+        override_path = Path(str(args.p_finale)).expanduser()
+    else:
+        override_path = _discover_p_finale_path(args.partants)
+
+    if override_path and override_path.exists():
+        override_true, override_place, paid_places = _load_p_finale_probabilities(
+            override_path,
+            runner_ids,
+            partants_data=partants_data,
+        )
+        if override_true and sum(override_true.values()) > 0:
+            p_true = override_true
+            logger.info("p_true surchargé depuis %s", override_path)
+        if override_place and sum(override_place.values()) > 0:
+            p_place_override = override_place
+            override_paid_places = paid_places
+            total_place = sum(override_place.values())
+            if paid_places is not None:
+                logger.info(
+                    "p_place surchargé depuis %s (places=%.2f, somme=%.3f)",
+                    override_path,
+                    paid_places,
+                    total_place,
+                )
+            else:
+                logger.info(
+                    "p_place surchargé depuis %s (somme=%.3f)",
+                    override_path,
+                    total_place,
+                )
+    elif explicit_override and override_path:
+        logger.warning("Override p_finale introuvable: %s", override_path)
+        
     # Tickets allocation
     favorite_ids: set[str] = set()
     if odds_h5:
@@ -2305,6 +2463,25 @@ def cmd_analyse(args: argparse.Namespace) -> None:
                 "last2_top3": _as_recent_form_flag(je_stats.get("last2_top3")),
                 "is_favorite": cid in favorite_ids,
             }
+            if p_place_override and cid in p_place_override:
+                place_prob = float(p_place_override[cid])
+                if place_prob > 0.0:
+                    runner["p_place"] = place_prob
+                    probabilities_block = dict(runner.get("probabilities", {}))
+                    probabilities_block["p_place"] = place_prob
+                    if "p_true" not in probabilities_block:
+                        probabilities_block["p_true"] = runner["p"]
+                    runner["probabilities"] = probabilities_block
+                    if isinstance(p, dict):
+                        p_probabilities = p.get("probabilities")
+                        if isinstance(p_probabilities, Mapping):
+                            new_probabilities = dict(p_probabilities)
+                        else:
+                            new_probabilities = {}
+                        new_probabilities["p_place"] = place_prob
+                        new_probabilities.setdefault("p_true", runner["p"])
+                        p["probabilities"] = new_probabilities
+                        p["p_place"] = place_prob
             if odds_place_current > 0.0:
                 runner["odds_place"] = odds_place_current
             if odds_place_h30 > 0.0 and odds_place_current <= 0.0:
@@ -2988,6 +3165,12 @@ def main() -> None:
         "--allow-heuristic", dest="allow_heuristic", action="store_true"
     )
     ana.add_argument("--allow-je-na", dest="allow_je_na", action="store_true")
+    ana.add_argument(
+        "--p-finale",
+        dest="p_finale",
+        default=None,
+        help="Chemin vers un fichier p_finale.json pour surcharger p_true/p_place.",
+    )
     ana.add_argument(
         "--calibration",
         default=str(PAYOUT_CALIBRATION_PATH),
