@@ -15,7 +15,10 @@ import inspect
 import json
 from pathlib import Path
 from urllib.parse import urljoin
+from datetime import datetime
 from typing import Any, Dict, Iterable, Mapping
+
+from zoneinfo import ZoneInfo
 
 import yaml
 
@@ -58,181 +61,74 @@ def _load_local_snapshot(rc_tag: str) -> Path | None:
 
 
 def fetch_race_snapshot(
-    reunion: str | None,
-    course: str | None = None,
-    phase: str = "H30",
+    reunion: str,
+    course: str,
+    phase: str,
     *,
-    use_cache: bool = False,
-    course_url: str | None = None,
-    **extra: Any,
+    date: str | None = None,
 ) -> dict[str, Any]:
-    """Return a minimal snapshot for ``reunion``/``course``.
+    """Return a normalised snapshot for ``reunion``/``course`` at ``phase``."""
 
-    By default the helper fetches the live course page from ZEturf, parses it
-    through :func:`scripts.online_fetch_zeturf.parse_course_page` and returns a
-    trimmed payload containing the runner list, the raw ``partants`` entry, the
-    ``market`` block (when available) and the normalised ``phase`` label.  When
-    ``use_cache`` is set to :data:`True` the helper instead loads the most
-    recent local snapshot (``data/R?C?/snapshot_*.json``) without performing any
-    remote requests.
-    """
+    if reunion in (None, "") or course in (None, ""):
+        raise ValueError("reunion and course are required")
 
-    phase_tag = _normalise_phase_alias(phase)
+    try:
+        reunion_norm = _normalise_label(reunion, "R")
+        course_norm = _normalise_label(course, "C")
+    except ValueError as exc:  # pragma: no cover - defensive guard
+        raise ValueError(str(exc)) from exc
 
-    reunion_text = str(reunion).strip() if reunion not in (None, "") else ""
-    course_text = str(course).strip() if course not in (None, "") else ""
+    phase_norm = _normalise_phase_alias(phase)
+    snapshot_mode = "H-5" if phase_norm == "H5" else "H-30"
 
-    if not reunion_text and course_url is None:
-        raise NotImplementedError(
-            "fetch_race_snapshot requires reunion/course identifiers or a course_url",
-        )
+    if date is None:
+        today = datetime.now(ZoneInfo("Europe/Paris")).date()
+        date_text = today.isoformat()
+    else:
+        date_text = str(date).strip()
+        if not date_text:
+            raise ValueError("date must be a non-empty string when provided")
 
-    if course_url and (not reunion_text or not course_text):
-        raw_snapshot: dict[str, Any] | None = None
+    course_url = f"https://www.zeturf.fr/fr/course/{date_text}/{reunion_norm}{course_norm}"
 
-        sources_config = extra.get("sources") if isinstance(extra.get("sources"), Mapping) else None
+        parse_fn = getattr(_impl, "parse_course_page", None)
+    if not callable(parse_fn):
+        raise ValueError("parse_course_page implementation unavailable")
 
-        retry_value = extra.get("retries", extra.get("retry"))
-        try:
-            retry_count = int(retry_value) if retry_value is not None else 3
-        except (TypeError, ValueError):
-            retry_count = 3
-        if retry_count <= 0:
-            retry_count = 1
+    try:
+        parsed_payload = parse_fn(course_url, snapshot=snapshot_mode)
+    except Exception as exc:  # pragma: no cover - defensive logging
+        raise ValueError(f"unable to parse course page at {course_url}") from exc
 
-        backoff_value = extra.get("backoff")
-        try:
-            backoff_delay = float(backoff_value) if backoff_value is not None else 1.0
-        except (TypeError, ValueError):
-            backoff_delay = 1.0
-        if backoff_delay <= 0:
-            backoff_delay = 1.0
+    if not isinstance(parsed_payload, Mapping):
+        raise ValueError(f"unexpected payload returned for {course_url}")
 
-        derived_reunion = reunion_text or None
-        derived_course = course_text or None
-        if derived_reunion and not derived_course:
-            match = _RC_COMBINED_RE.search(derived_reunion.upper())
-            if match:
-                derived_reunion = f"R{match.group(1)}"
-                derived_course = f"C{match.group(2)}"
+    raw_snapshot = dict(parsed_payload)
 
-        reunion_norm = derived_reunion
-        course_norm = derived_course
-        if reunion_norm:
-            try:
-                reunion_norm = _normalise_label(reunion_norm, "R")
-            except ValueError:
-                pass
-        if course_norm:
-            try:
-                course_norm = _normalise_label(course_norm, "C")
-            except ValueError:
-                pass
+    hippo_hint = None
+    if isinstance(raw_snapshot.get("meta"), Mapping):
+        meta_mapping = raw_snapshot["meta"]
+        hippo_hint = meta_mapping.get("hippodrome") or meta_mapping.get("meeting")
+    hippo_hint = hippo_hint or raw_snapshot.get("hippodrome") or raw_snapshot.get("meeting")
 
-        impl_kwargs = {}
-        for key in ("session", "retry", "retries", "backoff", "sources"):
-            if key in extra:
-                impl_kwargs[key] = extra[key]
+    canonical_url = _build_canonical_course_url(date_text, reunion_norm, course_norm, hippo_hint)
+    if canonical_url:
+        course_url = canonical_url
+        
+    raw_snapshot.setdefault("source_url", course_url)
 
-        if reunion_norm and course_norm:
-            try:
-                raw_snapshot = _fetch_race_snapshot_impl(
-                    reunion_norm,
-                    course_norm,
-                    phase=phase_tag,
-                    url=course_url,
-                    **impl_kwargs,
-                )
-            except Exception as exc:  # pragma: no cover - defensive logging
-                logger.debug(
-                    "[ZEturf] fallback fetch via url failed for %s/%s: %s",
-                    reunion_norm,
-                    course_norm,
-                    exc,
-                )
-                raw_snapshot = None
-
-        html_snapshot: dict[str, Any] | None = None
-        if raw_snapshot is None or not isinstance(raw_snapshot, Mapping) or not raw_snapshot.get("runners"):
-            html_snapshot = _fetch_snapshot_via_html(
-                [course_url],
-                phase=phase_tag,
-                retries=retry_count,
-                backoff=backoff_delay,
-                session=extra.get("session"),
-            )
-            if isinstance(html_snapshot, Mapping) and html_snapshot:
-                if isinstance(raw_snapshot, Mapping) and raw_snapshot:
-                    raw_snapshot = dict(raw_snapshot)
-                    _merge_snapshot_data(raw_snapshot, html_snapshot)
-                else:
-                    raw_snapshot = dict(html_snapshot)
-
-        if not isinstance(raw_snapshot, Mapping):
-            raw_snapshot = {}
-
-        raw_snapshot.setdefault("source_url", course_url)
-
-        reunion_hint = reunion_norm or reunion_text or raw_snapshot.get("reunion")
-        course_hint = course_norm or course_text or raw_snapshot.get("course")
-
-        if not reunion_hint:
-            meta_mapping = raw_snapshot.get("meta") if isinstance(raw_snapshot.get("meta"), Mapping) else {}
-            if isinstance(meta_mapping, Mapping):
-                reunion_hint = meta_mapping.get("reunion")
-                course_hint = course_hint or meta_mapping.get("course")
-        return _normalise_snapshot_result(
-            raw_snapshot,
-            reunion_hint=reunion_hint,
-            course_hint=course_hint,
-            phase_norm=phase_tag,
-            sources_config=sources_config,
-        )
-
-    rc_tag = _normalise_rc_tag(reunion_text, course_text or None)
-
-    reunion_hint = None
-    course_hint = None
-    match = re.match(r"^(R\d+)(C\d+)$", rc_tag)
-    if match:
-        reunion_hint, course_hint = match.group(1), match.group(2)
-    else:  # pragma: no cover - defensive guard
-        raise ValueError(f"rc tag {rc_tag!r} is invalid")
-
-    if use_cache:
-        snapshot_path = _load_local_snapshot(rc_tag)
-        if snapshot_path is None:
-            raise RuntimeError(
-                "Aucun snapshot local trouvé pour "
-                f"{rc_tag} (phase {phase_tag}). "
-                "Exécutez analyse_courses_du_jour_enrichie.py pour la phase souhaitée."
-            )
-        cached_payload = json.loads(snapshot_path.read_text(encoding="utf-8"))
-        if not isinstance(cached_payload, Mapping):
-            cached_payload = {}
-            
-        sources_config = extra.get("sources") if isinstance(extra.get("sources"), Mapping) else None
-        if sources_config is None:
-            try:
-                sources_config = _load_sources_config()
-            except Exception:  # pragma: no cover - best effort cache hydration
-                sources_config = None
-
-        return _normalise_snapshot_result(
-            cached_payload,
-            reunion_hint=reunion_hint,
-            course_hint=course_hint,
-            phase_norm=phase_tag,
-            sources_config=sources_config,  
-        )
-
-    return fetch_race_snapshot_full(
-        reunion,
-        course,
-        phase=phase,
-        course_url=course_url,
-        **extra,
+    normalised = _normalise_snapshot_result(
+        raw_snapshot,
+        reunion_hint=reunion_norm,
+        course_hint=course_norm,
+        phase_norm=phase_norm,
+        sources_config=None,
     )
+
+    partants_count = normalised.get("partants_count")
+    logger.info("[ZEturf] phase=%s url=%s partants=%s", phase_norm, course_url, partants_count)
+
+    return normalised
     
 
 def _load_full_impl() -> Any:
