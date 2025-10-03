@@ -1345,14 +1345,21 @@ def fetch_from_geny_idcourse(id_course: str) -> Dict[str, Any]:
     return snapshot
 
 
-def write_snapshot_from_geny(id_course: str, phase: str, out_dir: Path) -> Path:
+def write_snapshot_from_geny(
+    id_course: str, phase: str, out_dir: Path, *, course_url: str | None = None
+) -> Path:
     """Fetch a Geny snapshot for ``id_course`` and write it to ``out_dir``.
 
     The output filename embeds a timestamp, the race label and the phase tag
     (``"H-30"`` or ``"H-5"``).
+
+    When ``course_url`` is provided it is recorded in the resulting payload so
+    downstream consumers can trace the origin of the snapshot.
     """
 
     snap = fetch_from_geny_idcourse(id_course)
+    if course_url:
+        snap.setdefault("course_url", course_url)
 
     phase_tag = "H-30" if phase.upper().replace("-", "") == "H30" else "H-5"
     timestamp = dt.datetime.now().strftime("%Y%m%dT%H%M%S")
