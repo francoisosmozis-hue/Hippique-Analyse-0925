@@ -2018,9 +2018,9 @@ def _process_reunion(
             return
 
     base_dir = ensure_dir(data_dir)
-    for c_label, course_id in courses:
+    for r_label, c_label, course_id, course_url in courses:
         rc_dir = ensure_dir(base_dir / f"{r_label}{c_label}")
-        for r_label, c_label, course_id, course_url in courses:
+        write_snapshot_from_geny(course_id, phase, rc_dir, course_url=course_url)
         outcome: dict[str, Any] | None = None
         pipeline_done = False
         if phase.upper() == "H5":
@@ -2032,6 +2032,7 @@ def _process_reunion(
             if pipeline_done:
                 csv_path = export_per_horse_csv(rc_dir)
                 print(f"[INFO] per-horse report écrit: {csv_path}")
+                outcome = None
             elif outcome is not None:
                 _write_json_file(rc_dir / "decision.json", outcome)
             else:  # pragma: no cover - defensive fallback
