@@ -579,6 +579,18 @@ def _normalise_runner_name(record: Mapping[str, Any]) -> str | None:
     return None
 
 
+_PLACE_ODDS_KEYS = (
+    "odds_place",
+    "place_odds",
+    "placeOdds",
+    "place",
+    "cote_place",
+    "decimal_place_odds",
+    "place_decimal_odds",
+    "odds_place_dec",
+)
+
+
 def _resolve_odds(record: Mapping[str, Any]) -> float | None:
     odds_keys = (
         "odds_place",
@@ -590,6 +602,42 @@ def _resolve_odds(record: Mapping[str, Any]) -> float | None:
         "closing_odds",
     )
     for key in odds_keys:
+        if key not in record:
+            continue
+        value = _coerce_float(record.get(key))
+        if value is None or value <= 1.0:
+            continue
+        return value
+    return None
+
+
+def _resolve_place_odds(record: Mapping[str, Any]) -> float | None:
+    for key in _PLACE_ODDS_KEYS:
+        if key not in record:
+            continue
+        value = _coerce_float(record.get(key))
+        if value is None or value <= 1.0:
+            continue
+        return value
+
+    indicator_fields = ("bet_type", "type", "label", "market_type")
+    indicator_text = " ".join(
+        str(record.get(field, "") or "") for field in indicator_fields
+    ).lower()
+    if "place" not in indicator_text:
+        return None
+
+    fallback_keys = (
+        "odds",
+        "cote",
+        "odd",
+        "decimal_odds",
+        "odds_dec",
+        "odds_sp",
+        "expected_odds",
+        "closing_odds",
+    )
+    for key in fallback_keys:
         if key not in record:
             continue
         value = _coerce_float(record.get(key))
@@ -631,16 +679,92 @@ def _extract_sp_candidates(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, 
         odds = _resolve_odds(row)
         if odds is None:
             continue
+        place_odds = _resolve_place_odds(row)
+        if place_odds is not None:
+            odds = place_odds
         probability = _resolve_probability(row)
         candidate = {
             "id": _normalise_runner_id(row, idx),
             "name": _normalise_runner_name(row),
             "odds": odds,
         }
+        if place_odds is not None:
+            candidate["odds_place"] = place_odds
         if probability is not None:
             candidate["p"] = probability
         candidates.append(candidate)
     return candidates
+
+
+def _prepare_sp_legs(
+    legs: Sequence[Mapping[str, Any]] | None,
+) -> tuple[list[dict[str, Any]], list[str]]:
+    if not legs:
+        return [], []
+
+    prepared: list[dict[str, Any]] = []
+    missing_ids: list[str] = []
+    for index, leg in enumerate(legs):
+        if not isinstance(leg, Mapping):
+            continue
+        place_odds = _resolve_place_odds(leg)
+        if place_odds is None or place_odds <= 1.0:
+            missing_ids.append(_normalise_runner_id(leg, index))
+            continue
+        entry = {str(key): value for key, value in leg.items()}
+        entry["odds_place"] = place_odds
+        entry["odds"] = place_odds
+        prepared.append(entry)
+    return prepared, missing_ids
+
+
+def estimate_sp_ev(
+    legs: Sequence[Mapping[str, Any]] | None,
+) -> tuple[float | None, bool]:
+    """Return the average EV ratio for ``legs`` with valid place odds."""
+
+    if not legs:
+        return None, False
+
+    filtered, missing_ids = _prepare_sp_legs(legs)
+    unique_missing = list(dict.fromkeys(missing_ids))
+    some_missing = bool(unique_missing) or len(filtered) < sum(
+        1 for leg in legs if isinstance(leg, Mapping)
+    )
+    if unique_missing:
+        logger.warning(
+            "[SP] Place odds missing for legs: %s",
+            ", ".join(unique_missing),
+        )
+
+    if len(filtered) < 2:
+        return None, some_missing
+
+    total_ev = 0.0
+    total_stake = 0.0
+    for leg in filtered:
+        odds_value = _coerce_float(leg.get("odds_place"))
+        if odds_value is None or odds_value <= 1.0:
+            odds_value = _coerce_float(leg.get("odds"))
+        if odds_value is None or odds_value <= 1.0:
+            some_missing = True
+            continue
+        probability = _resolve_probability(leg)
+        if probability is None:
+            probability = 1.0 / odds_value if odds_value > 0 else None
+        if probability is None or probability <= 0.0 or probability >= 1.0:
+            some_missing = True
+            probability = None
+        if probability is None:
+            continue
+        total_ev += probability * odds_value - 1.0
+        total_stake += 1.0
+
+    if total_stake < 2:
+        return None, some_missing
+
+    ev_ratio = total_ev / total_stake if total_stake else None
+    return ev_ratio, some_missing
 
 
 def _split_legs(text: str) -> list[str]:
@@ -912,13 +1036,33 @@ def _analyse_course(
 
     reasons: list[str] = []
 
-    sp_candidates = _extract_sp_candidates(rows)
-    guards["sp_candidates"] = len(sp_candidates)
+    sp_candidates_all = _extract_sp_candidates(rows)
+    guards["sp_candidates"] = len(sp_candidates_all)
+
+    sp_ev_estimate, some_odds_missing = estimate_sp_ev(sp_candidates_all)
+    guards["sp_some_odds_missing"] = some_odds_missing
+    meta["sp_some_odds_missing"] = some_odds_missing
+    if sp_ev_estimate is not None:
+        guards["sp_ev_estimate"] = sp_ev_estimate
+
+    sp_candidates, _ = _prepare_sp_legs(sp_candidates_all)
+    guards["sp_candidates_with_place_odds"] = len(sp_candidates)
     sp_tickets: list[dict[str, Any]] = []
     ev_sp_total = 0.0
-    if len(sp_candidates) < 2:
+    sp_status = "ok"
+    sp_status = "ok"
+
+    if len(sp_candidates_all) < 2:
         reasons.append("sp_insufficient_candidates")
-    else:
+        if len(sp_candidates) < 2:
+        sp_status = "insufficient_data"
+        if "sp_insufficient_data" not in reasons:
+            reasons.append("sp_insufficient_data")
+
+    guards["sp_status"] = sp_status
+    meta["sp_status"] = sp_status
+
+    if sp_status == "ok":
         cfg = {
             "BUDGET_TOTAL": float(budget),
             "SP_RATIO": 1.0,
@@ -943,6 +1087,8 @@ def _analyse_course(
             if ev_sp_ratio < ev_min_sp:
                 reasons.append("sp_ev_below_min")
                 sp_tickets = []
+    else:
+        guards["sp_tickets"] = 0
     combo_candidates = _extract_combo_candidates(rows)
     guards["combo_candidates"] = len(combo_candidates)
     combo_overround = _extract_overround(rows)
@@ -977,8 +1123,13 @@ def _analyse_course(
                     reasons.append(f"combo_{decision}")
     tickets = sp_tickets + combo_tickets
 
+    if sp_status != "ok":
+        tickets = []
+        sp_tickets = []
+        combo_tickets = []
+
     stats: Dict[str, Any] = {}
-    if tickets:
+    if sp_status == "ok" and tickets:
         try:
             stats = simulate_ev_batch(
                 [dict(ticket) for ticket in tickets],
