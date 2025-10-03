@@ -89,9 +89,9 @@ def fetch_race_snapshot(
         if not date_text:
             raise ValueError("date must be a non-empty string when provided")
 
-    course_url = f"https://www.zeturf.fr/fr/course/{date_text}/{reunion_norm}{course_norm}"
+    course_url = f"{_ZT_BASE_URL}/fr/course/{date_text}/{reunion_norm}{course_norm}"
 
-        parse_fn = getattr(_impl, "parse_course_page", None)
+    parse_fn = getattr(_impl, "parse_course_page", None)
     if not callable(parse_fn):
         raise ValueError("parse_course_page implementation unavailable")
 
