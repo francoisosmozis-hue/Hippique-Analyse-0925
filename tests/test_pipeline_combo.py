@@ -695,6 +695,16 @@ def test_pipeline_optimization_preserves_ev_and_budget(tmp_path, monkeypatch):
 
 def test_pipeline_respects_p_finale_override(tmp_path, monkeypatch):
     partants = partants_sample()
+    market_payload = partants.get("market")
+    if isinstance(market_payload, dict):
+        for key in (
+            "slots_place",
+            "places_payees",
+            "places_payees_h5",
+            "paid_places",
+            "paid_slots",
+        ):
+            market_payload.pop(key, None)
     inputs = _write_inputs(
         tmp_path,
         partants,
@@ -806,7 +816,13 @@ def test_pipeline_respects_p_finale_override(tmp_path, monkeypatch):
     saved = json.loads((outdir / "p_finale.json").read_text(encoding="utf-8"))
     for cid, expected in p_true_override.items():
         assert saved["p_true"][cid] == pytest.approx(expected)
-
+    metrics_market = (
+        saved.get("meta", {})
+        .get("exotics", {})
+        .get("metrics", {})
+        .get("market", {})
+    )
+    assert metrics_market.get("slots_place") == pytest.approx(paid_places)
 
 def test_filter_combos_strict_handles_missing_metrics():
     class DummyWrapper:
