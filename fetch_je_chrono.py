@@ -14,24 +14,24 @@ LOGGER = logging.getLogger(__name__)
 ResultDict: TypeAlias = dict[str, str | None]
 
 
-enrich_from_snapshot(snapshot_path: str, out_dir: str) -> ResultDict:
+def enrich_from_snapshot(snapshot_path: str, out_dir: str) -> dict:
     """Build ``je_stats.csv`` and ``chronos.csv`` files from ``snapshot_path``.
 
-Parameters
+    Parameters
     ----------
     snapshot_path:
         Path to the JSON snapshot describing the runners.
     out_dir:
         Directory where the CSV files will be written.
 
-       Returns
+    Returns
     -------
     dict
         Mapping with the keys ``"je_stats"`` and ``"chronos"`` whose values are the
         paths to the generated files (as strings) or ``None`` when the artefact
         could not be produced.
-    """ 
-
+    """
+    
     result: ResultDict = {"je_stats": None, "chronos": None}
 
     snapshot_file = Path(snapshot_path)
@@ -84,7 +84,7 @@ Parameters
     else:
         result["je_stats"] = str(je_path)
 
-
+    try:
         _write_csv(chronos_path, normalised, ("num", "chrono"))
     except OSError:
         LOGGER.exception("Failed to write chronos CSV at %s", chronos_path)
