@@ -155,6 +155,7 @@ def test_build_market_requires_win_coverage_threshold():
     assert metrics_low["runner_count_total"] == 4
     assert metrics_low["runner_count_with_win_odds"] == 2
     assert metrics_low["win_coverage_ratio"] == pytest.approx(0.5, abs=1e-4)
+    assert metrics_low["win_coverage_sufficient"] is False
     assert "overround_win" not in metrics_low or metrics_low["overround_win"] is None
 
     runners_high_coverage = [
@@ -175,7 +176,9 @@ def test_build_market_requires_win_coverage_threshold():
     assert metrics_high["runner_count_total"] == 4
     assert metrics_high["runner_count_with_win_odds"] == 3
     assert metrics_high["win_coverage_ratio"] == pytest.approx(0.75, abs=1e-4)
+    assert metrics_high["win_coverage_sufficient"] is True
     assert metrics_high["overround_win"] == pytest.approx(round(expected_win_total, 4))
+    assert metrics_high["overround"] == pytest.approx(round(expected_win_total, 4))
 
 
 def test_market_drift_signal_thresholds():
@@ -304,10 +307,10 @@ def test_smoke_run(tmp_path):
     assert market_meta.get("overround") is not None
     if market_meta.get("overround") is not None:
         expected_market_overround = sum(
-            1.0 / horse["odds_place"]
+            1.0 / horse["odds"]
             for horse in partants["market"]["horses"]
         )
-        assert market_meta["overround"] == pytest.approx(expected_market_overround)
+        assert market_meta["overround"] == pytest.approx(expected_market_overround, abs=1e-4)
     diff_params = json.loads(
         (outdir / "diff_drift.json").read_text(encoding="utf-8")
     )["params"]
