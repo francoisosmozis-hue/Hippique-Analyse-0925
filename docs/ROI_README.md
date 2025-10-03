@@ -6,16 +6,18 @@
 - Split stakes evenly across active tickets unless a scenario-specific allocation is defined in the run configuration.
 
 ## EV / ROI Thresholds
-- Only deploy tickets with **expected value (EV) ≥ 1.05** and **projected ROI ≥ 8 %** after accounting for commission.
-- Flag tickets with EV between 1.02 and 1.05 for manual review; do not auto-submit unless an operator overrides the gate.
+- Only deploy combinations with **expected value (EV) ≥ +40 %** over stake.
+- Ensure projected **ROI global remains ≥ +20 %** across the active batch.
+- Require a **minimum projected payout of 10 €** for every submitted ticket.
+- Reject tickets with forecast **SP above 60 %** to keep exposure aligned with the ROI+ v5.1 spec.
 
 ## Overround Gating
-- Market overround must be **≤ 112 %** at H-30 and **≤ 108 %** at H-5.
-- If overround breaches the ceiling, suppress ticket generation and log the meeting for monitoring.
+- Suppress generation when the **market overround exceeds 1.30** at any checkpoint.
+- Log the blocked meeting and re-evaluate once the book returns below the gate.
 
 ## Data Fail-Safe Behavior
 - If any mandatory feed (odds, runners, scratches, or calibration curves) is stale by more than **7 minutes**, halt the pipeline and alert Ops via the standard PagerDuty hook.
-- On partial failures (e.g., missing sectional times), downgrade confidence and require manual approval before transmission.
+- Missing inputs trigger an **abstention propre**: no tickets are emitted until data integrity is restored, even if partial substitutes exist.
 
 ## Calibration Requirements
 - Maintain calibration files under `calibration/` with timestamps no older than **72 hours**.
@@ -30,6 +32,6 @@
 ```
 make venv
 make test
-make run-h30 ARGS="--meeting <meeting_id> --date <YYYY-MM-DD>"
-make run-h5 ARGS="--meeting <meeting_id> --date <YYYY-MM-DD>"
+make run-h30 URL="https://..."
+make run-h5 URL="https://..."
 ```
