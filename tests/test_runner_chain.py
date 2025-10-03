@@ -9,6 +9,17 @@ import runner_chain
 from scripts import runner_chain as runner_script
 
 
+def _build_payload(phase: str) -> runner_script.RunnerPayload:
+    return runner_script.RunnerPayload(
+        id_course="123456",
+        reunion="R1",
+        course="C2",
+        phase=phase,
+        start_time=dt.datetime(2023, 9, 25, 15, 30),
+        budget=5.0,
+    )
+
+
 def test_compute_overround_cap_flat_handicap_string_partants() -> None:
     cap = runner_chain.compute_overround_cap("Handicap de Plat", "16 partants")
     assert cap == pytest.approx(1.25)
