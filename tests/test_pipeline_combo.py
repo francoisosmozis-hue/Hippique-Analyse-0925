@@ -63,12 +63,18 @@ def _patch_combo_eval(monkeypatch, *, stats=None):
         result.setdefault("sharpe", 0.0)
         return result
 
-    monkeypatch.setattr(simulate_wrapper, "evaluate_combo", fake_eval)    
-def _write_inputs(tmp_path, partants, *, combo_ratio: float = 0.4):
+    monkeypatch.setattr(simulate_wrapper, "evaluate_combo", fake_eval)
+def _write_inputs(
+    tmp_path,
+    partants,
+    *,
+    combo_ratio: float = 0.4,
+    partants_filename: str = "partants.json",
+):
     h30_path = tmp_path / "h30.json"
     h5_path = tmp_path / "h5.json"
     stats_path = tmp_path / "stats.json"
-    partants_path = tmp_path / "partants.json"
+    partants_path = tmp_path / partants_filename
     gpi_path = tmp_path / "gpi.yml"
     diff_path = tmp_path / "diff.json"
 
@@ -684,8 +690,123 @@ def test_pipeline_optimization_preserves_ev_and_budget(tmp_path, monkeypatch):
 
     assert float(tracking["total_stake"]) == pytest.approx(total_stake)
     assert float(tracking["roi_sp"]) == pytest.approx(data["ev"]["roi_sp"])
-    assert float(tracking["roi_global"]) == pytest.approx(data["ev"]["roi_global"])
-   
+    assert float(tracking["roi_global"]) == pytest.approx(data["ev"]["roi_global"])   
+
+
+def test_pipeline_respects_p_finale_override(tmp_path, monkeypatch):
+    partants = partants_sample()
+    inputs = _write_inputs(
+        tmp_path,
+        partants,
+        partants_filename="R1C1_partants.json",
+    )
+
+    paid_places = 3.0
+    p_true_override = {
+        "1": 0.04,
+        "2": 0.06,
+        "3": 0.10,
+        "4": 0.15,
+        "5": 0.25,
+        "6": 0.40,
+    }
+    p_place_raw = {
+        "1": 0.05,
+        "2": 0.10,
+        "3": 0.20,
+        "4": 0.30,
+        "5": 0.15,
+        "6": 0.20,
+    }
+    override_payload = {
+        "p_true": p_true_override,
+        "p_place": p_place_raw,
+        "meta": {"market": {"slots_place": paid_places}},
+    }
+    override_path = inputs["partants"].with_name("R1C1_p_finale.json")
+    override_path.write_text(json.dumps(override_payload), encoding="utf-8")
+
+    _mock_tracking_outputs(tmp_path, monkeypatch)
+
+    captured_pre: list[list[dict]] = []
+    captured_post: list[list[dict]] = []
+
+    def fake_allocate(cfg_local, runners):
+        return [], 0.0
+
+    def fake_simulate(tickets, bankroll, **kwargs):
+        return {
+            "ev": 0.0,
+            "roi": 0.0,
+            "combined_expected_payout": 0.0,
+            "risk_of_ruin": 0.0,
+            "variance": 0.0,
+            "clv": 0.0,
+        }
+
+    def fake_gate(
+        cfg,
+        ev_sp,
+        ev_global,
+        roi_sp,
+        roi_global,
+        min_payout_combos,
+        risk_of_ruin=0.0,
+        ev_over_std=0.0,
+        homogeneous_field=False,
+    ):
+        return {"sp": True, "combo": False, "reasons": {"sp": [], "combo": []}}
+
+    original_ensure = pipeline_run._ensure_place_odds
+
+    def capture_ensure(runners):
+        captured_pre.append([dict(r) for r in runners])
+        ensured = original_ensure(runners)
+        captured_post.append([dict(r) for r in ensured])
+        return ensured
+
+    pipeline_run._load_simulate_ev.cache_clear()
+    monkeypatch.setattr(simulate_ev, "allocate_dutching_sp", fake_allocate)
+    monkeypatch.setattr(pipeline_run, "_ensure_place_odds", capture_ensure)
+    cleanup = _patch_simulation(monkeypatch, simulate_fn=fake_simulate, gate_fn=fake_gate)
+    try:
+        outdir = _run_pipeline(tmp_path, inputs)
+    finally:
+        cleanup()
+
+    assert captured_pre, "pre-ensure runners should be captured"
+    pre_runners = captured_pre[0]
+    assert pre_runners, "expected at least one runner"
+    pre_by_id = {runner["id"]: runner for runner in pre_runners}
+
+    scale = paid_places / sum(p_place_raw.values())
+    total_place = 0.0
+    for cid, raw in p_place_raw.items():
+        expected_place = raw * scale
+        runner = pre_by_id[cid]
+        assert runner["p"] == pytest.approx(p_true_override[cid])
+        assert runner["p_place"] == pytest.approx(expected_place)
+        probabilities = runner.get("probabilities", {})
+        assert probabilities.get("p_place") == pytest.approx(expected_place)
+        total_place += runner["p_place"]
+    assert total_place == pytest.approx(paid_places)
+
+    assert captured_post, "post-ensure runners should be captured"
+    post_runners = captured_post[0]
+    assert post_runners, "expected at least one sanitized runner"
+    post_by_id = {runner["id"]: runner for runner in post_runners}
+    total_post_place = 0.0
+    for cid, raw in p_place_raw.items():
+        expected_place = raw * scale
+        sanitized_runner = post_by_id[cid]
+        assert sanitized_runner["p_place"] == pytest.approx(expected_place)
+        total_post_place += sanitized_runner["p_place"]
+    assert total_post_place == pytest.approx(paid_places)
+
+    saved = json.loads((outdir / "p_finale.json").read_text(encoding="utf-8"))
+    for cid, expected in p_true_override.items():
+        assert saved["p_true"][cid] == pytest.approx(expected)
+
 
 def test_filter_combos_strict_handles_missing_metrics():
     class DummyWrapper:
