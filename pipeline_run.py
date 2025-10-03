@@ -2571,6 +2571,23 @@ def cmd_analyse(args: argparse.Namespace) -> None:
     if not market_runners_raw:
         market_runners_raw = runners_sp_sanitized
 
+    hint_missing = False
+    if slots_place_hint in (None, ""):
+        hint_missing = True
+    elif isinstance(slots_place_hint, (int, float)):
+        hint_missing = float(slots_place_hint) == 0.0
+    elif isinstance(slots_place_hint, str):
+        stripped_hint = slots_place_hint.strip()
+        if not stripped_hint:
+            hint_missing = True
+        else:
+            try:
+                hint_missing = float(stripped_hint.replace(",", ".")) == 0.0
+            except ValueError:
+                hint_missing = False
+    if override_paid_places is not None and hint_missing:
+        slots_place_hint = override_paid_places
+        
     if slots_place_hint in (None, ""):
         market_metrics = _build_market(market_runners_raw)
     else:
