@@ -1,8 +1,12 @@
 import os
+import logging
 from typing import Any, Dict, Iterable, List, Mapping, Sequence, Tuple
 
 from simulate_ev import allocate_dutching_sp
 from runner_chain import validate_exotics_with_simwrapper
+
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -337,7 +341,8 @@ def apply_ticket_policy(
         Optional overrides for validation thresholds. When ``None`` the values
         are read from ``cfg``.
     allow_heuristic:
-        Forwarded to :func:`runner_chain.validate_exotics_with_simwrapper`.
+        Deprecated toggle retained for compatibility.  Truthy values are
+        ignored and combos are always evaluated with calibration data.
         calibration:
         Optional path to the payout calibration YAML forwarded to
         :func:`runner_chain.validate_exotics_with_simwrapper`
@@ -360,6 +365,13 @@ def apply_ticket_policy(
     homogeneous_field = _is_homogeneous_field(runners_list)
     cfg["HOMOGENEOUS_FIELD"] = homogeneous_field
 
+    if allow_heuristic:
+        logger.warning(
+            "[COMBO] allow_heuristic demandé lors de la construction des tickets; "
+            "ignoré car une calibration payout versionnée est obligatoire."
+        )
+    allow_heuristic = False
+    
     # --- SP tickets -----------------------------------------------------
     sp_tickets, _ = allocate_dutching_sp(cfg, runners_list)
     sp_tickets.sort(key=lambda t: t.get("ev_ticket", 0.0), reverse=True)
