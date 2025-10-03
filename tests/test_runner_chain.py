@@ -234,16 +234,6 @@ def test_validate_exotics_with_simwrapper_logs_rejected_status(monkeypatch, capl
     assert info['flags']['combo'] is False
     assert any(reason.startswith('status_') for reason in info['flags']['reasons']['combo'])
 
-    def _build_payload(phase: str) -> runner_script.RunnerPayload:
-    return runner_script.RunnerPayload(
-        id_course="123456",
-        reunion="R1",
-        course="C2",
-        phase=phase,
-        start_time=dt.datetime(2023, 9, 25, 15, 30),
-        budget=5.0,
-    )
-
 
 def test_trigger_phase_result_missing_arrivee(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     payload = _build_payload("RESULT")
