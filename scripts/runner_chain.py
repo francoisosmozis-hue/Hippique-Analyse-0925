@@ -15,7 +15,6 @@ import json
 import logging
 import os
 import re
-from copy import deepcopy
 from pathlib import Path
 from typing import Any, Dict, List, Mapping
 
@@ -235,28 +234,12 @@ def _write_snapshot(
     dest.mkdir(parents=True, exist_ok=True)
     path = dest / f"snapshot_{window}.json"
 
-    sources = deepcopy(_load_sources_config())
-    if course_url is None:
-        rc_map_raw = sources.get("rc_map")
-        if isinstance(rc_map_raw, Mapping):
-            rc_map: Dict[str, Any] = dict(rc_map_raw)
-        else:
-            rc_map = {}
-        rc_map[race_id] = {
-            "course_id": payload.id_course,
-            "reunion": payload.reunion,
-            "course": payload.course,
-        }
-        sources["rc_map"] = rc_map
-
     now = dt.datetime.now().isoformat()
     try:
         snapshot = ofz.fetch_race_snapshot(
             payload.reunion,
             payload.course,
-            phase=window,
-            sources=sources,
-            url=course_url,
+            window,
         )
     except Exception as exc:
         reason = str(exc)
