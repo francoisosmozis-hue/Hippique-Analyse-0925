@@ -137,9 +137,9 @@ def enrich_from_snapshot(snapshot_path: str | Path, reunion: str, course: str) -
 
     target_csv = course_dir / f"{reunion_code}{course_code}_chronos.csv"
     if target_csv.exists():
-        return target_csv
+        return str(target_csv)
 
-    return _materialise_chronos(course_dir, reunion_code, course_code)
+    return str(_materialise_chronos(course_dir, reunion_code, course_code))
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
