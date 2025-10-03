@@ -17,16 +17,22 @@ venv: $(VENV)/.installed
 test: venv
 	$(PYTEST)
 
+CALIB_PATH ?=
+CALIBRATION ?=
+BUDGET ?= 5
+
+ifdef CALIB_PATH
+RUN_ENV := CALIB_PATH=$(CALIB_PATH) 
+else ifdef CALIBRATION
+RUN_ENV := CALIB_PATH=$(CALIBRATION) 
+else
+RUN_ENV :=
+endif
+
 run-h30: venv
-	@test -n "$(REUNION)" || (echo "REUNION environment variable is required" >&2; exit 1)
-	@test -n "$(COURSE)" || (echo "COURSE environment variable is required" >&2; exit 1)
-	$(PYTHON) scripts/runner_chain.py --reunion $(REUNION) --course $(COURSE) --phase H30 --ttl-hours ${TTL_HOURS}
+	@test -n "$(URL)" || (echo "URL variable is required" >&2; exit 1)
+	$(RUN_ENV)$(PYTHON) analyse_courses_du_jour_enrichie.py --course-url "$(URL)" --phase H30 --budget $(BUDGET)
 
 run-h5: venv
-	@test -n "$(REUNION)" || (echo "REUNION environment variable is required" >&2; exit 1)
-	@test -n "$(COURSE)" || (echo "COURSE environment variable is required" >&2; exit 1)
-	$(PYTHON) scripts/runner_chain.py --reunion $(REUNION) --course $(COURSE) --phase H5 --budget ${BUDGET} --calibration ${CALIBRATION}
-
-TTL_HOURS ?= 6
-BUDGET ?= 5
-CALIBRATION ?= calibration/payout_calibration.yaml
+	@test -n "$(URL)" || (echo "URL variable is required" >&2; exit 1)
+	$(RUN_ENV)$(PYTHON) analyse_courses_du_jour_enrichie.py --course-url "$(URL)" --phase H5 --budget $(BUDGET)
