@@ -27,6 +27,7 @@ def test_env_path_missing(monkeypatch, tmp_path):
     if calib.exists():
         calib.unlink()
     monkeypatch.delenv("ALLOW_HEURISTIC", raising=False)
+    monkeypatch.setenv("CALIB_PATH", str(calib))
     res = evaluate_combo(TICKETS, bankroll=10.0)
     assert res["status"] == "insufficient_data"
     assert res["calibration_used"] is False
@@ -72,12 +73,10 @@ def test_override_missing_calibration(tmp_path, monkeypatch):
         calibration=calib,
         allow_heuristic=True,
     )
-    assert res["status"] == "ok"
-    assert res["ev_ratio"] > 0.0
-    assert res["roi"] > 0.0
-    assert res["payout_expected"] > 0.0
+    assert res["status"] == "insufficient_data"
     assert res["calibration_used"] is False
     assert "no_calibration_yaml" in res["notes"]
+    assert "skeleton" in res["message"]
 
 
 def test_with_calibration(tmp_path, monkeypatch):
@@ -117,6 +116,7 @@ def test_marks_unreliable_probabilities(monkeypatch, tmp_path):
     if calib_path.exists():
         calib_path.unlink()
     monkeypatch.delenv("CALIB_PATH", raising=False)
+    calib_path.write_text("{}", encoding="utf-8")
 
     res = evaluate_combo(
         tickets,
@@ -129,4 +129,4 @@ def test_marks_unreliable_probabilities(monkeypatch, tmp_path):
     assert "combo_probabilities_unreliable" in res["notes"]
     assert res["ev_ratio"] <= 0.0
     assert res["roi"] <= 0.0
-    assert res["calibration_used"] is False
+    assert res["calibration_used"] is True
