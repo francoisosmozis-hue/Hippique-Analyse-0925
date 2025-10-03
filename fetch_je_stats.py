@@ -161,8 +161,11 @@ def _discover_course_dir(snapshot_path: Path) -> Path:
     return snapshot_path.parent
 
 
-def enrich_from_snapshot(snapshot_path: str | Path, reunion: str, course: str) -> Path:
-    """Materialise J/E statistics for the course referenced by ``snapshot_path``."""
+def enrich_from_snapshot(snapshot_path: str | Path, reunion: str, course: str) -> str:
+    """Materialise J/E statistics for the course referenced by ``snapshot_path``.
+
+    Returns the path to the generated CSV as a string.
+    """
 
     snapshot_path = Path(snapshot_path)
     course_dir = _discover_course_dir(snapshot_path)
@@ -172,9 +175,9 @@ def enrich_from_snapshot(snapshot_path: str | Path, reunion: str, course: str) -
 
     target_csv = course_dir / f"{reunion_code}{course_code}_je.csv"
     if target_csv.exists():
-        return target_csv
+        return str(target_csv)
 
-    return _materialise_stats(course_dir, reunion_code, course_code)
+    return str(_materialise_stats(course_dir, reunion_code, course_code))
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
