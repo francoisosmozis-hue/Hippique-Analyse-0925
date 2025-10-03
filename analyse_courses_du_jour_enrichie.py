@@ -22,6 +22,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from collections.abc import Mapping
 from typing import Any, Callable, Iterable
+from urllib.parse import urljoin
 
 import requests
 from bs4 import BeautifulSoup
@@ -1960,6 +1961,23 @@ def _process_single_course(
 # ---------------------------------------------------------------------------
 
 
+_COURSE_URL_PATTERN = re.compile(r"/(?:course|race)/(\d+)", re.IGNORECASE)
+
+
+def _extract_labels_from_text(text: str) -> tuple[str, str]:
+    """Return ``(reunion, course)`` labels parsed from ``text``."""
+
+    rc_match = re.search(r"R\d+\s*C\d+", text, re.IGNORECASE)
+    if rc_match:
+        return _derive_rc_parts(rc_match.group(0))
+
+    r_match = re.search(r"R\d+", text, re.IGNORECASE)
+    c_match = re.search(r"C\d+", text, re.IGNORECASE)
+    r_label = r_match.group(0).upper() if r_match else "R?"
+    c_label = c_match.group(0).upper() if c_match else "C?"
+    return r_label, c_label
+
+    
 def _process_reunion(
     url: str,
     phase: str,
@@ -1975,22 +1993,34 @@ def _process_reunion(
     resp.raise_for_status()
     soup = BeautifulSoup(resp.text, "html.parser")
 
-    r_match = re.search(r"(R\d+)", url)
-    r_label = r_match.group(1) if r_match else "R?"
+    text_blob = soup.get_text(" ", strip=True)
+    context_blob = f"{url} {text_blob}".strip()
 
-    courses: list[tuple[str, str]] = []
-    for a in soup.find_all("a"):
-        text = a.get_text(strip=True)
-        c_match = re.search(r"(C\d+)", text)
-        href = a.get("href", "")
-        id_match = re.search(r"(\d+)(?:\.html)?$", href)
-        if c_match and id_match:
-            courses.append((c_match.group(1), id_match.group(1)))
+    courses: list[tuple[str, str, str, str]] = []
+    course_match = _COURSE_URL_PATTERN.search(url)
+    if course_match:
+        course_id = course_match.group(1)
+        r_label, c_label = _extract_labels_from_text(context_blob)
+        courses.append((r_label, c_label, course_id, url))
+    else:
+        r_label, _ = _extract_labels_from_text(context_blob)
+
+        for a in soup.find_all("a"):
+            text = a.get_text(strip=True)
+            c_match = re.search(r"(C\d+)", text, re.IGNORECASE)
+            href = a.get("href", "")
+            id_match = re.search(r"(\d+)(?:\.html)?$", href)
+            if c_match and id_match:
+                course_url = urljoin(url, href)
+                courses.append((r_label, c_match.group(1).upper(), id_match.group(1), course_url))
+
+        if not courses:
+            return
 
     base_dir = ensure_dir(data_dir)
     for c_label, course_id in courses:
         rc_dir = ensure_dir(base_dir / f"{r_label}{c_label}")
-        write_snapshot_from_geny(course_id, phase, rc_dir)
+        for r_label, c_label, course_id, course_url in courses:
         outcome: dict[str, Any] | None = None
         pipeline_done = False
         if phase.upper() == "H5":
@@ -2031,7 +2061,12 @@ def main() -> None:
         action="store_true",
         help="Découvre toutes les réunions FR du jour via Geny et traite H30/H5",
     )
-    ap.add_argument("--reunion-url", help="URL ZEturf d'une réunion")
+    ap.add_argument(
+        "--course-url",
+        "--reunion-url",
+        dest="course_url",
+        help="URL ZEturf d'une réunion ou d'une course",
+    )
     ap.add_argument(
         "--phase",
         type=_phase_argument,
@@ -2084,7 +2119,7 @@ def main() -> None:
                 cmd = [
                     sys.executable,
                     str(script),
-                    "--reunion-url",
+                    "--course-url",
                     url_zeturf,
                     "--phase",
                     phase,
@@ -2125,9 +2160,9 @@ def main() -> None:
         )
         return
 
-    if args.reunion_url and args.phase:
+    if args.course_url and args.phase:
         _process_reunion(
-            args.reunion_url,
+            args.course_url,
             args.phase,
             Path(args.data_dir),
             budget=args.budget,
