@@ -142,6 +142,42 @@ def test_build_market_overround_place_falls_back_to_win_odds():
     assert metrics["overround_place"] == pytest.approx(expected)
 
 
+def test_build_market_requires_win_coverage_threshold():
+    runners_low_coverage = [
+        {"odds": 2.0},
+        {"odds": 3.5},
+        {},
+        {"odds": 0.0},
+    ]
+
+    metrics_low = pipeline_run._build_market(runners_low_coverage)
+
+    assert metrics_low["runner_count_total"] == 4
+    assert metrics_low["runner_count_with_win_odds"] == 2
+    assert metrics_low["win_coverage_ratio"] == pytest.approx(0.5, abs=1e-4)
+    assert "overround_win" not in metrics_low or metrics_low["overround_win"] is None
+
+    runners_high_coverage = [
+        {"odds": 2.0},
+        {"odds": 3.5},
+        {"odds": 5.0},
+        {},
+    ]
+
+    metrics_high = pipeline_run._build_market(runners_high_coverage)
+
+    expected_win_total = sum(
+        1.0 / runner["odds"]
+        for runner in runners_high_coverage
+        if runner.get("odds", 0) > 0
+    )
+
+    assert metrics_high["runner_count_total"] == 4
+    assert metrics_high["runner_count_with_win_odds"] == 3
+    assert metrics_high["win_coverage_ratio"] == pytest.approx(0.75, abs=1e-4)
+    assert metrics_high["overround_win"] == pytest.approx(round(expected_win_total, 4))
+
+
 def test_market_drift_signal_thresholds():
     assert pipeline_run.market_drift_signal(3.0, 2.0, is_favorite=False) == 2
     assert pipeline_run.market_drift_signal(2.0, 2.6, is_favorite=True) == -2
