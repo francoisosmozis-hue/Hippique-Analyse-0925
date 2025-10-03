@@ -110,6 +110,12 @@ def test_enrich_from_snapshot_invalid_json(
     caplog.set_level("WARNING")
     snapshot = tmp_path / "broken.json"
     snapshot.write_text("not-json", encoding="utf-8")
+    
+    result = module.enrich_from_snapshot(str(snapshot), str(tmp_path / "out"))
+
+    assert result == {"je_stats": None, "chronos": None}
+    assert any("Unable to load" in message for message in caplog.messages
+               
 def test_fetch_je_chrono_materialise_builds_csv(tmp_path: Path) -> None:
     course_dir = tmp_path / "R1C1"
     course_dir.mkdir()
