@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import csv
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -9,220 +11,105 @@ import fetch_je_chrono
 import fetch_je_stats
 
 
-def test_fetch_je_stats_wrapper_uses_snapshot_metadata(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+@pytest.mark.parametrize("module", [fetch_je_stats, fetch_je_chrono])
+def test_enrich_from_snapshot_builds_csvs(
+    module: Any, tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
-    course_dir = tmp_path / "R1C1"
-    course_dir.mkdir()
-    snapshot = tmp_path / "R1C1_H-5.json"
+    caplog.set_level("WARNING")
+    snapshot = tmp_path / "snapshot.json"
     snapshot.write_text(
-        json.dumps({"meta": {"course_dir": str(course_dir)}}),
+        json.dumps(
+            {
+                "runners": [
+                    {
+                        "num": "1",
+                        "nom": "Alpha",
+                        "j_rate": "12.5",
+                        "e_rate": "9.1",
+                        "chrono": "1'12\"5",
+                    },
+                    {
+                        "number": 2,
+                        "name": "Beta",
+                        "j_win": 7.8,
+                        "trainer_rate": 4.5,
+                        "time": "1'13\"0",
+                    },
+                ]
+            }
+        ),
         encoding="utf-8",
     )
 
-    calls: list[tuple[Path, str, str]] = []
+    out_dir = tmp_path / "artefacts")
 
-    def fake_materialise(directory: Path, reunion: str, course: str) -> Path:
-        calls.append((directory, reunion, course))
-        return directory / f"{reunion}{course}_je.csv"
+    result = module.enrich_from_snapshot(str(snapshot), str(out_dir))
 
-    monkeypatch.setattr(fetch_je_stats, "_materialise_stats", fake_materialise)
+    assert result == {
+        "je_stats": str(out_dir / "je_stats.csv"),
+        "chronos": str(out_dir / "chronos.csv"),
+    }
 
-    csv_path = fetch_je_stats.enrich_from_snapshot(snapshot, "r1", "c1")
-
-    assert csv_path == str(course_dir / "R1C1_je.csv")
-    assert calls == [(course_dir, "R1", "C1")]
-
-
-def test_fetch_je_stats_wrapper_accepts_snapshot_h5(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    course_dir = tmp_path / "R1C1"
-    course_dir.mkdir()
-    snapshot = tmp_path / "snapshot_H5.json"
-    snapshot.write_text(
-        json.dumps({"meta": {"course_dir": str(course_dir)}}),
-        encoding="utf-8",
-    )
-
-    calls: list[tuple[Path, str, str]] = []
-
-    def fake_materialise(directory: Path, reunion: str, course: str) -> Path:
-        calls.append((directory, reunion, course))
-        return directory / f"{reunion}{course}_je.csv"
-
-    monkeypatch.setattr(fetch_je_stats, "_materialise_stats", fake_materialise)
-
-    csv_path = fetch_je_stats.enrich_from_snapshot(snapshot, "r1", "c1")
-
-    assert csv_path == str(course_dir / "R1C1_je.csv")
-    assert calls == [(course_dir, "R1", "C1")]
-
-
-def test_fetch_je_stats_wrapper_is_idempotent(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    course_dir = tmp_path / "R1C1"
-    course_dir.mkdir()
-    snapshot = tmp_path / "R1C1_H-5.json"
-    snapshot.write_text(
-        json.dumps({"meta": {"course_dir": str(course_dir)}}),
-        encoding="utf-8",
-    )
-
-    csv_path = course_dir / "R1C1_je.csv"
-    csv_path.write_text("num,nom\n", encoding="utf-8")
-
-    def forbidden(*_args, **_kwargs):  # pragma: no cover - defensive guard
-        raise AssertionError("_materialise_stats should not be called when CSV exists")
-
-    monkeypatch.setattr(fetch_je_stats, "_materialise_stats", forbidden)
-
-    result = fetch_je_stats.enrich_from_snapshot(snapshot, "R1", "C1")
-
-    assert result == str(csv_path)
-
-
-def test_fetch_je_stats_materialise_builds_outputs(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    course_dir = tmp_path / "R1C1"
-    course_dir.mkdir()
-    snapshot = course_dir / "normalized_h5.json"
-    snapshot.write_text(
-        json.dumps({"course_id": "123", "runners": [{"id": "1", "name": "Alpha"}]}),
-        encoding="utf-8",
-    )
-
-    def fake_collect(course_id: str, h5_path: str):
-        assert course_id == "123"
-        assert Path(h5_path) == snapshot
-        return 87.5, {"1": {"j_win": 12.3, "e_win": 45.6}}
-
-    monkeypatch.setattr(fetch_je_stats, "collect_stats", fake_collect)
-
-    csv_path = fetch_je_stats._materialise_stats(course_dir, "R1", "C1")
-
-    assert csv_path == course_dir / "R1C1_je.csv"
-    assert (course_dir / "normalized_h5_je.csv").exists()
-
-    stats_path = course_dir / "stats_je.json"
-    payload = json.loads(stats_path.read_text(encoding="utf-8"))
-    assert payload["coverage"] == pytest.approx(87.5)
-    assert payload["1"] == {"j_win": 12.3, "e_win": 45.6}
-
-    lines = csv_path.read_text(encoding="utf-8").splitlines()
-    assert lines == ["num,nom,j_rate,e_rate", "1,Alpha,12.3,45.6"]
-
-
-def test_fetch_je_stats_materialise_persists_placeholder(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    course_dir = tmp_path / "R1C1"
-    course_dir.mkdir()
-    (course_dir / "normalized_h5.json").write_text(
-        json.dumps({"course_id": "123"}),
-        encoding="utf-8",
-    )
-
-    def failing_collect(*_args, **_kwargs):
-        raise RuntimeError("network down")
-
-    monkeypatch.setattr(fetch_je_stats, "collect_stats", failing_collect)
-
-    csv_path = fetch_je_stats._materialise_stats(course_dir, "R1", "C1")
-
-    assert csv_path == course_dir / "R1C1_je.csv"
-
-    stats_path = course_dir / "stats_je.json"
-    payload = json.loads(stats_path.read_text(encoding="utf-8"))
-    assert payload == {"coverage": 0, "ok": 0}
-
-    lines = csv_path.read_text(encoding="utf-8").splitlines()
-    assert lines == ["num,nom,j_rate,e_rate,ok", ",,,,0"]
-
-    legacy_path = course_dir / "normalized_h5_je.csv"
-    assert legacy_path.exists()
-    assert legacy_path.read_text(encoding="utf-8").splitlines() == [
-        "num,nom,j_rate,e_rate,ok",
-        ",,,,0",
+    je_rows = list(csv.reader((out_dir / "je_stats.csv").open(encoding="utf-8")))
+    assert je_rows == [
+        ["num", "nom", "j_rate", "e_rate"],
+        ["1", "Alpha", "12.5", "9.1"],
+        ["2", "Beta", "7.8", "4.5"],
     ]
 
+    chrono_rows = list(csv.reader((out_dir / "chronos.csv").open(encoding="utf-8")))
+    assert chrono_rows == [
+        ["num", "chrono"],
+        ["1", "1'12\"5"],
+        ["2", "1'13\"0"],
+    ]
 
-def test_fetch_je_chrono_wrapper_uses_snapshot_metadata(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    assert not caplog.messages
+
+
+@pytest.mark.parametrize("module", [fetch_je_stats, fetch_je_chrono])
+def test_enrich_from_snapshot_handles_missing_fields(
+    module: Any, tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
-    course_dir = tmp_path / "R1C1"
-    course_dir.mkdir()
-    snapshot = tmp_path / "R1C1_H-5.json"
-    snapshot.write_text(
-        json.dumps({"meta": {"course_dir": str(course_dir)}}),
-        encoding="utf-8",
-    )
+    caplog.set_level("WARNING")
+    snapshot = tmp_path / "snapshot.json"
+    snapshot.write_text(json.dumps({"runners": [{"id": "A"}]}), encoding="utf-8")
 
-    calls: list[tuple[Path, str, str]] = []
+    result = module.enrich_from_snapshot(str(snapshot), str(tmp_path / "out"))
 
-    def fake_materialise(directory: Path, reunion: str, course: str) -> Path:
-        calls.append((directory, reunion, course))
-        return directory / f"{reunion}{course}_chronos.csv"
+    assert result["je_stats"] is not None
+    assert result["chronos"] is not None
 
-    monkeypatch.setattr(fetch_je_chrono, "_materialise_chronos", fake_materialise)
+    je_rows = list(csv.reader(Path(result["je_stats"]).open(encoding="utf-8")))
+    assert je_rows == [["num", "nom", "j_rate", "e_rate"], ["A", "", "", ""]]
 
-    csv_path = fetch_je_chrono.enrich_from_snapshot(snapshot, "r1", "c1")
+    chrono_rows = list(csv.reader(Path(result["chronos"]).open(encoding="utf-8")))
+    assert chrono_rows == [["num", "chrono"], ["A", ""]]
 
-    assert csv_path == str(course_dir / "R1C1_chronos.csv")
-    assert calls == [(course_dir, "R1", "C1")]
+    warnings = [message for message in caplog.messages if "missing" in message]
+    assert warnings, "Expected warnings for missing fields"
 
 
-def test_fetch_je_chrono_wrapper_accepts_snapshot_h5(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+@pytest.mark.parametrize("module", [fetch_je_stats, fetch_je_chrono])
+def test_enrich_from_snapshot_missing_snapshot_returns_none(
+    module: Any, tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:    
+    caplog.set_level("WARNING")
+    missing = tmp_path / "absent.json"
+
+    result = module.enrich_from_snapshot(str(missing), str(tmp_path / "out"))
+
+    assert result == {"je_stats": None, "chronos": None}
+    assert any("does not exist" in message for message in caplog.messages)
+
+
+@pytest.mark.parametrize("module", [fetch_je_stats, fetch_je_chrono])
+def test_enrich_from_snapshot_invalid_json(
+    module: Any, tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
-    course_dir = tmp_path / "R1C1"
-    course_dir.mkdir()
-    snapshot = tmp_path / "snapshot_H5.json"
-    snapshot.write_text(
-        json.dumps({"meta": {"course_dir": str(course_dir)}}),
-        encoding="utf-8",
-    )
-
-    calls: list[tuple[Path, str, str]] = []
-
-    def fake_materialise(directory: Path, reunion: str, course: str) -> Path:
-        calls.append((directory, reunion, course))
-        return directory / f"{reunion}{course}_chronos.csv"
-
-    monkeypatch.setattr(fetch_je_chrono, "_materialise_chronos", fake_materialise)
-
-    csv_path = fetch_je_chrono.enrich_from_snapshot(snapshot, "r1", "c1")
-
-    assert csv_path == str(course_dir / "R1C1_chronos.csv")
-    assert calls == [(course_dir, "R1", "C1")]
-
-
-def test_fetch_je_chrono_wrapper_is_idempotent(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    course_dir = tmp_path / "R1C1"
-    course_dir.mkdir()
-    snapshot = tmp_path / "R1C1_H-5.json"
-    snapshot.write_text(
-        json.dumps({"meta": {"course_dir": str(course_dir)}}),
-        encoding="utf-8",
-    )
-
-    csv_path = course_dir / "R1C1_chronos.csv"
-    csv_path.write_text("num,chrono\n", encoding="utf-8")
-
-    def forbidden(*_args, **_kwargs):  # pragma: no cover - defensive guard
-        raise AssertionError("_materialise_chronos should not be called when CSV exists")
-    
-    monkeypatch.setattr(fetch_je_chrono, "_materialise_chronos", forbidden)
-
-    result = fetch_je_chrono.enrich_from_snapshot(snapshot, "R1", "C1")
-
-    assert result == str(csv_path)
-
-
+    caplog.set_level("WARNING")
+    snapshot = tmp_path / "broken.json"
+    snapshot.write_text("not-json", encoding="utf-8")
 def test_fetch_je_chrono_materialise_builds_csv(tmp_path: Path) -> None:
     course_dir = tmp_path / "R1C1"
     course_dir.mkdir()
