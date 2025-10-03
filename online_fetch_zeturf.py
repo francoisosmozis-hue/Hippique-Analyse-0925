@@ -63,6 +63,7 @@ def fetch_race_snapshot(
     phase: str = "H30",
     *,
     use_cache: bool = False,
+    course_url: str | None = None,
     **extra: Any,
 ) -> dict[str, Any]:
     """Return a minimal snapshot for ``reunion``/``course``.
@@ -118,6 +119,7 @@ def fetch_race_snapshot(
         reunion,
         course,
         phase=phase,
+        course_url=course_url,
         **extra,
     )
     
@@ -1755,6 +1757,8 @@ def fetch_race_snapshot_full(
     reunion: str,
     course: str | None = None,
     phase: str = "H30",
+    *,
+    course_url: str | None = None,
     **kwargs: Any,
 ) -> dict[str, Any]:
     """Return a snapshot decorated with metadata suitable for runner_chain."""
@@ -1791,6 +1795,15 @@ def fetch_race_snapshot_full(
 
     fetch_kwargs = dict(kwargs)
 
+    if course_url is None and "course_url" in fetch_kwargs:
+        maybe_url = fetch_kwargs.pop("course_url")
+        course_url = str(maybe_url) if maybe_url is not None else None
+    else:
+        fetch_kwargs.pop("course_url", None)
+
+    if course_url is not None:
+        fetch_kwargs.setdefault("url", course_url)
+        
     sources_config = fetch_kwargs.get("sources")
     if not isinstance(sources_config, Mapping):
         try:
