@@ -116,37 +116,44 @@ def test_enrich_from_snapshot_invalid_json(
     assert result == {"je_stats": None, "chronos": None}
     assert any("Unable to load" in message for message in caplog.messages)
                
-def test_fetch_je_chrono_materialise_builds_csv(tmp_path: Path) -> None:
-    course_dir = tmp_path / "R1C1"
-    course_dir.mkdir()
-    snapshot = course_dir / "R1C1_H-5.json"
+def test_fetch_je_chrono_enrich_from_snapshot_builds_chronos_csv(tmp_path: Path) -> None:
+    snapshot = tmp_path / "snapshot.json"
     snapshot.write_text(
         json.dumps(
             {
-                "partants": {
-                    "runners": [
-                        {"id": "1", "chrono": "1.12"},
-                        {"id": "2", "time": "1.18"},
-                    ]
-                }
+                "runners": [
+                    {"id": "1", "chrono": "1.12"},
+                    {"id": "2", "time": "1.18"},
             }
         ),
         encoding="utf-8",
     )
 
-    csv_path = fetch_je_chrono._materialise_chronos(course_dir, "R1", "C1")
+    result = fetch_je_chrono.enrich_from_snapshot(
+        str(snapshot), str(tmp_path / "artefacts")
+    )
 
-    assert csv_path == course_dir / "R1C1_chronos.csv"
-    assert (course_dir / "chronos.csv").exists()
-    lines = csv_path.read_text(encoding="utf-8").splitlines()
-    assert lines == ["num,chrono", "1,1.12", "2,1.18"]
+    chronos_path = tmp_path / "artefacts" / "chronos.csv"
+    assert result["chronos"] == str(chronos_path)
+    assert chronos_path.read_text(encoding="utf-8").splitlines() == [
+        "num,chrono",
+        "1,1.12",
+        "2,1.18",
+    ]
 
 
-def test_fetch_je_chrono_materialise_requires_snapshot(tmp_path: Path) -> None:
-    course_dir = tmp_path / "R1C1"
-    course_dir.mkdir()
+def test_fetch_je_chrono_enrich_from_snapshot_requires_snapshot(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level("WARNING")
+    missing = tmp_path / "R1C1_H-5.json"
 
-    with pytest.raises(RuntimeError, match="snapshot-missing"):
-        fetch_je_chrono._materialise_chronos(course_dir, "R1", "C1")
+    result = fetch_je_chrono.enrich_from_snapshot(
+        str(missing), str(tmp_path / "artefacts")
+    )
+
+    assert result == {"je_stats": None, "chronos": None}
+    assert not (tmp_path / "artefacts" / "chronos.csv").exists()
+    assert any("does not exist" in message for message in caplog.messages)
 
 
