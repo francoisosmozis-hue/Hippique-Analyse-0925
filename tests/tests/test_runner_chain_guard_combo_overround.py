@@ -64,8 +64,8 @@ def course_with_combo(tmp_path):
 def test_analyse_course_flags_combo_overround(monkeypatch, course_with_combo):
     def fake_sp_candidates(_rows):
         return [
-            {"id": "A", "odds": 3.0, "p": 0.3},
-            {"id": "B", "odds": 4.0, "p": 0.25},
+            {"id": "A", "odds": 3.0, "odds_place": 3.0, "p": 0.3},
+            {"id": "B", "odds": 4.0, "odds_place": 4.0, "p": 0.25},
         ]
 
     def fake_allocate(cfg, runners):
