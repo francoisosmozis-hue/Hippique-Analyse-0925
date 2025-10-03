@@ -32,6 +32,24 @@ analysis_dir=$(dirname "$analysis_path")
 printf '\n==> Artefacts générés dans %s\n' "$analysis_dir"
 ls -1 "$analysis_dir"
 
+je_stats_path=$(ls "$analysis_dir"/*_je.csv 2>/dev/null | head -n 1 || true)
+if [ -z "$je_stats_path" ] || [ ! -f "$je_stats_path" ]; then
+  echo "[ERREUR] Fichier de statistiques JE (*_je.csv) manquant" >&2
+  exit 1
+fi
+
+chronos_path="$analysis_dir/chronos.csv"
+if [ ! -f "$chronos_path" ]; then
+  echo "[ERREUR] chronos.csv manquant" >&2
+  exit 1
+fi
+
+p_finale_path=$(ls "$analysis_dir"/*_p_finale.json 2>/dev/null | head -n 1 || true)
+if [ -z "$p_finale_path" ] || [ ! -f "$p_finale_path" ]; then
+  echo "[ERREUR] Fichier p_finale (*_p_finale.json) manquant" >&2
+  exit 1
+fi
+
 grep -F '"phase": "H5"' "$analysis_path" >/dev/null || {
   echo "[ERREUR] analysis_H5.json ne contient pas la phase H5" >&2
   exit 1
