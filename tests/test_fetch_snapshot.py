@@ -113,4 +113,35 @@ def test_fetch_race_snapshot_merges_runner_metadata(monkeypatch: Any) -> None:
     assert runner["trainer"] == "Trainer 1"
     assert runner["music"] == "1a1a"
     assert runner["sex"] == "F"
+
+
+def test_fetch_race_snapshot_accepts_course_url(monkeypatch: Any) -> None:
+    import online_fetch_zeturf as ofz
+
+    captured: dict[str, Any] = {}
+
+    def fake_fetch_impl(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        captured["args"] = args
+        captured["kwargs"] = kwargs
+        captured["url"] = kwargs.get("url")
+        return {
+            "runners": [],
+            "partants": 0,
+            "meeting": "Test",
+            "discipline": "Plat",
+        }
+
+    monkeypatch.setattr(ofz, "_fetch_race_snapshot_impl", fake_fetch_impl)
+
+    snapshot = ofz.fetch_race_snapshot(
+        "R1",
+        "C1",
+        phase="H30",
+        course_url="https://example.com/course/mock",
+        sources={},
+    )
+
+    assert snapshot["phase"] == "H30"
+    assert captured["url"] == "https://example.com/course/mock"
+    assert "course_url" not in captured["kwargs"]
     
