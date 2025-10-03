@@ -573,6 +573,8 @@ Passer `cache_simulations=False` désactive cette optimisation.
 
 ## ▶️ Exécutions manuelles (local)
 
+Un `Makefile` simplifie les commandes usuelles : `make venv` prépare l'environnement virtuel, `make test` lance la suite `pytest`, tandis que `make run-h30` et `make run-h5` enveloppent les appels `runner_chain` décrits ci-dessous (avec `REUNION=R1 COURSE=C3`).
+
 ### Générer le planning du jour
 ```bash
 python scripts/online_fetch_zeturf.py \
