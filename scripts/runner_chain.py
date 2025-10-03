@@ -212,7 +212,13 @@ def _write_excel_update_command(
     _write_text_file(race_dir / "cmd_update_excel.txt", cmd)
 
 
-def _write_snapshot(payload: RunnerPayload, window: str, base: Path) -> None:
+def _write_snapshot(
+    payload: RunnerPayload,
+    window: str,
+    base: Path,
+    *,
+    course_url: str | None = None,
+) -> None:
     """Write a snapshot file for ``race_id`` under ``base``.
 
     Parameters
@@ -230,24 +236,27 @@ def _write_snapshot(payload: RunnerPayload, window: str, base: Path) -> None:
     path = dest / f"snapshot_{window}.json"
 
     sources = deepcopy(_load_sources_config())
-    rc_map = sources.get("rc_map")
-    if isinstance(rc_map, Mapping):
-        rc_entry = dict(rc_map)
-    else:
-        rc_entry = {}
-    rc_entry[race_id] = {
-        "course_id": payload.id_course,
-        "reunion": payload.reunion,
-        "course": payload.course,
-    }
-    sources["rc_map"] = rc_entry
+    if course_url is None:
+        rc_map_raw = sources.get("rc_map")
+        if isinstance(rc_map_raw, Mapping):
+            rc_map: Dict[str, Any] = dict(rc_map_raw)
+        else:
+            rc_map = {}
+        rc_map[race_id] = {
+            "course_id": payload.id_course,
+            "reunion": payload.reunion,
+            "course": payload.course,
+        }
+        sources["rc_map"] = rc_map
 
     now = dt.datetime.now().isoformat()
     try:
         snapshot = ofz.fetch_race_snapshot(
-            race_id,
+            payload.reunion,
+            payload.course,
             phase=window,
             sources=sources,
+            url=course_url,
         )
     except Exception as exc:
         reason = str(exc)
@@ -370,6 +379,7 @@ def _trigger_phase(
     mode: str,
     calibration: Path,
     calibration_available: bool,
+    course_url: str | None = None,
 ) -> None:
     """Run snapshot and/or analysis tasks for ``phase``."""
 
@@ -377,10 +387,10 @@ def _trigger_phase(
     race_id = payload.race_id
     budget = float(payload.budget)
     if phase_norm == "H30":
-        _write_snapshot(payload, "H30", snap_dir)
+        _write_snapshot(payload, "H30", snap_dir, course_url=course_url)
         return
     if phase_norm == "H5":
-        _write_snapshot(payload, "H5", snap_dir)
+        _write_snapshot(payload, "H5", snap_dir, course_url=course_url)
         _write_analysis(
             race_id,
             analysis_dir,
@@ -433,6 +443,12 @@ def main() -> None:
     parser.add_argument("--course", help="Course identifier (e.g. C3)")
     parser.add_argument("--phase", help="Phase to execute (H30, H5 or RESULT)")
     parser.add_argument("--start-time", help="Race start time (ISO 8601)")
+    parser.add_argument(
+        "--course-url",
+        "--reunion-url",
+        dest="course_url",
+        help="Direct ZEturf course URL overriding rc_map lookups",
+    )
     parser.add_argument("--h30-window-min", type=int, default=27)
     parser.add_argument("--h30-window-max", type=int, default=33)
     parser.add_argument("--h5-window-min", type=int, default=3)
@@ -466,7 +482,7 @@ def main() -> None:
     calibration_exists = calibration_path.exists()
     
     if args.planning:
-        for name in ("course_id", "reunion", "course", "phase", "start_time"):
+        for name in ("course_id", "reunion", "course", "phase", "start_time", "course_url"):
             if getattr(args, name):
                 parser.error("--planning cannot be combined with single-race options")
 
@@ -596,7 +612,8 @@ def main() -> None:
             mode=args.mode,
             calibration=calibration_path,
             calibration_available=calibration_exists,
-        )    
+            course_url=args.course_url,
+        ) 
     except PayloadValidationError as exc:
         logger.error("[runner] %s", exc)
         raise SystemExit(1) from exc
