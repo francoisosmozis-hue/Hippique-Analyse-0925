@@ -253,6 +253,8 @@ def validate_exotics_with_simwrapper(
     payout_min:
         Minimum expected payout required for a candidate to be retained.
     allow_heuristic:
+        Deprecated toggle kept for backwards compatibility.  Any truthy value
+        is ignored and evaluation proceeds only with a valid calibration file.
     sharpe_min:
         Minimum Sharpe ratio (EV/σ) required for a candidate.
         Passed through to :func:`evaluate_combo` to allow evaluation without
@@ -265,6 +267,14 @@ def validate_exotics_with_simwrapper(
         exotic ticket and ``info`` exposes ``notes`` and ``flags`` gathered
         during validation.
     """
+    if allow_heuristic:
+        logger.warning(
+            "[COMBO] Heuristic override requested; enforcing calibration-only "
+            "evaluation. Use the versioned payout calibration skeleton (version: 1) "
+            "if you need to refresh the file."
+        )
+        allow_heuristic = False
+
     validated: List[Dict[str, Any]] = []
     notes: List[str] = []
     notes_seen: set[str] = set()
@@ -281,7 +291,9 @@ def validate_exotics_with_simwrapper(
         calib_path, has_calib = _resolve_calibration_path()
     if not has_calib:
         logger.warning(
-            "[COMBO] Calibration payout introuvable (%s) → combinés désactivés.",
+            "[COMBO] Calibration payout introuvable (%s). Renseignez "
+            "config/payout_calibration.yaml en suivant le squelette versionné "
+            "(version: 1 → couple_place/trio/ze4) pour réactiver les combinés.",
             calib_path,
         )
         reason = "calibration_missing"
@@ -1050,14 +1062,13 @@ def _analyse_course(
     sp_tickets: list[dict[str, Any]] = []
     ev_sp_total = 0.0
     sp_status = "ok"
-    sp_status = "ok"
 
     if len(sp_candidates_all) < 2:
         reasons.append("sp_insufficient_candidates")
         if len(sp_candidates) < 2:
-        sp_status = "insufficient_data"
-        if "sp_insufficient_data" not in reasons:
-            reasons.append("sp_insufficient_data")
+            sp_status = "insufficient_data"
+            if "sp_insufficient_data" not in reasons:
+                reasons.append("sp_insufficient_data")
 
     guards["sp_status"] = sp_status
     meta["sp_status"] = sp_status
