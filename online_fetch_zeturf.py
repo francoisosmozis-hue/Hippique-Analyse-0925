@@ -88,16 +88,105 @@ def fetch_race_snapshot(
         )
 
     if course_url and (not reunion_text or not course_text):
-        minimal_snapshot = {
-            "runners": [],
-            "partants": None,
-            "source_url": course_url,
-        }
+        raw_snapshot: dict[str, Any] | None = None
+
+        sources_config = extra.get("sources") if isinstance(extra.get("sources"), Mapping) else None
+
+        retry_value = extra.get("retries", extra.get("retry"))
+        try:
+            retry_count = int(retry_value) if retry_value is not None else 3
+        except (TypeError, ValueError):
+            retry_count = 3
+        if retry_count <= 0:
+            retry_count = 1
+
+        backoff_value = extra.get("backoff")
+        try:
+            backoff_delay = float(backoff_value) if backoff_value is not None else 1.0
+        except (TypeError, ValueError):
+            backoff_delay = 1.0
+        if backoff_delay <= 0:
+            backoff_delay = 1.0
+
+        derived_reunion = reunion_text or None
+        derived_course = course_text or None
+        if derived_reunion and not derived_course:
+            match = _RC_COMBINED_RE.search(derived_reunion.upper())
+            if match:
+                derived_reunion = f"R{match.group(1)}"
+                derived_course = f"C{match.group(2)}"
+
+        reunion_norm = derived_reunion
+        course_norm = derived_course
+        if reunion_norm:
+            try:
+                reunion_norm = _normalise_label(reunion_norm, "R")
+            except ValueError:
+                pass
+        if course_norm:
+            try:
+                course_norm = _normalise_label(course_norm, "C")
+            except ValueError:
+                pass
+
+        impl_kwargs = {}
+        for key in ("session", "retry", "retries", "backoff", "sources"):
+            if key in extra:
+                impl_kwargs[key] = extra[key]
+
+        if reunion_norm and course_norm:
+            try:
+                raw_snapshot = _fetch_race_snapshot_impl(
+                    reunion_norm,
+                    course_norm,
+                    phase=phase_tag,
+                    url=course_url,
+                    **impl_kwargs,
+                )
+            except Exception as exc:  # pragma: no cover - defensive logging
+                logger.debug(
+                    "[ZEturf] fallback fetch via url failed for %s/%s: %s",
+                    reunion_norm,
+                    course_norm,
+                    exc,
+                )
+                raw_snapshot = None
+
+        html_snapshot: dict[str, Any] | None = None
+        if raw_snapshot is None or not isinstance(raw_snapshot, Mapping) or not raw_snapshot.get("runners"):
+            html_snapshot = _fetch_snapshot_via_html(
+                [course_url],
+                phase=phase_tag,
+                retries=retry_count,
+                backoff=backoff_delay,
+                session=extra.get("session"),
+            )
+            if isinstance(html_snapshot, Mapping) and html_snapshot:
+                if isinstance(raw_snapshot, Mapping) and raw_snapshot:
+                    raw_snapshot = dict(raw_snapshot)
+                    _merge_snapshot_data(raw_snapshot, html_snapshot)
+                else:
+                    raw_snapshot = dict(html_snapshot)
+
+        if not isinstance(raw_snapshot, Mapping):
+            raw_snapshot = {}
+
+        raw_snapshot.setdefault("source_url", course_url)
+
+        reunion_hint = reunion_norm or reunion_text or raw_snapshot.get("reunion")
+        course_hint = course_norm or course_text or raw_snapshot.get("course")
+
+        if not reunion_hint:
+            meta_mapping = raw_snapshot.get("meta") if isinstance(raw_snapshot.get("meta"), Mapping) else {}
+            if isinstance(meta_mapping, Mapping):
+                reunion_hint = meta_mapping.get("reunion")
+                course_hint = course_hint or meta_mapping.get("course")
         return _normalise_snapshot_result(
-            minimal_snapshot,
-            reunion_hint=reunion_text or None,
-            course_hint=course_text or None,
+            raw_snapshot,
+            reunion_hint=reunion_hint,
+            course_hint=course_hint,
             phase_norm=phase_tag,
+            sources_config=sources_config,
         )
 
     rc_tag = _normalise_rc_tag(reunion_text, course_text or None)
