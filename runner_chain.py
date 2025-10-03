@@ -579,6 +579,17 @@ def _normalise_runner_id(record: Mapping[str, Any], fallback_index: int) -> str:
             return str(value)
     return str(fallback_index)
 
+_PLACE_ODDS_KEYS = (
+    "odds_place",
+    "place_odds",
+    "placeOdds",
+    "place",
+    "cote_place",
+    "decimal_place_odds",
+    "place_decimal_odds",
+    "odds_place_dec",
+)
+
 
 def _normalise_runner_name(record: Mapping[str, Any]) -> str | None:
     for key in ("name", "nom", "horse", "runner", "participant_label"):
