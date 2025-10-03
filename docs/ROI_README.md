@@ -16,9 +16,9 @@
 - Log the blocked meeting and re-evaluate once the book returns below the gate.
 
 ## Data Fail-Safe Behavior
-- If any mandatory feed (odds, runners, scratches, or calibration curves) is stale by more than **7 minutes**, halt the pipeline and alert Ops via the standard PagerDuty hook.
-- Missing inputs trigger an **abstention propre**: no tickets are emitted until data integrity is restored, even if partial substitutes exist.
-
+- If any mandatory feed (odds, runners, scratches, or calibration curves) is stale by more than **7 minutes**, the run aborts gracefully for the affected meeting, records the incident in the tracking log, and alerts Ops via the standard PagerDuty hook while the broader pipeline continues to monitor other meetings.
+- Missing inputs trigger an **abstention propre**: the meeting is skipped, the reason is logged for follow-up, and the system resumes once data integrity is restored—no tickets are emitted off partial substitutes.
+- 
 ## Calibration Requirements
 - Maintain calibration files under `calibration/` with timestamps no older than **72 hours**.
 - Run the calibration suite after any odds-provider change or when drift exceeds **±3 %** on the EV back-test window.
