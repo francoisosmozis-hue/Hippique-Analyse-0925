@@ -1,209 +1,181 @@
-"""Helpers to materialise jockey/entraineur statistics."""
+"""Helpers to materialise jockey/entraineur statistics from a snapshot."""
 
 from __future__ import annotations
 
-import argparse
+import csv
 import json
 import logging
-import sys
 from pathlib import Path
-from typing import Any, Mapping
-
-from analyse_courses_du_jour_enrichie import (
-    _extract_id2name,
-    _write_je_csv_file,
-    _write_json_file,
-    _write_minimal_csv,
-)
-from scripts.fetch_je_stats import collect_stats
+from typing import Any, Iterable, Mapping, TypeAlias
 
 
 LOGGER = logging.getLogger(__name__)
 
+ResultDict: TypeAlias = dict[str, str | None]
 
-def _load_json(path: Path) -> Mapping[str, Any] | None:
+
+def enrich_from_snapshot(snapshot_path: str, out_dir: str) -> ResultDict:
+    """Build ``je_stats.csv`` and ``chronos.csv`` files from ``snapshot_path``.
+
+    Parameters
+    ----------
+    snapshot_path:
+        Path to the JSON snapshot describing the runners.
+    out_dir:
+        Directory where the CSV files will be written.
+
+    Returns
+    -------
+    dict
+        Mapping with the keys ``"je_stats"`` and ``"chronos"`` whose values are the
+        paths to the generated files (as strings) or ``None`` when the artefact
+        could not be produced.
+    """
+
+    result: ResultDict = {"je_stats": None, "chronos": None}
+
+    snapshot_file = Path(snapshot_path)
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
+        raw_payload = json.loads(snapshot_file.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        LOGGER.warning("Snapshot %s does not exist", snapshot_file)
+        return result
     except (OSError, json.JSONDecodeError):
-        return None
-    return payload if isinstance(payload, Mapping) else None
+        LOGGER.exception("Unable to load snapshot %s", snapshot_file)
+        return result
+
+    if not isinstance(raw_payload, Mapping):
+        LOGGER.warning("Snapshot %s is not a JSON object", snapshot_file)
+        payload: Mapping[str, Any] = {}
+    else:
+        payload = raw_payload
+
+    runners_field = payload.get("runners")
+    runners: list[Mapping[str, Any]] = []
+    if isinstance(runners_field, list):
+        for index, runner in enumerate(runners_field):
+            if isinstance(runner, Mapping):
+                runners.append(runner)
+            else:
+                LOGGER.warning(
+                    "Runner entry %s in %s is not an object and will be ignored",
+                    index,
+                    snapshot_file,
+                )
+    else:
+        LOGGER.warning("Snapshot %s is missing a 'runners' array", snapshot_file)
+
+    normalised = list(_normalise_runners(runners, snapshot_file))
+
+    output_dir = Path(out_dir)
+    try:
+        output_dir.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        LOGGER.exception("Unable to create output directory %s", output_dir)
+        return result
+
+    je_path = output_dir / "je_stats.csv"
+    chronos_path = output_dir / "chronos.csv"
+
+    try:
+        _write_csv(je_path, normalised, ("num", "nom", "j_rate", "e_rate"))
+    except OSError:
+        LOGGER.exception("Failed to write JE statistics CSV at %s", je_path)
+    else:
+        result["je_stats"] = str(je_path)
+        
+    try:
+        _write_csv(chronos_path, normalised, ("num", "chrono"))
+    except OSError:
+        LOGGER.exception("Failed to write chronos CSV at %s", chronos_path)
+    else:
+        result["chronos"] = str(chronos_path)
+
+    return result
 
 
-def _iter_snapshot_candidates(snapshot_dir: Path) -> list[Path]:
-    candidates: list[Path] = []
-    normalized = snapshot_dir / "normalized_h5.json"
-    if normalized.exists():
-        candidates.append(normalized)
-    snapshot_candidates = {
-        candidate
-        for pattern in ("*_H-5.json", "*_H5.json")
-        for candidate in snapshot_dir.glob(pattern)
-    }
-    candidates.extend(sorted(snapshot_candidates, reverse=True))
-    return candidates
+def _normalise_runners(
+    runners: Iterable[Mapping[str, Any]], snapshot_file: Path
+) -> Iterable[dict[str, str]]:
+    for index, runner in enumerate(runners):
+        descriptor = _runner_descriptor(runner, index)
+        num = _extract_value(
+            runner,
+            ("num", "number", "id"),
+            snapshot_file,
+            descriptor,
+            "num",
+        )
+        yield {
+            "num": num,
+            "nom": _extract_value(
+                runner,
+                ("nom", "name", "horse", "label"),
+                snapshot_file,
+                descriptor,
+                "nom",
+            ),
+            "j_rate": _extract_value(
+                runner,
+                ("j_rate", "j_win", "jockey_rate"),
+                snapshot_file,
+                descriptor,
+                "j_rate",
+            ),
+            "e_rate": _extract_value(
+                runner,
+                ("e_rate", "e_win", "trainer_rate"),
+                snapshot_file,
+                descriptor,
+                "e_rate",
+            ),
+            "chrono": _extract_value(
+                runner,
+                ("chrono", "time"),
+                snapshot_file,
+                descriptor,
+                "chrono",
+            ),
+        }
+
+        
+def _runner_descriptor(runner: Mapping[str, Any], index: int) -> str:
+    for key in ("num", "number", "id"):
+        value = runner.get(key)
+        if value not in (None, ""):
+            return f"{key}={value}"
+    return f"index {index}"
 
 
-def _extract_course_id(snapshot: Mapping[str, Any]) -> str | None:
-    for key in ("course_id", "id_course", "id"):
-        value = snapshot.get(key)
+def _extract_value(
+    runner: Mapping[str, Any],
+    keys: Iterable[str],
+    snapshot_file: Path,
+    descriptor: str,
+    label: str,
+) -> str:
+    for key in keys:
+        value = runner.get(key)
         if value not in (None, ""):
             return str(value)
 
-    meta = snapshot.get("meta")
-    if isinstance(meta, Mapping):
-        return _extract_course_id(meta)
-
-    return None
-
-
-def _discover_snapshot(snapshot_dir: Path) -> tuple[Path, Mapping[str, Any]]:
-    for candidate in _iter_snapshot_candidates(snapshot_dir):
-        payload = _load_json(candidate)
-        if payload:
-            return candidate, payload
-    raise RuntimeError("snapshot-missing")
-
-    
-def _extract_id_mapping(snapshot_dir: Path, payload: Mapping[str, Any]) -> Mapping[str, str]:
-    mapping = _extract_id2name(payload)
-    if mapping:
-        return mapping
-
-    fallback = snapshot_dir / "partants.json"
-    other_payload = _load_json(fallback)
-    if other_payload:
-        mapping = _extract_id2name(other_payload)
-    return mapping or {}
-
-    
-def _materialise_stats(snapshot_dir: Path, reunion: str, course: str) -> Path:
-    snapshot_file, payload = _discover_snapshot(snapshot_dir)
-
-    course_id = _extract_course_id(payload)
-    if not course_id:
-        raise RuntimeError("missing-course-id")
-
-    stats_path = snapshot_dir / "stats_je.json"
-    csv_path = snapshot_dir / f"{reunion}{course}_je.csv"
-    legacy_csv_path = snapshot_dir / f"{snapshot_file.stem}_je.csv"
-    
-    try:
-        coverage, mapped = collect_stats(course_id, h5_path=str(snapshot_file))
-    except Exception:  # pragma: no cover - network or scraping issues
-        LOGGER.exception("collect_stats failed for course %s", course_id)
-        stats_payload = {"coverage": 0, "ok": 0}
-        _write_json_file(stats_path, stats_payload)
-        placeholder_headers = ["num", "nom", "j_rate", "e_rate", "ok"]
-        placeholder_rows = [["", "", "", "", 0]]
-        _write_minimal_csv(csv_path, placeholder_headers, placeholder_rows)
-        if legacy_csv_path != csv_path:
-            _write_minimal_csv(legacy_csv_path, placeholder_headers, placeholder_rows)
-        return csv_path
-        
-    stats_payload: dict[str, Any] = {"coverage": coverage}
-    stats_payload.update(mapped)
-
-    _write_json_file(stats_path, stats_payload)
-
-    id2name = _extract_id_mapping(snapshot_dir, payload)
-    if not id2name:
-        id2name = {cid: "" for cid in mapped.keys()}
-
-    _write_je_csv_file(
-        csv_path,
-        id2name=id2name,
-        stats_payload=stats_payload,
+    LOGGER.warning(
+        "Runner %s in %s is missing '%s'; using empty string",
+        descriptor,
+        snapshot_file,
+        label,
     )
-
-    if legacy_csv_path != csv_path:
-        _write_je_csv_file(
-            legacy_csv_path,
-            id2name=id2name,
-            stats_payload=stats_payload,
-        )
-    
-    return csv_path
+    return ""
 
 
-def _discover_course_dir(snapshot_path: Path) -> Path:
-    payload = _load_json(snapshot_path)
-
-    def _extract(mapping: Mapping[str, Any]) -> str | None:
-        stack: list[Mapping[str, Any]] = [mapping]
-        seen: set[int] = set()
-        keys = {
-            "course_dir",
-            "course_directory",
-            "course_path",
-            "coursePath",
-        }
-        while stack:
-            current = stack.pop()
-            marker = id(current)
-            if marker in seen:
-                continue
-            seen.add(marker)
-            for key, value in current.items():
-                if isinstance(value, str) and key in keys and value.strip():
-                    return value.strip()
-                if isinstance(value, Mapping):
-                    stack.append(value)
-        return None
-
-    if isinstance(payload, Mapping):
-        candidate = _extract(payload)
-        if candidate:
-            course_dir = Path(candidate)
-            if not course_dir.is_absolute():
-                return (snapshot_path.parent / course_dir).resolve()
-            return course_dir
-
-    return snapshot_path.parent
-
-
-def enrich_from_snapshot(snapshot_path: str | Path, reunion: str, course: str) -> str:
-    """Materialise J/E statistics for the course referenced by ``snapshot_path``.
-
-    Returns the path to the generated CSV as a string.
-    """
-
-    snapshot_path = Path(snapshot_path)
-    course_dir = _discover_course_dir(snapshot_path)
-    
-    reunion_code = reunion.upper()
-    course_code = course.upper()
-
-    target_csv = course_dir / f"{reunion_code}{course_code}_je.csv"
-    if target_csv.exists():
-        return str(target_csv)
-
-    return str(_materialise_stats(course_dir, reunion_code, course_code))
-
-
-def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Build JE statistics artefacts")
-    parser.add_argument("--out", required=True, help="Répertoire destination")
-    parser.add_argument("--reunion", required=True, help="Identifiant réunion (ex: R1)")
-    parser.add_argument("--course", required=True, help="Identifiant course (ex: C1)")
-    return parser.parse_args(argv)
-
-
-def main(argv: list[str] | None = None) -> int:
-    args = _parse_args(argv)
-    snapshot_dir = Path(args.out)
-    snapshot_dir.mkdir(parents=True, exist_ok=True)
-
-    try:
-        _materialise_stats(snapshot_dir, args.reunion.upper(), args.course.upper())
-    except RuntimeError as exc:
-        print(f"[ERROR] fetch_je_stats: {exc}", file=sys.stderr)
-        return 1
-
-    return 0
-
-
-if __name__ == "__main__":  # pragma: no cover - CLI entry point
-    raise SystemExit(main())
+def _write_csv(path: Path, rows: Iterable[dict[str, str]], columns: Iterable[str]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    header = list(columns)
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(header)
+        for row in rows:
+            writer.writerow([row.get(column, "") for column in header]
 
 
 __all__ = ["enrich_from_snapshot"]
