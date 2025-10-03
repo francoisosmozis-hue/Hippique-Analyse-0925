@@ -1,9 +1,9 @@
 # ROI+ v5.1 Operational Notes
 
 ## Staking Rules
-- Daily bankroll is capped at **5 €**.
-- Maximum of **two tickets per meeting**; any additional opportunities are skipped.
-- Split stakes evenly across active tickets unless a scenario-specific allocation is defined in the run configuration.
+- Allocate a **5 € budget per course**, resetting for each meeting independently.
+- Fire at most **one SP dutching ticket plus one combo** for any given course; additional opportunities beyond this two-ticket cap are skipped for that course.
+- Distribute stakes via the configured **Kelly fractions**, while enforcing a **60 % exposure ceiling per runner**.
 
 ## EV / ROI Thresholds
 - Only deploy combinations with **expected value (EV) ≥ +40 %** over stake.
