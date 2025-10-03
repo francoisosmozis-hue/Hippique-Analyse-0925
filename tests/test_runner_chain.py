@@ -20,6 +20,35 @@ def _build_payload(phase: str) -> runner_script.RunnerPayload:
     )
 
 
+def test_estimate_sp_ev_filters_missing_place_odds(caplog: pytest.LogCaptureFixture) -> None:
+    legs = [
+        {"id": "A", "odds_place": 5.0, "p": 0.4},
+        {"id": "B", "place_odds": 6.0, "probability": 0.3},
+        {"id": "C", "odds": 3.0},
+    ]
+
+    with caplog.at_level(logging.WARNING):
+        ev, some_missing = runner_chain.estimate_sp_ev(legs)
+
+    assert some_missing is True
+    assert ev == pytest.approx(0.9)
+    assert "C" in caplog.text
+
+
+def test_estimate_sp_ev_returns_none_when_insufficient(caplog: pytest.LogCaptureFixture) -> None:
+    legs = [
+        {"id": "A", "odds_place": 5.0, "p": 0.4},
+        {"id": "B", "odds": 3.5},
+    ]
+
+    with caplog.at_level(logging.WARNING):
+        ev, some_missing = runner_chain.estimate_sp_ev(legs)
+
+    assert some_missing is True
+    assert ev is None
+    assert "B" in caplog.text
+
+
 def test_compute_overround_cap_flat_handicap_string_partants() -> None:
     cap = runner_chain.compute_overround_cap("Handicap de Plat", "16 partants")
     assert cap == pytest.approx(1.25)
