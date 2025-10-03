@@ -25,6 +25,84 @@ class DummyResp:
         return None
 
 
+def test_process_reunion_executes_pipeline(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    html = """
+    <html>
+      <body>
+        <h1>Réunion R2</h1>
+        <a href="/fr/course/123">Course C1</a>
+        <a href="/fr/course/456">Course C2</a>
+      </body>
+    </html>
+    """
+
+    def fake_get(url: str, headers: dict | None = None, timeout: int = 10) -> DummyResp:
+        return DummyResp(html)
+
+    monkeypatch.setattr(acde.requests, "get", fake_get)
+
+    snapshot_calls: list[dict[str, Any]] = []
+
+    def fake_snapshot(
+        cid: str, ph: str, rc_dir: Path, *, course_url: str | None = None
+    ) -> Path:
+        rc_dir.mkdir(parents=True, exist_ok=True)
+        snapshot_calls.append(
+            {
+                "course_id": cid,
+                "phase": ph,
+                "rc_dir": rc_dir,
+                "course_url": course_url,
+            }
+        )
+        dest = rc_dir / "snapshot.json"
+        dest.write_text("{}", encoding="utf-8")
+        return dest
+
+    monkeypatch.setattr(acde, "write_snapshot_from_geny", fake_snapshot)
+
+    chain_calls: list[tuple[Path, float, float]] = []
+
+    def fake_execute(rc_dir: Path, *, budget: float, kelly: float):
+        chain_calls.append((rc_dir, budget, kelly))
+        return True, None
+
+    monkeypatch.setattr(acde, "_execute_h5_chain", fake_execute)
+    monkeypatch.setattr(
+        acde,
+        "export_per_horse_csv",
+        lambda rc_dir: rc_dir / "per_horse_report.csv",
+    )
+
+    acde._process_reunion(
+        "https://www.zeturf.fr/fr/reunion/2024-09-25/R2-paris",
+        "H5",
+        tmp_path,
+        budget=42.0,
+        kelly=0.25,
+        gcs_prefix=None,
+    )
+
+    assert [call["course_id"] for call in snapshot_calls] == ["123", "456"]
+    assert [call["phase"] for call in snapshot_calls] == ["H5", "H5"]
+    assert [
+        call["course_url"]
+        for call in snapshot_calls
+    ] == [
+        "https://www.zeturf.fr/fr/course/123",
+        "https://www.zeturf.fr/fr/course/456",
+    ]
+    assert [
+        call["rc_dir"].relative_to(tmp_path)
+        for call in snapshot_calls
+    ] == [Path("R2C1"), Path("R2C2")]
+    assert [entry[0].relative_to(tmp_path) for entry in chain_calls] == [
+        Path("R2C1"),
+        Path("R2C2"),
+    ]
+    assert all(budget == 42.0 and kelly == 0.25 for _, budget, kelly in chain_calls)
+
+
 @pytest.mark.parametrize("phase, expect_pipeline", [("H30", False), ("H5", True)])
 def test_single_reunion(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, phase: str, expect_pipeline: bool) -> None:
     html = """
@@ -98,7 +176,7 @@ def test_single_reunion(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, phase: 
     monkeypatch.setattr(sys, "argv", argv)
     acde.main()
 
-    aassert [(c, p) for c, p, *_ in snaps] == [("123", phase), ("456", phase)]
+    assert [(c, p) for c, p, *_ in snaps] == [("123", phase), ("456", phase)]
     assert [url for *_rest, url in snaps] == [
         "https://www.zeturf.fr/fr/course/123",
         "https://www.zeturf.fr/fr/course/456",
