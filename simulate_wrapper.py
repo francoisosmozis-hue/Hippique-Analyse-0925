@@ -13,15 +13,18 @@ probability.  Results are cached in a least-recently-used queue capped at
 """
 from __future__ import annotations
 
+import logging
+import math
+import os
+import re
 from collections import OrderedDict
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Tuple
-
-import math
-import os
-import re
 import yaml
+
+
+logger = logging.getLogger(__name__)
 
 try:  # pragma: no cover - numpy is optional at runtime
     import numpy as np
@@ -728,6 +731,13 @@ def evaluate_combo(
         ``notes`` and ``requirements``.
     """
 
+    if allow_heuristic:
+        logger.warning(
+            "[COMBO] allow_heuristic override ignored; payout calibration is "
+            "mandatory for combo evaluation."
+        )
+        allow_heuristic = False
+        
     if calibration is None:
         env_calib = os.getenv("CALIB_PATH")
         calib_path = Path(env_calib) if env_calib else PAYOUT_CALIBRATION_PATH
@@ -743,7 +753,10 @@ def evaluate_combo(
             return {
                 "status": "insufficient_data",
                 "message": (
-                    f"Calibration file '{calib_path}' is required to evaluate tickets"
+                    "Calibration file "
+                    f"'{calib_path}' is required to evaluate tickets. "
+                    "Populate it using the versioned skeleton (version: 1 → "
+                    "couple_place/trio/ze4)."
                 ),
                 "calibration_used": False,
                 "notes": notes,
@@ -798,3 +811,4 @@ def evaluate_combo(
             result["calibration_metadata"] = meta_detail
 
     return result
+
