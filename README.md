@@ -686,6 +686,26 @@ et alimente les drapeaux `Statut H-5`/`Jouable H-5` selon l'analyse
 - Pour une course isolée, la fonction `write_snapshot_from_geny` permet d'écrire un snapshot `H30`/`H5`.
 - Limitations : les cotes Geny sont chargées dynamiquement et peuvent varier après capture ; aucune authentification n'est requise.
 
+### Smoke test H-5 express
+
+Un utilitaire shell `scripts/smoke_h5.sh` orchestre une analyse H‑5 complète en
+pilotant `analyse_courses_du_jour_enrichie.py`, puis vérifie la présence des
+principaux artefacts (`analysis_H5.json`, `per_horse_report.csv`,
+`tracking.csv`, `snapshot_H5.json`). Les sorties sont écrites dans le dossier
+deterministe `out_smoke_h5/`.
+
+```bash
+# URL optionnelle (par défaut : réunion de démonstration ZEturf)
+scripts/smoke_h5.sh "https://www.zeturf.fr/fr/meeting/2024-09-25/paris-vincennes"
+
+# Ou bien laissez le script utiliser son URL d'exemple
+scripts/smoke_h5.sh
+```
+
+Le script accepte également la variable d'environnement `PYTHON` pour pointer
+vers un interpréteur spécifique et supprime `out_smoke_h5/` avant chaque
+exécution afin de fournir un état propre.
+
 ---
 
 ## 🧾 Artifacts produits
