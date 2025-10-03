@@ -186,12 +186,18 @@ def _build_market(
     }
 
     coverage_ratio: float | None = None
+    coverage_sufficient = False
     if total_runners:
         coverage_ratio = win_runners / total_runners
         metrics["win_coverage_ratio"] = round(coverage_ratio, 4)
+        coverage_sufficient = coverage_ratio >= 0.70
 
-    if coverage_ratio is not None and coverage_ratio >= 0.70 and math.isfinite(win_total):
-        metrics["overround_win"] = round(win_total, 4)
+    metrics["win_coverage_sufficient"] = coverage_sufficient
+
+    if coverage_sufficient and math.isfinite(win_total):
+        rounded_win_total = round(win_total, 4)
+        metrics["overround_win"] = rounded_win_total
+        metrics["overround"] = rounded_win_total
 
     slots_value = _coerce_slots_place(slots_place)
 
@@ -2607,7 +2613,13 @@ def cmd_analyse(args: argparse.Namespace) -> None:
     if market_metrics.get("overround_win") is None:
         fallback_overround = _compute_market_overround(odds_h5)
         if fallback_overround is not None:
-            market_metrics["overround_win"] = fallback_overround
+            rounded_fallback = round(fallback_overround, 4)
+            market_metrics["overround_win"] = rounded_fallback
+            existing_general = market_metrics.get("overround")
+            if not isinstance(existing_general, (int, float)) or not math.isfinite(
+                float(existing_general)
+            ):
+                market_metrics["overround"] = rounded_fallback
     overround_source: str | None = None
     market_overround: float | None = None
     overround_place_candidate = market_metrics.get("overround_place")
@@ -2616,6 +2628,13 @@ def cmd_analyse(args: argparse.Namespace) -> None:
         if math.isfinite(place_value):
             market_overround = place_value
             overround_source = "place"
+    if market_overround is None:
+        overround_win_candidate = market_metrics.get("overround_win")
+        if isinstance(overround_win_candidate, (int, float)):
+            win_value = float(overround_win_candidate)
+            if math.isfinite(win_value):
+                market_overround = win_value
+                overround_source = "win"
     if market_overround is None:
         overround_win_candidate = market_metrics.get("overround_win")
         if isinstance(overround_win_candidate, (int, float)):
@@ -2691,8 +2710,16 @@ def cmd_analyse(args: argparse.Namespace) -> None:
         else:
             if isinstance(partants_data, dict):
                 partants_data["market"] = market_payload_dict
-    if market_overround is not None and market_payload_dict is not None:
-        market_payload_dict["overround"] = market_overround
+    meta_overround_value: float | None = None
+    general_meta_candidate = market_metrics.get("overround")
+    if isinstance(general_meta_candidate, (int, float)):
+        general_meta_value = float(general_meta_candidate)
+        if math.isfinite(general_meta_value):
+            meta_overround_value = general_meta_value
+    if meta_overround_value is None:
+        meta_overround_value = market_overround
+    if meta_overround_value is not None and market_payload_dict is not None:
+        market_payload_dict["overround"] = meta_overround_value
     if market_payload_dict is not None:
         try:
             meta["market"] = copy.deepcopy(market_payload_dict)
