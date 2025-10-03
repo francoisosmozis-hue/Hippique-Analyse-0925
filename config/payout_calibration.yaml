@@ -1,5 +1,29 @@
-cp:
-  base:
+# Baseline payout calibration used by combo evaluation.
+#
+# The schema is versioned so downstream tooling can detect incompatible
+# rewrites.  ``version: 1`` introduces the ``couple_place`` / ``trio`` / ``ze4``
+# sections with ``default`` percentile targets.  Each block lists the median,
+# 75th and 90th percentile payouts observed in historical simulations.
+version: 1
+
+# ``PAUSE_EXOTIQUES`` mirrors the live safeguard that blocks combo issuance when
+# calibration quality degrades.  Keep this to ``true`` when the EMA absolute
+# error exceeds the 15 % ceiling computed by ``recalibrate_payouts_pro.py``.
+PAUSE_EXOTIQUES: false
+
+# Optional health indicators exported by ``recalibrate_payouts_pro.py``.  They
+# are not consumed directly by the ticket builder but help monitoring drift.
+EMA_ABS_ERROR_PCT:
+  CP: 12.5
+  TRIO: 14.0
+  ZE4: 13.0
+
+# --- Couple Placé -----------------------------------------------------------
+# ``default`` aggregates relaxed race conditions (≤14 partants).  ``hard``
+# should be used for denser or more erratic fields where we expect higher
+# payouts to compensate the variance.
+couple_place:
+  default:
     median: 10.0
     p75: 14.0
     p90: 20.0
@@ -7,8 +31,13 @@ cp:
     median: 14.0
     p75: 20.0
     p90: 30.0
+
+# --- Trio -------------------------------------------------------------------
+# ``default`` corresponds to the historical average for open fields.  ``hard``
+# applies to handicaps or long-tail outcomes where break-even requires a higher
+# expected return.
 trio:
-  base:
+  default:
     median: 50.0
     p75: 80.0
     p90: 120.0
@@ -16,8 +45,12 @@ trio:
     median: 80.0
     p75: 130.0
     p90: 200.0
+
+# --- ZE4 / Quarté -----------------------------------------------------------
+# Targets for ZE4 (Quarté) combinés.  The ``hard`` bucket covers fields with a
+# large number of outsiders.
 ze4:
-  base:
+  default:
     median: 90.0
     p75: 140.0
     p90: 220.0
