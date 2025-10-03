@@ -146,9 +146,22 @@ def test_fetch_race_snapshot_accepts_course_url(monkeypatch: Any) -> None:
     assert "course_url" not in captured["kwargs"]
     
 
-def test_fetch_race_snapshot_handles_missing_rc_with_url() -> None:
+def test_fetch_race_snapshot_handles_missing_rc_with_url(monkeypatch: Any) -> None:
     import online_fetch_zeturf as ofz
 
+    html_payload = {
+        "runners": [{"num": "1", "name": "Alpha"}],
+        "partants": 1,
+        "meeting": "Test",
+        "meta": {"reunion": "R3", "course": "C4"},
+    }
+
+    monkeypatch.setattr(ofz, "_fetch_race_snapshot_impl", lambda *a, **k: {})
+    monkeypatch.setattr(
+        ofz,
+        "_fetch_snapshot_via_html",
+        lambda urls, **kwargs: dict(html_payload),
+    )
     snapshot = ofz.fetch_race_snapshot(
         None,
         None,
@@ -156,8 +169,10 @@ def test_fetch_race_snapshot_handles_missing_rc_with_url() -> None:
         course_url="https://example.test/course/123",
     )
 
-    assert "runners" in snapshot and snapshot["runners"] == []
-    assert "partants" in snapshot
+    assert snapshot["runners"]
+    assert snapshot["runners"][0]["name"] == "Alpha"
+    assert snapshot["partants_count"] == 1
+    assert snapshot["partants"] == 1
     assert snapshot["phase"] == "H5"
     assert snapshot["meta"]["phase"] == "H5"
     assert snapshot["source_url"] == "https://example.test/course/123"
