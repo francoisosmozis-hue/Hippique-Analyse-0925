@@ -1,0 +1,27 @@
+cp:
+  base:
+    median: 0.0
+    p75: 0.0
+    p90: 0.0
+  hard:
+    median: 0.0
+    p75: 0.0
+    p90: 0.0
+trio:
+  base:
+    median: 0.0
+    p75: 0.0
+    p90: 0.0
+  hard:
+    median: 0.0
+    p75: 0.0
+    p90: 0.0
+ze4:
+  base:
+    median: 0.0
+    p75: 0.0
+    p90: 0.0
+  hard:
+    median: 0.0
+    p75: 0.0
+    p90: 0.0
