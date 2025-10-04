@@ -116,3 +116,4 @@ jobs:
         uses: marocchino/sticky-pull-request-comment@v2
         with:
           recreate: true
+          path: GEMINI_PR_REVIEW.md
