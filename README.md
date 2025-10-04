@@ -512,3 +512,4 @@ colonnes listées ci-dessus.
 
 Projet privé **Analyse Hippique – GPI v5.1**.  
 Auteur : Deletrez — Support technique : via issues privées du repo.
+# ping gemini
