@@ -78,3 +78,9 @@ excel/
 
 
 
+# Artefacts & données locales
+data/
+out/
+__pycache__/
+*.pyc
+.venv/
