@@ -3,6 +3,7 @@ name: Gemini Code Review
 on:
   pull_request:
     types: [opened, synchronize, reopened]
+  workflow_dispatch: {}
 
 jobs:
   review:
@@ -31,26 +32,26 @@ jobs:
           GITHUB_BASE_REF: ${{ github.base_ref }}
         run: |
           python - << 'PY'
-          import os, subprocess, pathlib, textwrap
+          import os, subprocess, pathlib
           from google import genai
 
-          MODEL = os.getenv("GEMINI_MODEL","gemini-2.0-flash")  # ou "gemini-1.5-pro"
+          MODEL = os.getenv("GEMINI_MODEL","gemini-2.0-flash")
           KEEP_EXT = {".py",".yml",".yaml",".md",".sh",".toml",".json",".ini",".cfg"}
           EXCLUDE_DIRS = {".git",".venv","data","__pycache__","tests/__snapshots__",".github/workflows/cache"}
-          MAX_CHARS = 38000  # marge pour le prompt
+          MAX_CHARS = 38000
 
           def read_file_safe(p: pathlib.Path) -> str:
             try:
               if any(part in EXCLUDE_DIRS for part in p.parts): return ""
-              if p.stat().st_size > 300_000: return ""  # trop gros
+              if p.stat().st_size > 300_000: return ""
               txt = p.read_text(errors="ignore")
-              if "\x00" in txt: return ""               # binaire probable
+              if "\x00" in txt: return ""
               return txt[:MAX_CHARS]
             except Exception:
               return ""
 
-          # Liste des fichiers modifiés entre la base et HEAD
-          base = os.getenv("GITHUB_BASE_REF","origin/main")
+          # Fichiers modifiés entre la base et HEAD
+          base = os.getenv("GITHUB_BASE_REF","main")
           cmd = f'git diff --name-only origin/{base}...HEAD'
           try:
             diff = subprocess.check_output(["bash","-lc",cmd], text=True).splitlines()
@@ -109,3 +110,5 @@ jobs:
         with:
           recreate: true
           path: GEMINI_PR_REVIEW.md
+
+          
