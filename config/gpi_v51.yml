@@ -1,0 +1,14 @@
+OUTDIR_DEFAULT: "data"
+EXCEL_PATH: "data/modele_suivi_courses_hippiques.xlsx"
+CALIB_PATH: "config/payout_calibration.yaml"
+MODEL: "baseline-v5.1"
+SP_RATIO: 0.60
+COMBO_RATIO: 0.40
+MAX_VOL_PAR_CHEVAL: 0.60
+EV_MIN_GLOBAL: 0.40
+ROI_MIN_GLOBAL: 0.20
+EV_MIN_SP: 0.40
+ROI_MIN_SP: 0.20
+MIN_PAYOUT_COMBOS: 10.0
+KELLY_FRACTION: 0.5
+REQUIRE_DRIFT_LOG: false
