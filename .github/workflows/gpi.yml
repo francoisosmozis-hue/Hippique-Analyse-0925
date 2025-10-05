@@ -36,14 +36,17 @@ env:
 jobs:
   run:
     runs-on: ubuntu-latest
+    env:
+      PYPI_EXTRA_INDEX: ${{ secrets.PYPI_EXTRA_INDEX }}
+      GENY_COOKIE: ${{ secrets.GENY_COOKIE }}
+      GOOGLE_CREDENTIALS_B64: ${{ secrets.GOOGLE_CREDENTIALS_B64 }}
+      DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
       - name: Install dependencies
-        env:
-          PYPI_EXTRA_INDEX: ${{ secrets.PYPI_EXTRA_INDEX }}
         run: |
           python -m pip install --upgrade pip
           if [ -n "$PYPI_EXTRA_INDEX" ]; then
@@ -204,8 +207,6 @@ jobs:
           PY
       - name: Fetch J/E stats from Geny
         if: steps.course.outputs.course_id != '' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && github.event.schedule == '55 15 * * *'))
-        env:
-          GENY_COOKIE: ${{ secrets.GENY_COOKIE }}
         run: |
           python scripts/fetch_je_stats.py \
             --course-id "${{ steps.course.outputs.course_id }}" \
@@ -321,7 +322,4 @@ jobs:
             $extra_flags
       - name: Sync data to Drive
         run: python scripts/drive_sync.py --push data
-        env:
-          GOOGLE_CREDENTIALS_B64: ${{ secrets.GOOGLE_CREDENTIALS_B64 }}
-          DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
       

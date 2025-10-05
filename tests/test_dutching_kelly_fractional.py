@@ -11,7 +11,9 @@ def test_stakes_sum_not_exceed_bankroll():
     odds = [2.0, 3.5, 4.0]
     probs = [0.4, 0.3, 0.3]
     bankroll = 10.0
-    df = dutching_kelly_fractional(odds, total_stake=bankroll, probs=probs, round_to=0.01)
+    df = dutching_kelly_fractional(
+        odds, total_stake=bankroll, probs=probs, round_to=0.01
+    )
     assert isinstance(df, pd.DataFrame)
     assert df["Stake (€)"].sum() <= bankroll + 1e-6
 
@@ -29,7 +31,7 @@ def test_remainder_allocated_to_max_fk():
     max_fk_idx = df["f_kelly"].idxmax()
     assert df.loc[max_fk_idx, "Stake (€)"] == df["Stake (€)"].max()
     assert df["Stake (€)"].sum() == 5.0
-    
+
 
 def test_shares_sum_to_one_after_rounding():
     odds = [2.0, 3.5, 4.0]

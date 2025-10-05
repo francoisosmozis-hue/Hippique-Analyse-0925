@@ -56,7 +56,7 @@ def main() -> None:
         if not r_match:
             continue
         r = r_match.group(0)
-        hippo = title[r_match.end():].strip()
+        hippo = title[r_match.end() :].strip()
         if not _is_fr_meeting(hippo):
             continue
         slug = _slugify(hippo)

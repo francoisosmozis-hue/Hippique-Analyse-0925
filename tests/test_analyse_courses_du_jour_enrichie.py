@@ -20,7 +20,9 @@ class DummyResp:
 
 
 @pytest.mark.parametrize("phase, expect_pipeline", [("H30", False), ("H5", True)])
-def test_single_reunion(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, phase: str, expect_pipeline: bool) -> None:
+def test_single_reunion(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, phase: str, expect_pipeline: bool
+) -> None:
     html = """
     <html>
       <body>
@@ -54,17 +56,23 @@ def test_single_reunion(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, phase: 
         (rc_dir / f"{stem}_je.csv").write_text(
             "num,nom,j_rate,e_rate\n1,A,0.1,0.2\n", encoding="utf-8"
         )
-        (rc_dir / "chronos.csv").write_text(
-            "num,chrono\n1,1.0\n", encoding="utf-8"
-        )
+        (rc_dir / "chronos.csv").write_text("num,chrono\n1,1.0\n", encoding="utf-8")
         enrich_calls.append(rc_dir)
 
     monkeypatch.setattr(acde, "enrich_h5", fake_enrich)
 
     pipeline_calls: list[Path] = []
-    monkeypatch.setattr(acde, "build_p_finale", lambda rc_dir, **kw: pipeline_calls.append(rc_dir))
-    monkeypatch.setattr(acde, "run_pipeline", lambda rc_dir, **kw: pipeline_calls.append(rc_dir))
-    monkeypatch.setattr(acde, "build_prompt_from_meta", lambda rc_dir, **kw: pipeline_calls.append(rc_dir))
+    monkeypatch.setattr(
+        acde, "build_p_finale", lambda rc_dir, **kw: pipeline_calls.append(rc_dir)
+    )
+    monkeypatch.setattr(
+        acde, "run_pipeline", lambda rc_dir, **kw: pipeline_calls.append(rc_dir)
+    )
+    monkeypatch.setattr(
+        acde,
+        "build_prompt_from_meta",
+        lambda rc_dir, **kw: pipeline_calls.append(rc_dir),
+    )
 
     csv_calls: list[Path] = []
     monkeypatch.setattr(
@@ -72,7 +80,7 @@ def test_single_reunion(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, phase: 
         "export_per_horse_csv",
         lambda rc_dir: (csv_calls.append(rc_dir) or (rc_dir / "per_horse_report.csv")),
     )
-    
+
     argv = [
         "analyse_courses_du_jour_enrichie.py",
         "--reunion-url",
@@ -148,7 +156,9 @@ def test_batch_mode(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     ]
 
 
-def test_missing_enrich_outputs(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_missing_enrich_outputs(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     html = """
     <html><body><a href="/fr/course/123">C1</a></body></html>
     """

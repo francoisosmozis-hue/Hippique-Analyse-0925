@@ -6,7 +6,6 @@ import pytest
 errors = pytest.importorskip("googleapiclient.errors")
 HttpError = errors.HttpError
 
-import io
 import json
 import base64
 from unittest.mock import MagicMock, patch, ANY
@@ -39,7 +38,9 @@ def test_download_file_calls_get_media(tmp_path):
     service.files.return_value.get_media.return_value = "request"
     downloader = MagicMock()
     downloader.next_chunk.side_effect = [(None, True)]
-    with patch("scripts.drive_sync.MediaIoBaseDownload", return_value=downloader) as dl_mock:
+    with patch(
+        "scripts.drive_sync.MediaIoBaseDownload", return_value=downloader
+    ) as dl_mock:
         drive_sync.download_file("FILEID", dest, service=service)
     service.files.return_value.get_media.assert_called_once_with(fileId="FILEID")
     dl_mock.assert_called_once_with(ANY, "request")
@@ -70,7 +71,9 @@ def test_build_service_env(monkeypatch):
     creds_data = {"type": "service_account"}
     encoded = base64.b64encode(json.dumps(creds_data).encode()).decode()
     monkeypatch.setenv("GOOGLE_CREDENTIALS_B64", encoded)
-    with patch("scripts.drive_sync.service_account.Credentials.from_service_account_info") as cred_mock, patch("scripts.drive_sync.build") as build_mock:
+    with patch(
+        "scripts.drive_sync.service_account.Credentials.from_service_account_info"
+    ) as cred_mock, patch("scripts.drive_sync.build") as build_mock:
         cred_mock.return_value = "creds"
         build_mock.return_value = "service"
         service = drive_sync._build_service()
@@ -121,9 +124,7 @@ def test_find_item_queries_drive():
 
 def test_find_item_missing_returns_none():
     service = MagicMock()
-    service.files.return_value.list.return_value.execute.return_value = {
-        "files": []
-    }
+    service.files.return_value.list.return_value.execute.return_value = {"files": []}
     assert drive_sync.find_item("x", parent="PARENT", service=service) is None
 
 
@@ -145,9 +146,9 @@ def test_ensure_folder_creates_when_missing():
 
 def test_ensure_folder_returns_existing():
     service = MagicMock()
-    with patch(
-        "scripts.drive_sync.find_item", return_value="EXIST"
-    ), patch("scripts.drive_sync._build_service", return_value=service):
+    with patch("scripts.drive_sync.find_item", return_value="EXIST"), patch(
+        "scripts.drive_sync._build_service", return_value=service
+    ):
         folder_id = drive_sync.ensure_folder("sub", parent="PARENT")
     service.files.return_value.create.assert_not_called()
     assert folder_id == "EXIST"
@@ -157,9 +158,9 @@ def test_upload_or_update_updates_existing(tmp_path):
     path = tmp_path / "file.txt"
     path.write_text("data", encoding="utf-8")
     service = MagicMock()
-    with patch(
-        "scripts.drive_sync.find_item", return_value="ID"
-    ), patch("scripts.drive_sync.MediaFileUpload") as media_mock:
+    with patch("scripts.drive_sync.find_item", return_value="ID"), patch(
+        "scripts.drive_sync.MediaFileUpload"
+    ) as media_mock:
         drive_sync.upload_or_update(path, folder_id="FOLDER", service=service)
     service.files.return_value.update.assert_called_once_with(
         fileId="ID", media_body=ANY
@@ -172,9 +173,9 @@ def test_upload_or_update_creates_when_missing(tmp_path):
     path.write_text("data", encoding="utf-8")
     service = MagicMock()
     service.files.return_value.create.return_value.execute.return_value = {"id": "NEW"}
-    with patch(
-        "scripts.drive_sync.find_item", return_value=None
-    ), patch("scripts.drive_sync.MediaFileUpload"):
+    with patch("scripts.drive_sync.find_item", return_value=None), patch(
+        "scripts.drive_sync.MediaFileUpload"
+    ):
         new_id = drive_sync.upload_or_update(path, folder_id="FOLDER", service=service)
     service.files.return_value.create.assert_called_once()
     assert new_id == "NEW"

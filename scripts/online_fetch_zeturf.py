@@ -24,6 +24,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 def _fetch_from_geny() -> Dict[str, Any]:
     """Scrape meetings from Geny when the Zeturf API is unavailable."""
     logger.info("Tentative de récupération des réunions depuis Geny.")
@@ -59,7 +60,9 @@ def fetch_meetings(url: str) -> Any:
         resp.raise_for_status()
         return resp.json()
     except (requests.RequestException, json.JSONDecodeError) as e:
-        logger.warning(f"Échec de la récupération depuis Zeturf ({e}), tentative avec Geny.")
+        logger.warning(
+            f"Échec de la récupération depuis Zeturf ({e}), tentative avec Geny."
+        )
         return _fetch_from_geny()
 
 
@@ -74,7 +77,9 @@ def filter_today(meetings: Any) -> List[Dict[str, Any]]:
 
 def fetch_from_geny_idcourse(id_course: str) -> Dict[str, Any]:
     """Return a snapshot for ``id_course`` scraped from geny.com."""
-    logger.info(f"Tentative de récupération des partants pour la course {id_course} depuis Geny.")
+    logger.info(
+        f"Tentative de récupération des partants pour la course {id_course} depuis Geny."
+    )
     try:
         partants_url = f"{GENY_BASE}/partants-pmu/_c{id_course}"
         cotes_url = f"{GENY_BASE}/cotes?id_course={id_course}"
@@ -119,14 +124,26 @@ def fetch_from_geny_idcourse(id_course: str) -> Dict[str, Any]:
         else:
             items: Any
             if isinstance(data, dict):
-                items = data.get("runners") or data.get("data") or data.get("cotes") or []
+                items = (
+                    data.get("runners") or data.get("data") or data.get("cotes") or []
+                )
             else:
                 items = data
             for item in items:
-                num = str(item.get("num") or item.get("numero") or item.get("id") or item.get("number"))
+                num = str(
+                    item.get("num")
+                    or item.get("numero")
+                    or item.get("id")
+                    or item.get("number")
+                )
                 if not num:
                     continue
-                val = item.get("cote") or item.get("odds") or item.get("rapport") or item.get("value")
+                val = (
+                    item.get("cote")
+                    or item.get("odds")
+                    or item.get("rapport")
+                    or item.get("value")
+                )
                 if isinstance(val, str):
                     val = val.replace(",", ".")
                 try:
@@ -149,8 +166,13 @@ def fetch_from_geny_idcourse(id_course: str) -> Dict[str, Any]:
         }
         return snapshot
     except requests.RequestException as e:
-        logger.error(f"Erreur lors de la récupération des données Geny pour la course {id_course}: {e}")
-        raise RuntimeError(f"Impossible de récupérer les données de Geny pour la course {id_course}.") from e
+        logger.error(
+            f"Erreur lors de la récupération des données Geny pour la course {id_course}: {e}"
+        )
+        raise RuntimeError(
+            f"Impossible de récupérer les données de Geny pour la course {id_course}."
+        ) from e
+
 
 def fetch_runners(url: str) -> Dict[str, Any]:
     """Fetch raw runners data from ``url``."""
@@ -166,10 +188,14 @@ def fetch_runners(url: str) -> Dict[str, Any]:
         resp.raise_for_status()
         return resp.json()
     except (requests.RequestException, json.JSONDecodeError) as e:
-        logger.warning(f"Échec de la récupération des partants depuis Zeturf ({e}), tentative avec Geny.")
+        logger.warning(
+            f"Échec de la récupération des partants depuis Zeturf ({e}), tentative avec Geny."
+        )
         if course_id:
             return fetch_from_geny_idcourse(course_id)
-        raise RuntimeError("Impossible de récupérer les partants depuis Zeturf et aucun ID de course pour Geny.") from e
+        raise RuntimeError(
+            "Impossible de récupérer les partants depuis Zeturf et aucun ID de course pour Geny."
+        ) from e
 
 
 def write_snapshot_from_geny(id_course: str, phase: str, out_dir: Path) -> Path:
@@ -233,6 +259,7 @@ def normalize_snapshot(payload: Dict[str, Any]) -> Dict[str, Any]:
     meta.update({"runners": runners, "id2name": id2name})
     return meta
 
+
 def compute_diff(
     h30: Dict[str, Any],
     h5: Dict[str, Any],
@@ -259,14 +286,20 @@ def compute_diff(
     return {"top_steams": steams, "top_drifts": drifts}
 
 
-def make_diff(course_id: str, h30_path: Path | str, h5_path: Path | str, outdir: Path | str = ".") -> Path:
+def make_diff(
+    course_id: str, h30_path: Path | str, h5_path: Path | str, outdir: Path | str = "."
+) -> Path:
     """Write steam and drift lists to ``outdir`` and return the output path."""
     h30 = json.loads(Path(h30_path).read_text(encoding="utf-8"))
     h5 = json.loads(Path(h5_path).read_text(encoding="utf-8"))
     res = compute_diff(h30, h5)
     data = {
-        "steams": [{"id_cheval": r["id"], "delta": r["delta"]} for r in res["top_steams"]],
-        "drifts": [{"id_cheval": r["id"], "delta": r["delta"]} for r in res["top_drifts"]],
+        "steams": [
+            {"id_cheval": r["id"], "delta": r["delta"]} for r in res["top_steams"]
+        ],
+        "drifts": [
+            {"id_cheval": r["id"], "delta": r["delta"]} for r in res["top_drifts"]
+        ],
     }
     outdir = Path(outdir)
     outdir.mkdir(parents=True, exist_ok=True)
@@ -289,7 +322,9 @@ __all__ = [
 
 
 def main() -> None:  # pragma: no cover - minimal CLI wrapper
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+    )
     parser = argparse.ArgumentParser(description="Fetch data from Zeturf")
     parser.add_argument(
         "--mode", choices=["planning", "h30", "h5", "diff"], required=True
@@ -341,7 +376,9 @@ def main() -> None:  # pragma: no cover - minimal CLI wrapper
             out_path.write_text(
                 json.dumps(out_data, ensure_ascii=False, indent=2), encoding="utf-8"
             )
-        logger.info(f"Opération '{args.mode}' terminée avec succès. Fichier de sortie: {args.out}")
+        logger.info(
+            f"Opération '{args.mode}' terminée avec succès. Fichier de sortie: {args.out}"
+        )
     except (RuntimeError, ValueError) as e:
         logger.error(f"Échec de l'opération '{args.mode}': {e}")
         sys.exit(1)

@@ -13,6 +13,9 @@ jobs:
   prepare:
       if: github.event.schedule == '0 8 * * *'
       runs-on: ubuntu-latest
+      env:
+        GOOGLE_CREDENTIALS_B64: ${{ secrets.GOOGLE_CREDENTIALS_B64 }}
+        DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
       steps:
         - uses: actions/checkout@v4
         - uses: actions/setup-python@v5
@@ -23,9 +26,6 @@ jobs:
             python scripts/online_fetch_zeturf.py --mode planning --out meetings.json --sources config/sources.yml
         - name: Sync data to Drive
           run: python scripts/drive_sync.py --push data
-          env:
-            GOOGLE_CREDENTIALS_B64: ${{ secrets.GOOGLE_CREDENTIALS_B64 }}
-            DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
         - uses: actions/upload-artifact@v4
           with:
             name: meetings
@@ -33,6 +33,9 @@ jobs:
   cron:
     if: github.event.schedule != '0 8 * * *'
     runs-on: ubuntu-latest
+    env:
+      GOOGLE_CREDENTIALS_B64: ${{ secrets.GOOGLE_CREDENTIALS_B64 }}
+      DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -46,9 +49,6 @@ jobs:
           python scripts/cron_decider.py --meetings meetings.json
       - name: Sync data to Drive
         run: python scripts/drive_sync.py --push data
-        env:
-          GOOGLE_CREDENTIALS_B64: ${{ secrets.GOOGLE_CREDENTIALS_B64 }}
-          DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
       - uses: actions/upload-artifact@v4
         with:
           name: cron-data

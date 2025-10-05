@@ -26,6 +26,7 @@ PAYOUT_MIN_COMBO: float = 10.0
 MAX_TICKETS: int = 2
 """Maximum number of tickets emitted (1 SP + 1 combo)."""
 
+
 def allow_combo(
     ev_global: float,
     roi_global: float,
@@ -49,7 +50,10 @@ def allow_combo(
         Optional configuration mapping providing the thresholds used by the
         analysis pipeline.
     """
-    def _resolve(value: float | None, default: float, keys: Tuple[str, ...] = ()) -> float:
+
+    def _resolve(
+        value: float | None, default: float, keys: Tuple[str, ...] = ()
+    ) -> float:
         if value is not None:
             return float(value)
         if cfg is not None:
@@ -76,6 +80,7 @@ def allow_combo(
     if payout_est < resolved_payout:
         return False
     return True
+
 
 def _normalise_legs(value: Any) -> List[str]:
     if value is None:
@@ -185,25 +190,41 @@ def _extract_combo_entries(source: Any) -> List[Tuple[str, Dict[str, Any]]]:
             if isinstance(data, Mapping):
                 if not any(
                     key in data
-                    for key in ("legs", "participants", "runners", "combination", "combinaison")
+                    for key in (
+                        "legs",
+                        "participants",
+                        "runners",
+                        "combination",
+                        "combinaison",
+                    )
                 ):
                     continue
                 item = dict(data)
                 item.setdefault("type", combo_type)
                 entries.append((str(item.get("type", combo_type)).upper(), item))
-            elif isinstance(data, Sequence) and not isinstance(data, (str, bytes, bytearray)):
+            elif isinstance(data, Sequence) and not isinstance(
+                data, (str, bytes, bytearray)
+            ):
                 for item in data:
                     if not isinstance(item, Mapping):
                         continue
                     if not any(
                         key in item
-                        for key in ("legs", "participants", "runners", "combination", "combinaison")
+                        for key in (
+                            "legs",
+                            "participants",
+                            "runners",
+                            "combination",
+                            "combinaison",
+                        )
                     ):
                         continue
                     obj = dict(item)
                     obj.setdefault("type", combo_type)
                     entries.append((str(obj.get("type", combo_type)).upper(), obj))
-    elif isinstance(source, Sequence) and not isinstance(source, (str, bytes, bytearray)):
+    elif isinstance(source, Sequence) and not isinstance(
+        source, (str, bytes, bytearray)
+    ):
         for item in source:
             if not isinstance(item, Mapping):
                 continue
@@ -216,7 +237,13 @@ def _extract_combo_entries(source: Any) -> List[Tuple[str, Dict[str, Any]]]:
             )
             if not any(
                 key in item
-                for key in ("legs", "participants", "runners", "combination", "combinaison")
+                for key in (
+                    "legs",
+                    "participants",
+                    "runners",
+                    "combination",
+                    "combinaison",
+                )
             ):
                 continue
             entries.append((str(combo_type).upper(), dict(item)))
@@ -241,7 +268,12 @@ def _build_combo_candidates(
         )
         if not legs:
             continue
-        odds = raw.get("odds") or raw.get("cote") or raw.get("expected_odds") or raw.get("payout")
+        odds = (
+            raw.get("odds")
+            or raw.get("cote")
+            or raw.get("expected_odds")
+            or raw.get("payout")
+        )
         try:
             odds_val = float(odds)
         except (TypeError, ValueError):
@@ -265,8 +297,7 @@ def _build_combo_candidates(
             context_sources.append(course_context)
         if context_sources:
             ticket["legs_details"] = [
-                _build_leg_details(leg_id, *context_sources)
-                for leg_id in legs
+                _build_leg_details(leg_id, *context_sources) for leg_id in legs
             ]
         if "p" in raw:
             try:
@@ -345,8 +376,16 @@ def apply_ticket_policy(
         return sp_tickets, [], info
 
     combo_budget = budget_total * float(cfg.get("COMBO_RATIO", COMBO_SHARE))
-    ev_threshold = float(cfg.get("EV_MIN_GLOBAL", EV_MIN_COMBO)) if ev_threshold is None else ev_threshold
-    roi_threshold = float(cfg.get("ROI_MIN_GLOBAL", 0.0)) if roi_threshold is None else roi_threshold
+    ev_threshold = (
+        float(cfg.get("EV_MIN_GLOBAL", EV_MIN_COMBO))
+        if ev_threshold is None
+        else ev_threshold
+    )
+    roi_threshold = (
+        float(cfg.get("ROI_MIN_GLOBAL", 0.0))
+        if roi_threshold is None
+        else roi_threshold
+    )
     payout_threshold = (
         float(cfg.get("MIN_PAYOUT_COMBOS", PAYOUT_MIN_COMBO))
         if payout_threshold is None
@@ -381,9 +420,7 @@ def apply_ticket_policy(
         else:
             base_legs = [_leg_lookup_key(leg) for leg in base.get("legs", [])]
             if base_legs:
-                base["legs_details"] = [
-                    {"id": leg_id} for leg_id in base_legs
-                ]
+                base["legs_details"] = [{"id": leg_id} for leg_id in base_legs]
         base["legs"] = list(base_legs)
         key = (
             str(base.get("type", "CP")),
@@ -423,8 +460,8 @@ def apply_ticket_policy(
             merged["flags"] = list(ticket.get("flags", []))
         combo_tickets.append(merged)
 
-
     return sp_tickets, combo_tickets, info
+
 
 # Provide a convenient alias
 build_tickets = apply_ticket_policy

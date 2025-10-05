@@ -19,7 +19,6 @@ from simulate_wrapper import evaluate_combo
 from logging_io import append_csv_line, CSV_HEADER
 
 
-
 def validate_exotics_with_simwrapper(
     exotics: Iterable[List[Dict[str, Any]]],
     bankroll: float,
@@ -65,7 +64,7 @@ def validate_exotics_with_simwrapper(
         if label not in notes_seen:
             notes.append(label)
             notes_seen.add(label)
-            
+
     for candidate in exotics:
         stats = evaluate_combo(candidate, bankroll, allow_heuristic=allow_heuristic)
         ev_ratio = float(stats.get("ev_ratio", 0.0))

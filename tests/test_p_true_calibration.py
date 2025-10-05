@@ -26,9 +26,7 @@ def test_assemble_history_dataset(tmp_path):
     (race / "per_horse_report.csv").write_text(report, encoding="utf-8")
 
     arrival = {"arrival": [{"id": "1", "position": 1}, {"id": "2", "position": 2}]}
-    (race / "arrivee_officielle.json").write_text(
-        json.dumps(arrival), encoding="utf-8"
-    )
+    (race / "arrivee_officielle.json").write_text(json.dumps(arrival), encoding="utf-8")
 
     tickets = {"tickets": [{"legs": [{"id": "1"}, {"id": "3"}]}]}
     (race / "p_finale.json").write_text(json.dumps(tickets), encoding="utf-8")

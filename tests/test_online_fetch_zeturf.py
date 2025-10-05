@@ -46,7 +46,7 @@ def test_fetch_meetings_fallback_on_404(monkeypatch: pytest.MonkeyPatch) -> None
     def fake_get(url: str, timeout: int) -> DummyResp:
         calls.append(url)
         if url == primary:
-             return DummyResp(404, None)
+            return DummyResp(404, None)
         return DummyResp(200, geny_html)
 
     monkeypatch.setattr(ofz.requests, "get", fake_get)
@@ -63,7 +63,9 @@ def test_fetch_meetings_fallback_on_connection_error(
     """Network failures should trigger the Geny fallback."""
 
     primary = "https://www.zeturf.fr/rest/api/meetings/today"
-    fallback_payload = {"meetings": [{"id": "GENY", "name": "Fallback", "date": "today"}]}
+    fallback_payload = {
+        "meetings": [{"id": "GENY", "name": "Fallback", "date": "today"}]
+    }
     called: dict[str, int] = {"fallback": 0}
 
     def fake_get(url: str, timeout: int = 10) -> DummyResp:
@@ -102,7 +104,7 @@ def test_fetch_runners_placeholder_url() -> None:
 def test_fetch_runners_fallback_on_404(
     monkeypatch: pytest.MonkeyPatch, url: str
 ) -> None:
-    """``fetch_runners`` should fallback to Geny on a 404."""    
+    """``fetch_runners`` should fallback to Geny on a 404."""
     seen: list[str] = []
 
     def fake_get(u: str, timeout: int = 10) -> DummyResp:
@@ -211,8 +213,6 @@ def test_make_diff(tmp_path: Path) -> None:
     assert [r["id_cheval"] for r in data["drifts"]] == ["6", "10", "9", "5", "2"]
 
 
-
-
 def sample_snapshot() -> dict:
     return {
         "rc": "R1C1",
@@ -250,7 +250,9 @@ def test_normalize_snapshot_with_program_numbers() -> None:
 
 
 @pytest.mark.parametrize("mode", ["h30", "h5"])
-def test_main_snapshot_modes(mode: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_main_snapshot_modes(
+    mode: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """CLI should normalise snapshots for h30/h5 modes."""
 
     def fake_get(url: str, timeout: int = 10) -> DummyResp:
@@ -263,7 +265,15 @@ def test_main_snapshot_modes(mode: str, tmp_path: Path, monkeypatch: pytest.Monk
     monkeypatch.setattr(
         sys,
         "argv",
-        ["scripts/online_fetch_zeturf.py", "--mode", mode, "--out", str(out), "--sources", str(sources)],
+        [
+            "scripts/online_fetch_zeturf.py",
+            "--mode",
+            mode,
+            "--out",
+            str(out),
+            "--sources",
+            str(sources),
+        ],
     )
     ofz.main()
     data = json.loads(out.read_text(encoding="utf-8"))
@@ -302,7 +312,6 @@ def test_main_diff_mode(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
     assert data["drifts"][0]["id_cheval"] == "2"
 
 
-
 def test_main_planning_mode(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """``main`` should fetch and filter today's meetings in planning mode."""
 
@@ -319,7 +328,15 @@ def test_main_planning_mode(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.setattr(
         sys,
         "argv",
-        ["scripts/online_fetch_zeturf.py", "--mode", "planning", "--out", str(out), "--sources", str(sources)],
+        [
+            "scripts/online_fetch_zeturf.py",
+            "--mode",
+            "planning",
+            "--out",
+            str(out),
+            "--sources",
+            str(sources),
+        ],
     )
     ofz.main()
     data = json.loads(out.read_text(encoding="utf-8"))
@@ -336,7 +353,9 @@ def test_fetch_from_geny_idcourse(monkeypatch: pytest.MonkeyPatch) -> None:
     """
     odds_json = {"runners": [{"num": "1", "odds": 5}, {"num": "2", "odds": 7}]}
 
-    def fake_get(url: str, headers: dict[str, str] | None = None, timeout: int = 10) -> DummyResp:
+    def fake_get(
+        url: str, headers: dict[str, str] | None = None, timeout: int = 10
+    ) -> DummyResp:
         if "partants" in url:
             return DummyResp(200, None, text=partants_html)
         if "cotes" in url:
@@ -352,7 +371,9 @@ def test_fetch_from_geny_idcourse(monkeypatch: pytest.MonkeyPatch) -> None:
     assert snap["runners"][1]["odds"] == 7
 
 
-def test_write_snapshot_from_geny(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_write_snapshot_from_geny(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     sample = {
         "date": "2025-09-10",
         "source": "geny",

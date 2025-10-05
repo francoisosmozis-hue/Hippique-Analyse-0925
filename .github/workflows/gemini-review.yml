@@ -19,6 +19,8 @@ jobs:
     permissions:
       pull-requests: write
       contents: read
+    env:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
 
     steps:
       - uses: actions/checkout@v4
@@ -37,9 +39,8 @@ jobs:
 
       - name: Run Gemini on PR diff
         env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GITHUB_BASE_REF: ${{ github.base_ref }}
-          GEMINI_MODEL: gemini-2.0-flash   # ou gemini-1.5-pro
+          GEMINI_MODEL: gemini-1.5-flash   # ou gemini-1.5-pro
         run: |
           python - << 'PY'
           import os, subprocess, pathlib

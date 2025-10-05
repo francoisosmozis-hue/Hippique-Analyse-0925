@@ -1,0 +1,21 @@
+*** Begin Patch
+*** Update File: runner_chain.py
+@@
+-def validate_snapshot_or_die(snapshot: Dict[str, Any], phase: str) -> None:
+-    if not isinstance(snapshot, dict):
+-        print(f"[runner_chain] ERREUR: snapshot {phase} invalide (type).", file=sys.stderr)
+-        sys.exit(2)
+-    partants = snapshot.get("partants")
+-    if not isinstance(partants, list) or len(partants) == 0:
+-        print(f"[runner_chain] ERREUR: snapshot {phase} vide ou sans 'partants'.", file=sys.stderr)
+-        sys.exit(2)
++def validate_snapshot_or_die(snapshot: Dict[str, Any], phase: str) -> None:
++    """Validation robuste: on exige la présence d'une LISTE de runners."""
++    if not isinstance(snapshot, dict):
++        print(f"[runner_chain] ERREUR: snapshot {phase} invalide (type).", file=sys.stderr)
++        sys.exit(2)
++    runners = snapshot.get("runners") or []
++    if not isinstance(runners, list) or len(runners) == 0:
++        print(f"[runner_chain] ERREUR: snapshot {phase} vide ou sans 'runners'.", file=sys.stderr)
++        sys.exit(2)
+*** End Patch

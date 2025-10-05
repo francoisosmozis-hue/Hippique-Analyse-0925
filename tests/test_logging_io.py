@@ -1,5 +1,6 @@
 from logging_io import append_csv_line, CSV_HEADER
 
+
 def test_csv_header_and_columns(tmp_path):
     path = tmp_path / "log.csv"
     append_csv_line(path, {"reunion": "R1", "course": "C1", "partants": 8})

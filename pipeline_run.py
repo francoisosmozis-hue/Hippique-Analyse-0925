@@ -3,20 +3,16 @@
 """Minimal pipeline for computing EV and exporting artefacts."""
 
 import argparse
-import copy
 import datetime as dt
-import json
 import logging
 
 logger = logging.getLogger(__name__)
 LOG_LEVEL_ENV_VAR = "PIPELINE_LOG_LEVEL"
-import math
-import re
 from functools import partial
 from pathlib import Path
 
 import os
-import sys
+
 
 def configure_logging(level: str | int | None = None) -> None:
     """Configure root logging based on CLI or environment settings."""
@@ -43,34 +39,43 @@ def configure_logging(level: str | int | None = None) -> None:
     )
 
     if invalid_level:
-        logger.warning(
-            "Invalid log level %r, defaulting to INFO", resolved
-        )
+        logger.warning("Invalid log level %r, defaulting to INFO", resolved)
 
 
 from logging_io import append_csv_line, CSV_HEADER, append_json
-from simulate_ev import allocate_dutching_sp, gate_ev, simulate_ev_batch
-from tickets_builder import apply_ticket_policy
+from simulate_ev import allocate_dutching_sp, gate_ev
+from tickets_builder import apply_ticket_policy, allow_combo
 from validator_ev import summarise_validation, validate_inputs
 import simulate_wrapper as sw
 from config.config_loader import load_config
 from data_loader import load_json
-from validator import validate_snapshot_data, validate_partants_data, validate_stats_je_data
+from validator import (
+    validate_snapshot_data,
+    validate_partants_data,
+    validate_stats_je_data,
+)
 from utils import (
     save_json,
-    save_text,
     compute_drift_dict,
     summarize_sp_tickets,
     simulate_with_metrics,
     enforce_ror_threshold,
     export,
+    _resolve_effective_cap,
+    _summarize_optimization,
+)
+from calibration.p_true_model import (
+    load_p_true_model,
+    compute_runner_features,
+    predict_probability,
 )
 
 
 try:
     from dotenv import load_dotenv
+
     load_dotenv()
-except Exception: # pragma: no cover - optional dependency
+except Exception:  # pragma: no cover - optional dependency
     pass
 
 
@@ -88,6 +93,7 @@ METRIC_KEYS = {
     "sharpe",
     "optimized_sharpe",
 }
+
 
 def _heuristic_p_true(cfg, partants, odds_h5, odds_h30, stats_je) -> dict:
     weights = {}
@@ -170,9 +176,9 @@ def cmd_analyse(args: argparse.Namespace) -> None:
     validate_snapshot_data(h30_data, args.h30)
     h5_data = load_json(args.h5)
     validate_snapshot_data(h5_data, args.h5)
-    odds_h30 = {runner['id']: runner['odds'] for runner in h30_data.get('runners', [])}
-    odds_h5 = {runner['id']: runner['odds'] for runner in h5_data.get('runners', [])}
-    
+    odds_h30 = {runner["id"]: runner["odds"] for runner in h30_data.get("runners", [])}
+    odds_h5 = {runner["id"]: runner["odds"] for runner in h5_data.get("runners", [])}
+
     stats_je = load_json(args.stats_je)
     validate_stats_je_data(stats_je, args.stats_je)
     partants_data = load_json(args.partants)
@@ -183,7 +189,13 @@ def cmd_analyse(args: argparse.Namespace) -> None:
         partants = partants_data.get("participants", [])
 
     id2name = partants_data.get(
-        "id2name", {str(p.get("id") or p.get("numPmu")): p.get("name", str(p.get("id") or p.get("numPmu"))) for p in partants}
+        "id2name",
+        {
+            str(p.get("id") or p.get("numPmu")): p.get(
+                "name", str(p.get("id") or p.get("numPmu"))
+            )
+            for p in partants
+        },
     )
     rc = partants_data.get("rc", "R?C?")
     if "C" in rc:
@@ -209,11 +221,7 @@ def cmd_analyse(args: argparse.Namespace) -> None:
     if not isinstance(stats_je, dict):
         stats_je = {}
     if "coverage" not in stats_je:
-        runner_ids = {
-            str(p.get("id"))
-            for p in partants
-            if p.get("id") is not None
-        }
+        runner_ids = {str(p.get("id")) for p in partants if p.get("id") is not None}
         stats_ids = {
             str(cid)
             for cid, payload in stats_je.items()
@@ -249,12 +257,14 @@ def cmd_analyse(args: argparse.Namespace) -> None:
     for p in partants:
         cid = str(p.get("id") or p.get("numPmu"))
         if cid in odds_h5 and cid in p_true:
-            runners.append({
-                "id": cid,
-                "name": p.get("name", cid),
-                "odds": float(odds_h5[cid]),
-                "p": float(p_true[cid]),
-            })
+            runners.append(
+                {
+                    "id": cid,
+                    "name": p.get("name", cid),
+                    "odds": float(odds_h5[cid]),
+                    "p": float(p_true[cid]),
+                }
+            )
 
     sp_tickets, combo_templates, _combo_info = apply_ticket_policy(
         cfg,
@@ -267,7 +277,9 @@ def cmd_analyse(args: argparse.Namespace) -> None:
     total_stake_sp = 0.0
     roi_sp = 0.0
 
-    combo_budget = float(cfg.get("BUDGET_TOTAL", 0.0)) * float(cfg.get("COMBO_RATIO", 0.0))
+    combo_budget = float(cfg.get("BUDGET_TOTAL", 0.0)) * float(
+        cfg.get("COMBO_RATIO", 0.0)
+    )
     combo_tickets: list[dict] = []
     if combo_templates and combo_budget > 0:
         weights = [max(float(t.get("stake", 0.0)), 0.0) for t in combo_templates]
@@ -281,7 +293,7 @@ def cmd_analyse(args: argparse.Namespace) -> None:
             combo_tickets.append(ticket)
 
     bankroll = float(cfg.get("BUDGET_TOTAL", 0.0))
-    
+
     def log_reduction(info: dict) -> None:
         logger.warning(
             (
@@ -302,7 +314,9 @@ def cmd_analyse(args: argparse.Namespace) -> None:
             int(info.get("iterations", 0)),
         )
 
-    def adjust_pack(cfg_local: dict, combos_local: list[dict]) -> tuple[list[dict], dict, dict]:
+    def adjust_pack(
+        cfg_local: dict, combos_local: list[dict]
+    ) -> tuple[list[dict], dict, dict]:
         sp_adj, stats_local, info_local = enforce_ror_threshold(
             cfg_local,
             runners,
@@ -346,7 +360,9 @@ def cmd_analyse(args: argparse.Namespace) -> None:
             cfg=cfg,
         )
         if not combos_allowed:
-            flags.setdefault("reasons", {}).setdefault("combo", []).append("ALLOW_COMBO")
+            flags.setdefault("reasons", {}).setdefault("combo", []).append(
+                "ALLOW_COMBO"
+            )
 
     final_combo_tickets = combo_tickets if combos_allowed else []
 
@@ -385,7 +401,9 @@ def cmd_analyse(args: argparse.Namespace) -> None:
         }
     elif combo_budget_reassign or no_combo_available:
         cfg_sp = dict(cfg)
-        cfg_sp["SP_RATIO"] = float(cfg.get("SP_RATIO", 0.0)) + float(cfg.get("COMBO_RATIO", 0.0))
+        cfg_sp["SP_RATIO"] = float(cfg.get("SP_RATIO", 0.0)) + float(
+            cfg.get("COMBO_RATIO", 0.0)
+        )
         cfg_sp["COMBO_RATIO"] = 0.0
         sp_tickets, _ = allocate_dutching_sp(cfg_sp, runners)
         sp_tickets, stats_ev, reduction_info = adjust_pack(cfg_sp, [])
@@ -395,7 +413,7 @@ def cmd_analyse(args: argparse.Namespace) -> None:
         roi_global = float(stats_ev.get("roi", 0.0))
         combined_payout = float(stats_ev.get("combined_expected_payout", 0.0))
         risk_of_ruin = float(stats_ev.get("risk_of_ruin", 0.0))
-        ev_over_std = float(stats_ev.get("ev_over_std", 0.0))        
+        ev_over_std = float(stats_ev.get("ev_over_std", 0.0))
         flags = gate_ev(
             cfg_sp,
             ev_sp,
@@ -440,7 +458,9 @@ def cmd_analyse(args: argparse.Namespace) -> None:
 
     risk_of_ruin = float(stats_ev.get("risk_of_ruin", 0.0)) if tickets else 0.0
     clv_moyen = float(stats_ev.get("clv", 0.0)) if tickets else 0.0
-    combined_payout = float(stats_ev.get("combined_expected_payout", 0.0)) if tickets else 0.0
+    combined_payout = (
+        float(stats_ev.get("combined_expected_payout", 0.0)) if tickets else 0.0
+    )
     variance_total = float(stats_ev.get("variance", 0.0)) if tickets else 0.0
 
     optimization_summary = None
@@ -489,7 +509,6 @@ def cmd_analyse(args: argparse.Namespace) -> None:
         {"tickets": tickets, "ev": {"sp": ev_sp, "global": ev_global}},
     )
 
-
     outdir.mkdir(parents=True, exist_ok=True)
     stake_reduction_info = last_reduction_info or {}
     stake_reduction_flag = bool(stake_reduction_info.get("applied"))
@@ -511,7 +530,7 @@ def cmd_analyse(args: argparse.Namespace) -> None:
             "variance": stake_reduction_info.get("final_variance"),
             "total_stake": stake_reduction_info.get("final_total_stake"),
         },
-    }    
+    }
     export(
         outdir,
         meta,
@@ -582,14 +601,15 @@ def main() -> None:
     ana.set_defaults(func=cmd_analyse)
 
     args = parser.parse_args()
-    
+
     configure_logging(args.log_level)
-    
+
     args.func(args)
 
 
 if __name__ == "__main__":
     main()
+
 
 # ==== TEST-COMPAT helpers: export_optimization + try_trim_sp_by_ror ====
 def _export_with_optimization(base: dict, ev_result: dict) -> dict:
@@ -601,16 +621,45 @@ def _export_with_optimization(base: dict, ev_result: dict) -> dict:
     out["ev"] = ev_block
     return out
 
+
 def _try_trim_sp_by_ror(cfg, runners, sp_tickets, *, bankroll: float):
     """
     Si ROR trop élevé, applique enforce_ror_threshold et renvoie (tickets, stats, info).
     Sinon, renvoie (tickets, stats, {"applied": False, ...})
     """
     from ev_calculator import enforce_ror_threshold, compute_ev_roi
+
     k_cap = float(cfg.get("MAX_VOL_PAR_CHEVAL", 0.60))
     rnd = float(cfg.get("ROUND_TO_SP", 0.10))
-    stats0 = compute_ev_roi([dict(t) for t in sp_tickets], budget=float(bankroll), kelly_cap=k_cap, round_to=rnd)
+    stats0 = compute_ev_roi(
+        [dict(t) for t in sp_tickets],
+        budget=float(bankroll),
+        kelly_cap=k_cap,
+        round_to=rnd,
+    )
     r0 = float(stats0.get("risk_of_ruin", 1.0))
     if r0 <= float(cfg.get("ROR_MAX", 1.0)):
-        return sp_tickets, stats0, {"applied": False, "initial_ror": r0, "final_ror": r0, "target": float(cfg.get("ROR_MAX", 1.0))}
+        return (
+            sp_tickets,
+            stats0,
+            {
+                "applied": False,
+                "initial_ror": r0,
+                "final_ror": r0,
+                "target": float(cfg.get("ROR_MAX", 1.0)),
+            },
+        )
     return enforce_ror_threshold(cfg, runners, sp_tickets, bankroll=bankroll)
+
+
+def _place_slots(n:int)->int:
+    return 2 if n<=7 else (3 if n<=20 else 4)
+
+
+def compute_overround(horses:list, n:int)->float|None:
+    try:
+        slots=float(_place_slots(n))
+        s=sum(h.get("p",0.0) for h in horses)
+        return (s/slots) if slots>0 else None
+    except Exception:
+        return None

@@ -158,7 +158,9 @@ def _merge_meta(arrivee: JsonDict, tickets: JsonDict) -> JsonDict:
     return meta
 
 
-def _compute_ticket_metrics(tickets: Iterable[JsonDict]) -> tuple[float, float, float, float, float, float, float]:
+def _compute_ticket_metrics(
+    tickets: Iterable[JsonDict],
+) -> tuple[float, float, float, float, float, float, float]:
     total_stake = 0.0
     total_gain = 0.0
     total_ev = 0.0
@@ -304,14 +306,18 @@ def _update_observe_sheet(
 
 
 def main(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(description="Mettre à jour le ROI dans l'Excel de suivi")
+    parser = argparse.ArgumentParser(
+        description="Mettre à jour le ROI dans l'Excel de suivi"
+    )
     parser.add_argument(
         "--excel",
         default="modele_suivi_courses_hippiques.xlsx",
         help="Chemin du classeur Excel à mettre à jour",
     )
     parser.add_argument("--arrivee", required=True, help="JSON de l'arrivée officielle")
-    parser.add_argument("--tickets", required=True, help="JSON des tickets (p_finale.json)")
+    parser.add_argument(
+        "--tickets", required=True, help="JSON des tickets (p_finale.json)"
+    )
     parser.add_argument(
         "--sheet-prevision",
         default="ROI Prévisionnel",
@@ -335,7 +341,10 @@ def main(argv: list[str] | None = None) -> None:
     wb, created = _load_workbook(excel_path)
     if created and "Sheet" in wb.sheetnames and len(wb.sheetnames) == 1:
         default_ws = wb["Sheet"]
-        if default_ws.max_row <= 1 and default_ws.cell(row=1, column=1).value in (None, ""):
+        if default_ws.max_row <= 1 and default_ws.cell(row=1, column=1).value in (
+            None,
+            "",
+        ):
             wb.remove(default_ws)
 
     _update_previsionnel_sheet(wb, args.sheet_prevision, meta, tickets_data)
@@ -347,4 +356,3 @@ def main(argv: list[str] | None = None) -> None:
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point
     main()
-

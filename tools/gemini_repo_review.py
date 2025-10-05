@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-import os, pathlib, time
+import os
+import pathlib
+import time
 from typing import Iterable, List
 from google import genai
 
@@ -8,7 +10,14 @@ MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")  # "gemini-1.5-pro" pour +
 MAX_FILE_CHARS = 40_000
 RATE_DELAY = 0.5
 INCLUDE_EXT = {".py", ".yml", ".yaml", ".toml", ".json", ".ini", ".cfg", ".sh", ".md"}
-EXCLUDE_DIRS = {".git", ".venv", "data", "__pycache__", "tests/__snapshots__", ".github/workflows/cache"}
+EXCLUDE_DIRS = {
+    ".git",
+    ".venv",
+    "data",
+    "__pycache__",
+    "tests/__snapshots__",
+    ".github/workflows/cache",
+}
 EXCLUDE_FILES = {"schedules.csv"}
 
 PROMPT_HEADER = """Tu es un relecteur senior (Python/CI/GCP). Pour chaque fichier :
@@ -20,6 +29,7 @@ PROMPT_HEADER = """Tu es un relecteur senior (Python/CI/GCP). Pour chaque fichie
 Contexte: Analyse Hippique GPI v5.1 (budget 5€, EV/ROI, H-30/H-5, calibration payouts, Kelly 60%, abstention si data manquante).
 Répond en Markdown concis et actionnable.
 """
+
 
 def iter_repo_files(root: str) -> Iterable[pathlib.Path]:
     root = pathlib.Path(root)
@@ -42,10 +52,12 @@ def iter_repo_files(root: str) -> Iterable[pathlib.Path]:
                 continue
             yield p
 
+
 def chunk_text(s: str, max_chars: int) -> List[str]:
     if len(s) <= max_chars:
         return [s]
-    return [s[i:i+max_chars] for i in range(0, len(s), max_chars)]
+    return [s[i : i + max_chars] for i in range(0, len(s), max_chars)]
+
 
 def review_file(client: genai.Client, path: pathlib.Path) -> str:
     code = path.read_text(errors="ignore")
@@ -58,6 +70,7 @@ def review_file(client: genai.Client, path: pathlib.Path) -> str:
         out.append(header + (getattr(resp, "text", None) or ""))
         time.sleep(RATE_DELAY)
     return "".join(out)
+
 
 def main():
     client = genai.Client()  # GEMINI_API_KEY (Dev API) ou ADC (Vertex)
@@ -74,10 +87,13 @@ def main():
         "Synthétise en 15 puces max : risques transverses, quick wins (≤2j),"
         " chantiers (≥1 sem.), TODO priorisés format `- [P0] action (fichier)`."
     )
-    resp = client.models.generate_content(model=MODEL, contents="".join(report) + "\n" + synth_prompt)
+    resp = client.models.generate_content(
+        model=MODEL, contents="".join(report) + "\n" + synth_prompt
+    )
     report.append("\n\n## Synthèse priorisée\n" + (getattr(resp, "text", None) or ""))
     pathlib.Path("GEMINI_CODE_REVIEW.md").write_text("".join(report), encoding="utf-8")
     print("✅ Rapport écrit : GEMINI_CODE_REVIEW.md")
+
 
 if __name__ == "__main__":
     main()

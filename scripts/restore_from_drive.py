@@ -19,11 +19,15 @@ def _list_files(service, folder_id: str, date: str, prefix: str) -> Iterable[dic
         f"and '{folder_id}' in parents and mimeType='application/json'"
     )
     while True:
-        resp = service.files().list(
-            q=query,
-            fields="nextPageToken, files(id, name)",
-            pageToken=page_token,
-        ).execute()
+        resp = (
+            service.files()
+            .list(
+                q=query,
+                fields="nextPageToken, files(id, name)",
+                pageToken=page_token,
+            )
+            .execute()
+        )
         for item in resp.get("files", []):
             yield item
         page_token = resp.get("nextPageToken")

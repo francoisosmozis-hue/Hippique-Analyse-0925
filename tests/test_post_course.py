@@ -59,7 +59,6 @@ def test_post_course_flow(tmp_path: Path):
     assert data["brier_total"] == pytest.approx(0.53)
     assert data["brier_moyen"] == pytest.approx(0.265)
 
-
     arrivee_out = json.loads((tmp_path / "arrivee.json").read_text(encoding="utf-8"))
     assert arrivee_out["roi_reel"] == data["roi_reel"]
     assert arrivee_out["result_moyen"] == data["result_moyen"]
@@ -80,7 +79,7 @@ def test_post_course_flow(tmp_path: Path):
     assert float(row_cols[idx_roi_ticket]) == pytest.approx(1.5)
     assert float(row_cols[idx_brier_total]) == pytest.approx(0.53)
     assert float(row_cols[idx_brier_moyen]) == pytest.approx(0.265)
-    
+
     cmd_txt = (tmp_path / "cmd_update_excel.txt").read_text(encoding="utf-8")
     assert "update_excel_with_results.py" in cmd_txt
 

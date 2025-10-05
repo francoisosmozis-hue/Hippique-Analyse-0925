@@ -21,7 +21,9 @@ class DummyResp:
             raise err
 
 
-def test_main_parses_geny_page(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+def test_main_parses_geny_page(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
     html = """
     <section class='reunion'>
         <h2>R1 Paris-Vincennes (FR)</h2>

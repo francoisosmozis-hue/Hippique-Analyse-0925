@@ -5,9 +5,8 @@
 import json
 import math
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
-import numpy as np
 
 from simulate_ev import simulate_ev_batch
 
@@ -110,7 +109,14 @@ def _scale_ticket_metrics(ticket: dict, factor: float) -> None:
     if not math.isfinite(factor):
         return
 
-    for key in ("stake", "kelly_stake", "max_stake", "optimized_stake", "ev", "ev_ticket"):
+    for key in (
+        "stake",
+        "kelly_stake",
+        "max_stake",
+        "optimized_stake",
+        "ev",
+        "ev_ticket",
+    ):
         if key in ticket and ticket.get(key) is not None:
             ticket[key] = float(ticket[key]) * factor
 
@@ -197,9 +203,7 @@ def _summarize_optimization(
         "applied": applied,
         "ev_before": float(stats_opt.get("ev_individual", stats_opt.get("ev", 0.0))),
         "ev_after": float(stats_opt.get("ev", stats_opt.get("ev_individual", 0.0))),
-        "roi_before": float(
-            stats_opt.get("roi_individual", stats_opt.get("roi", 0.0))
-        ),
+        "roi_before": float(stats_opt.get("roi_individual", stats_opt.get("roi", 0.0))),
         "roi_after": float(stats_opt.get("roi", stats_opt.get("roi_individual", 0.0))),
         "stake_before": stake_before,
         "stake_after": stake_after,
@@ -431,6 +435,9 @@ def export(
         "R/C;hippodrome;date;discipline;mises;EV_globale;model\n" + ligne + "\n",
     )
     cmd = (
-        f'python update_excel_with_results.py '        f'--excel "{cfg.get("EXCEL_PATH")}" '        f'--arrivee "{outdir / "arrivee_officielle.json"}" '        f'--tickets "{outdir / "p_finale.json"}"\n'
+        f"python update_excel_with_results.py "
+        f'--excel "{cfg.get("EXCEL_PATH")}" '
+        f'--arrivee "{outdir / "arrivee_officielle.json"}" '
+        f'--tickets "{outdir / "p_finale.json"}"\n'
     )
     save_text(outdir / "cmd_update_excel.txt", cmd)

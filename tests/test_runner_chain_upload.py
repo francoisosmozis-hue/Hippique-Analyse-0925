@@ -23,7 +23,9 @@ def test_upload_file_called_for_analysis(tmp_path, monkeypatch):
         called.append(pathlib.Path(path))
 
     monkeypatch.setattr(rc, "upload_file", fake_upload)
-    monkeypatch.setattr(rc, "simulate_ev_batch", lambda *a, **k: {"ev": 0.5, "roi": 0.3, "green": True})
+    monkeypatch.setattr(
+        rc, "simulate_ev_batch", lambda *a, **k: {"ev": 0.5, "roi": 0.3, "green": True}
+    )
     monkeypatch.setattr(rc, "validate_ev", lambda *a, **k: None)
 
     rc._write_analysis("R1C1", tmp_path, budget=5.0, ev_min=0.4, roi_min=0.2)

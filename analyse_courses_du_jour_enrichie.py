@@ -25,8 +25,10 @@ from bs4 import BeautifulSoup
 try:  # pragma: no cover - optional dependency in tests
     from scripts.online_fetch_zeturf import write_snapshot_from_geny
 except Exception:  # pragma: no cover - used when optional deps are missing
+
     def write_snapshot_from_geny(*args: Any, **kwargs: Any) -> None:
         raise RuntimeError("write_snapshot_from_geny is unavailable")
+
 
 try:  # pragma: no cover - optional dependency in tests
     from scripts.drive_sync import (
@@ -34,11 +36,13 @@ try:  # pragma: no cover - optional dependency in tests
         push_tree,
     )
 except Exception:  # pragma: no cover - used when optional deps are missing
+
     def drive_ensure_folder(*args: Any, **kwargs: Any) -> str:
         raise RuntimeError("drive_ensure_folder is unavailable")
 
     def push_tree(*args: Any, **kwargs: Any) -> None:
         raise RuntimeError("push_tree is unavailable")
+
 
 # ---------------------------------------------------------------------------
 # Helper stubs - these functions are expected to be provided elsewhere in the
@@ -53,20 +57,30 @@ def ensure_dir(path: Path) -> Path:
     return path
 
 
-def enrich_h5(rc_dir: Path, *, budget: float, kelly: float) -> None:  # pragma: no cover - stub
+def enrich_h5(
+    rc_dir: Path, *, budget: float, kelly: float
+) -> None:  # pragma: no cover - stub
     raise NotImplementedError("enrich_h5 must be provided by the host application")
 
 
-def build_p_finale(rc_dir: Path, *, budget: float, kelly: float) -> None:  # pragma: no cover - stub
+def build_p_finale(
+    rc_dir: Path, *, budget: float, kelly: float
+) -> None:  # pragma: no cover - stub
     raise NotImplementedError("build_p_finale must be provided by the host application")
 
 
-def run_pipeline(rc_dir: Path, *, budget: float, kelly: float) -> None:  # pragma: no cover - stub
+def run_pipeline(
+    rc_dir: Path, *, budget: float, kelly: float
+) -> None:  # pragma: no cover - stub
     raise NotImplementedError("run_pipeline must be provided by the host application")
 
 
-def build_prompt_from_meta(rc_dir: Path, *, budget: float, kelly: float) -> None:  # pragma: no cover - stub
-    raise NotImplementedError("build_prompt_from_meta must be provided by the host application")
+def build_prompt_from_meta(
+    rc_dir: Path, *, budget: float, kelly: float
+) -> None:  # pragma: no cover - stub
+    raise NotImplementedError(
+        "build_prompt_from_meta must be provided by the host application"
+    )
 
 
 def _upload_artifacts(rc_dir: Path, *, drive_folder_id: str | None) -> None:
@@ -208,9 +222,13 @@ def _process_reunion(
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="Analyse courses du jour enrichie")
-    ap.add_argument("--data-dir", default="data", help="Répertoire racine pour les sorties")
+    ap.add_argument(
+        "--data-dir", default="data", help="Répertoire racine pour les sorties"
+    )
     ap.add_argument("--budget", type=float, default=100.0, help="Budget à utiliser")
-    ap.add_argument("--kelly", type=float, default=1.0, help="Fraction de Kelly à appliquer")
+    ap.add_argument(
+        "--kelly", type=float, default=1.0, help="Fraction de Kelly à appliquer"
+    )
     ap.add_argument(
         "--from-geny-today",
         action="store_true",
@@ -278,7 +296,9 @@ def main() -> None:
         return
 
     if args.from_geny_today:
-        raw = subprocess.check_output([sys.executable, "discover_geny_today.py"], text=True)
+        raw = subprocess.check_output(
+            [sys.executable, "discover_geny_today.py"], text=True
+        )
         payload = json.loads(raw)
         meetings = payload.get("meetings", [])
         base_dir = ensure_dir(Path(args.data_dir))

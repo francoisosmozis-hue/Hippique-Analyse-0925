@@ -1,4 +1,6 @@
-import pathlib, re, textwrap
+import pathlib
+import re
+import textwrap
 
 p = pathlib.Path("ev_calculator.py")
 src = p.read_text(encoding="utf-8")
@@ -7,7 +9,9 @@ blocks = []
 
 # (a) _kelly_fraction (au cas où il n'existe pas)
 if not re.search(r"\ndef\s+_kelly_fraction\s*\(", src):
-    blocks.append(textwrap.dedent('''
+    blocks.append(
+        textwrap.dedent(
+            '''
     # BEGIN GPT PATCH: _kelly_fraction
     def _kelly_fraction(p: float, odds: float) -> float:
         """Kelly fraction >= 0, lève ValueError si p∉(0,1) ou odds<=1."""
@@ -20,10 +24,14 @@ if not re.search(r"\ndef\s+_kelly_fraction\s*\(", src):
         f = (p * odds - 1.0) / b
         return f if f > 0.0 else 0.0
     # END GPT PATCH: _kelly_fraction
-    '''))
+    '''
+        )
+    )
 
 # (b) _apply_dutching (no-op si odds invalides dans le groupe)
-blocks.append(textwrap.dedent('''
+blocks.append(
+    textwrap.dedent(
+        '''
 # BEGIN GPT PATCH: _apply_dutching
 def _apply_dutching(tickets):
     """
@@ -55,10 +63,14 @@ def _apply_dutching(tickets):
         for i, w in zip(idxs, weights):
             tickets[i]["stake"] = total * (w / s)
 # END GPT PATCH: _apply_dutching
-'''))
+'''
+    )
+)
 
 # (c) risk_of_ruin (approx)
-blocks.append(textwrap.dedent('''
+blocks.append(
+    textwrap.dedent(
+        '''
 # BEGIN GPT PATCH: risk_of_ruin
 def risk_of_ruin(ev_per_bet: float, var_per_bet: float, bankroll: float) -> float:
     """
@@ -76,10 +88,14 @@ def risk_of_ruin(ev_per_bet: float, var_per_bet: float, bankroll: float) -> floa
     if r > 1.0: return 1.0
     return r
 # END GPT PATCH: risk_of_ruin
-'''))
+'''
+    )
+)
 
 # (d) compute_ev_roi (signature complète + champs)
-blocks.append(textwrap.dedent('''
+blocks.append(
+    textwrap.dedent(
+        '''
 # BEGIN GPT PATCH: compute_ev_roi
 def compute_ev_roi(
     tickets,
@@ -254,14 +270,20 @@ def compute_ev_roi(
         }
     return out
 # END GPT PATCH: compute_ev_roi
-'''))
+'''
+    )
+)
 
 # Empêche les doublons si le patch a déjà été appliqué
-for marker in ("# BEGIN GPT PATCH: _apply_dutching",
-               "# BEGIN GPT PATCH: risk_of_ruin",
-               "# BEGIN GPT PATCH: compute_ev_roi"):
+for marker in (
+    "# BEGIN GPT PATCH: _apply_dutching",
+    "# BEGIN GPT PATCH: risk_of_ruin",
+    "# BEGIN GPT PATCH: compute_ev_roi",
+):
     if marker in src:
-        src = re.sub(rf"\n{re.escape(marker)}.*?# END GPT PATCH: .*?\n", "", src, flags=re.S)
+        src = re.sub(
+            rf"\n{re.escape(marker)}.*?# END GPT PATCH: .*?\n", "", src, flags=re.S
+        )
 
 # Ajoute tous les blocs en fin de fichier
 src = src.rstrip() + "\n\n" + ("\n\n".join(b for b in blocks if b.strip())) + "\n"

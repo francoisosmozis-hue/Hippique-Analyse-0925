@@ -7,7 +7,7 @@ from typing import Dict
 
 
 class ValidationError(Exception):
-    """Raised when EV metrics do not meet required thresholds."""    
+    """Raised when EV metrics do not meet required thresholds."""
 
 
 def summarise_validation(*validators: Callable[[], object]) -> dict[str, bool | str]:
@@ -72,8 +72,8 @@ def validate_inputs(cfg, partants, odds, stats_je):
     if not allow_je_na:
         coverage = stats_je.get("coverage") if stats_je else None
         if coverage is None or float(coverage) < 80:
-            raise ValidationError("Couverture J/E insuffisante (<80%)") 
-    
+            raise ValidationError("Couverture J/E insuffisante (<80%)")
+
     return True
 
 
@@ -104,15 +104,13 @@ def validate(h30: dict, h5: dict, allow_je_na: bool) -> bool:
         for r in h5.get("runners", []):
             je = r.get("je_stats", {})
             if not je or ("j_win" not in je and "e_win" not in je):
-                raise ValueError(
-                    f"Stats J/E manquantes: {r.get('name', r.get('id'))}"
-                )
+                raise ValueError(f"Stats J/E manquantes: {r.get('name', r.get('id'))}")
     return True
 
 
 def validate_ev(ev_sp: float, ev_global: float | None, need_combo: bool = True) -> bool:
     """Validate SP and combined EVs against environment thresholds.
-    
+
     Parameters
     ----------
     ev_sp:
@@ -144,11 +142,13 @@ def validate_ev(ev_sp: float, ev_global: float | None, need_combo: bool = True) 
     if need_combo:
         if ev_global is None or ev_global < min_global:
             raise ValidationError("EV global below threshold")
-            
+
     return True
 
 
-def validate_policy(ev_global: float, roi_global: float, min_ev: float, min_roi: float) -> bool:
+def validate_policy(
+    ev_global: float, roi_global: float, min_ev: float, min_roi: float
+) -> bool:
     """Validate global EV and ROI against minimum thresholds."""
     if ev_global < min_ev:
         raise ValidationError("EV global below threshold")
@@ -157,7 +157,9 @@ def validate_policy(ev_global: float, roi_global: float, min_ev: float, min_roi:
     return True
 
 
-def validate_budget(stakes: Dict[str, float], budget_cap: float, max_vol_per_horse: float) -> bool:
+def validate_budget(
+    stakes: Dict[str, float], budget_cap: float, max_vol_per_horse: float
+) -> bool:
     """Ensure total stake and per-horse stakes respect budget constraints."""
     total = sum(stakes.values())
     if total > budget_cap:

@@ -131,7 +131,9 @@ def main() -> None:
     analysis_dir = Path(args.analysis_dir)
 
     for entry in planning:
-        race_id = entry.get("id") or f"{entry.get('meeting', '')}{entry.get('race', '')}"
+        race_id = (
+            entry.get("id") or f"{entry.get('meeting', '')}{entry.get('race', '')}"
+        )
         start = entry.get("start")
         if not race_id or not start:
             continue
@@ -144,7 +146,13 @@ def main() -> None:
             _write_snapshot(race_id, "H30", snap_dir)
         if args.h5_window_min <= delta <= args.h5_window_max:
             _write_snapshot(race_id, "H5", snap_dir)
-            _write_analysis(race_id, analysis_dir, budget=args.budget, ev_min=args.ev_min, roi_min=args.roi_min)
+            _write_analysis(
+                race_id,
+                analysis_dir,
+                budget=args.budget,
+                ev_min=args.ev_min,
+                roi_min=args.roi_min,
+            )
 
 
 if __name__ == "__main__":

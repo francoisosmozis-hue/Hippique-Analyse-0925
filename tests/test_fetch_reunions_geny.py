@@ -29,7 +29,6 @@ def test_fetch_reunions(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None
         frg.requests, "get", lambda url, headers=None, **kwargs: DummyResp(html)
     )
 
-
     out = tmp_path / "reuns.json"
     monkeypatch.setattr(
         sys,

@@ -1,6 +1,14 @@
-from typing import List, Dict, Any, Optional
-def compute_ev_roi(tickets: List[Dict[str, Any]], bankroll: float = 100.0,
-                   kelly_cap: Optional[float] = None, **kwargs) -> Dict[str, float]:
+from typing import Any, Dict, List, Optional, Sequence, Tuple
+import math
+from collections import defaultdict
+
+
+def compute_ev_roi(
+    tickets: List[Dict[str, Any]],
+    bankroll: float = 100.0,
+    kelly_cap: Optional[float] = None,
+    **kwargs,
+) -> Dict[str, float]:
     total_stake = ev_cash = 0.0
     for t in tickets or []:
         stake = float(t.get("stake", 0.0) or 0.0)
@@ -8,7 +16,14 @@ def compute_ev_roi(tickets: List[Dict[str, Any]], bankroll: float = 100.0,
         total_stake += stake
     roi = (ev_cash / total_stake) if total_stake > 0 else 0.0
     vol = 0.5
-    return {"ev": ev_cash, "roi": roi, "vol": vol, "ror": max(0.0, roi*0.01), "sharpe": (roi/vol if vol else 0.0)}
+    return {
+        "ev": ev_cash,
+        "roi": roi,
+        "vol": vol,
+        "ror": max(0.0, roi * 0.01),
+        "sharpe": (roi / vol if vol else 0.0),
+    }
+
 
 # --- Compat tests: _apply_dutching ---
 # Accepte soit une liste de "tickets" (dicts), soit (odds, probs, budget, kelly_fraction, cap).
@@ -16,8 +31,7 @@ def compute_ev_roi(tickets: List[Dict[str, Any]], bankroll: float = 100.0,
 # - Ignore les cotes invalides (odds <= 1.0).
 # - Si des probabilités 'p' sont présentes, on met à 0 les paris EV<=0 (p*odds - 1 <= 0).
 # - Conserve le budget total par groupe (somme des stakes inchangée).
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
-import math
+
 
 def _apply_dutching(
     tickets_or_odds: Any,
@@ -27,7 +41,9 @@ def _apply_dutching(
     cap: float = 1.0,
 ):
     # Mode 1: liste de tickets (in-place update des 'stake')
-    if isinstance(tickets_or_odds, list) and (len(tickets_or_odds)==0 or isinstance(tickets_or_odds[0], dict)):
+    if isinstance(tickets_or_odds, list) and (
+        len(tickets_or_odds) == 0 or isinstance(tickets_or_odds[0], dict)
+    ):
         tickets: List[Dict[str, Any]] = tickets_or_odds
         # Grouper par clé 'dutching' si présente, sinon traiter tout d'un bloc
         groups: Dict[Any, List[int]] = {}
@@ -63,7 +79,9 @@ def _apply_dutching(
                 cap_abs = float(cap) * total_stake
                 stakes = [(i, min(st, cap_abs)) for i, st in stakes]
                 tot = sum(st for _, st in stakes)
-                if tot > 0 and not math.isclose(tot, total_stake, rel_tol=1e-9, abs_tol=1e-6):
+                if tot > 0 and not math.isclose(
+                    tot, total_stake, rel_tol=1e-9, abs_tol=1e-6
+                ):
                     stakes = [(i, st * (total_stake / tot)) for i, st in stakes]
             # Assigner
             for i, st in stakes:
@@ -80,11 +98,12 @@ def _apply_dutching(
         # on ignore les invalides en les mettant à 0
         valid = [o for o in odds if o > 1.0]
         if not valid:
-            return [0.0]*n
+            return [0.0] * n
     weights: List[float] = []
     for i, o in enumerate(odds):
         if o <= 1.0:
-            weights.append(0.0); continue
+            weights.append(0.0)
+            continue
         w = 1.0 / (o - 1.0)
         if probs is not None:
             p = float(probs[i])
@@ -93,7 +112,7 @@ def _apply_dutching(
         weights.append(w)
     s = sum(weights)
     if s <= 0:
-        return [0.0]*n
+        return [0.0] * n
     budget_eff = max(0.0, min(1.0, float(kelly_fraction))) * float(budget)
     stakes = [budget_eff * w / s for w in weights]
     if cap is not None:
@@ -103,6 +122,7 @@ def _apply_dutching(
         if tot > 0 and not math.isclose(tot, budget_eff, rel_tol=1e-9, abs_tol=1e-6):
             stakes = [st * (budget_eff / tot) for st in stakes]
     return stakes
+
 
 # --- Compat tests: _kelly_fraction ---
 def _kelly_fraction(p: float, odds: float) -> float:
@@ -119,6 +139,7 @@ def _kelly_fraction(p: float, odds: float) -> float:
     b = odds - 1.0
     f = (p * odds - 1.0) / b
     return f if f > 0.0 else 0.0
+
 
 # --- Compat tests: risk_of_ruin(ev, variance, bankroll) ---
 def risk_of_ruin(ev: float, variance: float, bankroll: float) -> float:
@@ -139,9 +160,12 @@ def risk_of_ruin(ev: float, variance: float, bankroll: float) -> float:
         return 1.0
     ror = math.exp(-2.0 * ev * B / var)
     # clamp numérique
-    if ror < 0.0: ror = 0.0
-    if ror > 1.0: ror = 1.0
+    if ror < 0.0:
+        ror = 0.0
+    if ror > 1.0:
+        ror = 1.0
     return ror
+
 
 # --- Compat tests: compute_ev_roi ---
 def compute_ev_roi(
@@ -163,13 +187,13 @@ def compute_ev_roi(
     - Arrondi au pas 'round_to' si > 0
     Retourne un dict avec au moins: 'ev', 'roi', 'total_stake_normalized', 'ticket_metrics', 'risk_of_ruin'
     """
-    from typing import Any, Dict, List, Tuple
 
     if budget <= 0:
         raise ValueError("budget must be > 0")
 
     # --- 1) Probabilités: p à partir de 'p' ou via simulate_fn(legs), avec cache
     prob_cache = {}
+
     def get_p(t: Dict[str, Any]) -> float:
         if "p" in t and t["p"] is not None:
             return float(t["p"])
@@ -237,7 +261,9 @@ def compute_ev_roi(
 
     # --- 5) Arrondi au pas round_to, en corrigeant la dérive pour conserver ~budget
     if round_to and round_to > 0:
-        rounded = [round(float(t.get("stake", 0.0)) / round_to) * round_to for t in tickets]
+        rounded = [
+            round(float(t.get("stake", 0.0)) / round_to) * round_to for t in tickets
+        ]
         diff = budget - sum(rounded)
         # Ajuste la première stake non nulle pour absorber l'écart (simple et suffisant pour les tests)
         if abs(diff) >= 1e-12:
@@ -276,10 +302,14 @@ def compute_ev_roi(
         gain_win = st * (o - 1.0)
         gain_lose = -st
         m = p * gain_win + (1 - p) * gain_lose
-        e2 = p * (gain_win ** 2) + (1 - p) * (gain_lose ** 2)
-        var_sum += max(0.0, e2 - m ** 2)
+        e2 = p * (gain_win**2) + (1 - p) * (gain_lose**2)
+        var_sum += max(0.0, e2 - m**2)
     # moyenne par ticket (si 0 ticket actifs -> var=1 pour éviter /0)
-    n_active = sum(1 for t in tickets if float(t.get("stake", 0.0)) > 0 and float(t.get("odds", 0.0)) > 1.0)
+    n_active = sum(
+        1
+        for t in tickets
+        if float(t.get("stake", 0.0)) > 0 and float(t.get("odds", 0.0)) > 1.0
+    )
     var_per_bet = (var_sum / n_active) if n_active > 0 else 1.0
     ev_per_bet = (ev_total / n_active) if n_active > 0 else 0.0
     try:
@@ -295,9 +325,12 @@ def compute_ev_roi(
         "risk_of_ruin": float(ror),
     }
 
+
 # --- Compat wrapper: accepte des kwargs supplémentaires attendus par les tests ---
 try:
-    _ORIG_COMPUTE_EV_ROI = compute_ev_roi  # dernière version déjà définie dans ce module
+    _ORIG_COMPUTE_EV_ROI = (
+        compute_ev_roi  # dernière version déjà définie dans ce module
+    )
 
     def compute_ev_roi(*args, **kwargs):
         # Absorbe sans effet ces paramètres additionnels
@@ -305,6 +338,7 @@ try:
         kwargs.pop("cache_simulations", None)
         kwargs.pop("variance_cap", None)
         return _ORIG_COMPUTE_EV_ROI(*args, **kwargs)
+
 except NameError:
     # compute_ev_roi n'est pas encore défini (cas improbable ici) : on ne fait rien
     pass
@@ -312,8 +346,10 @@ except NameError:
 try:
     _BASE_COMPUTE_EV_ROI = compute_ev_roi  # garde la version actuelle
 except NameError:  # cas improbable
+
     def _BASE_COMPUTE_EV_ROI(*args, **kwargs):
         raise RuntimeError("compute_ev_roi base non définie")
+
 
 def compute_ev_roi(
     tickets,
@@ -370,7 +406,7 @@ def _apply_dutching(tickets):
     si toutes les cotes du groupe sont > 1.0. Sinon: ne rien changer.
     Modifie 'stake' in-place.
     """
-    from collections import defaultdict
+
     groups = defaultdict(list)
     for i, t in enumerate(tickets):
         groups[t.get("dutching", "_ALL_")].append(i)
@@ -393,8 +429,9 @@ def _apply_dutching(tickets):
             continue
         for i, w in zip(idxs, weights):
             tickets[i]["stake"] = total * (w / s)
-# END GPT PATCH: _apply_dutching
 
+
+# END GPT PATCH: _apply_dutching
 
 
 # BEGIN GPT PATCH: risk_of_ruin
@@ -404,17 +441,21 @@ def risk_of_ruin(ev_per_bet: float, var_per_bet: float, bankroll: float) -> floa
     Clamp dans [0,1], mu<=0 => risque=1.
     """
     import math
+
     var = max(float(var_per_bet), 1e-12)
-    mu  = float(ev_per_bet)
+    mu = float(ev_per_bet)
     cap = max(float(bankroll), 1e-12)
     if mu <= 0:
         return 1.0
     r = math.exp(-2.0 * mu * cap / var)
-    if r < 0.0: return 0.0
-    if r > 1.0: return 1.0
+    if r < 0.0:
+        return 0.0
+    if r > 1.0:
+        return 1.0
     return r
-# END GPT PATCH: risk_of_ruin
 
+
+# END GPT PATCH: risk_of_ruin
 
 
 # BEGIN GPT PATCH: compute_ev_roi
@@ -439,7 +480,6 @@ def compute_ev_roi(
     - optimize=True: expose optimized_stakes + optimization
     """
     from typing import Any, Dict, List, Tuple
-    import math
 
     # Validation d'entrée attendue par les tests
     if budget <= 0:
@@ -451,6 +491,7 @@ def compute_ev_roi(
 
     # Probas (inclut cache si demandé)
     prob_cache: Dict[Tuple, float] = {}
+
     def get_p(t: Dict[str, Any]) -> float:
         if "p" in t and t["p"] is not None:
             return float(t["p"])
@@ -468,9 +509,10 @@ def compute_ev_roi(
                 had_p = False
                 for leg in t["legs_details"]:
                     if "p" in leg and leg["p"] is not None:
-                        p *= float(leg["p"]); had_p = True
+                        p *= float(leg["p"])
+                        had_p = True
                     elif "odds" in leg and float(leg["odds"]) > 1.0:
-                        p *= 1.0/float(leg["odds"])
+                        p *= 1.0 / float(leg["odds"])
                 if had_p:
                     return float(p)
         return 0.0
@@ -478,8 +520,8 @@ def compute_ev_roi(
     # Kelly + cap
     for t in tickets:
         p_ = get_p(t)
-        o  = float(t.get("odds", 0.0))
-        k  = _kelly_fraction(p_, o) if (0.0 < p_ < 1.0) else 0.0
+        o = float(t.get("odds", 0.0))
+        k = _kelly_fraction(p_, o) if (0.0 < p_ < 1.0) else 0.0
         k_stake = k * float(budget) * float(kelly_cap)
         t["kelly_stake"] = float(k_stake)
         if t.get("stake") is None:
@@ -515,17 +557,17 @@ def compute_ev_roi(
     # Métriques, variance, CLV
     ticket_metrics: List[Dict[str, Any]] = []
     ev_total = 0.0
-    var_sum  = 0.0
+    var_sum = 0.0
     n_active = 0
     for t in tickets:
         p_ = get_p(t)
-        o  = float(t["odds"])
+        o = float(t["odds"])
         st = float(t.get("stake", 0.0))
         ev_i = st * (p_ * (o - 1.0) - (1.0 - p_))
         ev_total += ev_i
-        gain_win  = st * (o - 1.0)
+        gain_win = st * (o - 1.0)
         gain_lose = -st
-        m  = p_ * gain_win + (1 - p_) * gain_lose
+        m = p_ * gain_win + (1 - p_) * gain_lose
         e2 = p_ * (gain_win**2) + (1 - p_) * (gain_lose**2)
         var_i = max(0.0, e2 - m**2)
         if st > 0:
@@ -535,8 +577,15 @@ def compute_ev_roi(
             co = float(t["closing_odds"])
             if co > 0:
                 t["clv"] = (co - o) / o
-        rec = {"p": p_, "odds": o, "stake": st, "ev": ev_i, "kelly_stake": float(t.get("kelly_stake", 0.0))}
-        if "clv" in t: rec["clv"] = float(t["clv"])
+        rec = {
+            "p": p_,
+            "odds": o,
+            "stake": st,
+            "ev": ev_i,
+            "kelly_stake": float(t.get("kelly_stake", 0.0)),
+        }
+        if "clv" in t:
+            rec["clv"] = float(t["clv"])
         ticket_metrics.append(rec)
 
     roi = (ev_total / total) if total > 0 else 0.0
@@ -558,7 +607,9 @@ def compute_ev_roi(
     calibrated_expected_payout = 0.0
     for t in tickets:
         if t.get("legs"):
-            calibrated_expected_payout += float(t.get("odds", 0.0)) * float(t.get("stake", 0.0))
+            calibrated_expected_payout += float(t.get("odds", 0.0)) * float(
+                t.get("stake", 0.0)
+            )
     if 0.0 < calibrated_expected_payout <= 10.0:
         failure_reasons.append("expected payout for combined bets ≤ 10€")
 
@@ -590,7 +641,10 @@ def compute_ev_roi(
             "method": "kelly-proportional",
         }
     return out
+
+
 # END GPT PATCH: compute_ev_roi
+
 
 # ==== TEST-COMPAT: _kelly_fraction ====
 def _kelly_fraction(p: float, odds: float) -> float:
@@ -615,14 +669,17 @@ def risk_of_ruin(ev: float, variance: float, bankroll: float) -> float:
     - if variance <= 0: 0 if ev>0 else 1
     """
     import math
+
     ev = float(ev)
     var = float(variance)
     bk = float(bankroll)
     if var <= 0.0:
         return 0.0 if ev > 0.0 else 1.0
     r = math.exp(-2.0 * ev * bk / var)
-    if r < 0.0: r = 0.0
-    if r > 1.0: r = 1.0
+    if r < 0.0:
+        r = 0.0
+    if r > 1.0:
+        r = 1.0
     return r
 
 
@@ -634,6 +691,7 @@ def _apply_dutching(tickets):
     Group stake sum is preserved.
     """
     from collections import defaultdict
+
     groups = defaultdict(list)
     for i, t in enumerate(tickets):
         groups[t.get("dutching", "_ALL_")].append(i)
@@ -680,7 +738,6 @@ def compute_ev_roi(
     - optimize=True exposes optimized_stakes, ev_individual, optimization summary
     """
     from typing import Any, Dict, List, Tuple
-    import math
 
     if budget is None or float(budget) <= 0.0:
         raise ValueError("budget must be > 0")
@@ -697,7 +754,9 @@ def compute_ev_roi(
                 elif "name" in l:
                     key.append(("name", str(l["name"])))
                 else:
-                    key.append(("dict", tuple(sorted((k, str(v)) for k,v in l.items()))))
+                    key.append(
+                        ("dict", tuple(sorted((k, str(v)) for k, v in l.items())))
+                    )
             else:
                 key.append(("raw", str(l)))
         return tuple(key)
@@ -778,12 +837,16 @@ def compute_ev_roi(
     var_total = 0.0
     clv_vals = []
     for t in tks:
-        p_ = t["p"]; odds = float(t["odds"]); s = float(t["stake"])
+        p_ = t["p"]
+        odds = float(t["odds"])
+        s = float(t["stake"])
         ev_i = s * (p_ * (odds - 1.0) - (1.0 - p_))
-        var_i = p_ * (s * (odds - 1.0))**2 + (1.0 - p_) * (-s)**2 - ev_i**2
+        var_i = p_ * (s * (odds - 1.0)) ** 2 + (1.0 - p_) * (-s) ** 2 - ev_i**2
         ev_total += ev_i
         var_total += var_i
-        metrics.append({"kelly_stake": t["kelly_stake"], "stake": s, "ev": ev_i, "variance": var_i})
+        metrics.append(
+            {"kelly_stake": t["kelly_stake"], "stake": s, "ev": ev_i, "variance": var_i}
+        )
         if "clv" in t:
             clv_vals.append(float(t["clv"]))
 
@@ -807,7 +870,9 @@ def compute_ev_roi(
                 payout_expected += float(t["stake"]) * float(t["odds"]) * float(t["p"])
         if payout_expected <= float(budget):
             # exact string expected by tests (with euro sign)
-            failure.append(f"expected payout for combined bets ≤ {int(round(float(budget)))}€")
+            failure.append(
+                f"expected payout for combined bets ≤ {int(round(float(budget)))}€"
+            )
 
     if variance_cap is not None:
         cap = float(variance_cap) * (float(budget) ** 2)
@@ -836,7 +901,11 @@ def compute_ev_roi(
             optimized_stakes = opt
         else:
             optimized_stakes = [0.0] * len(tks)
-        optimization = {"method": "proportional_to_edge", "ev_before": ev_before, "ev_after": ev_total}
+        optimization = {
+            "method": "proportional_to_edge",
+            "ev_before": ev_before,
+            "ev_after": ev_total,
+        }
 
     # 8) reflect stake/clv back to caller tickets
     for t_src, t_new in zip(tickets, tks):
@@ -846,7 +915,11 @@ def compute_ev_roi(
 
     res = {
         "ev": ev_total,
-        "roi": roi if not optimize else ((ev_total / float(budget)) if float(budget) > 0 else 0.0),
+        "roi": (
+            roi
+            if not optimize
+            else ((ev_total / float(budget)) if float(budget) > 0 else 0.0)
+        ),
         "ev_ratio": (ev_total / float(budget)),
         "risk_of_ruin": ror,
         "total_stake_normalized": sum(t["stake"] for t in tks),
@@ -868,6 +941,7 @@ def compute_ev_roi(
         res["failure_reasons"] = failure
 
     return res
+
 
 # ==== TEST-COMPAT v2: compute_ev_roi (fix rounding, metrics, combos, optimizer) ====
 def compute_ev_roi(
@@ -895,7 +969,6 @@ def compute_ev_roi(
     - optimize: n'abaisse jamais l'EV; exporte optimized_stakes, ev_individual, optimization
     """
     from typing import Any, Dict, List, Tuple
-    import math
 
     if budget is None or float(budget) <= 0.0:
         raise ValueError("budget must be > 0")
@@ -912,7 +985,9 @@ def compute_ev_roi(
                 elif "name" in l:
                     key.append(("name", str(l["name"])))
                 else:
-                    key.append(("dict", tuple(sorted((k, str(v)) for k,v in l.items()))))
+                    key.append(
+                        ("dict", tuple(sorted((k, str(v)) for k, v in l.items())))
+                    )
             else:
                 key.append(("raw", str(l)))
         return tuple(key)
@@ -1001,16 +1076,20 @@ def compute_ev_roi(
     has_combo = any(t.get("legs") for t in tks)
 
     for t in tks:
-        p_ = float(t["p"]); odds = float(t["odds"]); s = float(t["stake"])
+        p_ = float(t["p"])
+        odds = float(t["odds"])
+        s = float(t["stake"])
         ev_i = s * (p_ * (odds - 1.0) - (1.0 - p_))
-        var_i = p_ * (s * (odds - 1.0))**2 + (1.0 - p_) * (-s)**2 - ev_i**2
-        metrics.append({
-            "kelly_stake": float(t["kelly_stake"]),
-            "stake": s,
-            "ev": ev_i,
-            "variance": var_i,
-            "roi": (ev_i / s) if s > 0 else 0.0,
-        })
+        var_i = p_ * (s * (odds - 1.0)) ** 2 + (1.0 - p_) * (-s) ** 2 - ev_i**2
+        metrics.append(
+            {
+                "kelly_stake": float(t["kelly_stake"]),
+                "stake": s,
+                "ev": ev_i,
+                "variance": var_i,
+                "roi": (ev_i / s) if s > 0 else 0.0,
+            }
+        )
         ev_total += ev_i
         var_total += var_i
         if "clv" in t:
@@ -1034,14 +1113,16 @@ def compute_ev_roi(
 
     if has_combo:
         if payout_expected <= float(budget):
-            failure.append(f"expected payout for combined bets ≤ {int(round(float(budget)))}€")
+            failure.append(
+                f"expected payout for combined bets ≤ {int(round(float(budget)))}€"
+            )
 
     if variance_cap is not None:
         cap = float(variance_cap) * (float(budget) ** 2)
         if var_total > cap:
             failure.append(f"variance above {float(variance_cap):.2f} * bankroll^2")
 
-    green = (len(failure) == 0)
+    green = len(failure) == 0
 
     # 7) optimiseur simple (ne baisse jamais l'EV)
     ev_before = ev_total
@@ -1067,7 +1148,11 @@ def compute_ev_roi(
                 optimized_stakes = [float(t["stake"]) for t in tks]  # ne pas dégrader
         else:
             optimized_stakes = [0.0] * len(tks)
-        optimization = {"method": "proportional_to_edge", "ev_before": ev_before, "ev_after": ev_total}
+        optimization = {
+            "method": "proportional_to_edge",
+            "ev_before": ev_before,
+            "ev_after": ev_total,
+        }
 
     # 8) refléter stake/clv/expected_payout vers l'appelant
     for t_src, t_new in zip(tickets, tks):
@@ -1079,7 +1164,11 @@ def compute_ev_roi(
 
     res = {
         "ev": ev_total,
-        "roi": roi if not optimize else ((ev_total / float(budget)) if float(budget) > 0 else 0.0),
+        "roi": (
+            roi
+            if not optimize
+            else ((ev_total / float(budget)) if float(budget) > 0 else 0.0)
+        ),
         "ev_ratio": ev_ratio,
         "risk_of_ruin": ror,
         "total_stake_normalized": sum(float(t["stake"]) for t in tks),
@@ -1102,6 +1191,7 @@ def compute_ev_roi(
 
     return res
 
+
 # ==== TEST-COMPAT: enforce_ror_threshold (binary search on scale) ====
 def enforce_ror_threshold(cfg, runners, sp_tickets, *, bankroll: float):
     """
@@ -1109,16 +1199,27 @@ def enforce_ror_threshold(cfg, runners, sp_tickets, *, bankroll: float):
     risk_of_ruin <= cfg["ROR_MAX"]. Retourne (tickets_trimmed, stats, info).
     info: {"applied": bool, "initial_ror": float, "final_ror": float, "target": float, "scale": float}
     """
-    import copy
     target = float(cfg.get("ROR_MAX", 1.0))
     k_cap = float(cfg.get("MAX_VOL_PAR_CHEVAL", 0.60))
     rnd = float(cfg.get("ROUND_TO_SP", 0.10))
 
     base = [dict(t) for t in sp_tickets]
-    stats0 = compute_ev_roi([dict(t) for t in base], budget=float(bankroll), kelly_cap=k_cap, round_to=rnd)
+    stats0 = compute_ev_roi(
+        [dict(t) for t in base], budget=float(bankroll), kelly_cap=k_cap, round_to=rnd
+    )
     r0 = float(stats0.get("risk_of_ruin", 1.0))
     if r0 <= target:
-        return base, stats0, {"applied": False, "initial_ror": r0, "final_ror": r0, "target": target, "scale": 1.0}
+        return (
+            base,
+            stats0,
+            {
+                "applied": False,
+                "initial_ror": r0,
+                "final_ror": r0,
+                "target": target,
+                "scale": 1.0,
+            },
+        )
 
     # bisection sur s
     lo, hi = 0.0, 1.0
@@ -1128,7 +1229,9 @@ def enforce_ror_threshold(cfg, runners, sp_tickets, *, bankroll: float):
         trial = [dict(t) for t in base]
         for t in trial:
             t["stake"] = float(t.get("stake", 0.0)) * mid
-        stats = compute_ev_roi(trial, budget=float(bankroll), kelly_cap=k_cap, round_to=rnd)
+        stats = compute_ev_roi(
+            trial, budget=float(bankroll), kelly_cap=k_cap, round_to=rnd
+        )
         r = float(stats.get("risk_of_ruin", 1.0))
         if r <= target:
             best = (mid, stats)
@@ -1141,5 +1244,11 @@ def enforce_ror_threshold(cfg, runners, sp_tickets, *, bankroll: float):
     for t in trimmed:
         t["stake"] = float(t.get("stake", 0.0)) * scale
 
-    info = {"applied": True, "initial_ror": r0, "final_ror": float(best_stats.get("risk_of_ruin", r0)), "target": target, "scale": scale}
+    info = {
+        "applied": True,
+        "initial_ror": r0,
+        "final_ror": float(best_stats.get("risk_of_ruin", r0)),
+        "target": target,
+        "scale": scale,
+    }
     return trimmed, best_stats, info

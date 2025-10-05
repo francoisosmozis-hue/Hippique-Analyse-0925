@@ -1,30 +1,43 @@
-name: Python tests (GPI v5.1)
+name: tests
 
-permissions:
-  contents: read
-  
 on:
   push:
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
-  test:
+  tests:
     runs-on: ubuntu-latest
+    env:
+      GOOGLE_CREDENTIALS_B64: ${{ secrets.GOOGLE_CREDENTIALS_B64 || '' }}
+      DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID || '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - uses: actions/cache@v4
         with:
-          python-version: "3.11"
-      - run: python -m pip install --upgrade pip
-      - run: pip install -r requirements.txt
-      - run: pytest -q
-      - name: Skip Drive sync (missing credentials)
-        if: ${{ secrets.GOOGLE_CREDENTIALS_B64 == '' }}
-        run: echo "Skipping Drive sync because GOOGLE_CREDENTIALS_B64 secret is not available."
-      - name: Sync data to Drive
-        if: ${{ secrets.GOOGLE_CREDENTIALS_B64 != '' }}
-        run: python scripts/drive_sync.py --push data
-        env:
-          GOOGLE_CREDENTIALS_B64: ${{ secrets.GOOGLE_CREDENTIALS_B64 }}
-          DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
-
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt') }}
+          restore-keys: ${{ runner.os }}-pip-
+      - name: Install deps
+        run: |
+          python -m pip install -U pip wheel
+          [ -f requirements.txt ] && pip install -r requirements.txt || true
+          pip install ruff black pytest
+      - name: Lint Python
+        run: |
+          ruff check .
+          black --check .
+      - name: Run tests
+        run: pytest -q
+      - name: Drive sync (optional)
+        run: |
+          if [ -n "$GOOGLE_CREDENTIALS_B64" ]; then
+            echo "$GOOGLE_CREDENTIALS_B64" | base64 -d > credentials.json
+            python drive_sync.py --push data || true
+          else
+            echo "No credentials -> skipping Drive sync."
+          fi

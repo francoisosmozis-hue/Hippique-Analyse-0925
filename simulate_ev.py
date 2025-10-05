@@ -1,7 +1,8 @@
 """Utilities for simple SP dutching and EV simulations."""
+
 from __future__ import annotations
 
-from typing import Any, Dict, Iterable, List, Sequence
+from typing import Any, Dict, List, Sequence
 
 from ev_calculator import compute_ev_roi
 from simulate_wrapper import simulate_wrapper
@@ -18,7 +19,9 @@ def implied_probs(odds_list: Sequence[float]) -> List[float]:
     return [x / total for x in inv]
 
 
-def allocate_dutching_sp(cfg: Dict[str, float], runners: List[Dict[str, Any]]) -> tuple[List[Dict[str, Any]], float]:
+def allocate_dutching_sp(
+    cfg: Dict[str, float], runners: List[Dict[str, Any]]
+) -> tuple[List[Dict[str, Any]], float]:
     """Allocate SP dutching stakes according to a Kelly share with 60% cap.
 
     When each ``runner`` provides an estimated win probability ``p``, those
@@ -75,7 +78,7 @@ def allocate_dutching_sp(cfg: Dict[str, float], runners: List[Dict[str, Any]]) -
             "ev_ticket": ev_ticket,
         }
         tickets.append(ticket)
-        
+
     if tickets:
         total_stake = sum(t["stake"] for t in tickets)
         diff = round((raw_total - total_stake) / step) * step
@@ -108,15 +111,17 @@ def gate_ev(
     """Return activation flags and failure reasons for SP and combinés."""
 
     reasons = {"sp": [], "combo": []}
-    
+
     sp_budget = float(cfg.get("BUDGET_TOTAL", 0.0)) * float(cfg.get("SP_RATIO", 1.0))
-    
+
     if ev_sp < float(cfg.get("EV_MIN_SP", 0.0)) * sp_budget:
         reasons["sp"].append("EV_MIN_SP")
     if roi_sp < float(cfg.get("ROI_MIN_SP", 0.0)):
         reasons["sp"].append("ROI_MIN_SP")
 
-    if ev_global < float(cfg.get("EV_MIN_GLOBAL", 0.0)) * float(cfg.get("BUDGET_TOTAL", 0.0)):
+    if ev_global < float(cfg.get("EV_MIN_GLOBAL", 0.0)) * float(
+        cfg.get("BUDGET_TOTAL", 0.0)
+    ):
         reasons["combo"].append("EV_MIN_GLOBAL")
     if roi_global < float(cfg.get("ROI_MIN_GLOBAL", 0.0)):
         reasons["combo"].append("ROI_MIN_GLOBAL")

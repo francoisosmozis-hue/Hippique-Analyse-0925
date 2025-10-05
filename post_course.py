@@ -70,14 +70,14 @@ def _compute_gains(
         t["result"] = 1 if gain else 0
         roi_reel = (gain - stake) / stake if stake else 0.0
         t["roi_reel"] = round(roi_reel, 4)
-        
+
         total_stake += stake
         total_gain += gain
 
         total_result += t["result"]
         total_roi_ticket += roi_reel
         n_tickets += 1
-        
+
         ev = None
         if "ev" in t:
             ev = float(t.get("ev", 0.0))
@@ -95,7 +95,6 @@ def _compute_gains(
             brier = (t["result"] - p) ** 2
             t["brier"] = round(brier, 4)
             total_brier += brier
-
 
     roi = (total_gain - total_stake) / total_stake if total_stake else 0.0
     result_mean = total_result / n_tickets if n_tickets else 0.0
@@ -118,7 +117,11 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="Post-course processing")
     ap.add_argument("--arrivee", required=True, help="Path to official arrival JSON")
     ap.add_argument("--tickets", required=True, help="Path to tickets.json to update")
-    ap.add_argument("--outdir", default=None, help="Output directory (defaults to tickets directory)")
+    ap.add_argument(
+        "--outdir",
+        default=None,
+        help="Output directory (defaults to tickets directory)",
+    )
     ap.add_argument(
         "--excel",
         default="modele_suivi_courses_hippiques.xlsx",
@@ -145,7 +148,7 @@ def main() -> None:
         result_moyen,
         roi_reel_moyen,
         brier_total,
-        brier_moyen,        
+        brier_moyen,
     ) = _compute_gains(tickets_data.get("tickets", []), winners)
     tickets_data["roi_reel"] = roi
     tickets_data["result_moyen"] = result_moyen
@@ -174,21 +177,23 @@ def main() -> None:
     ligne = (
         f'{meta.get("rc", "")};{meta.get("hippodrome", "")};{meta.get("date", "")};'
         f'{meta.get("discipline", "")};{total_stake:.2f};{roi:.4f};'
-        f'{result_moyen:.4f};{roi_reel_moyen:.4f};'
-        f'{brier_total:.4f};{brier_moyen:.4f};'
-        f'{ev_total:.2f};{diff_ev_total:.2f};'
+        f"{result_moyen:.4f};{roi_reel_moyen:.4f};"
+        f"{brier_total:.4f};{brier_moyen:.4f};"
+        f"{ev_total:.2f};{diff_ev_total:.2f};"
         f'{meta.get("model", meta.get("MODEL", ""))}'
     )
     _save_text(
         outdir / "ligne_resultats.csv",
         (
             "R/C;hippodrome;date;discipline;mises;ROI_reel;result_moyen;"
-            "ROI_reel_moyen;Brier_total;Brier_moyen;EV_total;EV_ecart;model\n" + ligne + "\n"
+            "ROI_reel_moyen;Brier_total;Brier_moyen;EV_total;EV_ecart;model\n"
+            + ligne
+            + "\n"
         ),
     )
-    
+
     cmd = (
-        f'python update_excel_with_results.py '
+        f"python update_excel_with_results.py "
         f'--excel "{args.excel}" '
         f'--arrivee "{Path(args.arrivee)}" '
         f'--tickets "{Path(args.tickets)}"\n'

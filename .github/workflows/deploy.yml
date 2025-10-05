@@ -8,6 +8,10 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
 
+    env:
+      GCP_PROJECT: ${{ secrets.GCP_PROJECT }}
+      GCP_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS }}
+
     steps:
     - name: Checkout repo
       uses: actions/checkout@v3
@@ -15,18 +19,18 @@ jobs:
     - name: Set up gcloud
       uses: google-github-actions/setup-gcloud@v2
       with:
-        project_id: ${{ secrets.GCP_PROJECT }}
-        service_account_key: ${{ secrets.GCP_CREDENTIALS }}
+        project_id: ${{ env.GCP_PROJECT }}
+        service_account_key: ${{ env.GCP_CREDENTIALS }}
         export_default_credentials: true
 
     - name: Build and Push Container
       run: |
-        gcloud builds submit --tag gcr.io/${{ secrets.GCP_PROJECT }}/hippique-analyse
+        gcloud builds submit --tag gcr.io/${{ env.GCP_PROJECT }}/hippique-analyse
 
     - name: Deploy to Cloud Run
       run: |
         gcloud run deploy hippique-analyse \
-          --image gcr.io/${{ secrets.GCP_PROJECT }}/hippique-analyse \
+          --image gcr.io/${{ env.GCP_PROJECT }}/hippique-analyse \
           --platform managed \
           --region europe-west1 \
           --allow-unauthenticated

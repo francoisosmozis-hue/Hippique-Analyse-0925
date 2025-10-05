@@ -1,4 +1,5 @@
 """Utilities to determine which course to analyse for scheduled runs."""
+
 from __future__ import annotations
 
 import argparse
@@ -77,7 +78,9 @@ def _iter_schedule_entries(path: Path) -> Iterator[CourseContext]:
             when = _parse_iso_datetime(row[1]) if len(row) > 1 else None
             meeting = row[2].strip() if len(row) > 2 and row[2].strip() else None
             race = row[3].strip() if len(row) > 3 and row[3].strip() else None
-            yield CourseContext(course_id=course_id, meeting=meeting, race=race, when=when)
+            yield CourseContext(
+                course_id=course_id, meeting=meeting, race=race, when=when
+            )
 
 
 def _iter_planning_entries(path: Path) -> Iterator[CourseContext]:
@@ -88,7 +91,9 @@ def _iter_planning_entries(path: Path) -> Iterator[CourseContext]:
 
     data = json.loads(path.read_text(encoding="utf-8"))
     if isinstance(data, dict):
-        meetings = data.get("meetings") or data.get("reunions") or data.get("data") or []
+        meetings = (
+            data.get("meetings") or data.get("reunions") or data.get("data") or []
+        )
     else:
         meetings = data
 
@@ -122,8 +127,8 @@ def _iter_planning_entries(path: Path) -> Iterator[CourseContext]:
                 or course.get("num")
                 or None
             )
-            when = (
-                _parse_iso_datetime(course.get("start") or course.get("time") or course.get("hour"))
+            when = _parse_iso_datetime(
+                course.get("start") or course.get("time") or course.get("hour")
             )
             contexts.append(
                 CourseContext(
@@ -136,7 +141,9 @@ def _iter_planning_entries(path: Path) -> Iterator[CourseContext]:
     return iter(contexts)
 
 
-def _select_best(now: dt.datetime, candidates: Iterable[CourseContext]) -> CourseContext | None:
+def _select_best(
+    now: dt.datetime, candidates: Iterable[CourseContext]
+) -> CourseContext | None:
     """Return the most relevant course from ``candidates`` for ``now``."""
 
     def sort_key(ctx: CourseContext) -> tuple[int, dt.timedelta]:
@@ -189,7 +196,9 @@ def resolve_course_context(
 def main(argv: Optional[list[str]] = None) -> int:
     """CLI entry-point used by automation scripts."""
 
-    parser = argparse.ArgumentParser(description="Resolve the course identifier to fetch")
+    parser = argparse.ArgumentParser(
+        description="Resolve the course identifier to fetch"
+    )
     parser.add_argument("--schedule-file", default="schedules.csv")
     parser.add_argument("--planning-dir", default="data/planning")
     parser.add_argument("--fallback")

@@ -17,6 +17,7 @@ The CLI accepts multiple ``--upload-glob`` patterns.  Files matching each
 pattern are uploaded to the configured Drive folder.  ``--download FILE_ID
 DEST`` pairs may be provided to retrieve files.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -59,9 +60,7 @@ def _build_service(credentials_json: Optional[str] = None):
     if not info:
         raise EnvironmentError("GOOGLE_CREDENTIALS_B64 is not set")
     data = json.loads(info)
-    creds = service_account.Credentials.from_service_account_info(
-        data, scopes=SCOPES
-    )
+    creds = service_account.Credentials.from_service_account_info(data, scopes=SCOPES)
     return build("drive", "v3", credentials=creds)
 
 
@@ -116,11 +115,7 @@ def find_item(
     query = [f"name = '{name}'", f"'{parent}' in parents", "trashed = false"]
     if mime_type:
         query.append(f"mimeType = '{mime_type}'")
-    result = (
-        srv.files()
-        .list(q=" and ".join(query), fields="files(id, name)")
-        .execute()
-    )
+    result = srv.files().list(q=" and ".join(query), fields="files(id, name)").execute()
     files = result.get("files", [])
     return files[0]["id"] if files else None
 
@@ -142,9 +137,7 @@ def ensure_folder(
             current = existing
         else:
             metadata = {"name": part, "parents": [current], "mimeType": FOLDER_MIME}
-            current = (
-                srv.files().create(body=metadata, fields="id").execute()["id"]
-            )
+            current = srv.files().create(body=metadata, fields="id").execute()["id"]
     return current
 
 

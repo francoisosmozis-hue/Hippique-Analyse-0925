@@ -1,7 +1,7 @@
 import logging
 import pytest
 
-from config.env_utils import get_env
+from config.config_loader import get_env
 
 
 def test_get_env_missing_warns(monkeypatch, caplog):

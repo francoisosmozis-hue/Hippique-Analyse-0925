@@ -76,6 +76,7 @@ _FALSE_VALUES = {"0", "false", "f", "no", "n", "off"}
 # Helper Functions
 # ---------------------------------------------------------------------------
 
+
 def _normalize_key(name: str) -> str:
     return re.sub(r"[^A-Z0-9]+", "", name.upper())
 
@@ -133,6 +134,7 @@ def _iter_candidates(name: str, aliases: Sequence[str] | None) -> List[str]:
         return [name]
     return [name, *aliases]
 
+
 def get_env(
     name: str,
     default: T | None = None,
@@ -155,7 +157,9 @@ def get_env(
     if raw_value is None:
         if required:
             raise RuntimeError(f"Missing required environment variable '{name}'")
-        logger.warning("Environment variable %s not set; using default %r", name, default)
+        logger.warning(
+            "Environment variable %s not set; using default %r", name, default
+        )
         return default  # type: ignore[return-value]
 
     try:
@@ -166,15 +170,21 @@ def get_env(
         ) from exc
 
     if source != name:
-        logger.info("Environment variable %s=%r used as alias for %s", source, value, name)
+        logger.info(
+            "Environment variable %s=%r used as alias for %s", source, value, name
+        )
 
     if default is not None and value != default:
-        logger.info("Environment variable %s=%r overrides default %r", source, value, default)
+        logger.info(
+            "Environment variable %s=%r overrides default %r", source, value, default
+        )
     return value
+
 
 # ---------------------------------------------------------------------------
 # Main Loader
 # ---------------------------------------------------------------------------
+
 
 def load_config(path: str) -> Dict[str, Any]:
     """Load, validate, and resolve configuration from a YAML file."""
@@ -210,33 +220,80 @@ def load_config(path: str) -> Dict[str, Any]:
     cfg["EXOTIC_MIN_PAYOUT"] = payout_default
 
     # Override with environment variables
-    cfg["SNAPSHOTS"] = get_env("SNAPSHOTS", cfg.get("SNAPSHOTS"), aliases=_env_aliases("SNAPSHOTS"))
+    cfg["SNAPSHOTS"] = get_env(
+        "SNAPSHOTS", cfg.get("SNAPSHOTS"), aliases=_env_aliases("SNAPSHOTS")
+    )
     cfg["DRIFT_TOP_N"] = get_env("DRIFT_TOP_N", cfg.get("DRIFT_TOP_N"), cast=int)
-    cfg["DRIFT_MIN_DELTA"] = get_env("DRIFT_MIN_DELTA", cfg.get("DRIFT_MIN_DELTA"), cast=float)
-    cfg["BUDGET_TOTAL"] = get_env("BUDGET_TOTAL", cfg.get("BUDGET_TOTAL"), cast=float, aliases=_env_aliases("BUDGET_TOTAL"))
-    cfg["SP_RATIO"] = get_env("SP_RATIO", cfg.get("SP_RATIO"), cast=float, aliases=_env_aliases("SP_RATIO"))
-    cfg["COMBO_RATIO"] = get_env("COMBO_RATIO", cfg.get("COMBO_RATIO"), cast=float, aliases=_env_aliases("COMBO_RATIO"))
-    cfg["MAX_VOL_PAR_CHEVAL"] = get_env("MAX_VOL_PAR_CHEVAL", cfg.get("MAX_VOL_PAR_CHEVAL"), cast=float, aliases=_env_aliases("MAX_VOL_PAR_CHEVAL"))
+    cfg["DRIFT_MIN_DELTA"] = get_env(
+        "DRIFT_MIN_DELTA", cfg.get("DRIFT_MIN_DELTA"), cast=float
+    )
+    cfg["BUDGET_TOTAL"] = get_env(
+        "BUDGET_TOTAL",
+        cfg.get("BUDGET_TOTAL"),
+        cast=float,
+        aliases=_env_aliases("BUDGET_TOTAL"),
+    )
+    cfg["SP_RATIO"] = get_env(
+        "SP_RATIO", cfg.get("SP_RATIO"), cast=float, aliases=_env_aliases("SP_RATIO")
+    )
+    cfg["COMBO_RATIO"] = get_env(
+        "COMBO_RATIO",
+        cfg.get("COMBO_RATIO"),
+        cast=float,
+        aliases=_env_aliases("COMBO_RATIO"),
+    )
+    cfg["MAX_VOL_PAR_CHEVAL"] = get_env(
+        "MAX_VOL_PAR_CHEVAL",
+        cfg.get("MAX_VOL_PAR_CHEVAL"),
+        cast=float,
+        aliases=_env_aliases("MAX_VOL_PAR_CHEVAL"),
+    )
     cfg["EV_MIN_SP"] = get_env("EV_MIN_SP", cfg.get("EV_MIN_SP"), cast=float)
-    cfg["EV_MIN_GLOBAL"] = get_env("EV_MIN_GLOBAL", cfg.get("EV_MIN_GLOBAL"), cast=float)
+    cfg["EV_MIN_GLOBAL"] = get_env(
+        "EV_MIN_GLOBAL", cfg.get("EV_MIN_GLOBAL"), cast=float
+    )
     cfg["ROI_MIN_SP"] = get_env("ROI_MIN_SP", cfg.get("ROI_MIN_SP"), cast=float)
-    cfg["ROI_MIN_GLOBAL"] = get_env("ROI_MIN_GLOBAL", cfg.get("ROI_MIN_GLOBAL"), cast=float)
-    cfg["ROR_MAX"] = get_env("ROR_MAX", cfg.get("ROR_MAX"), cast=float, aliases=_env_aliases("ROR_MAX"))
+    cfg["ROI_MIN_GLOBAL"] = get_env(
+        "ROI_MIN_GLOBAL", cfg.get("ROI_MIN_GLOBAL"), cast=float
+    )
+    cfg["ROR_MAX"] = get_env(
+        "ROR_MAX", cfg.get("ROR_MAX"), cast=float, aliases=_env_aliases("ROR_MAX")
+    )
     cfg["SHARPE_MIN"] = get_env("SHARPE_MIN", cfg.get("SHARPE_MIN"), cast=float)
-    cfg["MAX_TICKETS_SP"] = get_env("MAX_TICKETS_SP", cfg.get("MAX_TICKETS_SP"), cast=int)
+    cfg["MAX_TICKETS_SP"] = get_env(
+        "MAX_TICKETS_SP", cfg.get("MAX_TICKETS_SP"), cast=int
+    )
     cfg["MIN_STAKE_SP"] = get_env("MIN_STAKE_SP", cfg.get("MIN_STAKE_SP"), cast=float)
     cfg["DRIFT_COEF"] = get_env("DRIFT_COEF", cfg.get("DRIFT_COEF"), cast=float)
     cfg["ROUND_TO_SP"] = get_env("ROUND_TO_SP", cfg.get("ROUND_TO_SP"), cast=float)
-    cfg["JE_BONUS_COEF"] = get_env("JE_BONUS_COEF", cfg.get("JE_BONUS_COEF"), cast=float)
-    cfg["KELLY_FRACTION"] = get_env("KELLY_FRACTION", cfg.get("KELLY_FRACTION"), cast=float)
+    cfg["JE_BONUS_COEF"] = get_env(
+        "JE_BONUS_COEF", cfg.get("JE_BONUS_COEF"), cast=float
+    )
+    cfg["KELLY_FRACTION"] = get_env(
+        "KELLY_FRACTION", cfg.get("KELLY_FRACTION"), cast=float
+    )
     cfg["ALLOW_JE_NA"] = get_env("ALLOW_JE_NA", cfg.get("ALLOW_JE_NA"), cast=_as_bool)
-    cfg["PAUSE_EXOTIQUES"] = get_env("PAUSE_EXOTIQUES", cfg.get("PAUSE_EXOTIQUES"), cast=_as_bool)
-    cfg["REQUIRE_DRIFT_LOG"] = get_env("REQUIRE_DRIFT_LOG", cfg.get("REQUIRE_DRIFT_LOG"), cast=_as_bool)
-    cfg["MIN_PAYOUT_COMBOS"] = get_env("MIN_PAYOUT_COMBOS", cfg.get("MIN_PAYOUT_COMBOS"), cast=float, aliases=_env_aliases("MIN_PAYOUT_COMBOS"))
+    cfg["PAUSE_EXOTIQUES"] = get_env(
+        "PAUSE_EXOTIQUES", cfg.get("PAUSE_EXOTIQUES"), cast=_as_bool
+    )
+    cfg["REQUIRE_DRIFT_LOG"] = get_env(
+        "REQUIRE_DRIFT_LOG", cfg.get("REQUIRE_DRIFT_LOG"), cast=_as_bool
+    )
+    cfg["MIN_PAYOUT_COMBOS"] = get_env(
+        "MIN_PAYOUT_COMBOS",
+        cfg.get("MIN_PAYOUT_COMBOS"),
+        cast=float,
+        aliases=_env_aliases("MIN_PAYOUT_COMBOS"),
+    )
     cfg["EXOTIC_MIN_PAYOUT"] = cfg["MIN_PAYOUT_COMBOS"]
 
     corr_default = cfg.get("CORRELATION_PENALTY", 0.85)
-    cfg["CORRELATION_PENALTY"] = get_env("CORRELATION_PENALTY", corr_default, cast=float, aliases=_env_aliases("CORRELATION_PENALTY"))
+    cfg["CORRELATION_PENALTY"] = get_env(
+        "CORRELATION_PENALTY",
+        corr_default,
+        cast=float,
+        aliases=_env_aliases("CORRELATION_PENALTY"),
+    )
 
     # Final validation
     missing = [k for k in REQ_KEYS if k not in cfg]
