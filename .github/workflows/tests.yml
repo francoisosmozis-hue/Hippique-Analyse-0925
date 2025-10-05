@@ -8,8 +8,11 @@ permissions:
   contents: read
 
 jobs:
-  tests:
+  test:
     runs-on: ubuntu-latest
+    env:
+      GOOGLE_CREDENTIALS_B64: ${{ secrets.GOOGLE_CREDENTIALS_B64 || '' }}
+      DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID || '' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -22,20 +25,19 @@ jobs:
       - name: Upgrade pip
         run: python -m pip install --upgrade pip
 
-      - name: Install dependencies
+      - name: Install deps
         run: |
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
       - name: Run tests
         run: pytest -q
 
-      - name: No Drive sync (no credentials)
-        if: ${{ !secrets.GOOGLE_CREDENTIALS_B64 }}
-        run: echo "Skipping Drive sync because GOOGLE_CREDENTIALS_B64 is not set."
+      - name: Skip Drive sync (missing credentials)
+        if: ${{ env.GOOGLE_CREDENTIALS_B64 == '' }}
+        run: echo "Skipping Drive sync because GOOGLE_CREDENTIALS_B64 secret is not available (e.g., PR from fork)."
 
       - name: Sync data to Drive
-        if: ${{ secrets.GOOGLE_CREDENTIALS_B64 }}
-        run: python drive_sync.py --push data
-        env:
-          GOOGLE_CREDENTIALS_B64: ${{ secrets.GOOGLE_CREDENTIALS_B64 }}
-          DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
+        if: ${{ env.GOOGLE_CREDENTIALS_B64 != '' }}
+        run: |
+          echo "$GOOGLE_CREDENTIALS_B64" | base64 -d > credentials.json
+          python drive_sync.py --push data
