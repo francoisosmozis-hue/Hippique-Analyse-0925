@@ -15,30 +15,22 @@ import json
 import logging
 import os
 import re
+import sys
 from pathlib import Path
 from typing import Any, Dict, List, Mapping
 
-import sys
-
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from simulate_ev import simulate_ev_batch
-from simulate_wrapper import PAYOUT_CALIBRATION_PATH
-from validator_ev import ValidationError, validate_ev
+import yaml
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
+from pydantic import ValidationError as PydanticValidationError
+from pydantic import field_validator
 
 from scripts import online_fetch_zeturf as ofz
 from scripts.gcs_utils import disabled_reason, is_gcs_enabled
-
-from pydantic import (
-    AliasChoices,
-    BaseModel,
-    ConfigDict,
-    ValidationError as PydanticValidationError,
-    Field,
-    field_validator,
-)
-
-import yaml
+from simulate_ev import simulate_ev_batch
+from simulate_wrapper import PAYOUT_CALIBRATION_PATH
+from validator_ev import ValidationError, validate_ev
 
 logger = logging.getLogger(__name__)
 
@@ -84,7 +76,9 @@ class RunnerPayload(BaseModel):
     def _validate_course_id(cls, value: str) -> str:
         text = str(value).strip()
         if not text or not text.isdigit() or len(text) < 6:
-            raise ValueError("id_course must be a numeric string with at least 6 digits")
+            raise ValueError(
+                "id_course must be a numeric string with at least 6 digits"
+            )
         return text
 
     @field_validator("reunion")
@@ -201,9 +195,13 @@ def _write_excel_update_command(
         )
         return
 
-    excel = excel_path or os.getenv("EXCEL_RESULTS_PATH") or "modele_suivi_courses_hippiques.xlsx"
+    excel = (
+        excel_path
+        or os.getenv("EXCEL_RESULTS_PATH")
+        or "modele_suivi_courses_hippiques.xlsx"
+    )
     cmd = (
-        f'python update_excel_with_results.py '
+        f"python update_excel_with_results.py "
         f'--excel "{excel}" '
         f'--arrivee "{arrivee_path}" '
         f'--tickets "{tickets_path}"\n'
@@ -341,7 +339,7 @@ def _write_analysis(
     }
     with path.open("w", encoding="utf-8") as fh:
         json.dump(payload, fh, ensure_ascii=False, indent=2)
-    if USE_GCS and upload_file:    
+    if USE_GCS and upload_file:
         try:
             upload_file(path)
         except EnvironmentError as exc:
@@ -457,15 +455,22 @@ def main() -> None:
         help="Répertoire de sortie prioritaire (fallback vers $OUTPUT_DIR puis --analysis-dir)",
     )
     args = parser.parse_args()
-    
+
     snap_dir = Path(args.snap_dir)
     analysis_root = args.output or os.getenv("OUTPUT_DIR") or args.analysis_dir
     analysis_dir = Path(analysis_root)
     calibration_path = Path(args.calibration).expanduser()
     calibration_exists = calibration_path.exists()
-    
+
     if args.planning:
-        for name in ("course_id", "reunion", "course", "phase", "start_time", "course_url"):
+        for name in (
+            "course_id",
+            "reunion",
+            "course",
+            "phase",
+            "start_time",
+            "course_url",
+        ):
             if getattr(args, name):
                 parser.error("--planning cannot be combined with single-race options")
 
@@ -499,7 +504,9 @@ def main() -> None:
                         if match:
                             reunion = reunion or match.group(1)
                             course = course or match.group(2)
-                start = entry.get("start") or entry.get("time") or entry.get("start_time")
+                start = (
+                    entry.get("start") or entry.get("time") or entry.get("start_time")
+                )
                 if not (reunion and course and start and context_id):
                     logger.error(
                         "[runner] Invalid planning entry skipped: missing labels/id_course (%s)",
@@ -509,7 +516,9 @@ def main() -> None:
                 try:
                     start_time = dt.datetime.fromisoformat(start)
                 except ValueError:
-                    logger.error("[runner] Invalid ISO timestamp for planning entry %s", entry)
+                    logger.error(
+                        "[runner] Invalid ISO timestamp for planning entry %s", entry
+                    )
                     raise SystemExit(1)
                 delta = (start_time - now).total_seconds() / 60
                 if args.h30_window_min <= delta <= args.h30_window_max:
@@ -568,7 +577,8 @@ def main() -> None:
     ]
     if missing:
         parser.error(
-            "Missing required options for single-race mode: " + ", ".join(f"--{m}" for m in missing)
+            "Missing required options for single-race mode: "
+            + ", ".join(f"--{m}" for m in missing)
         )
 
     payload_dict = {
@@ -596,11 +606,11 @@ def main() -> None:
             calibration=calibration_path,
             calibration_available=calibration_exists,
             course_url=args.course_url,
-        ) 
+        )
     except PayloadValidationError as exc:
         logger.error("[runner] %s", exc)
         raise SystemExit(1) from exc
-          
+
 
 if __name__ == "__main__":
     main()

@@ -2,10 +2,10 @@
 from __future__ import annotations
 
 import argparse
+import inspect
 import json
 from pathlib import Path
 from typing import Any, List
-import inspect
 
 import yaml
 
@@ -15,7 +15,6 @@ SIG = inspect.signature(compute_ev_roi)
 DEFAULT_EV_THRESHOLD = SIG.parameters["ev_threshold"].default
 DEFAULT_ROI_THRESHOLD = SIG.parameters["roi_threshold"].default
 DEFAULT_KELLY_CAP = SIG.parameters["kelly_cap"].default
-
 
 
 def load_tickets(path: Path) -> List[dict[str, Any]]:
@@ -39,9 +38,7 @@ def load_tickets(path: Path) -> List[dict[str, Any]]:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Compute EV/ROI for betting tickets"
-    )
+    parser = argparse.ArgumentParser(description="Compute EV/ROI for betting tickets")
     parser.add_argument(
         "--tickets", required=True, help="Path to tickets file (JSON or YAML)"
     )
@@ -80,7 +77,7 @@ def main() -> None:
     ev = result["ev"]
     roi = result["roi"]
     risk = result["risk_of_ruin"]
-    pastille = "\U0001F7E2" if result["green"] else "\U0001F534"
+    pastille = "\U0001f7e2" if result["green"] else "\U0001f534"
 
     print(f"EV: {ev:.2f}")
     print(f"ROI: {roi:.2%}")
@@ -90,4 +87,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

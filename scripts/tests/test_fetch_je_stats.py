@@ -1,15 +1,10 @@
 import pytest
 from bs4 import BeautifulSoup
 
-from scripts.fetch_je_stats import (
-    RunnerIndex,
-    RunnerStat,
-    _extract_percentage_from_node,
-    _parse_percentage,
-    extract_stats_from_json,
-    extract_stats_from_table,
-    map_stats_to_ids,
-)
+from scripts.fetch_je_stats import (RunnerIndex, RunnerStat,
+                                    _extract_percentage_from_node,
+                                    _parse_percentage, extract_stats_from_json,
+                                    extract_stats_from_table, map_stats_to_ids)
 
 
 def test_parse_percentage_handles_common_formats():
@@ -82,10 +77,12 @@ def test_extract_percentage_from_node_prefers_ratio():
     ],
 )
 def test_map_stats_to_ids_uses_number_and_name(stat, expected):
-    index = RunnerIndex([
-        {"id": 101, "num": 1, "name": "Alpha"},
-        {"id": 202, "num": 2, "name": "Bravo"},
-    ])
+    index = RunnerIndex(
+        [
+            {"id": 101, "num": 1, "name": "Alpha"},
+            {"id": 202, "num": 2, "name": "Bravo"},
+        ]
+    )
     coverage, mapped, unmatched = map_stats_to_ids([stat], index)
     assert expected in mapped
     assert coverage == pytest.approx(50.0)
@@ -93,10 +90,12 @@ def test_map_stats_to_ids_uses_number_and_name(stat, expected):
 
 
 def test_map_stats_to_ids_skips_entries_without_stats():
-    index = RunnerIndex([
-        {"id": 1, "num": 1, "name": "Alpha"},
-        {"id": 2, "num": 2, "name": "Bravo"},
-    ])
+    index = RunnerIndex(
+        [
+            {"id": 1, "num": 1, "name": "Alpha"},
+            {"id": 2, "num": 2, "name": "Bravo"},
+        ]
+    )
     stats = [RunnerStat(num="1", name="Alpha", j_win=None, e_win=None)]
     coverage, mapped, unmatched = map_stats_to_ids(stats, index)
     assert mapped == {}

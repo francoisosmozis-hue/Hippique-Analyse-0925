@@ -12,6 +12,7 @@ from scripts.drive_sync import _build_service, build_remote_path, download_file
 BUCKET_ENV = "GCS_BUCKET"
 PREFIX_ENV = "GCS_PREFIX"
 
+
 def _list_blobs(
     service, bucket: str, base_prefix: str, date: str, prefix: str
 ) -> Iterable[str]:

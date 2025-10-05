@@ -96,7 +96,9 @@ def _invoke_runner(reunion: str, course: str, phase: str) -> None:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Trigger runner_chain phases based on timing")
+    ap = argparse.ArgumentParser(
+        description="Trigger runner_chain phases based on timing"
+    )
     ap.add_argument("--meetings", default="meetings.json", help="Planning JSON file")
     args = ap.parse_args()
 
@@ -113,8 +115,19 @@ def main() -> None:
         date_hint = meeting.get("date") or meeting.get("jour")
         courses = meeting.get("courses") or meeting.get("races") or []
         for course in courses:
-            c_label = course.get("c") or course.get("course") or course.get("num") or course.get("id") or ""
-            start = course.get("start") or course.get("time") or course.get("hour") or course.get("start_time")
+            c_label = (
+                course.get("c")
+                or course.get("course")
+                or course.get("num")
+                or course.get("id")
+                or ""
+            )
+            start = (
+                course.get("start")
+                or course.get("time")
+                or course.get("hour")
+                or course.get("start_time")
+            )
             if not r_label or not c_label or not start:
                 continue
             dtstart = _parse_start(date_hint, start)

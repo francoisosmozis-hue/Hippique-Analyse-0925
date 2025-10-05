@@ -1,7 +1,8 @@
+import datetime as dt
 import json
 import os
 import sys
-import datetime as dt
+
 import pytest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -21,7 +22,9 @@ class DummyResp:
             raise err
 
 
-def test_main_parses_geny_page(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+def test_main_parses_geny_page(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
     html = """
     <section class='reunion'>
         <h2>R1 Paris-Vincennes (FR)</h2>

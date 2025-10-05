@@ -87,7 +87,9 @@ def test_update_excel_records_observed_roi(tmp_path: Path) -> None:
     ws_observe = wb["ROI Observé"]
     assert ws_observe.max_row >= 2
     header_map_observe = {
-        ws_observe.cell(row=1, column=col).value: ws_observe.cell(row=2, column=col).value
+        ws_observe.cell(row=1, column=col)
+        .value: ws_observe.cell(row=2, column=col)
+        .value
         for col in range(1, ws_observe.max_column + 1)
         if ws_observe.cell(row=1, column=col).value
     }
@@ -95,12 +97,16 @@ def test_update_excel_records_observed_roi(tmp_path: Path) -> None:
     assert header_map_observe["mises"] == pytest.approx(3.0)
     assert header_map_observe["gains"] == pytest.approx(10.0)
     assert header_map_observe["ROI_reel"] == pytest.approx(tickets_data["roi_reel"])
-    assert header_map_observe["ROI_reel_moyen"] == pytest.approx(tickets_data["roi_reel_moyen"])
+    assert header_map_observe["ROI_reel_moyen"] == pytest.approx(
+        tickets_data["roi_reel_moyen"]
+    )
 
     ws_prevision = wb["ROI Prévisionnel"]
     assert ws_prevision.max_row >= 2
     header_map_prevision = {
-        ws_prevision.cell(row=1, column=col).value: ws_prevision.cell(row=2, column=col).value
+        ws_prevision.cell(row=1, column=col)
+        .value: ws_prevision.cell(row=2, column=col)
+        .value
         for col in range(1, ws_prevision.max_column + 1)
         if ws_prevision.cell(row=1, column=col).value
     }

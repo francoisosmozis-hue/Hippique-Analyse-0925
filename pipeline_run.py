@@ -10,8 +10,8 @@ import json
 import logging
 import math
 import os
-import sys
 import re
+import sys
 from functools import lru_cache, partial
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, Mapping, Sequence, cast
@@ -64,7 +64,9 @@ _ALLOW_COMBO_BASELINES: set[Callable[..., Any]] = set()
 _APPLY_POLICY_BASELINES: set[Callable[..., Any]] = set()
 
 
-def _filter_kwargs(func: Callable[..., Any], overrides: Mapping[str, Any]) -> dict[str, Any]:
+def _filter_kwargs(
+    func: Callable[..., Any], overrides: Mapping[str, Any]
+) -> dict[str, Any]:
     """Return keyword arguments supported by ``func`` from ``overrides``."""
 
     try:
@@ -73,7 +75,8 @@ def _filter_kwargs(func: Callable[..., Any], overrides: Mapping[str, Any]) -> di
         return dict(overrides)
 
     accepts_kwargs = any(
-        param.kind is inspect.Parameter.VAR_KEYWORD for param in signature.parameters.values()
+        param.kind is inspect.Parameter.VAR_KEYWORD
+        for param in signature.parameters.values()
     )
     if accepts_kwargs:
         return dict(overrides)
@@ -109,7 +112,9 @@ def _compute_market_overround(odds: Mapping[str, Any]) -> float | None:
 _DEFAULT_SLOTS_PLACE = 3
 
 
-def _coerce_slots_place(slots_place: Any, default: float = _DEFAULT_SLOTS_PLACE) -> float:
+def _coerce_slots_place(
+    slots_place: Any, default: float = _DEFAULT_SLOTS_PLACE
+) -> float:
     """Return a positive place slot count from ``slots_place`` or ``default``."""
 
     candidate = slots_place
@@ -143,7 +148,7 @@ def _build_market(
     win odds are used as a conservative fallback so downstream consumers can
     still derive an indicative overround.  Non-finite aggregates are ignored.
     """
-    
+
     win_total = 0.0
     place_total = 0.0
     total_runners = 0
@@ -155,9 +160,17 @@ def _build_market(
             continue
 
         total_runners += 1
-        
+
         win_odds = None
-        for key in ("odds", "decimal_odds", "odds_dec", "odds_win", "win_odds", "cote", "odd"):
+        for key in (
+            "odds",
+            "decimal_odds",
+            "odds_dec",
+            "odds_win",
+            "win_odds",
+            "cote",
+            "odd",
+        ):
             if key in entry:
                 candidate = _coerce_odds(entry.get(key))
                 if candidate > 0:
@@ -206,7 +219,7 @@ def _build_market(
         metrics["slots_place"] = (
             int_candidate if abs(slots_value - int_candidate) < 1e-9 else slots_value
         )
-        
+
     if has_place:
         if math.isfinite(place_total) and place_total > 0.0:
             metrics["overround_place"] = place_total
@@ -276,7 +289,7 @@ def _evaluate_combo_strict(
         notes = [str(value) for value in notes_raw if value not in (None, "")]
     elif notes_raw not in (None, ""):
         notes = [str(notes_raw)]
-        
+
     keep = True
     reasons: list[str] = []
 
@@ -360,6 +373,7 @@ def filter_combos_strict(
     keep_cap = max(1, int(max_keep))
 
     if len(kept) > keep_cap:
+
         def _sort_key(entry: Mapping[str, Any]) -> tuple[float, float]:
             ev_meta = entry.get("ev_check") if isinstance(entry, Mapping) else {}
             if not isinstance(ev_meta, Mapping):
@@ -374,15 +388,19 @@ def filter_combos_strict(
         kept = kept[:keep_cap]
 
         if dropped:
-            dropped_ids = [str(entry.get("id") or entry.get("type") or "?") for entry in dropped]
+            dropped_ids = [
+                str(entry.get("id") or entry.get("type") or "?") for entry in dropped
+            ]
             logger.info(
                 "[COMBO] Limitation aux %d meilleures combinaisons: conservées %s, ignorées %s",
                 keep_cap,
-                ", ".join(str(entry.get("id") or entry.get("type") or "?") for entry in kept),
+                ", ".join(
+                    str(entry.get("id") or entry.get("type") or "?") for entry in kept
+                ),
                 ", ".join(dropped_ids),
             )
             rejection_reasons.append("combo_limit_enforced")
-            
+
     if rejection_reasons:
         seen: set[str] = set()
         deduped: list[str] = []
@@ -410,13 +428,8 @@ def _maybe_load_dotenv() -> None:
 def _load_simulate_ev() -> Dict[str, Callable[..., Any]]:
     """Import heavy simulation helpers lazily."""
 
-    from simulate_ev import (
-        allocate_dutching_sp,
-        gate_ev,
-        implied_prob,
-        implied_probs,
-        simulate_ev_batch,
-    )
+    from simulate_ev import (allocate_dutching_sp, gate_ev, implied_prob,
+                             implied_probs, simulate_ev_batch)
 
     return {
         "allocate_dutching_sp": allocate_dutching_sp,
@@ -431,12 +444,10 @@ def _load_simulate_ev() -> Dict[str, Callable[..., Any]]:
 def _load_p_true_helpers() -> Dict[str, Callable[..., Any]]:
     """Import calibration helpers lazily."""
 
-    from calibration.p_true_model import (
-        compute_runner_features,
-        get_model_metadata,
-        load_p_true_model,
-        predict_probability,
-    )
+    from calibration.p_true_model import (compute_runner_features,
+                                          get_model_metadata,
+                                          load_p_true_model,
+                                          predict_probability)
 
     return {
         "compute_runner_features": compute_runner_features,
@@ -474,7 +485,8 @@ def __getattr__(name: str) -> Any:
         return mapping[name]
 
     if name in {"combos_allowed", "summarise_validation", "validate_inputs"}:
-        from validator_ev import combos_allowed, summarise_validation, validate_inputs
+        from validator_ev import (combos_allowed, summarise_validation,
+                                  validate_inputs)
 
         mapping: Dict[str, Any] = {
             "combos_allowed": combos_allowed,
@@ -484,7 +496,7 @@ def __getattr__(name: str) -> Any:
         return mapping[name]
 
     if name in {"append_csv_line", "append_json", "CSV_HEADER"}:
-        from logging_io import append_csv_line, append_json, CSV_HEADER
+        from logging_io import CSV_HEADER, append_csv_line, append_json
 
         mapping: Dict[str, Any] = {
             "append_csv_line": append_csv_line,
@@ -527,9 +539,7 @@ def configure_logging(level: str | int | None = None) -> None:
     )
 
     if invalid_level:
-        logger.warning(
-            "Invalid log level %r, defaulting to INFO", resolved
-        )
+        logger.warning("Invalid log level %r, defaulting to INFO", resolved)
 
 
 # ---------------------------------------------------------------------------
@@ -689,7 +699,7 @@ def filter_sp_candidates(cands: Sequence[Mapping[str, Any]]) -> list[Mapping[str
 
 
 def filter_cp_candidates(
-    pairs: Sequence[Sequence[Mapping[str, Any]]]
+    pairs: Sequence[Sequence[Mapping[str, Any]]],
 ) -> list[tuple[Mapping[str, Any], Mapping[str, Any]]]:
     """Return Couplé Placé pairs meeting the cumulative place odds requirement."""
 
@@ -779,7 +789,7 @@ def _ensure_place_odds(runners: Sequence[Mapping[str, Any]]) -> list[dict[str, A
             record["odds_place"] = place_odds
             record["odds_place_source"] = "synthetic"
             synthetic_used = True
-            
+
         if place_odds <= 0.0:
             continue
 
@@ -797,7 +807,7 @@ def _ensure_place_odds(runners: Sequence[Mapping[str, Any]]) -> list[dict[str, A
 
     return sanitized
 
-           
+
 def _extract_best_place_probability(record: Mapping[str, Any]) -> float:
     """Return the highest available probability hint for place odds synthesis."""
 
@@ -917,7 +927,9 @@ def _filter_sp_and_cp_tickets(
                 kept_indices: list[int] = []
                 for index, leg in enumerate(legs_seq):
                     fallback_entries: list[Mapping[str, Any]] = []
-                    if index < len(legs_details_seq) and isinstance(legs_details_seq[index], Mapping):
+                    if index < len(legs_details_seq) and isinstance(
+                        legs_details_seq[index], Mapping
+                    ):
                         fallback_entries.append(legs_details_seq[index])
                     if index < len(bets_seq) and isinstance(bets_seq[index], Mapping):
                         fallback_entries.append(bets_seq[index])
@@ -930,9 +942,7 @@ def _filter_sp_and_cp_tickets(
                         ticket_copy["legs"] = [legs_seq[i] for i in kept_indices]
                     if bets_seq:
                         ticket_copy["bets"] = [
-                            bets_seq[i]
-                            for i in kept_indices
-                            if i < len(bets_seq)
+                            bets_seq[i] for i in kept_indices if i < len(bets_seq)
                         ]
                     if legs_details_seq:
                         ticket_copy["legs_details"] = [
@@ -968,7 +978,9 @@ def _filter_sp_and_cp_tickets(
             odds_values: list[float | None] = []
             for index, leg in enumerate(legs_seq):
                 fallback_entries: list[Mapping[str, Any]] = []
-                if index < len(legs_details_seq) and isinstance(legs_details_seq[index], Mapping):
+                if index < len(legs_details_seq) and isinstance(
+                    legs_details_seq[index], Mapping
+                ):
                     fallback_entries.append(legs_details_seq[index])
                 odds = _resolve_leg_odds(leg, odds_lookup, fallback_entries)
                 odds_values.append(odds)
@@ -985,7 +997,9 @@ def _filter_sp_and_cp_tickets(
                         )
                     )
             else:
-                notes.append("CP retiré: cotes manquantes (règle > 4/1 non vérifiable).")
+                notes.append(
+                    "CP retiré: cotes manquantes (règle > 4/1 non vérifiable)."
+                )
             continue
         filtered_combo.append(dict(ticket))
 
@@ -1036,6 +1050,7 @@ def market_drift_signal(
     if is_favorite and delta <= STEAM_DOWN:
         return -2
     return 0
+
 
 _ENV_ALIASES: dict[str, tuple[str, ...]] = {
     "BUDGET_TOTAL": ("TOTAL_BUDGET", "BUDGET", "BUDGET_TOTAL_EUR", "TOTAL_BUDGET_EUR"),
@@ -1104,7 +1119,9 @@ def _as_bool(value: object) -> bool:
             return True
         if normalized in _FALSE_VALUES:
             return False
-    raise ValueError(f"Cannot interpret {value!r} as boolean")  # pragma: no cover - defensive
+    raise ValueError(
+        f"Cannot interpret {value!r} as boolean"
+    )  # pragma: no cover - defensive
 
 
 METRIC_KEYS = {
@@ -1150,9 +1167,7 @@ def simulate_with_metrics(
     if kelly_cap is None:
         stats = simulate_ev_batch_fn(sim_input, bankroll=bankroll)
     else:
-        stats = simulate_ev_batch_fn(
-            sim_input, bankroll=bankroll, kelly_cap=kelly_cap
-        )
+        stats = simulate_ev_batch_fn(sim_input, bankroll=bankroll, kelly_cap=kelly_cap)
     for original, simulated in zip(tickets, sim_input):
         for key in METRIC_KEYS:
             if key in simulated:
@@ -1166,7 +1181,14 @@ def _scale_ticket_metrics(ticket: dict, factor: float) -> None:
     if not math.isfinite(factor):
         return
 
-    for key in ("stake", "kelly_stake", "max_stake", "optimized_stake", "ev", "ev_ticket"):
+    for key in (
+        "stake",
+        "kelly_stake",
+        "max_stake",
+        "optimized_stake",
+        "ev",
+        "ev_ticket",
+    ):
         if key in ticket and ticket.get(key) is not None:
             ticket[key] = float(ticket[key]) * factor
 
@@ -1327,9 +1349,7 @@ def _summarize_optimization(
         "applied": applied,
         "ev_before": float(stats_opt.get("ev_individual", stats_opt.get("ev", 0.0))),
         "ev_after": float(stats_opt.get("ev", stats_opt.get("ev_individual", 0.0))),
-        "roi_before": float(
-            stats_opt.get("roi_individual", stats_opt.get("roi", 0.0))
-        ),
+        "roi_before": float(stats_opt.get("roi_individual", stats_opt.get("roi", 0.0))),
         "roi_after": float(stats_opt.get("roi", stats_opt.get("roi_individual", 0.0))),
         "stake_before": stake_before,
         "stake_after": stake_after,
@@ -1393,7 +1413,7 @@ def enforce_ror_threshold(
             drift,
             pct_str,
         )
-        
+
     cfg_iter = dict(cfg)
     target = float(cfg_iter.get("ROR_MAX", 0.0))
     cap = float(cfg_iter.get("MAX_VOL_PAR_CHEVAL", 0.60))
@@ -1474,18 +1494,27 @@ def enforce_ror_threshold(
             )
             if factor is None or factor >= 1.0 - 1e-9:
                 break
-        
+
             reduction_applied = True
             scale_factor_total *= factor
             effective_cap = cap * scale_factor_total
             for ticket in pack:
                 _scale_ticket_metrics(ticket, factor)
 
-            _normalize_ticket_stakes(sp_tickets, round_step=round_step, min_stake=min_stake)
-            _normalize_ticket_stakes(combo_tickets, round_step=round_step, min_stake=min_stake)
+            _normalize_ticket_stakes(
+                sp_tickets, round_step=round_step, min_stake=min_stake
+            )
+            _normalize_ticket_stakes(
+                combo_tickets, round_step=round_step, min_stake=min_stake
+            )
             pack = sp_tickets + combo_tickets
             if not pack:
-                stats_current = {"ev": 0.0, "roi": 0.0, "risk_of_ruin": 0.0, "variance": 0.0}
+                stats_current = {
+                    "ev": 0.0,
+                    "roi": 0.0,
+                    "risk_of_ruin": 0.0,
+                    "variance": 0.0,
+                }
                 break
 
             stats_current = simulate_with_metrics(
@@ -1513,7 +1542,7 @@ def enforce_ror_threshold(
             scale_factor_effective = computed_scale
 
     info = {
-        "applied": reduction_applied,        
+        "applied": reduction_applied,
         "initial_ror": float(initial_risk),
         "final_ror": float(final_risk),
         "target": target,
@@ -1561,14 +1590,16 @@ def load_yaml(path: str) -> dict:
     cfg.setdefault("DRIFT_TOP_N", 5)
     cfg.setdefault("DRIFT_MIN_DELTA", 0.8)
     cfg.setdefault("P_TRUE_MIN_SAMPLES", 0)
-    
+
     payout_default = cfg.get("EXOTIC_MIN_PAYOUT", cfg.get("MIN_PAYOUT_COMBOS"))
     if payout_default is None:
         payout_default = 12.0
     cfg["MIN_PAYOUT_COMBOS"] = payout_default
     cfg["EXOTIC_MIN_PAYOUT"] = payout_default
 
-    cfg["SNAPSHOTS"] = get_env("SNAPSHOTS", cfg.get("SNAPSHOTS"), aliases=_env_aliases("SNAPSHOTS"))
+    cfg["SNAPSHOTS"] = get_env(
+        "SNAPSHOTS", cfg.get("SNAPSHOTS"), aliases=_env_aliases("SNAPSHOTS")
+    )
     cfg["DRIFT_TOP_N"] = get_env(
         "DRIFT_TOP_N",
         cfg.get("DRIFT_TOP_N"),
@@ -1607,11 +1638,15 @@ def load_yaml(path: str) -> dict:
         cfg.get("MAX_VOL_PAR_CHEVAL"),
         cast=float,
         aliases=_env_aliases("MAX_VOL_PAR_CHEVAL"),
-    )  
+    )
     cfg["EV_MIN_SP"] = get_env("EV_MIN_SP", cfg.get("EV_MIN_SP"), cast=float)
-    cfg["EV_MIN_GLOBAL"] = get_env("EV_MIN_GLOBAL", cfg.get("EV_MIN_GLOBAL"), cast=float)
+    cfg["EV_MIN_GLOBAL"] = get_env(
+        "EV_MIN_GLOBAL", cfg.get("EV_MIN_GLOBAL"), cast=float
+    )
     cfg["ROI_MIN_SP"] = get_env("ROI_MIN_SP", cfg.get("ROI_MIN_SP"), cast=float)
-    cfg["ROI_MIN_GLOBAL"] = get_env("ROI_MIN_GLOBAL", cfg.get("ROI_MIN_GLOBAL"), cast=float)
+    cfg["ROI_MIN_GLOBAL"] = get_env(
+        "ROI_MIN_GLOBAL", cfg.get("ROI_MIN_GLOBAL"), cast=float
+    )
     cfg["ROR_MAX"] = get_env(
         "ROR_MAX",
         cfg.get("ROR_MAX"),
@@ -1619,15 +1654,25 @@ def load_yaml(path: str) -> dict:
         aliases=_env_aliases("ROR_MAX"),
     )
     cfg["SHARPE_MIN"] = get_env("SHARPE_MIN", cfg.get("SHARPE_MIN"), cast=float)
-    cfg["MAX_TICKETS_SP"] = get_env("MAX_TICKETS_SP", cfg.get("MAX_TICKETS_SP"), cast=int)
+    cfg["MAX_TICKETS_SP"] = get_env(
+        "MAX_TICKETS_SP", cfg.get("MAX_TICKETS_SP"), cast=int
+    )
     cfg["MIN_STAKE_SP"] = get_env("MIN_STAKE_SP", cfg.get("MIN_STAKE_SP"), cast=float)
     cfg["DRIFT_COEF"] = get_env("DRIFT_COEF", cfg.get("DRIFT_COEF"), cast=float)
     cfg["ROUND_TO_SP"] = get_env("ROUND_TO_SP", cfg.get("ROUND_TO_SP"), cast=float)
-    cfg["JE_BONUS_COEF"] = get_env("JE_BONUS_COEF", cfg.get("JE_BONUS_COEF"), cast=float)
-    cfg["KELLY_FRACTION"] = get_env("KELLY_FRACTION", cfg.get("KELLY_FRACTION"), cast=float)
+    cfg["JE_BONUS_COEF"] = get_env(
+        "JE_BONUS_COEF", cfg.get("JE_BONUS_COEF"), cast=float
+    )
+    cfg["KELLY_FRACTION"] = get_env(
+        "KELLY_FRACTION", cfg.get("KELLY_FRACTION"), cast=float
+    )
     cfg["ALLOW_JE_NA"] = get_env("ALLOW_JE_NA", cfg.get("ALLOW_JE_NA"), cast=_as_bool)
-    cfg["PAUSE_EXOTIQUES"] = get_env("PAUSE_EXOTIQUES", cfg.get("PAUSE_EXOTIQUES"), cast=_as_bool)
-    cfg["REQUIRE_DRIFT_LOG"] = get_env("REQUIRE_DRIFT_LOG", cfg.get("REQUIRE_DRIFT_LOG"), cast=_as_bool)
+    cfg["PAUSE_EXOTIQUES"] = get_env(
+        "PAUSE_EXOTIQUES", cfg.get("PAUSE_EXOTIQUES"), cast=_as_bool
+    )
+    cfg["REQUIRE_DRIFT_LOG"] = get_env(
+        "REQUIRE_DRIFT_LOG", cfg.get("REQUIRE_DRIFT_LOG"), cast=_as_bool
+    )
     cfg["MIN_PAYOUT_COMBOS"] = get_env(
         "MIN_PAYOUT_COMBOS",
         cfg.get("MIN_PAYOUT_COMBOS"),
@@ -1643,7 +1688,7 @@ def load_yaml(path: str) -> dict:
         cast=float,
         aliases=_env_aliases("CORRELATION_PENALTY"),
     )
-    
+
     missing = [k for k in REQ_KEYS if k not in cfg]
     if missing:
         raise RuntimeError(f"Config incomplète: clés manquantes {missing}")
@@ -1652,7 +1697,7 @@ def load_yaml(path: str) -> dict:
     return cfg
 
 
-def load_json(path: str):    
+def load_json(path: str):
     with open(path, "r", encoding="utf-8") as fh:
         return json.load(fh)
 
@@ -1709,7 +1754,7 @@ def _coerce_odds(value) -> float:
         normalized = value.replace(",", ".")
     else:
         normalized = value
-        
+
     try:
         odds = float(normalized)
     except (TypeError, ValueError):
@@ -1735,7 +1780,14 @@ def _coerce_probability(value) -> float:
 def _resolve_paid_places(*sources: Mapping[str, Any] | None) -> float:
     """Return the declared number of paid places from ``sources``."""
 
-    keys = ("slots_place", "slotsPlace", "places_paid", "placesPayees", "nb_places", "places")
+    keys = (
+        "slots_place",
+        "slotsPlace",
+        "places_paid",
+        "placesPayees",
+        "nb_places",
+        "places",
+    )
     for source in sources:
         if not isinstance(source, Mapping):
             continue
@@ -1750,7 +1802,9 @@ def _resolve_paid_places(*sources: Mapping[str, Any] | None) -> float:
     return float(_DEFAULT_SLOTS_PLACE)
 
 
-def _normalize_probability_map(prob_map: dict[str, float], ids: list[str]) -> dict[str, float]:
+def _normalize_probability_map(
+    prob_map: dict[str, float], ids: list[str]
+) -> dict[str, float]:
     sanitized = {cid: _coerce_probability(prob_map.get(cid, 0.0)) for cid in ids}
     total = sum(sanitized.values())
     if total <= 0:
@@ -1798,7 +1852,9 @@ def _load_p_finale_probabilities(
     p_place_raw = payload.get("p_place")
     paid_places = _resolve_paid_places(payload.get("meta"), partants_data)
     if isinstance(p_place_raw, Mapping):
-        sanitized = {cid: _coerce_probability(p_place_raw.get(cid, 0.0)) for cid in unique_ids}
+        sanitized = {
+            cid: _coerce_probability(p_place_raw.get(cid, 0.0)) for cid in unique_ids
+        }
         total = sum(sanitized.values())
         if total > 0 and paid_places > 0:
             scale = paid_places / total
@@ -1919,7 +1975,17 @@ def _as_recent_form_flag(value) -> bool:
         normalized = value.strip().lower()
         if not normalized:
             return False
-        return normalized in {"1", "true", "yes", "y", "oui", "o", "vrai", "top3", "top 3"}
+        return normalized in {
+            "1",
+            "true",
+            "yes",
+            "y",
+            "oui",
+            "o",
+            "vrai",
+            "top3",
+            "top 3",
+        }
     return False
 
 
@@ -1972,7 +2038,7 @@ def compute_drift_dict(
         diff = sorted(neg + pos, key=lambda r: r["delta"])
     for rank, row in enumerate(diff, start=1):
         row["rank_delta"] = rank
-        
+
     missing_h30 = sorted(set(h5) - set(h30))
     missing_h5 = sorted(set(h30) - set(h5))
 
@@ -2171,11 +2237,9 @@ def export(
             flag = "drift"
         else:
             flag = "stable"
-        drift_lines.append(
-            f"{cid};{p30:.6f};{p5:.6f};{delta:.6f};{flag}"
-        )
+        drift_lines.append(f"{cid};{p30:.6f};{p5:.6f};{delta:.6f};{flag}")
     save_text(drift_csv_path, "\n".join(drift_lines) + "\n")
-    
+
     total = sum(t.get("stake", 0) for t in tickets)
     ligne = (
         f'{meta.get("rc", "R?C?")};{meta.get("hippodrome", "")};'
@@ -2187,12 +2251,13 @@ def export(
         "R/C;hippodrome;date;discipline;mises;EV_globale;model\n" + ligne + "\n",
     )
     cmd = (
-        f'python update_excel_with_results.py '
+        f"python update_excel_with_results.py "
         f'--excel "{cfg.get("EXCEL_PATH")}" '
         f'--arrivee "{outdir / "arrivee_officielle.json"}" '
         f'--tickets "{outdir / "p_finale.json"}"\n'
     )
     save_text(outdir / "cmd_update_excel.txt", cmd)
+
 
 # ---------------------------------------------------------------------------
 # Analyse helper
@@ -2202,17 +2267,12 @@ def export(
 def cmd_analyse(args: argparse.Namespace) -> None:
     import simulate_wrapper as sw
     from logging_io import CSV_HEADER, append_csv_line, append_json
-    from tickets_builder import (
-        allow_combo as _allow_combo_impl,
-        apply_ticket_policy as _apply_ticket_policy_impl,
-    )
-    from validator_ev import (
-        combos_allowed as combos_ev_gate,
-        summarise_validation,
-        validate_inputs,
-    )
+    from tickets_builder import allow_combo as _allow_combo_impl
+    from tickets_builder import \
+        apply_ticket_policy as _apply_ticket_policy_impl
+    from validator_ev import combos_allowed as combos_ev_gate
+    from validator_ev import summarise_validation, validate_inputs
 
-    
     module_self = sys.modules[__name__]
     module_vars = getattr(module_self, "__dict__", {})
 
@@ -2241,7 +2301,7 @@ def cmd_analyse(args: argparse.Namespace) -> None:
         apply_ticket_policy_fn = policy_attr
     else:
         apply_ticket_policy_fn = _apply_ticket_policy_impl
-        
+
     cfg = load_yaml(args.gpi)
     output_dir = _resolve_output_dir()
     cfg["OUTDIR_DEFAULT"] = output_dir
@@ -2322,7 +2382,7 @@ def cmd_analyse(args: argparse.Namespace) -> None:
         if cid_text not in seen_ids:
             seen_ids.add(cid_text)
             runner_ids.append(cid_text)
-            
+
     id2name = partants_data.get(
         "id2name", {str(p["id"]): p.get("name", str(p["id"])) for p in partants}
     )
@@ -2354,15 +2414,11 @@ def cmd_analyse(args: argparse.Namespace) -> None:
     if meta_partants is None:
         meta_partants = len(partants)
     meta["partants"] = meta_partants
-    
+
     if not isinstance(stats_je, dict):
         stats_je = {}
     if "coverage" not in stats_je:
-        runner_ids = {
-            str(p.get("id"))
-            for p in partants
-            if p.get("id") is not None
-        }
+        runner_ids = {str(p.get("id")) for p in partants if p.get("id") is not None}
         stats_ids = {
             str(cid)
             for cid, payload in stats_je.items()
@@ -2430,7 +2486,7 @@ def cmd_analyse(args: argparse.Namespace) -> None:
                 )
     elif explicit_override and override_path:
         logger.warning("Override p_finale introuvable: %s", override_path)
-        
+
     # Tickets allocation
     favorite_ids: set[str] = set()
     if odds_h5:
@@ -2520,7 +2576,7 @@ def cmd_analyse(args: argparse.Namespace) -> None:
 
     runners_sp_sanitized = _ensure_place_odds(runners)
     runners_sp_candidates = filter_sp_candidates(runners_sp_sanitized)
-    
+
     policy_kwargs = _filter_kwargs(
         apply_ticket_policy_fn,
         {
@@ -2542,10 +2598,16 @@ def cmd_analyse(args: argparse.Namespace) -> None:
     total_stake_sp = 0.0
     roi_sp = 0.0
 
-    combo_budget = float(cfg.get("BUDGET_TOTAL", 0.0)) * float(cfg.get("COMBO_RATIO", 0.0))
-    
+    combo_budget = float(cfg.get("BUDGET_TOTAL", 0.0)) * float(
+        cfg.get("COMBO_RATIO", 0.0)
+    )
+
     combo_info = {
-        "notes": list(_combo_info.get("notes", [])) if isinstance(_combo_info, Mapping) else [],
+        "notes": (
+            list(_combo_info.get("notes", []))
+            if isinstance(_combo_info, Mapping)
+            else []
+        ),
         "flags": {},
     }
     if isinstance(_combo_info, Mapping):
@@ -2570,13 +2632,17 @@ def cmd_analyse(args: argparse.Namespace) -> None:
 
     filter_reasons: list[str] = []
 
-    market_payload = partants_data.get("market") if isinstance(partants_data, Mapping) else None
+    market_payload = (
+        partants_data.get("market") if isinstance(partants_data, Mapping) else None
+    )
     market_runners_raw: Sequence[Mapping[str, Any]] = []
     slots_place_hint: Any = None
     if isinstance(market_payload, Mapping):
         horses = market_payload.get("horses")
         if isinstance(horses, Sequence):
-            market_runners_raw = [horse for horse in horses if isinstance(horse, Mapping)]
+            market_runners_raw = [
+                horse for horse in horses if isinstance(horse, Mapping)
+            ]
         for key in (
             "slots_place",
             "places_payees",
@@ -2617,7 +2683,7 @@ def cmd_analyse(args: argparse.Namespace) -> None:
                 hint_missing = False
     if override_paid_places is not None and hint_missing:
         slots_place_hint = override_paid_places
-        
+
     if slots_place_hint in (None, ""):
         market_metrics = _build_market(market_runners_raw)
     else:
@@ -2686,9 +2752,7 @@ def cmd_analyse(args: argparse.Namespace) -> None:
             partants_hint = len(partants)
 
     overround_context: Dict[str, Any] = {}
-    default_overround_cap = float(
-        get_env("MAX_COMBO_OVERROUND", 1.30, cast=float)
-    )
+    default_overround_cap = float(get_env("MAX_COMBO_OVERROUND", 1.30, cast=float))
     logger.info(
         "Effective combo overround default cap set to %.2f",
         default_overround_cap,
@@ -2754,11 +2818,14 @@ def cmd_analyse(args: argparse.Namespace) -> None:
                 reasons_list.append("overround_above_threshold")
             filter_reasons.append("overround_above_threshold")
             combo_templates = []
-            
+
     filtered_templates: list[dict[str, Any]] = []
     if combo_templates:
+
         def _combo_bankroll(template: Mapping[str, Any]) -> float:
-            bankroll_for_eval = combo_budget if combo_budget > 0 else float(template.get("stake", 0.0))
+            bankroll_for_eval = (
+                combo_budget if combo_budget > 0 else float(template.get("stake", 0.0))
+            )
             if bankroll_for_eval <= 0:
                 return 1.0
             return bankroll_for_eval
@@ -2774,7 +2841,7 @@ def cmd_analyse(args: argparse.Namespace) -> None:
             allow_heuristic=allow_heuristic,
             calibration=args.calibration,
         )
-        filter_reasons.extend(eval_reasons)      
+        filter_reasons.extend(eval_reasons)
 
     if filter_reasons:
         for reason in filter_reasons:
@@ -2786,7 +2853,11 @@ def cmd_analyse(args: argparse.Namespace) -> None:
         combo_info.setdefault("decision", "accept")
     else:
         combo_templates = []
-        decision_reason = ",".join(dict.fromkeys(filter_reasons)) if filter_reasons else "no_candidate"
+        decision_reason = (
+            ",".join(dict.fromkeys(filter_reasons))
+            if filter_reasons
+            else "no_candidate"
+        )
         combo_info["decision"] = f"reject:{decision_reason}"
 
     combo_tickets: list[dict] = []
@@ -2820,7 +2891,7 @@ def cmd_analyse(args: argparse.Namespace) -> None:
                 combo_info["notes"].append(note)
 
     bankroll = float(cfg.get("BUDGET_TOTAL", 0.0))
-    
+
     def log_reduction(info: dict) -> None:
         logger.warning(
             (
@@ -2841,7 +2912,9 @@ def cmd_analyse(args: argparse.Namespace) -> None:
             int(info.get("iterations", 0)),
         )
 
-    def adjust_pack(cfg_local: dict, combos_local: list[dict]) -> tuple[list[dict], dict, dict]:
+    def adjust_pack(
+        cfg_local: dict, combos_local: list[dict]
+    ) -> tuple[list[dict], dict, dict]:
         sp_adj, stats_local, info_local = enforce_ror_threshold(
             cfg_local,
             runners,
@@ -2902,7 +2975,9 @@ def cmd_analyse(args: argparse.Namespace) -> None:
             cfg=cfg,
         )
         if combo_ok is False and combo_tickets:
-            flags.setdefault("reasons", {}).setdefault("combo", []).append("ALLOW_COMBO")
+            flags.setdefault("reasons", {}).setdefault("combo", []).append(
+                "ALLOW_COMBO"
+            )
 
     final_combo_tickets = combo_tickets if combo_ok else []
 
@@ -2941,7 +3016,9 @@ def cmd_analyse(args: argparse.Namespace) -> None:
         }
     elif combo_budget_reassign or no_combo_available:
         cfg_sp = dict(cfg)
-        cfg_sp["SP_RATIO"] = float(cfg.get("SP_RATIO", 0.0)) + float(cfg.get("COMBO_RATIO", 0.0))
+        cfg_sp["SP_RATIO"] = float(cfg.get("SP_RATIO", 0.0)) + float(
+            cfg.get("COMBO_RATIO", 0.0)
+        )
         cfg_sp["COMBO_RATIO"] = 0.0
         if len(runners_sp_candidates) >= 2:
             sp_tickets, _ = allocate_dutching_sp_fn(cfg_sp, runners_sp_candidates)
@@ -2954,7 +3031,7 @@ def cmd_analyse(args: argparse.Namespace) -> None:
         roi_global = float(stats_ev.get("roi", 0.0))
         combined_payout = float(stats_ev.get("combined_expected_payout", 0.0))
         risk_of_ruin = float(stats_ev.get("risk_of_ruin", 0.0))
-        ev_over_std = float(stats_ev.get("ev_over_std", 0.0))        
+        ev_over_std = float(stats_ev.get("ev_over_std", 0.0))
         flags = gate_ev_fn(
             cfg_sp,
             ev_sp,
@@ -2980,7 +3057,6 @@ def cmd_analyse(args: argparse.Namespace) -> None:
         risk_of_ruin = float(stats_ev.get("risk_of_ruin", 0.0))
         ev_over_std = float(stats_ev.get("ev_over_std", 0.0))
 
-    
     step_export = cfg.get("ROUND_TO_SP", 0.0)
     min_stake_export = cfg.get("MIN_STAKE_SP", 0.0)
     sp_changed = _normalize_ticket_stakes(
@@ -3022,10 +3098,9 @@ def cmd_analyse(args: argparse.Namespace) -> None:
                 and updated_info["final_total_stake"] >= 0.0
             ):
                 try:
-                    updated_info["scale_factor"] = (
-                        updated_info["final_total_stake"]
-                        / float(updated_info.get("initial_total_stake", 1.0))
-                    )
+                    updated_info["scale_factor"] = updated_info[
+                        "final_total_stake"
+                    ] / float(updated_info.get("initial_total_stake", 1.0))
                 except (TypeError, ValueError, ZeroDivisionError):  # pragma: no cover
                     pass
             last_reduction_info = updated_info
@@ -3046,8 +3121,7 @@ def cmd_analyse(args: argparse.Namespace) -> None:
                 extra_reasons.append("no_combo_available")
             if not extra_reasons:
                 extra_reasons.append("combo_removed_post_gate")
-            combo_info["decision"] = \
-                f"reject:{','.join(dict.fromkeys(extra_reasons))}"
+            combo_info["decision"] = f"reject:{','.join(dict.fromkeys(extra_reasons))}"
         elif not combo_tickets and "decision" not in combo_info:
             combo_info["decision"] = "reject:no_candidate"
 
@@ -3064,7 +3138,7 @@ def cmd_analyse(args: argparse.Namespace) -> None:
         "available": final_combo_present,
         "metrics": copy.deepcopy(combo_info.get("metrics", {})),
     }
-    
+
     if flags.get("reasons", {}).get("sp"):
         logger.warning(
             "Blocage SP dû aux seuils: %s",
@@ -3082,7 +3156,9 @@ def cmd_analyse(args: argparse.Namespace) -> None:
 
     risk_of_ruin = float(stats_ev.get("risk_of_ruin", 0.0)) if tickets else 0.0
     clv_moyen = float(stats_ev.get("clv", 0.0)) if tickets else 0.0
-    combined_payout = float(stats_ev.get("combined_expected_payout", 0.0)) if tickets else 0.0
+    combined_payout = (
+        float(stats_ev.get("combined_expected_payout", 0.0)) if tickets else 0.0
+    )
     variance_total = float(stats_ev.get("variance", 0.0)) if tickets else 0.0
 
     optimization_summary = None
@@ -3135,7 +3211,6 @@ def cmd_analyse(args: argparse.Namespace) -> None:
         },
     )
 
-
     outdir.mkdir(parents=True, exist_ok=True)
     stake_reduction_info = last_reduction_info or {}
     stake_reduction_flag = bool(stake_reduction_info.get("applied"))
@@ -3157,7 +3232,7 @@ def cmd_analyse(args: argparse.Namespace) -> None:
             "variance": stake_reduction_info.get("final_variance"),
             "total_stake": stake_reduction_info.get("final_total_stake"),
         },
-    }    
+    }
     export(
         outdir,
         meta,
@@ -3251,9 +3326,9 @@ def main() -> None:
     ana.set_defaults(func=cmd_analyse)
 
     args = parser.parse_args()
-    
+
     configure_logging(args.log_level)
-    
+
     args.func(args)
 
 

@@ -1,38 +1,21 @@
-VENV ?= .venv
-PYTHON := $(VENV)/bin/python
-PIP := $(VENV)/bin/pip
-PYTEST := $(VENV)/bin/pytest
-
-.PHONY: venv test run-h30 run-h5
-
-$(VENV)/.installed: requirements.txt
-	python3 -m venv $(VENV)
-	$(PIP) install --upgrade pip
-	$(PIP) install -r requirements.txt
-	touch $@
-
-venv: $(VENV)/.installed
-	@echo "Virtual environment ready at $(VENV)"
-
-test: venv
-	$(PYTEST)
-
-CALIB_PATH ?=
-CALIBRATION ?=
-BUDGET ?= 5
-
-ifdef CALIB_PATH
-RUN_ENV := CALIB_PATH=$(CALIB_PATH) 
-else ifdef CALIBRATION
-RUN_ENV := CALIB_PATH=$(CALIBRATION) 
-else
-RUN_ENV :=
-endif
-
-run-h30: venv
-	@test -n "$(URL)" || (echo "URL variable is required" >&2; exit 1)
-	$(RUN_ENV) $(PYTHON) analyse_courses_du_jour_enrichie.py --course-url "$(URL)" --phase H30 --budget $(BUDGET)
-
-run-h5: venv
-	@test -n "$(URL)" || (echo "URL variable is required" >&2; exit 1)
-	$(RUN_ENV) $(PYTHON) analyse_courses_du_jour_enrichie.py --course-url "$(URL)" --phase H5 --budget $(BUDGET)
+.PHONY: compile helpcheck importcheck doctor
+compile:
+	python - <<'PY'
+import py_compile, sys
+from pathlib import Path
+skip={'.venv','.git','.github','data','dist','build','excel','out','cache','__pycache__'}
+errs=[]
+for p in Path('.').rglob('*.py'):
+    if any(part in skip for part in p.parts): continue
+    try: py_compile.compile(str(p), doraise=True)
+    except Exception as e: errs.append((str(p), e))
+if errs:
+    print('== Syntax errors ==')
+    for f,e in errs: print(' -', f, '->', e); sys.exit(1)
+print('Syntax OK')
+PY
+helpcheck:
+	python tools/ci_check.py --mode helpcheck --timeout 5
+importcheck:
+	python tools/ci_check.py --mode importcheck --timeout 5
+doctor: compile helpcheck

@@ -62,21 +62,17 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.append(str(REPO_ROOT))
 
-from post_course_payload import (
-    CSV_HEADER,
-    apply_summary_to_ticket_container,
-    build_payload,
-    compute_post_course_summary,
-    format_csv_line,
-    merge_meta,
-)
+import google.auth.exceptions as google_auth_exceptions
+from google.cloud import storage
+from google.oauth2 import service_account
+
+from post_course_payload import (CSV_HEADER, apply_summary_to_ticket_container,
+                                 build_payload, compute_post_course_summary,
+                                 format_csv_line, merge_meta)
 
 # Keep these imports on separate lines to avoid syntax issues when running
 # under stripped/concatenated builds.
 
-import google.auth.exceptions as google_auth_exceptions
-from google.cloud import storage
-from google.oauth2 import service_account
 
 try:  # pragma: no cover - fallback when executed from within scripts/
     from scripts.gcs_utils import disabled_reason, is_gcs_enabled
@@ -109,10 +105,9 @@ def _ensure_drive_imports() -> None:
 
     try:  # pragma: no cover - executed when googleapiclient is available
         from googleapiclient.discovery import build as drive_build
-        from googleapiclient.http import (
-            MediaFileUpload as _MediaFileUpload,
-            MediaIoBaseDownload as _MediaIoBaseDownload,
-        )
+        from googleapiclient.http import MediaFileUpload as _MediaFileUpload
+        from googleapiclient.http import \
+            MediaIoBaseDownload as _MediaIoBaseDownload
     except ImportError as exc:  # pragma: no cover - handled in tests via patching
         raise RuntimeError(
             "googleapiclient is required for Google Drive synchronisation"
@@ -293,7 +288,7 @@ def _run_local_post_course(
     post_course._save_json(tickets_path, tickets_data)
 
     target_out.mkdir(parents=True, exist_ok=True)
-     meta = merge_meta(arrivee_data, tickets_data)
+    meta = merge_meta(arrivee_data, tickets_data)
     payload = build_payload(
         meta=meta,
         arrivee=arrivee_data,
@@ -630,11 +625,11 @@ def main() -> int | None:
                     file=sys.stderr,
                 )
         elif folder_id:
-        if dry_run and drive_requested:
-            print(
-                "[drive_sync] --dry-run: téléverserait l'Excel local dans le dossier "
-                f"Drive {folder_id}"
-            )
+            if dry_run and drive_requested:
+                print(
+                    "[drive_sync] --dry-run: téléverserait l'Excel local dans le dossier "
+                    f"Drive {folder_id}"
+                )
         elif drive_service:
             try:
                 drive_upload_file(
@@ -649,14 +644,14 @@ def main() -> int | None:
                     file=sys.stderr,
                 )
         elif args.upload_result or args.upload_line or args.upload_file:
-        msg = "[drive_sync] Upload Drive ignoré: --folder-id manquant pour les créations."
-        if dry_run:
-            print("[drive_sync] --dry-run: " + msg.split(": ")[1])
+            msg = "[drive_sync] Upload Drive ignoré: --folder-id manquant pour les créations."
+            if dry_run:
+                print("[drive_sync] --dry-run: " + msg.split(": ")[1])
         else:
             print(msg, file=sys.stderr)
 
         if args.upload_result:
-        arrivee_path = outputs.get("arrivee")
+            arrivee_path = outputs.get("arrivee")
         if arrivee_path and arrivee_path.exists():
             if dry_run and drive_requested:
                 if folder_id:
@@ -677,7 +672,7 @@ def main() -> int | None:
                         file=sys.stderr,
                     )
         if args.upload_line:
-        csv_line = outputs.get("csv_line")
+            csv_line = outputs.get("csv_line")
         if csv_line and csv_line.exists():
             if dry_run and drive_requested:
                 if folder_id:
@@ -698,7 +693,7 @@ def main() -> int | None:
                         file=sys.stderr,
                     )
 
-        ffor extra in args.upload_file:
+        for extra in args.upload_file:
         extra_path = Path(extra)
         if not extra_path.exists():
             print(

@@ -23,7 +23,6 @@ from typing import Dict, Mapping
 
 import yaml
 
-
 DEFAULT_HALF_LIFE = 60.0
 DEFAULT_DECAY = 0.5 ** (1.0 / DEFAULT_HALF_LIFE)
 METADATA_KEY = "__meta__"
@@ -112,7 +111,7 @@ def update_probabilities(
     """
     # Load existing calibration parameters if available
     calib_path = Path(calibration_file)
-    
+
     if calib_path.exists():
         with calib_path.open("r", encoding="utf-8") as fh:
             existing = yaml.safe_load(fh) or {}
@@ -132,7 +131,9 @@ def update_probabilities(
     if decay is None:
         decay = DEFAULT_DECAY
     decay = _normalise_decay(decay)
-    params: Dict[str, Dict[str, float]] = defaultdict(lambda: {"alpha": 1.0, "beta": 1.0})
+    params: Dict[str, Dict[str, float]] = defaultdict(
+        lambda: {"alpha": 1.0, "beta": 1.0}
+    )
     extras: Dict[str, Dict[str, object]] = defaultdict(dict)
     for key, val in existing.items():
         if key == METADATA_KEY:
@@ -172,7 +173,6 @@ def update_probabilities(
                 timestamp = datetime.now(timezone.utc).isoformat()
             extras_combo["updated_at"] = timestamp
             extras_combo["weight"] = p["alpha"] + p["beta"]
-
 
     # Compute posterior probabilities and write back to YAML
     out_data: Dict[str, Dict[str, float]] = {}

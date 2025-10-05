@@ -7,11 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from scripts.resolve_course_id import (
-    CourseContextError,
-    _iter_schedule_entries,
-    resolve_course_context,
-)
+from scripts.resolve_course_id import (CourseContextError,
+                                       _iter_schedule_entries,
+                                       resolve_course_context)
 
 try:  # Python 3.9+
     from zoneinfo import ZoneInfo
@@ -56,7 +54,9 @@ def test_resolve_course_context_picks_closest_future_entry(tmp_path: Path) -> No
 def test_resolve_course_context_errors_when_empty(tmp_path: Path) -> None:
     """Missing schedule information should raise a clear error."""
 
-    schedule = write_schedule(tmp_path, ["https://m.zeeturf.fr/rest/api/2/race/{course_id};;"])
+    schedule = write_schedule(
+        tmp_path, ["https://m.zeeturf.fr/rest/api/2/race/{course_id};;"]
+    )
 
     with pytest.raises(CourseContextError):
         resolve_course_context(schedule_file=schedule, planning_dir=None)
@@ -95,4 +95,3 @@ def test_resolve_course_context_supports_fr_course_urls(tmp_path: Path) -> None:
     assert ctx.course_id == "654321"
     assert ctx.meeting == "R1"
     assert ctx.race == "C1"
-

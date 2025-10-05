@@ -11,7 +11,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable, Iterator
 
-
 JsonDict = dict[str, Any]
 
 
@@ -108,7 +107,9 @@ def _build_arrivee_payload(
             arr_meta.setdefault(key, value)
     arrivee["meta"] = arr_meta
     if "result" in arrivee and isinstance(arrivee["result"], Iterable):
-        arrivee["result"] = [str(item) for item in arrivee["result"] if item not in (None, "")]
+        arrivee["result"] = [
+            str(item) for item in arrivee["result"] if item not in (None, "")
+        ]
     else:
         arrivee["result"] = []
     if context:
@@ -130,7 +131,9 @@ def export(
     out.mkdir(parents=True, exist_ok=True)
 
     meta = p_finale.get("meta") if isinstance(p_finale.get("meta"), dict) else {}
-    tickets = p_finale.get("tickets") if isinstance(p_finale.get("tickets"), list) else []
+    tickets = (
+        p_finale.get("tickets") if isinstance(p_finale.get("tickets"), list) else []
+    )
     ev = p_finale.get("ev") if isinstance(p_finale.get("ev"), dict) else {}
     p_true = p_finale.get("p_true")
 
@@ -219,13 +222,17 @@ def export(
     if not excel_path:
         excel_path = "modele_suivi_courses_hippiques.xlsx"
 
-    arrivee_payload = arrivee if arrivee is not None else {
-        "rc": meta.get("rc"),
-        "date": meta.get("date"),
-        "result": [],
-        "gains": 0.0,
-        "note": "placeholder",
-    }
+    arrivee_payload = (
+        arrivee
+        if arrivee is not None
+        else {
+            "rc": meta.get("rc"),
+            "date": meta.get("date"),
+            "result": [],
+            "gains": 0.0,
+            "note": "placeholder",
+        }
+    )
     _save_json(out / "arrivee_officielle.json", arrivee_payload)
 
     cmd = (
@@ -259,7 +266,9 @@ def _export_from_arrivals(
     excel_path: str | None = None,
 ) -> list[Path]:
     arrivals_payload = _load_json(arrivals_path)
-    arrivees = arrivals_payload.get("arrivees") if isinstance(arrivals_payload, dict) else []
+    arrivees = (
+        arrivals_payload.get("arrivees") if isinstance(arrivals_payload, dict) else []
+    )
     if not isinstance(arrivees, list):
         raise SystemExit("Le fichier d'arrivées doit contenir une liste 'arrivees'")
     exports = _collect_exports(analyses_dir)
@@ -280,17 +289,24 @@ def _export_from_arrivals(
             continue
         entries = exports.get(rc)
         if not entries:
-            print(f"[WARN] Aucun export trouvé pour {rc} sous {analyses_dir}", file=sys.stderr)
+            print(
+                f"[WARN] Aucun export trouvé pour {rc} sous {analyses_dir}",
+                file=sys.stderr,
+            )
             continue
         entry = max(entries, key=lambda e: e.mtime)
-        meta = entry.data.get("meta") if isinstance(entry.data.get("meta"), dict) else {}
+        meta = (
+            entry.data.get("meta") if isinstance(entry.data.get("meta"), dict) else {}
+        )
         race_date = meta.get("date")
         if not race_date:
             arr_meta = item.get("meta") if isinstance(item.get("meta"), dict) else {}
             race_date = arr_meta.get("date") or arrivals_path.stem.split("_")[0]
         dest = out_dir / str(race_date or "unknown") / rc
         cfg: JsonDict = {"EXCEL_PATH": excel_path} if excel_path else {}
-        arrivee_payload = _build_arrivee_payload(item, rc=rc, meta=meta, context=context)
+        arrivee_payload = _build_arrivee_payload(
+            item, rc=rc, meta=meta, context=context
+        )
         out_path = export(dest, entry.data, cfg=cfg, arrivee=arrivee_payload)
         results.append(out_path)
         print(f"[export] {rc}: {entry.path} → {out_path}")
@@ -298,11 +314,19 @@ def _export_from_arrivals(
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Exporter les tickets/p_finale pour le post-traitement")
-    parser.add_argument("--outputs-dir", help="Répertoire contenant p_finale.json à convertir")
+    parser = argparse.ArgumentParser(
+        description="Exporter les tickets/p_finale pour le post-traitement"
+    )
+    parser.add_argument(
+        "--outputs-dir", help="Répertoire contenant p_finale.json à convertir"
+    )
     parser.add_argument("--arrivees", help="Fichier JSON des arrivées consolidées")
-    parser.add_argument("--analyses-dir", default="data/analyses", help="Racine des analyses H-5")
-    parser.add_argument("--out-dir", default="data/results", help="Destination des exports")
+    parser.add_argument(
+        "--analyses-dir", default="data/analyses", help="Racine des analyses H-5"
+    )
+    parser.add_argument(
+        "--out-dir", default="data/results", help="Destination des exports"
+    )
     parser.add_argument(
         "--excel",
         default="modele_suivi_courses_hippiques.xlsx",

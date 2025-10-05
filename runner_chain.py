@@ -21,14 +21,11 @@ import os
 import re
 import unicodedata
 from pathlib import Path
-
-
 from typing import Any, Dict, Iterable, List, Mapping, Sequence, Tuple
 
+from logging_io import CSV_HEADER, append_csv_line
 from simulate_ev import allocate_dutching_sp, simulate_ev_batch
 from simulate_wrapper import PAYOUT_CALIBRATION_PATH, evaluate_combo
-from logging_io import append_csv_line, CSV_HEADER
-
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +63,7 @@ def _resolve_calibration_path() -> tuple[Path, bool]:
 
     return candidates[0], False
 
+
 def compute_overround_cap(
     discipline: str | None,
     partants: Any,
@@ -80,7 +78,7 @@ def compute_overround_cap(
     describing the evaluation (normalised discipline/course labels, partants
     count, default cap and whether the stricter threshold was triggered).
     """
-    
+
     try:
         cap = float(default_cap)
     except (TypeError, ValueError):  # pragma: no cover - defensive
@@ -191,7 +189,9 @@ def filter_exotics_by_overround(
 
     context: Dict[str, Any] = {}
     try:
-        default_cap = float(overround_max) if overround_max is not None else MAX_COMBO_OVERROUND
+        default_cap = (
+            float(overround_max) if overround_max is not None else MAX_COMBO_OVERROUND
+        )
     except (TypeError, ValueError):  # pragma: no cover - defensive fallback
         default_cap = MAX_COMBO_OVERROUND
 
@@ -200,9 +200,9 @@ def filter_exotics_by_overround(
         partants,
         default_cap=default_cap,
         course_label=course_label,
-        context=context,        
+        context=context,
     )
-    
+
     try:
         overround_value = float(overround) if overround is not None else None
     except (TypeError, ValueError):  # pragma: no cover - defensive fallback
@@ -213,7 +213,7 @@ def filter_exotics_by_overround(
 
     if overround_value is None or overround_value <= cap:
         return [list(ticket) for ticket in exotics]
-        
+
     reason = context.get("reason") if context.get("triggered") else None
     logger.info(
         "[OVERROUND] combinés filtrés (overround=%.3f, cap=%.2f, discipline=%s, partants=%s, course=%s, reason=%s)",
@@ -225,6 +225,7 @@ def filter_exotics_by_overround(
         reason or "default_cap",
     )
     return []
+
 
 def validate_exotics_with_simwrapper(
     exotics: Iterable[List[Dict[str, Any]]],
@@ -309,11 +310,11 @@ def validate_exotics_with_simwrapper(
         if label not in notes_seen:
             notes.append(label)
             notes_seen.add(label)
-            
+
     for candidate in exotics:
         if not candidate:
             continue
-        
+
         base_meta: Mapping[str, Any] = {}
         candidate_ids: List[str] = []
         for entry in candidate:
@@ -366,7 +367,7 @@ def validate_exotics_with_simwrapper(
                 ticket_label,
                 legs_for_log,
             )
-            
+
             reasons.append(f"status_{status or 'unknown'}")
             continue
         if ev_ratio < 0.40:
@@ -394,7 +395,9 @@ def validate_exotics_with_simwrapper(
 
         legs_raw = base_meta.get("legs")
         legs: List[str] = []
-        if isinstance(legs_raw, Sequence) and not isinstance(legs_raw, (bytes, bytearray, str)):
+        if isinstance(legs_raw, Sequence) and not isinstance(
+            legs_raw, (bytes, bytearray, str)
+        ):
             legs = [str(val) for val in legs_raw]
         elif isinstance(legs_raw, Mapping):
             legs = [str(val) for val in legs_raw.values()]
@@ -513,7 +516,7 @@ def export_tracking_csv_line(
             p_val = max(0.0, min(1.0, p_val))
             remaining *= 1.0 - p_val
         prob_value = 1.0 - remaining
-        
+
     data: Dict[str, Any] = {
         "reunion": meta.get("reunion", ""),
         "course": meta.get("course", ""),
@@ -578,6 +581,7 @@ def _normalise_runner_id(record: Mapping[str, Any], fallback_index: int) -> str:
         if value not in (None, ""):
             return str(value)
     return str(fallback_index)
+
 
 _PLACE_ODDS_KEYS = (
     "odds_place",
@@ -812,9 +816,17 @@ def _split_legs(text: str) -> list[str]:
     return [str(part) for part in legs]
 
 
-def _extract_combo_candidates(rows: Sequence[Mapping[str, Any]]) -> list[list[dict[str, Any]]]:
+def _extract_combo_candidates(
+    rows: Sequence[Mapping[str, Any]],
+) -> list[list[dict[str, Any]]]:
     combos: list[list[dict[str, Any]]] = []
-    json_fields = ("combo_json", "combo_candidates", "exotics", "combinaisons", "combos")
+    json_fields = (
+        "combo_json",
+        "combo_candidates",
+        "exotics",
+        "combinaisons",
+        "combos",
+    )
     for row in rows:
         for field in json_fields:
             value = row.get(field)
@@ -862,7 +874,9 @@ def _normalize_combo_record(record: Mapping[str, Any]) -> dict[str, Any] | None:
     legs: list[str] = []
     if isinstance(legs_value, str):
         legs = _split_legs(legs_value)
-    elif isinstance(legs_value, Sequence) and not isinstance(legs_value, (bytes, bytearray, str)):
+    elif isinstance(legs_value, Sequence) and not isinstance(
+        legs_value, (bytes, bytearray, str)
+    ):
         legs = [str(item) for item in legs_value if str(item).strip()]
     elif isinstance(legs_value, Mapping):
         legs = [str(v) for v in legs_value.values() if str(v).strip()]
@@ -934,7 +948,9 @@ __all__ = [
 def build_cli_parser() -> argparse.ArgumentParser:
     """Return an argument parser exposing runner-chain utilities."""
 
-    parser = argparse.ArgumentParser(description="Evaluate runner chain tickets for a course")
+    parser = argparse.ArgumentParser(
+        description="Evaluate runner chain tickets for a course"
+    )
     parser.add_argument(
         "course_dir",
         help="Directory containing je_stats.csv and chronos.csv for the course",
@@ -1208,7 +1224,14 @@ def _format_excel_command(course_dir: Path, analysis_path: Path) -> str:
     if match:
         meeting, race = match.groups()
     arrivee = course_dir / "arrivee.json"
-    parts = ["python", "post_course.py", "--arrivee", str(arrivee), "--tickets", str(analysis_path)]
+    parts = [
+        "python",
+        "post_course.py",
+        "--arrivee",
+        str(arrivee),
+        "--tickets",
+        str(analysis_path),
+    ]
     if meeting:
         parts.extend(["--reunion", meeting])
     if race:
@@ -1223,8 +1246,14 @@ def main(argv: Sequence[str] | None = None) -> None:
     args = parser.parse_args(argv)
 
     course_dir = Path(args.course_dir)
-    analysis_path = Path(args.analysis_path) if args.analysis_path else course_dir / "analysis_H5.json"
-    tracking_path = Path(args.tracking_path) if args.tracking_path else course_dir / "tracking.csv"
+    analysis_path = (
+        Path(args.analysis_path)
+        if args.analysis_path
+        else course_dir / "analysis_H5.json"
+    )
+    tracking_path = (
+        Path(args.tracking_path) if args.tracking_path else course_dir / "tracking.csv"
+    )
 
     global CALIB_PATH
     CALIB_PATH = str(args.calibration)

@@ -6,7 +6,6 @@ import pytest
 
 import runner_chain
 
-
 _DEF_PARAMS = {
     "budget": 100.0,
     "overround_max": 1.30,
@@ -18,7 +17,9 @@ _DEF_PARAMS = {
 }
 
 
-def _write_csv(path: Path, fieldnames: list[str], rows: list[dict[str, object]]) -> None:
+def _write_csv(
+    path: Path, fieldnames: list[str], rows: list[dict[str, object]]
+) -> None:
     with path.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
         writer.writeheader()
@@ -38,7 +39,14 @@ def course_with_combo(tmp_path):
     course_dir = tmp_path / "R1C4"
     course_dir.mkdir()
 
-    combo = [{"combo_id": "CP1", "combo_legs": ["1", "2"], "combo_odds": 18.0, "combo_p": 0.05}]
+    combo = [
+        {
+            "combo_id": "CP1",
+            "combo_legs": ["1", "2"],
+            "combo_odds": 18.0,
+            "combo_p": 0.05,
+        }
+    ]
     _write_csv(
         course_dir / "je_stats.csv",
         ["id", "odds_place", "p_place", "combo_json", "combo_overround"],
@@ -50,7 +58,13 @@ def course_with_combo(tmp_path):
                 "combo_json": json.dumps(combo),
                 "combo_overround": "1.60",
             },
-            {"id": "B", "odds_place": "4.0", "p_place": "0.25", "combo_json": "", "combo_overround": ""},
+            {
+                "id": "B",
+                "odds_place": "4.0",
+                "p_place": "0.25",
+                "combo_json": "",
+                "combo_overround": "",
+            },
         ],
     )
     _write_csv(

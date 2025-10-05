@@ -10,14 +10,9 @@ from typing import Any, Iterable
 from openpyxl import Workbook, load_workbook
 from openpyxl.worksheet.worksheet import Worksheet
 
-from post_course_payload import (
-    JsonDict,
-    PostCourseSummary,
-    build_payload_from_sources,
-    merge_meta,
-    summarise_ticket_metrics,
-)
-
+from post_course_payload import (JsonDict, PostCourseSummary,
+                                 build_payload_from_sources, merge_meta,
+                                 summarise_ticket_metrics)
 
 PREVISION_HEADERS = [
     "R/C",
@@ -98,7 +93,6 @@ def _upsert_row(
     ws: Worksheet,
     headers: Iterable[str],
     values: dict[str, Any],
-    *,
     key_header: str = "R/C",
 ) -> None:
     header_map = _ensure_header_map(ws, headers)
@@ -139,9 +133,6 @@ def _update_previsionnel_sheet(
     if not rc:
         return
     ws = _get_sheet(wb, sheet_name)
-    *,
-    total_stake: float,
-    ev_data: JsonDict | None,
     row = {
         "R/C": rc,
         "hippodrome": meta.get("hippodrome", ""),
@@ -165,11 +156,9 @@ def _update_observe_sheet(
     wb: Workbook,
     sheet_name: str,
     meta: JsonDict,
-    *,
     tickets: list[JsonDict],
     summary: PostCourseSummary,
     observed: JsonDict | None,
-    total_stake: float,
     total_gain: float,
 ) -> None:
     rc = meta.get("rc")
@@ -201,14 +190,10 @@ def _update_observe_sheet(
         "ROI_reel_moyen": observed_section.get(
             "roi_reel_moyen", summary.roi_ticket_mean
         ),
-        "Brier_total": observed_section.get(
-            "brier_total", summary.brier_total
-        ),
+        "Brier_total": observed_section.get("brier_total", summary.brier_total),
         "Brier_moyen": observed_section.get("brier_moyen", summary.brier_mean),
         "EV_total": observed_section.get("ev_total", summary.ev_total),
-        "EV_ecart": observed_section.get(
-            "ev_ecart_total", summary.ev_diff_total
-        ),
+        "EV_ecart": observed_section.get("ev_ecart_total", summary.ev_diff_total),
         "model": meta.get("model") or meta.get("MODEL", ""),
     }
     ws = _get_sheet(wb, sheet_name)
@@ -216,7 +201,9 @@ def _update_observe_sheet(
 
 
 def main(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(description="Mettre à jour le ROI dans l'Excel de suivi")
+    parser = argparse.ArgumentParser(
+        description="Mettre à jour le ROI dans l'Excel de suivi"
+    )
     parser.add_argument(
         "--excel",
         default="modele_suivi_courses_hippiques.xlsx",
@@ -260,7 +247,11 @@ def main(argv: list[str] | None = None) -> None:
     meta = merge_meta(payload_arrivee or {}, {"meta": meta_source})
 
     raw_tickets = payload.get("tickets")
-    tickets_list = [t for t in raw_tickets if isinstance(t, dict)] if isinstance(raw_tickets, list) else []
+    tickets_list = (
+        [t for t in raw_tickets if isinstance(t, dict)]
+        if isinstance(raw_tickets, list)
+        else []
+    )
     summary = summarise_ticket_metrics(tickets_list)
 
     mises_raw = payload.get("mises")
@@ -269,7 +260,9 @@ def main(argv: list[str] | None = None) -> None:
     if total_stake_value is None and mises_section:
         total_stake_value = mises_section.get("totales")
     total_stake = _as_float(total_stake_value, summary.total_stake)
-    total_gain = _as_float(mises_section.get("gains") if mises_section else None, summary.total_gain)
+    total_gain = _as_float(
+        mises_section.get("gains") if mises_section else None, summary.total_gain
+    )
 
     ev_raw = payload.get("ev_estimees")
     ev_data = ev_raw if isinstance(ev_raw, dict) else {}
@@ -279,7 +272,10 @@ def main(argv: list[str] | None = None) -> None:
     wb, created = _load_workbook(excel_path)
     if created and "Sheet" in wb.sheetnames and len(wb.sheetnames) == 1:
         default_ws = wb["Sheet"]
-        if default_ws.max_row <= 1 and default_ws.cell(row=1, column=1).value in (None, ""):
+        if default_ws.max_row <= 1 and default_ws.cell(row=1, column=1).value in (
+            None,
+            "",
+        ):
             wb.remove(default_ws)
 
     _update_previsionnel_sheet(

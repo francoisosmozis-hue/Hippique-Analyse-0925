@@ -1,10 +1,10 @@
+import json
 import os
 import re
-import json
-import tempfile
 import subprocess
+import tempfile
 from pathlib import Path
-from typing import Optional, List, Literal, Tuple
+from typing import List, Literal, Optional, Tuple
 from urllib.parse import urlparse
 
 from fastapi import FastAPI, HTTPException
@@ -36,7 +36,7 @@ class AnalyseParams(BaseModel):
     # Paramètres clefs pour déclencher le pipeline
     meeting: Optional[str] = Field(
         default=None,
-        description="Identifiant réunion/courses (si utilisé par tes scripts, ex: 'R1C3')."
+        description="Identifiant réunion/courses (si utilisé par tes scripts, ex: 'R1C3').",
     )
     reunion: Optional[str] = Field(
         default=None,
@@ -47,12 +47,10 @@ class AnalyseParams(BaseModel):
         description="Identifiant de la course (ex: 'C3').",
     )
     course_url: Optional[str] = Field(
-        default=None,
-        description="URL ZEturf/Geny pour scrap (si DATA_MODE='web')."
+        default=None, description="URL ZEturf/Geny pour scrap (si DATA_MODE='web')."
     )
     phase: Literal["H30", "H5"] = Field(
-        default="H5",
-        description="Phase d’analyse (H30 ou H5)."
+        default="H5", description="Phase d’analyse (H30 ou H5)."
     )
 
     # Overrides facultatifs
@@ -63,7 +61,9 @@ class AnalyseParams(BaseModel):
     data_mode: Optional[Literal["web", "local"]] = Field(default=None)
 
     # Avancé : flags pour activer/désactiver certaines étapes
-    run_prompt: bool = Field(default=True, description="Générer le prompt final Lyra GPI v5.1")
+    run_prompt: bool = Field(
+        default=True, description="Générer le prompt final Lyra GPI v5.1"
+    )
     run_export: bool = Field(default=True, description="Exporter p_finale et tickets")
 
 
@@ -147,13 +147,17 @@ def _split_meeting_label(value: str) -> Tuple[str, str]:
     cleaned = value.strip().upper().replace(" ", "").replace("-", "")
     match = re.fullmatch(r"R(?P<reunion>\d+)C(?P<course>\d+)", cleaned)
     if not match:
-        raise ValueError("Paramètre meeting doit suivre le format 'R<num>C<num>' (ex: 'R1C3').")
+        raise ValueError(
+            "Paramètre meeting doit suivre le format 'R<num>C<num>' (ex: 'R1C3')."
+        )
     reunion = _normalise_rc_component(match.group("reunion"), "R")
     course = _normalise_rc_component(match.group("course"), "C")
     return reunion, course
 
 
-def _resolve_reunion_course(params: AnalyseParams) -> Tuple[Optional[str], Optional[str]]:
+def _resolve_reunion_course(
+    params: AnalyseParams,
+) -> Tuple[Optional[str], Optional[str]]:
     meeting_reunion: Optional[str] = None
     meeting_course: Optional[str] = None
     if params.meeting:
@@ -212,10 +216,18 @@ def analyse(body: AnalyseParams):
     """
 
     # Résolution des paramètres effectifs (env -> overrides -> body)
-    eff_default_budget = body.default_budget if body.default_budget is not None else DEFAULT_BUDGET
+    eff_default_budget = (
+        body.default_budget if body.default_budget is not None else DEFAULT_BUDGET
+    )
     eff_min_ev_sp = body.min_ev_sp if body.min_ev_sp is not None else MIN_EV_SP
-    eff_min_ev_combo = body.min_ev_combo if body.min_ev_combo is not None else MIN_EV_COMBO
-    eff_max_volat = body.max_volat_per_horse if body.max_volat_per_horse is not None else MAX_VOLAT_PER_HORSE
+    eff_min_ev_combo = (
+        body.min_ev_combo if body.min_ev_combo is not None else MIN_EV_COMBO
+    )
+    eff_max_volat = (
+        body.max_volat_per_horse
+        if body.max_volat_per_horse is not None
+        else MAX_VOLAT_PER_HORSE
+    )
     eff_data_mode = body.data_mode if body.data_mode is not None else DATA_MODE
 
     # Dossier de sortie dédié à l’appel
@@ -248,10 +260,15 @@ def analyse(body: AnalyseParams):
     # Construis la commande du script principal
     # NOTE: adapte les flags si ton script en attend d’autres (meeting, URL, phase, etc.)
     cmd = [
-        "python", "-u", "analyse_courses_du_jour_enrichie.py",
-        "--phase", body.phase,
-        "--data-dir", str(outputs_dir),
-        "--budget", str(eff_default_budget),
+        "python",
+        "-u",
+        "analyse_courses_du_jour_enrichie.py",
+        "--phase",
+        body.phase,
+        "--data-dir",
+        str(outputs_dir),
+        "--budget",
+        str(eff_default_budget),
     ]
     kelly_fraction = env.get("KELLY_FRACTION")
     if kelly_fraction:
@@ -286,7 +303,9 @@ def analyse(body: AnalyseParams):
             )
             raise HTTPException(status_code=500, detail=detail)
     except subprocess.TimeoutExpired:
-        raise HTTPException(status_code=504, detail="Timeout pipeline analyse (12 min).")
+        raise HTTPException(
+            status_code=504, detail="Timeout pipeline analyse (12 min)."
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erreur lancement pipeline: {e}")
 
@@ -297,8 +316,11 @@ def analyse(body: AnalyseParams):
     if body.run_export:
         try:
             export_cmd = [
-                "python", "-u", "p_finale_export.py",
-                "--outputs-dir", str(outputs_dir)
+                "python",
+                "-u",
+                "p_finale_export.py",
+                "--outputs-dir",
+                str(outputs_dir),
             ]
             proc2 = subprocess.run(
                 export_cmd,
@@ -323,7 +345,6 @@ def analyse(body: AnalyseParams):
                     "p_finale_export.py a échoué", proc2
                 )
                 raise HTTPException(status_code=500, detail=detail)
-
 
             # Convention: le script export crée p_finale.json et tickets.json dans outputs_dir
             p_finale = _read_json_if_exists(outputs_dir / "p_finale.json")
@@ -356,4 +377,5 @@ if __name__ == "__main__":
     # Cloud Run fournit PORT, mais on supporte un run local python main.py
     port = int(os.getenv("PORT", "8080"))
     import uvicorn
+
     uvicorn.run("main:app", host="0.0.0.0", port=port)

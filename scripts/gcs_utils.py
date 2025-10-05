@@ -1,4 +1,5 @@
 """Utilities for configuring Google Cloud Storage synchronisation toggles."""
+
 from __future__ import annotations
 
 import os

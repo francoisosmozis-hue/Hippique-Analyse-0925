@@ -2,10 +2,9 @@ from __future__ import annotations
 
 import json
 import sys
-from types import SimpleNamespace
 import xml.etree.ElementTree as ET
-
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -17,7 +16,9 @@ if "requests" not in sys.modules:
     def _dummy_get(*args: object, **kwargs: object) -> None:
         raise NotImplementedError("requests.get should be patched in tests")
 
-    sys.modules["requests"] = SimpleNamespace(RequestException=_DummyRequestException, get=_dummy_get)
+    sys.modules["requests"] = SimpleNamespace(
+        RequestException=_DummyRequestException, get=_dummy_get
+    )
 
 
 if "bs4" not in sys.modules:
@@ -34,7 +35,12 @@ if "bs4" not in sys.modules:
                 return value.split()
             return self._element.attrib.get(key, default)
 
-        def find_all(self, name: str | None = None, href: bool = False, attrs: dict[str, object] | None = None):
+        def find_all(
+            self,
+            name: str | None = None,
+            href: bool = False,
+            attrs: dict[str, object] | None = None,
+        ):
             matches = []
             for elem in self._element.iter():
                 if name and elem.tag != name:
@@ -46,7 +52,12 @@ if "bs4" not in sys.modules:
                 matches.append(_SoupNode(elem))
             return matches
 
-        def find(self, name: str | None = None, href: bool = False, attrs: dict[str, object] | None = None):
+        def find(
+            self,
+            name: str | None = None,
+            href: bool = False,
+            attrs: dict[str, object] | None = None,
+        ):
             results = self.find_all(name=name, href=href, attrs=attrs)
             return results[0] if results else None
 
@@ -79,7 +90,6 @@ if "bs4" not in sys.modules:
                 text = separator.join(part for part in text.split())
             return text
 
-
     def _match_attrs(element: ET.Element, attrs: dict[str, object]) -> bool:
         for key, value in attrs.items():
             attr_val = element.attrib.get(key)
@@ -96,7 +106,6 @@ if "bs4" not in sys.modules:
                     return False
         return True
 
-
     def _parse_selector(selector: str) -> tuple[str | None, list[str]]:
         selector = selector.strip()
         if not selector:
@@ -110,12 +119,10 @@ if "bs4" not in sys.modules:
             classes = []
         return tag, classes
 
-
     def _has_classes(element: ET.Element, classes: list[str]) -> bool:
         attr_val = element.attrib.get("class", "")
         current = attr_val.split() if attr_val else []
         return all(cls in current for cls in classes)
-
 
     def _build_root(markup: str) -> ET.Element:
         try:
@@ -124,20 +131,13 @@ if "bs4" not in sys.modules:
             wrapper = f"<root>{markup}</root>"
             return ET.fromstring(wrapper)
 
-
     def BeautifulSoup(markup: str, parser: str | None = None) -> _SoupNode:  # type: ignore[misc]
         return _SoupNode(_build_root(markup))
 
-
     sys.modules["bs4"] = SimpleNamespace(BeautifulSoup=BeautifulSoup)
 
-from get_arrivee_geny import (
-    PlanningEntry,
-    _resolve_course_url_from_meeting,
-    load_planning,
-    main,
-    parse_arrival,
-)
+from get_arrivee_geny import (PlanningEntry, _resolve_course_url_from_meeting,
+                              load_planning, main, parse_arrival)
 
 
 def test_load_planning_supports_multiple_layouts(tmp_path: Path) -> None:

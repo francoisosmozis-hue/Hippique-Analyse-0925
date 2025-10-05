@@ -1,6 +1,6 @@
 import inspect
-from pathlib import Path
 import textwrap
+from pathlib import Path
 
 SOURCE = textwrap.dedent(
     '''\

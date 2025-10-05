@@ -34,7 +34,9 @@ _JSON_HEADERS = {"Content-Type": "application/json"}
 _VALID_PHASES = {"H30", "H5"}
 
 
-def _json_response(payload: Mapping[str, Any], status: int) -> tuple[str, int, dict[str, str]]:
+def _json_response(
+    payload: Mapping[str, Any], status: int
+) -> tuple[str, int, dict[str, str]]:
     """Return a tuple compatible with the legacy Cloud Function contract."""
 
     return json.dumps(dict(payload), ensure_ascii=False), status, dict(_JSON_HEADERS)
@@ -47,7 +49,7 @@ def _coerce_payload(obj: Any) -> Mapping[str, Any]:
     providing a ``get_json`` method.  Any unexpected type triggers ``TypeError``
     which is handled by :func:`run_hminus`.
     """
-    
+
     if isinstance(obj, Mapping):
         return obj
     if hasattr(obj, "get_json"):
@@ -88,7 +90,7 @@ def run_hminus(request: Any) -> tuple[str, int, dict[str, str]]:
     are reported as JSON responses consistent with the original Flask
     implementation.
     """
-    
+
     try:
         payload = _coerce_payload(request)
     except TypeError:
@@ -123,4 +125,3 @@ def run_hminus(request: Any) -> tuple[str, int, dict[str, str]]:
 
 
 __all__ = ["run_hminus", "ROOT", "DATA_ROOT", "VALIDATOR_SCRIPT"]
-

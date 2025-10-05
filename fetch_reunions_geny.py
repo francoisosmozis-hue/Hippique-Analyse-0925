@@ -26,9 +26,7 @@ def _slugify(value: str) -> str:
 
 def _fetch_reunions() -> List[Dict[str, str]]:
     """Download Geny page and extract reunion data."""
-    resp = requests.get(
-        GENY_URL, headers={"User-Agent": "Mozilla/5.0"}, timeout=10
-    )
+    resp = requests.get(GENY_URL, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
     resp.raise_for_status()
     soup = BeautifulSoup(resp.text, "html.parser")
 
@@ -42,7 +40,7 @@ def _fetch_reunions() -> List[Dict[str, str]]:
         if not match:
             continue
         label = match.group(0)
-        hippo = title[match.end():].strip(" -")
+        hippo = title[match.end() :].strip(" -")
         hippo = re.sub(r"\s*\([A-Z]{2}\)$", "", hippo)
 
         # Extract Geny link even if not used later
@@ -73,7 +71,9 @@ def main() -> None:
     data = {"date": args.date, "reunions": []}
     for reunion in reunions:
         slug = _slugify(reunion["hippodrome"])
-        url_zeturf = f"https://www.zeturf.fr/fr/reunion/{args.date}/{reunion['label']}-{slug}"
+        url_zeturf = (
+            f"https://www.zeturf.fr/fr/reunion/{args.date}/{reunion['label']}-{slug}"
+        )
         data["reunions"].append(
             {
                 "label": reunion["label"],

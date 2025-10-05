@@ -8,7 +8,6 @@ import logging
 from pathlib import Path
 from typing import Any, Iterable, Mapping, TypeAlias
 
-
 LOGGER = logging.getLogger(__name__)
 
 ResultDict: TypeAlias = dict[str, str | None]
@@ -83,7 +82,7 @@ def enrich_from_snapshot(snapshot_path: str, out_dir: str) -> dict:
         LOGGER.exception("Failed to write JE statistics CSV at %s", je_path)
     else:
         result["je_stats"] = str(je_path)
-        
+
     try:
         _write_csv(chronos_path, normalised, ("num", "chrono"))
     except OSError:
@@ -138,7 +137,7 @@ def _normalise_runners(
             ),
         }
 
-        
+
 def _runner_descriptor(runner: Mapping[str, Any], index: int) -> str:
     for key in ("num", "number", "id"):
         value = runner.get(key)
@@ -168,7 +167,9 @@ def _extract_value(
     return ""
 
 
-def _write_csv(path: Path, rows: Iterable[dict[str, str]], columns: Iterable[str]) -> None:
+def _write_csv(
+    path: Path, rows: Iterable[dict[str, str]], columns: Iterable[str]
+) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     header = list(columns)
     with path.open("w", newline="", encoding="utf-8") as handle:

@@ -1,5 +1,3 @@
-import pytest
-
 from scripts import online_fetch_zeturf as zeturf
 
 
@@ -83,10 +81,11 @@ def test_fetch_runners_scrapes_start_time(monkeypatch):
         return DummyResponse()
 
     monkeypatch.setattr(zeturf.requests, "get", fake_get)
-    monkeypatch.setattr(zeturf, "_scrape_start_time_from_course_page", lambda course_id: "13:45")
+    monkeypatch.setattr(
+        zeturf, "_scrape_start_time_from_course_page", lambda course_id: "13:45"
+    )
 
     result = zeturf.fetch_runners("https://www.zeturf.fr/race/123456")
 
     assert result["meta"]["start_time"] == "13:45"
     assert result["start_time"] == "13:45"
-
