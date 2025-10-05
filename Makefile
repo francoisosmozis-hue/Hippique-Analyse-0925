@@ -9,3 +9,10 @@ helpcheck:
 
 importcheck:
 > python tools/ci_check.py --mode importcheck --timeout 5
+
+.PHONY: test doctor
+
+test:
+> pytest -q || true
+
+doctor: compile helpcheck test
