@@ -2023,7 +2023,14 @@ def _process_reunion(
     base_dir = ensure_dir(data_dir)
     for r_label, c_label, course_id, course_url in courses:
         rc_dir = ensure_dir(base_dir / f"{r_label}{c_label}")
-        write_snapshot_from_geny(course_id, phase, rc_dir, course_url=course_url)
+        try:
+
+            write_snapshot_from_geny(course_id, phase, rc_dir, course_url=course_url)
+
+        except TypeError:
+
+            write_snapshot_from_geny(course_id, phase, rc_dir)
+
         outcome: dict[str, Any] | None = None
         pipeline_done = False
         if phase.upper() == "H5":
