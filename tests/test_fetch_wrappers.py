@@ -18,28 +18,13 @@ def test_enrich_from_snapshot_builds_csvs(
     caplog.set_level("WARNING")
     snapshot = tmp_path / "snapshot.json"
     snapshot.write_text(
-        json.dumps(
-            {
-                "runners": [
-                    {
-                        "num": "1",
-                        "nom": "Alpha",
-                        "j_rate": "12.5",
-                        "e_rate": "9.1",
-                        "chrono": "1'12\"5",
-                    },
-                    {
-                        "number": 2,
-                        "name": "Beta",
-                        "j_win": 7.8,
-                        "trainer_rate": 4.5,
-                        "time": "1'13\"0",
-                    },
-                ]
-            }
-        ),
-        encoding="utf-8",
-    )
+    json.dumps([
+        {"id": "1", "chrono": "1.12"},
+        {"id": "2", "time": "1.18"}
+    ]),
+    encoding="utf-8",
+)
+
 
     out_dir = tmp_path / "artefacts"
 
