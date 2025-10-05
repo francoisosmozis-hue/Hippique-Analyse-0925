@@ -648,10 +648,12 @@ def compute_drift_dict(
 def _heuristic_p_true(cfg, partants, odds_h5, odds_h30, stats_je) -> dict:
     weights = {}
     for p in partants:
-        cid = str(p["id"])
+        cid = str(p.get("id") or p.get("numPmu"))
         if cid not in odds_h5:
             continue
         o5 = float(odds_h5[cid])
+        if o5 == 0.0:
+            continue
         base = 1.0 / o5
         je = stats_je.get(cid, {})
         bonus = (je.get("j_win", 0) + je.get("e_win", 0)) * float(cfg["JE_BONUS_COEF"])
@@ -823,14 +825,20 @@ def cmd_analyse(args: argparse.Namespace) -> None:
 
     outdir = Path(args.outdir or cfg["OUTDIR_DEFAULT"])
 
-    odds_h30 = load_json(args.h30)
-    odds_h5 = load_json(args.h5)
+    h30_data = load_json(args.h30)
+    h5_data = load_json(args.h5)
+    odds_h30 = {runner['id']: runner['odds'] for runner in h30_data.get('runners', [])}
+    odds_h5 = {runner['id']: runner['odds'] for runner in h5_data.get('runners', [])}
+    
     stats_je = load_json(args.stats_je)
     partants_data = load_json(args.partants)
 
     partants = partants_data.get("runners", [])
+    if not partants:
+        partants = partants_data.get("participants", [])
+
     id2name = partants_data.get(
-        "id2name", {str(p["id"]): p.get("name", str(p["id"])) for p in partants}
+        "id2name", {str(p.get("id") or p.get("numPmu")): p.get("name", str(p.get("id") or p.get("numPmu"))) for p in partants}
     )
     rc = partants_data.get("rc", "R?C?")
     if "C" in rc:
@@ -894,7 +902,7 @@ def cmd_analyse(args: argparse.Namespace) -> None:
     # Tickets allocation
     runners = []
     for p in partants:
-        cid = str(p["id"])
+        cid = str(p.get("id") or p.get("numPmu"))
         if cid in odds_h5 and cid in p_true:
             runners.append({
                 "id": cid,
@@ -1237,3 +1245,27 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+# ==== TEST-COMPAT helpers: export_optimization + try_trim_sp_by_ror ====
+def _export_with_optimization(base: dict, ev_result: dict) -> dict:
+    """Injecte un résumé d'optimisation si présent."""
+    out = dict(base)
+    ev_block = dict(out.get("ev", {}))
+    if "optimization" in ev_result:
+        ev_block["optimization"] = ev_result["optimization"]
+    out["ev"] = ev_block
+    return out
+
+def _try_trim_sp_by_ror(cfg, runners, sp_tickets, *, bankroll: float):
+    """
+    Si ROR trop élevé, applique enforce_ror_threshold et renvoie (tickets, stats, info).
+    Sinon, renvoie (tickets, stats, {"applied": False, ...})
+    """
+    from ev_calculator import enforce_ror_threshold, compute_ev_roi
+    k_cap = float(cfg.get("MAX_VOL_PAR_CHEVAL", 0.60))
+    rnd = float(cfg.get("ROUND_TO_SP", 0.10))
+    stats0 = compute_ev_roi([dict(t) for t in sp_tickets], budget=float(bankroll), kelly_cap=k_cap, round_to=rnd)
+    r0 = float(stats0.get("risk_of_ruin", 1.0))
+    if r0 <= float(cfg.get("ROR_MAX", 1.0)):
+        return sp_tickets, stats0, {"applied": False, "initial_ror": r0, "final_ror": r0, "target": float(cfg.get("ROR_MAX", 1.0))}
+    return enforce_ror_threshold(cfg, runners, sp_tickets, bankroll=bankroll)

@@ -367,83 +367,51 @@ Passer `cache_simulations=False` désactive cette optimisation.
 
 ## ▶️ Exécutions manuelles (local)
 
-### Générer le planning du jour
+Le pipeline peut être exécuté manuellement pour une journée donnée grâce à une combinaison du `Makefile` et de scripts dédiés.
+
+**Étape 1 : Installer les dépendances**
+
+Si c'est la première fois que vous lancez le projet, installez l'environnement virtuel et les dépendances :
 ```bash
-python scripts/online_fetch_zeturf.py \
-  --mode planning \
-  --out data/planning/$(date +%F).json \
-  --sources config/sources.yml
+make install
 ```
 
-### Forcer une fenêtre (ex : R1C3 à H‑30)
+**Étape 2 : Récupérer les cotes du jour**
+
+Cette commande va lancer le script `pmu_odds.py` pour générer deux fichiers CSV avec les cotes à deux moments différents : `odds_h30.csv` et `odds_h5.csv`.
 ```bash
-python scripts/runner_chain.py --reunion R1 --course C3 --phase H30 --ttl-hours 6
+make odds DATE=2025-10-04
+```
+*Remplacez la date par celle qui vous intéresse.*
+
+**Étape 3 : Préparer les snapshots pour une course**
+
+Le pipeline d'analyse a besoin de fichiers JSON spécifiques. Le script `prepare_snapshots.py` sert à les créer à partir des fichiers CSV pour une course donnée.
+
+Par exemple, pour préparer l'analyse de la course R1C6 :
+```bash
+# Créer le snapshot H-30
+python scripts/prepare_snapshots.py --csv data/pmu/2025-10-04/odds_h30.csv --reunion 1 --course 6 --outdir data/h30 --outfile h30.json
+
+# Créer le snapshot H-5
+python scripts/prepare_snapshots.py --csv data/pmu/2025-10-04/odds_h5.csv --reunion 1 --course 6 --outdir data/h5 --outfile h5.json
 ```
 
-### Lancer l’analyse H‑5
+**Étape 4 : Lancer l'analyse**
+
+Maintenant que les snapshots `h30.json` and `h5.json` sont prêts, vous pouvez lancer l'analyse principale.
 ```bash
-python scripts/runner_chain.py --reunion R1 --course C3 --phase H5 \
-  --budget 5 --calibration calibration/payout_calibration.yaml
+python pipeline_run.py analyse \
+  --h30 data/h30/h30.json \
+  --h5 data/h5/h5.json \
+  --stats-je data/pmu/2025-10-04/R1/C6/participants.json \
+  --partants data/pmu/2025-10-04/R1/C6/participants.json \
+  --gpi config/gpi.yml \
+  --outdir data/out
 ```
+*Note : Pour les stats J/E (`--stats-je`) et les partants (`--partants`), nous réutilisons le fichier `participants.json` complet téléchargé par `pmu_fetch.py`, qui est plus riche que les snapshots que nous avons créés.*
 
-### Post‑course : arrivée + MAJ Excel
-```bash
-python scripts/runner_chain.py --reunion R1 --course C3 --phase RESULT \
-  --excel excel/modele_suivi_courses_hippiques.xlsx
-```
-
-Le script autonome `post_course.py` accepte désormais l'option `--places`
-pour indiquer le nombre de positions rémunérées à considérer (1 par défaut).
-Par exemple :
-
-```bash
-python post_course.py --arrivee arrivee.json --tickets tickets.json --places 3
-```
-
-### Calculer EV/ROI via la CLI
-```bash
-python cli_ev.py --tickets tickets.json --budget 100 \
-  --ev-threshold 5 --roi-threshold 0.2
-```
-
-### Calibrer le simulateur
-```bash
-python calibration/calibrate_simulator.py --results data/results.csv
-
-```
-### Analyse des courses du jour (Geny)
-
-#### Usage
-
-```bash
-python fetch_reunions_geny.py --date YYYY-MM-DD --out data/reunions.json
-python analyse_courses_du_jour_enrichie.py --reunions-file data/reunions.json --budget <B> --kelly <K>
-```
-
-Le second script déclenche automatiquement les phases **H30** puis **H5** pour chaque réunion française listée dans `data/reunions.json`.
-
-#### Dépendances
-
-- `beautifulsoup4`
-- `requests`
-
-#### Autres usages
-
-- Exemple pour traiter toutes les réunions du jour :
-  ```bash
-  python analyse_courses_du_jour_enrichie.py --from-geny-today --phase H5 --budget 5
-  ```
-  Pour lancer l'analyse depuis un fichier de réunions (`fetch_reunions_geny.py`) :
-  ```bash
-  python analyse_courses_du_jour_enrichie.py --reunions-file data/reunions.json
-  ```
-- Pour une réunion spécifique issue de ZEturf :
-  ```bash
-  python analyse_courses_du_jour_enrichie.py --reunion-url https://www.zeturf.fr/fr/reunion/... --phase H5
-  ```
-  Les sorties sont écrites sous `data/RxCy/` (ex. `data/R1C3/`).
-- Pour une course isolée, la fonction `write_snapshot_from_geny` permet d'écrire un snapshot `H30`/`H5`.
-- Limitations : les cotes Geny sont chargées dynamiquement et peuvent varier après capture ; aucune authentification n'est requise.
+Les résultats de l'analyse seront disponibles dans le répertoire `data/out`.
 
 ---
 

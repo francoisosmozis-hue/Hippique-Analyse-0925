@@ -1,8 +1,8 @@
 zeturf:
   # Race snapshot endpoint; replace {course_id} before requesting
-  # Mobile API format: https://m.zeeturf.fr/rest/api/{version}/race/{course_id}
+  # Mobile API format: https://m.zeeturf.fr/rest/api/{version}/race/1605880
   # 'version' currently 2 as of 2024
-  url: "https://m.zeeturf.fr/rest/api/2/race/{course_id}"
+  url: "https://www.geny.com/reunions-courses-pmu"
 geny:
   # Fallback endpoint scraped when Zeturf is unavailable
   url: "https://www.geny.com/reunions-courses-pmu"

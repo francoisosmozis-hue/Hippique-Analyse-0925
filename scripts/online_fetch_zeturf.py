@@ -80,6 +80,10 @@ def fetch_runners(url: str) -> Dict[str, Any]:
     try:
         resp = requests.get(url, timeout=10)
         resp.raise_for_status()
+    except requests.RequestException as exc:
+        if course_id:
+            return fetch_from_geny_idcourse(course_id)
+        raise exc
     except requests.HTTPError as exc:  # pragma: no cover - exercised via tests
         status = exc.response.status_code if exc.response is not None else None
         if status == 404 and course_id:

@@ -73,3 +73,40 @@ def get_env(
     if default is not None and value != default:
         logger.info("Environment variable %s=%r overrides default %r", source, value, default)
     return value
+
+# ==== TEST-COMPAT: load_yaml with ENV aliases & ratio validation ====
+def load_yaml(path: str):
+    import os, json, math
+    from pathlib import Path as _Path
+    import yaml  # le projet l'utilise déjà
+
+    def _as_float(x, default=None):
+        try:
+            return float(x)
+        except Exception:
+            return default
+
+    with open(path, "r", encoding="utf-8") as f:
+        data = yaml.safe_load(f) or {}
+
+    # Appliquer alias ENV (écrasent le YAML si présents)
+    alias_map = {
+        "TOTAL_BUDGET": "BUDGET_TOTAL",
+        "SIMPLE_RATIO": "SP_RATIO",
+        "COMBO_SHARE": "COMBO_RATIO",
+        "MAX_STAKE_PER_HORSE": "MAX_VOL_PAR_CHEVAL",
+        "EXOTIC_MIN_PAYOUT": "MIN_PAYOUT_COMBOS",
+    }
+    for env_k, cfg_k in alias_map.items():
+        if env_k in os.environ and os.environ[env_k] != "":
+            v = os.environ[env_k]
+            fv = _as_float(v, v)
+            data[cfg_k] = fv
+
+    # Validation des ratios
+    sp = _as_float(data.get("SP_RATIO", 0.0), 0.0)
+    co = _as_float(data.get("COMBO_RATIO", 0.0), 0.0)
+    if abs((sp + co) - 1.0) > 1e-9:
+        raise RuntimeError("SP_RATIO + COMBO_RATIO must equal 1.0")
+
+    return data
