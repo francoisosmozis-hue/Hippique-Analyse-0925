@@ -1,0 +1,52 @@
+name: Smoke Pipeline (H5 with fixtures)
+on:
+  push:
+  pull_request:
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install deps
+        run: |
+          python -m pip install -U pip wheel
+          if [ -f requirements.txt ]; then pip install -r requirements.txt || true; fi
+          pip install pandas pyyaml beautifulsoup4 lxml openpyxl
+
+      - name: Run smoke pipeline (H5 with fixtures)
+        run: |
+          set -euo pipefail
+          mkdir -p out/smoke
+          if [ -f analyse_courses_du_jour_enrichie.py ]; then
+            python analyse_courses_du_jour_enrichie.py \
+              --phase H5 \
+              --h30 data/smoke/h30.json \
+              --h5  data/smoke/h5.json  \
+              --budget 5 \
+              --outdir out/smoke
+          elif [ -f pipeline_run.py ]; then
+            # Fallback générique si ton entrée principale est pipeline_run.py
+            python pipeline_run.py analyse \
+              --phase H5 \
+              --h30 data/smoke/h30.json \
+              --h5  data/smoke/h5.json  \
+              --budget 5 \
+              --outdir out/smoke
+          else
+            echo "❌ Aucun entrypoint pipeline trouvé (analyse_courses_du_jour_enrichie.py ou pipeline_run.py)."
+            exit 1
+          fi
+          # Laisse une trace minimale si le pipeline ne produit rien
+          ls -R out || true
+
+      - name: Upload artifacts (out/smoke)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: out-smoke
+          path: out/smoke
