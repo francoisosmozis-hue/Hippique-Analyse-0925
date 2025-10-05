@@ -136,8 +136,13 @@ if "bs4" not in sys.modules:
 
     sys.modules["bs4"] = SimpleNamespace(BeautifulSoup=BeautifulSoup)
 
-from get_arrivee_geny import (PlanningEntry, _resolve_course_url_from_meeting,
-                              load_planning, main, parse_arrival)
+from get_arrivee_geny import (
+    PlanningEntry,
+    _resolve_course_url_from_meeting,
+    load_planning,
+    main,
+    parse_arrival,
+)
 
 
 def test_load_planning_supports_multiple_layouts(tmp_path: Path) -> None:

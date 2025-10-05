@@ -1,20 +1,32 @@
 #!/usr/bin/env python3
-import py_compile, sys
+import py_compile
+import sys
 from pathlib import Path
 
 SKIP_DIRS = {
-    ".venv", ".git", ".github", "data", "dist", "build", "excel", "out", "cache",
-    "__pycache__", "Hippique-Analyse-0925", "tests", "scripts/tests"
+    ".venv",
+    ".git",
+    ".github",
+    "data",
+    "dist",
+    "build",
+    "excel",
+    "out",
+    "cache",
+    "__pycache__",
+    "Hippique-Analyse-0925",
 }
+
 
 def should_skip(p: Path) -> bool:
     if any(part in SKIP_DIRS for part in p.parts):
         return True
     name = p.name
-    # On évite les impls lourdes/instables et les fichiers mis en quarantaine
+    # ignorer impls instables et fichiers quarantainés
     if name.endswith("_impl.py") or name.endswith(".disabled"):
         return True
     return False
+
 
 errs = []
 for p in Path(".").rglob("*.py"):

@@ -7,9 +7,11 @@ from pathlib import Path
 
 import pytest
 
-from scripts.resolve_course_id import (CourseContextError,
-                                       _iter_schedule_entries,
-                                       resolve_course_context)
+from scripts.resolve_course_id import (
+    CourseContextError,
+    _iter_schedule_entries,
+    resolve_course_context,
+)
 
 try:  # Python 3.9+
     from zoneinfo import ZoneInfo

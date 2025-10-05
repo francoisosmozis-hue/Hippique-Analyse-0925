@@ -1,5 +1,5 @@
 .RECIPEPREFIX := >
-.PHONY: compile helpcheck importcheck doctor
+.PHONY: compile helpcheck importcheck
 
 compile:
 > python tools/compile_check.py
@@ -9,5 +9,3 @@ helpcheck:
 
 importcheck:
 > python tools/ci_check.py --mode importcheck --timeout 5
-
-doctor: compile helpcheck

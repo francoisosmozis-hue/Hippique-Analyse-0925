@@ -11,8 +11,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 import inspect
 
-from ev_calculator import (_apply_dutching, _kelly_fraction, compute_ev_roi,
-                           risk_of_ruin)
+from ev_calculator import _apply_dutching, _kelly_fraction, compute_ev_roi, risk_of_ruin
 from pipeline_run import enforce_ror_threshold
 from simulate_ev import allocate_dutching_sp, simulate_ev_batch
 

@@ -4,8 +4,14 @@ from pathlib import Path
 from typing import Any, Callable, Mapping
 
 import pytest
-from test_pipeline_smoke import (DEFAULT_CALIBRATION, GPI_YML, odds_h5,
-                                 odds_h30, partants_sample, stats_sample)
+from test_pipeline_smoke import (
+    DEFAULT_CALIBRATION,
+    GPI_YML,
+    odds_h5,
+    odds_h30,
+    partants_sample,
+    stats_sample,
+)
 
 import logging_io
 import pipeline_run

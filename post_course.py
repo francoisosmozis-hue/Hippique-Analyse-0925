@@ -15,9 +15,13 @@ from datetime import date
 from pathlib import Path
 from typing import Any, Dict
 
-from post_course_payload import (CSV_HEADER, apply_summary_to_ticket_container,
-                                 build_payload, compute_post_course_summary,
-                                 format_csv_line)
+from post_course_payload import (
+    CSV_HEADER,
+    apply_summary_to_ticket_container,
+    build_payload,
+    compute_post_course_summary,
+    format_csv_line,
+)
 
 
 def _load_json(path: str | Path) -> Dict[str, Any]:

@@ -9,9 +9,15 @@ import pytest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from validator_ev import (ValidationError, combos_allowed,
-                          summarise_validation, validate_combos, validate_ev,
-                          validate_inputs, validate_policy)
+from validator_ev import (
+    ValidationError,
+    combos_allowed,
+    summarise_validation,
+    validate_combos,
+    validate_ev,
+    validate_inputs,
+    validate_policy,
+)
 
 
 def test_validate_ev_passes_with_defaults(monkeypatch):

@@ -428,8 +428,13 @@ def _maybe_load_dotenv() -> None:
 def _load_simulate_ev() -> Dict[str, Callable[..., Any]]:
     """Import heavy simulation helpers lazily."""
 
-    from simulate_ev import (allocate_dutching_sp, gate_ev, implied_prob,
-                             implied_probs, simulate_ev_batch)
+    from simulate_ev import (
+        allocate_dutching_sp,
+        gate_ev,
+        implied_prob,
+        implied_probs,
+        simulate_ev_batch,
+    )
 
     return {
         "allocate_dutching_sp": allocate_dutching_sp,
@@ -444,10 +449,12 @@ def _load_simulate_ev() -> Dict[str, Callable[..., Any]]:
 def _load_p_true_helpers() -> Dict[str, Callable[..., Any]]:
     """Import calibration helpers lazily."""
 
-    from calibration.p_true_model import (compute_runner_features,
-                                          get_model_metadata,
-                                          load_p_true_model,
-                                          predict_probability)
+    from calibration.p_true_model import (
+        compute_runner_features,
+        get_model_metadata,
+        load_p_true_model,
+        predict_probability,
+    )
 
     return {
         "compute_runner_features": compute_runner_features,
@@ -485,8 +492,7 @@ def __getattr__(name: str) -> Any:
         return mapping[name]
 
     if name in {"combos_allowed", "summarise_validation", "validate_inputs"}:
-        from validator_ev import (combos_allowed, summarise_validation,
-                                  validate_inputs)
+        from validator_ev import combos_allowed, summarise_validation, validate_inputs
 
         mapping: Dict[str, Any] = {
             "combos_allowed": combos_allowed,
@@ -2268,8 +2274,7 @@ def cmd_analyse(args: argparse.Namespace) -> None:
     import simulate_wrapper as sw
     from logging_io import CSV_HEADER, append_csv_line, append_json
     from tickets_builder import allow_combo as _allow_combo_impl
-    from tickets_builder import \
-        apply_ticket_policy as _apply_ticket_policy_impl
+    from tickets_builder import apply_ticket_policy as _apply_ticket_policy_impl
     from validator_ev import combos_allowed as combos_ev_gate
     from validator_ev import summarise_validation, validate_inputs
 

@@ -67,8 +67,7 @@ except Exception:  # pragma: no cover - used when optional deps are missing
 
 if USE_GCS:
     try:  # pragma: no cover - optional dependency in tests
-        from scripts.drive_sync import \
-            build_remote_path as gcs_build_remote_path
+        from scripts.drive_sync import build_remote_path as gcs_build_remote_path
         from scripts.drive_sync import push_tree
     except Exception as exc:  # pragma: no cover - used when optional deps are missing
         print(

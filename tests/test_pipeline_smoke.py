@@ -13,8 +13,7 @@ import logging_io
 import pipeline_run
 import validator_ev
 from pipeline_run import build_p_true, compute_drift_dict, load_yaml
-from simulate_ev import (allocate_dutching_sp, gate_ev, implied_probs,
-                         simulate_ev_batch)
+from simulate_ev import allocate_dutching_sp, gate_ev, implied_probs, simulate_ev_batch
 from simulate_wrapper import PAYOUT_CALIBRATION_PATH
 
 DEFAULT_CALIBRATION = str(PAYOUT_CALIBRATION_PATH)

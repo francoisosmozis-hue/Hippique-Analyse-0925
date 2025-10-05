@@ -7,8 +7,13 @@ import pytest
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from kelly import kelly_fraction
-from simulate_ev import (allocate_dutching_sp, gate_ev, implied_probs,
-                         normalize_overround, simulate_ev_batch)
+from simulate_ev import (
+    allocate_dutching_sp,
+    gate_ev,
+    implied_probs,
+    normalize_overround,
+    simulate_ev_batch,
+)
 
 
 def test_implied_probs_normalizes():

@@ -10,9 +10,13 @@ from typing import Any, Iterable
 from openpyxl import Workbook, load_workbook
 from openpyxl.worksheet.worksheet import Worksheet
 
-from post_course_payload import (JsonDict, PostCourseSummary,
-                                 build_payload_from_sources, merge_meta,
-                                 summarise_ticket_metrics)
+from post_course_payload import (
+    JsonDict,
+    PostCourseSummary,
+    build_payload_from_sources,
+    merge_meta,
+    summarise_ticket_metrics,
+)
 
 PREVISION_HEADERS = [
     "R/C",

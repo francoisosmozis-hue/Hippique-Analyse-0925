@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
-import argparse, subprocess, sys
+import argparse
+import subprocess
+import sys
+
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="Lint runner (safe)")
-    ap.add_argument("--fix", action="store_true", help="apply autofixes (ruff/isort/black)")
+    ap.add_argument(
+        "--fix", action="store_true", help="apply autofixes (ruff/isort/black)"
+    )
     args = ap.parse_args()
 
     steps = []
@@ -21,6 +26,7 @@ def main() -> int:
         if proc.returncode != 0:
             return proc.returncode
     return 0
+
 
 if __name__ == "__main__":
     sys.exit(main())

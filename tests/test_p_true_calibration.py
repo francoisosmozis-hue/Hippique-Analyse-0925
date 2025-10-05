@@ -7,11 +7,17 @@ import pytest
 
 import pipeline_run
 from calibration import p_true_model
-from calibration.p_true_model import (compute_runner_features,
-                                      get_model_metadata, load_p_true_model,
-                                      predict_probability)
-from calibration.p_true_training import (assemble_history_dataset,
-                                         serialize_model, train_logistic_model)
+from calibration.p_true_model import (
+    compute_runner_features,
+    get_model_metadata,
+    load_p_true_model,
+    predict_probability,
+)
+from calibration.p_true_training import (
+    assemble_history_dataset,
+    serialize_model,
+    train_logistic_model,
+)
 
 
 def test_assemble_history_dataset(tmp_path):

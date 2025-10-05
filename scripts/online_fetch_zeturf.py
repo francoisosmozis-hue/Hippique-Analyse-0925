@@ -13,8 +13,17 @@ import sys
 import time
 from functools import lru_cache
 from pathlib import Path
-from typing import (Any, Callable, Dict, Iterable, List, Mapping,
-                    MutableMapping, Sequence, TypeVar)
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    List,
+    Mapping,
+    MutableMapping,
+    Sequence,
+    TypeVar,
+)
 
 try:
     import requests

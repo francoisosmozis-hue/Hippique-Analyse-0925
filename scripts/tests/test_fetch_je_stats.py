@@ -1,10 +1,15 @@
 import pytest
 from bs4 import BeautifulSoup
 
-from scripts.fetch_je_stats import (RunnerIndex, RunnerStat,
-                                    _extract_percentage_from_node,
-                                    _parse_percentage, extract_stats_from_json,
-                                    extract_stats_from_table, map_stats_to_ids)
+from scripts.fetch_je_stats import (
+    RunnerIndex,
+    RunnerStat,
+    _extract_percentage_from_node,
+    _parse_percentage,
+    extract_stats_from_json,
+    extract_stats_from_table,
+    map_stats_to_ids,
+)
 
 
 def test_parse_percentage_handles_common_formats():
