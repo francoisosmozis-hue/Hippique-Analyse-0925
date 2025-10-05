@@ -439,3 +439,17 @@ def main() -> None:  # pragma: no cover - CLI glue
 
 if __name__ == "__main__":  # pragma: no cover
     main()
+
+
+def enrich_from_snapshot(snapshot_path: str, reunion: str = "", course: str = "") -> str:
+    """
+    Lit le JSON H-5, produit <stem>_je.csv (cache activé).
+    Retourne le chemin du CSV.
+    """
+    import subprocess, shlex
+    from pathlib import Path
+    sp = Path(snapshot_path)
+    out = sp.with_name(f"{sp.stem}_je.csv")
+    cmd = f'python scripts/fetch_je_stats.py --h5 "{sp}" --out "{out}" --cache --ttl-seconds 86400'
+    subprocess.run(shlex.split(cmd), check=True)
+    return str(out)
