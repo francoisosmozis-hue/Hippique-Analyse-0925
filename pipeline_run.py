@@ -55,6 +55,7 @@ from validator_ev import summarise_validation, validate_inputs
 import simulate_wrapper as sw
 from config.config_loader import load_config
 from data_loader import load_json
+from validator import validate_snapshot_data, validate_partants_data, validate_stats_je_data
 from utils import (
     save_json,
     save_text,
@@ -166,12 +167,16 @@ def cmd_analyse(args: argparse.Namespace) -> None:
     outdir = Path(args.outdir or cfg["OUTDIR_DEFAULT"])
 
     h30_data = load_json(args.h30)
+    validate_snapshot_data(h30_data, args.h30)
     h5_data = load_json(args.h5)
+    validate_snapshot_data(h5_data, args.h5)
     odds_h30 = {runner['id']: runner['odds'] for runner in h30_data.get('runners', [])}
     odds_h5 = {runner['id']: runner['odds'] for runner in h5_data.get('runners', [])}
     
     stats_je = load_json(args.stats_je)
+    validate_stats_je_data(stats_je, args.stats_je)
     partants_data = load_json(args.partants)
+    validate_partants_data(partants_data, args.partants)
 
     partants = partants_data.get("runners", [])
     if not partants:
