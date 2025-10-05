@@ -20,17 +20,30 @@ UA = {"User-Agent": "pmu-open-client/0.1 (+roi-analyse)"}
 def dmy(date: dt.date) -> str:
     return date.strftime("%d%m%Y")  # JJMMAAAA
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 def _get(url: str, retries: int = 3, timeout: int = 15):
     for i in range(retries):
-        r = requests.get(url, headers=UA, timeout=timeout)
-        if r.ok:
-            try:
-                return r.json()
-            except Exception:
-                # parfois l’API renvoie du texte/HTML en erreur
-                raise RuntimeError(f"Réponse non-JSON pour {url[:120]}")
-        time.sleep(0.6 * (i + 1))
-    raise RuntimeError(f"Échec GET {url}")
+        try:
+            r = requests.get(url, headers=UA, timeout=timeout)
+            r.raise_for_status()  # Lève une exception pour les codes 4xx/5xx
+            return r.json()
+        except requests.exceptions.HTTPError as e:
+            # Les 404 sont courants pour les rapports, pas de nouvelle tentative.
+            if e.response.status_code == 404:
+                raise
+            logger.warning(f"Erreur HTTP {e.response.status_code} pour {url}. Nouvelle tentative...")
+        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+            logger.warning(f"Erreur de connexion pour {url}: {e}. Nouvelle tentative...")
+        except json.JSONDecodeError:
+            # Peut arriver si l'API renvoie du HTML au lieu de JSON pour une erreur
+            logger.warning(f"Réponse non-JSON pour {url[:120]}. Nouvelle tentative...")
+
+        time.sleep(0.8 * (i + 1))
+
+    raise RuntimeError(f"Échec final de l'extraction de {url} après {retries} tentatives.")
 
 def fetch_program(date: dt.date) -> dict:
     # Variante la plus courante et riche
@@ -78,6 +91,7 @@ def save_json(obj: dict, path: Path):
         json.dump(obj, f, ensure_ascii=False, indent=2)
 
 def main():
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
     ap = argparse.ArgumentParser(description="Fetch PMU open endpoints (FR)")
     ap.add_argument("--date", help="YYYY-MM-DD (défaut: aujourd’hui)", default=dt.date.today().isoformat())
     ap.add_argument("--out", help="Dossier de sortie", default="data/pmu")
@@ -86,32 +100,36 @@ def main():
 
     date = dt.date.fromisoformat(args.date)
     out_root = Path(args.out) / date.isoformat()
-    print(f"[i] Date {date} → dossier {out_root}")
+    logger.info(f"Date {date} → dossier {out_root}")
 
     # 1) Programme
-    prog = fetch_program(date)
-    save_json(prog, out_root / "programme.json")
+    try:
+        prog = fetch_program(date)
+        save_json(prog, out_root / "programme.json")
+    except RuntimeError as e:
+        logger.error(f"Impossible de récupérer le programme: {e}")
+        return
 
     # 2) Boucle R/C (FR)
     count = 0
     for r, c, meta in iter_fr_courses(prog):
         course_dir = out_root / f"R{r}" / f"C{c}"
-        print(f" - R{r}C{c} {meta.get('hippodrome','?')} {meta.get('heure','?')}) ({meta.get('discipline','?')})")
+        logger.info(f" - R{r}C{c} {meta.get('hippodrome','?')} {meta.get('heure','?')}) ({meta.get('discipline','?')})")
         try:
             part = fetch_participants(date, r, c)
             save_json(part, course_dir / "participants.json")
-        except Exception as e:
-            print(f"   ! participants indisponibles : {e}")
+        except (RuntimeError, requests.exceptions.HTTPError) as e:
+            logger.warning(f"   ! participants indisponibles pour R{r}C{c}: {e}")
         time.sleep(args.sleep)
         try:
             rap = fetch_rapports(date, r, c)
             save_json(rap, course_dir / "rapports_definitifs.json")
-        except Exception as e:
-            print(f"   ! rapports-definitifs indisponibles (course pas encore arrivée ?) : {e}")
+        except (RuntimeError, requests.exceptions.HTTPError) as e:
+            logger.warning(f"   ! rapports-definitifs indisponibles pour R{r}C{c}: {e}")
         time.sleep(args.sleep)
         count += 1
 
-    print(f"[✓] Terminé. Courses traitées (FR): {count}. Fichiers sous {out_root}")
+    logger.info(f"[✓] Terminé. Courses traitées (FR): {count}. Fichiers sous {out_root}")
 
 if __name__ == "__main__":
     main()

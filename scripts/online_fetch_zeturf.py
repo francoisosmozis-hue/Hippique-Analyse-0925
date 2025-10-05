@@ -20,25 +20,36 @@ HDRS = {"User-Agent": "Mozilla/5.0 (+EV; GPI v5.1)"}
 GENY_FALLBACK_URL = f"{GENY_BASE}/reunions-courses-pmu"
 
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 def _fetch_from_geny() -> Dict[str, Any]:
     """Scrape meetings from Geny when the Zeturf API is unavailable."""
-    resp = requests.get(GENY_FALLBACK_URL, timeout=10)
-    resp.raise_for_status()
-    soup = BeautifulSoup(resp.text, "html.parser")
-    today = dt.date.today().isoformat()
-    meetings: List[Dict[str, Any]] = []
-    for li in soup.select("li[data-date]"):
-        date = li["data-date"]
-        if date != today:
-            continue
-        meetings.append(
-            {
-                "id": li.get("data-id"),
-                "name": li.get_text(strip=True),
-                "date": date,
-            }
-        )
-    return {"meetings": meetings}
+    logger.info("Tentative de récupération des réunions depuis Geny.")
+    try:
+        resp = requests.get(GENY_FALLBACK_URL, timeout=10)
+        resp.raise_for_status()
+        soup = BeautifulSoup(resp.text, "html.parser")
+        today = dt.date.today().isoformat()
+        meetings: List[Dict[str, Any]] = []
+        for li in soup.select("li[data-date]"):
+            date = li["data-date"]
+            if date != today:
+                continue
+            meetings.append(
+                {
+                    "id": li.get("data-id"),
+                    "name": li.get_text(strip=True),
+                    "date": date,
+                }
+            )
+        if not meetings:
+            logger.warning("Aucune réunion trouvée sur Geny pour aujourd'hui.")
+        return {"meetings": meetings}
+    except requests.RequestException as e:
+        logger.error(f"Erreur lors de la récupération des données Geny: {e}")
+        raise RuntimeError("Impossible de récupérer les données de Geny.") from e
 
 
 def fetch_meetings(url: str) -> Any:
@@ -47,15 +58,8 @@ def fetch_meetings(url: str) -> Any:
         resp = requests.get(url, timeout=10)
         resp.raise_for_status()
         return resp.json()
-    except requests.Timeout:
-        return _fetch_from_geny()
-    except requests.HTTPError as exc:  # pragma: no cover - exercised via tests
-        status = exc.response.status_code if exc.response is not None else None
-        if status == 404:
-            return _fetch_from_geny()
-            
-        raise
-    except requests.RequestException:
+    except (requests.RequestException, json.JSONDecodeError) as e:
+        logger.warning(f"Échec de la récupération depuis Zeturf ({e}), tentative avec Geny.")
         return _fetch_from_geny()
 
 
@@ -68,6 +72,86 @@ def filter_today(meetings: Any) -> List[Dict[str, Any]]:
     return [m for m in items if m.get("date") == today]
 
 
+def fetch_from_geny_idcourse(id_course: str) -> Dict[str, Any]:
+    """Return a snapshot for ``id_course`` scraped from geny.com."""
+    logger.info(f"Tentative de récupération des partants pour la course {id_course} depuis Geny.")
+    try:
+        partants_url = f"{GENY_BASE}/partants-pmu/_c{id_course}"
+        cotes_url = f"{GENY_BASE}/cotes?id_course={id_course}"
+
+        resp_partants = requests.get(partants_url, headers=HDRS, timeout=10)
+        resp_partants.raise_for_status()
+        soup = BeautifulSoup(resp_partants.text, "html.parser")
+
+        text = soup.get_text(" ", strip=True)
+        match = re.search(r"R\d+", text)
+        r_label = match.group(0) if match else None
+
+        runners: List[Dict[str, Any]] = []
+        for tr in soup.select("tr"):
+            cols = [td.get_text(strip=True) for td in tr.find_all("td")]
+            if len(cols) < 4 or not cols[0].isdigit():
+                continue
+            runners.append(
+                {
+                    "num": cols[0],
+                    "name": cols[1],
+                    "jockey": cols[2],
+                    "entraineur": cols[3],
+                }
+            )
+
+        resp_cotes = requests.get(cotes_url, headers=HDRS, timeout=10)
+        resp_cotes.raise_for_status()
+        odds_map: Dict[str, float] = {}
+        try:
+            data = resp_cotes.json()
+        except ValueError:
+            soup_cotes = BeautifulSoup(resp_cotes.text, "html.parser")
+            for tr in soup_cotes.select("tr"):
+                cols = [td.get_text(strip=True) for td in tr.find_all("td")]
+                if len(cols) < 2 or not cols[0].isdigit():
+                    continue
+                try:
+                    odds_map[cols[0]] = float(cols[1].replace(",", "."))
+                except ValueError:
+                    continue
+        else:
+            items: Any
+            if isinstance(data, dict):
+                items = data.get("runners") or data.get("data") or data.get("cotes") or []
+            else:
+                items = data
+            for item in items:
+                num = str(item.get("num") or item.get("numero") or item.get("id") or item.get("number"))
+                if not num:
+                    continue
+                val = item.get("cote") or item.get("odds") or item.get("rapport") or item.get("value")
+                if isinstance(val, str):
+                    val = val.replace(",", ".")
+                try:
+                    odds_map[num] = float(val)
+                except (TypeError, ValueError):
+                    continue
+
+        for r in runners:
+            num = r.get("num")
+            if num in odds_map:
+                r["odds"] = odds_map[num]
+
+        snapshot = {
+            "date": dt.date.today().isoformat(),
+            "source": "geny",
+            "id_course": id_course,
+            "r_label": r_label,
+            "runners": runners,
+            "partants": len(runners),
+        }
+        return snapshot
+    except requests.RequestException as e:
+        logger.error(f"Erreur lors de la récupération des données Geny pour la course {id_course}: {e}")
+        raise RuntimeError(f"Impossible de récupérer les données de Geny pour la course {id_course}.") from e
+
 def fetch_runners(url: str) -> Dict[str, Any]:
     """Fetch raw runners data from ``url``."""
     if "{course_id}" in url:
@@ -76,103 +160,16 @@ def fetch_runners(url: str) -> Dict[str, Any]:
         )
     match = re.search(r"/race/(\d+)", url)
     course_id = match.group(1) if match else None
-    
+
     try:
         resp = requests.get(url, timeout=10)
         resp.raise_for_status()
-    except requests.RequestException as exc:
+        return resp.json()
+    except (requests.RequestException, json.JSONDecodeError) as e:
+        logger.warning(f"Échec de la récupération des partants depuis Zeturf ({e}), tentative avec Geny.")
         if course_id:
             return fetch_from_geny_idcourse(course_id)
-        raise exc
-    except requests.HTTPError as exc:  # pragma: no cover - exercised via tests
-        status = exc.response.status_code if exc.response is not None else None
-        if status == 404 and course_id:
-            return fetch_from_geny_idcourse(course_id)            
-        raise
-    return resp.json()
-
-
-def fetch_from_geny_idcourse(id_course: str) -> Dict[str, Any]:
-    """Return a snapshot for ``id_course`` scraped from geny.com.
-
-    Parameters
-    ----------
-    id_course:
-        Identifier of the course on geny.com.
-    """
-
-    partants_url = f"{GENY_BASE}/partants-pmu/_c{id_course}"
-    cotes_url = f"{GENY_BASE}/cotes?id_course={id_course}"
-
-    resp_partants = requests.get(partants_url, headers=HDRS, timeout=10)
-    resp_partants.raise_for_status()
-    soup = BeautifulSoup(resp_partants.text, "html.parser")
-
-    text = soup.get_text(" ", strip=True)
-    match = re.search(r"R\d+", text)
-    r_label = match.group(0) if match else None
-
-    runners: List[Dict[str, Any]] = []
-    for tr in soup.select("tr"):
-        cols = [td.get_text(strip=True) for td in tr.find_all("td")]
-        if len(cols) < 4 or not cols[0].isdigit():
-            continue
-        runners.append(
-            {
-                "num": cols[0],
-                "name": cols[1],
-                "jockey": cols[2],
-                "entraineur": cols[3],
-            }
-        )
-
-    resp_cotes = requests.get(cotes_url, headers=HDRS, timeout=10)
-    resp_cotes.raise_for_status()
-    odds_map: Dict[str, float] = {}
-    try:
-        data = resp_cotes.json()
-    except ValueError:
-        soup_cotes = BeautifulSoup(resp_cotes.text, "html.parser")
-        for tr in soup_cotes.select("tr"):
-            cols = [td.get_text(strip=True) for td in tr.find_all("td")]
-            if len(cols) < 2 or not cols[0].isdigit():
-                continue
-            try:
-                odds_map[cols[0]] = float(cols[1].replace(",", "."))
-            except ValueError:
-                continue
-    else:
-        items: Any
-        if isinstance(data, dict):
-            items = data.get("runners") or data.get("data") or data.get("cotes") or []
-        else:
-            items = data
-        for item in items:
-            num = str(item.get("num") or item.get("numero") or item.get("id") or item.get("number"))
-            if not num:
-                continue
-            val = item.get("cote") or item.get("odds") or item.get("rapport") or item.get("value")
-            if isinstance(val, str):
-                val = val.replace(",", ".")
-            try:
-                odds_map[num] = float(val)
-            except (TypeError, ValueError):
-                continue
-
-    for r in runners:
-        num = r.get("num")
-        if num in odds_map:
-            r["odds"] = odds_map[num]
-
-    snapshot = {
-        "date": dt.date.today().isoformat(),
-        "source": "geny",
-        "id_course": id_course,
-        "r_label": r_label,
-        "runners": runners,
-        "partants": len(runners),
-    }
-    return snapshot
+        raise RuntimeError("Impossible de récupérer les partants depuis Zeturf et aucun ID de course pour Geny.") from e
 
 
 def write_snapshot_from_geny(id_course: str, phase: str, out_dir: Path) -> Path:
@@ -292,6 +289,7 @@ __all__ = [
 
 
 def main() -> None:  # pragma: no cover - minimal CLI wrapper
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
     parser = argparse.ArgumentParser(description="Fetch data from Zeturf")
     parser.add_argument(
         "--mode", choices=["planning", "h30", "h5", "diff"], required=True
@@ -299,51 +297,51 @@ def main() -> None:  # pragma: no cover - minimal CLI wrapper
     parser.add_argument("--out", required=True, help="Output JSON file")
     parser.add_argument("--sources", default="config/sources.yml", help="YAML sources")
     args = parser.parse_args()
-    
-    if args.mode in {"planning", "h30", "h5"}:
-        with open(args.sources, "r", encoding="utf-8") as fh:
-            config = yaml.safe_load(fh) or {}
-        url = config.get("zeturf", {}).get("url")
-        if not url:
-            raise ValueError("No Zeturf source URL configured in sources.yml")
-        if args.mode == "planning":
-            meetings = fetch_meetings(url)
-            data = filter_today(meetings)
-        else:
-            payload = fetch_runners(url)
-            data = normalize_snapshot(payload)
-        Path(args.out).parent.mkdir(parents=True, exist_ok=True)
-        Path(args.out).write_text(
-            json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
-    else:  # diff mode
-        out_path = Path(args.out)
-        root = out_path.parent.parent
-        snaps = os.getenv("SNAPSHOTS", "H30,H5").split(",")
-        h30_name, h5_name = [s.strip().lower() for s in snaps[:2]]
-        h30_path = root / h30_name / f"{h30_name}.json"
-        h5_path = root / h5_name / f"{h5_name}.json"
-        h30 = json.loads(h30_path.read_text(encoding="utf-8"))
-        h5 = json.loads(h5_path.read_text(encoding="utf-8"))
-        top_n = int(os.getenv("DRIFT_TOP_N", "5"))
-        min_delta = float(os.getenv("DRIFT_MIN_DELTA", "0.8"))
-        res = compute_diff(h30, h5, top_n=top_n, min_delta=min_delta)
-        out_data = {
-            "steams": [
-                {"id_cheval": r["id"], "delta": r["delta"]}
-                for r in res["top_steams"]
-            ],
-            "drifts": [
-                {"id_cheval": r["id"], "delta": r["delta"]}
-                for r in res["top_drifts"]
-            ],
-        }
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        out_path.write_text(
-            json.dumps(out_data, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
-    
 
-
-if __name__ == "__main__":  # pragma: no cover
-    main()
+    try:
+        if args.mode in {"planning", "h30", "h5"}:
+            with open(args.sources, "r", encoding="utf-8") as fh:
+                config = yaml.safe_load(fh) or {}
+            url = config.get("zeturf", {}).get("url")
+            if not url:
+                raise ValueError("No Zeturf source URL configured in sources.yml")
+            if args.mode == "planning":
+                meetings = fetch_meetings(url)
+                data = filter_today(meetings)
+            else:
+                payload = fetch_runners(url)
+                data = normalize_snapshot(payload)
+            Path(args.out).parent.mkdir(parents=True, exist_ok=True)
+            Path(args.out).write_text(
+                json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+        else:  # diff mode
+            out_path = Path(args.out)
+            root = out_path.parent.parent
+            snaps = os.getenv("SNAPSHOTS", "H30,H5").split(",")
+            h30_name, h5_name = [s.strip().lower() for s in snaps[:2]]
+            h30_path = root / h30_name / f"{h30_name}.json"
+            h5_path = root / h5_name / f"{h5_name}.json"
+            h30 = json.loads(h30_path.read_text(encoding="utf-8"))
+            h5 = json.loads(h5_path.read_text(encoding="utf-8"))
+            top_n = int(os.getenv("DRIFT_TOP_N", "5"))
+            min_delta = float(os.getenv("DRIFT_MIN_DELTA", "0.8"))
+            res = compute_diff(h30, h5, top_n=top_n, min_delta=min_delta)
+            out_data = {
+                "steams": [
+                    {"id_cheval": r["id"], "delta": r["delta"]}
+                    for r in res["top_steams"]
+                ],
+                "drifts": [
+                    {"id_cheval": r["id"], "delta": r["delta"]}
+                    for r in res["top_drifts"]
+                ],
+            }
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            out_path.write_text(
+                json.dumps(out_data, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+        logger.info(f"Opération '{args.mode}' terminée avec succès. Fichier de sortie: {args.out}")
+    except (RuntimeError, ValueError) as e:
+        logger.error(f"Échec de l'opération '{args.mode}': {e}")
+        sys.exit(1)
