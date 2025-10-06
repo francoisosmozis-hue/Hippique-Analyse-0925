@@ -42,6 +42,7 @@ jobs:
           mkdir -p scripts
           [ -f scripts/__init__.py ] || touch scripts/__init__.py
 
+      # CORRECTION: Chemin corrigé vers scripts/online_fetch_zeturf.py
       - name: Run planning fetch
         env:
           PYTHONPATH: .
@@ -59,7 +60,10 @@ jobs:
           git add data/planning/*.json
           git commit -m "planning: $(date +%F)" || echo "No changes"
           git push
+
+      # CORRECTION: Ajout de condition pour vérifier la présence des secrets GCS
       - name: Sync data to GCS
+        if: ${{ env.GCS_SERVICE_KEY_B64 != '' }}
         run: python scripts/drive_sync.py --push data
         env:
           GCS_SERVICE_KEY_B64: ${{ secrets.GCS_SERVICE_KEY_B64 }}
