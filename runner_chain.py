@@ -25,8 +25,8 @@ from pathlib import Path
 
 from typing import Any, Dict, Iterable, List, Mapping, Sequence, Tuple
 
-from simulate_ev import allocate_dutching_sp, simulate_ev_batch
-from simulate_wrapper import PAYOUT_CALIBRATION_PATH, evaluate_combo
+from scripts.simulate_ev import simulate_ev_batch
+from scripts.simulate_wrapper import PAYOUT_CALIBRATION_PATH
 from logging_io import append_csv_line, CSV_HEADER
 
 
