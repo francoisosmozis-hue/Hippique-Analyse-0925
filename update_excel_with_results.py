@@ -133,15 +133,15 @@ def _update_previsionnel_sheet(
     wb: Workbook,
     sheet_name: str,
     meta: JsonDict,
-    tickets: JsonDict,
+    *,
+    total_stake: float,
+    ev_data: JsonDict | None,
 ) -> None:
     rc = meta.get("rc")
     if not rc:
         return
     ws = _get_sheet(wb, sheet_name)
-    *,
-    total_stake: float,
-    ev_data: JsonDict | None,
+    ev_section = ev_data or {}
     row = {
         "R/C": rc,
         "hippodrome": meta.get("hippodrome", ""),
