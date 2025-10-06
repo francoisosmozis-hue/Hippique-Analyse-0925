@@ -30,13 +30,6 @@ from bs4 import BeautifulSoup
 from logging_io import append_csv_line, CSV_HEADER
 from scripts.gcs_utils import disabled_reason, is_gcs_enabled
 from scripts.online_fetch_zeturf import normalize_snapshot
-
-# Tests may insert a lightweight stub of ``scripts.online_fetch_zeturf`` to avoid
-# pulling heavy scraping dependencies.  Ensure the stub does not linger in
-# ``sys.modules`` so that later imports retrieve the fully-featured module.
-_fetch_module = sys.modules.get("scripts.online_fetch_zeturf")
-if _fetch_module is not None and not hasattr(_fetch_module, "fetch_race_snapshot"):
-    sys.modules.pop("scripts.online_fetch_zeturf", None)
 from scripts.fetch_je_stats import collect_stats
 
 import pipeline_run
@@ -44,6 +37,13 @@ from runner_chain import compute_overround_cap
 from simulate_wrapper import PAYOUT_CALIBRATION_PATH, evaluate_combo
 
 logger = logging.getLogger(__name__)
+
+# Tests may insert a lightweight stub of ``scripts.online_fetch_zeturf`` to avoid
+# pulling heavy scraping dependencies.  Ensure the stub does not linger in
+# ``sys.modules`` so that later imports retrieve the fully-featured module.
+_fetch_module = sys.modules.get("scripts.online_fetch_zeturf")
+if _fetch_module is not None and not hasattr(_fetch_module, "fetch_race_snapshot"):
+    sys.modules.pop("scripts.online_fetch_zeturf", None)
 
 
 class MissingH30SnapshotError(RuntimeError):
