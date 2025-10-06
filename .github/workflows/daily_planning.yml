@@ -46,7 +46,7 @@ jobs:
         env:
           PYTHONPATH: .
         run: |
-          python online_fetch_zeturf.py \
+          python scripts/online_fetch_zeturf.py \
             --mode planning \
             --out data/planning/$(date +%F).json \
             --sources config/sources.yml
