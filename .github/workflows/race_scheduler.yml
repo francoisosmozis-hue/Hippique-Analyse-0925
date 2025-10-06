@@ -136,7 +136,7 @@ jobs:
               continue
             fi
             echo "[export] Traitement de ${dir}"
-            python "${GITHUB_WORKSPACE}/p_finale_export.py" \
+            python "${GITHUB_WORKSPACE}/scripts/p_finale_export.py" \
               --outputs-dir "${dir}"
             found=1
           done < <(find "${analysis_root}" -type f -name 'p_finale.json' 2>/dev/null || true)
@@ -144,7 +144,6 @@ jobs:
           if [ "${found}" -eq 0 ]; then
             echo "[WARN] Aucun p_finale.json détecté sous ${analysis_root}" >&2
           fi
-
 
       - name: Upload artifacts (H-30/H-5)
         if: always()
