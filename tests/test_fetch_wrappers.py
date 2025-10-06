@@ -124,6 +124,7 @@ def test_fetch_je_chrono_enrich_from_snapshot_builds_chronos_csv(tmp_path: Path)
                 "runners": [
                     {"id": "1", "chrono": "1.12"},
                     {"id": "2", "time": "1.18"},
+                ]
             }
         ),
         encoding="utf-8",
