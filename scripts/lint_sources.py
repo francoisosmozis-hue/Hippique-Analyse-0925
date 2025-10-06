@@ -40,6 +40,7 @@ class Diagnostics:
         if self.errors:
             return 1
         if self.warnings:
+            return 0
         return 0
 
 
