@@ -13,6 +13,9 @@ openpyxl>=3.1.2
 # --- YAML / calibration EV ---
 PyYAML>=6.0.1
 
+# --- CORRECTION: Ajout de pydantic (requis par runner_chain.py) ---
+pydantic>=2.7.0
+
 # --- API / web ---
 fastapi==0.112.2
 uvicorn[standard]==0.30.6
@@ -24,15 +27,5 @@ google-auth>=2.29.0
 # --- Robustesse encodages ---
 charset-normalizer>=3.3.2
 
-# --- Validation schémas ---
-pydantic>=2.7.0
-
-
-
 # --- Tests ---
 pytest>=7.4
-
-
-
-
-
