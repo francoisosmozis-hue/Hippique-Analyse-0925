@@ -58,25 +58,35 @@ import sys
 from pathlib import Path
 from typing import Any, Callable, Iterable, Optional
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-if str(REPO_ROOT) not in sys.path:
-    sys.path.append(str(REPO_ROOT))
-
-from post_course_payload import (
-    CSV_HEADER,
-    apply_summary_to_ticket_container,
-    build_payload,
-    compute_post_course_summary,
-    format_csv_line,
-    merge_meta,
-)
-
 # Keep these imports on separate lines to avoid syntax issues when running
 # under stripped/concatenated builds.
 
 import google.auth.exceptions as google_auth_exceptions
 from google.cloud import storage
 from google.oauth2 import service_account
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
+try:
+    from post_course_payload import (
+        CSV_HEADER,
+        apply_summary_to_ticket_container,
+        build_payload,
+        compute_post_course_summary,
+        format_csv_line,
+        merge_meta,
+    )
+except ImportError:  # pragma: no cover - executed when run from scripts/
+    if str(REPO_ROOT) not in sys.path:
+        sys.path.append(str(REPO_ROOT))
+    from post_course_payload import (
+        CSV_HEADER,
+        apply_summary_to_ticket_container,
+        build_payload,
+        compute_post_course_summary,
+        format_csv_line,
+        merge_meta,
+    )
 
 try:  # pragma: no cover - fallback when executed from within scripts/
     from scripts.gcs_utils import disabled_reason, is_gcs_enabled
@@ -293,7 +303,7 @@ def _run_local_post_course(
     post_course._save_json(tickets_path, tickets_data)
 
     target_out.mkdir(parents=True, exist_ok=True)
-     meta = merge_meta(arrivee_data, tickets_data)
+    meta = merge_meta(arrivee_data, tickets_data)
     payload = build_payload(
         meta=meta,
         arrivee=arrivee_data,
@@ -629,7 +639,7 @@ def main() -> int | None:
                     f"[drive_sync] Impossible de téléverser l'Excel Drive: {exc}",
                     file=sys.stderr,
                 )
-        elif folder_id:
+    elif folder_id:
         if dry_run and drive_requested:
             print(
                 "[drive_sync] --dry-run: téléverserait l'Excel local dans le dossier "
@@ -648,14 +658,14 @@ def main() -> int | None:
                     f"[drive_sync] Upload Excel Drive ignoré: {exc}",
                     file=sys.stderr,
                 )
-        elif args.upload_result or args.upload_line or args.upload_file:
+    elif args.upload_result or args.upload_line or args.upload_file:
         msg = "[drive_sync] Upload Drive ignoré: --folder-id manquant pour les créations."
         if dry_run:
             print("[drive_sync] --dry-run: " + msg.split(": ")[1])
         else:
             print(msg, file=sys.stderr)
 
-        if args.upload_result:
+    if args.upload_result:
         arrivee_path = outputs.get("arrivee")
         if arrivee_path and arrivee_path.exists():
             if dry_run and drive_requested:
@@ -676,7 +686,7 @@ def main() -> int | None:
                         f"[drive_sync] Upload arrivee.json échoué: {exc}",
                         file=sys.stderr,
                     )
-        if args.upload_line:
+    if args.upload_line:
         csv_line = outputs.get("csv_line")
         if csv_line and csv_line.exists():
             if dry_run and drive_requested:
@@ -698,7 +708,7 @@ def main() -> int | None:
                         file=sys.stderr,
                     )
 
-        ffor extra in args.upload_file:
+    for extra in args.upload_file:
         extra_path = Path(extra)
         if not extra_path.exists():
             print(
