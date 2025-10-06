@@ -3,11 +3,10 @@
 
 from __future__ import annotations
 
-import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 try:
     import pandas as pd
@@ -83,11 +82,11 @@ def export_p_finale_from_dir(outputs_dir: Path) -> bool:
         return False
     
     # Build DataFrame
-    rows = []
+    rows: list[dict[str, Any]] = []
     for runner in runners:
         if not isinstance(runner, dict):
             continue
-        
+            
         row = {
             'num': runner.get('num') or runner.get('number') or runner.get('id'),
             'nom': runner.get('nom') or runner.get('name'),
@@ -96,3 +95,20 @@ def export_p_finale_from_dir(outputs_dir: Path) -> bool:
             'j_rate': runner.get('j_rate') or runner.get('jockey_rate'),
             'e_rate': runner.get('e_rate') or runner.get('trainer_rate'),
         }
+        rows.append(row)
+
+    if not rows:
+        location = source_file or outputs_dir
+        print(f"No valid runner data available in {location}", file=sys.stderr)
+        return False
+
+    df = pd.DataFrame(rows)
+
+    csv_path = outputs_dir / 'p_finale_export.csv'
+    df.to_csv(csv_path, index=False)
+
+    excel_path = outputs_dir / 'p_finale_export.xlsx'
+    df.to_excel(excel_path, index=False)
+
+    print(f"Exported p_finale data to {csv_path} and {excel_path}")
+    return True
