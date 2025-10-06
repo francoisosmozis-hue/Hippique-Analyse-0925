@@ -24,7 +24,9 @@ google-auth>=2.29.0
 # --- Robustesse encodages ---
 charset-normalizer>=3.3.2
 
-
+# --- Machine Learning ---
+scikit-learn>=1.4.2
+lightgbm>=4.3.0
 
 # --- Tests ---
 pytest>=7.4
