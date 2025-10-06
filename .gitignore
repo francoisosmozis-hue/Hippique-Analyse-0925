@@ -93,3 +93,10 @@ excel/
 
 # Avoid shadowing third-party libs
 /sklearn/
+# Évite de re-committer des packages nommés comme des libs Python
+/sklearn/
+/numpy/
+/pandas/
+/torch/
+/scipy/
+/site-packages/
