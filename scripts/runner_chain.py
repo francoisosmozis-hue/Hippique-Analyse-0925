@@ -22,9 +22,10 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from simulate_ev import simulate_ev_batch
-from simulate_wrapper import PAYOUT_CALIBRATION_PATH
-from validator_ev import ValidationError, validate_ev
+# CORRECTION: Imports depuis scripts/ au lieu de la racine
+from scripts.simulate_ev import simulate_ev_batch
+from scripts.simulate_wrapper import PAYOUT_CALIBRATION_PATH
+from scripts.validator_ev import ValidationError, validate_ev
 
 from scripts import online_fetch_zeturf as ofz
 from scripts.gcs_utils import disabled_reason, is_gcs_enabled
@@ -390,6 +391,7 @@ def _trigger_phase(
         arrivee_path = race_dir / "arrivee_officielle.json"
         race_dir.mkdir(parents=True, exist_ok=True)
         if not arrivee_path.exists():
+            # CORRECTION: Encodage UTF-8 corrigé
             logger.error(
                 "[KO] Arrivée absente… %s (recherché: %s)", race_id, arrivee_path
             )
