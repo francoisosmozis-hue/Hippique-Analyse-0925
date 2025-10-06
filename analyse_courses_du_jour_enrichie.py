@@ -2063,9 +2063,9 @@ def main() -> None:
     ap.add_argument(
         "--data-dir", default="data", help="Répertoire racine pour les sorties"
     )
-    ap.add_argument("--budget", type=float, default=100.0, help="Budget à utiliser")
+    ap.add_argument("--budget", type=float, default=5.0, help="Budget à utiliser")
     ap.add_argument(
-        "--kelly", type=float, default=1.0, help="Fraction de Kelly à appliquer"
+        "--kelly", type=float, default=0.5, help="Fraction de Kelly à appliquer"
     )
     ap.add_argument(
         "--from-geny-today",
@@ -2074,9 +2074,13 @@ def main() -> None:
     )
     ap.add_argument(
         "--course-url",
-        "--reunion-url",
         dest="course_url",
-        help="URL ZEturf d'une réunion ou d'une course",
+        help="URL ZEturf d'une course unique",
+    )
+    ap.add_argument(
+        "--reunion-url",
+        dest="reunion_url",
+        help="URL ZEturf d'une réunion (pour scraper plusieurs courses)",
     )
     ap.add_argument(
         "--phase",
@@ -2090,70 +2094,45 @@ def main() -> None:
         help="Fichier JSON listant les réunions à traiter (mode batch)",
     )
     ap.add_argument(
-        "--upload-gcs",
-        action="store_true",
-        help="Upload des artefacts générés sur Google Cloud Storage",
-    )
-    ap.add_argument(
-        "--upload-drive",
-        action="store_true",
-        help=argparse.SUPPRESS,
-    )
-    ap.add_argument(
         "--gcs-prefix",
         help="Préfixe GCS racine pour les uploads",
     )
-    ap.add_argument(
-        "--drive-folder-id",
-        dest="gcs_prefix",
-        help=argparse.SUPPRESS,
-    )
     args = ap.parse_args()
 
-    gcs_prefix = None
-    if args.upload_gcs or args.upload_drive:
-        if args.gcs_prefix is not None:
-            gcs_prefix = args.gcs_prefix
-        else:
-            gcs_prefix = os.environ.get("GCS_PREFIX")
-        if gcs_prefix is None:
-            print("[WARN] gcs-prefix manquant, envoi vers GCS ignoré")
+    data_dir = Path(args.data_dir)
 
-    if args.reunions_file:
-        script = Path(__file__).resolve()
-        data = json.loads(Path(args.reunions_file).read_text(encoding="utf-8"))
-        for reunion in data.get("reunions", []):
-            url_zeturf = reunion.get("url_zeturf")
-            if not url_zeturf:
-                continue
-            for phase in ["H30", "H5"]:
-                cmd = [
-                    sys.executable,
-                    str(script),
-                    "--course-url",
-                    url_zeturf,
-                    "--phase",
-                    phase,
-                    "--data-dir",
-                    args.data_dir,
-                    "--budget",
-                    str(args.budget),
-                    "--kelly",
-                    str(args.kelly),
-                ]
-                if gcs_prefix is not None:
-                    cmd.append("--upload-gcs")
-                    cmd.extend(["--gcs-prefix", gcs_prefix])
-                subprocess.run(cmd, check=True)
+    if args.course_url and args.phase:
+        rc_match = re.search(r"(R\d+C\d+)", args.course_url)
+        if not rc_match:
+            print("[ERROR] Impossible d'extraire R#C# de l'URL de la course", file=sys.stderr)
+            raise SystemExit(2)
+        
+        reunion, course = _derive_rc_parts(rc_match.group(1))
+        
+        print(f"Traitement de la course {reunion}{course} en phase {args.phase}")
+        _process_single_course(
+            reunion,
+            course,
+            args.phase,
+            data_dir,
+            budget=args.budget,
+            kelly=args.kelly,
+            gcs_prefix=args.gcs_prefix,
+        )
         return
 
-    if args.reunion or args.course:
-        if not (args.reunion and args.course and args.phase):
-            print(
-                "[ERROR] --reunion, --course et --phase doivent être utilisés ensemble",
-                file=sys.stderr,
-            )
-            raise SystemExit(2)
+    if args.reunion_url and args.phase:
+        _process_reunion(
+            args.reunion_url,
+            args.phase,
+            data_dir,
+            budget=args.budget,
+            kelly=args.kelly,
+            gcs_prefix=args.gcs_prefix,
+        )
+        return
+
+    if args.reunion and args.course and args.phase:
         try:
             reunion_label = _normalise_rc_label(args.reunion, "R")
             course_label = _normalise_rc_label(args.course, "C")
@@ -2167,57 +2146,11 @@ def main() -> None:
             Path(args.data_dir),
             budget=args.budget,
             kelly=args.kelly,
-            gcs_prefix=gcs_prefix,
+            gcs_prefix=args.gcs_prefix,
         )
         return
 
-    if args.course_url and args.phase:
-        _process_reunion(
-            args.course_url,
-            args.phase,
-            Path(args.data_dir),
-            budget=args.budget,
-            kelly=args.kelly,
-            gcs_prefix=gcs_prefix,
-        )
-        return
+    parser.error("Veuillez spécifier une action: --course-url, --reunion-url, ou --reunion/--course")
 
-    if args.from_geny_today:
-        payload = _load_geny_today_payload()
-        meetings = payload.get("meetings", [])
-        base_dir = ensure_dir(Path(args.data_dir))
-        for meeting in meetings:
-            r_label = meeting.get("r", "")
-            for course in meeting.get("courses", []):
-                c_label = course.get("c", "")
-                rc_dir = ensure_dir(base_dir / f"{r_label}{c_label}")
-                course_id = course.get("id_course")
-                if not course_id:
-                    continue
-                write_snapshot_from_geny(course_id, "H30", rc_dir)
-                write_snapshot_from_geny(course_id, "H5", rc_dir)
-                success, decision = safe_enrich_h5(
-                    rc_dir, budget=args.budget, kelly=args.kelly
-                )
-                if success:
-                    build_p_finale(rc_dir, budget=args.budget, kelly=args.kelly)
-                    run_pipeline(rc_dir, budget=args.budget, kelly=args.kelly)
-                    build_prompt_from_meta(rc_dir, budget=args.budget, kelly=args.kelly)
-                    csv_path = export_per_horse_csv(rc_dir)
-                    print(f"[INFO] per-horse report écrit: {csv_path}")
-                else:
-                    if decision is not None:
-                        _write_json_file(rc_dir / "decision.json", decision)
-                if gcs_prefix is not None:
-                    _upload_artifacts(rc_dir, gcs_prefix=gcs_prefix)
-        print("[DONE] from-geny-today pipeline terminé.")
-        return
-
-    # Fall back to original behaviour: simply run the pipeline on ``data_dir``
-    run_pipeline(Path(args.data_dir), budget=args.budget, kelly=args.kelly)
-    if gcs_prefix is not None:
-        _upload_artifacts(Path(args.data_dir), gcs_prefix=gcs_prefix)
-
-
-if __name__ == "__main__":  # pragma: no cover - CLI entry point
+if __name__ == "__main__":
     main()

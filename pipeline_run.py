@@ -2051,22 +2051,36 @@ def compute_drift_dict(
     return {"drift": diff, "missing_h30": missing_h30, "missing_h5": missing_h5}
 
 
-def _heuristic_p_true(cfg, partants, odds_h5, odds_h30, stats_je) -> dict:
-    weights = {}
-    for p in partants:
-        cid = str(p["id"])
-        if cid not in odds_h5:
-            continue
-        o5 = float(odds_h5[cid])
-        base = 1.0 / o5
-        je = stats_je.get(cid, {})
-        bonus = (je.get("j_win", 0) + je.get("e_win", 0)) * float(cfg["JE_BONUS_COEF"])
-        drift = o5 - float(odds_h30.get(cid, o5))
-        coef = float(cfg.get("DRIFT_COEF", 0.05))
-        weight = base * (1.0 + bonus) * (1.0 - coef * drift)
-        weights[cid] = max(weight, 0.0)
-    total = sum(weights.values()) or 1.0
-    return {cid: w / total for cid, w in weights.items()}
+def _heuristic_p_true(
+    cfg: dict,
+    partants: dict,
+    odds_h5: dict,
+    odds_h30: dict,
+    stats_je: dict,
+) -> dict:
+    """Return p_true computed from a blend of implied probabilities and heuristics."""
+
+    runners = partants.get("runners", [])
+    if not runners:
+        return {}
+
+    p_true: dict[str, float] = {}
+    for runner in runners:
+        num = str(runner["num"])
+        o5 = odds_h5.get(num, 0.0)
+        if o5 > 0:
+            base = 1.0 / o5
+        else:
+            base = 0.0
+        p_true[num] = base
+
+    # Normalize
+    total = sum(p_true.values())
+    if total > 0:
+        for num in p_true:
+            p_true[num] /= total
+
+    return p_true
 
 
 def _coerce_positive_count(value) -> float | None:

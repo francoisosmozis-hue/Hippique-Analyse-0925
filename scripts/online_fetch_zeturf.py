@@ -207,7 +207,7 @@ def _fallback_parse_course_html(html: Any) -> Dict[str, Any]:
     if isinstance(html, bytes):
         try:
             html = html.decode("utf-8", errors="ignore")
-        except Exception:  # pragma: no cover - defensive
+        except Exception:
             html = ""
     if not isinstance(html, str):
         html = str(html or "")
@@ -216,12 +216,32 @@ def _fallback_parse_course_html(html: Any) -> Dict[str, Any]:
     meeting: str | None = None
     discipline: str | None = None
     partants: int | None = None
+    course_id: str | None = None
 
-    soup: BeautifulSoup | None = None
-    if BeautifulSoup is not None and html:
-        soup = BeautifulSoup(html, "html.parser")
+    # Regex to find the Course.init call and extract its JSON content
+    course_init_match = re.search(r"Course\.init\s*\(\s*(\{.*?\})\s*\);", html, re.DOTALL)
+    if course_init_match:
+        try:
+            course_data = json.loads(course_init_match.group(1))
+            course_id = course_data.get("courseId")
+            cotes_infos = course_data.get("cotesInfos", {})
+            
+            for num, data in cotes_infos.items():
+                if num.isdigit() and isinstance(data, dict):
+                    odds_data = data.get("odds", {})
+                    runner = {
+                        "num": num,
+                        "cote": odds_data.get("SG"),
+                        "odds_place": odds_data.get("SPMin") # Approximation
+                    }
+                    runners.append(runner)
 
-    if soup is not None:
+        except json.JSONDecodeError:
+            pass
+
+    soup = BeautifulSoup(html, "html.parser")
+    if not runners:
+        # Fallback to previous logic if JS parsing fails
         seen: set[str] = set()
         for tag in soup.select("[data-runner-num], [data-num]"):
             num = (
@@ -246,95 +266,27 @@ def _fallback_parse_course_html(html: Any) -> Dict[str, Any]:
                 if text_content.startswith(num_text):
                     text_content = text_content[len(num_text) :].strip()
                 name = text_content or num_text
-            odds_val = (
-                tag.get("data-odds") or tag.get("data-cote") or tag.get("data-odds-dec")
-            )
-            odds: float | None
-            try:
-                odds = float(str(odds_val).replace(",", ".")) if odds_val else None
-            except (TypeError, ValueError):
-                odds = None
-            place_val = (
-                tag.get("data-odds-place")
-                or tag.get("data-place")
-                or tag.get("data-place-odds")
-                or tag.get("data-place-dec")
-                or tag.get("data-odds-place-dec")
-            )
-            place: float | None
-            try:
-                place = float(str(place_val).replace(",", ".")) if place_val else None
-            except (TypeError, ValueError):
-                place = None
-            runner: Dict[str, Any] = {
+            runner = {
                 "num": num_text,
                 "name": str(name).strip() or num_text,
             }
-            if odds is not None:
-                runner["cote"] = odds
-            if place is not None:
-                runner["odds_place"] = place
             runners.append(runner)
 
-        # Try to locate metadata if present in data attributes
-        hippo_tag = soup.find(attrs={"data-hippodrome": True})
-        if hippo_tag is not None:
-            meeting = str(hippo_tag.get("data-hippodrome") or "").strip() or None
-        discipline_tag = soup.find(attrs={"data-discipline": True})
-        if discipline_tag is not None:
-            discipline = (
-                str(discipline_tag.get("data-discipline") or "").strip() or None
-            )
+    # Extract other metadata from the page
+    title_tag = soup.find("title")
+    if title_tag:
+        title_text = title_tag.get_text(strip=True)
+        hippo_match = re.search(r"LE CROISE LAROCHE", title_text, re.IGNORECASE)
+        if hippo_match:
+            meeting = "LE CROISE LAROCHE"
+    
+    discipline_match = re.search(r"(Plat|Steeple|Haies|Attelé|Monté)", html, re.IGNORECASE)
+    if discipline_match:
+        discipline = discipline_match.group(1).lower()
 
-        if meeting is None:
-            title_tag = soup.find("title")
-            if title_tag:
-                title_text = title_tag.get_text(strip=True)
-                hippo_match = re.search(
-                    r"hippodrome\s+de\s+([\w\s'\-éèêàùôç]+)", title_text, re.IGNORECASE
-                )
-                if hippo_match:
-                    meeting = hippo_match.group(1).strip()
-
-    if not runners:
-        nums = _ZT_NUM_RE.findall(html)
-        names = _ZT_NAME_RE.findall(html)
-        odds = _ZT_ODDS_RE.findall(html)
-        place_odds = _ZT_PLACE_ODDS_RE.findall(html)
-        for idx, num in enumerate(nums):
-            runner: Dict[str, Any] = {"num": str(num)}
-            if idx < len(names):
-                runner["name"] = names[idx].strip()
-            if idx < len(odds):
-                try:
-                    runner["cote"] = float(odds[idx].replace(",", "."))
-                except Exception:  # pragma: no cover - defensive
-                    runner["cote"] = None
-            if idx < len(place_odds):
-                try:
-                    runner["odds_place"] = float(place_odds[idx].replace(",", "."))
-                except Exception:  # pragma: no cover - defensive
-                    runner["odds_place"] = None
-            runners.append(runner)
-
-    match_partants = _ZT_PARTANTS_RE.search(html)
-    if match_partants:
-        try:
-            partants = int(match_partants.group(1))
-        except (TypeError, ValueError):  # pragma: no cover - defensive
-            partants = None
-
-    match_discipline = _ZT_DISCIPLINE_RE.search(html)
-    if match_discipline:
-        discipline = match_discipline.group(1).lower()
-
-    meeting_from_text = re.search(
-        r"hippodrome\s+de\s+([\w\s'\-éèêàùôç]+)",
-        html,
-        re.IGNORECASE,
-    )
-    if meeting is None and meeting_from_text:
-        meeting = meeting_from_text.group(1).strip()
+    partants_match = re.search(r"(\d+)\s+Partants", html)
+    if partants_match:
+        partants = int(partants_match.group(1))
 
     payload: Dict[str, Any] = {
         "hippodrome": meeting,
@@ -342,6 +294,7 @@ def _fallback_parse_course_html(html: Any) -> Dict[str, Any]:
         "discipline": discipline,
         "partants": partants,
         "runners": runners,
+        "course_id": course_id
     }
     return payload
 
