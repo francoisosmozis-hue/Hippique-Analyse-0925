@@ -27,9 +27,14 @@ jobs:
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           pip install ruff pytest mypy
-      - name: Lint with ruff
-        run: ruff check .
-      - name: Run tests
-        run: pytest -q || true
-      - name: Smoke Test
+      - name: Run checks and smoke tests
         run: bash scripts/cloudshell_verify.sh
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: run-artifacts-${{ matrix.python-version }}
+          path: |
+            logs/
+            tracking.csv
+          if-no-files-found: ignore
