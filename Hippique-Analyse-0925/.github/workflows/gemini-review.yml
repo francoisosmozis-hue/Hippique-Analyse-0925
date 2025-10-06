@@ -1,0 +1,126 @@
+name: Gemini Code Review (Dev API)
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: |
+          python -m pip install -U pip
+          pip install google-genai
+
+      - name: Run Gemini review on PR diff
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          # base branch de la PR (ex: main). On l’injecte pour fiabiliser le diff.
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          MODEL: gemini-2.0-flash   # rapide; tu peux tester gemini-1.5-pro
+        run: |
+          python - <<'PY'
+          import os, subprocess, pathlib
+          from google import genai
+
+          MODEL = os.getenv("MODEL", "gemini-2.0-flash")
+          BASE  = os.getenv("BASE_REF") or "main"
+
+          KEEP_EXT = {".py",".yml",".yaml",".md",".sh",".toml",".json",".ini",".cfg"}
+          EXCLUDE_DIRS = {".git",".venv","data","__pycache__","tests/__snapshots__",".github/workflows/cache"}
+          MAX_CHARS = 38000
+          MAX_FILES = 60  # garde-fou coût
+
+          def read_file_safe(p: pathlib.Path) -> str:
+            try:
+              if any(part in EXCLUDE_DIRS for part in p.parts): return ""
+              if p.stat().st_size > 300_000: return ""
+              t = p.read_text(errors="ignore")
+              if "\x00" in t: return ""
+              return t[:MAX_CHARS]
+            except Exception:
+              return ""
+
+          # S'assure que la base est présente localement
+          subprocess.run(["bash","-lc", 'git fetch --no-tags --prune origin "+refs/heads/*:refs/remotes/origin/*"'], check=False)
+
+          # Diff fichiers entre base et HEAD
+          try:
+            diff = subprocess.check_output(
+              ["bash","-lc", f"git diff --name-only origin/{BASE}...HEAD"], text=True
+            ).splitlines()
+          except Exception:
+            diff = subprocess.check_output(
+              ["bash","-lc", "git diff --name-only HEAD~1...HEAD"], text=True
+            ).splitlines()
+
+          # Filtrage extensions & existence
+          files = []
+          for f in diff:
+            p = pathlib.Path(f)
+            if p.exists() and p.is_file() and ((p.suffix in KEEP_EXT) or (p.name == "Dockerfile")):
+              files.append(p)
+          files = files[:MAX_FILES]
+
+          body = [f"## Gemini review (Dev API, model: {MODEL})\n"]
+          if not files:
+            body.append("Aucun fichier pertinent modifié.")
+          else:
+            client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+            PROMPT = """Tu es un relecteur senior (Python/CI/GCP). Pour chaque fichier :
+            1) Résume le rôle (1–2 lignes).
+            2) Donne 3 risques clés (bug/perf/sécurité/robustesse I/O/réseau).
+            3) Propose un patch minimal (diff unifié) si pertinent (sans casser les signatures publiques).
+            4) Propose 1 test pytest court ciblé.
+            Contexte: Analyse Hippique GPI v5.1 (budget 5€, EV/ROI, H-30/H-5, calibration payouts, Kelly 60%, abstention si data manquante).
+            Répond en Markdown concis et actionnable.
+            """
+
+            for p in files:
+              content = read_file_safe(p)
+              if not content:
+                continue
+              prompt = f"""{PROMPT}
+
+Fichier: `{p.as_posix()}`
+```text
+{content}
+```"""
+              print(f"[Gemini] Reviewing {p} ...")
+              try:
+                resp = client.models.generate_content(model=MODEL, contents=prompt)
+                text = getattr(resp, "text", None) or "_(pas de réponse)_"
+              except Exception as e:
+                text = f"_(erreur génération: {e})_"
+              body.append(f"\n### `{p.as_posix()}`\n{text}")
+
+            # Synthèse transversale
+            try:
+              synth_prompt = "Synthétise en 10 puces max les TODO P0/P1 transverses au diff."
+              resp = client.models.generate_content(model=MODEL, contents="\n".join(body) + "\n" + synth_prompt)
+              body.append("\n\n### Synthèse priorisée\n" + (getattr(resp, "text", None) or ""))
+            except Exception as e:
+              body.append(f"\n\n_(erreur synthèse: {e})_")
+
+          pathlib.Path("GEMINI_PR_REVIEW.md").write_text("\n".join(body), encoding="utf-8")
+          PY
+
+      - name: Post sticky comment on PR
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          recreate: true
+          path: GEMINI_PR_REVIEW.md

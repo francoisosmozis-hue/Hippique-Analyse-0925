@@ -1,0 +1,6 @@
+{
+  "meetings": [
+    {"reunion": "R1", "course": "C1", "time": "2024-01-01T12:00:00"},
+    {"reunion": "R1", "course": "C2", "time": "2024-01-01T12:30:00"}
+  ]
+}

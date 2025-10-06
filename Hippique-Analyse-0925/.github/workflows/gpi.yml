@@ -1,0 +1,355 @@
+name: GPI v5.1 - GPI
+
+on:
+  workflow_dispatch:
+    inputs:
+      course_id:
+        description: "Course ID"
+        required: true
+      meeting:
+        description: "Réunion (ex: R1)"
+        required: false
+      race:
+        description: "Course (ex: C5)"
+        required: false
+  schedule:
+    - cron: "25 15 * * *"
+    - cron: "55 15 * * *"
+
+permissions:
+  contents: read
+  
+env:
+  TZ: Europe/Paris
+  SNAPSHOTS: ${{ vars.GPI_SNAPSHOTS || 'H30,H5' }}
+  DRIFT_TOP_N: ${{ vars.GPI_DRIFT_TOP_N || 5 }}
+  DRIFT_MIN_DELTA: ${{ vars.GPI_DRIFT_MIN_DELTA || 0.8 }}
+  BUDGET_TOTAL: ${{ vars.GPI_BUDGET_TOTAL || '5' }}
+  EV_MIN_GLOBAL: ${{ vars.GPI_EV_MIN_GLOBAL || '0.40' }}
+  ROI_MIN_GLOBAL: ${{ vars.GPI_ROI_MIN_GLOBAL || '0.20' }}
+  MAX_VOL_PAR_CHEVAL: ${{ vars.GPI_MAX_VOL_PAR_CHEVAL || '0.60' }}
+  MIN_PAYOUT_COMBOS: ${{ vars.GPI_MIN_PAYOUT_COMBOS || '10.0' }}
+  ALLOW_JE_NA: ${{ vars.GPI_ALLOW_JE_NA || 'false' }}
+  GPI_CONFIG_PATH: ${{ vars.GPI_CONFIG_PATH || 'config/gpi.yml' }}
+  GPI_OUTDIR: ${{ vars.GPI_OUTDIR || 'data/out' }}
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        env:
+          PYPI_EXTRA_INDEX: ${{ secrets.PYPI_EXTRA_INDEX }}
+        run: |
+          python -m pip install --upgrade pip
+          if [ -n "$PYPI_EXTRA_INDEX" ]; then
+            pip install -r requirements.txt --extra-index-url "$PYPI_EXTRA_INDEX"
+          else
+            pip install -r requirements.txt
+          fi
+      - name: Resolve course context
+        id: course
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_COURSE_ID: ${{ github.event.inputs.course_id }}
+          INPUT_MEETING: ${{ github.event.inputs.meeting }}
+          INPUT_RACE: ${{ github.event.inputs.race }}
+          FALLBACK_COURSE_ID: ${{ vars.GPI_COURSE_ID }}
+          SCHEDULE_FILE: ${{ vars.GPI_SCHEDULE_FILE || 'schedules.csv' }}
+          PLANNING_DIR: ${{ vars.GPI_PLANNING_DIR || 'data/planning' }}
+        run: |
+          python - <<'PY'
+          import os
+
+          from scripts.resolve_course_id import CourseContextError, resolve_course_context
+
+          event = os.environ.get("EVENT_NAME")
+          course_id = ""
+          meeting = os.environ.get("INPUT_MEETING") or ""
+          race = os.environ.get("INPUT_RACE") or ""
+
+          if event == "workflow_dispatch":
+              course_id = os.environ.get("INPUT_COURSE_ID") or ""
+              if not course_id:
+                  print("::error::Missing course_id input for workflow_dispatch")
+                  raise SystemExit(1)
+          else:
+              fallback = os.environ.get("FALLBACK_COURSE_ID") or None
+              schedule_file = os.environ.get("SCHEDULE_FILE")
+              planning_dir = os.environ.get("PLANNING_DIR")
+              try:
+                  ctx = resolve_course_context(
+                      fallback=fallback,
+                      schedule_file=schedule_file,
+                      planning_dir=planning_dir,
+                  )
+              except CourseContextError as exc:
+                  print(f"::error::{exc}")
+                  raise SystemExit(1) from exc
+              course_id = ctx.course_id
+              meeting = meeting or (ctx.meeting or "")
+              race = race or (ctx.race or "")
+
+          gh_output = os.environ["GITHUB_OUTPUT"]
+          with open(gh_output, "a", encoding="utf-8") as fh:
+              fh.write(f"course_id={course_id}\n")
+              fh.write(f"meeting={meeting}\n")
+              fh.write(f"race={race}\n")
+
+          gh_env = os.environ["GITHUB_ENV"]
+          with open(gh_env, "a", encoding="utf-8") as fh:
+              fh.write(f"COURSE_ID={course_id}\n")
+              if meeting:
+                  fh.write(f"MEETING_LABEL={meeting}\n")
+              if race:
+                  fh.write(f"RACE_LABEL={race}\n")
+          PY
+      - name: Inject course ID into source URL
+        if: steps.course.outputs.course_id != ''
+        run: |
+          cid="${{ steps.course.outputs.course_id }}"
+          test -n "$cid"
+          sed -i "s/{course_id}/$cid/" config/sources.yml
+      - name: Fetch H-30 snapshot
+        if: >
+          steps.course.outputs.course_id != '' && (
+            github.event_name == 'workflow_dispatch' ||
+            (
+              github.event_name == 'schedule' &&
+              (github.event.schedule == '25 15 * * *' || github.event.schedule == '55 15 * * *')
+            )
+          )
+        run: |
+          mkdir -p data/h30
+          python scripts/online_fetch_zeturf.py --mode h30 --out data/h30/h30.json
+          meeting_input="${{ github.event.inputs.meeting }}"
+          if [ -z "$meeting_input" ]; then
+            meeting_input="${{ steps.course.outputs.meeting }}"
+          fi
+          race_input="${{ github.event.inputs.race }}"
+          if [ -z "$race_input" ]; then
+            race_input="${{ steps.course.outputs.race }}"
+          fi
+          if [ -n "$meeting_input" ] && [ -n "$race_input" ]; then
+            python pipeline_run.py snapshot --when h30 --meeting "$meeting_input" --race "$race_input" --outdir data/h30
+          fi
+      - name: Extract H-30 odds map
+        if: >
+          steps.course.outputs.course_id != '' && (
+            github.event_name == 'workflow_dispatch' ||
+            (
+              github.event_name == 'schedule' &&
+              (github.event.schedule == '25 15 * * *' || github.event.schedule == '55 15 * * *')
+            )
+          )
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          src = Path("data/h30/h30.json")
+          dest = Path("data/h30/odds.json")
+          if not src.exists():
+              raise SystemExit("Missing H-30 snapshot at data/h30/h30.json")
+
+          try:
+              payload = json.loads(src.read_text(encoding="utf-8"))
+          except json.JSONDecodeError as exc:
+              raise SystemExit(f"Invalid JSON in {src}: {exc}")
+
+          odds: dict[str, float] = {}
+          for runner in payload.get("runners", []):
+              cid = runner.get("id")
+              if cid is None:
+                  continue
+              value = runner.get("odds")
+              if value in (None, "", "-"):
+                  continue
+              try:
+                  odds[str(cid)] = float(value)
+              except (TypeError, ValueError):
+                  continue
+
+          dest.write_text(json.dumps(odds, ensure_ascii=False, indent=2), encoding="utf-8")
+          print(f"Extracted {len(odds)} H-30 odds entries to {dest}")
+          PY
+      - name: Fetch H-5 snapshot and diff
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && github.event.schedule == '55 15 * * *')
+        run: |
+          mkdir -p data/h30 data/h5 data/diff
+          python scripts/online_fetch_zeturf.py --mode h5 --out data/h5/h5.json
+          python scripts/online_fetch_zeturf.py --mode diff --out data/diff/diff_drift.json
+      - name: Extract H-5 odds map
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && github.event.schedule == '55 15 * * *')
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          src = Path("data/h5/h5.json")
+          dest = Path("data/h5/odds.json")
+          if not src.exists():
+              raise SystemExit("Missing H-5 snapshot at data/h5/h5.json")
+
+          try:
+              payload = json.loads(src.read_text(encoding="utf-8"))
+          except json.JSONDecodeError as exc:
+              raise SystemExit(f"Invalid JSON in {src}: {exc}")
+
+          odds: dict[str, float] = {}
+          for runner in payload.get("runners", []):
+              cid = runner.get("id")
+              if cid is None:
+                  continue
+              value = runner.get("odds")
+              if value in (None, "", "-"):
+                  continue
+              try:
+                  odds[str(cid)] = float(value)
+              except (TypeError, ValueError):
+                  continue
+
+          dest.write_text(json.dumps(odds, ensure_ascii=False, indent=2), encoding="utf-8")
+          print(f"Extracted {len(odds)} H-5 odds entries to {dest}")
+          PY
+      - name: Fetch J/E stats from Geny
+        if: steps.course.outputs.course_id != '' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && github.event.schedule == '55 15 * * *'))
+        env:
+          GENY_COOKIE: ${{ secrets.GENY_COOKIE }}
+        run: |
+          python scripts/fetch_je_stats.py \
+            --course-id "${{ steps.course.outputs.course_id }}" \
+            --h5 data/h5/h5.json \
+            --out data/h5/stats_je.json
+      - name: Ensure pipeline inputs are available
+        if: steps.course.outputs.course_id != '' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && github.event.schedule == '55 15 * * *'))
+        run: |
+          set -euo pipefail
+          missing=()
+          for path in \
+            data/h30/h30.json \
+            data/h30/odds.json \
+            data/h5/h5.json \
+            data/h5/odds.json \
+            data/h5/stats_je.json \
+            data/diff/diff_drift.json; do
+            if [ ! -s "$path" ]; then
+              echo "::error::Missing pipeline input: $path" >&2
+              missing+=("$path")
+            fi
+          done
+          if [ "${#missing[@]}" -ne 0 ]; then
+            echo "Found ${#missing[@]} missing inputs." >&2
+            exit 1
+          fi
+      - name: Check GPI configuration
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && github.event.schedule == '55 15 * * *')
+        run: |
+          if [ ! -f "$GPI_CONFIG_PATH" ]; then
+            echo "GPI configuration missing at $GPI_CONFIG_PATH" >&2
+            exit 1
+          fi
+      - name: Inspect runner identifiers
+        if: steps.course.outputs.course_id != '' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && github.event.schedule == '55 15 * * *'))
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          from pipeline_run import compute_drift_dict
+
+          h30_path = Path("data/h30/odds.json")
+          h5_path = Path("data/h5/odds.json")
+          partants_path = Path("data/h5/h5.json")
+
+          if not h30_path.exists():
+              raise SystemExit("Missing odds map at data/h30/odds.json")
+          if not h5_path.exists():
+              raise SystemExit("Missing odds map at data/h5/odds.json")
+          if not partants_path.exists():
+              raise SystemExit("Missing runners payload at data/h5/h5.json")
+
+          odds_h30 = json.loads(h30_path.read_text(encoding="utf-8"))
+          odds_h5 = json.loads(h5_path.read_text(encoding="utf-8"))
+          partants_data = json.loads(partants_path.read_text(encoding="utf-8"))
+
+          partants = partants_data.get("runners", [])
+          id2name = partants_data.get(
+              "id2name",
+              {
+                  str(p.get("id")): p.get("name", str(p.get("id")))
+                  for p in partants
+                  if p.get("id") is not None
+              },
+          )
+
+          drift = compute_drift_dict(
+              odds_h30,
+              odds_h5,
+              id2name,
+              top_n=int(os.getenv("DRIFT_TOP_N", "5")),
+              min_delta=float(os.getenv("DRIFT_MIN_DELTA", "0.8")),
+          )
+
+          print("compute_drift_dict IDs:", [row["id"] for row in drift.get("drift", [])])
+
+          ticket_ids = [
+              str(p.get("id"))
+              for p in partants
+              if p.get("id") is not None and str(p.get("id")) in odds_h5
+          ]
+          print("Ticket construction IDs:", ticket_ids)
+
+          missing = sorted(
+              {
+                  str(p.get("id"))
+                  for p in partants
+                  if p.get("id") is not None
+              }
+              - set(odds_h5)
+          )
+          if missing:
+              print("::warning::Missing odds for partant IDs:", ",".join(missing))
+          else:
+              print("All partants have odds entries at H-5.")
+          PY
+      - name: Run tests
+        if: steps.course.outputs.course_id != '' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && github.event.schedule == '55 15 * * *'))
+        run: pytest -q
+      - name: Run pipeline
+        if: steps.course.outputs.course_id != '' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && github.event.schedule == '55 15 * * *'))
+        run: |
+          mkdir -p "$GPI_OUTDIR"
+          extra_flags=""
+          case "$ALLOW_JE_NA" in
+            1|true|TRUE|True|yes|YES)
+              extra_flags="--allow-je-na"
+              ;;
+          esac
+          python pipeline_run.py analyse \
+            --h30 data/h30/odds.json \
+            --h5 data/h5/odds.json \
+            --stats-je data/h5/stats_je.json \
+            --partants data/h5/h5.json \
+            --gpi "$GPI_CONFIG_PATH" \
+            --outdir "$GPI_OUTDIR" \
+            --diff data/diff/diff_drift.json \
+            --budget "$BUDGET_TOTAL" \
+            --ev-global "$EV_MIN_GLOBAL" \
+            --roi-global "$ROI_MIN_GLOBAL" \
+            --max-vol "$MAX_VOL_PAR_CHEVAL" \
+            --min-payout "$MIN_PAYOUT_COMBOS" \
+            $extra_flags
+      - name: Sync data to GCS
+        run: python scripts/drive_sync.py --push data
+        env:
+          GCS_SERVICE_KEY_B64: ${{ secrets.GCS_SERVICE_KEY_B64 }}
+          GCS_BUCKET: ${{ vars.GCS_BUCKET }}
+          GCS_PREFIX: ${{ vars.GCS_PREFIX || '' }}
+          GOOGLE_CLOUD_PROJECT: ${{ vars.GOOGLE_CLOUD_PROJECT }}
+      
