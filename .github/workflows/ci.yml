@@ -5,13 +5,31 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11"]
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: { python-version: '3.11' }
-      - run: python -m pip install -U pip wheel
-      - run: |
-          if [ -f requirements.txt ]; then pip install -r requirements.txt || true; fi
-          pip install ruff pytest pandas pyyaml beautifulsoup4 lxml openpyxl
-      - run: ruff check .
-      - run: pytest -q || true
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ matrix.python-version }}-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-${{ matrix.python-version }}-
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install ruff pytest mypy
+      - name: Lint with ruff
+        run: ruff check .
+      - name: Run tests
+        run: pytest -q || true
+      - name: Smoke Test
+        run: bash scripts/cloudshell_verify.sh
