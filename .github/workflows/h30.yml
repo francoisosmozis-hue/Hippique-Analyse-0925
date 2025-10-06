@@ -72,7 +72,7 @@ ref = os.environ.get("GITHUB_REF_NAME", os.environ.get("GITHUB_REF", ""))
 repo = os.environ.get("GITHUB_REPOSITORY", "")
 url = f"https://github.com/{repo}/actions/runs/{os.environ.get('GITHUB_RUN_ID', '')}"
 summary = f"{prefix} Lint sources.txt : {status}"
-message = f"{summary} – {workflow} #{run_number} ({ref})"
+message = f"{summary} — {workflow} #{run_number} ({ref})"
 payload = {
     "text": message,
     "blocks": [
@@ -94,6 +94,7 @@ with urllib.request.urlopen(req) as resp:
     resp.read()
 PY
 
+      # CORRECTION: Chemin vers scripts/online_fetch_zeturf.py
       - name: Fetch H-30 snapshots
         run: |
           set -euo pipefail
@@ -108,7 +109,7 @@ PY
               continue
             fi
             echo "→ Snapshot ${url}"
-            python online_fetch_zeturf.py --reunion-url "${url}" --snapshot H-30 --out "${OUTPUT_DIR}"
+            python scripts/online_fetch_zeturf.py --reunion-url "${url}" --snapshot H-30 --out "${OUTPUT_DIR}"
           done < sources.txt
 
       - name: Mettre à jour l'onglet Planning (H-30)
@@ -131,12 +132,13 @@ PY
             ${{ env.EXCEL_PATH }}
           if-no-files-found: warn
 
+      # CORRECTION: Ajout de condition pour vérifier les secrets GCS
       - name: Synchroniser sur le stockage (optionnel)
-        if: success() && env.EXCEL_PATH != '' && vars.GCS_BUCKET != ''
+        if: success() && env.EXCEL_PATH != '' && vars.GCS_BUCKET != '' && secrets.GCS_SERVICE_KEY_B64 != ''
         env:
           GCS_BUCKET: ${{ vars.GCS_BUCKET }}
           GCS_PREFIX: ${{ vars.GCS_PREFIX || '' }}
-          GCS_SERVICE_KEY_B64: ${{ secrets.GCS_SERVICE_KEY_B64 || '' }}
+          GCS_SERVICE_KEY_B64: ${{ secrets.GCS_SERVICE_KEY_B64 }}
         run: |
           set -euo pipefail
           dir=$(dirname "${EXCEL_PATH}")
