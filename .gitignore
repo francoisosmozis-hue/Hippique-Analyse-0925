@@ -90,3 +90,6 @@ excel/
 # --- Cache divers ---
 .cache/
 /Hippique-Analyse-0925
+
+# Avoid shadowing third-party libs
+/sklearn/
