@@ -22,7 +22,7 @@ from zoneinfo import ZoneInfo
 
 import yaml
 
-from scripts import online_fetch_zeturf as _impl
+from scripts import online_fetch_zeturf as _raw_impl
 
 
 _RC_COMBINED_RE = re.compile(r"R?\s*(\d+)\s*C\s*(\d+)", re.IGNORECASE)
@@ -147,7 +147,7 @@ def _load_full_impl() -> Any:
     return module
 
 
-def _resolve_impl() -> Any:
+def _resolve_impl(module: Any) -> Any:
     """Ensure the implementation module exposes the expected public API."""
 
     required_attrs = {
@@ -160,12 +160,12 @@ def _resolve_impl() -> Any:
         "time",
     }
 
-    if not all(hasattr(_impl, attr) for attr in required_attrs):
+    if not all(hasattr(module, attr) for attr in required_attrs):
         return _load_full_impl()
-    return _impl
+    return module
 
 
-_impl = _resolve_impl()
+_impl = _resolve_impl(_raw_impl)
 
 try:  # pragma: no cover - requests is always available in production
     import requests
