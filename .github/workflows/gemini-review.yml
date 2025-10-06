@@ -95,12 +95,13 @@ jobs:
               content = read_file_safe(p)
               if not content:
                 continue
+              # Échappement des backticks pour éviter conflit YAML
               prompt = f"""{PROMPT}
 
 Fichier: `{p.as_posix()}`
-```text
+---
 {content}
-```"""
+---"""
               print(f"[Gemini] Reviewing {p} ...")
               try:
                 resp = client.models.generate_content(model=MODEL, contents=prompt)
