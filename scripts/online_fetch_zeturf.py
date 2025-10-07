@@ -13,7 +13,17 @@ import sys
 import time
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, List, Mapping, MutableMapping, Sequence, TypeVar
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    List,
+    Mapping,
+    MutableMapping,
+    Sequence,
+    TypeVar,
+)
 
 try:
     import requests
@@ -22,9 +32,10 @@ except ModuleNotFoundError as exc:  # pragma: no cover - exercised via dedicated
         "The 'requests' package is required to fetch data from Zeturf. "
         "Install it with 'pip install requests' or switch to the urllib-based fallback implementation."
     ) from exc
+import re
+
 import yaml
 from bs4 import BeautifulSoup
-import re
 
 try:  # pragma: no cover - Python < 3.9 fallbacks are extremely rare
     from zoneinfo import ZoneInfo
@@ -163,8 +174,8 @@ _ZT_PLACE_ODDS_RE = re.compile(
     r'data-(?:odds-place|place-odds|place)=(?:"|\')?([0-9]+(?:[.,][0-9]+)?)',
     re.IGNORECASE,
 )
-_ZT_PARTANTS_RE = re.compile(r'(?:\b|\D)([0-9]{1,2})\s+partants?', re.IGNORECASE)
-_ZT_DISCIPLINE_RE = re.compile(r'(trot|plat|obstacles?|mont[ée])', re.IGNORECASE)
+_ZT_PARTANTS_RE = re.compile(r"(?:\b|\D)([0-9]{1,2})\s+partants?", re.IGNORECASE)
+_ZT_DISCIPLINE_RE = re.compile(r"(trot|plat|obstacles?|mont[ée])", re.IGNORECASE)
 
 
 def _looks_like_suspicious_html(html: Any) -> bool:
@@ -236,9 +247,7 @@ def _fallback_parse_course_html(html: Any) -> Dict[str, Any]:
                     text_content = text_content[len(num_text) :].strip()
                 name = text_content or num_text
             odds_val = (
-                tag.get("data-odds")
-                or tag.get("data-cote")
-                or tag.get("data-odds-dec")
+                tag.get("data-odds") or tag.get("data-cote") or tag.get("data-odds-dec")
             )
             odds: float | None
             try:
@@ -257,7 +266,10 @@ def _fallback_parse_course_html(html: Any) -> Dict[str, Any]:
                 place = float(str(place_val).replace(",", ".")) if place_val else None
             except (TypeError, ValueError):
                 place = None
-            runner: Dict[str, Any] = {"num": num_text, "name": str(name).strip() or num_text}
+            runner: Dict[str, Any] = {
+                "num": num_text,
+                "name": str(name).strip() or num_text,
+            }
             if odds is not None:
                 runner["cote"] = odds
             if place is not None:
@@ -270,13 +282,17 @@ def _fallback_parse_course_html(html: Any) -> Dict[str, Any]:
             meeting = str(hippo_tag.get("data-hippodrome") or "").strip() or None
         discipline_tag = soup.find(attrs={"data-discipline": True})
         if discipline_tag is not None:
-            discipline = str(discipline_tag.get("data-discipline") or "").strip() or None
+            discipline = (
+                str(discipline_tag.get("data-discipline") or "").strip() or None
+            )
 
         if meeting is None:
             title_tag = soup.find("title")
             if title_tag:
                 title_text = title_tag.get_text(strip=True)
-                hippo_match = re.search(r"hippodrome\s+de\s+([\w\s'\-éèêàùôç]+)", title_text, re.IGNORECASE)
+                hippo_match = re.search(
+                    r"hippodrome\s+de\s+([\w\s'\-éèêàùôç]+)", title_text, re.IGNORECASE
+                )
                 if hippo_match:
                     meeting = hippo_match.group(1).strip()
 
@@ -329,6 +345,7 @@ def _fallback_parse_course_html(html: Any) -> Dict[str, Any]:
     }
     return payload
 
+
 _URL_FIELDS: Sequence[str] = ("url", "endpoint", "href")
 _MODE_HINTS: Dict[str, Sequence[str]] = {
     "planning": ("planning", "meetings", "schedule"),
@@ -347,9 +364,13 @@ def _load_geny_discovery_payload() -> Mapping[str, Any]:
     """Return the JSON payload produced by ``discover_geny_today`` when available."""
 
     try:
-        raw = subprocess.check_output([sys.executable, str(_DISCOVER_GENY_SCRIPT)], text=True)
+        raw = subprocess.check_output(
+            [sys.executable, str(_DISCOVER_GENY_SCRIPT)], text=True
+        )
     except FileNotFoundError as exc:  # pragma: no cover - defensive guard
-        logger.warning("Discovery helper %s introuvable: %s", _DISCOVER_GENY_SCRIPT, exc)
+        logger.warning(
+            "Discovery helper %s introuvable: %s", _DISCOVER_GENY_SCRIPT, exc
+        )
         return {}
     except subprocess.CalledProcessError as exc:  # pragma: no cover - external failure
         logger.warning("Echec discover_geny_today (code %s): %s", exc.returncode, exc)
@@ -424,6 +445,7 @@ _HOUR_ONLY_PATTERN = re.compile(
     r"(\d{1,2})\s*(?:heures?|heure|hours?|hrs?|hres?|[hH])",
     re.IGNORECASE,
 )
+
 
 @lru_cache(maxsize=1)
 def _env_timezone() -> dt.tzinfo | None:
@@ -527,9 +549,10 @@ def resolve_source_url(config: Dict[str, Any], mode: str) -> str:
 
     raise ValueError(f"No source URL configured for mode '{mode}'")
 
+
 def _fetch_from_geny() -> Dict[str, Any]:
     """Scrape meetings from Geny when the Zeturf API is unavailable."""
-    
+
     resp = _http_get_with_backoff(GENY_FALLBACK_URL, timeout=10, require_text=True)
     soup = BeautifulSoup(resp.text, "html.parser")
     today = dt.date.today().isoformat()
@@ -560,7 +583,7 @@ def fetch_meetings(url: str) -> Any:
         status = exc.response.status_code if exc.response is not None else None
         if status == 404:
             return _fetch_from_geny()
-            
+
         raise
     except requests.RequestException:
         return _fetch_from_geny()
@@ -622,7 +645,7 @@ def fetch_runners(url: str) -> Dict[str, Any]:
         if status == 404 and course_id:
             return fetch_from_geny_idcourse(course_id)
         raise
-    
+
     text_payload = getattr(resp, "text", "")
     payload: Dict[str, Any] | None
     fallback_used = False
@@ -655,7 +678,9 @@ def fetch_runners(url: str) -> Dict[str, Any]:
         for field in ("hippodrome", "discipline", "partants"):
             value = payload.get(field)
             if value in (None, ""):
-                logger.warning("Snapshot field '%s' missing after fallback for %s", field, url)
+                logger.warning(
+                    "Snapshot field '%s' missing after fallback for %s", field, url
+                )
 
     if course_id:
         payload.setdefault("course_id", course_id)
@@ -663,7 +688,11 @@ def fetch_runners(url: str) -> Dict[str, Any]:
         if not start_time:
             scraped = _scrape_start_time_from_course_page(course_id)
             if scraped:
-                meta = payload.get("meta") if isinstance(payload.get("meta"), Mapping) else {}
+                meta = (
+                    payload.get("meta")
+                    if isinstance(payload.get("meta"), Mapping)
+                    else {}
+                )
                 updated_meta = dict(meta) if meta else {}
                 updated_meta.setdefault("start_time", scraped)
                 payload["meta"] = updated_meta
@@ -770,7 +799,9 @@ def _resolve_rc_entry(rc: str, obj: Any, *, visited: set[int] | None = None) -> 
     return None
 
 
-def _extract_course_id_from_entry(entry: Any, *, visited: set[int] | None = None) -> str | None:
+def _extract_course_id_from_entry(
+    entry: Any, *, visited: set[int] | None = None
+) -> str | None:
     """Extract ``course_id`` from ``entry`` when present."""
 
     if entry is None:
@@ -800,7 +831,15 @@ def _extract_course_id_from_entry(entry: Any, *, visited: set[int] | None = None
         return None
     visited.add(obj_id)
 
-    for key in ("course_id", "id_course", "courseId", "idCourse", "id", "numero", "number"):
+    for key in (
+        "course_id",
+        "id_course",
+        "courseId",
+        "idCourse",
+        "id",
+        "numero",
+        "number",
+    ):
         if key in entry:
             value = entry[key]
             if isinstance(value, (int, str)):
@@ -894,10 +933,7 @@ def _fetch_race_snapshot_by_rc(
 
     needs_injection = bool(
         entry_url
-        and (
-            _COURSE_PLACEHOLDER.search(entry_url)
-            or "{course_id}" in entry_url
-        )
+        and (_COURSE_PLACEHOLDER.search(entry_url) or "{course_id}" in entry_url)
     )
 
     template: str | None = None
@@ -983,7 +1019,9 @@ def fetch_race_snapshot(
         )
 
     if course is None:
-        raise ValueError("course label is required when reunion/course are provided separately")
+        raise ValueError(
+            "course label is required when reunion/course are provided separately"
+        )
 
     reunion_label = _normalise_reunion_label(reunion)
     course_label = _normalise_course_label(course)
@@ -997,8 +1035,12 @@ def fetch_race_snapshot(
     else:
         config = {}
 
-    rc_map_raw = config.get("rc_map") if isinstance(config.get("rc_map"), Mapping) else None
-    rc_map: Dict[str, Any] = {str(k): v for k, v in rc_map_raw.items()} if rc_map_raw else {}
+    rc_map_raw = (
+        config.get("rc_map") if isinstance(config.get("rc_map"), Mapping) else None
+    )
+    rc_map: Dict[str, Any] = (
+        {str(k): v for k, v in rc_map_raw.items()} if rc_map_raw else {}
+    )
 
     entry = dict(rc_map.get(rc, {}))
     entry.setdefault("reunion", reunion_label)
@@ -1048,7 +1090,7 @@ def _rows_to_runners(rows: Iterable[Any]) -> List[Dict[str, Any]]:
         runners.append(runner)
     return runners
 
-    
+
 def _parse_geny_runners(soup: BeautifulSoup, html: str) -> List[Dict[str, Any]]:
     """Parse runner information from Geny partants HTML."""
 
@@ -1059,7 +1101,7 @@ def _parse_geny_runners(soup: BeautifulSoup, html: str) -> List[Dict[str, Any]]:
             return float(str(value).replace(",", "."))
         except (TypeError, ValueError):  # pragma: no cover - defensive
             return None
-            
+
     runners = _rows_to_runners(soup.select("tr"))
     if runners:
         return runners
@@ -1255,6 +1297,7 @@ def fetch_from_geny_idcourse(id_course: str) -> Dict[str, Any]:
             return float(value)
         except (TypeError, ValueError):
             return None
+
     try:
         data = resp_cotes.json()
     except ValueError:
@@ -1278,7 +1321,12 @@ def fetch_from_geny_idcourse(id_course: str) -> Dict[str, Any]:
         else:
             items = data
         for item in items:
-            num = str(item.get("num") or item.get("numero") or item.get("id") or item.get("number"))
+            num = str(
+                item.get("num")
+                or item.get("numero")
+                or item.get("id")
+                or item.get("number")
+            )
             if not num:
                 continue
             win_val = _coerce_float(
@@ -1290,7 +1338,9 @@ def fetch_from_geny_idcourse(id_course: str) -> Dict[str, Any]:
                 or item.get("value")
                 or item.get("gagnant")
             )
-            odds_block = item.get("odds") if isinstance(item.get("odds"), Mapping) else None
+            odds_block = (
+                item.get("odds") if isinstance(item.get("odds"), Mapping) else None
+            )
             if win_val is None and isinstance(odds_block, Mapping):
                 win_val = _coerce_float(
                     odds_block.get("win")
@@ -1312,7 +1362,9 @@ def fetch_from_geny_idcourse(id_course: str) -> Dict[str, Any]:
                     or odds_block.get("place_odds")
                     or odds_block.get("placeOdds")
                 )
-            market_block = item.get("market") if isinstance(item.get("market"), Mapping) else None
+            market_block = (
+                item.get("market") if isinstance(item.get("market"), Mapping) else None
+            )
             if place_val is None and market_block:
                 place_val = _coerce_float(
                     market_block.get("place")
@@ -1373,7 +1425,9 @@ def write_snapshot_from_geny(
     return dest
 
 
-def _compute_implied_probabilities(runners: Sequence[Dict[str, Any]]) -> Dict[str, float]:
+def _compute_implied_probabilities(
+    runners: Sequence[Dict[str, Any]],
+) -> Dict[str, float]:
     """Return implied win probabilities for ``runners`` based on their odds."""
 
     implied: Dict[str, float] = {}
@@ -1565,7 +1619,9 @@ def _extract_start_time(html: str) -> str | None:
                 formatted = _from_json_ld(nested)
                 if formatted:
                     return formatted
-        elif isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        elif isinstance(value, Sequence) and not isinstance(
+            value, (str, bytes, bytearray)
+        ):
             for item in value:
                 formatted = _from_json_ld(item)
                 if formatted:
@@ -1635,7 +1691,7 @@ def _extract_start_time(html: str) -> str | None:
             if formatted:
                 return formatted
     attr_hint_names = ("aria-label", "title", "data-label", "data-tooltip")
-    
+
     for tag in soup.find_all(True):
         descriptor = " ".join(
             [
@@ -1753,7 +1809,9 @@ def normalize_snapshot(payload: Dict[str, Any]) -> Dict[str, Any]:
         "date": payload.get("date", dt.date.today().isoformat()),
         "discipline": payload.get("discipline", ""),
     }
-    course_id = payload.get("course_id") or payload.get("id_course") or payload.get("idCourse")
+    course_id = (
+        payload.get("course_id") or payload.get("id_course") or payload.get("idCourse")
+    )
     if course_id:
         meta["course_id"] = str(course_id)
 
@@ -1767,7 +1825,9 @@ def normalize_snapshot(payload: Dict[str, Any]) -> Dict[str, Any]:
     if not start_time and course_id:
         start_time = _scrape_start_time_from_course_page(str(course_id))
     if not start_time:
-        raw_meta = payload.get("meta") if isinstance(payload.get("meta"), Mapping) else None
+        raw_meta = (
+            payload.get("meta") if isinstance(payload.get("meta"), Mapping) else None
+        )
         if isinstance(raw_meta, Mapping):
             start_time = _normalise_start_time(raw_meta.get("start_time"))
     if not start_time:
@@ -1810,12 +1870,14 @@ def normalize_snapshot(payload: Dict[str, Any]) -> Dict[str, Any]:
 
     meta.setdefault("partants", len(runners))
 
-    meta.update({
-        "runners": runners,
-        "id2name": id2name,
-        "odds": odds_map,
-        "p_imp": implied,
-    })
+    meta.update(
+        {
+            "runners": runners,
+            "id2name": id2name,
+            "odds": odds_map,
+            "p_imp": implied,
+        }
+    )
     _warn_missing_metadata(meta)
     return meta
 
@@ -1846,7 +1908,11 @@ def _warn_missing_metadata(meta: Mapping[str, Any]) -> None:
         or meta.get("id_course")
         or "unknown"
     )
-    logger.warning("Missing snapshot metadata for %s: %s", rc, ", ".join(sorted(set(missing))))
+    logger.warning(
+        "Missing snapshot metadata for %s: %s", rc, ", ".join(sorted(set(missing)))
+    )
+
+
 def compute_diff(
     h30: Dict[str, Any],
     h5: Dict[str, Any],
@@ -1873,14 +1939,20 @@ def compute_diff(
     return {"top_steams": steams, "top_drifts": drifts}
 
 
-def make_diff(course_id: str, h30_path: Path | str, h5_path: Path | str, outdir: Path | str = ".") -> Path:
+def make_diff(
+    course_id: str, h30_path: Path | str, h5_path: Path | str, outdir: Path | str = "."
+) -> Path:
     """Write steam and drift lists to ``outdir`` and return the output path."""
     h30 = json.loads(Path(h30_path).read_text(encoding="utf-8"))
     h5 = json.loads(Path(h5_path).read_text(encoding="utf-8"))
     res = compute_diff(h30, h5)
     data = {
-        "steams": [{"id_cheval": r["id"], "delta": r["delta"]} for r in res["top_steams"]],
-        "drifts": [{"id_cheval": r["id"], "delta": r["delta"]} for r in res["top_drifts"]],
+        "steams": [
+            {"id_cheval": r["id"], "delta": r["delta"]} for r in res["top_steams"]
+        ],
+        "drifts": [
+            {"id_cheval": r["id"], "delta": r["delta"]} for r in res["top_drifts"]
+        ],
     }
     outdir = Path(outdir)
     outdir.mkdir(parents=True, exist_ok=True)
@@ -1907,10 +1979,18 @@ __all__ = [
 
 def main() -> None:  # pragma: no cover - minimal CLI wrapper
     parser = argparse.ArgumentParser(description="Fetch data from Zeturf")
-    parser.add_argument("--mode", choices=["planning", "h30", "h5", "diff"], help="Mode classique (planning/h30/h5/diff)")
+    parser.add_argument(
+        "--mode",
+        choices=["planning", "h30", "h5", "diff"],
+        help="Mode classique (planning/h30/h5/diff)",
+    )
     parser.add_argument("--out", required=True, help="Fichier ou dossier de sortie")
-    parser.add_argument("--sources", default="config/sources.yml", help="Fichier YAML des endpoints")
-    parser.add_argument("--reunion-url", help="URL publique de la réunion ZEturf à parcourir")
+    parser.add_argument(
+        "--sources", default="config/sources.yml", help="Fichier YAML des endpoints"
+    )
+    parser.add_argument(
+        "--reunion-url", help="URL publique de la réunion ZEturf à parcourir"
+    )
     parser.add_argument("--snapshot", help="Phase pour --reunion-url (H-30 ou H-5)")
     args = parser.parse_args()
 
@@ -1937,12 +2017,12 @@ def main() -> None:  # pragma: no cover - minimal CLI wrapper
         written = 0
         for course_id in course_ids:
             api_url = _inject_course_id(url_template, course_id)
-            
+
             temp_dir = out_dir / str(course_id)
             temp_dir.mkdir(parents=True, exist_ok=True)
             temp_url_file = temp_dir / "source_url.txt"
             temp_url_file.write_text(api_url, encoding="utf-8")
-            
+
             payload = fetch_runners(api_url)
             data = normalize_snapshot(payload)
             data.setdefault("course_id", str(course_id))
@@ -1975,7 +2055,9 @@ def main() -> None:  # pragma: no cover - minimal CLI wrapper
                 if not target_url_file.exists():
                     target_url_file.write_text(api_url, encoding="utf-8")
 
-            dest.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+            dest.write_text(
+                json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
             written += 1
 
         print(f"{written} snapshot(s) {phase_tag} enregistrés dans {out_dir}")
@@ -1995,7 +2077,7 @@ def main() -> None:  # pragma: no cover - minimal CLI wrapper
         out_path.parent.mkdir(parents=True, exist_ok=True)
         url_path = out_path.with_name(out_path.name + ".url")
         url_path.write_text(url, encoding="utf-8")
-        
+
         if args.mode == "planning":
             meetings = fetch_meetings(url)
             data = filter_today(meetings)
@@ -2019,19 +2101,16 @@ def main() -> None:  # pragma: no cover - minimal CLI wrapper
         res = compute_diff(h30, h5, top_n=top_n, min_delta=min_delta)
         out_data = {
             "steams": [
-                {"id_cheval": r["id"], "delta": r["delta"]}
-                for r in res["top_steams"]
+                {"id_cheval": r["id"], "delta": r["delta"]} for r in res["top_steams"]
             ],
             "drifts": [
-                {"id_cheval": r["id"], "delta": r["delta"]}
-                for r in res["top_drifts"]
+                {"id_cheval": r["id"], "delta": r["delta"]} for r in res["top_drifts"]
             ],
         }
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(
             json.dumps(out_data, ensure_ascii=False, indent=2), encoding="utf-8"
         )
-    
 
 
 if __name__ == "__main__":  # pragma: no cover

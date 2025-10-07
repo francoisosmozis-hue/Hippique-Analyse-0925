@@ -15,7 +15,9 @@ def _expected_synthetic(probability: float) -> float:
     return max(1.1, implied)
 
 
-def test_ensure_place_odds_synthesizes_missing_values(caplog: pytest.LogCaptureFixture) -> None:
+def test_ensure_place_odds_synthesizes_missing_values(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     """Runners without place odds should receive a synthetic conservative quote."""
 
     runner = {"id": "7", "name": "Lucky", "p": 0.42}
@@ -55,8 +57,7 @@ def test_build_market_uses_synthetic_place_odds() -> None:
     """Synthetic odds should feed into the place overround calculation."""
 
     runners = [
-        {"id": str(idx), "name": f"Runner {idx}", "p": 0.75}
-        for idx in range(1, 5)
+        {"id": str(idx), "name": f"Runner {idx}", "p": 0.75} for idx in range(1, 5)
     ]
 
     sanitized = _ensure_place_odds(runners)

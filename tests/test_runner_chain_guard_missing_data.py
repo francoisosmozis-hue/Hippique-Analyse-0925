@@ -2,7 +2,6 @@ from pathlib import Path
 
 import runner_chain
 
-
 _DEF_PARAMS = {
     "budget": 100.0,
     "overround_max": 1.30,
@@ -24,7 +23,9 @@ def _analyse(course_dir: Path, **overrides):
 def test_analyse_course_aborts_when_je_missing(tmp_path):
     course_dir = tmp_path / "R1C1"
     course_dir.mkdir()
-    (course_dir / "chronos.csv").write_text("num,chrono,ok\n1,1.0,1\n", encoding="utf-8")
+    (course_dir / "chronos.csv").write_text(
+        "num,chrono,ok\n1,1.0,1\n", encoding="utf-8"
+    )
 
     payload = _analyse(course_dir)
 

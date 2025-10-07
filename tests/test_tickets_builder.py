@@ -15,7 +15,17 @@ def test_apply_ticket_policy_filters_homogeneous_trio():
         {"id": "3", "name": "C", "odds": 2.1},
         {"id": "4", "name": "D", "odds": 2.4},
     ]
-    combo_candidates = [[{"id": "combo1", "type": "TRIO", "legs": ["1", "2", "3"], "odds": 15.0, "stake": 1.0}]]
+    combo_candidates = [
+        [
+            {
+                "id": "combo1",
+                "type": "TRIO",
+                "legs": ["1", "2", "3"],
+                "odds": 15.0,
+                "stake": 1.0,
+            }
+        ]
+    ]
 
     sp_tickets, combos, info = apply_ticket_policy(
         cfg,

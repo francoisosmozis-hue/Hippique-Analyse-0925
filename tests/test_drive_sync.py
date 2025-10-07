@@ -181,7 +181,7 @@ def test_main_skips_when_credentials_missing(monkeypatch, capsys, tmp_path):
             str(excel_path),
         ],
     )
-    
+
     result = drive_sync.main()
 
     captured = capsys.readouterr()
@@ -257,7 +257,7 @@ def test_main_local_only_runs_local_artifacts(tmp_path, monkeypatch, capsys):
     assert excel_path.exists()
     workbook = load_workbook(excel_path)
     assert "ROI Observé" in workbook.sheetnames
-    
+
 
 def test_build_service_env(monkeypatch):
     creds_data = {"type": "service_account"}
@@ -313,7 +313,9 @@ def test_build_drive_service_from_file(monkeypatch, tmp_path):
     drive_sync.service_account.Credentials.from_service_account_file.assert_called_once_with(
         str(creds_path), scopes=drive_sync.DRIVE_SCOPES
     )
-    builder.assert_called_once_with("drive", "v3", credentials=fake_creds, cache_discovery=False)
+    builder.assert_called_once_with(
+        "drive", "v3", credentials=fake_creds, cache_discovery=False
+    )
 
 
 def test_build_drive_service_from_json(monkeypatch):
@@ -336,7 +338,9 @@ def test_build_drive_service_from_json(monkeypatch):
     drive_sync.service_account.Credentials.from_service_account_info.assert_called_once_with(
         payload, scopes=drive_sync.DRIVE_SCOPES
     )
-    builder.assert_called_once_with("drive", "v3", credentials=fake_creds, cache_discovery=False)
+    builder.assert_called_once_with(
+        "drive", "v3", credentials=fake_creds, cache_discovery=False
+    )
 
 
 def test_drive_download_file(monkeypatch, tmp_path):
@@ -441,7 +445,9 @@ def test_main_drive_flow(monkeypatch, tmp_path):
     download_mock = MagicMock(name="download")
     upload_mock = MagicMock(name="upload")
 
-    monkeypatch.setattr(drive_sync, "_build_drive_service", MagicMock(return_value=drive_service))
+    monkeypatch.setattr(
+        drive_sync, "_build_drive_service", MagicMock(return_value=drive_service)
+    )
     monkeypatch.setattr(drive_sync, "drive_download_file", download_mock)
     monkeypatch.setattr(drive_sync, "drive_upload_file", upload_mock)
     monkeypatch.setattr(drive_sync, "is_gcs_enabled", lambda: False)
@@ -478,7 +484,11 @@ def test_main_drive_flow(monkeypatch, tmp_path):
 
     assert result == 0
     download_mock.assert_called_once()
-    excel_calls = [call for call in upload_mock.call_args_list if call.kwargs.get("file_id") == "excel123"]
+    excel_calls = [
+        call
+        for call in upload_mock.call_args_list
+        if call.kwargs.get("file_id") == "excel123"
+    ]
     assert len(excel_calls) == 1
     uploaded_names = {Path(call.args[2]).name for call in upload_mock.call_args_list}
     assert "arrivee.json" in uploaded_names

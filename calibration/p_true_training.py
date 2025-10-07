@@ -19,20 +19,19 @@ calibration model implemented in :mod:`calibration.p_true_model`.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from pathlib import Path
-from typing import Iterable, Mapping
-
 import datetime as dt
 import json
 import math
 import numbers
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Iterable, Mapping
 
 import pandas as pd
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import brier_score_loss, log_loss
 import yaml
 
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import brier_score_loss, log_loss
 
 # ---------------------------------------------------------------------------
 # Data loading helpers
@@ -163,9 +162,7 @@ def assemble_history_dataset(base_dir: Path) -> pd.DataFrame:
             if odds_h5 <= _MIN_ODDS:
                 continue
 
-            odds_h30 = _select_column(
-                row, ("odds_h30", "cote_h30", "odds_h_30", "h30")
-            )
+            odds_h30 = _select_column(row, ("odds_h30", "cote_h30", "odds_h_30", "h30"))
             if odds_h30 <= _MIN_ODDS:
                 odds_h30 = odds_h5
 

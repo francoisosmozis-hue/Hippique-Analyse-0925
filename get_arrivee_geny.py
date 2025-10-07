@@ -34,7 +34,6 @@ from urllib.parse import urljoin
 import requests
 from bs4 import BeautifulSoup
 
-
 GENY_BASE = "https://www.geny.com"
 HDRS = {"User-Agent": "Mozilla/5.0 (compatible; get_arrivee_geny/1.0)"}
 
@@ -81,7 +80,12 @@ def _first(obj: MutableMapping[str, Any] | None, *keys: str) -> Any:
 def _get_course_id(data: MutableMapping[str, Any]) -> str | None:
     """Extract a course identifier from ``data`` using known aliases."""
 
-    for container in (data, _first(data, "meta"), _first(data, "course"), _first(data, "race")):
+    for container in (
+        data,
+        _first(data, "meta"),
+        _first(data, "course"),
+        _first(data, "race"),
+    ):
         if isinstance(container, MutableMapping):
             for key in (
                 "course_id",
@@ -170,7 +174,9 @@ class PlanningEntry:
         return {k: v for k, v in meta.items() if v not in (None, "")}
 
 
-def _iter_planning_entries(data: Any, context: dict[str, Any] | None = None) -> Iterable[PlanningEntry]:
+def _iter_planning_entries(
+    data: Any, context: dict[str, Any] | None = None
+) -> Iterable[PlanningEntry]:
     """Yield :class:`PlanningEntry` objects extracted from ``data``."""
 
     ctx = dict(context or {})
@@ -260,10 +266,21 @@ def load_planning(path: Path) -> List[PlanningEntry]:
         if entry.rc in deduped:
             existing = deduped[entry.rc]
             # Merge missing metadata from the new entry.
-            for field_name in ("reunion", "course", "course_id", "url_geny", "date", "start", "hippodrome", "discipline"):
+            for field_name in (
+                "reunion",
+                "course",
+                "course_id",
+                "url_geny",
+                "date",
+                "start",
+                "hippodrome",
+                "discipline",
+            ):
                 if not getattr(existing, field_name) and getattr(entry, field_name):
                     setattr(existing, field_name, getattr(entry, field_name))
-            existing.meta.update({k: v for k, v in entry.meta.items() if k not in existing.meta})
+            existing.meta.update(
+                {k: v for k, v in entry.meta.items() if k not in existing.meta}
+            )
         else:
             deduped[entry.rc] = entry
     return list(deduped.values())
@@ -284,7 +301,10 @@ def _request(url: str) -> requests.Response:
 def _extract_arrival_from_json(text: str) -> list[str]:
     """Extract arrival numbers from JSON-like payload contained in ``text``."""
 
-    for pattern in (r'"arriv[ée]e"\s*:\s*(\[[^\]]+\])', r'"arrival"\s*:\s*(\[[^\]]+\])'):
+    for pattern in (
+        r'"arriv[ée]e"\s*:\s*(\[[^\]]+\])',
+        r'"arrival"\s*:\s*(\[[^\]]+\])',
+    ):
         match = re.search(pattern, text, re.IGNORECASE)
         if not match:
             continue
@@ -328,7 +348,9 @@ def _extract_arrival_from_tables(soup: BeautifulSoup) -> list[str]:
         headers = [th.get_text(" ", strip=True).lower() for th in table.find_all("th")]
         if not headers:
             continue
-        rank_idx = next((i for i, h in enumerate(headers) if "arriv" in h or "place" in h), None)
+        rank_idx = next(
+            (i for i, h in enumerate(headers) if "arriv" in h or "place" in h), None
+        )
         if rank_idx is None:
             continue
         num_idx = next(
@@ -407,7 +429,9 @@ def _course_candidate_urls(course_id: str) -> Sequence[str]:
     )
 
 
-def fetch_arrival_for_course(entry: PlanningEntry) -> tuple[list[str], str | None, str | None]:
+def fetch_arrival_for_course(
+    entry: PlanningEntry,
+) -> tuple[list[str], str | None, str | None]:
     """Return arrival numbers, resolved URL and optional error message."""
 
     if not entry.course_id:
@@ -438,7 +462,12 @@ def _resolve_course_url_from_meeting(url: str, entry: PlanningEntry) -> str | No
     course_key = (entry.course or "").replace(" ", "").upper()
 
     if entry.course_id:
-        for attr in ("data-course", "data-course-id", "data-idcourse", "data-id-course"):
+        for attr in (
+            "data-course",
+            "data-course-id",
+            "data-idcourse",
+            "data-id-course",
+        ):
             for node in soup.find_all(attrs={attr: True}):
                 value = node.get(attr)
                 if not value or str(value) != entry.course_id:
@@ -491,7 +520,14 @@ def fetch_arrival(entry: PlanningEntry) -> dict[str, Any]:
 
     numbers, url, error = fetch_arrival_for_course(entry)
     if numbers:
-        result.update({"result": numbers, "status": "ok", "url": url, "retrieved_at": datetime.utcnow().isoformat()})
+        result.update(
+            {
+                "result": numbers,
+                "status": "ok",
+                "url": url,
+                "retrieved_at": datetime.utcnow().isoformat(),
+            }
+        )
         return result
 
     if error and error != "missing-course-id":
@@ -503,7 +539,9 @@ def fetch_arrival(entry: PlanningEntry) -> dict[str, Any]:
         if resolved:
             try:
                 resp = _request(resolved)
-            except requests.RequestException as exc:  # pragma: no cover - network failure
+            except (
+                requests.RequestException
+            ) as exc:  # pragma: no cover - network failure
                 result["error"] = f"{exc.__class__.__name__}: {exc}"
             else:
                 numbers = parse_arrival(resp.text)
@@ -551,9 +589,13 @@ def write_arrivals(entries: Sequence[PlanningEntry], dest: Path) -> None:
 
 
 def main(argv: Sequence[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(description="Fetch arrivals from geny.com based on planning JSON")
+    parser = argparse.ArgumentParser(
+        description="Fetch arrivals from geny.com based on planning JSON"
+    )
     parser.add_argument("--planning", required=True, help="Path to planning JSON file")
-    parser.add_argument("--out", required=True, help="Destination JSON file for arrivals")
+    parser.add_argument(
+        "--out", required=True, help="Destination JSON file for arrivals"
+    )
     args = parser.parse_args(argv)
 
     planning_path = Path(args.planning)

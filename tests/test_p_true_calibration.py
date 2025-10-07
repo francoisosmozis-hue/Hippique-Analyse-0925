@@ -5,6 +5,7 @@ import math
 import pandas as pd
 import pytest
 
+import pipeline_run
 from calibration import p_true_model
 from calibration.p_true_model import (
     compute_runner_features,
@@ -17,7 +18,7 @@ from calibration.p_true_training import (
     serialize_model,
     train_logistic_model,
 )
-import pipeline_run
+
 
 def test_assemble_history_dataset(tmp_path):
     base = tmp_path
@@ -28,9 +29,7 @@ def test_assemble_history_dataset(tmp_path):
     (race / "per_horse_report.csv").write_text(report, encoding="utf-8")
 
     arrival = {"arrival": [{"id": "1", "position": 1}, {"id": "2", "position": 2}]}
-    (race / "arrivee_officielle.json").write_text(
-        json.dumps(arrival), encoding="utf-8"
-    )
+    (race / "arrivee_officielle.json").write_text(json.dumps(arrival), encoding="utf-8")
 
     tickets = {"tickets": [{"legs": [{"id": "1"}, {"id": "3"}]}]}
     (race / "p_finale.json").write_text(json.dumps(tickets), encoding="utf-8")
@@ -149,5 +148,3 @@ def test_build_p_true_downgrades_to_heuristic_when_history_short(
 
     assert result == heur_expected
     assert "Calibration p_true ignorée" in caplog.text
-
-    

@@ -69,7 +69,9 @@ def get_race_results(race_dir: Path) -> Dict[str, Any] | None:
         return None
 
 
-def calculate_pnl(tickets: List[Dict[str, Any]], results: Dict[str, Any]) -> Tuple[float, float]:
+def calculate_pnl(
+    tickets: List[Dict[str, Any]], results: Dict[str, Any]
+) -> Tuple[float, float]:
     """
     Calcule le Profit & Loss (P&L) pour une liste de tickets.
 
@@ -92,7 +94,7 @@ def calculate_pnl(tickets: List[Dict[str, Any]], results: Dict[str, Any]) -> Tup
     # Utilise 'arrivee' pour les chevaux gagnants/places, fallback sur 'place'
     placed_horses_data = results.get("arrivee", results.get("place", []))
     placed_horses = {str(h["num"]) for h in placed_horses_data}
-    
+
     for ticket in tickets:
         stake = float(ticket.get("stake", 0.0))
         total_wagered += stake
@@ -103,7 +105,7 @@ def calculate_pnl(tickets: List[Dict[str, Any]], results: Dict[str, Any]) -> Tup
             legs = ticket.get("legs", [])
             if not legs:
                 continue
-            
+
             horse_num = str(legs[0].get("num"))
             if horse_num in placed_horses:
                 # Le cheval est placé, trouver son rapport
@@ -114,7 +116,7 @@ def calculate_pnl(tickets: List[Dict[str, Any]], results: Dict[str, Any]) -> Tup
                         break
             else:
                 pnl -= stake
-        
+
         elif bet_type in ("CP", "COUPLE_PLACE", "COUPLE"):
             # Pari Couplé Placé
             legs = ticket.get("legs", [])
@@ -134,13 +136,15 @@ def calculate_pnl(tickets: List[Dict[str, Any]], results: Dict[str, Any]) -> Tup
                 # La clé du rapport peut être "H1-H2" ou "H2-H1"
                 rapport_key1 = f"{horse1_num}-{horse2_num}"
                 rapport_key2 = f"{horse2_num}-{horse1_num}"
-                rapport_val = rapports_cp.get(rapport_key1) or rapports_cp.get(rapport_key2)
+                rapport_val = rapports_cp.get(rapport_key1) or rapports_cp.get(
+                    rapport_key2
+                )
 
                 if rapport_val:
-                     pnl += (stake * float(rapport_val)) - stake
+                    pnl += (stake * float(rapport_val)) - stake
                 else:
                     # Fallback si le rapport exact n'est pas trouvé
-                    pnl -= stake # On considère le pari comme perdu
+                    pnl -= stake  # On considère le pari comme perdu
             else:
                 pnl -= stake
         else:
@@ -162,7 +166,7 @@ def main():
     total_pnl = 0.0
     total_wagered = 0.0
     days_with_bets = 0
-    
+
     orchestrator_script = project_root / "analyse_courses_du_jour_enrichie.py"
 
     print(f"Lancement du backtest du {start_date} au {end_date}")
@@ -172,7 +176,7 @@ def main():
     while current_date <= end_date:
         date_str = current_date.strftime("%Y%m%d")
         day_dir = data_dir / date_str
-        
+
         if not day_dir.is_dir():
             current_date += timedelta(days=1)
             continue
@@ -182,7 +186,9 @@ def main():
         day_wagered = 0.0
         races_processed = 0
 
-        race_dirs = sorted([d for d in day_dir.iterdir() if d.is_dir() and d.name.startswith("R")])
+        race_dirs = sorted(
+            [d for d in day_dir.iterdir() if d.is_dir() and d.name.startswith("R")]
+        )
 
         for race_dir in race_dirs:
             # Étape 1: Exécuter l'orchestrateur pour générer p_finale.json
@@ -190,11 +196,14 @@ def main():
             cmd = [
                 sys.executable,
                 str(orchestrator_script),
-                "--rc-dir", str(race_dir),
-                "--budget", str(daily_budget),
-                "--kelly", "0.5" # Utilisation d'une fraction de Kelly standard
+                "--rc-dir",
+                str(race_dir),
+                "--budget",
+                str(daily_budget),
+                "--kelly",
+                "0.5",  # Utilisation d'une fraction de Kelly standard
             ]
-            
+
             try:
                 # L'orchestrateur est verbeux, on capture la sortie pour ne pas polluer
                 subprocess.run(cmd, check=True, capture_output=True, text=True)
@@ -206,7 +215,7 @@ def main():
             p_finale_path = race_dir / "p_finale.json"
             if not p_finale_path.exists():
                 continue
-            
+
             try:
                 with p_finale_path.open("r", encoding="utf-8") as f:
                     p_finale_data = json.load(f)
@@ -236,7 +245,9 @@ def main():
         if day_wagered > 0:
             days_with_bets += 1
             roi_day = (day_pnl / day_wagered) * 100 if day_wagered > 0 else 0
-            print(f"  Mises du jour: {day_wagered:.2f}€ | P&L du jour: {day_pnl:+.2f}€ | ROI du jour: {roi_day:+.2f}%")
+            print(
+                f"  Mises du jour: {day_wagered:.2f}€ | P&L du jour: {day_pnl:+.2f}€ | ROI du jour: {roi_day:+.2f}%"
+            )
 
         total_pnl += day_pnl
         total_wagered += day_wagered
@@ -245,9 +256,9 @@ def main():
     print("\n" + "=" * 40)
     print("RÉSULTATS COMPLETS DU BACKTEST")
     print("=" * 40)
-    
+
     final_roi = (total_pnl / total_wagered) * 100 if total_wagered > 0 else 0
-    
+
     print(f"Période analysée:          {start_date} à {end_date}")
     print(f"Nombre de jours avec paris:  {days_with_bets}")
     print(f"Total des mises engagées:    {total_wagered:.2f}€")

@@ -47,7 +47,9 @@ def _load_existing(path: Path) -> set[str]:
     return existing
 
 
-def enrich_requirements(path: Path, extras: Iterable[str], *, dry_run: bool = False) -> bool:
+def enrich_requirements(
+    path: Path, extras: Iterable[str], *, dry_run: bool = False
+) -> bool:
     """Ensure ``path`` contains the packages from ``extras``.
 
     Returns ``True`` when the file would be modified.
@@ -91,7 +93,9 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    changed = enrich_requirements(args.requirements, EXTRA_DEPENDENCIES, dry_run=args.dry_run)
+    changed = enrich_requirements(
+        args.requirements, EXTRA_DEPENDENCIES, dry_run=args.dry_run
+    )
     if not changed:
         print("Requirements are already enriched.")
 

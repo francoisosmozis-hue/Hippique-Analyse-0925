@@ -7,9 +7,10 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 import pytest
 
 from ev_calculator import compute_ev_roi
+from kelly import kelly_fraction
 from simulate_ev import allocate_dutching_sp
 from tickets_builder import PAYOUT_MIN_COMBO, allow_combo
-from kelly import kelly_fraction
+
 
 def test_max_two_tickets():
     cfg = {
@@ -42,7 +43,7 @@ def test_combo_thresholds_cfg():
     # default threshold from cfg keeps the 12€ combo and rejects below
     assert allow_combo(ev_global=0.5, roi_global=0.5, payout_est=11.9, cfg=cfg) is False
     assert allow_combo(ev_global=0.5, roi_global=0.5, payout_est=12.0, cfg=cfg) is True
-    
+
     # increasing payout threshold via cfg rejects lower payouts
     cfg["MIN_PAYOUT_COMBOS"] = 15.0
     assert allow_combo(ev_global=0.5, roi_global=0.5, payout_est=14.0, cfg=cfg) is False
@@ -58,7 +59,7 @@ def test_combo_thresholds_cfg():
     cfg["ROI_MIN_GLOBAL"] = 0.3
     assert allow_combo(ev_global=0.5, roi_global=0.2, payout_est=20.0, cfg=cfg) is False
     assert allow_combo(ev_global=0.5, roi_global=0.3, payout_est=20.0, cfg=cfg) is True
-    
+
 
 def test_combo_thresholds_lower_payout_cfg():
     cfg = {

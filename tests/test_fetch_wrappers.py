@@ -93,7 +93,7 @@ def test_enrich_from_snapshot_handles_missing_fields(
 @pytest.mark.parametrize("module", [fetch_je_stats, fetch_je_chrono])
 def test_enrich_from_snapshot_missing_snapshot_returns_none(
     module: Any, tmp_path: Path, caplog: pytest.LogCaptureFixture
-) -> None:    
+) -> None:
     caplog.set_level("WARNING")
     missing = tmp_path / "absent.json"
 
@@ -110,13 +110,16 @@ def test_enrich_from_snapshot_invalid_json(
     caplog.set_level("WARNING")
     snapshot = tmp_path / "broken.json"
     snapshot.write_text("not-json", encoding="utf-8")
-    
+
     result = module.enrich_from_snapshot(str(snapshot), str(tmp_path / "out"))
 
     assert result == {"je_stats": None, "chronos": None}
     assert any("Unable to load" in message for message in caplog.messages)
-               
-def test_fetch_je_chrono_enrich_from_snapshot_builds_chronos_csv(tmp_path: Path) -> None:
+
+
+def test_fetch_je_chrono_enrich_from_snapshot_builds_chronos_csv(
+    tmp_path: Path,
+) -> None:
     snapshot = tmp_path / "snapshot.json"
     snapshot.write_text(
         json.dumps(
@@ -124,7 +127,8 @@ def test_fetch_je_chrono_enrich_from_snapshot_builds_chronos_csv(tmp_path: Path)
                 "runners": [
                     {"id": "1", "chrono": "1.12"},
                     {"id": "2", "time": "1.18"},
-            ]
+                ]
+            }
         ),
         encoding="utf-8",
     )
@@ -155,5 +159,3 @@ def test_fetch_je_chrono_enrich_from_snapshot_requires_snapshot(
     assert result == {"je_stats": None, "chronos": None}
     assert not (tmp_path / "artefacts" / "chronos.csv").exists()
     assert any("does not exist" in message for message in caplog.messages)
-
-

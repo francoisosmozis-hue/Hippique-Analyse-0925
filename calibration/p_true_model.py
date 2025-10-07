@@ -2,15 +2,13 @@
 
 from __future__ import annotations
 
+import math
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
 
-import math
-import threading
-
 import yaml
-
 
 MODEL_PATH = Path("calibration/p_true_model.yaml")
 _EPSILON = 1e-9
@@ -40,7 +38,8 @@ class PTrueModel:
         """Return a shallow copy of the calibration metadata."""
 
         return get_model_metadata(self)
-        
+
+
 def _sigmoid(value: float) -> float:
     if value >= 0:
         z = math.exp(-value)

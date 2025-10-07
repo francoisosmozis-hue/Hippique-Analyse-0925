@@ -24,7 +24,9 @@ def test_run_hminus_invokes_script(monkeypatch):
 
     monkeypatch.setattr(cloud_app.subprocess, "run", fake_run)
 
-    body, status, headers = cloud_app.run_hminus(DummyRequest({"R": "R1", "C": "C2", "when": "H-5"}))
+    body, status, headers = cloud_app.run_hminus(
+        DummyRequest({"R": "R1", "C": "C2", "when": "H-5"})
+    )
 
     assert status == 200
     assert json.loads(body) == {"ok": True}
@@ -34,7 +36,12 @@ def test_run_hminus_invokes_script(monkeypatch):
     cmd = recorded["cmd"]
     assert cmd[0] == sys.executable
     assert cmd[1] == str(cloud_app.VALIDATOR_SCRIPT)
-    assert cmd[2:] == ["--artefacts", str(cloud_app.DATA_ROOT / "R1C2"), "--phase", "H5"]
+    assert cmd[2:] == [
+        "--artefacts",
+        str(cloud_app.DATA_ROOT / "R1C2"),
+        "--phase",
+        "H5",
+    ]
 
 
 @pytest.mark.parametrize(

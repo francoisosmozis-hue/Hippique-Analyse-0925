@@ -50,11 +50,17 @@ def test_fetch_race_snapshot_returns_list_of_partants(monkeypatch: Any) -> None:
             return "<html></html>"
 
         monkeypatch.setattr(ofz._impl, "parse_course_page", fake_parse, raising=False)
-        monkeypatch.setattr(ofz._impl, "normalize_snapshot", fake_normalize, raising=False)
-        monkeypatch.setattr(ofz._impl, "fetch_race_snapshot", failing_impl_fetch, raising=False)
+        monkeypatch.setattr(
+            ofz._impl, "normalize_snapshot", fake_normalize, raising=False
+        )
+        monkeypatch.setattr(
+            ofz._impl, "fetch_race_snapshot", failing_impl_fetch, raising=False
+        )
         monkeypatch.setattr(ofz, "_http_get", fake_http_get)
 
-        snap = ofz.fetch_race_snapshot("R1", "C1", "H5", url="https://example.com/course/mock")
+        snap = ofz.fetch_race_snapshot(
+            "R1", "C1", "H5", url="https://example.com/course/mock"
+        )
 
         assert isinstance(snap["runners"], list)
         assert snap["phase"] == "H5"
@@ -144,7 +150,7 @@ def test_fetch_race_snapshot_accepts_course_url(monkeypatch: Any) -> None:
     assert snapshot["phase"] == "H30"
     assert captured["url"] == "https://example.com/course/mock"
     assert "course_url" not in captured["kwargs"]
-    
+
 
 def test_fetch_race_snapshot_handles_missing_rc_with_url(monkeypatch: Any) -> None:
     import online_fetch_zeturf as ofz

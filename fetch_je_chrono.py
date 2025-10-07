@@ -8,7 +8,6 @@ import logging
 from pathlib import Path
 from typing import Any, Iterable, Mapping, TypeAlias
 
-
 LOGGER = logging.getLogger(__name__)
 
 ResultDict: TypeAlias = dict[str, str | None]
@@ -31,7 +30,7 @@ def enrich_from_snapshot(snapshot_path: str, out_dir: str) -> dict:
         paths to the generated files (as strings) or ``None`` when the artefact
         could not be produced.
     """
-    
+
     result: ResultDict = {"je_stats": None, "chronos": None}
 
     snapshot_file = Path(snapshot_path)
@@ -168,7 +167,9 @@ def _extract_value(
     return ""
 
 
-def _write_csv(path: Path, rows: Iterable[dict[str, str]], columns: Iterable[str]) -> None:
+def _write_csv(
+    path: Path, rows: Iterable[dict[str, str]], columns: Iterable[str]
+) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     header = list(columns)
     with path.open("w", newline="", encoding="utf-8") as handle:

@@ -1,12 +1,13 @@
 """Utilities for simple SP dutching and EV simulations."""
+
 from __future__ import annotations
 
 import math
 from typing import Any, Dict, List, Sequence
 
 from ev_calculator import compute_ev_roi
-from simulate_wrapper import simulate_wrapper
 from kelly import kelly_fraction
+from simulate_wrapper import simulate_wrapper
 
 
 def implied_prob(odds: float) -> float:
@@ -48,7 +49,9 @@ def implied_probs(odds_list: Sequence[float]) -> List[float]:
     return [normalised[str(index)] for index in range(len(odds_list))]
 
 
-def allocate_dutching_sp(cfg: Dict[str, float], runners: List[Dict[str, Any]]) -> tuple[List[Dict[str, Any]], float]:
+def allocate_dutching_sp(
+    cfg: Dict[str, float], runners: List[Dict[str, Any]]
+) -> tuple[List[Dict[str, Any]], float]:
     """Allocate SP dutching stakes according to a Kelly share with 60% cap.
 
     When each ``runner`` provides an estimated win probability ``p``, those
@@ -83,7 +86,9 @@ def allocate_dutching_sp(cfg: Dict[str, float], runners: List[Dict[str, Any]]) -
             prob_value = float(prob_primary) if prob_primary is not None else None
         except (TypeError, ValueError):
             prob_value = None
-        if prob_value is not None and (not math.isfinite(prob_value) or prob_value <= 0.0 or prob_value >= 1.0):
+        if prob_value is not None and (
+            not math.isfinite(prob_value) or prob_value <= 0.0 or prob_value >= 1.0
+        ):
             prob_value = None
 
         if prob_value is not None:
@@ -92,10 +97,16 @@ def allocate_dutching_sp(cfg: Dict[str, float], runners: List[Dict[str, Any]]) -
 
         fallback_source = runner.get("p_imp_h5", runner.get("p_imp"))
         try:
-            fallback_value = float(fallback_source) if fallback_source is not None else None
+            fallback_value = (
+                float(fallback_source) if fallback_source is not None else None
+            )
         except (TypeError, ValueError):
             fallback_value = None
-        if fallback_value is None or not math.isfinite(fallback_value) or fallback_value <= 0.0:
+        if (
+            fallback_value is None
+            or not math.isfinite(fallback_value)
+            or fallback_value <= 0.0
+        ):
             fallback_value = implied_prob(odds_value) if odds_value > 0 else 0.0
         fallback_probs[key] = fallback_value
 
@@ -169,7 +180,7 @@ def allocate_dutching_sp(cfg: Dict[str, float], runners: List[Dict[str, Any]]) -
             "ev_ticket": ev_ticket,
         }
         tickets.append(ticket)
-        
+
     if tickets:
         total_stake = sum(t["stake"] for t in tickets)
         if rounding_enabled:
@@ -213,9 +224,9 @@ def gate_ev(
     """
 
     reasons = {"sp": [], "combo": []}
-    
+
     sp_budget = float(cfg.get("BUDGET_TOTAL", 0.0)) * float(cfg.get("SP_RATIO", 1.0))
-    
+
     ev_min_sp_ratio = float(cfg.get("EV_MIN_SP", 0.0))
     if homogeneous_field:
         ev_min_sp_ratio = float(cfg.get("EV_MIN_SP_HOMOGENEOUS", ev_min_sp_ratio))
@@ -225,7 +236,9 @@ def gate_ev(
     if roi_sp < float(cfg.get("ROI_MIN_SP", 0.0)):
         reasons["sp"].append("ROI_MIN_SP")
 
-    if ev_global < float(cfg.get("EV_MIN_GLOBAL", 0.0)) * float(cfg.get("BUDGET_TOTAL", 0.0)):
+    if ev_global < float(cfg.get("EV_MIN_GLOBAL", 0.0)) * float(
+        cfg.get("BUDGET_TOTAL", 0.0)
+    ):
         reasons["combo"].append("EV_MIN_GLOBAL")
     if roi_global < float(cfg.get("ROI_MIN_GLOBAL", 0.0)):
         reasons["combo"].append("ROI_MIN_GLOBAL")

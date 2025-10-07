@@ -24,7 +24,9 @@ CSV_HEADER = [
 ]
 
 
-def append_csv_line(path: str, data: Mapping[str, object], header: Iterable[str] = CSV_HEADER) -> None:
+def append_csv_line(
+    path: str, data: Mapping[str, object], header: Iterable[str] = CSV_HEADER
+) -> None:
     """Append a line to a CSV file ensuring the header exists.
 
     Parameters
@@ -50,4 +52,6 @@ def append_json(path: str, data: object) -> None:
     """Write JSON data to *path* creating parent directories."""
     file_path = Path(path)
     file_path.parent.mkdir(parents=True, exist_ok=True)
-    file_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    file_path.write_text(
+        json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
+    )

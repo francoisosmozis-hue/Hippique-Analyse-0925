@@ -13,7 +13,7 @@ import argparse
 import json
 from datetime import date
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any, Dict
 
 from post_course_payload import (
     CSV_HEADER,
@@ -44,7 +44,11 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="Post-course processing")
     ap.add_argument("--arrivee", required=True, help="Path to official arrival JSON")
     ap.add_argument("--tickets", required=True, help="Path to tickets.json to update")
-    ap.add_argument("--outdir", default=None, help="Output directory (defaults to tickets directory)")
+    ap.add_argument(
+        "--outdir",
+        default=None,
+        help="Output directory (defaults to tickets directory)",
+    )
     ap.add_argument(
         "--excel",
         default="modele_suivi_courses_hippiques.xlsx",
@@ -101,9 +105,9 @@ def main() -> None:
         outdir / "ligne_resultats.csv",
         CSV_HEADER + "\n" + ligne + "\n",
     )
-    
+
     cmd = (
-        f'python update_excel_with_results.py '
+        f"python update_excel_with_results.py "
         f'--excel "{args.excel}" '
         f'--payload "{payload_path}"\n'
     )

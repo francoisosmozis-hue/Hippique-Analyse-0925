@@ -18,22 +18,21 @@ import re
 import subprocess
 import sys
 import time
+from collections.abc import Mapping
 from datetime import datetime, timezone
 from pathlib import Path
-from collections.abc import Mapping
 from typing import Any, Callable, Iterable
 from urllib.parse import urljoin
 
 import requests
 from bs4 import BeautifulSoup
-
-from logging_io import append_csv_line, CSV_HEADER
-from scripts.gcs_utils import disabled_reason, is_gcs_enabled
-from scripts.online_fetch_zeturf import normalize_snapshot
-from scripts.fetch_je_stats import collect_stats
+from runner_chain import compute_overround_cap
 
 import pipeline_run
-from runner_chain import compute_overround_cap
+from logging_io import CSV_HEADER, append_csv_line
+from scripts.fetch_je_stats import collect_stats
+from scripts.gcs_utils import disabled_reason, is_gcs_enabled
+from scripts.online_fetch_zeturf import normalize_snapshot
 from simulate_wrapper import PAYOUT_CALIBRATION_PATH, evaluate_combo
 
 # Tests may insert a lightweight stub of ``scripts.online_fetch_zeturf`` to avoid
@@ -53,6 +52,7 @@ class MissingH30SnapshotError(RuntimeError):
         super().__init__(message)
         self.rc_dir = Path(rc_dir) if isinstance(rc_dir, (str, Path)) else None
 
+
 USE_GCS = is_gcs_enabled()
 
 TRACKING_HEADER = CSV_HEADER + ["phase", "status", "reason"]
@@ -60,17 +60,15 @@ TRACKING_HEADER = CSV_HEADER + ["phase", "status", "reason"]
 try:  # pragma: no cover - optional dependency in tests
     from scripts.online_fetch_zeturf import write_snapshot_from_geny
 except Exception:  # pragma: no cover - used when optional deps are missing
-    
+
     def write_snapshot_from_geny(*args: Any, **kwargs: Any) -> None:
         raise RuntimeError("write_snapshot_from_geny is unavailable")
 
 
 if USE_GCS:
     try:  # pragma: no cover - optional dependency in tests
-        from scripts.drive_sync import (
-            build_remote_path as gcs_build_remote_path,
-            push_tree,
-        )
+        from scripts.drive_sync import build_remote_path as gcs_build_remote_path
+        from scripts.drive_sync import push_tree
     except Exception as exc:  # pragma: no cover - used when optional deps are missing
         print(
             f"[WARN] Synchronisation GCS indisponible ({exc}), bascule en mode local.",
@@ -85,8 +83,8 @@ else:  # pragma: no cover - Cloud sync explicitly disabled
 
 
 # --- RÈGLES ANTI-COTES FAIBLES (SP min 4/1 ; CP somme > 6.0 déc) ---------------
-MIN_SP_DEC_ODDS = 5.0        # 4/1 = 5.0
-MIN_CP_SUM_DEC = 6.0         # (o1-1)+(o2-1) ≥ 4  <=> (o1+o2) ≥ 6.0
+MIN_SP_DEC_ODDS = 5.0  # 4/1 = 5.0
+MIN_CP_SUM_DEC = 6.0  # (o1-1)+(o2-1) ≥ 4  <=> (o1+o2) ≥ 6.0
 
 
 def _write_json_file(path: Path, payload: Any) -> None:
@@ -107,7 +105,7 @@ def _write_minimal_csv(
             for row in rows:
                 writer.writerow(list(row))
 
-    
+
 def _load_json_if_exists(path: Path) -> dict[str, Any] | None:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
@@ -346,11 +344,7 @@ def _filter_sp_and_cp_by_odds(payload: dict[str, Any]) -> None:
                         break
                 if odds is None:
                     market = payload.get("market") or {}
-                    horses = (
-                        market.get("horses")
-                        if isinstance(market, dict)
-                        else []
-                    )
+                    horses = market.get("horses") if isinstance(market, dict) else []
                     num = str(leg.get("num") or leg.get("horse") or "")
                     mh = None
                     if isinstance(horses, list):
@@ -392,11 +386,7 @@ def _filter_sp_and_cp_by_odds(payload: dict[str, Any]) -> None:
                         break
                 if odds is None:
                     market = payload.get("market") or {}
-                    horses = (
-                        market.get("horses")
-                        if isinstance(market, dict)
-                        else []
-                    )
+                    horses = market.get("horses") if isinstance(market, dict) else []
                     num = str(leg.get("num") or leg.get("horse") or "")
                     mh = None
                     if isinstance(horses, list):
@@ -442,9 +432,7 @@ def ensure_dir(path: Path) -> Path:
     return path
 
 
-def enrich_h5(
-    rc_dir: Path, *, budget: float, kelly: float
-) -> None:
+def enrich_h5(rc_dir: Path, *, budget: float, kelly: float) -> None:
     """Prepare all artefacts required for the H-5 pipeline.
 
     The function normalises the latest H-30/H-5 snapshots, extracts odds maps,
@@ -552,11 +540,15 @@ def enrich_h5(
     stats_path = rc_dir / "stats_je.json"
     course_id = str(partants_payload.get("course_id") or "").strip()
     if not course_id:
-        raise ValueError("Impossible de déterminer l'identifiant course pour les stats J/E")
+        raise ValueError(
+            "Impossible de déterminer l'identifiant course pour les stats J/E"
+        )
     snap_stem = h5_raw_path.stem
     je_path = rc_dir / f"{snap_stem}_je.csv"
     try:
-        coverage, mapped = collect_stats(course_id, h5_path=rc_dir / "normalized_h5.json")
+        coverage, mapped = collect_stats(
+            course_id, h5_path=rc_dir / "normalized_h5.json"
+        )
     except Exception:  # pragma: no cover - network or scraping issues
         logger.exception("collect_stats failed for course %s", course_id)
         stats_payload = {"coverage": 0, "ok": 0}
@@ -582,18 +574,14 @@ def enrich_h5(
         _write_minimal_csv(chronos_path, placeholder_headers, placeholder_rows)
 
 
-def build_p_finale(
-    rc_dir: Path, *, budget: float, kelly: float
-) -> None:
+def build_p_finale(rc_dir: Path, *, budget: float, kelly: float) -> None:
     """Run the ticket allocation pipeline and persist ``p_finale.json``."""
 
     rc_dir = Path(rc_dir)
     _run_single_pipeline(rc_dir, budget=budget)
 
 
-def run_pipeline(
-    rc_dir: Path, *, budget: float, kelly: float
-) -> None:
+def run_pipeline(rc_dir: Path, *, budget: float, kelly: float) -> None:
     """Execute the analysis pipeline for ``rc_dir`` or its subdirectories."""
 
     rc_dir = Path(rc_dir)
@@ -623,9 +611,7 @@ def run_pipeline(
         raise FileNotFoundError(f"Aucune donnée pipeline détectée dans {rc_dir}")
 
 
-def build_prompt_from_meta(
-    rc_dir: Path, *, budget: float, kelly: float
-) -> None:
+def build_prompt_from_meta(rc_dir: Path, *, budget: float, kelly: float) -> None:
     """Generate a human-readable prompt from ``p_finale.json`` metadata."""
 
     rc_dir = Path(rc_dir)
@@ -653,7 +639,11 @@ def build_prompt_from_meta(
         roi = ev.get("roi_global")
         prompt_lines.append(
             "EV globale : "
-            + (f"{float(global_ev):.2f}" if isinstance(global_ev, (int, float)) else "n/a")
+            + (
+                f"{float(global_ev):.2f}"
+                if isinstance(global_ev, (int, float))
+                else "n/a"
+            )
             + " | ROI estimé : "
             + (f"{float(roi):.2f}" if isinstance(roi, (int, float)) else "n/a")
         )
@@ -888,7 +878,12 @@ def _run_h5_guard_phase(
     if not meta:
         base = _gather_tracking_base(rc_dir)
         if isinstance(base, dict):
-            meta = {k: v for k, v in base.items() if k in {"reunion", "course", "hippodrome", "date", "discipline", "partants"}}
+            meta = {
+                k: v
+                for k, v in base.items()
+                if k
+                in {"reunion", "course", "hippodrome", "date", "discipline", "partants"}
+            }
         meta.setdefault("rc", rc_dir.name)
     else:
         meta.setdefault("rc", meta.get("rc") or rc_dir.name)
@@ -1151,6 +1146,8 @@ def _snap_prefix(rc_dir: Path) -> str | None:
 _SCRIPTS_DIR = Path(__file__).resolve().with_name("scripts")
 _FETCH_JE_STATS_SCRIPT = _SCRIPTS_DIR.joinpath("fetch_je_stats.py")
 _FETCH_JE_CHRONO_SCRIPT = _SCRIPTS_DIR.joinpath("fetch_je_chrono.py")
+
+
 def _check_enrich_outputs(
     rc_dir: Path,
     *,
@@ -1354,7 +1351,7 @@ def _recover_je_csv_from_stats(
 
     if _rebuild_je_csv_from_stats(rc_dir):
         return True, True, True
-        
+
     return True, False, True
 
 
@@ -1400,7 +1397,9 @@ def _rebuild_je_csv_from_stats(rc_dir: Path) -> bool:
         return False
 
     try:
-        _write_je_csv_file(rc_dir / f"{snap}_je.csv", id2name=id2name, stats_payload=stats_payload)
+        _write_je_csv_file(
+            rc_dir / f"{snap}_je.csv", id2name=id2name, stats_payload=stats_payload
+        )
     except OSError as exc:
         print(
             f"[WARN] Échec d'écriture du CSV J/E pour {rc_dir.name}: {exc}",
@@ -1430,9 +1429,11 @@ def _regenerate_chronos_csv(rc_dir: Path) -> bool:
                 for runner in items:
                     if not isinstance(runner, dict):
                         continue
-                    if runner.get("id") is None and runner.get("num") is None and runner.get(
-                        "number"
-                    ) is None:
+                    if (
+                        runner.get("id") is None
+                        and runner.get("num") is None
+                        and runner.get("number") is None
+                    ):
                         continue
                     cleaned.append(runner)
             return cleaned
@@ -1570,7 +1571,7 @@ def _ensure_h5_artifacts(
 
     def _attempt_stats_rebuild(*, allow_without_fetch: bool = False) -> bool:
         """Try rebuilding the JE CSV when stats data appears to be available."""
-        
+
         nonlocal stats_recovered
         if not missing or not _missing_requires_stats(missing):
             return False
@@ -1599,6 +1600,7 @@ def _ensure_h5_artifacts(
             if _refresh_missing_state():
                 return True
         return False
+
     if _missing_requires_stats(missing):
         (
             stats_fetch_success,
@@ -1607,10 +1609,7 @@ def _ensure_h5_artifacts(
         ) = _recover_je_csv_from_stats(rc_dir, retry_cb=retry_cb)
         retry_invoked = retry_invoked or stats_retry_invoked
         retried = (
-            retried
-            or stats_fetch_success
-            or stats_recovered
-            or stats_retry_invoked
+            retried or stats_fetch_success or stats_recovered or stats_retry_invoked
         )
         if stats_retry_invoked and not stats_recovered:
             if _attempt_stats_rebuild(allow_without_fetch=True):
@@ -1623,13 +1622,13 @@ def _ensure_h5_artifacts(
         chronos_path = rc_dir / "chronos.csv"
         if not success or not chronos_path.exists():
             _regenerate_chronos_csv(rc_dir)
-            
+
     if retried:
         if _refresh_missing_state():
             return None
         if _attempt_stats_rebuild():
             return None
-            
+
     if missing and retry_cb is not None and not retry_invoked:
         try:
             retry_cb()
@@ -1721,7 +1720,7 @@ def safe_enrich_h5(
             "reason": "unplayable-marker",
             "details": details,
         }
-        
+
     try:
         enrich_h5(rc_dir, budget=budget, kelly=kelly)
     except MissingH30SnapshotError as exc:
@@ -1776,7 +1775,9 @@ def _execute_h5_chain(
     try:
         _write_json_file(rc_dir / "analysis_H5.json", analysis_payload)
     except Exception as exc:  # pragma: no cover - defensive logging
-        logger.warning("[H-5] unable to persist analysis_H5.json for %s: %s", rc_dir, exc)
+        logger.warning(
+            "[H-5] unable to persist analysis_H5.json for %s: %s", rc_dir, exc
+        )
     if not guard_ok:
         return False, guard_outcome
     run_pipeline(rc_dir, budget=budget, kelly=kelly)
@@ -1977,7 +1978,7 @@ def _extract_labels_from_text(text: str) -> tuple[str, str]:
     c_label = c_match.group(0).upper() if c_match else "C?"
     return r_label, c_label
 
-    
+
 def _process_reunion(
     url: str,
     phase: str,
@@ -2012,7 +2013,9 @@ def _process_reunion(
             id_match = re.search(r"(\d+)(?:\.html)?$", href)
             if c_match and id_match:
                 course_url = urljoin(url, href)
-                courses.append((r_label, c_match.group(1).upper(), id_match.group(1), course_url))
+                courses.append(
+                    (r_label, c_match.group(1).upper(), id_match.group(1), course_url)
+                )
 
         if not courses:
             return

@@ -1,22 +1,22 @@
 #!/usr/bin/env python3
 
-import os
-import sys
 import builtins
 import datetime as dt
-from typing import Any, Mapping
-from pathlib import Path
-import json
 import importlib.util
+import json
 import logging
+import os
 import shutil
+import sys
+from pathlib import Path
+from typing import Any, Mapping
 
 import pytest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-import scripts.online_fetch_zeturf as ofz
 import online_fetch_zeturf as cli
+import scripts.online_fetch_zeturf as ofz
 
 
 class DummyResp:
@@ -40,7 +40,9 @@ class DummyResp:
 def test_import_guard_when_requests_missing(monkeypatch: pytest.MonkeyPatch) -> None:
     """Importing the module without ``requests`` should raise a helpful error."""
 
-    module_path = Path(__file__).resolve().parents[1] / "scripts" / "online_fetch_zeturf.py"
+    module_path = (
+        Path(__file__).resolve().parents[1] / "scripts" / "online_fetch_zeturf.py"
+    )
     spec = importlib.util.spec_from_file_location(
         "_scripts_online_fetch_zeturf_import_guard", module_path
     )
@@ -145,7 +147,7 @@ def test_fetch_meetings_fallback_on_404(monkeypatch: pytest.MonkeyPatch) -> None
     def fake_get(url: str, timeout: int, headers: Any | None = None) -> DummyResp:
         calls.append(url)
         if url == primary:
-             return DummyResp(404, None)
+            return DummyResp(404, None)
         return DummyResp(200, geny_html)
 
     monkeypatch.setattr(ofz.requests, "get", fake_get)
@@ -162,7 +164,9 @@ def test_fetch_meetings_fallback_on_connection_error(
     """Network failures should trigger the Geny fallback."""
 
     primary = "https://www.zeturf.fr/rest/api/meetings/today"
-    fallback_payload = {"meetings": [{"id": "GENY", "name": "Fallback", "date": "today"}]}
+    fallback_payload = {
+        "meetings": [{"id": "GENY", "name": "Fallback", "date": "today"}]
+    }
     called: dict[str, int] = {"fallback": 0}
 
     def fake_get(url: str, timeout: int = 10, headers: Any | None = None) -> DummyResp:
@@ -292,7 +296,9 @@ def test_fetch_race_snapshot_uses_entry_url(monkeypatch: pytest.MonkeyPatch) -> 
     assert snapshot["rc"] == "R1C1"
 
 
-def test_fetch_race_snapshot_accepts_direct_url(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_fetch_race_snapshot_accepts_direct_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Providing a direct URL should skip template resolution entirely."""
 
     direct_url = "https://www.zeturf.fr/rest/api/race/12345"
@@ -314,7 +320,9 @@ def test_fetch_race_snapshot_accepts_direct_url(monkeypatch: pytest.MonkeyPatch)
         return operation()
 
     def forbidden_resolver(*_args: Any, **_kwargs: Any) -> str:
-        raise AssertionError("resolve_source_url should not be called when a direct URL is provided")
+        raise AssertionError(
+            "resolve_source_url should not be called when a direct URL is provided"
+        )
 
     monkeypatch.setattr(ofz, "fetch_runners", fake_fetch)
     monkeypatch.setattr(ofz, "_retry_with_backoff", fake_retry)
@@ -343,7 +351,9 @@ def test_fetch_race_snapshot_merges_h30_odds_map(
     rc_dir = Path("data") / "R7C8"
     try:
         rc_dir.mkdir(parents=True, exist_ok=True)
-        (rc_dir / "h30.json").write_text(json.dumps({"1": 4.2, "2": 9.0}), encoding="utf-8")
+        (rc_dir / "h30.json").write_text(
+            json.dumps({"1": 4.2, "2": 9.0}), encoding="utf-8"
+        )
         (rc_dir / "normalized_h30.json").write_text(
             json.dumps(
                 {
@@ -406,7 +416,9 @@ def test_fetch_race_snapshot_returns_minimal_snapshot_on_failure(
     monkeypatch.setattr(cli, "_fetch_snapshot_via_html", lambda *a, **k: None)
     monkeypatch.setattr(cli, "_exp_backoff_sleep", lambda *a, **k: None)
     monkeypatch.setattr(cli._impl, "fetch_race_snapshot", failing_impl_fetch)
-    monkeypatch.setattr(cli._impl, "discover_course_id", lambda *_args, **_kw: None, raising=False)
+    monkeypatch.setattr(
+        cli._impl, "discover_course_id", lambda *_args, **_kw: None, raising=False
+    )
 
     caplog.set_level(logging.ERROR, logger=cli.logger.name)
 
@@ -421,7 +433,9 @@ def test_fetch_race_snapshot_returns_minimal_snapshot_on_failure(
     )
 
     assert attempts, "at least one direct HTML attempt should be recorded"
-    assert all(url == "https://www.zeturf.fr/fr/course/placeholder" for url, _ in attempts)
+    assert all(
+        url == "https://www.zeturf.fr/fr/course/placeholder" for url, _ in attempts
+    )
     assert {label for _, label in attempts} <= {"H30", "H-30"}
     assert snapshot["reunion"] == "R1"
     assert snapshot["course"] == "C2"
@@ -429,8 +443,7 @@ def test_fetch_race_snapshot_returns_minimal_snapshot_on_failure(
     assert snapshot["partants"] == 0
     assert snapshot.get("partants_count") == 0
     assert any(
-        "échec fetch_race_snapshot" in record.getMessage()
-        for record in caplog.records
+        "échec fetch_race_snapshot" in record.getMessage() for record in caplog.records
     )
 
 
@@ -522,10 +535,12 @@ def test_lightweight_fetch_snapshot_remote(monkeypatch: pytest.MonkeyPatch) -> N
 
     def failing_impl_fetch(*_args: Any, **_kwargs: Any) -> Mapping[str, Any]:
         raise RuntimeError("impl failure")
-    
+
     monkeypatch.setattr(cli._impl, "parse_course_page", fake_parse, raising=False)
     monkeypatch.setattr(cli._impl, "normalize_snapshot", fake_normalize, raising=False)
-    monkeypatch.setattr(cli._impl, "fetch_race_snapshot", failing_impl_fetch, raising=False)
+    monkeypatch.setattr(
+        cli._impl, "fetch_race_snapshot", failing_impl_fetch, raising=False
+    )
     monkeypatch.setattr(cli, "_http_get", lambda *_a, **_k: "<html></html>")
 
     snapshot = cli.fetch_race_snapshot("1", "2", phase="H-5")
@@ -541,8 +556,10 @@ def test_lightweight_fetch_snapshot_remote(monkeypatch: pytest.MonkeyPatch) -> N
     assert captured["snapshot"] == "H-5"
     assert captured["url"] == "https://www.zeturf.fr/fr/course/R1C2"
 
-    
-def test_lightweight_fetch_snapshot_use_cache(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+
+def test_lightweight_fetch_snapshot_use_cache(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     """The cache flag should bypass the remote parser and load local files."""
 
     payload = {
@@ -552,16 +569,18 @@ def test_lightweight_fetch_snapshot_use_cache(monkeypatch: pytest.MonkeyPatch, t
     }
     cache_file = tmp_path / "snapshot.json"
     cache_file.write_text(json.dumps(payload), encoding="utf-8")
-    
+
     monkeypatch.setattr(cli, "_load_local_snapshot", lambda rc: cache_file)
     monkeypatch.setattr(
         cli._impl,
         "parse_course_page",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("remote fetch should not happen")),
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("remote fetch should not happen")
+        ),
         raising=False,
     )
 
-    snapshot = cli.fetch_race_snapshot("R9", "C3", use_cache=True) 
+    snapshot = cli.fetch_race_snapshot("R9", "C3", use_cache=True)
 
     assert snapshot["runners"] == payload["runners"]
     assert snapshot["partants"] == 1
@@ -573,14 +592,16 @@ def test_lightweight_fetch_snapshot_use_cache(monkeypatch: pytest.MonkeyPatch, t
     assert snapshot["course"] == "C3"
 
 
-def test_lightweight_fetch_snapshot_cache_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_lightweight_fetch_snapshot_cache_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """A missing cache entry should raise a clear runtime error."""
 
     monkeypatch.setattr(cli, "_load_local_snapshot", lambda rc: None)
 
     with pytest.raises(RuntimeError):
         cli.fetch_race_snapshot("R4", "C5", use_cache=True)
-        
+
 
 def test_fetch_from_geny_parser_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
     """The Geny parser should fallback to attribute/regex extraction."""
@@ -673,7 +694,9 @@ def test_fetch_from_geny_retries_on_429(monkeypatch: pytest.MonkeyPatch) -> None
     assert sleep_calls == [0.5]
 
 
-def test_normalize_snapshot_logs_missing_metadata(caplog: pytest.LogCaptureFixture) -> None:
+def test_normalize_snapshot_logs_missing_metadata(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     """Missing metadata should emit a warning for visibility."""
 
     payload = {"rc": "R1C1", "runners": []}
@@ -686,6 +709,8 @@ def test_normalize_snapshot_logs_missing_metadata(caplog: pytest.LogCaptureFixtu
     assert any("meeting" in message for message in messages)
     assert any("discipline" in message for message in messages)
     assert any("partants" in message for message in messages)
+
+
 def test_extract_course_ids_from_meeting() -> None:
     """Meeting pages should yield ordered course identifiers."""
 
@@ -833,8 +858,6 @@ def test_make_diff(tmp_path: Path) -> None:
     assert [r["id_cheval"] for r in data["drifts"]] == ["6", "10", "9", "5", "2"]
 
 
-
-
 def sample_snapshot() -> dict:
     return {
         "rc": "R1C1",
@@ -909,7 +932,6 @@ def test_normalize_snapshot_includes_start_time(raw: str, expected: str) -> None
     assert normalized["start_time"] == expected
 
 
-
 def test_normalize_snapshot_honours_timezone(monkeypatch: pytest.MonkeyPatch) -> None:
     """ISO datetimes should be converted to the timezone specified via ``$TZ``."""
 
@@ -927,7 +949,9 @@ def test_normalize_snapshot_honours_timezone(monkeypatch: pytest.MonkeyPatch) ->
 
 
 @pytest.mark.parametrize("mode", ["h30", "h5"])
-def test_main_snapshot_modes(mode: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_main_snapshot_modes(
+    mode: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """CLI should normalise snapshots for h30/h5 modes."""
 
     def fake_get(url: str, timeout: int = 10) -> DummyResp:
@@ -943,7 +967,15 @@ def test_main_snapshot_modes(mode: str, tmp_path: Path, monkeypatch: pytest.Monk
     monkeypatch.setattr(
         sys,
         "argv",
-        ["scripts/online_fetch_zeturf.py", "--mode", mode, "--out", str(out), "--sources", str(sources)],
+        [
+            "scripts/online_fetch_zeturf.py",
+            "--mode",
+            mode,
+            "--out",
+            str(out),
+            "--sources",
+            str(sources),
+        ],
     )
     ofz.main()
     data = json.loads(out.read_text(encoding="utf-8"))
@@ -986,7 +1018,6 @@ def test_main_diff_mode(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
     data = json.loads(out.read_text(encoding="utf-8"))
     assert data["steams"][0]["id_cheval"] == "1"
     assert data["drifts"][0]["id_cheval"] == "2"
-
 
 
 def test_reunion_snapshot_cli(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1085,7 +1116,15 @@ def test_main_planning_mode(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.setattr(
         sys,
         "argv",
-        ["scripts/online_fetch_zeturf.py", "--mode", "planning", "--out", str(out), "--sources", str(sources)],
+        [
+            "scripts/online_fetch_zeturf.py",
+            "--mode",
+            "planning",
+            "--out",
+            str(out),
+            "--sources",
+            str(sources),
+        ],
     )
     ofz.main()
     data = json.loads(out.read_text(encoding="utf-8"))
@@ -1106,7 +1145,9 @@ def test_fetch_from_geny_idcourse(monkeypatch: pytest.MonkeyPatch) -> None:
     """
     odds_json = {"runners": [{"num": "1", "odds": 5}, {"num": "2", "odds": 7}]}
 
-    def fake_get(url: str, headers: dict[str, str] | None = None, timeout: int = 10) -> DummyResp:
+    def fake_get(
+        url: str, headers: dict[str, str] | None = None, timeout: int = 10
+    ) -> DummyResp:
         if "partants" in url:
             return DummyResp(200, None, text=partants_html)
         if "cotes" in url:
@@ -1122,7 +1163,9 @@ def test_fetch_from_geny_idcourse(monkeypatch: pytest.MonkeyPatch) -> None:
     assert snap["runners"][1]["odds"] == 7
 
 
-def test_write_snapshot_from_geny(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_write_snapshot_from_geny(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     sample = {
         "date": "2025-09-10",
         "source": "geny",

@@ -584,20 +584,22 @@ python scripts/online_fetch_zeturf.py \
 ```
 
 ### Forcer une fenêtre (ex : R1C3 à H‑30)
+# Le dossier doit contenir un snapshot (ex: snapshot_H30.json)
 ```bash
-python scripts/runner_chain.py --reunion R1 --course C3 --phase H30 --ttl-hours 6
+python scripts/runner_chain.py data/R1C3 --phase H30
 ```
 
 ### Lancer l’analyse H‑5
+# Le dossier doit contenir snapshot_H5.json, je_stats.csv, et chronos.csv
 ```bash
-python scripts/runner_chain.py --reunion R1 --course C3 --phase H5 \
+python scripts/runner_chain.py data/R1C3 --phase H5 \
   --budget 5 --calibration calibration/payout_calibration.yaml
 ```
 
 ### Post‑course : arrivée + MAJ Excel
+# Le dossier doit contenir arrivee_officielle.json
 ```bash
-python scripts/runner_chain.py --reunion R1 --course C3 --phase RESULT \
-  --excel excel/modele_suivi_courses_hippiques.xlsx
+python scripts/runner_chain.py data/R1C3 --phase RESULT
 ```
 
 Le script autonome `post_course.py` accepte désormais l'option `--places`
