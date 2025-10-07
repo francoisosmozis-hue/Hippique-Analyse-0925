@@ -1,9 +1,0 @@
-TRIO:
-  base: { median: 18 }
-  hard: { median: 65 }
-COUPLE_PLACE:
-  base: { median: 12 }
-  hard: { median: 28 }
-ZE4:
-  base: { median: 40 }
-  hard: { median: 150 }

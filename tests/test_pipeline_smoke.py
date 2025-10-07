@@ -12,7 +12,6 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 import pipeline_run
 import validator_ev
 import logging_io
-import tickets_builder
 from simulate_ev import allocate_dutching_sp, gate_ev, simulate_ev_batch, implied_probs
 from pipeline_run import build_p_true, compute_drift_dict, load_yaml
 from simulate_wrapper import PAYOUT_CALIBRATION_PATH

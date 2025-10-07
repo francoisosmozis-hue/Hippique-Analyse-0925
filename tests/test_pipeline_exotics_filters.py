@@ -109,7 +109,8 @@ def _prepare_stubs(
         lambda *_args, **_kwargs: overround_cap,
     )
     if compute_cap_stub is None:
-        compute_cap_stub = lambda *_args, **_kwargs: overround_cap
+        def compute_cap_stub(*_args, **_kwargs):
+        return overround_cap
         
     monkeypatch.setattr(
         pipeline_run,

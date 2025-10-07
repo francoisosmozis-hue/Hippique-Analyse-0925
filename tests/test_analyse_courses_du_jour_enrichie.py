@@ -6,14 +6,13 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+import analyse_courses_du_jour_enrichie as acde
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 stub_fetch = types.ModuleType("scripts.online_fetch_zeturf")
 stub_fetch.normalize_snapshot = lambda payload: payload
 sys.modules.setdefault("scripts.online_fetch_zeturf", stub_fetch)
-
-import analyse_courses_du_jour_enrichie as acde
 
 
 class DummyResp:

@@ -21,7 +21,6 @@ from post_course_payload import (
     build_payload,
     compute_post_course_summary,
     format_csv_line,
-    merge_meta,
 )
 
 

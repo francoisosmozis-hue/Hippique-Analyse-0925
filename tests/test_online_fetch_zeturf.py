@@ -539,7 +539,7 @@ def test_lightweight_fetch_snapshot_remote(monkeypatch: pytest.MonkeyPatch) -> N
     assert snapshot["meta"]["reunion"] == "R1"
     assert snapshot["meta"]["course"] == "C2"
     assert captured["snapshot"] == "H-5"
-    assert captured["url"] == f"https://www.zeturf.fr/fr/course/R1C2"
+    assert captured["url"] == "https://www.zeturf.fr/fr/course/R1C2"
 
     
 def test_lightweight_fetch_snapshot_use_cache(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

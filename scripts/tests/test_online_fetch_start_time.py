@@ -1,4 +1,3 @@
-import pytest
 
 from scripts import online_fetch_zeturf as zeturf
 
