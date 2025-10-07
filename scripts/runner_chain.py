@@ -288,6 +288,8 @@ def _write_analysis(
     calibration: Path,
     calibration_available: bool,
 ) -> None:
+    from pipeline_run import enforce_ror_threshold  # Import local
+    
     """Compute a dummy EV/ROI analysis and write it to disk.
 
     When the payout calibration file is missing the combo generation is skipped
