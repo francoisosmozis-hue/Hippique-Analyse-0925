@@ -1,4 +1,6 @@
 name: Deploy to Cloud Run
+permissions:
+  contents: read
 
 on:
   push:
