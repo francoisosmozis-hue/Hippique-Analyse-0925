@@ -1,4 +1,4 @@
-import runner_chain
+from scripts import runner_chain
 
 
 def test_validate_exotics_requires_calibration(tmp_path, monkeypatch):

@@ -4,12 +4,10 @@ import logging
 from pathlib import Path
 
 import pytest
-import runner_chain
-
-from scripts import runner_chain as runner_script
+from scripts import runner_chain
 
 
-def _build_payload(phase: str) -> runner_script.RunnerPayload:
+def _build_payload(phase: str) -> runner_chain.RunnerPayload:
     return runner_script.RunnerPayload(
         id_course="123456",
         reunion="R1",

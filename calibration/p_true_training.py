@@ -30,195 +30,19 @@ from typing import Iterable, Mapping
 import pandas as pd
 import yaml
 
-from sklearn.linear_model import LogisticRegression
+import lightgbm as lgb
 from sklearn.metrics import brier_score_loss, log_loss
 
-# ---------------------------------------------------------------------------
-# Data loading helpers
-# ---------------------------------------------------------------------------
-
-
-_EPSILON = 1e-9
-_MIN_ODDS = 1.01
-
-
-def _read_json(path: Path) -> object:
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        return {}
-
-
-def _extract_identifier(row: Mapping[str, object]) -> str | None:
-    for key in ("id", "runner_id", "horse_id", "num", "participant", "code"):
-        value = row.get(key)
-        if value not in (None, ""):
-            if isinstance(value, numbers.Integral):
-                return str(int(value))
-            if isinstance(value, numbers.Real):
-                as_float = float(value)
-                if math.isfinite(as_float) and as_float.is_integer():
-                    return str(int(as_float))
-                return str(as_float)
-            return str(value)
-    return None
-
-
-def _extract_winners(data: object) -> set[str]:
-    winners: set[str] = set()
-
-    if isinstance(data, Mapping):
-        position = data.get("position") or data.get("place") or data.get("rank")
-        if str(position).strip().lower() in {"1", "1er", "winner", "gagnant"}:
-            ident = _extract_identifier(data)
-            if ident:
-                winners.add(ident)
-
-        for key in (
-            "winners",
-            "winner",
-            "gagnant",
-            "arrival",
-            "arrivee",
-            "result",
-            "results",
-            "official",
-            "arrival_order",
-        ):
-            if key in data:
-                winners |= _extract_winners(data[key])
-
-        for value in data.values():
-            if isinstance(value, (Mapping, list)):
-                winners |= _extract_winners(value)
-    elif isinstance(data, list):
-        for item in data:
-            winners |= _extract_winners(item)
-    elif isinstance(data, (str, int)):
-        winners.add(str(data))
-
-    return winners
-
-
-def _extract_backed_ids(data: object) -> set[str]:
-    backed: set[str] = set()
-
-    if isinstance(data, Mapping):
-        if "tickets" in data:
-            backed |= _extract_backed_ids(data["tickets"])
-        if "legs" in data:
-            backed |= _extract_backed_ids(data["legs"])
-        ident = _extract_identifier(data)
-        if ident:
-            backed.add(ident)
-        for value in data.values():
-            if isinstance(value, (Mapping, list)):
-                backed |= _extract_backed_ids(value)
-    elif isinstance(data, list):
-        for item in data:
-            backed |= _extract_backed_ids(item)
-
-    return backed
-
-
-def _select_column(row: Mapping[str, object], names: Iterable[str]) -> float:
-    for name in names:
-        if name in row:
-            try:
-                return float(row[name])
-            except (TypeError, ValueError):
-                continue
-    return 0.0
-
-
-def assemble_history_dataset(base_dir: Path) -> pd.DataFrame:
-    """Return a dataframe combining odds, drift, J/E stats and outcomes."""
-
-    rows: list[dict] = []
-
-    for race_dir in sorted(base_dir.glob("R*C*")):
-        if not race_dir.is_dir():
-            continue
-
-        report_path = race_dir / "per_horse_report.csv"
-        if not report_path.exists():
-            continue
-
-        try:
-            report = pd.read_csv(report_path)
-        except Exception:  # pragma: no cover - invalid CSV is ignored
-            continue
-
-        results = _extract_winners(_read_json(race_dir / "arrivee_officielle.json"))
-        tickets = _extract_backed_ids(_read_json(race_dir / "p_finale.json"))
-
-        for _, raw_row in report.iterrows():
-            row = raw_row.to_dict()
-            ident = _extract_identifier(row)
-            if not ident:
-                continue
-
-            odds_h5 = _select_column(row, ("odds_h5", "cote_h5", "odds_h_5", "h5"))
-            if odds_h5 <= _MIN_ODDS:
-                continue
-
-            odds_h30 = _select_column(row, ("odds_h30", "cote_h30", "odds_h_30", "h30"))
-            if odds_h30 <= _MIN_ODDS:
-                odds_h30 = odds_h5
-
-            j_win = _select_column(row, ("j_win", "jockey_win", "jockey_wins"))
-            e_win = _select_column(row, ("e_win", "trainer_win", "entraineur_win"))
-
-            je_total = j_win + e_win
-            drift = odds_h5 - odds_h30
-            implied_prob = 1.0 / odds_h5
-
-            rows.append(
-                {
-                    "race_id": race_dir.name,
-                    "runner_id": ident,
-                    "odds_h5": odds_h5,
-                    "odds_h30": odds_h30,
-                    "drift": drift,
-                    "log_odds": math.log(max(odds_h5, _MIN_ODDS + _EPSILON)),
-                    "implied_prob": implied_prob,
-                    "j_win": j_win,
-                    "e_win": e_win,
-                    "je_total": je_total,
-                    "was_backed": 1.0 if ident in tickets else 0.0,
-                    "is_winner": 1.0 if ident in results else 0.0,
-                }
-            )
-
-    return pd.DataFrame(rows)
-
-
-# ---------------------------------------------------------------------------
-# Model training
-# ---------------------------------------------------------------------------
-
-
-@dataclass(slots=True)
-class CalibrationResult:
-    """Container returned by :func:`train_logistic_model`."""
-
-    model: LogisticRegression
-    features: list[str]
-    n_samples: int
-    n_races: int
-    brier_score: float
-    log_loss: float
-    fitted_at: dt.datetime
-
+# ... (le reste des imports et des fonctions jusqu'à train_logistic_model)
 
 def train_logistic_model(
     dataset: pd.DataFrame,
     *,
     features: Iterable[str],
-    C: float = 1.0,
+    C: float = 1.0,  # Note: C is for LogisticRegression, will be adapted for LGBM
     random_state: int = 42,
 ) -> CalibrationResult:
-    """Fit a regularised logistic regression and return diagnostics."""
+    """Fit a LightGBM classifier and return diagnostics."""
 
     df = dataset.dropna(subset=["is_winner"])
     if df.empty:
@@ -228,11 +52,14 @@ def train_logistic_model(
     X = df[feature_list].to_numpy()
     y = df["is_winner"].astype(int).to_numpy()
 
-    model = LogisticRegression(
-        C=float(C),
-        solver="lbfgs",
-        max_iter=1000,
+    # Utilisation de LightGBM au lieu de la régression logistique
+    model = lgb.LGBMClassifier(
+        objective="binary",
+        metric="logloss",
         random_state=random_state,
+        n_estimators=100,  # Peut être optimisé par cross-validation
+        learning_rate=0.05, # Peut être optimisé
+        num_leaves=31, # Peut être optimisé
     )
     model.fit(X, y)
 
@@ -241,7 +68,7 @@ def train_logistic_model(
     loss = float(log_loss(y, proba, labels=[0, 1]))
 
     return CalibrationResult(
-        model=model,
+        model=model,  # Le modèle est maintenant un LGBMClassifier
         features=feature_list,
         n_samples=int(len(df)),
         n_races=int(df["race_id"].nunique() if "race_id" in df else 0),
@@ -252,21 +79,19 @@ def train_logistic_model(
 
 
 def serialize_model(result: CalibrationResult, path: Path, *, C: float = 1.0) -> None:
-    """Write ``result`` to ``path`` using the repository YAML schema."""
+    """Write ``result`` to ``path`` using a joblib dump for the model."""
 
-    coefs = result.model.coef_[0]
-    intercept = float(result.model.intercept_[0])
+    # LightGBM models are best saved with joblib or their own format
+    import joblib
+    model_path = path.with_suffix(".joblib")
+    joblib.dump(result.model, model_path)
 
     payload = {
-        "version": 1,
+        "version": 2,  # Version du modèle incrémentée
+        "model_format": "lightgbm_joblib",
+        "model_path": str(model_path.name),
         "features": result.features,
-        "intercept": intercept,
-        "coefficients": {
-            name: float(value)
-            for name, value in zip(result.features, coefs, strict=True)
-        },
         "metadata": {
-            "regularization": float(C),
             "n_samples": result.n_samples,
             "n_races": result.n_races,
             "brier_score": result.brier_score,

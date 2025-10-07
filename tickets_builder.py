@@ -2,7 +2,7 @@ import logging
 import os
 from typing import Any, Dict, Iterable, List, Mapping, Sequence, Tuple
 
-from runner_chain import validate_exotics_with_simwrapper
+from scripts.runner_chain import validate_exotics_with_simwrapper
 
 from simulate_ev import allocate_dutching_sp
 

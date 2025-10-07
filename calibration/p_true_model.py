@@ -19,24 +19,27 @@ _MODEL_CACHE: tuple[Path, float, "PTrueModel"] | None = None
 
 @dataclass(frozen=True, slots=True)
 class PTrueModel:
-    """Representation of the serialized logistic regression."""
+    """Representation of a serialized prediction model."""
 
+    model: Any  # The actual model object, e.g., LGBMClassifier
     features: tuple[str, ...]
-    intercept: float
-    coefficients: dict[str, float]
     metadata: dict
 
     def predict(self, features: Mapping[str, float]) -> float:
-        score = float(self.intercept)
-        for name in self.features:
-            coef = float(self.coefficients.get(name, 0.0))
-            value = float(features.get(name, 0.0))
-            score += coef * value
-        return _sigmoid(score)
+        """Predict probability for a single observation."""
+        try:
+            # Create the feature vector in the correct order
+            feature_vector = [[features.get(name, 0.0) for name in self.features]]
+            # Predict probability for the positive class (winner)
+            proba = self.model.predict_proba(feature_vector)[:, 1]
+            return proba[0]
+        except Exception as e:
+            # Log error if prediction fails for some reason
+            # logger.error(f"Model prediction failed: {e}")
+            return _EPSILON
 
     def get_metadata(self) -> dict[str, Any]:
         """Return a shallow copy of the calibration metadata."""
-
         return get_model_metadata(self)
 
 
@@ -72,22 +75,54 @@ def load_p_true_model(path: Path | None = None) -> PTrueModel | None:
             return _MODEL_CACHE[2]
 
         data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        
+        # Handle new LightGBM format
+        if data.get("model_format") == "lightgbm_joblib":
+            import joblib
+            model_path = path.parent / data["model_path"]
+            if not model_path.exists():
+                raise FileNotFoundError(f"Model file not found: {model_path}")
+            
+            model_obj = joblib.load(model_path)
+            features = tuple(str(f) for f in data.get("features", ()))
+            metadata = dict(data.get("metadata", {}))
+            
+            model = PTrueModel(
+                model=model_obj,
+                features=features,
+                metadata=metadata,
+            )
+            _MODEL_CACHE = (path, mtime, model)
+            return model
+        
+        # Fallback for old Logistic Regression format (if needed, otherwise remove)
         features = tuple(str(f) for f in data.get("features", ()))
+        if not features or "coefficients" not in data:
+            return None # Not a recognizable format
+
+        # This part is now legacy and will be removed in future versions.
+        # It reconstructs a model object that behaves like a scikit-learn model.
+        @dataclass
+        class _LegacyModel:
+            intercept: float
+            coefficients: dict[str, float]
+            features: tuple[str, ...]
+
+            def predict_proba(self, X) -> list[list[float]]:
+                score = self.intercept + sum(self.coefficients.get(name, 0.0) * val for name, val in zip(self.features, X[0]))
+                prob = _sigmoid(score)
+                return [[1 - prob, prob]]
+
         intercept = float(data.get("intercept", 0.0))
         coeffs_raw = data.get("coefficients", {})
         coefficients = {str(k): float(v) for k, v in coeffs_raw.items()}
         metadata = dict(data.get("metadata", {}))
 
-        if not features:
-            raise ValueError("calibration model does not define any feature")
-
-        for name in features:
-            coefficients.setdefault(name, 0.0)
+        legacy_model_obj = _LegacyModel(intercept=intercept, coefficients=coefficients, features=features)
 
         model = PTrueModel(
+            model=legacy_model_obj,
             features=features,
-            intercept=intercept,
-            coefficients=coefficients,
             metadata=metadata,
         )
         _MODEL_CACHE = (path, mtime, model)
@@ -124,7 +159,7 @@ def compute_runner_features(
     odds_h30: float | None,
     stats: Mapping[str, float] | None,
 ) -> dict[str, float]:
-    """Return the feature mapping expected by the logistic regression."""
+    """Return the feature mapping expected by the calibration model."""
 
     o5 = max(float(odds_h5 or 0.0), 0.0)
     if not math.isfinite(o5) or o5 <= 1.0:

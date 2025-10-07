@@ -8,7 +8,7 @@ import os
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-import runner_chain
+from scripts import runner_chain
 
 from simulate_wrapper import PAYOUT_CALIBRATION_PATH
 

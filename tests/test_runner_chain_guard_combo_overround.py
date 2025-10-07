@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 
 import pytest
-import runner_chain
+from scripts import runner_chain
 
 _DEF_PARAMS = {
     "budget": 100.0,

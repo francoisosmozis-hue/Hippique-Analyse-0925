@@ -26,7 +26,7 @@ from urllib.parse import urljoin
 
 import requests
 from bs4 import BeautifulSoup
-from runner_chain import compute_overround_cap
+from scripts.analysis_utils import compute_overround_cap
 
 import pipeline_run
 from logging_io import CSV_HEADER, append_csv_line

@@ -1,4 +1,4 @@
-import runner_chain
+from scripts import runner_chain
 
 
 def test_combo_rejected_by_ev(monkeypatch):

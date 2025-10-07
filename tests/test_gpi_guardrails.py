@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import runner_chain
+from scripts import runner_chain
 
 import p_finale_export
 

@@ -1,7 +1,7 @@
 import csv
 from pathlib import Path
 
-import runner_chain
+from scripts import runner_chain
 
 _DEF_PARAMS = {
     "budget": 100.0,
