@@ -33,7 +33,7 @@ from scripts.online_fetch_zeturf import normalize_snapshot
 from scripts.fetch_je_stats import collect_stats
 
 import pipeline_run
-from runner_chain import compute_overround_cap
+from scripts.analysis_utils import compute_overround_cap
 from simulate_wrapper import PAYOUT_CALIBRATION_PATH, evaluate_combo
 
 logger = logging.getLogger(__name__)
