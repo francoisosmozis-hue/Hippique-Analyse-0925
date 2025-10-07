@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, Mapping, Sequence, cast
 
 from config.env_utils import get_env
-from runner_chain import compute_overround_cap
+from scripts.analysis_utils import compute_overround_cap
 from simulate_wrapper import PAYOUT_CALIBRATION_PATH
 
 logger = logging.getLogger(__name__)
