@@ -1,0 +1,4 @@
+# Exemple de sources ZEturf : remplacer par les réunions du jour
+# https://www.zeturf.fr/fr/meeting/2024-09-25/paris-vincennes
+# https://www.zeturf.fr/fr/meeting/2024-09-25/chantilly
+# https://www.zeturf.fr/fr/meeting/2024-09-25/cagnes-sur-mer

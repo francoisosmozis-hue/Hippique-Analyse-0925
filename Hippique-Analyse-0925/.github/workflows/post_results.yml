@@ -1,0 +1,107 @@
+name: GPI v5.1 - Post Results
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {}
+
+env:
+  TZ: Europe/Paris
+  PYTHONUNBUFFERED: "1"
+  GCS_BUCKET: ${{ vars.GCS_BUCKET || '' }}
+
+jobs:
+  results:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with: { python-version: "3.12" }
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Generate planning for the day
+        run: |
+          set -euo pipefail
+          mkdir -p data/planning data/results
+          python online_fetch_zeturf.py \
+            --mode planning \
+            --out "data/planning/$(date +%F).json" \
+            --sources config/sources.yml
+      - name: Fetch results + prepare Excel update commands
+        run: |
+          set -euo pipefail
+          PLANNING="data/planning/$(date +%F).json"
+          ARRIVEE_OUT="data/results/$(date +%F)_arrivees.json"
+
+          if [ ! -s "$PLANNING" ] || ! jq -e '.meetings | length > 0' "$PLANNING" >/dev/null 2>&1; then
+            echo "::warning::Aucun planning valide pour $(date +%F). Étape arrivées sautée."
+            echo '{"date":"'"$(date +%F)"'","arrivees":[]}' > "$ARRIVEE_OUT"
+          else
+            python get_arrivee_geny.py --planning "$PLANNING" --out "$ARRIVEE_OUT"
+
+            python p_finale_export.py \
+              --arrivees "$ARRIVEE_OUT" \
+              --analyses-dir data/analyses \
+              --excel excel/modele_suivi_courses_hippiques.xlsx \
+              --out-dir data/results
+          fi
+  
+
+
+      - name: Update Excel with results
+        run: |
+          set -euo pipefail
+          RESULTS_BASE="data/results/$(date +%F)"
+          if [ ! -d "$RESULTS_BASE" ]; then
+            echo "No race exports in $RESULTS_BASE"
+            exit 0
+          fi
+
+          if ! compgen -G "$RESULTS_BASE/*" > /dev/null; then
+            echo "No race directories under $RESULTS_BASE"
+            exit 0
+          fi
+
+          for race_dir in "$RESULTS_BASE"/*; do
+            if [ -d "$race_dir" ] \
+              && [ -f "$race_dir/arrivee_officielle.json" ] \
+              && [ -f "$race_dir/tickets.json" ]; then
+              python update_excel_with_results.py \
+                --excel excel/modele_suivi_courses_hippiques.xlsx \
+                --arrivee "$race_dir/arrivee_officielle.json" \
+                --tickets "$race_dir/tickets.json"
+            fi
+          done
+
+
+
+      - name: Commit results + updated Excel
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@users.noreply.github.com"
+          git pull --rebase origin main
+          git add data/results/** excel/*.xlsx
+          git commit -m "results+excel: $(date +%F' '%T)" || echo "No changes"
+          git push
+            
+      - name: Upload results + Excel to GCS
+        env:
+          GCS_SERVICE_KEY_B64: ${{ secrets.GCS_SERVICE_KEY_B64 }}
+          GCS_BUCKET: ${{ vars.GCS_BUCKET }}
+          GCS_PREFIX: ${{ vars.GCS_PREFIX || '' }}
+          GOOGLE_CLOUD_PROJECT: ${{ vars.GOOGLE_CLOUD_PROJECT }}
+        run: |
+          python scripts/drive_sync.py \            
+            --upload-glob "data/results/**/*.json" \
+            --upload-glob "excel/*.xlsx"
+      - name: Sync data to GCS
+        run: python scripts/drive_sync.py --push data
+        env:
+          GCS_SERVICE_KEY_B64: ${{ secrets.GCS_SERVICE_KEY_B64 }}
+          GCS_BUCKET: ${{ vars.GCS_BUCKET }}
+          GCS_PREFIX: ${{ vars.GCS_PREFIX || '' }}
+          GOOGLE_CLOUD_PROJECT: ${{ vars.GOOGLE_CLOUD_PROJECT }}

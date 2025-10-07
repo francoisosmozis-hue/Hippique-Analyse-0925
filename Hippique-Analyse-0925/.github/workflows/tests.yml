@@ -1,0 +1,45 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+
+    # 1) On résout les secrets UNE FOIS ici (autorisé)
+    env:
+      GOOGLE_CREDENTIALS_B64: ${{ secrets.GOOGLE_CREDENTIALS_B64 || '' }}
+      DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID || '' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: |
+          python -m pip install -U pip wheel
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Run tests
+        run: pytest -q
+
+      # 2) Condition gérée DANS le shell (pas d'expression YAML qui touche secrets)
+      - name: Drive sync (optional)
+        run: |
+          if [ -n "$GOOGLE_CREDENTIALS_B64" ]; then
+            echo "Credentials present -> syncing Drive…"
+            echo "$GOOGLE_CREDENTIALS_B64" | base64 -d > credentials.json
+            python drive_sync.py --push data
+          else
+            echo "No GOOGLE_CREDENTIALS_B64 -> skipping Drive sync."
+          fi
