@@ -1,0 +1,72 @@
+name: Gemini – Propose & Push Changes
+
+on:
+  workflow_dispatch:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+env:
+  GEMINI_MODEL: gemini-2.5-flash     # évite les quotas Pro
+
+jobs:
+  propose-and-push:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.comment.body, '/gemini-push')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+
+      - name: Setup Node & install Gemini CLI
+        run: |
+          corepack enable || true
+          npm i -g @google/gemini-cli
+
+      - name: Ask Gemini for a unified patch
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          PROMPT=$'Tu es un reviewer/éditeur. Dans ce repo, propose un patch git UNIFIÉ (format `git diff`) entre balises:\nBEGIN_PATCH\n...diff...\nEND_PATCH\n\nObjectif:\n- Corriger robustesse analyse H-30/H-5\n- Ajouter smoke tests minimaux\n- Ne pas ajouter de dépendances\n- Patch idempotent\nRéponds UNIQUEMENT avec le patch entre balises.'
+          gemini --model "$GEMINI_MODEL" --prompt "$PROMPT" > gemini_out.txt
+          awk '/BEGIN_PATCH/{flag=1;next}/END_PATCH/{flag=0}flag' gemini_out.txt > /tmp/patch.diff
+          echo "---- PATCH PREVIEW ----"
+          head -n 80 /tmp/patch.diff || true
+          echo "-----------------------"
+
+      - name: Apply patch (if any)
+        id: apply
+        run: |
+          if [ ! -s /tmp/patch.diff ]; then
+            echo "no_patch=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git apply --whitespace=fix /tmp/patch.diff || { echo "Patch failed"; git status; git diff; exit 1; }
+          echo "no_patch=false" >> "$GITHUB_OUTPUT"
+
+      - name: Commit changes
+        if: steps.apply.outputs.no_patch == 'false'
+        run: |
+          git config user.name  "gemini-bot"
+          git config user.email "gemini-bot@users.noreply.github.com"
+          git checkout -b "gemini/auto-$(date +%s)"
+          git add -A
+          git commit -m "chore(gemini): apply proposed patch"
+
+      - name: Create Pull Request
+        if: steps.apply.outputs.no_patch == 'false'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          branch: ${{ github.ref_name }}-gemini
+          title: "chore(gemini): proposed patch"
+          body: |
+            Patch généré automatiquement par Gemini.
+            Voir le job pour le prompt exact et le diff.
+          labels: automated, gemini
+          base: main
