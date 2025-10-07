@@ -23,6 +23,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 # CORRECTION: Imports depuis scripts/ au lieu de la racine
+from scripts.analysis_utils import compute_overround_cap
 from scripts.simulate_ev import simulate_ev_batch
 from scripts.simulate_wrapper import PAYOUT_CALIBRATION_PATH
 from scripts.validator_ev import ValidationError, validate_ev
