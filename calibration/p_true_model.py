@@ -33,7 +33,7 @@ class PTrueModel:
             # Predict probability for the positive class (winner)
             proba = self.model.predict_proba(feature_vector)[:, 1]
             return proba[0]
-        except Exception as e:
+        except Exception:
             # Log error if prediction fails for some reason
             # logger.error(f"Model prediction failed: {e}")
             return _EPSILON

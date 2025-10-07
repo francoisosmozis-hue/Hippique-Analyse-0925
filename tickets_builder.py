@@ -2,7 +2,7 @@ import logging
 import os
 from typing import Any, Dict, Iterable, List, Mapping, Sequence, Tuple
 
-from scripts.runner_chain import validate_exotics_with_simwrapper
+from simulate_wrapper import evaluate_combo
 
 from simulate_ev import allocate_dutching_sp
 
@@ -343,6 +343,47 @@ def _build_combo_candidates(
     return candidates
 
 
+def _validate_exotics_with_simwrapper(
+    combo_candidates,
+    bankroll,
+    ev_min,
+    roi_min,
+    payout_min,
+    sharpe_min,
+    allow_heuristic,
+    calibration,
+):
+    validated = []
+    all_info = {"flags": {"reasons": {"combo": []}}, "notes": []}
+    for ticket_list in combo_candidates:
+        result = evaluate_combo(
+            ticket_list,
+            bankroll,
+            calibration=calibration,
+            allow_heuristic=allow_heuristic,
+        )
+        if result["status"] == "ok":
+            if (
+                result["ev_ratio"] >= ev_min
+                and result["roi"] >= roi_min
+                and result["payout_expected"] >= payout_min
+                and result["sharpe"] >= sharpe_min
+            ):
+                validated.append(ticket_list[0])
+            else:
+                if result["ev_ratio"] < ev_min:
+                    all_info["flags"]["reasons"]["combo"].append("ev_below_threshold")
+                if result["roi"] < roi_min:
+                    all_info["flags"]["reasons"]["combo"].append("roi_below_threshold")
+                if result["payout_expected"] < payout_min:
+                    all_info["flags"]["reasons"]["combo"].append("payout_expected_below_accept_threshold")
+                if result["sharpe"] < sharpe_min:
+                    all_info["flags"]["reasons"]["combo"].append("sharpe_below_threshold")
+        else:
+            all_info["notes"].append(result.get("message", "evaluation_failed"))
+
+    return validated, all_info
+
 def apply_ticket_policy(
     cfg: Mapping[str, Any],
     runners: Iterable[Dict[str, Any]],
@@ -455,7 +496,7 @@ def apply_ticket_policy(
     )
     sharpe_threshold = float(cfg.get("SHARPE_MIN", 0.0))
 
-    validated, info = validate_exotics_with_simwrapper(
+    validated, info = _validate_exotics_with_simwrapper(
         combo_candidates,
         bankroll=combo_budget,
         ev_min=ev_threshold,

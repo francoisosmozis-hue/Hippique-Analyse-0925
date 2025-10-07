@@ -13,17 +13,16 @@ import sys
 import time
 import unicodedata
 from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Iterable, Mapping
 from urllib.parse import urljoin
-from zoneinfo import ZoneInfo
 
 import yaml
 
 from scripts import online_fetch_zeturf as _impl
 
 _RC_COMBINED_RE = re.compile(r"R?\s*(\d+)\s*C\s*(\d+)", re.IGNORECASE)
+_ZT_BASE_URL = "https://www.zeturf.fr"
 
 
 def _normalise_rc_tag(reunion: str | int, course: str | int | None) -> str:
@@ -67,72 +66,23 @@ def fetch_race_snapshot(
 ) -> dict[str, Any]:
     """Return a normalised snapshot for ``reunion``/``course`` at ``phase``."""
 
-    if reunion in (None, "") or course in (None, ""):
-        raise ValueError("reunion and course are required")
-
-    try:
-        reunion_norm = _normalise_label(reunion, "R")
-        course_norm = _normalise_label(course, "C")
-    except ValueError as exc:  # pragma: no cover - defensive guard
-        raise ValueError(str(exc)) from exc
-
-    phase_norm = _normalise_phase_alias(phase)
-    snapshot_mode = "H-5" if phase_norm == "H5" else "H-30"
-
-    if date is None:
-        today = datetime.now(ZoneInfo("Europe/Paris")).date()
-        date_text = today.isoformat()
-    else:
+    course_url: str | None
+    if date:
+        try:
+            reunion_norm = _normalise_label(reunion, "R")
+            course_norm = _normalise_label(course, "C")
+        except ValueError as exc:
+            raise ValueError(str(exc)) from exc
         date_text = str(date).strip()
         if not date_text:
             raise ValueError("date must be a non-empty string when provided")
+        course_url = f"{_ZT_BASE_URL}/fr/course/{date_text}/{reunion_norm}{course_norm}"
+    else:
+        course_url = None
 
-    course_url = f"{_ZT_BASE_URL}/fr/course/{date_text}/{reunion_norm}{course_norm}"
-
-    parse_fn = getattr(_impl, "parse_course_page", None)
-    if not callable(parse_fn):
-        raise ValueError("parse_course_page implementation unavailable")
-
-    try:
-        parsed_payload = parse_fn(course_url, snapshot=snapshot_mode)
-    except Exception as exc:  # pragma: no cover - defensive logging
-        raise ValueError(f"unable to parse course page at {course_url}") from exc
-
-    if not isinstance(parsed_payload, Mapping):
-        raise ValueError(f"unexpected payload returned for {course_url}")
-
-    raw_snapshot = dict(parsed_payload)
-
-    hippo_hint = None
-    if isinstance(raw_snapshot.get("meta"), Mapping):
-        meta_mapping = raw_snapshot["meta"]
-        hippo_hint = meta_mapping.get("hippodrome") or meta_mapping.get("meeting")
-    hippo_hint = (
-        hippo_hint or raw_snapshot.get("hippodrome") or raw_snapshot.get("meeting")
+    return fetch_race_snapshot_full(
+        reunion=reunion, course=course, phase=phase, course_url=course_url
     )
-
-    canonical_url = _build_canonical_course_url(
-        date_text, reunion_norm, course_norm, hippo_hint
-    )
-    if canonical_url:
-        course_url = canonical_url
-
-    raw_snapshot.setdefault("source_url", course_url)
-
-    normalised = _normalise_snapshot_result(
-        raw_snapshot,
-        reunion_hint=reunion_norm,
-        course_hint=course_norm,
-        phase_norm=phase_norm,
-        sources_config=None,
-    )
-
-    partants_count = normalised.get("partants_count")
-    logger.info(
-        "[ZEturf] phase=%s url=%s partants=%s", phase_norm, course_url, partants_count
-    )
-
-    return normalised
 
 
 def _load_full_impl() -> Any:

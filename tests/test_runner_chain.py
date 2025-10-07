@@ -8,7 +8,7 @@ from scripts import runner_chain
 
 
 def _build_payload(phase: str) -> runner_chain.RunnerPayload:
-    return runner_script.RunnerPayload(
+    return runner_chain.RunnerPayload(
         id_course="123456",
         reunion="R1",
         course="C2",
@@ -286,9 +286,7 @@ def test_trigger_phase_result_missing_arrivee(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     payload = _build_payload("RESULT")
-    caplog.set_level(logging.ERROR)
-
-    runner_script._trigger_phase(
+    runner_chain._trigger_phase(
         payload,
         snap_dir=tmp_path,
         analysis_dir=tmp_path,
@@ -329,7 +327,7 @@ def test_trigger_phase_result_with_arrivee(
 
     caplog.set_level(logging.INFO)
 
-    runner_script._trigger_phase(
+    runner_chain._trigger_phase(
         payload,
         snap_dir=tmp_path,
         analysis_dir=tmp_path,

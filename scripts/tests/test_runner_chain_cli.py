@@ -28,10 +28,7 @@ def _stub_analysis(monkeypatch, module):
         lambda tickets, bankroll: {"ev": 0.4, "roi": 0.3, "green": True},
     )
     monkeypatch.setattr(module, "validate_ev", lambda *_, **__: True)
-    monkeypatch.setattr(
-        module, "_load_csv_rows", lambda *_, **__: [{"p": 0.5, "odds": 2.0}]
-    )
-
+    
 
 def _invoke(module, monkeypatch, args):
     monkeypatch.setattr(sys, "argv", ["runner_chain.py", *args])
@@ -51,12 +48,10 @@ def _create_test_env(
     if with_snapshot:
         snapshot_payload = {
             "payload": {
-                "meta": {
-                    "course_id": "123456",
-                    "reunion": "R1",
-                    "course": "C2",
-                    "start_time": "2024-01-01T12:05:00",
-                }
+                "course_id": "123456",
+                "reunion": "R1",
+                "course": "C2",
+                "start_time": "2024-01-01T12:05:00",
             }
         }
         (course_dir / f"snapshot_{phase}.json").write_text(json.dumps(snapshot_payload))
@@ -72,17 +67,22 @@ def test_single_race_h5_creates_analysis(tmp_path, monkeypatch, runner_chain_mod
     _stub_analysis(monkeypatch, runner_chain_module)
     course_dir = _create_test_env(tmp_path, "R1C2", "H5")
 
+    monkeypatch.setattr(
+        runner_chain_module.ofz, "fetch_race_snapshot", lambda *_, **__: {}
+    )
+
     _invoke(
         runner_chain_module,
         monkeypatch,
         [
+            "--analysis-dir-path",
             str(course_dir),
-            "--phase",
-            "H5",
+            "--output",
+            str(tmp_path),
         ],
     )
 
-    assert (course_dir / "analysis_H5.json").exists()
+    assert (course_dir / "analysis.json").exists()
 
 
 def test_missing_calibration_disables_combos(
@@ -96,12 +96,11 @@ def test_missing_calibration_disables_combos(
 
     monkeypatch.setattr(runner_chain_module, "simulate_ev_batch", fake_simulation)
     monkeypatch.setattr(runner_chain_module, "validate_ev", lambda *_, **__: True)
-    monkeypatch.setattr(
-        runner_chain_module,
-        "_load_csv_rows",
-        lambda *_, **__: [{"p": 0.5, "odds": 2.0}],
-    )
 
+    monkeypatch.setattr(
+        runner_chain_module.ofz, "fetch_race_snapshot", lambda *_, **__: {}
+    )
+    
     course_dir = _create_test_env(tmp_path, "R1C2", "H5")
     calibration_path = tmp_path / "missing_calibration.yaml"
 
@@ -109,18 +108,19 @@ def test_missing_calibration_disables_combos(
         runner_chain_module,
         monkeypatch,
         [
+            "--analysis-dir-path",
             str(course_dir),
-            "--phase",
-            "H5",
             "--calibration",
             str(calibration_path),
+            "--output",
+            str(tmp_path),
         ],
     )
-
-    analysis_file = course_dir / "analysis_H5.json"
+    analysis_file = course_dir / "analysis.json"
     payload = json.loads(analysis_file.read_text(encoding="utf-8"))
 
-    assert "combo_calibration_missing" in payload["guards"]["combo_decision"]
+    assert payload["status"] == "insufficient_data"
+    assert "calibration_missing" in payload["notes"]
 
 
 def test_single_race_h30_only_writes_snapshot(
@@ -138,12 +138,12 @@ def test_single_race_h30_only_writes_snapshot(
         runner_chain_module,
         monkeypatch,
         [
+            "--analysis-dir-path",
             str(course_dir),
-            "--phase",
-            "H30",
+            "--output",
+            str(tmp_path),
         ],
     )
-
     assert (course_dir / "snapshot_H30.json").exists()
     assert not (course_dir / "analysis_H5.json").exists()
 
@@ -157,33 +157,37 @@ def test_missing_snapshot_file_exits(
         _invoke(
             runner_chain_module,
             monkeypatch,
-            [
-                str(course_dir),
-                "--phase",
-                "H5",
-            ],
-        )
-
+                    [
+                        "--analysis-dir-path",
+                        str(course_dir),
+                        "--output",
+                        str(tmp_path),
+                    ],        )
     assert excinfo.value.code == 2
     err = capsys.readouterr().err
-    assert "No snapshot file" in err
+    assert "Snapshot file not found" in err
 
 
 def test_missing_analysis_csv_aborts(tmp_path, monkeypatch, runner_chain_module):
     _stub_analysis(monkeypatch, runner_chain_module)
     course_dir = _create_test_env(tmp_path, "R1C2", "H5", with_csv=False)
 
+    monkeypatch.setattr(
+        runner_chain_module.ofz, "fetch_race_snapshot", lambda *_, **__: {}
+    )
+
     _invoke(
         runner_chain_module,
         monkeypatch,
         [
+            "--analysis-dir-path",
             str(course_dir),
-            "--phase",
-            "H5",
+            "--output",
+            str(tmp_path),
         ],
     )
 
-    analysis_file = course_dir / "analysis_H5.json"
+    analysis_file = course_dir / "analysis.json"
     payload = json.loads(analysis_file.read_text(encoding="utf-8"))
     assert payload["status"] == "aborted"
     assert "data_missing" in payload["reasons"]

@@ -20,18 +20,26 @@ calibration model implemented in :mod:`calibration.p_true_model`.
 from __future__ import annotations
 
 import datetime as dt
-import json
-import math
-import numbers
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Mapping
+from typing import Any, Iterable, List
+from dataclasses import dataclass
 
 import pandas as pd
 import yaml
 
 import lightgbm as lgb
 from sklearn.metrics import brier_score_loss, log_loss
+
+
+@dataclass
+class CalibrationResult:
+    model: Any
+    features: List[str]
+    n_samples: int
+    n_races: int
+    brier_score: float
+    log_loss: float
+    fitted_at: dt.datetime
 
 # ... (le reste des imports et des fonctions jusqu'à train_logistic_model)
 
