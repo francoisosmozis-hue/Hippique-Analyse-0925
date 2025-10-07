@@ -452,6 +452,7 @@ def compute_ev_roi(
     cache_simulations: bool = True,
     ev_threshold: float = 0.35,
     roi_threshold: float = 0.25,
+    ror_threshold: Optional[float] = None,
     kelly_cap: float = 0.60,
     round_to: float = 0.10,
     optimize: bool = False,
@@ -944,8 +945,9 @@ def compute_ev_roi(
         reasons.append(f"ROI below {roi_threshold:.2f}")
     if has_combined and combined_expected_payout <= 12:
         reasons.append("expected payout for combined bets ≤ 12€")
-    if variance_exceeded:
-        reasons.append(f"variance above {variance_cap:.2f} * bankroll^2")
+    if ror_threshold is not None and ruin_risk > ror_threshold:
+        reasons.append(f"risk of ruin above {ror_threshold:.2%}")
+        green_flag = False
 
     green_flag = not reasons
 

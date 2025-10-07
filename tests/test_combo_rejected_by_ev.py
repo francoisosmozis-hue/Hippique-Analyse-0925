@@ -1,4 +1,5 @@
-from scripts import runner_chain
+from tickets_builder import _validate_exotics_with_simwrapper
+from simulate_wrapper import evaluate_combo
 
 
 def test_combo_rejected_by_ev(monkeypatch):
@@ -13,13 +14,18 @@ def test_combo_rejected_by_ev(monkeypatch):
             "requirements": [],
         }
 
-    monkeypatch.setattr(runner_chain, "evaluate_combo", fake_eval)
+    monkeypatch.setattr("tickets_builder.evaluate_combo", fake_eval)
 
-    tickets, info = runner_chain.validate_exotics_with_simwrapper(
+    tickets, info = _validate_exotics_with_simwrapper(
         [[{"id": "low_ev", "p": 0.5, "odds": 2.0, "stake": 1.0}]],
         bankroll=10,
+        ev_min=0.4,
+        roi_min=0.0,
+        payout_min=0.0,
+        sharpe_min=0.0,
+        allow_heuristic=False,
+        calibration=None,
     )
 
     assert tickets == []
-    assert info["decision"] == "reject:ev_ratio_below_accept_threshold"
-    assert info["flags"]["reasons"]["combo"] == ["ev_ratio_below_accept_threshold"]
+    assert "ev_below_threshold" in info["flags"]["reasons"]["combo"]

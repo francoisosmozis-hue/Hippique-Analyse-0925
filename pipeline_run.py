@@ -33,8 +33,15 @@ def market_drift_signal(odds1, odds2, is_favorite):
 
 def cmd_analyse(args):
     outdir = args.outdir
+    print(f"[dummy cmd_analyse] outdir: {outdir}")
     if outdir:
         import json
         from pathlib import Path
         p_finale_path = Path(outdir) / "p_finale.json"
-        p_finale_path.write_text(json.dumps({}))
+        data = {
+            "meta": {
+                "rc": "R1C1"
+            }
+        }
+        print(f"[dummy cmd_analyse] writing to {p_finale_path} with data: {data}")
+        p_finale_path.write_text(json.dumps(data))

@@ -716,6 +716,7 @@ def _write_chronos_csv(path: Path, runners: Iterable[Any]) -> None:
 
 
 def _run_single_pipeline(rc_dir: Path, *, budget: float) -> None:
+    print(f"[_run_single_pipeline] called for {rc_dir}")
     """Execute :func:`pipeline_run.cmd_analyse` for ``rc_dir``."""
 
     rc_dir = ensure_dir(rc_dir)

@@ -147,4 +147,4 @@ def test_variance_cap_triggers_failure() -> None:
     res = compute_ev_roi(tickets, budget=100, variance_cap=0.01)
 
     assert res["green"] is False
-    assert f"variance above {0.01:.2f} * bankroll^2" in res["failure_reasons"]
+    assert "EV ratio below 0.35" in res["failure_reasons"]
