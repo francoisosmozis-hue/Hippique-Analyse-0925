@@ -246,7 +246,7 @@ def test_main_local_only_runs_local_artifacts(tmp_path, monkeypatch, capsys):
     assert "brier_total" in updated
 
     arrivee_payload = json.loads((outdir / "arrivee.json").read_text(encoding="utf-8"))
-    assert arrivee_payload["result"] == ["1", "5"]
+    assert arrivee_payload["arrivee"]["result"] == ["1", "5"]
 
     csv_content = (outdir / "ligne_resultats.csv").read_text(encoding="utf-8")
     assert "ROI_reel" in csv_content.splitlines()[0]

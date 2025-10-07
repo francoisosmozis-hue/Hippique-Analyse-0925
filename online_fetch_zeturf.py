@@ -1059,9 +1059,8 @@ def _fetch_race_snapshot_impl(
     if retry_count_int <= 0:
         retry_count_int = 1
 
-    if not reunion_text:
+    if not reunion_text and not url:
         raise ValueError("reunion value is required")
-
     if not course_text:
         match = _RC_COMBINED_RE.search(reunion_text.upper())
         if match:

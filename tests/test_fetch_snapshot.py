@@ -58,8 +58,8 @@ def test_fetch_race_snapshot_returns_list_of_partants(monkeypatch: Any) -> None:
         )
         monkeypatch.setattr(ofz, "_http_get", fake_http_get)
 
-        snap = ofz.fetch_race_snapshot(
-            "R1", "C1", "H5", url="https://example.com/course/mock"
+        snap = ofz.fetch_race_snapshot_full(
+            "R1", "C1", "H5", course_url="https://example.com/course/mock"
         )
 
         assert isinstance(snap["runners"], list)
@@ -108,7 +108,7 @@ def test_fetch_race_snapshot_merges_runner_metadata(monkeypatch: Any) -> None:
     monkeypatch.setattr(ofz._impl, "fetch_race_snapshot", fake_fetch, raising=False)
     monkeypatch.setattr(ofz, "_fetch_snapshot_via_html", lambda *a, **k: None)
 
-    snapshot = ofz.fetch_race_snapshot("R1", "C1", phase="H5", sources={})
+    snapshot = ofz.fetch_race_snapshot_full("R1", "C1", phase="H5", sources={})
 
     runners = snapshot["runners"]
     assert len(runners) == 1
@@ -139,7 +139,7 @@ def test_fetch_race_snapshot_accepts_course_url(monkeypatch: Any) -> None:
 
     monkeypatch.setattr(ofz, "_fetch_race_snapshot_impl", fake_fetch_impl)
 
-    snapshot = ofz.fetch_race_snapshot(
+    snapshot = ofz.fetch_race_snapshot_full(
         "R1",
         "C1",
         phase="H30",
@@ -162,13 +162,13 @@ def test_fetch_race_snapshot_handles_missing_rc_with_url(monkeypatch: Any) -> No
         "meta": {"reunion": "R3", "course": "C4"},
     }
 
-    monkeypatch.setattr(ofz, "_fetch_race_snapshot_impl", lambda *a, **k: {})
+
     monkeypatch.setattr(
         ofz,
         "_fetch_snapshot_via_html",
         lambda urls, **kwargs: dict(html_payload),
     )
-    snapshot = ofz.fetch_race_snapshot(
+    snapshot = ofz.fetch_race_snapshot_full(
         None,
         None,
         "H5",
