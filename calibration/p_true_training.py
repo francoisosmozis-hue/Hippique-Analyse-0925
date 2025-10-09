@@ -1,8 +1,11 @@
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import brier_score_loss, roc_auc_score
 from calibration.p_true_model import PTrueModel
-import os
 
 # Chemin vers les données et le modèle
 DATA_FILE = os.path.join(os.path.dirname(__file__), '..', 'data', 'training_data.csv')
@@ -24,7 +27,6 @@ def train():
         return
 
     # 2. Définition des features et de la cible
-    # NOTE: Le fichier training_data.csv doit être régénéré pour inclure ces nouvelles features.
     features = [
         'age', 'sexe', 'musique_victoires_5_derniers', 'musique_places_5_derniers',
         'musique_disqualifications_5_derniers', 'musique_position_moyenne_5_derniers',
@@ -35,16 +37,16 @@ def train():
     ]
     target = 'gagnant'
 
-    # Le prétraitement est maintenant fait dans build_training_dataset.py
-    # df['sexe'] = df['sexe'].astype('category').cat.codes
-
     # Vérification que toutes les colonnes nécessaires sont présentes
     required_columns = features + [target]
     if not all(col in df.columns for col in required_columns):
-        print(f"ERREUR: Colonnes manquantes dans {DATA_FILE}.")
-        print(f"Colonnes requises: {required_columns}")
-        print(f"Colonnes présentes: {df.columns.tolist()}")
-        return
+        missing_cols = set(required_columns) - set(df.columns)
+        print(f"AVERTISSEMENT: Colonnes manquantes: {missing_cols}. Ajout avec la valeur -1.")
+        for col in missing_cols:
+            df[col] = -1
+
+    # Convertir la colonne 'sexe' en codes numériques
+    df['sexe'] = df['sexe'].astype('category').cat.codes
 
     X = df[features]
     y = df[target]
@@ -66,7 +68,6 @@ def train():
     print(f"Score Brier sur l'ensemble de test : {brier:.4f} (plus c'est bas, mieux c'est)")
     print(f"Score AUC ROC sur l'ensemble de test : {auc:.4f} (plus c'est haut, mieux c'est)")
     print("---------------------------\n")
-
 
     # 6. Sauvegarde du modèle
     pt_model.save(MODEL_OUTPUT_FILE)
