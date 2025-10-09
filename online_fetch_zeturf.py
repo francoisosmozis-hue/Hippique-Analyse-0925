@@ -20,6 +20,12 @@ from urllib.parse import urljoin
 import yaml
 
 from scripts import online_fetch_zeturf as _impl
+from scripts.online_fetch_zeturf import (
+    http_get,
+    parse_meeting_page,
+    parse_course_page,
+    to_pipeline_json,
+)
 
 _RC_COMBINED_RE = re.compile(r"R?\s*(\d+)\s*C\s*(\d+)", re.IGNORECASE)
 _ZT_BASE_URL = "https://www.zeturf.fr"
@@ -1862,7 +1868,7 @@ else:  # pragma: no cover - defensive fallback for stripped builds
         raise RuntimeError("scripts.online_fetch_zeturf.main is unavailable")
 
 
-__all__ = ["fetch_race_snapshot", "fetch_race_snapshot_full", "main"]
+__all__ = ["fetch_race_snapshot", "fetch_race_snapshot_full", "main", "http_get", "parse_meeting_page", "parse_course_page", "to_pipeline_json"]
 
 # Re-export normalisation helper when available so downstream tooling can rely
 # on the same convenience shim regardless of whether it imports the lightweight

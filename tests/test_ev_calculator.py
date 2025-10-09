@@ -11,17 +11,13 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 import inspect
 
-import inspect
-
-from ev_calculator import _apply_dutching, _kelly_fraction, compute_ev_roi, risk_of_ruin
-from simulate_ev import allocate_dutching_sp, simulate_ev_batch
+from ev_calculator import compute_ev_roi, risk_of_ruin
 
 SIG = inspect.signature(compute_ev_roi)
 EV_THRESHOLD = SIG.parameters["ev_threshold"].default
 ROI_THRESHOLD = SIG.parameters["roi_threshold"].default
 KELLY_CAP = SIG.parameters["kelly_cap"].default
 ROUND_TO = SIG.parameters["round_to"].default
-
 
 
 def test_risk_of_ruin_decreases_with_lower_variance() -> None:

@@ -1961,6 +1961,24 @@ def make_diff(
     return out_fp
 
 
+def parse_course_page(url: str, snapshot: str) -> Dict[str, Any]:
+    """Wrapper for fetch_runners to be called from the root online_fetch_zeturf."""
+    return fetch_runners(url)
+
+
+def to_pipeline_json(data: Any) -> str:
+    """Converts data to a JSON string for the pipeline."""
+    return json.dumps(data, ensure_ascii=False, indent=2)
+
+
+def parse_meeting_page(url: str) -> Any:
+    """Wrapper for fetch_meetings."""
+    return fetch_meetings(url)
+
+
+http_get = _http_get_with_backoff
+
+
 __all__ = [
     "fetch_meetings",
     "filter_today",
@@ -1974,6 +1992,10 @@ __all__ = [
     "make_diff",
     "resolve_source_url",
     "main",
+    "parse_course_page",
+    "to_pipeline_json",
+    "parse_meeting_page",
+    "http_get",
 ]
 
 

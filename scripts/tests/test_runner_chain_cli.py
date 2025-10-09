@@ -28,7 +28,7 @@ def _stub_analysis(monkeypatch, module):
         lambda tickets, bankroll: {"ev": 0.4, "roi": 0.3, "green": True},
     )
     monkeypatch.setattr(module, "validate_ev", lambda *_, **__: True)
-    
+
 
 def _invoke(module, monkeypatch, args):
     monkeypatch.setattr(sys, "argv", ["runner_chain.py", *args])
@@ -100,7 +100,7 @@ def test_missing_calibration_disables_combos(
     monkeypatch.setattr(
         runner_chain_module.ofz, "fetch_race_snapshot", lambda *_, **__: {}
     )
-    
+
     course_dir = _create_test_env(tmp_path, "R1C2", "H5")
     calibration_path = tmp_path / "missing_calibration.yaml"
 
@@ -157,12 +157,13 @@ def test_missing_snapshot_file_exits(
         _invoke(
             runner_chain_module,
             monkeypatch,
-                    [
-                        "--analysis-dir-path",
-                        str(course_dir),
-                        "--output",
-                        str(tmp_path),
-                    ],        )
+            [
+                "--analysis-dir-path",
+                str(course_dir),
+                "--output",
+                str(tmp_path),
+            ],
+        )
     assert excinfo.value.code == 2
     err = capsys.readouterr().err
     assert "Snapshot file not found" in err

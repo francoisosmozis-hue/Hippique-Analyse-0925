@@ -75,18 +75,19 @@ def load_p_true_model(path: Path | None = None) -> PTrueModel | None:
             return _MODEL_CACHE[2]
 
         data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-        
+
         # Handle new LightGBM format
         if data.get("model_format") == "lightgbm_joblib":
             import joblib
+
             model_path = path.parent / data["model_path"]
             if not model_path.exists():
                 raise FileNotFoundError(f"Model file not found: {model_path}")
-            
+
             model_obj = joblib.load(model_path)
             features = tuple(str(f) for f in data.get("features", ()))
             metadata = dict(data.get("metadata", {}))
-            
+
             model = PTrueModel(
                 model=model_obj,
                 features=features,
@@ -94,11 +95,11 @@ def load_p_true_model(path: Path | None = None) -> PTrueModel | None:
             )
             _MODEL_CACHE = (path, mtime, model)
             return model
-        
+
         # Fallback for old Logistic Regression format (if needed, otherwise remove)
         features = tuple(str(f) for f in data.get("features", ()))
         if not features or "coefficients" not in data:
-            return None # Not a recognizable format
+            return None  # Not a recognizable format
 
         # This part is now legacy and will be removed in future versions.
         # It reconstructs a model object that behaves like a scikit-learn model.
@@ -109,7 +110,10 @@ def load_p_true_model(path: Path | None = None) -> PTrueModel | None:
             features: tuple[str, ...]
 
             def predict_proba(self, X) -> list[list[float]]:
-                score = self.intercept + sum(self.coefficients.get(name, 0.0) * val for name, val in zip(self.features, X[0]))
+                score = self.intercept + sum(
+                    self.coefficients.get(name, 0.0) * val
+                    for name, val in zip(self.features, X[0])
+                )
                 prob = _sigmoid(score)
                 return [[1 - prob, prob]]
 
@@ -118,7 +122,9 @@ def load_p_true_model(path: Path | None = None) -> PTrueModel | None:
         coefficients = {str(k): float(v) for k, v in coeffs_raw.items()}
         metadata = dict(data.get("metadata", {}))
 
-        legacy_model_obj = _LegacyModel(intercept=intercept, coefficients=coefficients, features=features)
+        legacy_model_obj = _LegacyModel(
+            intercept=intercept, coefficients=coefficients, features=features
+        )
 
         model = PTrueModel(
             model=legacy_model_obj,

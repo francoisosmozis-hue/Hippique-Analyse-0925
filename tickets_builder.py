@@ -2,9 +2,8 @@ import logging
 import os
 from typing import Any, Dict, Iterable, List, Mapping, Sequence, Tuple
 
-from simulate_wrapper import evaluate_combo
-
 from simulate_ev import allocate_dutching_sp
+from simulate_wrapper import evaluate_combo
 
 logger = logging.getLogger(__name__)
 
@@ -376,13 +375,18 @@ def _validate_exotics_with_simwrapper(
                 if result["roi"] < roi_min:
                     all_info["flags"]["reasons"]["combo"].append("roi_below_threshold")
                 if result["payout_expected"] < payout_min:
-                    all_info["flags"]["reasons"]["combo"].append("payout_expected_below_accept_threshold")
+                    all_info["flags"]["reasons"]["combo"].append(
+                        "payout_expected_below_accept_threshold"
+                    )
                 if result["sharpe"] < sharpe_min:
-                    all_info["flags"]["reasons"]["combo"].append("sharpe_below_threshold")
+                    all_info["flags"]["reasons"]["combo"].append(
+                        "sharpe_below_threshold"
+                    )
         else:
             all_info["notes"].append(result.get("message", "evaluation_failed"))
 
     return validated, all_info
+
 
 def apply_ticket_policy(
     cfg: Mapping[str, Any],

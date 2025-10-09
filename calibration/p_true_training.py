@@ -20,14 +20,14 @@ calibration model implemented in :mod:`calibration.p_true_model`.
 from __future__ import annotations
 
 import datetime as dt
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable, List
-from dataclasses import dataclass
 
+import lightgbm as lgb
 import pandas as pd
 import yaml
 
-import lightgbm as lgb
 from sklearn.metrics import brier_score_loss, log_loss
 
 
@@ -41,7 +41,9 @@ class CalibrationResult:
     log_loss: float
     fitted_at: dt.datetime
 
+
 # ... (le reste des imports et des fonctions jusqu'à train_logistic_model)
+
 
 def train_logistic_model(
     dataset: pd.DataFrame,
@@ -66,8 +68,8 @@ def train_logistic_model(
         metric="logloss",
         random_state=random_state,
         n_estimators=100,  # Peut être optimisé par cross-validation
-        learning_rate=0.05, # Peut être optimisé
-        num_leaves=31, # Peut être optimisé
+        learning_rate=0.05,  # Peut être optimisé
+        num_leaves=31,  # Peut être optimisé
     )
     model.fit(X, y)
 
@@ -91,6 +93,7 @@ def serialize_model(result: CalibrationResult, path: Path, *, C: float = 1.0) ->
 
     # LightGBM models are best saved with joblib or their own format
     import joblib
+
     model_path = path.with_suffix(".joblib")
     joblib.dump(result.model, model_path)
 

@@ -162,7 +162,6 @@ def test_fetch_race_snapshot_handles_missing_rc_with_url(monkeypatch: Any) -> No
         "meta": {"reunion": "R3", "course": "C4"},
     }
 
-
     monkeypatch.setattr(
         ofz,
         "_fetch_snapshot_via_html",

@@ -26,10 +26,10 @@ from urllib.parse import urljoin
 
 import requests
 from bs4 import BeautifulSoup
-from scripts.analysis_utils import compute_overround_cap
 
 import pipeline_run
 from logging_io import CSV_HEADER, append_csv_line
+from scripts.analysis_utils import compute_overround_cap
 from scripts.fetch_je_stats import collect_stats
 from scripts.gcs_utils import disabled_reason, is_gcs_enabled
 from scripts.online_fetch_zeturf import normalize_snapshot

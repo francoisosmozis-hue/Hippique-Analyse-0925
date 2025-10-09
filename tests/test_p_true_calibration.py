@@ -1,4 +1,3 @@
-import json
 import logging
 import math
 
@@ -13,7 +12,6 @@ from calibration.p_true_model import (
     load_p_true_model,
     predict_probability,
 )
-
 
 
 def test_train_and_predict_roundtrip(tmp_path, monkeypatch):

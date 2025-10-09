@@ -1,5 +1,4 @@
 from tickets_builder import _validate_exotics_with_simwrapper
-from simulate_wrapper import evaluate_combo
 
 
 def test_combo_rejected_by_ev(monkeypatch):
