@@ -24,16 +24,15 @@ def train():
         return
 
     # 2. Définition des features et de la cible
-    # C'est ici que vous définissez les variables à utiliser pour la prédiction.
-    # Assurez-vous que ces features sont disponibles au moment de la prédiction live.
-    features = ['age', 'sexe', 'poids', 'dernier_rapport', 'musique']
+    features = [
+        'age', 'sexe', 'musique_victoires_5_derniers', 'musique_places_5_derniers',
+        'musique_disqualifications_5_derniers', 'musique_position_moyenne_5_derniers',
+        'cote', 'probabilite_implicite'
+    ]
     target = 'gagnant'
 
-    # Prétraitement simple (à améliorer)
-    # Conversion de la musique en une feature numérique simple
-    df['musique'] = df['musique'].apply(lambda x: sum(int(c) for c in str(x) if c.isdigit()))
-    df['sexe'] = df['sexe'].astype('category').cat.codes
-
+    # Le prétraitement est maintenant fait dans build_training_dataset.py
+    # df['sexe'] = df['sexe'].astype('category').cat.codes
 
     # Vérification que toutes les colonnes nécessaires sont présentes
     required_columns = features + [target]

@@ -1,77 +1,59 @@
-
+import sys
 import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import json
 import pandas as pd
 import numpy as np
-from tqdm import tqdm
 import re
 import requests
 from bs4 import BeautifulSoup
-from typing import Any, List, MutableMapping, Sequence, Tuple
+from typing import Any, List, Dict
+import datetime as dt
+import time
+import argparse
 
-# --- Début de la logique de récupération copiée de get_arrivee_geny.py ---
+def get_race_data_from_zeturf(url: str) -> Dict[str, Any]:
+    """Fetches and parses the main data object from the ZEturf race page."""
+    try:
+        resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
+        resp.raise_for_status()
+        html = resp.text
+        
+        course_init_match = re.search(r"Course.init\s*\(\s*(\{.*?\})\s*\);", html, re.DOTALL)
+        if course_init_match:
+            json_str = course_init_match.group(1)
+            json_str = re.sub(r'([\\{,])\s*(\w+)\s*:', r'\1"\2":', json_str)
+            json_str = json_str.replace("'", '"')
+            
+            course_data = json.loads(json_str)
+            return course_data
+    except (requests.RequestException, json.JSONDecodeError, AttributeError) as e:
+        print(f"Error fetching or parsing ZEturf page {url}: {e}", file=sys.stderr)
+    return {}
 
-GENY_BASE = "https://www.geny.com"
-HDRS = {"User-Agent": "Mozilla/5.0 (compatible; build_training_dataset/1.0)"}
-ARRIVE_TEXT_RE = re.compile(
-    r"arriv[ée]e\s*(?:officielle|définitive)?\s*:?\s*([0-9\s\-–>]+)",
-    re.IGNORECASE,
-)
+def get_arrival_from_api(date: str, reunion: int, course: int) -> List[int]:
+    """Fetches the arrival from the open-pmu-api."""
+    try:
+        formatted_date = dt.datetime.strptime(date, "%Y-%m-%d").strftime("%d/%m/%Y")
+        api_url = f"https://open-pmu-api.vercel.app/api/arrivees?date={formatted_date}"
+        resp = requests.get(api_url, timeout=10)
+        resp.raise_for_status()
+        api_data = resp.json()
+        
+        for r in api_data.get('arrivees', []):
+            if r.get('reunion') == reunion and r.get('course') == course:
+                return r.get('arrivee', [])
+    except (requests.RequestException, json.JSONDecodeError, AttributeError) as e:
+        print(f"Error fetching arrival from API for R{reunion}C{course} on {date}: {e}", file=sys.stderr)
+    return []
 
-def _request(url: str) -> requests.Response:
-    """Return an HTTP response for ``url``."""
-    resp = requests.get(url, headers=HDRS, timeout=15)
-    resp.raise_for_status()
-    return resp
-
-def _extract_arrival_from_text(text: str) -> list[str]:
-    """Extract arrival numbers from free text snippets."""
-    match = ARRIVE_TEXT_RE.search(text)
-    if not match:
-        return []
-    return re.findall(r"\d+", match.group(1))
-
-def parse_arrival(html: str) -> list[str]:
-    """Return arrival numbers extracted from ``html``."""
-    soup = BeautifulSoup(html, "html.parser")
-    # Simplifié pour n'utiliser que l'extraction textuelle qui est la plus robuste
-    numbers = _extract_arrival_from_text(soup.get_text(" ", strip=True))
-    return numbers
-
-def _course_candidate_urls(course_id: str) -> Sequence[str]:
-    return (
-        f"{GENY_BASE}/resultats-pmu/course/_c{course_id}",
-        f"{GENY_BASE}/resultats-pmu/_c{course_id}",
-        f"{GENY_BASE}/course-pmu/_c{course_id}",
-    )
-
-def fetch_arrival_for_course(course_id: str) -> Tuple[List[str], str | None]:
-    """Return arrival numbers and optional error message."""
-    if not course_id:
-        return [], "missing-course-id"
-
-    for url in _course_candidate_urls(course_id):
-        try:
-            resp = _request(url)
-            numbers = parse_arrival(resp.text)
-            if numbers:
-                return numbers, None
-        except requests.RequestException as exc:
-            last_error = f"{exc.__class__.__name__}: {exc}"
-            continue
-        last_error = "no-arrival-data"
-    return [], last_error
-
-# --- Fin de la logique de récupération ---
-
-def parse_musique(musique_str):
-    """Analyse la chaîne 'musique' pour en extraire des features de performance."""
+def parse_musique(musique_str: str) -> dict:
     if not isinstance(musique_str, str):
         return {}
-    musique_recente = re.sub(r'\(.*?\)', '', musique_str)
-    performances = re.findall(r'(\d+|[A-Z])', musique_recente)
+    musique_recente = re.sub(r'\\(.*\\)', '', musique_str)
+    performances = re.findall(r'(\\d+|[A-Z])', musique_recente)
     last_5 = performances[:5]
-    
     return {
         'musique_victoires_5_derniers': last_5.count('1'),
         'musique_places_5_derniers': sum(1 for p in last_5 if p in ['1', '2', '3']),
@@ -79,111 +61,97 @@ def parse_musique(musique_str):
         'musique_position_moyenne_5_derniers': np.mean([int(p) for p in last_5 if p.isdigit()] or [-1]),
     }
 
-def get_course_id_from_snapshot(snapshot: dict) -> str | None:
-    """Extrait l'ID de la course depuis le snapshot."""
-    meta = snapshot.get("meta", {})
-    # Essayer plusieurs clés possibles pour l'ID de la course
-    return meta.get("course_id") or meta.get("id_course") or snapshot.get("course_id")
+def build_dataset_for_race(race_url: str) -> List[Dict[str, Any]]:
+    """Builds a dataset for a single race URL."""
+    print(f"Processing {race_url}")
+    race_data = get_race_data_from_zeturf(race_url)
+    if not race_data:
+        return []
 
-from pathlib import Path
+    reunion_date = race_data.get("reunionDate")
+    rc_match = re.search(r"(R\d+C\d+)", race_url)
+    if not rc_match:
+        return []
+    reunion_num = int(re.search(r"R(\d+)", rc_match.group(1)).group(1))
+    course_num = int(re.search(r"C(\d+)", rc_match.group(1)).group(1))
 
-# ... (garder le reste du haut du fichier)
+    arrival = get_arrival_from_api(reunion_date, reunion_num, course_num)
+    if not arrival:
+        print(f"Could not get arrival for R{reunion_num}C{course_num} on {reunion_date}. Using fake arrival [1, 2, 3].")
+        arrival = [1, 2, 3]
+    winner_number = arrival[0]
 
-
-def build_dataset(data_dir: str) -> pd.DataFrame:
-    """Construit le jeu de données en parcourant les courses et en fetchant les résultats."""
-    all_horse_data = []
+    cotes_infos = race_data.get("cotesInfos", {})
     
-    race_dirs = [d for d in os.listdir(data_dir) if os.path.isdir(os.path.join(data_dir, d)) and d.startswith('R')]
+    all_horse_data = []
+    resp = requests.get(race_url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
+    soup = BeautifulSoup(resp.text, "html.parser")
+    runner_rows = soup.select("tr[data-runner]")
 
-    print(f"Found {len(race_dirs)} race directories to process.")
-
-    for race_dir_name in tqdm(race_dirs, desc="Construction du dataset"):
-        print(f"\n--- Traitement de: {race_dir_name} ---")
-        race_path = Path(os.path.join(data_dir, race_dir_name))
-
-        subdirs = [d for d in os.listdir(race_path) if os.path.isdir(os.path.join(race_path, d))]
-        if not subdirs:
-            print(f"  -> Aucun sous-répertoire trouvé dans {race_path}. Skip.")
+    for row in runner_rows:
+        num_str = row.get("data-runner")
+        if not num_str:
             continue
         
-        snapshot_dir = race_path / subdirs[0]
-        print(f"  -> Recherche des snapshots dans: {snapshot_dir}")
-        
-        h5_files = list(snapshot_dir.glob('*_H-5.json'))
-        if not h5_files:
-            print(f"  -> Aucun fichier snapshot H-5 trouvé dans {snapshot_dir}. Skip.")
-            continue
-        snapshot_h5_path = h5_files[0]
+        num = int(num_str)
+        name_tag = row.select_one("a.horse-name")
+        name = name_tag.get('title', '') if name_tag else ''
+        musique_tag = row.select_one("td.musique")
+        musique = musique_tag.get('title', '') if musique_tag else ''
+        sexe_age_tag = row.select_one("td.sexe-age")
+        sexe_age = sexe_age_tag.get_text(strip=True) if sexe_age_tag else ''
+        sexe, age = ('M', 0)
+        if sexe_age and '/' in sexe_age:
+            sexe, age_str = sexe_age.split('/')
+            try:
+                age = int(age_str)
+            except ValueError:
+                age = 0
 
-        h30_files = list(snapshot_dir.glob('*_H-30.json'))
-        snapshot_h30_path = h30_files[0] if h30_files else None
+        horse_data = {
+            "num": num,
+            "name": name,
+            "gagnant": 1 if num == winner_number else 0,
+            "age": age,
+            "sexe": 1 if sexe == 'M' else 0,
+        }
+        horse_data.update(parse_musique(musique))
 
-        with open(snapshot_h5_path, 'r') as f:
-            snapshot_h5 = json.load(f)
-
-        course_id = get_course_id_from_snapshot(snapshot_h5)
-        print(f"  -> ID de course extrait: {course_id}")
-        if not course_id:
-            print("  -> ID de course manquant. Skip.")
-            continue
-
-        # Récupération de l'arrivée en direct
-        arrival, error = fetch_arrival_for_course(course_id)
-        if error or not arrival:
-            print(f"  -> Impossible de récupérer l'arrivée ({error or 'arrivée vide'}). Utilisation d'une arrivée fictive [1, 2, 3].")
-            arrival = [1, 2, 3]
+        odds_info = cotes_infos.get(num_str, {}).get("odds", {})
+        if odds_info and odds_info.get("SG"):
+            horse_data["cote"] = odds_info.get("SG")
+            horse_data["probabilite_implicite"] = 1 / odds_info.get("SG")
         else:
-            print(f"  -> Résultat de la récupération de l'arrivée: arrivée={arrival}")
+            horse_data["cote"] = None
+            horse_data["probabilite_implicite"] = 0
+
+        all_horse_data.append(horse_data)
         
-        winner_number = int(arrival[0])
-        print(f"  -> Numéro du gagnant: {winner_number}")
-
-        cotes_h30 = {}
-        if snapshot_h30_path and os.path.exists(snapshot_h30_path):
-            with open(snapshot_h30_path, 'r') as f:
-                snapshot_h30 = json.load(f)
-                for runner in snapshot_h30.get('runners', []):
-                    cotes_h30[runner.get('num')] = runner.get('dernier_rapport', {}).get('gagnant')
-
-        # Logique de feature engineering...
-        runners_processed = 0
-        for runner in snapshot_h5.get('runners', []):
-            horse_data = {}
-            cote_gagnant = runner.get('dernier_rapport', {}).get('gagnant')
-            if not cote_gagnant or cote_gagnant <= 1:
-                continue
-
-            horse_data['cote'] = cote_gagnant
-            horse_data['probabilite_implicite'] = 1 / cote_gagnant
-            
-            # ... autres features ...
-            horse_data.update(parse_musique(runner.get('musique')))
-            horse_data['age'] = runner.get('age')
-            horse_data['sexe'] = runner.get('sexe')
-            
-            # Cible
-            horse_data['gagnant'] = 1 if runner.get('num') == winner_number else 0
-            
-            all_horse_data.append(horse_data)
-            runners_processed += 1
-        print(f"  -> {runners_processed} partants traités.")
-
-    return pd.DataFrame(all_horse_data)
-
+    return all_horse_data
 
 if __name__ == "__main__":
-    DATA_DIRECTORY = os.path.join(os.path.dirname(__file__), '..', 'out_smoke_h5')
-    OUTPUT_FILE = os.path.join(DATA_DIRECTORY, 'training_data.csv')
+    parser = argparse.ArgumentParser(description="Build a training dataset from a list of Zeturf race URLs.")
+    parser.add_argument("url_file", help="Path to a file containing a list of Zeturf race URLs, one per line.")
+    args = parser.parse_args()
 
-    print("Démarrage de la construction du jeu de données d'entraînement (mode débogage)...")
-    
-    training_df = build_dataset(DATA_DIRECTORY)
+    with open(args.url_file, "r") as f:
+        race_urls = [line.strip() for line in f if line.strip() and not line.startswith("#")]
 
-    if not training_df.empty:
-        training_df.fillna(-1, inplace=True)
-        training_df.to_csv(OUTPUT_FILE, index=False)
-        print(f"\nJeu de données sauvegardé dans {OUTPUT_FILE} avec {len(training_df)} lignes.")
+    all_races_data = []
+    for url in race_urls:
+        race_data = build_dataset_for_race(url)
+        if race_data:
+            all_races_data.extend(race_data)
+        time.sleep(1) # Be respectful to the server
+
+    if all_races_data:
+        df = pd.DataFrame(all_races_data)
+        df.fillna(-1, inplace=True)
+        
+        output_path = os.path.join("data", "training_data.csv")
+        df.to_csv(output_path, index=False)
+        print(f"\nDataset successfully created at {output_path} with {len(df)} rows.")
+        print("\n--- First 5 rows: ---")
+        print(df.head())
     else:
-        print("\nAucune donnée n'a été générée.")
-
+        print("\nNo data was generated.")

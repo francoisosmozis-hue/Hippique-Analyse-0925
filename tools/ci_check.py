@@ -17,7 +17,8 @@ SKIP_DIRS = {
     "out",
     "cache",
     "__pycache__",
-    "Hippique-Analyse-0925","tests","scripts/tests",
+    "tests",
+    "scripts/tests",
 }
 DEFAULT_TIMEOUT = 5
 
@@ -60,17 +61,18 @@ def run_help(p: Path, timeout: int) -> tuple[int, str, str]:
 def try_import(p: Path, timeout: int) -> tuple[int, str]:
     env = os.environ.copy()
     env.update({"CI": "1", "DRY_RUN": "1", "OFFLINE": "1", "NO_NET": "1"})
+    # To import a file directly, we need to add its parent to the path
+    parent_dir = p.parent.as_posix()
+    module_name = p.stem
     code = f"""
-import importlib.util, sys
-spec=importlib.util.spec_from_file_location("ci_module","{p.as_posix()}")
-m=importlib.util.module_from_spec(spec)
+import sys
+sys.path.insert(0, '{parent_dir}')
 try:
-    spec.loader.exec_module(m)
+    import {module_name}
     sys.exit(0)
-except SystemExit as e:
-    sys.exit(int(getattr(e,'code',0) or 0))
 except Exception as e:
-    print("IMPORT_ERROR:",repr(e))
+    import traceback
+    traceback.print_exc()
     sys.exit(1)
 """
     try:

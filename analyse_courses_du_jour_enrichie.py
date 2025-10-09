@@ -29,7 +29,7 @@ from bs4 import BeautifulSoup
 
 from logging_io import CSV_HEADER, append_csv_line
 from scripts.gcs_utils import disabled_reason, is_gcs_enabled
-from scripts.online_fetch_zeturf import normalize_snapshot
+
 
 # Tests may insert a lightweight stub of ``scripts.online_fetch_zeturf`` to avoid
 # pulling heavy scraping dependencies.  Ensure the stub does not linger in
@@ -461,7 +461,7 @@ def enrich_h5(rc_dir: Path, *, budget: float, kelly: float) -> None:
             raise ValueError(f"Snapshot invalide: {path} ({exc})") from exc
 
     def _normalise_snapshot(payload: dict[str, Any]) -> dict[str, Any]:
-        normalised = normalize_snapshot(payload)
+        normalised = dict(payload)
         # Preserve a few metadata fields expected by downstream consumers.
         for key in [
             "id_course",

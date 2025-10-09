@@ -1,102 +1,129 @@
-# --- Python ---
+# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
-*.pyo
-*.pyd
+*$py.class
+
+# C extensions
 *.so
-*.egg
-*.egg-info/
-.eggs/
+
+# Distribution / packaging
 .Python
 build/
+develop-eggs/
 dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
 
-# --- Environnements virtuels ---
-.venv/
-venv/
+# PyInstaller
+#  Usually these files are written by a python script from a template
+#  before PyInstaller builds the exe, so as to inject date/other infos into it.
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# Translations
+*.mo
+*.pot
+
+# Django stuff:
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+
+# Flask stuff:
+instance/
+.webassets-cache
+
+# Scrapy stuff:
+.scrapy
+
+# Sphinx documentation
+docs/_build/
+
+# PyBuilder
+target/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# pyenv
+.python-version
+
+# celery beat schedule file
+celerybeat-schedule
+
+# SageMath parsed files
+*.sage.py
+
+# Environments
+.env
+.venv
 env/
+venv/
 ENV/
 env.bak/
+venv.bak/
 
-# --- Config / secrets ---
-credentials.json
-client_secrets.json
-token.json
-*serviceaccount*.json
-*.key
-*.pem
-*.p12
-*.crt
-*.der
-*.cer
-*.csr
-*.jks
-*.keystore
+# Spyder project settings
+.spyderproject
+.spyproject
 
-# --- Fichiers d'env ---
-.env
-.env.*
-!.env.example.txt
+# Rope project settings
+.ropeproject
 
-# --- IDE / OS ---
-.vscode/
-.idea/
-*.swp
-.DS_Store
-Thumbs.db
+# mkdocs documentation
+/site
 
-# --- Logs & fichiers runtime ---
-*.log
-*.pid
-*.sock
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
 
-# --- Données locales / résultats ---
-data/*
-!data/planning/
-!data/planning/**
-!data/planning/.gitkeep
-!data/results/
-!data/results/**
-!data/results/.gitkeep
-!data/snapshots/
-!data/snapshots/**
-!data/analyses/
-!data/analyses/**
-!data/analyses/.gitkeep
-results/
-out_*/
-*.json
-!config/meetings.json
-!data/planning/*.json
+# Pyre type checker
+.pyre/
 
-# --- Fichiers projet spécifiques ---
-modele_suivi_courses_hippiques.xlsx
-excel/
-*.xlsx
-*.xlsm
-*.ods
-*.csv
-*.parquet
-*.pkl
-*.db
-*.rtf
-*.docx
-*.pdf
-*.png
-*.jpg
-*.jpeg
-*.gif
+# pytype static type analyzer
+.pytype/
 
-# --- Cache divers ---
-.cache/
-/Hippique-Analyse-0925
+# Cython debug symbols
+cython_debug/
 
-# Avoid shadowing third-party libs
-/sklearn/
-# Évite de re-committer des packages nommés comme des libs Python
-/sklearn/
-/numpy/
-/pandas/
-/torch/
-/scipy/
-/site-packages/
+# gemini-cli settings
+.gemini/
+
+# GitHub App credentials
+gha-creds-*.json

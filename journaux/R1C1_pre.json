@@ -1,0 +1,58 @@
+{
+  "tickets": [],
+  "ev": {
+    "sp": 0.0,
+    "global": 0.0
+  },
+  "exotics": {
+    "decision": "reject:overround_above_threshold",
+    "notes": [
+      "SP retiré: toutes les cotes < 4/1 (5.0 déc)."
+    ],
+    "flags": {
+      "reasons": {
+        "combo": [
+          "overround_above_threshold"
+        ]
+      },
+      "overround": {
+        "value": 2.6720907661310136,
+        "threshold": 1.3,
+        "source": "place"
+      },
+      "combo": false
+    },
+    "thresholds": {
+      "ev_min": 0.4,
+      "payout_min": 10.0,
+      "allow_heuristic": false,
+      "ev_accept_min": 0.4,
+      "payout_accept_min": 10.0,
+      "overround_max": 1.3,
+      "overround_cap_default": 1.3,
+      "overround_context": {
+        "default_cap": 1.3,
+        "cap": 1.3,
+        "discipline": "trot",
+        "course_label": "c1",
+        "partants": 6,
+        "triggered": false
+      }
+    },
+    "available": false,
+    "metrics": {
+      "market": {
+        "runner_count_total": 6,
+        "runner_count_with_win_odds": 6,
+        "win_coverage_ratio": 1.0,
+        "win_coverage_sufficient": true,
+        "overround_win": 1.3839,
+        "overround": 1.3839,
+        "slots_place": 3,
+        "overround_place": 2.6720907661310136
+      },
+      "overround": 2.6720907661310136,
+      "overround_source": "place"
+    }
+  }
+}

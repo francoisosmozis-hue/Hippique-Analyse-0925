@@ -47,8 +47,12 @@ def download_file(service: Any=None, file_id: Optional[str]=None, target: str | 
     p.write_bytes(b"")
     return p
 
-if __name__ == "__main__":
+def main():
     import argparse
     ap = argparse.ArgumentParser(description="drive_sync (CI-compatible stub)")
     ap.add_argument("--help-only", action="store_true")
     ap.parse_args()
+
+
+if __name__ == "__main__":
+    main()
