@@ -13,7 +13,10 @@ def get_model_metadata() -> dict:
     features = [
         'age', 'sexe', 'musique_victoires_5_derniers', 'musique_places_5_derniers',
         'musique_disqualifications_5_derniers', 'musique_position_moyenne_5_derniers',
-        'cote', 'probabilite_implicite', 'drift_cote'
+        'cote', 'probabilite_implicite',
+        'j_win', 'e_win', 'distance', 'allocation', 'num_runners',
+        'discipline_Plat', 'discipline_Trot Attelé', 'discipline_Haies', 
+        'discipline_Cross', 'discipline_Steeple'
     ]
     return {'features': features}
 
@@ -32,17 +35,20 @@ def parse_musique(musique_str):
         'musique_position_moyenne_5_derniers': np.mean([int(p) for p in last_5 if p.isdigit()] or [-1]),
     }
 
-def compute_runner_features(runner_data: dict, h30_odds: dict, h5_odds: dict) -> dict:
+def compute_runner_features(runner_data: dict, race_data: dict, je_stats: dict, h30_odds: dict, h5_odds: dict) -> dict:
     """
-    Calcule les features pour un unique partant.
+    Calcule les features pour un unique partant en utilisant les données de course et les stats J/E.
     """
     features = {}
     
+    # Features du partant
     features['age'] = runner_data.get('age')
     features['sexe'] = 1 if runner_data.get('sexe') == 'M' else 0
     features.update(parse_musique(runner_data.get('musique')))
     
     num = str(runner_data.get('num'))
+    
+    # Features de cotes
     cote_h5 = h5_odds.get(num)
     cote_h30 = h30_odds.get(num)
 
@@ -57,7 +63,24 @@ def compute_runner_features(runner_data: dict, h30_odds: dict, h5_odds: dict) ->
         features['drift_cote'] = (cote_h5 - cote_h30) / cote_h30
     else:
         features['drift_cote'] = 0
+        
+    # Features Jockey/Entraîneur
+    runner_je_stats = je_stats.get(num, {})
+    features['j_win'] = runner_je_stats.get('j_win', 0)
+    features['e_win'] = runner_je_stats.get('e_win', 0)
 
+    # Features de la course
+    features['distance'] = race_data.get('distance')
+    features['allocation'] = race_data.get('allocation')
+    features['num_runners'] = len(race_data.get('runners', []))
+
+    # One-hot encoding de la discipline
+    discipline = race_data.get('discipline')
+    disciplines = ['Plat', 'Trot Attelé', 'Haies', 'Cross', 'Steeple']
+    for d in disciplines:
+        features[f'discipline_{d}'] = 1 if discipline == d else 0
+
+    # Gestion des valeurs manquantes
     for key, value in features.items():
         if value is None:
             features[key] = -1

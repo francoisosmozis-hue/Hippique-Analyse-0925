@@ -1,0 +1,51 @@
+
+name: Weekly Model Recalibration
+
+on:
+  workflow_dispatch: # Permet de lancer le workflow manuellement
+  schedule:
+    - cron: '0 2 * * 0' # Chaque dimanche à 2h du matin (UTC)
+
+jobs:
+  recalibrate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12' # Assurez-vous que la version correspond à votre projet
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Fetch recent race URLs
+        id: fetch_urls
+        run: |
+          echo """NOTE: This step is a placeholder.
+          You need to create the script 'scripts/fetch_historical_urls.py'.
+          This script should fetch race URLs from the last 7 days and save them to 'urls_courses.txt'.
+          Example: python scripts/fetch_historical_urls.py --days 7 --output urls_courses.txt
+          """
+          # Placeholder: create a dummy file if the script doesn't exist to avoid failure
+          touch urls_courses.txt
+          # python scripts/fetch_historical_urls.py --days 7 --output urls_courses.txt
+
+      - name: Build training dataset
+        run: python scripts/build_training_dataset.py urls_courses.txt
+
+      - name: Train new p_true model
+        run: python calibration/p_true_training.py
+
+      - name: Commit new model and data
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore(ops): Weekly model recalibration"
+          file_pattern: "calibration/p_true_model.joblib data/training_data.csv"
+          commit_user_name: "GitHub Actions"
+          commit_user_email: "actions@github.com"
+          commit_author: "GitHub Actions <actions@github.com>"

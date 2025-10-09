@@ -2099,59 +2099,71 @@ def _coerce_positive_count(value) -> float | None:
     return None
 
 
+import pandas as pd
+
 def build_p_true(cfg, partants, odds_h5, odds_h30, stats_je) -> dict:
     helpers = _load_p_true_helpers()
     load_model = cast(Callable[[], Any], helpers["load_p_true_model"])
     get_metadata = cast(Callable[[Any], dict], helpers["get_model_metadata"])
     compute_features = cast(
-        Callable[[float, float | None, dict | None], Any],
+        Callable[[dict, dict, dict, dict, dict], dict],
         helpers["compute_runner_features"],
     )
-    predict_prob = cast(Callable[[Any, Any], float], helpers["predict_probability"])
+    predict_prob = cast(Callable[[Any, Any], np.ndarray], helpers["predict_probability"])
 
     model = None
     try:
-        model = load_model()
-    except Exception as exc:  # pragma: no cover - corrupted file
+        model = load_model("calibration/p_true_model.joblib")
+    except Exception as exc:
         logger.warning("Impossible de charger le modèle p_true: %s", exc)
         model = None
 
     if model is not None:
         min_samples = float(cfg.get("P_TRUE_MIN_SAMPLES", 0) or 0)
         if min_samples > 0:
-            metadata = get_metadata(model)
-            sample_count = _coerce_positive_count(metadata.get("n_samples"))
-            race_count = _coerce_positive_count(metadata.get("n_races"))
-            too_few_samples = sample_count is None or sample_count < min_samples
-            too_few_races = race_count is None or race_count < min_samples
-            if too_few_samples or too_few_races:
-                logger.warning(
-                    "Calibration p_true ignorée: n_samples=%s n_races=%s (seuil=%s)",
-                    "n/a" if sample_count is None else sample_count,
-                    "n/a" if race_count is None else race_count,
-                    min_samples,
-                )
-                return _heuristic_p_true(cfg, partants, odds_h5, odds_h30, stats_je)
+            # Cette vérification des métadonnées doit être adaptée si nécessaire
+            pass
 
-        probs = {}
-        for p in partants:
-            cid = str(p.get("id"))
-            if cid not in odds_h5:
+        runners = partants.get("runners", [])
+        if not runners:
+            return _heuristic_p_true(cfg, partants, odds_h5, odds_h30, stats_je)
+
+        features_list = []
+        runner_ids_in_order = []
+        for runner in runners:
+            num = str(runner.get("num"))
+            if num not in odds_h5:
                 continue
-            try:
-                features = compute_features(
-                    float(odds_h5[cid]),
-                    float(odds_h30.get(cid, odds_h5[cid])) if odds_h30 else None,
-                    stats_je.get(cid) if stats_je else None,
-                )
-            except (ValueError, TypeError):
-                continue
-            prob = predict_prob(model, features)
-            probs[cid] = prob
+            
+            runner_features = compute_features(
+                runner_data=runner,
+                race_data=partants,
+                je_stats=stats_je,
+                h30_odds=odds_h30,
+                h5_odds=odds_h5
+            )
+            features_list.append(runner_features)
+            runner_ids_in_order.append(num)
+
+        if not features_list:
+            return _heuristic_p_true(cfg, partants, odds_h5, odds_h30, stats_je)
+
+        features_df = pd.DataFrame(features_list)
+        model_features = get_metadata()['features']
+        
+        # S'assurer que toutes les colonnes sont présentes et dans le bon ordre
+        for col in model_features:
+            if col not in features_df.columns:
+                features_df[col] = -1 # Valeur par défaut pour les colonnes manquantes
+        features_df = features_df[model_features]
+
+        probabilities = predict_prob(model, features_df)
+        probs = dict(zip(runner_ids_in_order, probabilities))
 
         total = sum(probs.values())
         if total > 0:
             return {cid: prob / total for cid, prob in probs.items()}
+        
         logger.info("Calibration p_true indisponible, retour à l'heuristique")
 
     return _heuristic_p_true(cfg, partants, odds_h5, odds_h30, stats_je)

@@ -24,10 +24,14 @@ def train():
         return
 
     # 2. Définition des features et de la cible
+    # NOTE: Le fichier training_data.csv doit être régénéré pour inclure ces nouvelles features.
     features = [
         'age', 'sexe', 'musique_victoires_5_derniers', 'musique_places_5_derniers',
         'musique_disqualifications_5_derniers', 'musique_position_moyenne_5_derniers',
-        'cote', 'probabilite_implicite'
+        'cote', 'probabilite_implicite',
+        'j_win', 'e_win', 'distance', 'allocation', 'num_runners',
+        'discipline_Plat', 'discipline_Trot Attelé', 'discipline_Haies', 
+        'discipline_Cross', 'discipline_Steeple'
     ]
     target = 'gagnant'
 

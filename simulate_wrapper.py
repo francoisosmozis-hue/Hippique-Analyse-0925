@@ -583,22 +583,34 @@ def _load_calibration() -> None:
     _calibration_mtime = mtime
 
 
+import itertools
+
+def _harville_unordered_prob(probabilities: List[float]) -> float:
+    """Estimate unordered joint probability using Harville/Henery formula."""
+    n = len(probabilities)
+    if n == 0:
+        return 0.0
+    if n == 1:
+        return probabilities[0]
+
+    total_prob = 0.0
+    # Itérer sur toutes les permutations des chevaux
+    for p_order in itertools.permutations(probabilities):
+        # Calculer la probabilité de cet ordre spécifique
+        ordered_prob = 1.0
+        remaining_prob_space = 1.0
+        for p in p_order:
+            if remaining_prob_space <= 0:
+                ordered_prob = 0
+                break
+            ordered_prob *= p / remaining_prob_space
+            remaining_prob_space -= p
+        total_prob += ordered_prob
+        
+    return total_prob
+
 def simulate_wrapper(legs: Iterable[object]) -> float:
-    """Return calibrated win probability for a combination of ``legs``.
-
-    Parameters
-    ----------
-    legs:
-        Iterable describing the components of the combiné.
-
-    Returns
-    -------
-    float
-        Calibrated probability if available. When absent, each leg uses the
-        most informative source among provided ``p`` values, cached
-        calibrations or ``1 / odds`` as conservative fallback. The resulting
-        probabilities are multiplied.
-    """
+    """Return calibrated win probability for a combination of ``legs``."""
     _load_calibration()
     legs_list = list(legs)
     key = _combo_key(legs_list)
@@ -615,7 +627,6 @@ def simulate_wrapper(legs: Iterable[object]) -> float:
             cached["p"] = prob
         return float(prob)
 
-    prob = 1.0
     sources: List[str] = []
     details: Dict[str, Dict[str, Any]] = {}
     leg_probabilities: List[float] = []
@@ -623,7 +634,6 @@ def simulate_wrapper(legs: Iterable[object]) -> float:
         leg_prob, source, identifier, extras = _extract_leg_probability(leg)
         leg_probabilities.append(leg_prob)
         context = _extract_leg_context(leg)
-        prob *= leg_prob
         sources.append(source)
         detail_entry = {"p": leg_prob, "source": source}
         if extras:
@@ -632,6 +642,15 @@ def simulate_wrapper(legs: Iterable[object]) -> float:
         if context_clean:
             detail_entry["context"] = context_clean
         details[identifier] = detail_entry
+
+    # Nouvelle logique de calcul de probabilité pour le fallback
+    if len(leg_probabilities) > 1:
+        prob = _harville_unordered_prob(leg_probabilities)
+        sources.append("harville_fallback")
+    elif len(leg_probabilities) == 1:
+        prob = leg_probabilities[0]
+    else:
+        prob = 0.0
 
     groups = _find_correlation_groups(legs_list)
     correlation_details: List[Dict[str, Any]] = []
