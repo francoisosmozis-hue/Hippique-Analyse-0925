@@ -439,6 +439,13 @@ def main() -> None:
         "path",
         help="Path to a planning JSON file or a specific analysis directory for a single race",
     )
+    parser.add_argument(
+        "--course-url",
+        "--reunion-url",
+        dest="course_url",
+        default=None,
+        help="Direct ZEturf course URL overriding rc_map lookups",
+    )
 
     parser.add_argument("--h30-window-min", type=int, default=27)
     parser.add_argument("--h30-window-max", type=int, default=33)

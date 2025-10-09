@@ -75,7 +75,6 @@ def test_single_race_h5_creates_analysis(tmp_path, monkeypatch, runner_chain_mod
         runner_chain_module,
         monkeypatch,
         [
-            "--analysis-dir-path",
             str(course_dir),
             "--output",
             str(tmp_path),
@@ -108,7 +107,6 @@ def test_missing_calibration_disables_combos(
         runner_chain_module,
         monkeypatch,
         [
-            "--analysis-dir-path",
             str(course_dir),
             "--calibration",
             str(calibration_path),
@@ -138,7 +136,6 @@ def test_single_race_h30_only_writes_snapshot(
         runner_chain_module,
         monkeypatch,
         [
-            "--analysis-dir-path",
             str(course_dir),
             "--output",
             str(tmp_path),
@@ -158,7 +155,6 @@ def test_missing_snapshot_file_exits(
             runner_chain_module,
             monkeypatch,
             [
-                "--analysis-dir-path",
                 str(course_dir),
                 "--output",
                 str(tmp_path),
@@ -181,7 +177,6 @@ def test_missing_analysis_csv_aborts(tmp_path, monkeypatch, runner_chain_module)
         runner_chain_module,
         monkeypatch,
         [
-            "--analysis-dir-path",
             str(course_dir),
             "--output",
             str(tmp_path),
