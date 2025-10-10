@@ -49,6 +49,19 @@ def test_estimate_sp_ev_returns_none_when_insufficient(caplog: pytest.LogCapture
     assert "B" in caplog.text
 
 
+def test_estimate_sp_ev_imputes_missing_odds_place(caplog: pytest.LogCaptureFixture) -> None:
+    legs = [
+        {"id": "A", "p": 0.3, "market": {"nplace": 2, "n_partants": 12}},
+        {"id": "B", "odds_place": 5.0, "p": 0.2},
+    ]
+
+    with caplog.at_level(logging.INFO):
+        ev, some_missing = runner_chain.estimate_sp_ev(legs)
+
+    assert some_missing is True
+    assert ev == pytest.approx(0.5, rel=1e-2)
+    assert "odds_place_imputed" in legs[0].get("notes", [])
+    assert "Cote place imputée" in caplog.text
 def test_compute_overround_cap_flat_handicap_string_partants() -> None:
     cap = runner_chain.compute_overround_cap("Handicap de Plat", "16 partants")
     assert cap == pytest.approx(1.25)
