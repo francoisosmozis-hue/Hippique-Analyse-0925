@@ -315,7 +315,7 @@ def load_planning(path: Path) -> List[PlanningEntry]:
 
 
 def _extract_arrival_from_json(text: str) -> list[str]:
-     for match in _JSON_LIST_RE.finditer(text): 
+    for match in _JSON_LIST_RE.finditer(text): 
         try:
             data = json.loads(match.group(0))
         except json.JSONDecodeError:
@@ -457,7 +457,8 @@ def _read_local_file(path: Path) -> tuple[str, str | None]:
     return text, hint
 
     
-    def _resolve_relative(path: str, base_dir: Path | None) -> Path:
+
+def _resolve_relative(path: str, base_dir: Path | None) -> Path:
     candidate = Path(path)
     if candidate.is_absolute() or base_dir is None:
         return candidate
