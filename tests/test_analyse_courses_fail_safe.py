@@ -84,10 +84,7 @@ def test_safe_enrich_h5_abstains_without_h30(tmp_path, monkeypatch):
 
     rc_dir = tmp_path / "R1C5"
     snapshot = _write_snapshot(rc_dir)
-    snapshot.write_text(json.dumps({"id_course": "COURSE42"}), encoding="utf-8")
-
-    monkeypatch.setattr(acd, "normalize_snapshot", lambda payload: payload)
-
+    monkeypatch.setattr(acd, "_normalise_snapshot", lambda payload: payload)
     success, outcome = acd.safe_enrich_h5(rc_dir, budget=5.0, kelly=0.05)
 
     assert success is False
@@ -449,7 +446,7 @@ def test_execute_h5_chain_skips_downstream_without_h30(tmp_path, monkeypatch):
     snapshot = _write_snapshot(rc_dir)
     snapshot.write_text(json.dumps({"id_course": "COURSE84"}), encoding="utf-8")
 
-    monkeypatch.setattr(acd, "normalize_snapshot", lambda payload: payload)
+    monkeypatch.setattr(acd, "_normalise_snapshot", lambda payload: payload)
 
     def forbidden(*_args, **_kwargs):  # pragma: no cover - defensive assertion
         raise AssertionError("downstream step should be skipped when H-30 is missing")

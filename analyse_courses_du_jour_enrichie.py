@@ -432,59 +432,70 @@ def ensure_dir(path: Path) -> Path:
     return path
 
 
-def enrich_h5(rc_dir: Path, *, budget: float, kelly: float) -> None:
-    """Prepare all artefacts required for the H-5 pipeline.
+def _latest_snapshot(rc_dir: Path, tag: str) -> Path | None:
+    """Return the latest snapshot file for a given tag."""
+    pattern = f"*_{tag}.json"
+    candidates = sorted(rc_dir.glob(pattern))
+    if not candidates:
+        return None
+    return candidates[-1]
 
-    The function normalises the latest H-30/H-5 snapshots, extracts odds maps,
-    fetches jockey/entraineur statistics and materialises CSV companions used
-    by downstream tooling.  by downstream tooling.  The H-30 snapshot is a hard requirement; when it is
-    absent the function abstains and signals the caller to mark the course as
-    non playable.
-    """
+
+def _load_snapshot(path: Path) -> dict[str, Any]:
+    """Load a snapshot file."""
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Snapshot invalide: {path} ({exc})") from exc
+
+
+def _latest_snapshot(rc_dir: Path, tag: str) -> Path | None:
+    """Return the latest snapshot file for a given tag."""
+    pattern = f"*_{tag}.json"
+    candidates = sorted(rc_dir.glob(pattern))
+    if not candidates:
+        return None
+    return candidates[-1]
+
+
+def _load_snapshot(path: Path) -> dict[str, Any]:
+    """Load a snapshot file."""
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Snapshot invalide: {path} ({exc})") from exc
+
+
+def _normalise_snapshot(payload: dict[str, Any]) -> dict[str, Any]:
+    normalised = dict(payload)
+    # Preserve a few metadata fields expected by downstream consumers.
+    for key in [
+        "id_course",
+        "course_id",
+        "source",
+        "rc",
+        "r_label",
+        "meeting",
+        "reunion",
+        "race",
+    ]:
+        value = payload.get(key)
+        if value is not None and key not in normalised:
+            normalised[key] = value
+    return normalised
+
+
+def enrich_h5(rc_dir: Path, *, budget: float, kelly: float) -> None:
 
     rc_dir = ensure_dir(Path(rc_dir))
 
-    def _latest_snapshot(tag: str) -> Path | None:
-        pattern = f"*_{tag}.json"
-        candidates = sorted(rc_dir.glob(pattern))
-        if not candidates:
-            return None
-        # ``glob`` returns in alphabetical order which correlates with the
-        # timestamp prefix we use for snapshots.  The most recent file is the
-        # last one.
-        return candidates[-1]
-
-    def _load_snapshot(path: Path) -> dict[str, Any]:
-        try:
-            return json.loads(path.read_text(encoding="utf-8"))
-        except json.JSONDecodeError as exc:
-            raise ValueError(f"Snapshot invalide: {path} ({exc})") from exc
-
-    def _normalise_snapshot(payload: dict[str, Any]) -> dict[str, Any]:
-        normalised = dict(payload)
-        # Preserve a few metadata fields expected by downstream consumers.
-        for key in [
-            "id_course",
-            "course_id",
-            "source",
-            "rc",
-            "r_label",
-            "meeting",
-            "reunion",
-            "race",
-        ]:
-            value = payload.get(key)
-            if value is not None and key not in normalised:
-                normalised[key] = value
-        return normalised
-
-    h5_raw_path = _latest_snapshot("H-5")
+    h5_raw_path = _latest_snapshot(rc_dir, "H-5")
     if h5_raw_path is None:
         raise FileNotFoundError("Aucun snapshot H-5 trouvé pour l'analyse")
     h5_payload = _load_snapshot(h5_raw_path)
     h5_normalised = _normalise_snapshot(h5_payload)
 
-    h30_raw_path = _latest_snapshot("H-30")
+    h30_raw_path = _latest_snapshot(rc_dir, "H-30")
     h30_payload: dict[str, Any]
     if h30_raw_path is not None:
         h30_payload = _load_snapshot(h30_raw_path)
@@ -2098,6 +2109,17 @@ def main() -> None:
         help="Préfixe GCS racine pour les uploads",
     )
     args = ap.parse_args()
+    print(f"[DEBUG] args: {args}")
+            args.course_url,
+            args.reunion_url,
+            (args.reunion and args.course),
+            args.reunions_file,
+            args.from_geny_today,
+        ]
+    ):
+        ap.error(
+            "Veuillez spécifier une action: --from-geny-today, --course-url, --reunion-url, ou --reunion/--course"
+        )
 
     data_dir = Path(args.data_dir)
 
@@ -2106,9 +2128,9 @@ def main() -> None:
         if not rc_match:
             print("[ERROR] Impossible d'extraire R#C# de l'URL de la course", file=sys.stderr)
             raise SystemExit(2)
-        
+
         reunion, course = _derive_rc_parts(rc_match.group(1))
-        
+
         print(f"Traitement de la course {reunion}{course} en phase {args.phase}")
         _process_single_course(
             reunion,
@@ -2149,8 +2171,5 @@ def main() -> None:
             gcs_prefix=args.gcs_prefix,
         )
         return
-
-    parser.error("Veuillez spécifier une action: --course-url, --reunion-url, ou --reunion/--course")
-
 if __name__ == "__main__":
     main()

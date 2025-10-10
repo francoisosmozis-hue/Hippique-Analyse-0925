@@ -173,7 +173,7 @@ def test_single_reunion(
 
     argv = [
         "analyse_courses_du_jour_enrichie.py",
-        "--course-url",
+        "--reunion-url",
         "https://www.zeturf.fr/fr/reunion/2024-09-25/R1-test",
         "--phase",
         phase,
@@ -240,7 +240,7 @@ def test_course_url_shortcuts_single_course(
     argv = [
         "analyse_courses_du_jour_enrichie.py",
         "--course-url",
-        "https://www.zeturf.fr/fr/course/654321",
+        "https://www.zeturf.fr/fr/course/2024-09-25/R1C3-test",
         "--phase",
         "H30",
         "--data-dir",
