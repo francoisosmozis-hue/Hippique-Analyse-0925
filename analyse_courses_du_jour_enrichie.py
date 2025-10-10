@@ -38,6 +38,23 @@ from simulate_wrapper import PAYOUT_CALIBRATION_PATH, evaluate_combo
 
 logger = logging.getLogger(__name__)
 
+
+def _env_float(name: str, default: float) -> float:
+    try:
+        return float(os.getenv(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+
+
+GPI_BUDGET_DEFAULT = _env_float("GPI_BUDGET", 5.0)
+EV_MIN_THRESHOLD = _env_float("EV_MIN", 0.40)
+ROI_SP_MIN_THRESHOLD = _env_float("ROI_SP_MIN", 0.20)
+PAYOUT_MIN_THRESHOLD = _env_float("PAYOUT_MIN", 10.0)
+OVERROUND_MAX_THRESHOLD = _env_float("OVERROUND_MAX", 1.30)
+if "MAX_COMBO_OVERROUND" not in os.environ:
+    os.environ["MAX_COMBO_OVERROUND"] = f"{OVERROUND_MAX_THRESHOLD:.2f}"
+
+
 # Tests may insert a lightweight stub of ``scripts.online_fetch_zeturf`` to avoid
 # pulling heavy scraping dependencies.  Ensure the stub does not linger in
 # ``sys.modules`` so that later imports retrieve the fully-featured module.
@@ -52,6 +69,7 @@ class MissingH30SnapshotError(RuntimeError):
     def __init__(self, message: str, *, rc_dir: Path | str | None = None) -> None:
         super().__init__(message)
         self.rc_dir = Path(rc_dir) if isinstance(rc_dir, (str, Path)) else None
+
 
 USE_GCS = is_gcs_enabled()
 
@@ -85,8 +103,8 @@ else:  # pragma: no cover - Cloud sync explicitly disabled
 
 
 # --- RÈGLES ANTI-COTES FAIBLES (SP min 4/1 ; CP somme > 6.0 déc) ---------------
-MIN_SP_DEC_ODDS = 5.0        # 4/1 = 5.0
-MIN_CP_SUM_DEC = 6.0         # (o1-1)+(o2-1) ≥ 4  <=> (o1+o2) ≥ 6.0
+MIN_SP_DEC_ODDS = 5.0  # 4/1 = 5.0
+MIN_CP_SUM_DEC = 6.0  # (o1-1)+(o2-1) ≥ 4  <=> (o1+o2) ≥ 6.0
 
 
 def _write_json_file(path: Path, payload: Any) -> None:
@@ -107,7 +125,7 @@ def _write_minimal_csv(
             for row in rows:
                 writer.writerow(list(row))
 
-    
+
 def _load_json_if_exists(path: Path) -> dict[str, Any] | None:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
@@ -346,11 +364,7 @@ def _filter_sp_and_cp_by_odds(payload: dict[str, Any]) -> None:
                         break
                 if odds is None:
                     market = payload.get("market") or {}
-                    horses = (
-                        market.get("horses")
-                        if isinstance(market, dict)
-                        else []
-                    )
+                    horses = market.get("horses") if isinstance(market, dict) else []
                     num = str(leg.get("num") or leg.get("horse") or "")
                     mh = None
                     if isinstance(horses, list):
@@ -392,11 +406,7 @@ def _filter_sp_and_cp_by_odds(payload: dict[str, Any]) -> None:
                         break
                 if odds is None:
                     market = payload.get("market") or {}
-                    horses = (
-                        market.get("horses")
-                        if isinstance(market, dict)
-                        else []
-                    )
+                    horses = market.get("horses") if isinstance(market, dict) else []
                     num = str(leg.get("num") or leg.get("horse") or "")
                     mh = None
                     if isinstance(horses, list):
@@ -442,9 +452,7 @@ def ensure_dir(path: Path) -> Path:
     return path
 
 
-def enrich_h5(
-    rc_dir: Path, *, budget: float, kelly: float
-) -> None:
+def enrich_h5(rc_dir: Path, *, budget: float, kelly: float) -> None:
     """Prepare all artefacts required for the H-5 pipeline.
 
     The function normalises the latest H-30/H-5 snapshots, extracts odds maps,
@@ -552,11 +560,15 @@ def enrich_h5(
     stats_path = rc_dir / "stats_je.json"
     course_id = str(partants_payload.get("course_id") or "").strip()
     if not course_id:
-        raise ValueError("Impossible de déterminer l'identifiant course pour les stats J/E")
+        raise ValueError(
+            "Impossible de déterminer l'identifiant course pour les stats J/E"
+        )
     snap_stem = h5_raw_path.stem
     je_path = rc_dir / f"{snap_stem}_je.csv"
     try:
-        coverage, mapped = collect_stats(course_id, h5_path=rc_dir / "normalized_h5.json")
+        coverage, mapped = collect_stats(
+            course_id, h5_path=rc_dir / "normalized_h5.json"
+        )
     except Exception:  # pragma: no cover - network or scraping issues
         logger.exception("collect_stats failed for course %s", course_id)
         stats_payload = {"coverage": 0, "ok": 0}
@@ -583,21 +595,49 @@ def enrich_h5(
 
 
 def build_p_finale(
-    rc_dir: Path, *, budget: float, kelly: float
+    rc_dir: Path,
+    *,
+    budget: float,
+    kelly: float,
+    ev_min: float | None = None,
+    roi_min: float | None = None,
+    payout_min: float | None = None,
+    overround_max: float | None = None,
 ) -> None:
     """Run the ticket allocation pipeline and persist ``p_finale.json``."""
 
     rc_dir = Path(rc_dir)
-    _run_single_pipeline(rc_dir, budget=budget)
+    _run_single_pipeline(
+        rc_dir,
+        budget=budget,
+        ev_min=ev_min,
+        roi_min=roi_min,
+        payout_min=payout_min,
+        overround_max=overround_max,
+    )
 
 
 def run_pipeline(
-    rc_dir: Path, *, budget: float, kelly: float
+    rc_dir: Path,
+    *,
+    budget: float,
+    kelly: float,
+    ev_min: float | None = None,
+    roi_min: float | None = None,
+    payout_min: float | None = None,
+    overround_max: float | None = None,
 ) -> None:
     """Execute the analysis pipeline for ``rc_dir`` or its subdirectories."""
 
     rc_dir = Path(rc_dir)
 
+    ev_threshold = EV_MIN_THRESHOLD if ev_min is None else float(ev_min)
+    roi_threshold = ROI_SP_MIN_THRESHOLD if roi_min is None else float(roi_min)
+    payout_threshold = PAYOUT_MIN_THRESHOLD if payout_min is None else float(payout_min)
+    overround_threshold = (
+        OVERROUND_MAX_THRESHOLD if overround_max is None else float(overround_max)
+    )
+    
     # If ``rc_dir`` already holds a freshly generated ``p_finale.json`` we do
     # not run the pipeline again – this is the case when ``build_p_finale`` was
     # just invoked on the directory.
@@ -609,13 +649,28 @@ def run_pipeline(
         for name in ("h5.json", "partants.json", "stats_je.json")
     )
     if inputs_available:
-        _run_single_pipeline(rc_dir, budget=budget)
+        _run_single_pipeline(
+            rc_dir,
+            budget=budget,
+            ev_min=ev_threshold,
+            roi_min=roi_threshold,
+            payout_min=payout_threshold,
+            overround_max=overround_threshold,
+        )
         return
 
     ran_any = False
     for subdir in sorted(p for p in rc_dir.iterdir() if p.is_dir()):
         try:
-            build_p_finale(subdir, budget=budget, kelly=kelly)
+            build_p_finale(
+                subdir,
+                budget=budget,
+                kelly=kelly,
+                ev_min=ev_threshold,
+                roi_min=roi_threshold,
+                payout_min=payout_threshold,
+                overround_max=overround_threshold,
+            )
         except FileNotFoundError:
             continue
         ran_any = True
@@ -623,9 +678,7 @@ def run_pipeline(
         raise FileNotFoundError(f"Aucune donnée pipeline détectée dans {rc_dir}")
 
 
-def build_prompt_from_meta(
-    rc_dir: Path, *, budget: float, kelly: float
-) -> None:
+def build_prompt_from_meta(rc_dir: Path, *, budget: float, kelly: float) -> None:
     """Generate a human-readable prompt from ``p_finale.json`` metadata."""
 
     rc_dir = Path(rc_dir)
@@ -653,7 +706,11 @@ def build_prompt_from_meta(
         roi = ev.get("roi_global")
         prompt_lines.append(
             "EV globale : "
-            + (f"{float(global_ev):.2f}" if isinstance(global_ev, (int, float)) else "n/a")
+            + (
+                f"{float(global_ev):.2f}"
+                if isinstance(global_ev, (int, float))
+                else "n/a"
+            )
             + " | ROI estimé : "
             + (f"{float(roi):.2f}" if isinstance(roi, (int, float)) else "n/a")
         )
@@ -725,10 +782,24 @@ def _write_chronos_csv(path: Path, runners: Iterable[Any]) -> None:
             writer.writerow([cid, chrono])
 
 
-def _run_single_pipeline(rc_dir: Path, *, budget: float) -> None:
+def _run_single_pipeline(
+    rc_dir: Path,
+    *,
+    budget: float,
+    ev_min: float | None = None,
+    roi_min: float | None = None,
+    payout_min: float | None = None,
+    overround_max: float | None = None,
+) -> None:
     """Execute :func:`pipeline_run.cmd_analyse` for ``rc_dir``."""
 
     rc_dir = ensure_dir(rc_dir)
+    ev_threshold = EV_MIN_THRESHOLD if ev_min is None else float(ev_min)
+    roi_threshold = ROI_SP_MIN_THRESHOLD if roi_min is None else float(roi_min)
+    payout_threshold = PAYOUT_MIN_THRESHOLD if payout_min is None else float(payout_min)
+    overround_threshold = (
+        OVERROUND_MAX_THRESHOLD if overround_max is None else float(overround_max)
+    )
     required = {"h30.json", "h5.json", "partants.json", "stats_je.json"}
     missing = [name for name in required if not (rc_dir / name).exists()]
     if missing:
@@ -761,18 +832,26 @@ def _run_single_pipeline(rc_dir: Path, *, budget: float) -> None:
         outdir=str(rc_dir),
         diff=None,
         budget=float(budget),
-        ev_global=None,
-        roi_global=None,
+        ev_global=ev_threshold,
+        roi_global=roi_threshold,
         max_vol=None,
-        min_payout=None,
+        min_payout=payout_threshold,
         ev_min_exotic=None,
         payout_min_exotic=None,
         allow_heuristic=False,
         allow_je_na=allow_je_na,
         calibration=str(PAYOUT_CALIBRATION_PATH),
     )
-    pipeline_run.cmd_analyse(args)
-
+    previous_overround = os.environ.get("MAX_COMBO_OVERROUND")
+    os.environ["MAX_COMBO_OVERROUND"] = f"{overround_threshold:.2f}"
+    try:
+        pipeline_run.cmd_analyse(args)
+    finally:
+        if previous_overround is None:
+            os.environ.pop("MAX_COMBO_OVERROUND", None)
+        else:
+            os.environ["MAX_COMBO_OVERROUND"] = previous_overround
+            
     p_finale_path = rc_dir / "p_finale.json"
     try:
         payload = json.loads(p_finale_path.read_text(encoding="utf-8"))
@@ -888,7 +967,12 @@ def _run_h5_guard_phase(
     if not meta:
         base = _gather_tracking_base(rc_dir)
         if isinstance(base, dict):
-            meta = {k: v for k, v in base.items() if k in {"reunion", "course", "hippodrome", "date", "discipline", "partants"}}
+            meta = {
+                k: v
+                for k, v in base.items()
+                if k
+                in {"reunion", "course", "hippodrome", "date", "discipline", "partants"}
+            }
         meta.setdefault("rc", rc_dir.name)
     else:
         meta.setdefault("rc", meta.get("rc") or rc_dir.name)
@@ -1151,6 +1235,8 @@ def _snap_prefix(rc_dir: Path) -> str | None:
 _SCRIPTS_DIR = Path(__file__).resolve().with_name("scripts")
 _FETCH_JE_STATS_SCRIPT = _SCRIPTS_DIR.joinpath("fetch_je_stats.py")
 _FETCH_JE_CHRONO_SCRIPT = _SCRIPTS_DIR.joinpath("fetch_je_chrono.py")
+
+
 def _check_enrich_outputs(
     rc_dir: Path,
     *,
@@ -1400,7 +1486,9 @@ def _rebuild_je_csv_from_stats(rc_dir: Path) -> bool:
         return False
 
     try:
-        _write_je_csv_file(rc_dir / f"{snap}_je.csv", id2name=id2name, stats_payload=stats_payload)
+        write_je_csv_file(
+            rc_dir / f"{snap}_je.csv", id2name=id2name, stats_payload=stats_payload
+        )
     except OSError as exc:
         print(
             f"[WARN] Échec d'écriture du CSV J/E pour {rc_dir.name}: {exc}",
@@ -1430,9 +1518,11 @@ def _regenerate_chronos_csv(rc_dir: Path) -> bool:
                 for runner in items:
                     if not isinstance(runner, dict):
                         continue
-                    if runner.get("id") is None and runner.get("num") is None and runner.get(
-                        "number"
-                    ) is None:
+                    if (
+                        runner.get("id") is None
+                        and runner.get("num") is None
+                        and runner.get("number") is None
+                    ):
                         continue
                     cleaned.append(runner)
             return cleaned
@@ -1599,6 +1689,7 @@ def _ensure_h5_artifacts(
             if _refresh_missing_state():
                 return True
         return False
+        
     if _missing_requires_stats(missing):
         (
             stats_fetch_success,
@@ -1607,10 +1698,7 @@ def _ensure_h5_artifacts(
         ) = _recover_je_csv_from_stats(rc_dir, retry_cb=retry_cb)
         retry_invoked = retry_invoked or stats_retry_invoked
         retried = (
-            retried
-            or stats_fetch_success
-            or stats_recovered
-            or stats_retry_invoked
+            retried or stats_fetch_success or stats_recovered or stats_retry_invoked
         )
         if stats_retry_invoked and not stats_recovered:
             if _attempt_stats_rebuild(allow_without_fetch=True):
@@ -1756,7 +1844,14 @@ def safe_enrich_h5(
 
 
 def _execute_h5_chain(
-    rc_dir: Path, *, budget: float, kelly: float
+    rc_dir: Path,
+    *,
+    budget: float,
+    kelly: float,
+    ev_min: float,
+    roi_min: float,
+    payout_min: float,
+    overround_max: float,
 ) -> tuple[bool, dict[str, Any] | None]:
     """Run the full H-5 enrichment pipeline with fail-safe guards.
 
@@ -1768,18 +1863,37 @@ def _execute_h5_chain(
     if not success:
         return False, outcome
 
-    build_p_finale(rc_dir, budget=budget, kelly=kelly)
+    build_p_finale(
+        rc_dir,
+        budget=budget,
+        kelly=kelly,
+        ev_min=ev_min,
+        roi_min=roi_min,
+        payout_min=payout_min,
+        overround_max=overround_max,
+    )
     guard_ok, analysis_payload, guard_outcome = _run_h5_guard_phase(
         rc_dir,
         budget=budget,
+        min_roi=roi_min,
     )
     try:
         _write_json_file(rc_dir / "analysis_H5.json", analysis_payload)
     except Exception as exc:  # pragma: no cover - defensive logging
-        logger.warning("[H-5] unable to persist analysis_H5.json for %s: %s", rc_dir, exc)
+        logger.warning(
+            "[H-5] unable to persist analysis_H5.json for %s: %s", rc_dir, exc
+        )
     if not guard_ok:
         return False, guard_outcome
-    run_pipeline(rc_dir, budget=budget, kelly=kelly)
+    run_pipeline(
+        rc_dir,
+        budget=budget,
+        kelly=kelly,
+        ev_min=ev_min,
+        roi_min=roi_min,
+        payout_min=payout_min,
+        overround_max=overround_max,
+    )
     build_prompt_from_meta(rc_dir, budget=budget, kelly=kelly)
     return True, None
 
@@ -1921,6 +2035,10 @@ def _process_single_course(
     budget: float,
     kelly: float,
     gcs_prefix: str | None,
+    ev_min: float = EV_MIN_THRESHOLD,
+    roi_min: float = ROI_SP_MIN_THRESHOLD,
+    payout_min: float = PAYOUT_MIN_THRESHOLD,
+    overround_max: float = OVERROUND_MAX_THRESHOLD,
 ) -> dict[str, Any] | None:
     """Fetch and analyse a specific course designated by ``reunion``/``course``."""
 
@@ -1935,6 +2053,10 @@ def _process_single_course(
             rc_dir,
             budget=budget,
             kelly=kelly,
+            ev_min=ev_min,
+            roi_min=roi_min,
+            payout_min=payout_min,
+            overround_max=overround_max,
         )
         if pipeline_done:
             csv_path = export_per_horse_csv(rc_dir)
@@ -1977,7 +2099,7 @@ def _extract_labels_from_text(text: str) -> tuple[str, str]:
     c_label = c_match.group(0).upper() if c_match else "C?"
     return r_label, c_label
 
-    
+
 def _process_reunion(
     url: str,
     phase: str,
@@ -1986,6 +2108,10 @@ def _process_reunion(
     budget: float,
     kelly: float,
     gcs_prefix: str | None,
+    ev_min: float = EV_MIN_THRESHOLD,
+    roi_min: float = ROI_SP_MIN_THRESHOLD,
+    payout_min: float = PAYOUT_MIN_THRESHOLD,
+    overround_max: float = OVERROUND_MAX_THRESHOLD,
 ) -> None:
     """Fetch ``url`` and run the pipeline for each course of the meeting."""
 
@@ -2012,7 +2138,9 @@ def _process_reunion(
             id_match = re.search(r"(\d+)(?:\.html)?$", href)
             if c_match and id_match:
                 course_url = urljoin(url, href)
-                courses.append((r_label, c_match.group(1).upper(), id_match.group(1), course_url))
+                courses.append(
+                    (r_label, c_match.group(1).upper(), id_match.group(1), course_url)
+                )
 
         if not courses:
             return
@@ -2028,6 +2156,10 @@ def _process_reunion(
                 rc_dir,
                 budget=budget,
                 kelly=kelly,
+                ev_min=ev_min,
+                roi_min=roi_min,
+                payout_min=payout_min,
+                overround_max=overround_max
             )
             if pipeline_done:
                 csv_path = export_per_horse_csv(rc_dir)
@@ -2053,9 +2185,35 @@ def main() -> None:
     ap.add_argument(
         "--data-dir", default="data", help="Répertoire racine pour les sorties"
     )
-    ap.add_argument("--budget", type=float, default=100.0, help="Budget à utiliser")
+    ap.add_argument(
+        "--budget", type=float, default=GPI_BUDGET_DEFAULT, help="Budget à utiliser"
+    )
     ap.add_argument(
         "--kelly", type=float, default=1.0, help="Fraction de Kelly à appliquer"
+    )
+    ap.add_argument(
+        "--ev-min",
+        type=float,
+        default=EV_MIN_THRESHOLD,
+        help="Seuil EV global minimal (ratio).",
+    )
+    ap.add_argument(
+        "--roi-min",
+        type=float,
+        default=ROI_SP_MIN_THRESHOLD,
+        help="ROI global minimal (ratio).",
+    )
+    ap.add_argument(
+        "--payout-min",
+        type=float,
+        default=PAYOUT_MIN_THRESHOLD,
+        help="Payout combinés minimal (euros).",
+    )
+    ap.add_argument(
+        "--overround-max",
+        type=float,
+        default=OVERROUND_MAX_THRESHOLD,
+        help="Overround place maximum autorisé.",
     )
     ap.add_argument(
         "--from-geny-today",
@@ -2130,6 +2288,14 @@ def main() -> None:
                     str(args.budget),
                     "--kelly",
                     str(args.kelly),
+                    "--ev-min",
+                    str(args.ev_min),
+                    "--roi-min",
+                    str(args.roi_min),
+                    "--payout-min",
+                    str(args.payout_min),
+                    "--overround-max",
+                    str(args.overround_max),
                 ]
                 if gcs_prefix is not None:
                     cmd.append("--upload-gcs")
@@ -2158,6 +2324,14 @@ def main() -> None:
             budget=args.budget,
             kelly=args.kelly,
             gcs_prefix=gcs_prefix,
+            ev_min=args.ev_min,
+            roi_min=args.roi_min,
+            payout_min=args.payout_min,
+            overround_max=args.overround_max
+            ev_min=args.ev_min,
+            roi_min=args.roi_min,
+            payout_min=args.payout_min,
+            overround_max=args.overround_max,
         )
         return
 
@@ -2190,8 +2364,24 @@ def main() -> None:
                     rc_dir, budget=args.budget, kelly=args.kelly
                 )
                 if success:
-                    build_p_finale(rc_dir, budget=args.budget, kelly=args.kelly)
-                    run_pipeline(rc_dir, budget=args.budget, kelly=args.kelly)
+                    build_p_finale(
+                        rc_dir,
+                        budget=args.budget,
+                        kelly=args.kelly,
+                        ev_min=args.ev_min,
+                        roi_min=args.roi_min,
+                        payout_min=args.payout_min,
+                        overround_max=args.overround_max,
+                    )
+                    run_pipeline(
+                        rc_dir,
+                        budget=args.budget,
+                        kelly=args.kelly,
+                        ev_min=args.ev_min,
+                        roi_min=args.roi_min,
+                        payout_min=args.payout_min,
+                        overround_max=args.overround_max,
+                    )
                     build_prompt_from_meta(rc_dir, budget=args.budget, kelly=args.kelly)
                     csv_path = export_per_horse_csv(rc_dir)
                     print(f"[INFO] per-horse report écrit: {csv_path}")
@@ -2204,7 +2394,15 @@ def main() -> None:
         return
 
     # Fall back to original behaviour: simply run the pipeline on ``data_dir``
-    run_pipeline(Path(args.data_dir), budget=args.budget, kelly=args.kelly)
+    run_pipeline(
+        Path(args.data_dir),
+        budget=args.budget,
+        kelly=args.kelly,
+        ev_min=args.ev_min,
+        roi_min=args.roi_min,
+        payout_min=args.payout_min,
+        overround_max=args.overround_max,
+    )
     if gcs_prefix is not None:
         _upload_artifacts(Path(args.data_dir), gcs_prefix=gcs_prefix)
 
