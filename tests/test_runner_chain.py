@@ -365,4 +365,8 @@ def test_export_tracking_csv_line(tmp_path):
     header = lines[0].split(';')
     assert header[-1] == 'ALERTE_VALUE'
     assert {'prob_implicite_panier', 'ev_simulee_post_arrondi', 'roi_simule', 'roi_reel', 'sharpe', 'drift_sign'} <= set(header)
-    assert lines[1].split(';')[-1] == 'ALERTE_VALUE'
+    assert {'nb_tickets', 'expected_gross_return_eur'} <= set(header)
+    values = dict(zip(header, lines[1].split(';')))
+    assert values['ALERTE_VALUE'] == 'ALERTE_VALUE'
+    assert values['nb_tickets'] == '2'
+    assert float(values['expected_gross_return_eur']) == pytest.approx(3.6)
