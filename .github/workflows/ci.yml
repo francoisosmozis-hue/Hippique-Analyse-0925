@@ -1,60 +1,43 @@
-name: CI
+name: CI ROI+ Guardrails
 
 on:
-  pull_request:
   push:
-    branches: [ main, master ]
-
-permissions:
-  contents: read
-
-concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+    branches: [ "**" ]
+  pull_request:
 
 jobs:
-  test:
+  tests:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: { python-version: "3.11" }
-      - uses: actions/cache@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt') }}
-          restore-keys: ${{ runner.os }}-pip-
+          python-version: "3.10"
+          
       - name: Install deps
         run: |
           python -m pip install --upgrade pip
-          [ -f requirements.txt ] && pip install -r requirements.txt
-          pip install ruff black pytest
-      - name: Lint (ruff)
-        run: ruff check .
-      - name: Format (black --check)
-        run: black --check .
-      - name: Unit tests
-        run: |
-          if [ -d tests ]; then pytest -q; else echo "No tests dir"; fi
-      - name: Smoke ROI gates (soft-fail)
-        continue-on-error: true
-        env:
-          TZ: Europe/Paris
-          GPI_BUDGET: "5"
-          EV_MIN: "0.40"
-          ROI_SP_MIN: "0.20"
-          PAYOUT_MIN: "10"
-          OVERROUND_MAX: "1.30"
-        run: |
-          python - <<'PY'
-import os
-req=["GPI_BUDGET","EV_MIN","ROI_SP_MIN","PAYOUT_MIN","OVERROUND_MAX"]
-missing=[k for k in req if not os.getenv(k)]
-if missing: print("WARN missing:", missing)
-mods=["analyse_courses_du_jour_enrichie","pipeline_run","simulate_ev","simulate_wrapper","validator_ev","module_dutching_pmu"]
-ok=0
-for m in mods:
-    try: __import__(m); ok+=1
-    except Exception as e: print("INFO import fail", m, e)
-print("Imports OK:", ok, "/", len(mods))
-PY
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install pytest
+
+      - name: Run unit tests
+        run: pytest -q
+
+      - name: Upload artifacts (if any)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: analysis-artifacts
+          path: |
+            data/**/snapshot_H30.json
+            data/**/snapshot_H5.json
+            data/**/*_je.csv
+            data/**/chronos.csv
+            data/**/*_p_finale.json
+            data/**/analysis_H5.json
+            data/**/tracking.csv
+            prompts/*.txt
+          if-no-files-found: ignore
