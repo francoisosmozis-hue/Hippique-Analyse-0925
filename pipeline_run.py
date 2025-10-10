@@ -259,126 +259,89 @@ def _coerce_slots_place(slots_place: Any, default: float = _DEFAULT_SLOTS_PLACE)
     return slots_value
 
 
-def _build_market(
-    snapshot: Mapping[str, Any] | Sequence[Mapping[str, Any]],
-    p_place: Mapping[str, float] | None = None,
-    slots_place: Any = _DEFAULT_SLOTS_PLACE,
-) -> dict[str, Any]:
-    """Return market metrics including a real overround based on place odds."""
+def build_market(snapshot: dict, p_place_map: Mapping[str, float] | None) -> dict:
+    """
+    Vue marché minimale : n_partants, chevaux {num,p,cote_place?}, overround (win si dispo, sinon proxy place).
+    """
 
-    if p_place is not None and not isinstance(p_place, Mapping):
-        slots_place = p_place
-        place_prob_map: Mapping[str, float] | None = None
-    else:
-        place_prob_map = p_place
-
-    if isinstance(snapshot, Mapping):
-        runners_source = (
-            snapshot.get("runners")
-            or snapshot.get("partants")
-            or snapshot.get("horses")
-            or []
-        )
-    else:
-        runners_source = snapshot
-
-    runners: list[Mapping[str, Any]] = [
-        entry for entry in runners_source if isinstance(entry, Mapping)
-    ]
-
-    horses: list[dict[str, Any]] = []
-    total_runners = 0
-    win_runners = 0
-    win_total = 0.0
-    place_total = 0.0
-    has_place_odds = False
-
-    for entry in runners:
-        total_runners += 1
-        
-        num_val = entry.get("num") or entry.get("number") or entry.get("id")
-        num_text = str(num_val or "").strip()
-        if not num_text:
-            num_text = str(total_runners)
-
-        identifiers = [num_text]
-        alt_id = entry.get("id")
-        alt_text = str(alt_id or "").strip()
-        if alt_text and alt_text not in identifiers:
-            identifiers.append(alt_text)
-
-        place_prob = 0.0
-        if place_prob_map:
-            for ident in identifiers:
-                if ident in place_prob_map:
-                    place_prob = _coerce_probability(place_prob_map.get(ident))
-                    break
-
-        win_odds = None
-        for key in (
-            "odds",
-            "decimal_odds",
-            "odds_dec",
-            "odds_win",
-            "win_odds",
-            "cote",
-            "odd",
-        ):
-            if key in entry:
-                candidate = _coerce_odds(entry.get(key))
-                if candidate > 0:
-                    win_odds = candidate
-                    break
-        if win_odds is not None:
-            win_runners += 1
-            win_total += 1.0 / win_odds
-
+    runners = snapshot.get("runners") or snapshot.get("partants") or []
+    horses = []
+    for r in runners:
+        num = str(r.get("num") or r.get("numero") or r.get("id") or "").strip()
+        if not num:
+            continue
+        p = float(p_place_map.get(num, 0.0) or 0.0) if p_place_map else 0.0
         odds_place = None
-        for key in ("odds_place", "cote_place", "place_odds", "cote"):
-            if key in entry:
-                candidate = _coerce_odds(entry.get(key))
-                if candidate > 0:
-                    odds_place = candidate
-                    break
-        if odds_place is None and win_odds is not None:
-            odds_place = win_odds
-        if odds_place is not None:
-            place_total += 1.0 / odds_place
-            has_place_odds = True
+        for key in ("odds_place", "cote_place", "cote"):
+            if r.get(key) is not None:
+                odds_place = _safe_float(r.get(key))
+                break
+        horses.append({"num": num, "p": p, "cote": odds_place})
 
-    horses.append({"num": num_text, "p": float(place_prob), "cote": odds_place})
+    n = len(runners)
+    or_win = _overround_from_odds_win(runners)
+    or_place = _overround_place_proxy(p_place_map, _n_places(n))
+    overround = or_win if or_win is not None else or_place
 
-        overround = _overround_from_odds(horses)
+    market = {"n_partants": n, "horses": horses, "overround": overround}
+    if or_win is not None:
+        market["overround_win"] = or_win
+    if or_place is not None:
+        market["overround_place_proxy"] = or_place
+        market.setdefault("overround_place", or_place)
+    return market
 
-    metrics: dict[str, Any] = {
-        "n_partants": len(runners),
-        "horses": horses,
-        "overround": overround,
-    }
+    
+_build_market = build_market
 
-    if total_runners:
-        coverage_ratio = win_runners / total_runners
-        metrics["runner_count_total"] = total_runners
-        metrics["runner_count_with_win_odds"] = win_runners
-        metrics["win_coverage_ratio"] = round(coverage_ratio, 4)
-        metrics["win_coverage_sufficient"] = coverage_ratio >= 0.70
-    else:
-        metrics["win_coverage_sufficient"] = False
-        
-    if win_runners and math.isfinite(win_total):
-        metrics["overround_win"] = round(win_total, 4)
 
-    slots_value = _coerce_slots_place(slots_place)
-    if slots_value:
-        int_candidate = int(slots_value)
-        metrics["slots_place"] = (
-            int_candidate if abs(slots_value - int_candidate) < 1e-9 else slots_value
-        )
-        
-    if has_place_odds and math.isfinite(place_total):
-        metrics["overround_place"] = place_total
+def _build_place_probability_map(
+    runners: Sequence[Mapping[str, Any]],
+    p_place_override: Mapping[str, float] | None = None,
+) -> dict[str, float]:
+    """Return a mapping of identifiers to place probabilities."""
+    
+    result: dict[str, float] = {}
+    for runner in runners or []:
+        if not isinstance(runner, Mapping):
+            continue
+        identifiers: list[str] = []
+        for key in ("num", "number", "id"):
+            val = runner.get(key)
+            if val in (None, ""):
+                continue
+            text = str(val).strip()
+            if text and text not in identifiers:
+                identifiers.append(text)
+                
+        place_prob: float | None = None
+        probs_block = runner.get("probabilities")
+        if isinstance(probs_block, Mapping):
+            candidate = probs_block.get("p_place")
+            if isinstance(candidate, (int, float)):
+                place_prob = float(candidate)
+        if place_prob is None and isinstance(runner.get("p_place"), (int, float)):
+            place_prob = float(runner["p_place"])
 
-    return metrics
+    runner_id = runner.get("id")
+        if place_prob is None and isinstance(p_place_override, Mapping):
+            if runner_id in p_place_override:
+                try:
+                    place_prob = float(p_place_override[runner_id])
+                except (TypeError, ValueError):
+                    place_prob = None
+
+        if place_prob is None and isinstance(runner.get("p"), (int, float)):
+            place_prob = float(runner["p"])
+
+        if place_prob is None or place_prob <= 0.0:
+            continue
+
+        targets = identifiers or [str(runner_id).strip()]
+        for ident in targets:
+            if ident:
+                result[ident] = place_prob
+    return result
 
 
 def _coerce_float(value: Any, default: float = 0.0) -> float:
@@ -1232,19 +1195,19 @@ def _filter_sp_and_cp_tickets(
             notes.append("SP retiré: pool incomplet (<2 jambes ≥ 4/1 (5.0 déc)).")
             filtered_sp = []
 
-      if filtered_sp:
-        place_lookup: dict[str, float] = {}
-        for entry in runners:
-            if not isinstance(entry, Mapping):
-                continue
-            probability = _extract_best_place_probability(entry)
-            if probability <= 0.0:
-                continue
-            for ident in _extract_leg_ids(entry):
-                ident_text = str(ident).strip()
-                if ident_text and ident_text not in place_lookup:
-                    place_lookup[ident_text] = probability
-
+        if filtered_sp:
+            place_lookup: dict[str, float] = {}
+            for entry in runners:
+                if not isinstance(entry, Mapping):
+                    continue
+                probability = _extract_best_place_probability(entry)
+                if probability <= 0.0:
+                    continue
+                for ident in _extract_leg_ids(entry):
+                    ident_text = str(ident).strip()
+                    if ident_text and ident_text not in place_lookup:
+                        place_lookup[ident_text] = probability
+    
         def _ticket_leg_ids(ticket: Mapping[str, Any]) -> list[str]:
             identifiers: list[str] = []
             legs_seq = _normalize_sequence(ticket.get("legs"))
@@ -1677,46 +1640,7 @@ def enforce_ror_threshold(
 
     runners_sp_sanitized = _ensure_place_odds(runners)
 
-    p_place_map: dict[str, float] = {}
-    for runner in runners_sp_sanitized:
-        if not isinstance(runner, Mapping):
-            continue
-        identifiers: list[str] = []
-        for key in ("num", "number", "id"):
-            val = runner.get(key)
-            if val in (None, ""):
-                continue
-            text = str(val).strip()
-            if text and text not in identifiers:
-                identifiers.append(text)
-
-        place_prob: float | None = None
-        probs_block = runner.get("probabilities")
-        if isinstance(probs_block, Mapping):
-            candidate = probs_block.get("p_place")
-            if isinstance(candidate, (int, float)):
-                place_prob = float(candidate)
-        if place_prob is None and isinstance(runner.get("p_place"), (int, float)):
-            place_prob = float(runner["p_place"])
-
-        runner_id = runner.get("id")
-        if place_prob is None and isinstance(p_place_override, Mapping):
-            if runner_id in p_place_override:
-                try:
-                    place_prob = float(p_place_override[runner_id])
-                except (TypeError, ValueError):
-                    place_prob = None
-
-        if place_prob is None and isinstance(runner.get("p"), (int, float)):
-            place_prob = float(runner["p"])
-
-        if place_prob is None or place_prob <= 0.0:
-            continue
-
-        targets = identifiers or [str(runner_id).strip()]
-        for ident in targets:
-            if ident:
-                p_place_map[ident] = place_prob
+    p_place_map = _build_place_probability_map(runners_sp_sanitized, p_place_override)
     runners_sp = filter_sp_candidates(runners_sp_sanitized)
     if len(runners_sp) >= 2:
         sp_tickets, _ = allocate_dutching_sp_fn(cfg_iter, runners_sp)
@@ -2922,6 +2846,7 @@ def cmd_analyse(args: argparse.Namespace) -> None:
 
     runners_sp_sanitized = _ensure_place_odds(runners)
     runners_sp_candidates = filter_sp_candidates(runners_sp_sanitized)
+    p_place_map = _build_place_probability_map(runners_sp_sanitized, p_place_override)
     
     policy_kwargs = _filter_kwargs(
         apply_ticket_policy_fn,
@@ -3035,14 +2960,22 @@ def cmd_analyse(args: argparse.Namespace) -> None:
     if override_paid_places is not None and hint_missing:
         slots_place_hint = override_paid_places
         
-    if isinstance(market_payload, Mapping):
-        market_snapshot: Mapping[str, Any] | Sequence[Mapping[str, Any]] = market_payload
+    if isinstance(raw_h5, Mapping):
+        market_snapshot_dict = dict(raw_h5)
     elif isinstance(partants_data, Mapping):
-        market_snapshot = partants_data
+        market_snapshot_dict = dict(partants_data)
     else:
-        market_snapshot = market_runners_raw
+        market_snapshot_dict = {"runners": list(market_runners_raw)}
 
-    market_metrics = _build_market(market_snapshot, p_place_map, slots_place_hint)
+    market_metrics = build_market(market_snapshot_dict, p_place_map)
+    if slots_place_hint not in (None, ""):
+        try:
+            market_metrics.setdefault(
+                "slots_place",
+                _coerce_slots_place(slots_place_hint),
+            )
+        except Exception:
+            pass
 
     place_overround_estimate = _estimate_overround_place(runners_sp_sanitized)
     if place_overround_estimate is None and isinstance(partants_data, Mapping):
@@ -3072,7 +3005,17 @@ def cmd_analyse(args: argparse.Namespace) -> None:
         general_value = float(overround_general_candidate)
         if math.isfinite(general_value):
             market_overround = general_value
-            overround_source = "place"
+            if market_metrics.get("overround_win") is not None and (
+                math.isclose(
+                    market_metrics.get("overround_win", 0.0),
+                    market_overround,
+                    rel_tol=1e-6,
+                    abs_tol=1e-6,
+                )
+            ):
+                overround_source = "win"
+            else:
+                overround_source = "place"
     if market_overround is None:
         overround_place_candidate = market_metrics.get("overround_place")
         if isinstance(overround_place_candidate, (int, float)):
@@ -3086,14 +3029,7 @@ def cmd_analyse(args: argparse.Namespace) -> None:
             win_value = float(overround_win_candidate)
             if math.isfinite(win_value):
                 market_overround = win_value
-                overround_source = "win"
-    if market_overround is None:
-        overround_win_candidate = market_metrics.get("overround_win")
-        if isinstance(overround_win_candidate, (int, float)):
-            win_value = float(overround_win_candidate)
-            if math.isfinite(win_value):
-                market_overround = win_value
-                overround_source = "win"
+                overround_source = "win"    
     course_label_text = (
         partants_data.get("course_label")
         or partants_data.get("label")
