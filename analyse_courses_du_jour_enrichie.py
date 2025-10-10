@@ -2327,10 +2327,6 @@ def main() -> None:
             ev_min=args.ev_min,
             roi_min=args.roi_min,
             payout_min=args.payout_min,
-            overround_max=args.overround_max
-            ev_min=args.ev_min,
-            roi_min=args.roi_min,
-            payout_min=args.payout_min,
             overround_max=args.overround_max,
         )
         return
