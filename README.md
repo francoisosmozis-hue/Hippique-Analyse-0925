@@ -11,13 +11,12 @@ Pipeline **pro** pour planifier, capturer H‑30 / H‑5, analyser et consigner 
 - **Post‑results (*/15 min)** : récupération **arrivées officielles**, **mise à jour Excel** (ROI réel), **upload GCS**.
 
 **Standards verrouillés** (GPI v5.1) :
-- Budget **max 5 €** / course, **2 tickets max** (SP + 1 combiné éventuel, configurable via `MAX_TICKETS_SP`).
-- **EV globale ≥ +35 %** et **ROI estimé global ≥ +25 %** (**ROI SP ≥ +10 %**) pour valider le **vert**.
-- Combinés uniquement si **payout attendu > 12 €** (calibration).
-- **KELLY_FRACTION = 0.5** : moitié de Kelly pour réduire la variance au prix d'une EV moindre; cap 60 % par cheval.
-- **MIN_STAKE_SP = 0.10** : mise minimale par ticket SP, évite les micro-mises (réduit variance) mais peut bloquer un peu d'EV.
-- **ROUND_TO_SP = 0.10** : arrondi des mises SP à 0,10 €; utiliser `0` pour désactiver l'arrondi sans provoquer de crash tout en conservant le calcul EV/ROI.
-- **SHARPE_MIN = 0.5** : seuil minimal de ratio EV/σ; filtre les paris à variance trop élevée.
+- Budget **max 5 €** / course et **2 tickets max** : un seul SP + un combiné (CP/CG/Trio/ZE4) si et seulement si **EV ≥ +40 %** et **payout attendu ≥ 10 €**.
+- SP « Kelly fractionné » : **EV_SP ≥ +40 %**, **ROI_SP ≥ +20 %**, **≤ 60 % du budget** engagé sur un même cheval.
+- Combinés calibrés : fichier `config/payout_calibration.yaml` valide obligatoire, sinon statut `insufficient_data` et abstention.
+- Surcote place : **overround place > 1.30 ⇒ combinés bloqués** (raison `overround_above_threshold`).
+- **EV globale ≥ +35 %** et **ROI estimé global ≥ +25 %** pour afficher la pastille verte.
+- **KELLY_FRACTION = 0.5**, **MIN_STAKE_SP = 0.10**, **ROUND_TO_SP = 0.10**, **SHARPE_MIN = 0.5** (cf. `config/gpi.yml`).
 
 ### Garde-fous opérationnels
 
