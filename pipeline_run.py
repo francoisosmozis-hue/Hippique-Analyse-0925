@@ -14,7 +14,7 @@ import sys
 import re
 from functools import lru_cache, partial
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, List, Mapping, Sequence, cast
+from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence, cast
 
 import yaml
 
@@ -113,6 +113,26 @@ def _compute_market_overround(odds: Mapping[str, Any]) -> float | None:
     if not seen:
         return None
     return total
+
+
+def _overround_from_odds(horses: List[Dict[str, Any]]) -> Optional[float]:
+    """Overround = sum(1/odds_i) computed from available odds."""
+
+    implied: List[float] = []
+    for horse in horses:
+        odds = horse.get("cote")
+        if odds is None:
+            continue
+        try:
+            value = float(str(odds).replace(",", "."))
+        except Exception:  # pragma: no cover - defensive
+            continue
+        if value <= 1e-9:
+            continue
+        implied.append(1.0 / value)
+    if not implied:
+        return None
+    return sum(implied)
 
 
 def _normalize_partants_runners(snapshot: Mapping[str, Any] | None) -> List[Any]:
@@ -224,7 +244,7 @@ def _build_market(
     p_place: Mapping[str, float] | None = None,
     slots_place: Any = _DEFAULT_SLOTS_PLACE,
 ) -> dict[str, Any]:
-    """Return market metrics including place overround and paid places."""
+    """Return market metrics including a real overround based on place odds."""
 
     if p_place is not None and not isinstance(p_place, Mapping):
         slots_place = p_place
@@ -246,48 +266,55 @@ def _build_market(
         entry for entry in runners_source if isinstance(entry, Mapping)
     ]
 
-    n_partants = len(runners)
-    nplace = 3 if n_partants >= 8 else (2 if n_partants >= 4 else 1)
-
-    win_total = 0.0
-    place_total = 0.0
+    horses: list[dict[str, Any]] = []
     total_runners = 0
     win_runners = 0
-    has_place = False
-    horses: list[dict[str, Any]] = []
-    sum_p_hat = 0.0
+    win_total = 0.0
+    place_total = 0.0
+    has_place_odds = False
 
     for entry in runners:
         total_runners += 1
         
         num_val = entry.get("num") or entry.get("number") or entry.get("id")
         num_text = str(num_val or "").strip()
-        identifiers = [num_text] if num_text else []
-        id_val = entry.get("id")
-        id_text = str(id_val or "").strip()
-        if id_text and id_text not in identifiers:
-            identifiers.append(id_text)
+        if not num_text:
+            num_text = str(total_runners)
+
+        identifiers = [num_text]
+        alt_id = entry.get("id")
+        alt_text = str(alt_id or "").strip()
+        if alt_text and alt_text not in identifiers:
+            identifiers.append(alt_text)
 
         place_prob = 0.0
         if place_prob_map:
             for ident in identifiers:
-                if ident and ident in place_prob_map:
+                if ident in place_prob_map:
                     place_prob = _coerce_probability(place_prob_map.get(ident))
                     break
 
         win_odds = None
-        for key in ("odds", "decimal_odds", "odds_dec", "odds_win", "win_odds", "cote", "odd"):
+        for key in (
+            "odds",
+            "decimal_odds",
+            "odds_dec",
+            "odds_win",
+            "win_odds",
+            "cote",
+            "odd",
+        ):
             if key in entry:
                 candidate = _coerce_odds(entry.get(key))
                 if candidate > 0:
                     win_odds = candidate
                     break
         if win_odds is not None:
-            win_total += 1.0 / win_odds
             win_runners += 1
+            win_total += 1.0 / win_odds
 
         odds_place = None
-        for key in ("odds_place", "place_odds", "cote_place", "cote"):
+        for key in ("odds_place", "cote_place", "place_odds", "cote"):
             if key in entry:
                 candidate = _coerce_odds(entry.get(key))
                 if candidate > 0:
@@ -297,59 +324,39 @@ def _build_market(
             odds_place = win_odds
         if odds_place is not None:
             place_total += 1.0 / odds_place
-            has_place = True
+            has_place_odds = True
 
-    horses.append(
-            {
-                "num": num_text or id_text,
-                "p": place_prob,
-                "cote": odds_place,
-            }
-        )
+    horses.append({"num": num_text, "p": float(place_prob), "cote": odds_place})
 
-        if odds_place is not None and odds_place > 1.0:
-            p_hat = max(0.01, min(0.90, 1.0 / odds_place))
-        else:
-            p_hat = max(0.005, min(0.90, place_prob))
-        sum_p_hat += p_hat
-
-    overround = float(sum_p_hat / max(1, nplace)) if nplace else 0.0
+        overround = _overround_from_odds(horses)
 
     metrics: dict[str, Any] = {
-        "runner_count_total": total_runners,
-        "runner_count_with_win_odds": win_runners,
-        "n_partants": n_partants,
+        "n_partants": len(runners),
         "horses": horses,
         "overround": overround,
-        "nplace": nplace,
     }
 
-    coverage_ratio: float | None = None
-    coverage_sufficient = False
     if total_runners:
         coverage_ratio = win_runners / total_runners
+        metrics["runner_count_total"] = total_runners
+        metrics["runner_count_with_win_odds"] = win_runners
         metrics["win_coverage_ratio"] = round(coverage_ratio, 4)
-        coverage_sufficient = coverage_ratio >= 0.70
-
-    metrics["win_coverage_sufficient"] = coverage_sufficient
-
-    if coverage_sufficient and math.isfinite(win_total):
-        rounded_win_total = round(win_total, 4)
-        metrics["overround_win"] = rounded_win_total
+        metrics["win_coverage_sufficient"] = coverage_ratio >= 0.70
+    else:
+        metrics["win_coverage_sufficient"] = False
+        
+    if win_runners and math.isfinite(win_total):
+        metrics["overround_win"] = round(win_total, 4)
 
     slots_value = _coerce_slots_place(slots_place)
-
     if slots_value:
         int_candidate = int(slots_value)
         metrics["slots_place"] = (
             int_candidate if abs(slots_value - int_candidate) < 1e-9 else slots_value
         )
         
-    if has_place:
-        if math.isfinite(place_total) and place_total > 0.0:
-            metrics["overround_place"] = place_total
-        elif math.isfinite(place_total):
-            metrics["overround_place"] = 0.0
+    if has_place_odds and math.isfinite(place_total):
+        metrics["overround_place"] = place_total
 
     return metrics
 
@@ -1205,6 +1212,53 @@ def _filter_sp_and_cp_tickets(
             notes.append("SP retiré: pool incomplet (<2 jambes ≥ 4/1 (5.0 déc)).")
             filtered_sp = []
 
+      if filtered_sp:
+        place_lookup: dict[str, float] = {}
+        for entry in runners:
+            if not isinstance(entry, Mapping):
+                continue
+            probability = _extract_best_place_probability(entry)
+            if probability <= 0.0:
+                continue
+            for ident in _extract_leg_ids(entry):
+                ident_text = str(ident).strip()
+                if ident_text and ident_text not in place_lookup:
+                    place_lookup[ident_text] = probability
+
+        def _ticket_leg_ids(ticket: Mapping[str, Any]) -> list[str]:
+            identifiers: list[str] = []
+            legs_seq = _normalize_sequence(ticket.get("legs"))
+            if legs_seq:
+                for leg in legs_seq:
+                    if isinstance(leg, Mapping):
+                        for ident in _extract_leg_ids(leg):
+                            ident_text = str(ident).strip()
+                            if ident_text:
+                                identifiers.append(ident_text)
+                    elif leg not in (None, ""):
+                        identifiers.append(str(leg))
+            fallback_ids = _extract_leg_ids(ticket)
+            if fallback_ids:
+                identifiers.extend(fallback_ids)
+            return identifiers
+
+        sigma_p = 0.0
+        seen_ids: set[str] = set()
+        for ticket in filtered_sp:
+            for ident in _ticket_leg_ids(ticket):
+                if ident in seen_ids:
+                    continue
+                if ident not in place_lookup:
+                    continue
+                sigma_p += place_lookup[ident]
+                seen_ids.add(ident)
+
+        if sigma_p < 1.20 - 1e-9:
+            notes.append(f"coverage_fail_SigmaP<{sigma_p:.2f}<1.20")
+            filtered_sp = []
+        else:
+            notes.append(f"coverage_ok_SigmaP={sigma_p:.2f}")
+            
     return filtered_sp, filtered_combo, notes
 
 
