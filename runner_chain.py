@@ -512,8 +512,10 @@ def export_tracking_csv_line(
         "discipline",
         "partants",
         "tickets_count",
+        "nb_tickets",
         "stake_total",
         "stake_average",
+        "expected_gross_return_eur",
         "ev_simulee_post_arrondi",
         "ev_sp",
         "ev_global",
@@ -549,9 +551,17 @@ def export_tracking_csv_line(
     payload.update({str(k): v for k, v in stats.items()})
     payload.setdefault("ev_simulee_post_arrondi", payload.get("ev_global"))
     payload.setdefault("roi_simule", payload.get("roi_global"))
-    payload["tickets_count"] = len(stake_values)
+    ticket_count = len(stake_values)
+    payload["tickets_count"] = ticket_count
+    payload.setdefault("nb_tickets", ticket_count)
     payload["stake_total"] = stake_total
     payload["stake_average"] = stake_average
+    gross_return = payload.get("expected_gross_return_eur")
+    if gross_return is None:
+        gross_return = payload.get("combined_expected_payout")
+    if gross_return is None and isinstance(payload.get("ev_global"), (int, float)):
+        gross_return = stake_total + float(payload.get("ev_global", 0.0))
+    payload["expected_gross_return_eur"] = gross_return
     payload["ALERTE_VALUE"] = "ALERTE_VALUE" if alerte else ""
 
     mode = "a" if path_obj.exists() else "w"
