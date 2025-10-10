@@ -56,6 +56,46 @@ elif _place_fee_candidate >= 1.0:
     _place_fee_candidate = 0.99
 PLACE_FEE = _place_fee_candidate
 
+
+def _safe_float(x):
+    try:
+        return float(str(x).replace(",", "."))
+    except Exception:
+        return None
+
+
+def _overround_from_odds_win(runners):
+    """Somme des 1/cote gagnant (ignore None)."""
+
+    vals = []
+    for r in runners or []:
+        ow = r.get("odds_win") or r.get("cote_gagnant") or r.get("cote")
+        ow = _safe_float(ow)
+        if ow and ow > 1e-9:
+            vals.append(1.0 / ow)
+    return sum(vals) if vals else None
+
+
+def _n_places(n_partants: int) -> int:
+    if n_partants >= 8:
+        return 3
+    if n_partants >= 4:
+        return 2
+    return 1
+
+
+def _overround_place_proxy(p_place_map, nplace):
+    """
+    Proxy place : si p_place est renormalisé sur nplace, s/nplace ≈ 1.0.
+    Sert d’indicatif quand on n’a pas les cotes gagnant.
+    """
+
+    if not p_place_map:
+        return None
+    s = sum(float(v) for v in p_place_map.values())
+    return (s / float(nplace)) if s > 0 else None
+
+
 def _env_float_default(name: str, default: float) -> float:
     try:
         return float(os.getenv(name, str(default)))
