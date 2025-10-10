@@ -9,7 +9,6 @@ Corrections:
 - Logging structuré
 """
 
-import os
 import sys
 import json
 import time
@@ -254,7 +253,7 @@ class ZeturfFetcher:
             try:
                 dt = datetime.fromisoformat(dt_str.replace('Z', '+00:00'))
                 return dt.strftime('%H:%M')
-            except:
+            except Exception:
                 pass
         
         # Chercher dans les attributs data-*
@@ -278,7 +277,7 @@ class ZeturfFetcher:
         try:
             found = elem.select_one(selector)
             return found.get_text(strip=True) if found else ''
-        except:
+        except Exception:
             return ''
     
     def _extract_odds(self, elem) -> float:
@@ -288,7 +287,7 @@ class ZeturfFetcher:
             if odds_elem:
                 odds_text = odds_elem.get_text(strip=True)
                 return float(odds_text.replace(',', '.'))
-        except:
+        except Exception:
             pass
         return 0.0
     
