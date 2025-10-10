@@ -14,7 +14,7 @@ import sys
 import re
 from functools import lru_cache, partial
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, Mapping, Sequence, cast
+from typing import Any, Callable, Dict, Iterable, List, Mapping, Sequence, cast
 
 import yaml
 
@@ -56,8 +56,15 @@ elif _place_fee_candidate >= 1.0:
     _place_fee_candidate = 0.99
 PLACE_FEE = _place_fee_candidate
 
-EXOTIC_BASE_EV = 0.40
-EXOTIC_BASE_PAYOUT = 10.0
+def _env_float_default(name: str, default: float) -> float:
+    try:
+        return float(os.getenv(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+
+
+EXOTIC_BASE_EV = max(_env_float_default("EV_MIN", 0.40), 0.40)
+EXOTIC_BASE_PAYOUT = max(_env_float_default("PAYOUT_MIN", 10.0), 10.0)
 
 _DEFAULT_ALLOW_COMBO: Callable[..., Any] | None = None
 _DEFAULT_APPLY_TICKET_POLICY: Callable[..., Any] | None = None
@@ -106,6 +113,22 @@ def _compute_market_overround(odds: Mapping[str, Any]) -> float | None:
     if not seen:
         return None
     return total
+
+
+def _normalize_partants_runners(snapshot: Mapping[str, Any] | None) -> List[Any]:
+    """Return a runners list while tolerating legacy 'partants' payloads."""
+
+    if not isinstance(snapshot, Mapping):
+        return []
+    runners = snapshot.get("runners")
+    if isinstance(runners, list) and runners:
+        return runners
+    fallback = snapshot.get("partants")
+    if isinstance(fallback, list) and fallback:
+        if isinstance(snapshot, dict):
+            snapshot["runners"] = fallback
+        return fallback
+    return runners if isinstance(runners, list) else []
 
 
 def _estimate_overround_place(
@@ -2520,7 +2543,7 @@ def cmd_analyse(args: argparse.Namespace) -> None:
     stats_je = load_json(args.stats_je)
     partants_data = load_json(args.partants)
 
-    partants = partants_data.get("runners", [])
+    partants = _normalize_partants_runners(partants_data)
     runner_ids: list[str] = []
     seen_ids: set[str] = set()
     for entry in partants:
