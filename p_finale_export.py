@@ -16,6 +16,27 @@ except ImportError:
     pd = None  # type: ignore
 
 
+DRIFT_DELTA = 0.04    # seuil de variation de proba entre H-30 et H-5
+F_STEAM = 1.03        # bonus si le cheval "chauffe"
+F_DRIFT_FAV = 0.97    # malus si le favori H-30 dérive nettement
+
+
+def apply_drift_steam(p_val, num, p5_map, p30_map, fav30):
+    """Applique un léger bonus/malus marché sur p_val (place-proba)."""
+
+    try:
+        p5v = float(p5_map.get(num, 0.0)) if p5_map else 0.0
+        p30v = float(p30_map.get(num, 0.0)) if p30_map else 0.0
+    except Exception:
+        return p_val
+
+    if p5v >= p30v + DRIFT_DELTA:
+        return p_val * F_STEAM
+    if (p30v >= p5v + DRIFT_DELTA) and (fav30 == num):
+        return p_val * F_DRIFT_FAV
+    return p_val
+
+
 def load_analysis_file(path: Path) -> Dict[str, Any] | None:
     """Load analysis JSON file."""
     if not path.exists():
