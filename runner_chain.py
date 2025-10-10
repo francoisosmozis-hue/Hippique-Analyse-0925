@@ -69,6 +69,96 @@ _VALID_PHASES = {"H30", "H5", "RESULT"}
 EXOTIC_BASE_EV = getattr(pipeline_run, "EXOTIC_BASE_EV", 0.40)
 EXOTIC_BASE_PAYOUT = getattr(pipeline_run, "EXOTIC_BASE_PAYOUT", 10.0)
 
+EXOTIC_TYPES = {"COUPLE_PLACE", "COUPLE_GAGNANT", "TRIO", "ZE4", "ZE234", "MULTI", "2SUR4"}
+_SP_LABELS = {
+    "SP",
+    "SIMPLE_PLACE_DUTCHING",
+    "DUTCHING_SP",
+    "PLACE_DUTCHING",
+    "SP_DUTCHING_GPIV51",
+}
+
+
+def should_cut_exotics(overround: float, threshold: float = 1.30) -> bool:
+    """True si overround marché > seuil (marché 'gras' => on coupe exotiques)."""
+
+    try:
+        return (overround is not None) and (float(overround) > float(threshold))
+    except Exception:
+        return False
+
+
+def enforce_budget_and_ticket_cap(tickets: list, budget: float) -> list:
+    """
+    Garde SP dutching + premier combiné, puis rescale au budget.
+    'type' doit être renseigné correctement sur chaque ticket.
+    """
+
+    if not tickets:
+        return []
+
+    sp = [
+        t
+        for t in tickets
+        if (t.get("label", "") or t.get("type", "")).upper() in _SP_LABELS
+    ]
+    exo = [
+        t
+        for t in tickets
+        if (t.get("type", "") or "").upper() in EXOTIC_TYPES
+    ]
+
+    final = []
+    if sp:
+        final.append(sp[0])
+    if exo:
+        final.append(exo[0])
+    final = final[:2]
+
+    tot = sum(float(t.get("stake", 0.0) or 0.0) for t in final)
+    if tot > float(budget) + 1e-9 and tot > 0:
+        scale = float(budget) / tot
+        for t in final:
+            t["stake"] = round(float(t.get("stake", 0.0)) * scale, 2)
+    return final
+
+
+def _update_metrics_ticket_counts(metrics_path: Path, tickets: list[Mapping[str, Any]]) -> None:
+    """Refresh ticket counters in metrics.json after the final lock."""
+
+    if not metrics_path.exists():
+        return
+
+    try:
+        metrics = json.loads(metrics_path.read_text(encoding="utf-8"))
+    except Exception:
+        return
+
+    if not isinstance(metrics, dict):
+        return
+
+    tickets_bucket = metrics.get("tickets")
+    if not isinstance(tickets_bucket, dict):
+        tickets_bucket = {}
+        metrics["tickets"] = tickets_bucket
+
+    total = len(tickets)
+    sp_count = sum(
+        1 for t in tickets if (t.get("label", "") or t.get("type", "")).upper() in _SP_LABELS
+    )
+    combo_count = sum(
+        1 for t in tickets if (t.get("type", "") or "").upper() in EXOTIC_TYPES
+    )
+
+    tickets_bucket["total"] = total
+    tickets_bucket["sp"] = sp_count
+    tickets_bucket["combo"] = combo_count
+
+    try:
+        metrics_path.write_text(json.dumps(metrics, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    except OSError:
+        logger.warning("Unable to refresh metrics ticket counts in %s", metrics_path)
+
 
 def _coerce_float(value: Any) -> float | None:
     """Return ``value`` as a finite float when possible."""
@@ -925,7 +1015,59 @@ def _write_analysis(
         analysis_summary.update({"status": "error", "reason": str(exc)})
         _write_json_file(race_dir / "analysis.json", analysis_summary)
         return
+        
+    outdir_path = Path(result.get("outdir") or "")
+    budget_value = float(budget) if budget and float(budget) > 0 else 5.0
+    enforced_tickets: list[Mapping[str, Any]] | None = None
+    if outdir_path.is_dir():
+        p_finale_path = outdir_path / "p_finale.json"
+        if p_finale_path.exists():
+            try:
+                p_payload = json.loads(p_finale_path.read_text(encoding="utf-8"))
+            except Exception:
+                p_payload = None
+            if isinstance(p_payload, dict):
+                meta_block = p_payload.get("meta")
+                market_meta = meta_block.get("market") if isinstance(meta_block, Mapping) else {}
+                overround_value = None
+                if isinstance(market_meta, Mapping):
+                    overround_value = market_meta.get("overround")
+                tickets_payload = p_payload.get("tickets")
+                if isinstance(tickets_payload, list):
+                    sanitized = [dict(t) for t in tickets_payload if isinstance(t, Mapping)]
+                    if should_cut_exotics(overround_value):
+                        sanitized = [
+                            t
+                            for t in sanitized
+                            if (t.get("label", "") or t.get("type", "")).upper() in _SP_LABELS
+                        ]
+                    enforced = enforce_budget_and_ticket_cap(sanitized, budget_value)
+                    p_payload["tickets"] = enforced
+                    enforced_tickets = enforced
+                    try:
+                        p_finale_path.write_text(
+                            json.dumps(p_payload, ensure_ascii=False, indent=2) + "\n",
+                            encoding="utf-8",
+                        )
+                    except OSError as exc:  # pragma: no cover - resilience
+                        logger.warning("[runner] Unable to persist guarded tickets: %s", exc)
+                    else:
+                        _update_metrics_ticket_counts(outdir_path / "metrics.json", enforced)
     metrics = result.get("metrics") if isinstance(result, Mapping) else {}
+    if enforced_tickets and isinstance(metrics, dict):
+        tickets_bucket = metrics.get("tickets")
+        if isinstance(tickets_bucket, dict):
+            tickets_bucket["total"] = len(enforced_tickets)
+            tickets_bucket["sp"] = sum(
+                1
+                for t in enforced_tickets
+                if (t.get("label", "") or t.get("type", "")).upper() in _SP_LABELS
+            )
+            tickets_bucket["combo"] = sum(
+                1
+                for t in enforced_tickets
+                if (t.get("type", "") or "").upper() in EXOTIC_TYPES
+            )
 
     status = (
         str(metrics.get("status") or "unknown")
