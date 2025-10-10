@@ -112,3 +112,9 @@ def export_p_finale_from_dir(outputs_dir: Path) -> bool:
 
     print(f"Exported p_finale data to {csv_path} and {excel_path}")
     return True
+
+
+def export(outputs_dir: Path | str) -> bool:
+    """Compatibility wrapper expected by historical tests."""
+
+    return export_p_finale_from_dir(Path(outputs_dir))
