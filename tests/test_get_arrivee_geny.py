@@ -137,8 +137,9 @@ def test_parse_arrival_supports_multiple_formats() -> None:
     csv_text = "place;numero\n1;3\n2;8\n3;5"
     assert parse_arrival(csv_text, hint="csv") == ["1", "3", "2", "8", "3", "5"]
 
+
     
-    def test_fetch_arrival_prefers_local_sources(tmp_path: Path) -> None:
+def test_fetch_arrival_prefers_local_sources(tmp_path: Path) -> None:
     offline = tmp_path / "R1C2.html"
     offline.write_text("<div>Arrivée officielle : 8 - 4 - 5</div>", encoding="utf-8")
 
