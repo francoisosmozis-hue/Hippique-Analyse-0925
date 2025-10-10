@@ -11,6 +11,7 @@ Bernoulli event and the posterior means are multiplied to obtain the final
 probability.  Results are cached in a least-recently-used queue capped at
 ``MAX_CACHE_SIZE`` entries to avoid unbounded growth.
 """
+
 from __future__ import annotations
 
 import logging
@@ -168,7 +169,6 @@ def set_correlation_penalty(value: Any) -> None:
         CORRELATION_PENALTY = min(penalty, 1.0)
 
 
-
 def _coerce_str(value: Any) -> str | None:
     if value is None:
         return None
@@ -308,7 +308,9 @@ def _find_correlation_groups(legs: Sequence[Any]) -> List[Dict[str, Any]]:
         if len(unique) < 2:
             continue
         current = consolidated.get(unique)
-        if current is None or _identifier_priority(identifier) < _identifier_priority(current):
+        if current is None or _identifier_priority(identifier) < _identifier_priority(
+            current
+        ):
             consolidated[unique] = identifier
 
     groups: List[Dict[str, Any]] = []
@@ -461,6 +463,7 @@ def _estimate_group_probability(
     adjusted = max(min(adjusted, base), _EPSILON)
     return adjusted, method, float(penalty)
 
+
 def _extract_leg_probability(leg: Any) -> Tuple[float, str, str, Dict[str, Any]]:
     """Return ``(probability, source, identifier, extras)`` for ``leg``."""
 
@@ -487,7 +490,9 @@ def _extract_leg_probability(leg: Any) -> Tuple[float, str, str, Dict[str, Any]]
             sources = entry.get("sources")
             if isinstance(sources, str):
                 source = sources
-            elif isinstance(sources, Sequence) and not isinstance(sources, (str, bytes)):
+            elif isinstance(sources, Sequence) and not isinstance(
+                sources, (str, bytes)
+            ):
                 source = str(next(iter(sources), "calibration"))
             else:
                 source = "calibration"
@@ -745,7 +750,10 @@ def evaluate_combo(
         calib_path = Path(calibration)
     notes: List[str] = []
     requirements: _RequirementsList = _RequirementsList()
-    calibration_used = calib_path.exists()
+    try:
+        calibration_used = calib_path.is_file()
+    except OSError:
+        calibration_used = False
     if not calibration_used:
         notes.append("no_calibration_yaml")
         requirements.append(str(calib_path))
@@ -795,7 +803,7 @@ def evaluate_combo(
         "roi": float(stats.get("roi", 0.0)),
         "payout_expected": float(stats.get("combined_expected_payout", 0.0)),
         "sharpe": float(stats.get("sharpe", 0.0)),
-        "ticket_metrics": stats.get("ticket_metrics", []), 
+        "ticket_metrics": stats.get("ticket_metrics", []),
         "notes": notes,
         "requirements": requirements,
         "calibration_used": calibration_used,
@@ -811,4 +819,3 @@ def evaluate_combo(
             result["calibration_metadata"] = meta_detail
 
     return result
-
