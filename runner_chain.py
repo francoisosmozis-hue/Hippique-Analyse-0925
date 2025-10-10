@@ -117,9 +117,47 @@ def estimate_sp_ev(legs: Iterable[Mapping[str, Any]]) -> tuple[float | None, boo
         odds_f = _coerce_float(odds)
         prob_f = _coerce_float(prob)
 
+        identifier = _extract_leg_identifier(leg_mapping, total - 1)
+
+        if (odds_f is None or odds_f <= 1.0) and prob_f is not None and prob_f > 0.0:
+            market = leg_mapping.get("market") if isinstance(leg_mapping.get("market"), Mapping) else None
+            nplace_val = None
+            if isinstance(market, Mapping):
+                candidate_nplace = market.get("nplace")
+                if isinstance(candidate_nplace, (int, float)) and candidate_nplace > 0:
+                    nplace_val = int(candidate_nplace)
+                if not nplace_val:
+                    n_partants = market.get("n_partants") or market.get("n_participants")
+                    try:
+                        n_value = int(float(n_partants)) if n_partants not in (None, "") else None
+                    except (TypeError, ValueError):
+                        n_value = None
+                    if n_value:
+                        nplace_val = 3 if n_value >= 8 else (2 if n_value >= 4 else 1)
+                if not nplace_val:
+                    horses = market.get("horses")
+                    if isinstance(horses, Sequence):
+                        count = len(horses)
+                        nplace_val = 3 if count >= 8 else (2 if count >= 4 else 1)
+            if not nplace_val:
+                nplace_val = 3 if total >= 8 else (2 if total >= 4 else 1)
+
+            approx = nplace_val / max(1e-6, prob_f)
+            odds_f = max(1.10, min(10.0, approx))
+            some_missing = True
+            notes = leg_mapping.setdefault("notes", []) if isinstance(leg_mapping, dict) else None
+            if isinstance(notes, list) and "odds_place_imputed" not in notes:
+                notes.append("odds_place_imputed")
+            logger.info(
+                "[SP] Cote place imputée pour %s (nplace=%d, p=%.4f → %.2f)",
+                identifier,
+                nplace_val,
+                prob_f,
+                odds_f,
+            )
+
         if odds_f is None or prob_f is None:
             some_missing = True
-            identifier = _extract_leg_identifier(leg_mapping, total - 1)
             logger.warning(
                 "[SP] Cote place ou probabilité manquante pour %s", identifier
             )
@@ -127,7 +165,6 @@ def estimate_sp_ev(legs: Iterable[Mapping[str, Any]]) -> tuple[float | None, boo
 
         if odds_f <= 1.0 or not 0.0 < prob_f < 1.0:
             some_missing = True
-            identifier = _extract_leg_identifier(leg_mapping, total - 1)
             logger.warning(
                 "[SP] Données place invalides pour %s (odds=%.3f, p=%.3f)",
                 identifier,
@@ -256,6 +293,35 @@ def validate_exotics_with_simwrapper(
         },
     }
 
+    calib_candidate = (
+        str(calibration)
+        if calibration
+        else os.environ.get("GPI_PAYOUT_CALIBRATION", str(PAYOUT_CALIBRATION_PATH))
+    )
+    try:
+        ok_calib = (
+            bool(calib_candidate)
+            and os.path.exists(calib_candidate)
+            and os.path.getsize(calib_candidate) > 0
+        )
+    except Exception:
+        ok_calib = False
+
+    if not ok_calib:
+        base_note = "calibration_missing"
+        custom_note = "no_calibration_yaml → exotiques désactivés"
+        if base_note not in info["notes"]:
+            info["notes"].append(base_note)
+        if custom_note not in info["notes"]:
+            info["notes"].append(custom_note)
+        flags_combo = info["flags"].setdefault("reasons", {}).setdefault("combo", [])
+        if "calibration_missing" not in flags_combo:
+            flags_combo.append("calibration_missing")
+        info["flags"]["combo"] = False
+        info["flags"]["ALERTE_VALUE"] = False
+        info["decision"] = "reject:calibration_missing"
+        info["status"] = "insufficient_data"
+        return [], info
     calibration_path = Path(calibration) if calibration else PAYOUT_CALIBRATION_PATH
 
     kept: list[dict[str, Any]] = []
