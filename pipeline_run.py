@@ -220,29 +220,61 @@ def _coerce_slots_place(slots_place: Any, default: float = _DEFAULT_SLOTS_PLACE)
 
 
 def _build_market(
-    runners: Sequence[Mapping[str, Any]],
+    snapshot: Mapping[str, Any] | Sequence[Mapping[str, Any]],
+    p_place: Mapping[str, float] | None = None,
     slots_place: Any = _DEFAULT_SLOTS_PLACE,
-) -> dict[str, float | int]:
-    """Return market metrics for win and place books.
+) -> dict[str, Any]:
+    """Return market metrics including place overround and paid places."""
 
-    The place overround is the *raw* sum of the implied probabilities
-    (``1 / odds``) for each runner.  When a runner is missing a place quote the
-    win odds are used as a conservative fallback so downstream consumers can
-    still derive an indicative overround.  Non-finite aggregates are ignored.
-    """
-    
+    if p_place is not None and not isinstance(p_place, Mapping):
+        slots_place = p_place
+        place_prob_map: Mapping[str, float] | None = None
+    else:
+        place_prob_map = p_place
+
+    if isinstance(snapshot, Mapping):
+        runners_source = (
+            snapshot.get("runners")
+            or snapshot.get("partants")
+            or snapshot.get("horses")
+            or []
+        )
+    else:
+        runners_source = snapshot
+
+    runners: list[Mapping[str, Any]] = [
+        entry for entry in runners_source if isinstance(entry, Mapping)
+    ]
+
+    n_partants = len(runners)
+    nplace = 3 if n_partants >= 8 else (2 if n_partants >= 4 else 1)
+
     win_total = 0.0
     place_total = 0.0
     total_runners = 0
     win_runners = 0
     has_place = False
+    horses: list[dict[str, Any]] = []
+    sum_p_hat = 0.0
 
     for entry in runners:
-        if not isinstance(entry, Mapping):
-            continue
-
         total_runners += 1
         
+        num_val = entry.get("num") or entry.get("number") or entry.get("id")
+        num_text = str(num_val or "").strip()
+        identifiers = [num_text] if num_text else []
+        id_val = entry.get("id")
+        id_text = str(id_val or "").strip()
+        if id_text and id_text not in identifiers:
+            identifiers.append(id_text)
+
+        place_prob = 0.0
+        if place_prob_map:
+            for ident in identifiers:
+                if ident and ident in place_prob_map:
+                    place_prob = _coerce_probability(place_prob_map.get(ident))
+                    break
+
         win_odds = None
         for key in ("odds", "decimal_odds", "odds_dec", "odds_win", "win_odds", "cote", "odd"):
             if key in entry:
@@ -254,22 +286,42 @@ def _build_market(
             win_total += 1.0 / win_odds
             win_runners += 1
 
-        place_odds = None
-        for key in ("odds_place", "place_odds", "cote_place"):
+        odds_place = None
+        for key in ("odds_place", "place_odds", "cote_place", "cote"):
             if key in entry:
                 candidate = _coerce_odds(entry.get(key))
                 if candidate > 0:
-                    place_odds = candidate
+                    odds_place = candidate
                     break
-        if place_odds is None and win_odds is not None:
-            place_odds = win_odds
-        if place_odds is not None:
-            place_total += 1.0 / place_odds
+        if odds_place is None and win_odds is not None:
+            odds_place = win_odds
+        if odds_place is not None:
+            place_total += 1.0 / odds_place
             has_place = True
 
-    metrics: dict[str, float | int] = {
+    horses.append(
+            {
+                "num": num_text or id_text,
+                "p": place_prob,
+                "cote": odds_place,
+            }
+        )
+
+        if odds_place is not None and odds_place > 1.0:
+            p_hat = max(0.01, min(0.90, 1.0 / odds_place))
+        else:
+            p_hat = max(0.005, min(0.90, place_prob))
+        sum_p_hat += p_hat
+
+    overround = float(sum_p_hat / max(1, nplace)) if nplace else 0.0
+
+    metrics: dict[str, Any] = {
         "runner_count_total": total_runners,
         "runner_count_with_win_odds": win_runners,
+        "n_partants": n_partants,
+        "horses": horses,
+        "overround": overround,
+        "nplace": nplace,
     }
 
     coverage_ratio: float | None = None
@@ -284,7 +336,6 @@ def _build_market(
     if coverage_sufficient and math.isfinite(win_total):
         rounded_win_total = round(win_total, 4)
         metrics["overround_win"] = rounded_win_total
-        metrics["overround"] = rounded_win_total
 
     slots_value = _coerce_slots_place(slots_place)
 
@@ -1551,6 +1602,47 @@ def enforce_ror_threshold(
         min_stake = 0.0
 
     runners_sp_sanitized = _ensure_place_odds(runners)
+
+    p_place_map: dict[str, float] = {}
+    for runner in runners_sp_sanitized:
+        if not isinstance(runner, Mapping):
+            continue
+        identifiers: list[str] = []
+        for key in ("num", "number", "id"):
+            val = runner.get(key)
+            if val in (None, ""):
+                continue
+            text = str(val).strip()
+            if text and text not in identifiers:
+                identifiers.append(text)
+
+        place_prob: float | None = None
+        probs_block = runner.get("probabilities")
+        if isinstance(probs_block, Mapping):
+            candidate = probs_block.get("p_place")
+            if isinstance(candidate, (int, float)):
+                place_prob = float(candidate)
+        if place_prob is None and isinstance(runner.get("p_place"), (int, float)):
+            place_prob = float(runner["p_place"])
+
+        runner_id = runner.get("id")
+        if place_prob is None and isinstance(p_place_override, Mapping):
+            if runner_id in p_place_override:
+                try:
+                    place_prob = float(p_place_override[runner_id])
+                except (TypeError, ValueError):
+                    place_prob = None
+
+        if place_prob is None and isinstance(runner.get("p"), (int, float)):
+            place_prob = float(runner["p"])
+
+        if place_prob is None or place_prob <= 0.0:
+            continue
+
+        targets = identifiers or [str(runner_id).strip()]
+        for ident in targets:
+            if ident:
+                p_place_map[ident] = place_prob
     runners_sp = filter_sp_candidates(runners_sp_sanitized)
     if len(runners_sp) >= 2:
         sp_tickets, _ = allocate_dutching_sp_fn(cfg_iter, runners_sp)
@@ -2344,7 +2436,7 @@ def export(
     )
     save_text(outdir / "cmd_update_excel.txt", cmd)
 
-metrics_payload: dict[str, Any] = {
+    metrics_payload: dict[str, Any] = {
         "status": status or meta.get("status"),
         "ev": {"sp": ev_sp, "global": ev_global},
         "roi": {"sp": roi_sp, "global": roi_global},
@@ -2869,10 +2961,14 @@ def cmd_analyse(args: argparse.Namespace) -> None:
     if override_paid_places is not None and hint_missing:
         slots_place_hint = override_paid_places
         
-    if slots_place_hint in (None, ""):
-        market_metrics = _build_market(market_runners_raw)
+    if isinstance(market_payload, Mapping):
+        market_snapshot: Mapping[str, Any] | Sequence[Mapping[str, Any]] = market_payload
+    elif isinstance(partants_data, Mapping):
+        market_snapshot = partants_data
     else:
-        market_metrics = _build_market(market_runners_raw, slots_place_hint)
+        market_snapshot = market_runners_raw
+
+    market_metrics = _build_market(market_snapshot, p_place_map, slots_place_hint)
 
     place_overround_estimate = _estimate_overround_place(runners_sp_sanitized)
     if place_overround_estimate is None and isinstance(partants_data, Mapping):
@@ -2897,12 +2993,19 @@ def cmd_analyse(args: argparse.Namespace) -> None:
                 market_metrics["overround"] = rounded_fallback
     overround_source: str | None = None
     market_overround: float | None = None
-    overround_place_candidate = market_metrics.get("overround_place")
-    if isinstance(overround_place_candidate, (int, float)):
-        place_value = float(overround_place_candidate)
-        if math.isfinite(place_value):
-            market_overround = place_value
+    overround_general_candidate = market_metrics.get("overround")
+    if isinstance(overround_general_candidate, (int, float)):
+        general_value = float(overround_general_candidate)
+        if math.isfinite(general_value):
+            market_overround = general_value
             overround_source = "place"
+    if market_overround is None:
+        overround_place_candidate = market_metrics.get("overround_place")
+        if isinstance(overround_place_candidate, (int, float)):
+            place_value = float(overround_place_candidate)
+            if math.isfinite(place_value):
+                market_overround = place_value
+                overround_source = "place"
     if market_overround is None:
         overround_win_candidate = market_metrics.get("overround_win")
         if isinstance(overround_win_candidate, (int, float)):
