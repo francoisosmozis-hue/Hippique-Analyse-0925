@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""Minimal pipeline for computing EV and exporting artefacts."""
+# -*- coding: utf-8 -*-"""Minimal pipeline for computing EV and exporting artefacts."""
 
 import argparse
 import copy
@@ -15,6 +14,9 @@ import sys
 from functools import lru_cache, partial
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, Mapping, Sequence, cast
+import inspect
+import copy
+import numpy as np
 
 from config.env_utils import get_env
 from runner_chain import compute_overround_cap
@@ -999,7 +1001,7 @@ def _filter_sp_and_cp_tickets(
                     notes.append(
                         (
                             "CP retiré: somme des cotes décimales "
-                            f"{float(odds_values[0]):.2f}+{float(odds_values[1]):.2f} ≤ 6.00 (règle > 4/1 cumulés)."
+                            f'{float(odds_values[0]):.2f}+{float(odds_values[1]):.2f} ≤ 6.00 (règle > 4/1 cumulés).'
                         )
                     )
             else:
@@ -1381,17 +1383,23 @@ def enforce_ror_threshold(
     *,
     max_iterations: int = 48,
 ) -> tuple[list[dict], dict, dict]:
-    """Return SP tickets and EV metrics after enforcing the ROR threshold."""
+    """
+    Return SP tickets and EV metrics after enforcing the ROR threshold.
+
+    This new version implements a portfolio-building strategy:
+    1. It evaluates each Simple Placé (SP) candidate individually.
+    2. It filters out any candidate with a negative or insufficient EV/ROI.
+    3. It builds a portfolio of profitable SP bets.
+    4. It then applies the risk-of-ruin (ROR) reduction logic to the combined
+       portfolio of profitable SP tickets and combo tickets.
+    """
+
+    import copy
 
     try:
         max_iterations = max(1, int(max_iterations))
     except (TypeError, ValueError):
         max_iterations = 1
-
-    allocate_dutching_sp_fn = cast(
-        Callable[[dict, list[dict]], tuple[list[dict], Any]],
-        _load_simulate_ev()["allocate_dutching_sp"],
-    )
 
     def _log_variance_drift(stats: dict, context: str) -> None:
         naive = stats.get("variance_naive")
@@ -1423,28 +1431,66 @@ def enforce_ror_threshold(
     cfg_iter = dict(cfg)
     target = float(cfg_iter.get("ROR_MAX", 0.0))
     cap = float(cfg_iter.get("MAX_VOL_PAR_CHEVAL", 0.60))
+    sp_bankroll = bankroll * float(cfg_iter.get("SP_RATIO", 1.0))
+    ev_min_sp = float(cfg_iter.get("EV_MIN_SP", 0.0))
+    roi_min_sp = float(cfg_iter.get("ROI_MIN_SP", 0.0))
+
     try:
         round_step = float(cfg_iter.get("ROUND_TO_SP", 0.0))
-    except (TypeError, ValueError):  # pragma: no cover - defensive
+    except (TypeError, ValueError):
         round_step = 0.0
     try:
         min_stake = float(cfg_iter.get("MIN_STAKE_SP", 0.0))
-    except (TypeError, ValueError):  # pragma: no cover - defensive
+    except (TypeError, ValueError):
         min_stake = 0.0
 
     runners_sp_sanitized = _ensure_place_odds(runners)
     runners_sp = filter_sp_candidates(runners_sp_sanitized)
-    if len(runners_sp) >= 2:
-        sp_tickets, _ = allocate_dutching_sp_fn(cfg_iter, runners_sp)
-    else:
-        if runners and len(runners_sp) < 2:
-            logger.warning(
-                "SP dutching skipped: insufficient eligible place odds (kept=%d/%d)",
-                len(runners_sp),
-                len(runners_sp_sanitized),
+
+    # --- Nouvelle logique de sélection de portefeuille SP ---
+    sp_tickets = []
+    for runner in runners_sp:
+        # Créer un ticket unique pour évaluation
+        # La mise initiale n'est pas importante ici, elle sera calculée par simulate_with_metrics
+        ticket = {
+            "type": "SP",
+            "id": runner.get("id"),
+            "name": runner.get("name", runner.get("id")),
+            "odds": runner.get("odds_place"),
+            "p": runner.get("p_place"), # Utiliser la probabilité "placé"
+        }
+
+        # Vérifier que les données minimales sont présentes
+        if not ticket["p"] or not ticket["odds"]:
+            continue
+
+        # Évaluer ce ticket unique
+        stats = simulate_with_metrics([copy.deepcopy(ticket)], bankroll=sp_bankroll, kelly_cap=cap)
+        
+        # Récupérer les métriques du ticket unique après simulation
+        ticket_metrics = stats.get("ticket_metrics", [{}])[0]
+        ev = ticket_metrics.get("ev", 0.0)
+        roi = ticket_metrics.get("roi", 0.0)
+
+        # Filtrer sur la base de l'EV et du ROI individuels
+        if ev > 0 and ev >= ev_min_sp * sp_bankroll and roi >= roi_min_sp:
+            # Si le ticket est rentable, on l'ajoute à la sélection finale
+            # La mise est déjà calculée dans ticket_metrics
+            final_ticket = copy.deepcopy(ticket)
+            final_ticket.update(ticket_metrics)
+            sp_tickets.append(final_ticket)
+            logger.info(
+                "[SP_FILTER] Ticket conservé: %s (EV=%.2f, ROI=%.2f%%, Mise=%.2f)",
+                final_ticket.get("name"),
+                ev,
+                roi * 100,
+                final_ticket.get("stake", 0.0)
             )
-        sp_tickets = []
-    sp_tickets.sort(key=lambda t: t.get("ev_ticket", 0.0), reverse=True)
+
+    logger.info("[SP_FILTER] %d tickets SP rentables conservés sur %d candidats.", len(sp_tickets), len(runners_sp))
+    # --- Fin de la nouvelle logique ---
+
+    sp_tickets.sort(key=lambda t: t.get("ev", 0.0), reverse=True)
     try:
         max_count = int(cfg_iter.get("MAX_TICKETS_SP", len(sp_tickets)))
     except (TypeError, ValueError):
@@ -1469,6 +1515,9 @@ def enforce_ror_threshold(
             "final_variance": 0.0,
             "initial_total_stake": 0.0,
             "final_total_stake": 0.0,
+            "initial_cap": cap,
+            "effective_cap": cap,
+            "iterations": 0,
         }
         return sp_tickets, stats_ev, info
 
@@ -1483,6 +1532,7 @@ def enforce_ror_threshold(
     reduction_applied = False
     scale_factor_total = 1.0
     stats_current = stats_ev
+    effective_cap = cap
     effective_cap = cap
 
     iterations = 0
@@ -2053,20 +2103,24 @@ def compute_drift_dict(
 
 def _heuristic_p_true(
     cfg: dict,
-    partants: dict,
+    partants: Any,
     odds_h5: dict,
     odds_h30: dict,
     stats_je: dict,
 ) -> dict:
     """Return p_true computed from a blend of implied probabilities and heuristics."""
 
-    runners = partants.get("runners", [])
+    if isinstance(partants, dict):
+        runners = partants.get("runners", [])
+    else:
+        runners = list(partants)
+        
     if not runners:
         return {}
 
     p_true: dict[str, float] = {}
     for runner in runners:
-        num = str(runner["num"])
+        num = str(runner.get("num", runner.get("id")))
         o5 = odds_h5.get(num, 0.0)
         if o5 > 0:
             base = 1.0 / o5
@@ -2124,7 +2178,11 @@ def build_p_true(cfg, partants, odds_h5, odds_h30, stats_je) -> dict:
             # Cette vérification des métadonnées doit être adaptée si nécessaire
             pass
 
-        runners = partants.get("runners", [])
+        if isinstance(partants, dict):
+            runners = partants.get("runners", [])
+        else:
+            runners = list(partants)
+
         if not runners:
             return _heuristic_p_true(cfg, partants, odds_h5, odds_h30, stats_je)
 
@@ -2283,7 +2341,7 @@ def export(
         "R/C;hippodrome;date;discipline;mises;EV_globale;model\n" + ligne + "\n",
     )
     cmd = (
-        f"python update_excel_with_results.py "
+        f'python update_excel_with_results.py '
         f'--excel "{cfg.get("EXCEL_PATH")}" '
         f'--arrivee "{outdir / "arrivee_officielle.json"}" '
         f'--tickets "{outdir / "p_finale.json"}"\n'
@@ -2944,7 +3002,8 @@ def cmd_analyse(args: argparse.Namespace) -> None:
         )
 
     def adjust_pack(
-        cfg_local: dict, combos_local: list[dict]
+        cfg_local: dict,
+        combos_local: list[dict],
     ) -> tuple[list[dict], dict, dict]:
         sp_adj, stats_local, info_local = enforce_ror_threshold(
             cfg_local,
