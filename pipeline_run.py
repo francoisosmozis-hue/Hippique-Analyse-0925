@@ -155,26 +155,6 @@ def _compute_market_overround(odds: Mapping[str, Any]) -> float | None:
     return total
 
 
-def _overround_from_odds(horses: List[Dict[str, Any]]) -> Optional[float]:
-    """Overround = sum(1/odds_i) computed from available odds."""
-
-    implied: List[float] = []
-    for horse in horses:
-        odds = horse.get("cote")
-        if odds is None:
-            continue
-        try:
-            value = float(str(odds).replace(",", "."))
-        except Exception:  # pragma: no cover - defensive
-            continue
-        if value <= 1e-9:
-            continue
-        implied.append(1.0 / value)
-    if not implied:
-        return None
-    return sum(implied)
-
-
 def _normalize_partants_runners(snapshot: Mapping[str, Any] | None) -> List[Any]:
     """Return a runners list while tolerating legacy 'partants' payloads."""
 
