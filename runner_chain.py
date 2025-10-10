@@ -107,7 +107,11 @@ def estimate_sp_ev(legs: Iterable[Mapping[str, Any]]) -> tuple[float | None, boo
     for leg in legs:
         total += 1
         leg_mapping = leg if isinstance(leg, Mapping) else {}
-        odds = leg_mapping.get("odds_place") or leg_mapping.get("place_odds") or leg_mapping.get("odds")
+        odds = (
+            leg_mapping.get("odds_place")
+            or leg_mapping.get("place_odds")
+            or leg_mapping.get("odds")
+        )
         prob = leg_mapping.get("p") or leg_mapping.get("probability")
 
         odds_f = _coerce_float(odds)
@@ -329,7 +333,9 @@ def validate_exotics_with_simwrapper(
         if status != "ok":
             reason = f"status_{status or 'unknown'}"
             reasons.append(reason)
-            logger.warning("[COMBO] rejet statut=%s pour %s", status or "unknown", ticket_id)
+            logger.warning(
+                "[COMBO] rejet statut=%s pour %s", status or "unknown", ticket_id
+            )
             keep = False
 
         if ev_ratio is None or ev_ratio < EXOTIC_BASE_EV:
@@ -377,10 +383,16 @@ def validate_exotics_with_simwrapper(
     if kept:
         kept.sort(
             key=lambda ticket: (
-                ticket.get("ev_ratio") if ticket.get("ev_ratio") is not None else float("-inf"),
-                ticket.get("payout_expected")
-                if ticket.get("payout_expected") is not None
-                else float("-inf"),
+                (
+                    ticket.get("ev_ratio")
+                    if ticket.get("ev_ratio") is not None
+                    else float("-inf")
+                ),
+                (
+                    ticket.get("payout_expected")
+                    if ticket.get("payout_expected") is not None
+                    else float("-inf")
+                ),
             ),
             reverse=True,
         )
@@ -507,7 +519,9 @@ class RunnerPayload(BaseModel):
     def _validate_course_id(cls, value: str) -> str:
         text = str(value).strip()
         if not text or not text.isdigit() or len(text) < 6:
-            raise ValueError("id_course must be a numeric string with at least 6 digits")
+            raise ValueError(
+                "id_course must be a numeric string with at least 6 digits"
+            )
         return text
 
     @field_validator("reunion")
@@ -624,14 +638,42 @@ def _write_excel_update_command(
         )
         return
 
-    excel = excel_path or os.getenv("EXCEL_RESULTS_PATH") or "modele_suivi_courses_hippiques.xlsx"
+    excel = (
+        excel_path
+        or os.getenv("EXCEL_RESULTS_PATH")
+        or "modele_suivi_courses_hippiques.xlsx"
+    )
     cmd = (
-        f'python update_excel_with_results.py '
+        f"python update_excel_with_results.py "
         f'--excel "{excel}" '
         f'--arrivee "{arrivee_path}" '
         f'--tickets "{tickets_path}"\n'
     )
     _write_text_file(race_dir / "cmd_update_excel.txt", cmd)
+
+
+def _normalize_snapshot_payload(
+    snapshot: Mapping[str, Any] | None,
+) -> tuple[dict[str, Any], list[Any]]:
+    """Return a mutable snapshot payload ensuring a 'runners' list is available."""
+
+    if isinstance(snapshot, dict):
+        normalized = snapshot
+    elif isinstance(snapshot, Mapping):
+        try:
+            normalized = dict(snapshot)
+        except TypeError:
+            return {}, []
+    else:
+        return {}, []
+    runners = normalized.get("runners")
+    if isinstance(runners, list) and runners:
+        return normalized, runners
+    fallback = normalized.get("partants")
+    if isinstance(fallback, list) and fallback:
+        normalized["runners"] = fallback
+        return normalized, fallback
+    return normalized, runners if isinstance(runners, list) else []
 
 
 def _write_snapshot(
@@ -677,12 +719,19 @@ def _write_snapshot(
             "reason": reason,
         }
     else:
+        normalized_snapshot, normalized_runners = _normalize_snapshot_payload(snapshot)
+        if course_url and isinstance(normalized_snapshot, dict):
+            normalized_snapshot.setdefault("source_url", course_url)
+        if not normalized_runners:
+            logger.warning(
+                "[runner] Snapshot %s (%s) missing runners payload", race_id, window
+            )
         payload_out = {
             "status": "ok",
             "rc": race_id,
             "phase": window,
             "fetched_at": now,
-            "payload": snapshot,
+            "payload": normalized_snapshot,
         }
         logger.info("[runner] Snapshot %s (%s) fetched", race_id, window)
 
@@ -719,7 +768,7 @@ def _write_analysis(
     mode: str,
     calibration: Path,
 ) -> None:
-     """Execute the pipeline for ``payload`` and persist artefacts."""
+    """Execute the pipeline for ``payload`` and persist artefacts."""
 
     race_id = payload.race_id
     race_dir = analysis_dir / race_id
@@ -802,12 +851,18 @@ def _write_analysis(
         return
     metrics = result.get("metrics") if isinstance(result, Mapping) else {}
 
-    status = str(metrics.get("status") or "unknown") if isinstance(metrics, Mapping) else "unknown"
-    analysis_summary.update({
-        "status": status,
-        "outdir": result.get("outdir"),
-        "metrics": metrics,
-    })
+    status = (
+        str(metrics.get("status") or "unknown")
+        if isinstance(metrics, Mapping)
+        else "unknown"
+    )
+    analysis_summary.update(
+        {
+            "status": status,
+            "outdir": result.get("outdir"),
+            "metrics": metrics,
+        }
+    )
     _write_json_file(race_dir / "analysis.json", analysis_summary)
 
     artefacts_to_copy = [
@@ -824,7 +879,7 @@ def _write_analysis(
             shutil.copy2(src, race_dir / name)
 
     cmd_path = Path(result.get("outdir", "")) / "cmd_update_excel.txt"
-    if cmd_path.exists():    
+    if cmd_path.exists():
         try:
             command_text = cmd_path.read_text(encoding="utf-8").strip()
         except OSError:  # pragma: no cover - best effort
@@ -842,7 +897,9 @@ def _write_analysis(
     else:
         reason = disabled_reason()
         detail = f"{reason}=false" if reason else "USE_GCS disabled"
-        logger.info("[gcs] Skipping upload for %s (%s)", race_dir / "analysis.json", detail)
+        logger.info(
+            "[gcs] Skipping upload for %s (%s)", race_dir / "analysis.json", detail
+        )
 
 
 def _trigger_phase(
@@ -957,7 +1014,14 @@ def main() -> None:
     calibration_path = Path(args.calibration).expanduser()
     
     if args.planning:
-        for name in ("course_id", "reunion", "course", "phase", "start_time", "course_url"):
+        for name in (
+            "course_id",
+            "reunion",
+            "course",
+            "phase",
+            "start_time",
+            "course_url",
+        ):
             if getattr(args, name):
                 parser.error("--planning cannot be combined with single-race options")
 
@@ -991,7 +1055,9 @@ def main() -> None:
                         if match:
                             reunion = reunion or match.group(1)
                             course = course or match.group(2)
-                start = entry.get("start") or entry.get("time") or entry.get("start_time")
+                start = (
+                    entry.get("start") or entry.get("time") or entry.get("start_time")
+                )
                 if not (reunion and course and start and context_id):
                     logger.error(
                         "[runner] Invalid planning entry skipped: missing labels/id_course (%s)",
@@ -1001,7 +1067,9 @@ def main() -> None:
                 try:
                     start_time = dt.datetime.fromisoformat(start)
                 except ValueError:
-                    logger.error("[runner] Invalid ISO timestamp for planning entry %s", entry)
+                    logger.error(
+                        "[runner] Invalid ISO timestamp for planning entry %s", entry
+                    )
                     raise SystemExit(1)
                 delta = (start_time - now).total_seconds() / 60
                 if args.h30_window_min <= delta <= args.h30_window_max:
@@ -1058,7 +1126,8 @@ def main() -> None:
     ]
     if missing:
         parser.error(
-            "Missing required options for single-race mode: " + ", ".join(f"--{m}" for m in missing)
+            "Missing required options for single-race mode: "
+            + ", ".join(f"--{m}" for m in missing)
         )
 
     payload_dict = {
@@ -1089,8 +1158,7 @@ def main() -> None:
     except PayloadValidationError as exc:
         logger.error("[runner] %s", exc)
         raise SystemExit(1) from exc
-          
+
 
 if __name__ == "__main__":
     main()
-    
