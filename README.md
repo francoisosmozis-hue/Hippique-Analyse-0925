@@ -24,7 +24,8 @@ Pipeline **pro** pour planifier, capturer H‑30 / H‑5, analyser et consigner 
 - La phase **H‑5** réessaie automatiquement les collectes `JE`/`chronos` en cas d'absence des CSV, marque la course « non jouable » via `UNPLAYABLE.txt` si la régénération échoue et évite ainsi que le pipeline plante.
 - Les combinés sont désormais filtrés strictement dans `pipeline_run.py` : statut `"ok"` obligatoire, EV ≥ +40 % et payout attendu ≥ 10 € sans heuristique. Le runner et le pipeline partagent la même règle, ce qui garantit un comportement homogène en CLI comme dans les automatisations.
 - Le seuil d'overround est adapté automatiquement (`1.30` standard désormais aligné sur la garde ROI, `1.25` pour les handicaps plats ouverts ≥ 14 partants) pour réduire les tickets exotiques à faible espérance.
-
+- Chaque analyse écrit systématiquement `out/<RC>/metrics.json|csv`, `p_finale.json` et `cmd_update_excel.txt` afin d'exposer EV, ROI, overround et raisons d'abstention.
+- 
 ### API `/analyse`
 
 L'API FastAPI expose un endpoint `POST /analyse` (voir `main.py`).
@@ -158,6 +159,27 @@ Statuts H‑30/H‑5, Jouable H‑5, Tickets H‑5, Commentaires) et réalise un
 doublons. Les commandes ci‑dessus peuvent être enchaînées avec un utilitaire
 d'upload (ex. `scripts/drive_sync.py`) pour pousser le fichier sur Google
 Drive.
+
+---
+
+## ✅ Tests & smoke
+
+- **Tests ciblés des garde-fous EV/overround/SP**
+
+  ```bash
+  pytest tests/test_overround_place.py tests/test_sp_dutching_guards.py
+  ```
+
+- **Suite complète**
+
+  ```bash
+  pytest
+  ```
+
+Les jeux d'entrée utilisés dans `tests/test_pipeline_exotics_filters.py`
+permettent également de vérifier rapidement les exports `out/<RC>/` produits
+par `pipeline_run.run_pipeline`.
+
 
 ### Automatisation GitHub Actions H‑30 / H‑5
 
