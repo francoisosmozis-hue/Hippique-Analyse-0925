@@ -24,7 +24,13 @@ GPI_CONFIG = os.path.join(PROJECT_ROOT, "gpi_v51.yml")
 
 def run_command(command: list[str], cwd: str) -> subprocess.CompletedProcess:
     """Exécute une commande shell et retourne le résultat."""
-    return subprocess.run(command, capture_output=True, text=True, cwd=cwd, check=False, encoding='utf-8')
+    print(f"  -> Running command: {' '.join(command)}") # DEBUG
+    result = subprocess.run(command, capture_output=True, text=True, cwd=cwd, check=False, encoding='utf-8')
+    if result.stdout:
+        print(f"  -> stdout: {result.stdout}")
+    if result.stderr:
+        print(f"  -> stderr: {result.stderr}")
+    return result
 
 def backtest_race(race_url: str, date_str: str, temp_dir: str) -> list[dict]:
     """Exécute le backtest pour une seule course."""
@@ -51,6 +57,12 @@ def backtest_race(race_url: str, date_str: str, temp_dir: str) -> list[dict]:
         result = run_command(cmd_scrape, PROJECT_ROOT)
         if result.returncode != 0 or not os.path.exists(partants_file):
             print(f"  -> Failed to scrape race data: {result.stderr or 'File not created'}")
+            failed_page_path = os.path.join(race_dir, "failed_page.html")
+            if os.path.exists(failed_page_path):
+                with open(failed_page_path, "r", encoding="utf-8") as f:
+                    print("--- FAILED PAGE HTML ---")
+                    print(f.read())
+                    print("--- END FAILED PAGE HTML ---")
             return []
         run_command(["cp", h5_odds_file, h30_odds_file], PROJECT_ROOT) # Simuler H-30
 

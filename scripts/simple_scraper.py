@@ -17,7 +17,8 @@ def parse_geny_race_page(html: str) -> tuple[dict, dict]:
         infos_text = info_course_tag.get_text(" ", strip=True)
         distance_match = re.search(r'(\d\s*\d{3})m', infos_text)
         if distance_match:
-            race_data['distance'] = int(distance_match.group(1).replace(' ', ''))
+            distance_str = distance_match.group(1)
+            race_data['distance'] = int("".join(distance_str.split()))
         
         discipline_tag = info_course_tag.find("strong")
         if discipline_tag:
@@ -25,7 +26,8 @@ def parse_geny_race_page(html: str) -> tuple[dict, dict]:
 
         allocation_match = re.search(r'([\d\s]+)€', infos_text)
         if allocation_match:
-            race_data['allocation'] = int(allocation_match.group(1).replace(' ', ''))
+            allocation_str = allocation_match.group(1)
+            race_data['allocation'] = int("".join(allocation_str.split()))
 
     # Extraire les données des partants depuis la table principale
     partants_table = soup.find("table", id=re.compile(r"^dt_partants")) # id peut changer
