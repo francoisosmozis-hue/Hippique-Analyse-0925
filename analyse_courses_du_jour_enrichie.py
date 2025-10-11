@@ -29,7 +29,17 @@ from bs4 import BeautifulSoup
 
 from logging_io import append_csv_line, CSV_HEADER
 from scripts.gcs_utils import disabled_reason, is_gcs_enabled
-from scripts.online_fetch_zeturf import normalize_snapshot
+try:
+    from scripts.online_fetch_zeturf import normalize_snapshot
+except (ImportError, SyntaxError) as _normalize_import_error:  # pragma: no cover - fallback
+    def _raise_normalize_snapshot(payload: Mapping[str, Any]) -> dict[str, Any]:
+        """Placeholder lorsque :mod:`scripts.online_fetch_zeturf` est invalide."""
+
+        raise RuntimeError(
+            "normalize_snapshot indisponible (erreur d'import scripts.online_fetch_zeturf)"
+        ) from _normalize_import_error
+
+    normalize_snapshot = _raise_normalize_snapshot
 from scripts.fetch_je_stats import collect_stats
 
 import pipeline_run
@@ -1876,7 +1886,7 @@ def _execute_h5_chain(
         rc_dir,
         budget=budget,
         min_roi=roi_min,
-            )
+    )
     return out_path
 
 
@@ -1902,31 +1912,40 @@ def _load_geny_today_payload() -> dict[str, Any]:
                 "courses": [
                     {
                         "c": "C1",
-                        "id_course": "12345" # A dummy ID is sufficient
+                        "id_course": "12345",  # A dummy ID is sufficient
                     }
-               ]
-           }
-        ]
+                ],
+            }
+        ],  
     }
 
 
-def _normalise_rc_label(label: str | int, prefix: str) -> str:
-   """Normalise ``label`` to the canonical ``R``/``C`` format.
+def _normalize_label(label: object) -> str:
+    """Normalise un libellé: trim, uppercase et retrait des espaces.
 
-   ``label`` may be provided without the leading prefix (``"1"``) or with a
-   lowercase variant (``"c3"``). The return value always matches ``R\\d+`` or
-   ``C\\d+`` with no leading zero. ``ValueError`` is raised when the label does
+    Utilise ``str(label)`` pour accepter des entrées non textuelles.
+    """
+
+    return str(label).strip().upper().replace(" ", "")
+
+
+def _normalise_rc_label(label: str | int, prefix: str) -> str:
+    """Normalise ``label`` to the canonical ``R``/``C`` format.
+
+    ``label`` may be provided without the leading prefix (``"1"``) or with a
+    lowercase variant (``"c3"``). The return value always matches ``R\\d+`` or
+    ``C\\d+`` with no leading zero. ``ValueError`` is raised when the label does
     not describe a strictly positive integer.
     """
 
-    text = str(label).strip().upper().replace(" ", "")
+    text = _normalize_label(label)
     if not text:
         raise ValueError(f"Identifiant {prefix} vide")
     if text.startswith(prefix):
         text = text[len(prefix) :]
     elif text.startswith(prefix[0]):
         text = text[1:]
-   if not text.isdigit():
+    if not text.isdigit():
         raise ValueError(f"Identifiant {prefix} invalide: {label!r}")
     number = int(text)
     if number <= 0:
@@ -1945,16 +1964,16 @@ def _normalise_phase(value: str) -> str:
 
 def _phase_argument(value: str) -> str:
     """Argument parser wrapper that normalises ``value`` to ``H30``/``H5``."""
-   
+    
     try:
         return _normalise_phase(value)
     except ValueError as exc:  # pragma: no cover - handled by argparse
         raise argparse.ArgumentTypeError(str(exc)) from exc
-   
-   
+
+
 def _resolve_course_id(reunion: str, course: str) -> str:
     """Return the Geny course identifier matching ``reunion``/``course``."""
-   
+    
     payload = _load_geny_today_payload()
     reunion = reunion.upper()
     course = course.upper()
@@ -1976,55 +1995,6 @@ def _resolve_course_id(reunion: str, course: str) -> str:
     raise ValueError(f"Course {reunion}{course} introuvable via discover_geny_today")
    
    
-def _process_single_course(
-    reunion: str,
-    course: str,
-    phase: str,
-    data_dir: Path,
-    *,
-    budget: float,
-    kelly: float,
-    gcs_prefix: str | None,
-) -> dict[str, Any] | None:
-    """Fetch and analyse a specific course designated by ``reunion``/``course``."""
-  
-    course_id = _resolve_course_id(reunion, course)
-    base_dir = ensure_dir(data_dir)
-    rc_dir = ensure_dir(base_dir / f"{reunion}{course}")
-    write_snapshot_from_geny(course_id, phase, rc_dir)
-    outcome: dict[str, Any] | None = None
-    pipeline_done = False
-    if phase.upper() == "H5":
-        pipeline_done, outcome = _execute_h5_chain(
-            rc_dir,
-            budget=budget,
-            kelly=kelly,
-        )
-        if pipeline_done:
-            csv_path = export_per_horse_csv(rc_dir)
-            print(f"[INFO] per-horse report écrit: {csv_path}")
-            outcome = None
-        elif outcome is not None:
-            _write_json_file(rc_dir / "decision.json", outcome)
-        else:  # pragma: no cover - defensive fallback
-            _write_json_file(
-                rc_dir / "decision.json",
-                {
-                    "status": "no-bet",
-                    "decision": "ABSTENTION",
-                    "reason": "pipeline-error",
-                },
-            course_id = (
-                course_info.get("id_course")
-                or course_info.get("course_id")
-                or course_info.get("id")
-            )
-            if course_id is None:
-                break
-            return str(course_id)
-    raise ValueError(f"Course {reunion}{course} introuvable via discover_geny_today")
-
-
 def _process_single_course(
     reunion: str,
     course: str,
