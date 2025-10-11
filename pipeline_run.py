@@ -2536,7 +2536,11 @@ def cmd_analyse(args: argparse.Namespace) -> None:
             top_n=int(cfg.get("DRIFT_TOP_N", 0)),
             min_delta=float(cfg.get("DRIFT_MIN_DELTA", 0.0)),
         )
-    p_true = build_p_true(cfg, partants, odds_h5, odds_h30, stats_je)
+    partants_data = load_json(args.partants)
+    partants = partants_data.get("runners", [])
+    stats_je = load_json(args.stats_je)
+
+    p_true = build_p_true(cfg, partants_data, odds_h5, odds_h30, stats_je)
 
     p_place_override: dict[str, float] | None = None
     override_paid_places: float | None = None

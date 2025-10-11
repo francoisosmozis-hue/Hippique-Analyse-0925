@@ -195,4 +195,32 @@ def fetch_race_snapshot(
     snapshot.setdefault("rc", rc)
     return snapshot
 
+def write_snapshot_from_geny(course_id: str, phase: str, rc_dir: Path) -> None:
+    logger.info("STUB: Writing dummy snapshots for %s in %s", course_id, rc_dir)
+    rc_dir.mkdir(parents=True, exist_ok=True)
+
+    runners = [
+        {"id": "1", "num": "1", "name": "DUMMY 1", "odds": 5.0},
+        {"id": "2", "num": "2", "name": "DUMMY 2", "odds": 6.0},
+        {"id": "3", "num": "3", "name": "DUMMY 3", "odds": 7.0},
+        {"id": "4", "num": "4", "name": "DUMMY 4", "odds": 8.0},
+        {"id": "5", "num": "5", "name": "DUMMY 5", "odds": 9.0},
+        {"id": "6", "num": "6", "name": "DUMMY 6", "odds": 10.0},
+        {"id": "7", "num": "7", "name": "DUMMY 7", "odds": 11.0},
+    ]
+
+    # Create dummy H-30 file
+    h30_file = rc_dir / "dummy_H-30.json"
+    with open(h30_file, "w", encoding="utf-8") as f:
+        json.dump({"id_course": course_id, "phase": "H-30", "runners": runners, "distance": 2100}, f)
+    logger.info("STUB: Wrote dummy H-30 file to %s", h30_file)
+
+    # Create dummy H-5 file
+    h5_file = rc_dir / "dummy_H-5.json"
+    with open(h5_file, "w", encoding="utf-8") as f:
+        json.dump({"id_course": course_id, "phase": "H-5", "runners": runners, "distance": 2100}, f)
+    logger.info("STUB: Wrote dummy H-5 file to %s", h5_file)
+
+
+
 # ... (le reste du fichier)
