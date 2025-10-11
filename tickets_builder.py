@@ -1,7 +1,7 @@
-import os
 import logging
 import os
-from typing import Any, Dict, Iterable, List, Mapping, Sequence, Tuple
+from collections.abc import Iterable, Mapping, Sequence
+from typing import Any, Dict, List, Tuple
 
 from simulate_ev import allocate_dutching_sp
 from runner_chain import validate_exotics_with_simwrapper
