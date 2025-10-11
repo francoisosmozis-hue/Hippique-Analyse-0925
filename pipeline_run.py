@@ -3290,145 +3290,145 @@ def cmd_analyse(args: argparse.Namespace) -> None:
             cfg=cfg,
         )
         if combo_ok is False and combo_tickets:
-3293             "roi_global": roi_global,
-   3294             "risk_of_ruin": risk_of_ruin,
-   3295             "clv_moyen": clv_moyen,
-   3296             "model": cfg.get("MODEL", ""),
-   3297         },
-   3298         CSV_HEADER,
-   3299     )
-   3300     append_json(
-   3301         f"journaux/{course_id}_pre.json",
-   3302         {
-   3303             "tickets": tickets,
-   3304             "ev": {"sp": ev_sp, "global": ev_global},
-   3305             "exotics": meta.get("exotics", {}),
-   3306         },
-   3307     )
-   3308 
-   3309     outdir.mkdir(parents=True, exist_ok=True)
-   3310     stake_reduction_info = last_reduction_info or {}
-   3311     stake_reduction_flag = bool(stake_reduction_info.get("applied"))
-   3312     stake_reduction_details = {
-   3313         "scale_factor": stake_reduction_info.get("scale_factor", 1.0),
-   3314         "target": stake_reduction_info.get("target"),
-   3315         "initial_cap": stake_reduction_info.get("initial_cap"),
-   3316         "effective_cap": stake_reduction_info.get("effective_cap"),
-   3317         "iterations": stake_reduction_info.get("iterations"),
-   3318         "initial": {
-   3319             "risk_of_ruin": stake_reduction_info.get("initial_ror"),
-   3320             "ev": stake_reduction_info.get("initial_ev"),
-   3321             "variance": stake_reduction_info.get("initial_variance"),
-   3322             "total_stake": stake_reduction_info.get("initial_total_stake"),
-   3323         },
-   3324         "final": {
-   3325             "risk_of_ruin": stake_reduction_info.get("final_ror"),
-   3326             "ev": stake_reduction_info.get("final_ev"),
-   3327             "variance": stake_reduction_info.get("final_variance"),
-   3328             "total_stake": stake_reduction_info.get("final_total_stake"),
-   3329         },
-   3330     }
-   3331     export(
-   3332         outdir,
-   3333         meta,
-   3334         tickets,
-   3335         ev_sp,
-   3336         ev_global,
-   3337         roi_sp,
-   3338         roi_global,
-   3339         risk_of_ruin,
-   3340         clv_moyen,
-   3341         variance_total,
-   3342         combined_payout,
-   3343         p_true,
-   3344         drift,
-   3345         cfg,
-   3346         runners,
-   3347         stake_reduction_applied=stake_reduction_flag,
-   3348         stake_reduction_details=stake_reduction_details,
-   3349         optimization_details=optimization_summary,
-   3350     )
-   3351     logger.info("OK: analyse exportée dans %s", outdir)
-   3352 
-   3353 
-   3354 def cmd_snapshot(args: argparse.Namespace) -> None:
-   3355     """Write a race-specific snapshot file."""
-   3356 
-   3357     base = Path(args.outdir)
-   3358     src = base / f"{args.when}.json"
-   3359     data = load_json(str(src))
-   3360     rc = f"{args.meeting}{args.race}"
-   3361     dest = base / f"{rc}-{args.when}.json"
-   3362     save_json(dest, data)
-   3363     logger.info("Snapshot écrit: %s", dest)
-   3364 
-   3365 
-   3366 def main() -> None:
-   3367     parser = argparse.ArgumentParser(description="GPI v5.1 pipeline")
-   3368     parser.add_argument(
-   3369         "--log-level",
-   3370         default=None,
-   3371         help=(
-   3372             "Logging level (DEBUG, INFO, WARNING, ERROR). "
-   3373             f"Can also be set via {LOG_LEVEL_ENV_VAR}."
-   3374         ),
-   3375     )
-   3376     sub = parser.add_subparsers(dest="cmd", required=True)
-   3377 
-   3378     snap = sub.add_parser("snapshot", help="Renommer un snapshot h30/h5")
-   3379     snap.add_argument("--when", choices=["h30", "h5"], required=True)
-   3380     snap.add_argument("--meeting", required=True)
-   3381     snap.add_argument("--race", required=True)
-   3382     snap.add_argument("--outdir", required=True)
-   3383     snap.set_defaults(func=cmd_snapshot)
-   3384 
-   3385     ana = sub.add_parser("analyse", help="Analyser une course")
-   3386     ana.add_argument("--h30", required=True)
-   3387     ana.add_argument("--h5", required=True)
-   3388     ana.add_argument("--stats-je", required=True)
-   3389     ana.add_argument("--partants", required=True)
-   3390     ana.add_argument("--gpi", required=True)
-   3391     ana.add_argument("--outdir", default=None)
-   3392     ana.add_argument("--diff", default=None)
-   3393     ana.add_argument("--budget", type=float)
-   3394     ana.add_argument("--ev-global", dest="ev_global", type=float)
-   3395     ana.add_argument("--roi-global", dest="roi_global", type=float)
-   3396     ana.add_argument("--max-vol", dest="max_vol", type=float)
-   3397     ana.add_argument("--min-payout", dest="min_payout", type=float)
-   3398     ana.add_argument("--ev-min-exotic", dest="ev_min_exotic", type=float, default=None)
-   3399     ana.add_argument(
-   3400         "--payout-min-exotic", dest="payout_min_exotic", type=float, default=None
-   3401     )
-   3402     ana.add_argument(
-   3403         "--allow-heuristic",
-   3404         dest="allow_heuristic",
-   3405         action="store_true",
-   3406         help="(obsolète) Conservé pour compatibilité mais ignoré : les combinés "
-   3407         "exigent une calibration payout valide.",
-   3408     )
-   3409     ana.add_argument("--allow-je-na", dest="allow_je_na", action="store_true")
-   3410     ana.add_argument(
-   3411         "--p-finale",
-   3412         dest="p_finale",
-   3413         default=None,
-   3414         help="Chemin vers un fichier p_finale.json pour surcharger p_true/p_place.",
-   3415     )
-   3416     ana.add_argument(
-   3417         "--calibration",
-   3418         default=str(PAYOUT_CALIBRATION_PATH),
-   3419         help="Chemin vers payout_calibration.yaml pour l'évaluation des combinés.",
-   3420     )
-   3421     ana.set_defaults(func=cmd_analyse)
-   3422 
-   3423     args = parser.parse_args()
-   3424 
-   3425     configure_logging(args.log_level)
-   3426 
-   3427     args.func(args)
-   3428 
-   3429 
-   3430 if __name__ == "__main__":
-   3431     main()
+            "roi_global": roi_global,
+            "risk_of_ruin": risk_of_ruin,
+            "clv_moyen": clv_moyen,
+            "model": cfg.get("MODEL", ""),
+        },
+        CSV_HEADER,
+    )
+    append_json(
+        f"journaux/{course_id}_pre.json",
+        {
+            "tickets": tickets,
+            "ev": {"sp": ev_sp, "global": ev_global},
+            "exotics": meta.get("exotics", {}),
+        },
+    )
+
+    outdir.mkdir(parents=True, exist_ok=True)
+    stake_reduction_info = last_reduction_info or {}
+    stake_reduction_flag = bool(stake_reduction_info.get("applied"))
+    stake_reduction_details = {
+        "scale_factor": stake_reduction_info.get("scale_factor", 1.0),
+        "target": stake_reduction_info.get("target"),
+        "initial_cap": stake_reduction_info.get("initial_cap"),
+        "effective_cap": stake_reduction_info.get("effective_cap"),
+        "iterations": stake_reduction_info.get("iterations"),
+        "initial": {
+            "risk_of_ruin": stake_reduction_info.get("initial_ror"),
+            "ev": stake_reduction_info.get("initial_ev"),
+            "variance": stake_reduction_info.get("initial_variance"),
+            "total_stake": stake_reduction_info.get("initial_total_stake"),
+        },
+        "final": {
+            "risk_of_ruin": stake_reduction_info.get("final_ror"),
+            "ev": stake_reduction_info.get("final_ev"),
+            "variance": stake_reduction_info.get("final_variance"),
+            "total_stake": stake_reduction_info.get("final_total_stake"),
+        },
+    }
+    export(
+        outdir,
+        meta,
+        tickets,
+        ev_sp,
+        ev_global,
+        roi_sp,
+        roi_global,
+        risk_of_ruin,
+        clv_moyen,
+        variance_total,
+        combined_payout,
+        p_true,
+        drift,
+        cfg,
+        runners,
+        stake_reduction_applied=stake_reduction_flag,
+        stake_reduction_details=stake_reduction_details,
+        optimization_details=optimization_summary,
+    )
+    logger.info("OK: analyse exportée dans %s", outdir)
+
+
+def cmd_snapshot(args: argparse.Namespace) -> None:
+    """Write a race-specific snapshot file."""
+
+    base = Path(args.outdir)
+    src = base / f"{args.when}.json"
+    data = load_json(str(src))
+    rc = f"{args.meeting}{args.race}"
+    dest = base / f"{rc}-{args.when}.json"
+    save_json(dest, data)
+    logger.info("Snapshot écrit: %s", dest)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="GPI v5.1 pipeline")
+    parser.add_argument(
+        "--log-level",
+        default=None,
+        help=(
+            "Logging level (DEBUG, INFO, WARNING, ERROR). "
+            f"Can also be set via {LOG_LEVEL_ENV_VAR}."
+        ),
+    )
+    sub = parser.add_subparsers(dest="cmd", required=True)
+
+    snap = sub.add_parser("snapshot", help="Renommer un snapshot h30/h5")
+    snap.add_argument("--when", choices=["h30", "h5"], required=True)
+    snap.add_argument("--meeting", required=True)
+    snap.add_argument("--race", required=True)
+    snap.add_argument("--outdir", required=True)
+    snap.set_defaults(func=cmd_snapshot)
+
+    ana = sub.add_parser("analyse", help="Analyser une course")
+    ana.add_argument("--h30", required=True)
+    ana.add_argument("--h5", required=True)
+    ana.add_argument("--stats-je", required=True)
+    ana.add_argument("--partants", required=True)
+    ana.add_argument("--gpi", required=True)
+    ana.add_argument("--outdir", default=None)
+    ana.add_argument("--diff", default=None)
+    ana.add_argument("--budget", type=float)
+    ana.add_argument("--ev-global", dest="ev_global", type=float)
+    ana.add_argument("--roi-global", dest="roi_global", type=float)
+    ana.add_argument("--max-vol", dest="max_vol", type=float)
+    ana.add_argument("--min-payout", dest="min_payout", type=float)
+    ana.add_argument("--ev-min-exotic", dest="ev_min_exotic", type=float, default=None)
+    ana.add_argument(
+        "--payout-min-exotic", dest="payout_min_exotic", type=float, default=None
+    )
+    ana.add_argument(
+        "--allow-heuristic",
+        dest="allow_heuristic",
+        action="store_true",
+        help="(obsolète) Conservé pour compatibilité mais ignoré : les combinés "
+        "exigent une calibration payout valide.",
+    )
+    ana.add_argument("--allow-je-na", dest="allow_je_na", action="store_true")
+    ana.add_argument(
+        "--p-finale",
+        dest="p_finale",
+        default=None,
+        help="Chemin vers un fichier p_finale.json pour surcharger p_true/p_place.",
+    )
+    ana.add_argument(
+        "--calibration",
+        default=str(PAYOUT_CALIBRATION_PATH),
+        help="Chemin vers payout_calibration.yaml pour l'évaluation des combinés.",
+    )
+    ana.set_defaults(func=cmd_analyse)
+
+    args = parser.parse_args()
+
+    configure_logging(args.log_level)
+
+    args.func(args)
+
+
+if __name__ == "__main__":
+    main()
         "modele_suivi_courses_hippiques_clean.csv",
         {
             "reunion": meta.get("reunion", ""),
