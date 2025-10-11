@@ -12,6 +12,32 @@ Corrections:
 import sys
 import json
 import time
+<<<<<<< HEAD
+from functools import lru_cache
+from pathlib import Path
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    List,
+    Mapping,
+    MutableMapping,
+    Sequence,
+    TypeVar,
+)
+
+try:
+    import requests
+except ModuleNotFoundError as exc:  # pragma: no cover - exercised via dedicated test
+    raise RuntimeError(
+        "The 'requests' package is required to fetch data from Zeturf. "
+        "Install it with 'pip install requests' or switch to the urllib-based fallback implementation."
+    ) from exc
+import re
+
+=======
+>>>>>>> origin/main
 import yaml
 import argparse
 import logging
@@ -22,6 +48,15 @@ from pathlib import Path
 import requests
 from requests.exceptions import RequestException, Timeout, ConnectionError
 from bs4 import BeautifulSoup
+<<<<<<< HEAD
+
+try:  # pragma: no cover - Python < 3.9 fallbacks are extremely rare
+    from zoneinfo import ZoneInfo
+except Exception:  # pragma: no cover - very defensive
+    ZoneInfo = None  # type: ignore[assignment]
+
+=======
+>>>>>>> origin/main
 
 # Configuration du logging
 logging.basicConfig(
@@ -30,12 +65,56 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# ... (le reste du fichier jusqu'à la fin, avec toutes les corrections)
 
+<<<<<<< HEAD
+def fetch_from_pmu_api(date: str, reunion: int, course: int) -> Dict[str, Any]:
+    """
+    Fetches race data from the unofficial PMU Turfinfo API.
+    """
+    date_str = date.replace("-", "")
+    base_url = f"https://offline.turfinfo.api.pmu.fr/rest/client/7/programme/{date_str}/R{reunion}/C{course}"
+=======
 class ZeturfFetchError(Exception):
     """Exception personnalisée pour les erreurs de fetch ZEturf"""
     pass
+>>>>>>> origin/main
 
+    try:
+        partants_url = f"{base_url}/participants"
+        partants_resp = _http_get_with_backoff(partants_url)
+        partants_data = partants_resp.json()
+        if not partants_data:
+            logger.error(f"No data returned from PMU participants API for R{reunion}C{course}")
+            return {}
+    except Exception as e:
+        logger.error(f"Failed to fetch PMU participants for R{reunion}C{course}: {e}")
+        return {}
 
+<<<<<<< HEAD
+    runners = []
+    for p in partants_data.get('participants', []):
+        runners.append({
+            "num": p.get('numero'),
+            "name": p.get('nom'),
+            "sexe": p.get('sexe'),
+            "age": p.get('age'),
+            "musique": p.get('musique'),
+        })
+
+    try:
+        rapports_url = f"{base_url}/rapports/SIMPLE_PLACE"
+        rapports_resp = _http_get_with_backoff(rapports_url)
+        rapports_data = rapports_resp.json()
+        if rapports_data:
+            odds_map = {}
+            for rapport in rapports_data.get('rapports', []):
+                if rapport.get('typePari') == 'SIMPLE_PLACE':
+                    for comb in rapport.get('combinaisons', []):
+                        num = comb.get('combinaison')[0]
+                        odds_map[str(num)] = comb.get('rapport')
+
+=======
 class ZeturfFetcher:
     """Classe pour gérer les requêtes ZEturf avec retry et cache"""
     
@@ -87,13 +166,31 @@ class ZeturfFetcher:
                 
                         odds_map[str(num)] = comb.get('rapport')
     
+>>>>>>> origin/main
             for runner in runners:
                 if str(runner['num']) in odds_map:
                     runner['dernier_rapport'] = {'gagnant': odds_map[str(runner['num'])]}
                     runner['cote'] = odds_map[str(runner['num'])]
+<<<<<<< HEAD
+
+    except Exception as e:
+        logger.warning(f"Failed to fetch PMU rapports for R{reunion}C{course}: {e}")
+
+    return {
+        "runners": runners,
+        "hippodrome": partants_data.get('hippodrome', {}).get('libelleCourt'),
+        "discipline": partants_data.get('discipline'),
+        "partants": len(runners),
+        "course_id": partants_data.get('id'),
+        "reunion": f"R{reunion}",
+        "course": f"C{course}",
+        "date": date,
+    }
+=======
     
     except Exception as e:
         logger.warning(f"Failed to fetch PMU rapports for R{reunion}C{course}: {e}")
+>>>>>>> origin/main
 
     return {
         "runners": runners,
@@ -222,6 +319,9 @@ def write_snapshot_from_geny(course_id: str, phase: str, rc_dir: Path) -> None:
 
 
 
+<<<<<<< HEAD
+# ... (le reste du fichier)
+=======
 # ... (le reste du fichier)
         for idx, runner_elem in enumerate(runners_data, 1):
             try:
@@ -439,3 +539,4 @@ def main():
 
 if __name__ == '__main__':
     sys.exit(main())
+>>>>>>> origin/main

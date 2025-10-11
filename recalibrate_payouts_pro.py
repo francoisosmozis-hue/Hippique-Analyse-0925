@@ -4,6 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Recalibrate payouts and set PAUSE_EXOTIQUES flag"
@@ -32,7 +33,7 @@ def main() -> None:
 
     ema = results.get("EMA_ABS_ERROR_PCT", {"CP": 20.0, "TRIO": 20.0, "ZE4": 20.0})
     pause = any(ema.get(k, 100.0) > 15.0 for k in ("CP", "TRIO", "ZE4"))
-    
+
     # Écris le drapeau consensuel dans payout_calibration.yaml
     block = {"PAUSE_EXOTIQUES": bool(pause), "EMA_ABS_ERROR_PCT": ema}
     with open(args.out, "a", encoding="utf-8") as f:
@@ -40,6 +41,7 @@ def main() -> None:
         for key, value in block.items():
             f.write(f"{key}: {value}\n")
     print(f"[Calibration] PAUSE_EXOTIQUES={pause} (seuil 15%)")
+
 
 if __name__ == "__main__":
     main()

@@ -24,7 +24,9 @@ class DummyResp:
         return None
 
 
-def test_check_enrich_outputs_retries_once(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_check_enrich_outputs_retries_once(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     snap = tmp_path / "snap_H-5.json"
     snap.write_text("{}", encoding="utf-8")
 
@@ -45,7 +47,9 @@ def test_check_enrich_outputs_retries_once(monkeypatch: pytest.MonkeyPatch, tmp_
     assert sleeps == [0.0]
 
 
-def test_check_enrich_outputs_no_bet_payload(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_check_enrich_outputs_no_bet_payload(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     snap = tmp_path / "snap_H-5.json"
     snap.write_text("{}", encoding="utf-8")
 
@@ -87,6 +91,8 @@ def test_check_enrich_outputs_prefers_latest_snapshot(
             ]
         },
     }
+
+
 def test_process_reunion_continues_after_failure(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -141,7 +147,9 @@ def test_process_reunion_continues_after_failure(
     monkeypatch.setattr(
         acde,
         "export_per_horse_csv",
-        lambda rc_dir: (pipeline_calls.append(rc_dir) or (rc_dir / "per_horse_report.csv")),
+        lambda rc_dir: (
+            pipeline_calls.append(rc_dir) or (rc_dir / "per_horse_report.csv")
+        ),
     )
 
     acde._process_reunion(
@@ -176,6 +184,6 @@ def test_mark_course_unplayable_writes_marker(
     assert info["marker_path"].endswith("UNPLAYABLE.txt")
     assert info["marker_written"] is True
     assert "chronos.csv" in info["marker_message"]
-    
+
     captured = capsys.readouterr()
     assert "Course non jouable" in captured.err

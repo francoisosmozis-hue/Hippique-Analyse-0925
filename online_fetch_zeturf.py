@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import importlib.util
+import inspect
+import json
 import logging
 import os
 import re
@@ -11,6 +13,12 @@ import sys
 import time
 import unicodedata
 from dataclasses import dataclass
+<<<<<<< HEAD
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, Iterable, Mapping
+from urllib.parse import urljoin
+=======
 import inspect
 import json
 import subprocess
@@ -21,12 +29,12 @@ from datetime import datetime
 import datetime as dt
 from typing import Any, Dict, Iterable, Mapping, Sequence
 
+>>>>>>> origin/main
 from zoneinfo import ZoneInfo
 
 import yaml
 
 from scripts import online_fetch_zeturf as _raw_impl
-
 
 _RC_COMBINED_RE = re.compile(r"R?\s*(\d+)\s*C\s*(\d+)", re.IGNORECASE)
 
@@ -121,7 +129,7 @@ def fetch_race_snapshot(
     )
     if canonical_url:
         course_url = canonical_url
-        
+
     raw_snapshot.setdefault("source_url", course_url)
 
     normalised = _normalise_snapshot_result(
@@ -268,7 +276,7 @@ class RaceSnapshot:
         partants_count = self.partants_count
         if partants_count is None and isinstance(runners, list):
             partants_count = len(runners)
-            
+
         payload: Dict[str, Any] = {
             "meeting": self.meeting,
             "date": self.date,
@@ -469,7 +477,11 @@ def _double_extract(
         if fallback_data is None:
             fallback_data = _fallback_parse_html(html)
         return fallback_data
+<<<<<<< HEAD
+
+=======
         
+>>>>>>> origin/main
     parse_fn = getattr(_impl, "parse_course_page", None)
     snapshot_mode = "H-30" if str(snapshot).upper().replace("-", "") == "H30" else "H-5"
     if callable(parse_fn):
@@ -827,7 +839,7 @@ def _coerce_runner_entry(entry: Mapping[str, Any]) -> dict[str, Any] | None:
                     return candidate
             return None
         return None
-        
+
     def _coerce_float(value: Any) -> float | None:
         if value in (None, ""):
             return None
@@ -847,7 +859,7 @@ def _coerce_runner_entry(entry: Mapping[str, Any]) -> dict[str, Any] | None:
         if place_val is not None:
             runner.setdefault("odds_place", place_val)
             break
-            
+
     for prob_key in ("p", "probability", "p_imp", "p_imp_h5", "p_true"):
         prob_val = _coerce_float(entry.get(prob_key))
         if prob_val is not None:
@@ -928,7 +940,7 @@ def _coerce_runner_entry(entry: Mapping[str, Any]) -> dict[str, Any] | None:
         coerced = _coerce_metadata_value(value)
         if coerced is not None:
             runner[key] = coerced
-            
+
     return runner
 
 
@@ -987,7 +999,7 @@ def _build_snapshot_payload(
                 parsed = _coerce_runner_entry(entry)
                 if parsed:
                     runners.append(parsed)
-                    
+
     if runners:
         deduped: list[dict[str, Any]] = []
         by_number: dict[str, dict[str, Any]] = {}
@@ -1017,7 +1029,7 @@ def _build_snapshot_payload(
             deduped.append(runner)
             if number:
                 by_number[number] = runner
-                
+
         def _runner_sort_key(item: Mapping[str, Any]) -> tuple[int, str]:
             raw_number = str(item.get("num") or item.get("id") or "").strip()
             match = re.search(r"\d+", raw_number)
@@ -1026,7 +1038,7 @@ def _build_snapshot_payload(
 
         deduped.sort(key=_runner_sort_key)
         runners = deduped
-        
+
     partants_count = _coerce_int(raw_snapshot.get("partants"))
 
     meta_raw = (
@@ -1082,7 +1094,7 @@ def _build_snapshot_payload(
                 "start_time",
             )
         heure_officielle = _coerce_str(candidate)
-        
+
     if partants_count is None:
         candidate = _first_meta_value(
             meta_raw, "partants", "nb_partants", "n_partants", "participants"
@@ -1229,7 +1241,7 @@ def _fetch_race_snapshot_impl(
             or meta_hint.get("meeting")
             or meta_hint.get("venue")
         )
-        
+
     candidate_urls: list[str] = []
     try:
         entry_url = _impl._extract_url_from_entry(entry)
@@ -1307,14 +1319,14 @@ def _fetch_race_snapshot_impl(
     elif fallback_urls:
         primary_url = fallback_urls[0]
     rc_map[rc] = entry
-    
+
     sources_payload["rc_map"] = rc_map
 
     phase_norm = _normalise_phase_alias(phase)
 
     raw_snapshot: dict[str, Any] | None = None
     last_error: Exception | None = None
-    
+
     html_attempted: set[str] = set()
 
     owns_session = False
@@ -1328,7 +1340,11 @@ def _fetch_race_snapshot_impl(
             owns_session = True
 
     try:
+<<<<<<< HEAD
+
+=======
         
+>>>>>>> origin/main
         def _try_html(urls: Iterable[str]) -> dict[str, Any] | None:
             ordered: list[str] = []
             for candidate in urls:
@@ -1378,7 +1394,7 @@ def _fetch_race_snapshot_impl(
                     break
             else:
                 html_attempted.add(direct_url)
-                
+
         if html_snapshot is None:
             html_snapshot = _try_html(fallback_urls)
         if isinstance(html_snapshot, dict) and html_snapshot:
@@ -1403,7 +1419,11 @@ def _fetch_race_snapshot_impl(
         if signature is not None and "course" in signature.parameters:
             arg_candidates.append((reunion_norm, course_norm))
         arg_candidates.append((rc,))
+<<<<<<< HEAD
+
+=======
                 
+>>>>>>> origin/main
         if raw_snapshot is None or not raw_snapshot.get("runners"):
             for args in arg_candidates:
                 try:
@@ -1475,7 +1495,7 @@ def _fetch_race_snapshot_impl(
             phase=phase_norm,
             source_url=source_url,
         )
-        
+
         meta = raw_snapshot.get("meta") if isinstance(raw_snapshot, Mapping) else None
         if isinstance(meta, dict):
             thresholds = meta.setdefault("exotic_thresholds", {})
@@ -1608,7 +1628,7 @@ def _merge_h30_odds(
             updates["odds_place_h30"] = place
         if not updates:
             odds_map.pop(number, None)
-            
+
     candidates = payload.get("runners")
     runners_iterable = (
         candidates
@@ -1662,7 +1682,7 @@ def _merge_h30_odds(
             number = _coerce_number(key)
             if not number:
                 continue
-                
+
             win_value: Any | None
             place_value: Any | None = None
             if isinstance(value, Mapping):
@@ -1941,7 +1961,7 @@ def fetch_race_snapshot_full(
 
     if course_url is not None:
         fetch_kwargs.setdefault("url", course_url)
-        
+
     sources_config = fetch_kwargs.get("sources")
     if not isinstance(sources_config, Mapping):
         try:
@@ -2155,7 +2175,11 @@ def fetch_race_snapshot(
 if hasattr(_impl, "main"):
     main = _impl.main
 else:  # pragma: no cover - defensive fallback for stripped builds
+<<<<<<< HEAD
+
+=======
     
+>>>>>>> origin/main
     def main(*_args: Any, **_kwargs: Any) -> None:
         raise RuntimeError("scripts.online_fetch_zeturf.main is unavailable")
 

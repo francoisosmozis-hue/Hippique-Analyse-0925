@@ -44,7 +44,9 @@ def test_write_snapshot_success(tmp_path, monkeypatch, runner_payload):
     sources = {"zeturf": {"url": "https://example.test/race/{course_id}"}}
     monkeypatch.setattr(rc, "_load_sources_config", lambda: sources)
     monkeypatch.setattr(ofz.time, "sleep", lambda *a, **k: None)
-    monkeypatch.setattr(ofz, "_scrape_start_time_from_course_page", lambda course_id: "13:45")
+    monkeypatch.setattr(
+        ofz, "_scrape_start_time_from_course_page", lambda course_id: "13:45"
+    )
 
     def fake_get(url, timeout=None, headers=None):
         assert url == "https://example.test/race/654321"

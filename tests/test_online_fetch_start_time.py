@@ -43,7 +43,9 @@ def test_extract_start_time_from_text_fallback() -> None:
 
 
 def test_extract_start_time_returns_none_when_missing() -> None:
-    assert zeturf._extract_start_time("<html><body>Aucune heure ici</body></html>") is None
+    assert (
+        zeturf._extract_start_time("<html><body>Aucune heure ici</body></html>") is None
+    )
 
 
 def test_extract_start_time_from_accessibility_label() -> None:

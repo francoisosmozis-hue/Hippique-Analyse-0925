@@ -1,158 +1,153 @@
-"""Loader and inference helpers for the :math:`p_true` calibration model."""
-
-from __future__ import annotations
-
-from dataclasses import dataclass
-from pathlib import Path
-from typing import Any, Mapping
-
-import math
-import threading
-
-import yaml
 
 
-MODEL_PATH = Path("calibration/p_true_model.yaml")
-_EPSILON = 1e-9
+import joblib
+import lightgbm as lgb
+import re
+import numpy as np
+import pandas as pd
 
-_MODEL_LOCK = threading.Lock()
-_MODEL_CACHE: tuple[Path, float, "PTrueModel"] | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class PTrueModel:
-    """Representation of the serialized logistic regression."""
-
-    features: tuple[str, ...]
-    intercept: float
-    coefficients: dict[str, float]
-    metadata: dict
-
-    def predict(self, features: Mapping[str, float]) -> float:
-        score = float(self.intercept)
-        for name in self.features:
-            coef = float(self.coefficients.get(name, 0.0))
-            value = float(features.get(name, 0.0))
-            score += coef * value
-        return _sigmoid(score)
-
-    def get_metadata(self) -> dict[str, Any]:
-        """Return a shallow copy of the calibration metadata."""
-
-        return get_model_metadata(self)
-        
-def _sigmoid(value: float) -> float:
-    if value >= 0:
-        z = math.exp(-value)
-        return 1.0 / (1.0 + z)
-    z = math.exp(value)
-    return z / (1.0 + z)
-
-
-def _ensure_probability(prob: float) -> float:
-    if prob <= 0.0:
-        return _EPSILON
-    if prob >= 1.0:
-        return 1.0 - _EPSILON
-    return prob
-
-
-def load_p_true_model(path: Path | None = None) -> PTrueModel | None:
-    """Return cached :class:`PTrueModel` when available on disk."""
-
-    path = Path(path or MODEL_PATH)
-
-    try:
-        mtime = path.stat().st_mtime
-    except FileNotFoundError:
-        return None
-
-    global _MODEL_CACHE
-    with _MODEL_LOCK:
-        if _MODEL_CACHE and _MODEL_CACHE[0] == path and _MODEL_CACHE[1] == mtime:
-            return _MODEL_CACHE[2]
-
-        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-        features = tuple(str(f) for f in data.get("features", ()))
-        intercept = float(data.get("intercept", 0.0))
-        coeffs_raw = data.get("coefficients", {})
-        coefficients = {str(k): float(v) for k, v in coeffs_raw.items()}
-        metadata = dict(data.get("metadata", {}))
-
-        if not features:
-            raise ValueError("calibration model does not define any feature")
-
-        for name in features:
-            coefficients.setdefault(name, 0.0)
-
-        model = PTrueModel(
-            features=features,
-            intercept=intercept,
-            coefficients=coefficients,
-            metadata=metadata,
-        )
-        _MODEL_CACHE = (path, mtime, model)
-        return model
-
-
-def get_model_metadata(model: PTrueModel | None) -> dict[str, Any]:
-    """Return sanitized calibration metadata for ``model``.
-
-    Only scalar values (``str``/``int``/``float``/``bool``) are exposed in the
-    returned mapping to avoid leaking nested structures. When ``model`` is
-    ``None`` or metadata is missing, an empty dictionary is returned.
+def get_model_metadata() -> dict:
     """
+    Retourne les métadonnées du modèle, comme la liste des features attendues.
+    """
+    features = [
+        'age', 'sexe', 'musique_victoires_5_derniers', 'musique_places_5_derniers',
+        'musique_disqualifications_5_derniers', 'musique_position_moyenne_5_derniers',
+        'cote', 'probabilite_implicite',
+        'j_win', 'e_win', 'distance', 'allocation', 'num_runners',
+        'discipline_Plat', 'discipline_Trot Attelé', 'discipline_Haies', 
+        'discipline_Cross', 'discipline_Steeple'
+    ]
+    return {'features': features}
 
-    if model is None:
+def parse_musique(musique_str):
+    """Analyse la chaîne 'musique' pour en extraire des features de performance."""
+    if not isinstance(musique_str, str):
         return {}
-
-    meta: Mapping[str, Any] | None = None
-    if isinstance(model.metadata, Mapping):
-        meta = model.metadata
-
-    if meta is None:
-        return {}
-
-    sanitized: dict[str, Any] = {}
-    for key, value in meta.items():
-        if isinstance(value, (str, int, float, bool)):
-            sanitized[str(key)] = value
-    return dict(sanitized)
-
-
-def compute_runner_features(
-    odds_h5: float,
-    odds_h30: float | None,
-    stats: Mapping[str, float] | None,
-) -> dict[str, float]:
-    """Return the feature mapping expected by the logistic regression."""
-
-    o5 = max(float(odds_h5 or 0.0), 0.0)
-    if not math.isfinite(o5) or o5 <= 1.0:
-        raise ValueError("odds_h5 must be > 1 and finite")
-
-    o30 = float(odds_h30) if odds_h30 not in (None, "") else o5
-    if not math.isfinite(o30) or o30 <= 1.0:
-        o30 = o5
-
-    stats = stats or {}
-    j_win = float(stats.get("j_win", 0.0))
-    e_win = float(stats.get("e_win", 0.0))
-    je_total = j_win + e_win
-
+    musique_recente = re.sub(r'\(.*\?)', '', musique_str)
+    performances = re.findall(r'(\d+|[A-Z])', musique_recente)
+    last_5 = performances[:5]
+    
     return {
-        "log_odds": math.log(max(o5, 1.0 + _EPSILON)),
-        "drift": o5 - o30,
-        "je_total": je_total,
-        "implied_prob": 1.0 / o5,
+        'musique_victoires_5_derniers': last_5.count('1'),
+        'musique_places_5_derniers': sum(1 for p in last_5 if p in ['1', '2', '3']),
+        'musique_disqualifications_5_derniers': sum(1 for p in last_5 if p in ['D', 'A', 'T', 'R']),
+        'musique_position_moyenne_5_derniers': np.mean([int(p) for p in last_5 if p.isdigit()] or [-1]),
     }
 
+def compute_runner_features(runner_data: dict, race_data: dict, je_stats: dict, h30_odds: dict, h5_odds: dict) -> dict:
+    """
+    Calcule les features pour un unique partant en utilisant les données de course et les stats J/E.
+    """
+    features = {}
+    
+    # Features du partant
+    features['age'] = runner_data.get('age')
+    features['sexe'] = 1 if runner_data.get('sexe') == 'M' else 0
+    features.update(parse_musique(runner_data.get('musique')))
+    
+    num = str(runner_data.get('num'))
+    
+    # Features de cotes
+    cote_h5 = h5_odds.get(num)
+    cote_h30 = h30_odds.get(num)
 
-def predict_probability(
-    model: PTrueModel,
-    features: Mapping[str, float],
-) -> float:
-    """Return calibrated probability clipped to ``(0, 1)``."""
+    if cote_h5 and cote_h5 > 1:
+        features['cote'] = cote_h5
+        features['probabilite_implicite'] = 1 / cote_h5
+    else:
+        features['cote'] = 999
+        features['probabilite_implicite'] = 1 / 999
 
-    prob = model.predict(features)
-    return _ensure_probability(prob)
+    if cote_h30 and cote_h5 and cote_h30 > 1 and cote_h5 > 1:
+        features['drift_cote'] = (cote_h5 - cote_h30) / cote_h30
+    else:
+        features['drift_cote'] = 0
+        
+    # Features Jockey/Entraîneur
+    runner_je_stats = je_stats.get(num, {})
+    features['j_win'] = runner_je_stats.get('j_win', 0)
+    features['e_win'] = runner_je_stats.get('e_win', 0)
+
+    # Features de la course
+    features['distance'] = race_data.get('distance')
+    features['allocation'] = race_data.get('allocation')
+    features['num_runners'] = len(race_data.get('runners', []))
+
+    # One-hot encoding de la discipline
+    discipline = race_data.get('discipline')
+    disciplines = ['Plat', 'Trot Attelé', 'Haies', 'Cross', 'Steeple']
+    for d in disciplines:
+        features[f'discipline_{d}'] = 1 if discipline == d else 0
+
+    # Gestion des valeurs manquantes
+    for key, value in features.items():
+        if value is None:
+            features[key] = -1
+            
+    return features
+
+def load_p_true_model(filepath: str):
+    """Charge un modèle PTrueModel depuis un fichier."""
+    return PTrueModel.load(filepath)
+
+def predict_probability(model, features_df: pd.DataFrame):
+    """Prédit la probabilité avec le modèle chargé."""
+    return model.predict_proba(features_df)
+
+class PTrueModel:
+    """
+    A wrapper for the LightGBM model to predict p_true.
+    """
+    def __init__(self, params=None):
+        if params is None:
+            self.params = {
+                'objective': 'binary',
+                'metric': 'binary_logloss',
+                'boosting_type': 'gbdt',
+                'n_estimators': 1000,
+                'learning_rate': 0.01,
+                'num_leaves': 20,
+                'max_depth': 5,
+                'seed': 42,
+                'n_jobs': -1,
+                'verbose': -1,
+                'colsample_bytree': 0.7,
+                'subsample': 0.7,
+            }
+        else:
+            self.params = params
+        self.model = lgb.LGBMClassifier(**self.params)
+
+    def fit(self, X, y, eval_set=None):
+        """
+        Trains the model.
+        Uses early stopping if an evaluation set is provided.
+        """
+        print("Entraînement du modèle LightGBM...")
+        callbacks = [lgb.early_stopping(100, verbose=False)] if eval_set else []
+        self.model.fit(X, y, eval_set=eval_set, callbacks=callbacks)
+        print("Entraînement terminé.")
+
+    def predict_proba(self, X):
+        """
+        Predicts probabilities for the positive class.
+        """
+        return self.model.predict_proba(X)[:, 1]
+
+    def save(self, filepath):
+        """
+        Saves the trained model to a file.
+        """
+        print(f"Sauvegarde du modèle dans {filepath}")
+        joblib.dump(self.model, filepath)
+
+    @classmethod
+    def load(cls, filepath):
+        """
+        Loads a trained model from a file.
+        """
+        print(f"Chargement du modèle depuis {filepath}")
+        model_instance = cls()
+        model_instance.model = joblib.load(filepath)
+        return model_instance

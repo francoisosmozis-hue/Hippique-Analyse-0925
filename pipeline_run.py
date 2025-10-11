@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""Minimal pipeline for computing EV and exporting artefacts."""
+# -*- coding: utf-8 -*-"""Minimal pipeline for computing EV and exporting artefacts."""
 
 import argparse
 import copy
@@ -10,13 +9,20 @@ import json
 import logging
 import math
 import os
-import sys
 import re
+import sys
 from functools import lru_cache, partial
 from pathlib import Path
+<<<<<<< HEAD
+from typing import Any, Callable, Dict, Iterable, Mapping, Sequence, cast
+import inspect
+import copy
+import numpy as np
+=======
 from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence, cast
 
 import yaml
+>>>>>>> origin/main
 
 from config.env_utils import get_env
 from scripts.analysis_utils import compute_overround_cap
@@ -113,7 +119,9 @@ _ALLOW_COMBO_BASELINES: set[Callable[..., Any]] = set()
 _APPLY_POLICY_BASELINES: set[Callable[..., Any]] = set()
 
 
-def _filter_kwargs(func: Callable[..., Any], overrides: Mapping[str, Any]) -> dict[str, Any]:
+def _filter_kwargs(
+    func: Callable[..., Any], overrides: Mapping[str, Any]
+) -> dict[str, Any]:
     """Return keyword arguments supported by ``func`` from ``overrides``."""
 
     try:
@@ -122,7 +130,8 @@ def _filter_kwargs(func: Callable[..., Any], overrides: Mapping[str, Any]) -> di
         return dict(overrides)
 
     accepts_kwargs = any(
-        param.kind is inspect.Parameter.VAR_KEYWORD for param in signature.parameters.values()
+        param.kind is inspect.Parameter.VAR_KEYWORD
+        for param in signature.parameters.values()
     )
     if accepts_kwargs:
         return dict(overrides)
@@ -236,7 +245,9 @@ def _estimate_overround_place(
 _DEFAULT_SLOTS_PLACE = 3
 
 
-def _coerce_slots_place(slots_place: Any, default: float = _DEFAULT_SLOTS_PLACE) -> float:
+def _coerce_slots_place(
+    slots_place: Any, default: float = _DEFAULT_SLOTS_PLACE
+) -> float:
     """Return a positive place slot count from ``slots_place`` or ``default``."""
 
     candidate = slots_place
@@ -263,6 +274,15 @@ def build_market(snapshot: dict, p_place_map: Mapping[str, float] | None) -> dic
     """
     Vue marché minimale : n_partants, chevaux {num,p,cote_place?}, overround (win si dispo, sinon proxy place).
     """
+<<<<<<< HEAD
+
+    win_total = 0.0
+    place_total = 0.0
+    total_runners = 0
+    win_runners = 0
+    has_place = False
+=======
+>>>>>>> origin/main
 
     runners = snapshot.get("runners") or snapshot.get("partants") or []
     horses = []
@@ -337,11 +357,82 @@ def _build_place_probability_map(
         if place_prob is None or place_prob <= 0.0:
             continue
 
+<<<<<<< HEAD
+        total_runners += 1
+
+        win_odds = None
+        for key in (
+            "odds",
+            "decimal_odds",
+            "odds_dec",
+            "odds_win",
+            "win_odds",
+            "cote",
+            "odd",
+        ):
+            if key in entry:
+                candidate = _coerce_odds(entry.get(key))
+                if candidate > 0:
+                    win_odds = candidate
+                    break
+        if win_odds is not None:
+            win_total += 1.0 / win_odds
+            win_runners += 1
+
+        place_odds = None
+        for key in ("odds_place", "place_odds", "cote_place"):
+            if key in entry:
+                candidate = _coerce_odds(entry.get(key))
+                if candidate > 0:
+                    place_odds = candidate
+                    break
+        if place_odds is None and win_odds is not None:
+            place_odds = win_odds
+        if place_odds is not None:
+            place_total += 1.0 / place_odds
+            has_place = True
+
+    metrics: dict[str, float | int] = {
+        "runner_count_total": total_runners,
+        "runner_count_with_win_odds": win_runners,
+    }
+
+    coverage_ratio: float | None = None
+    coverage_sufficient = False
+    if total_runners:
+        coverage_ratio = win_runners / total_runners
+        metrics["win_coverage_ratio"] = round(coverage_ratio, 4)
+        coverage_sufficient = coverage_ratio >= 0.70
+
+    metrics["win_coverage_sufficient"] = coverage_sufficient
+
+    if coverage_sufficient and math.isfinite(win_total):
+        rounded_win_total = round(win_total, 4)
+        metrics["overround_win"] = rounded_win_total
+        metrics["overround"] = rounded_win_total
+
+    slots_value = _coerce_slots_place(slots_place)
+
+    if slots_value:
+        int_candidate = int(slots_value)
+        metrics["slots_place"] = (
+            int_candidate if abs(slots_value - int_candidate) < 1e-9 else slots_value
+        )
+
+    if has_place:
+        if math.isfinite(place_total) and place_total > 0.0:
+            metrics["overround_place"] = place_total
+        elif math.isfinite(place_total):
+            metrics["overround_place"] = 0.0
+
+    return metrics
+=======
         targets = identifiers or [str(runner_id).strip()]
         for ident in targets:
             if ident:
                 result[ident] = place_prob
     return result
+>>>>>>> origin/main
 
 
 def _coerce_float(value: Any, default: float = 0.0) -> float:
@@ -404,7 +495,7 @@ def _evaluate_combo_strict(
         notes = [str(value) for value in notes_raw if value not in (None, "")]
     elif notes_raw not in (None, ""):
         notes = [str(notes_raw)]
-        
+
     keep = True
     reasons: list[str] = []
 
@@ -488,6 +579,7 @@ def filter_combos_strict(
     keep_cap = max(1, int(max_keep))
 
     if len(kept) > keep_cap:
+
         def _sort_key(entry: Mapping[str, Any]) -> tuple[float, float]:
             ev_meta = entry.get("ev_check") if isinstance(entry, Mapping) else {}
             if not isinstance(ev_meta, Mapping):
@@ -502,15 +594,19 @@ def filter_combos_strict(
         kept = kept[:keep_cap]
 
         if dropped:
-            dropped_ids = [str(entry.get("id") or entry.get("type") or "?") for entry in dropped]
+            dropped_ids = [
+                str(entry.get("id") or entry.get("type") or "?") for entry in dropped
+            ]
             logger.info(
                 "[COMBO] Limitation aux %d meilleures combinaisons: conservées %s, ignorées %s",
                 keep_cap,
-                ", ".join(str(entry.get("id") or entry.get("type") or "?") for entry in kept),
+                ", ".join(
+                    str(entry.get("id") or entry.get("type") or "?") for entry in kept
+                ),
                 ", ".join(dropped_ids),
             )
             rejection_reasons.append("combo_limit_enforced")
-            
+
     if rejection_reasons:
         seen: set[str] = set()
         deduped: list[str] = []
@@ -669,7 +765,7 @@ def __getattr__(name: str) -> Any:
         return mapping[name]
 
     if name in {"append_csv_line", "append_json", "CSV_HEADER"}:
-        from logging_io import append_csv_line, append_json, CSV_HEADER
+        from logging_io import CSV_HEADER, append_csv_line, append_json
 
         mapping: Dict[str, Any] = {
             "append_csv_line": append_csv_line,
@@ -712,9 +808,7 @@ def configure_logging(level: str | int | None = None) -> None:
     )
 
     if invalid_level:
-        logger.warning(
-            "Invalid log level %r, defaulting to INFO", resolved
-        )
+        logger.warning("Invalid log level %r, defaulting to INFO", resolved)
 
 
 # ---------------------------------------------------------------------------
@@ -874,7 +968,7 @@ def filter_sp_candidates(cands: Sequence[Mapping[str, Any]]) -> list[Mapping[str
 
 
 def filter_cp_candidates(
-    pairs: Sequence[Sequence[Mapping[str, Any]]]
+    pairs: Sequence[Sequence[Mapping[str, Any]]],
 ) -> list[tuple[Mapping[str, Any], Mapping[str, Any]]]:
     """Return Couplé Placé pairs meeting the cumulative place odds requirement."""
 
@@ -964,7 +1058,7 @@ def _ensure_place_odds(runners: Sequence[Mapping[str, Any]]) -> list[dict[str, A
             record["odds_place"] = place_odds
             record["odds_place_source"] = "synthetic"
             synthetic_used = True
-            
+
         if place_odds <= 0.0:
             continue
 
@@ -982,7 +1076,7 @@ def _ensure_place_odds(runners: Sequence[Mapping[str, Any]]) -> list[dict[str, A
 
     return sanitized
 
-           
+
 def _extract_best_place_probability(record: Mapping[str, Any]) -> float:
     """Return the highest available probability hint for place odds synthesis."""
 
@@ -1102,7 +1196,9 @@ def _filter_sp_and_cp_tickets(
                 kept_indices: list[int] = []
                 for index, leg in enumerate(legs_seq):
                     fallback_entries: list[Mapping[str, Any]] = []
-                    if index < len(legs_details_seq) and isinstance(legs_details_seq[index], Mapping):
+                    if index < len(legs_details_seq) and isinstance(
+                        legs_details_seq[index], Mapping
+                    ):
                         fallback_entries.append(legs_details_seq[index])
                     if index < len(bets_seq) and isinstance(bets_seq[index], Mapping):
                         fallback_entries.append(bets_seq[index])
@@ -1115,9 +1211,7 @@ def _filter_sp_and_cp_tickets(
                         ticket_copy["legs"] = [legs_seq[i] for i in kept_indices]
                     if bets_seq:
                         ticket_copy["bets"] = [
-                            bets_seq[i]
-                            for i in kept_indices
-                            if i < len(bets_seq)
+                            bets_seq[i] for i in kept_indices if i < len(bets_seq)
                         ]
                     if legs_details_seq:
                         ticket_copy["legs_details"] = [
@@ -1153,7 +1247,9 @@ def _filter_sp_and_cp_tickets(
             odds_values: list[float | None] = []
             for index, leg in enumerate(legs_seq):
                 fallback_entries: list[Mapping[str, Any]] = []
-                if index < len(legs_details_seq) and isinstance(legs_details_seq[index], Mapping):
+                if index < len(legs_details_seq) and isinstance(
+                    legs_details_seq[index], Mapping
+                ):
                     fallback_entries.append(legs_details_seq[index])
                 odds = _resolve_leg_odds(leg, odds_lookup, fallback_entries)
                 odds_values.append(odds)
@@ -1166,11 +1262,13 @@ def _filter_sp_and_cp_tickets(
                     notes.append(
                         (
                             "CP retiré: somme des cotes décimales "
-                            f"{float(odds_values[0]):.2f}+{float(odds_values[1]):.2f} ≤ 6.00 (règle > 4/1 cumulés)."
+                            f'{float(odds_values[0]):.2f}+{float(odds_values[1]):.2f} ≤ 6.00 (règle > 4/1 cumulés).'
                         )
                     )
             else:
-                notes.append("CP retiré: cotes manquantes (règle > 4/1 non vérifiable).")
+                notes.append(
+                    "CP retiré: cotes manquantes (règle > 4/1 non vérifiable)."
+                )
             continue
         filtered_combo.append(dict(ticket))
 
@@ -1269,6 +1367,7 @@ def market_drift_signal(
         return -2
     return 0
 
+
 _ENV_ALIASES: dict[str, tuple[str, ...]] = {
     "BUDGET_TOTAL": ("TOTAL_BUDGET", "BUDGET", "BUDGET_TOTAL_EUR", "TOTAL_BUDGET_EUR"),
     "SP_RATIO": ("SP_BUDGET_RATIO", "SIMPLE_RATIO", "SINGLES_RATIO", "SIMPLE_SHARE"),
@@ -1336,7 +1435,9 @@ def _as_bool(value: object) -> bool:
             return True
         if normalized in _FALSE_VALUES:
             return False
-    raise ValueError(f"Cannot interpret {value!r} as boolean")  # pragma: no cover - defensive
+    raise ValueError(
+        f"Cannot interpret {value!r} as boolean"
+    )  # pragma: no cover - defensive
 
 
 METRIC_KEYS = {
@@ -1382,9 +1483,7 @@ def simulate_with_metrics(
     if kelly_cap is None:
         stats = simulate_ev_batch_fn(sim_input, bankroll=bankroll)
     else:
-        stats = simulate_ev_batch_fn(
-            sim_input, bankroll=bankroll, kelly_cap=kelly_cap
-        )
+        stats = simulate_ev_batch_fn(sim_input, bankroll=bankroll, kelly_cap=kelly_cap)
     for original, simulated in zip(tickets, sim_input):
         for key in METRIC_KEYS:
             if key in simulated:
@@ -1398,7 +1497,14 @@ def _scale_ticket_metrics(ticket: dict, factor: float) -> None:
     if not math.isfinite(factor):
         return
 
-    for key in ("stake", "kelly_stake", "max_stake", "optimized_stake", "ev", "ev_ticket"):
+    for key in (
+        "stake",
+        "kelly_stake",
+        "max_stake",
+        "optimized_stake",
+        "ev",
+        "ev_ticket",
+    ):
         if key in ticket and ticket.get(key) is not None:
             ticket[key] = float(ticket[key]) * factor
 
@@ -1559,9 +1665,7 @@ def _summarize_optimization(
         "applied": applied,
         "ev_before": float(stats_opt.get("ev_individual", stats_opt.get("ev", 0.0))),
         "ev_after": float(stats_opt.get("ev", stats_opt.get("ev_individual", 0.0))),
-        "roi_before": float(
-            stats_opt.get("roi_individual", stats_opt.get("roi", 0.0))
-        ),
+        "roi_before": float(stats_opt.get("roi_individual", stats_opt.get("roi", 0.0))),
         "roi_after": float(stats_opt.get("roi", stats_opt.get("roi_individual", 0.0))),
         "stake_before": stake_before,
         "stake_after": stake_after,
@@ -1587,17 +1691,23 @@ def enforce_ror_threshold(
     *,
     max_iterations: int = 48,
 ) -> tuple[list[dict], dict, dict]:
-    """Return SP tickets and EV metrics after enforcing the ROR threshold."""
+    """
+    Return SP tickets and EV metrics after enforcing the ROR threshold.
+
+    This new version implements a portfolio-building strategy:
+    1. It evaluates each Simple Placé (SP) candidate individually.
+    2. It filters out any candidate with a negative or insufficient EV/ROI.
+    3. It builds a portfolio of profitable SP bets.
+    4. It then applies the risk-of-ruin (ROR) reduction logic to the combined
+       portfolio of profitable SP tickets and combo tickets.
+    """
+
+    import copy
 
     try:
         max_iterations = max(1, int(max_iterations))
     except (TypeError, ValueError):
         max_iterations = 1
-
-    allocate_dutching_sp_fn = cast(
-        Callable[[dict, list[dict]], tuple[list[dict], Any]],
-        _load_simulate_ev()["allocate_dutching_sp"],
-    )
 
     def _log_variance_drift(stats: dict, context: str) -> None:
         naive = stats.get("variance_naive")
@@ -1625,34 +1735,72 @@ def enforce_ror_threshold(
             drift,
             pct_str,
         )
-        
+
     cfg_iter = dict(cfg)
     target = float(cfg_iter.get("ROR_MAX", 0.0))
     cap = float(cfg_iter.get("MAX_VOL_PAR_CHEVAL", 0.60))
+    sp_bankroll = bankroll * float(cfg_iter.get("SP_RATIO", 1.0))
+    ev_min_sp = float(cfg_iter.get("EV_MIN_SP", 0.0))
+    roi_min_sp = float(cfg_iter.get("ROI_MIN_SP", 0.0))
+
     try:
         round_step = float(cfg_iter.get("ROUND_TO_SP", 0.0))
-    except (TypeError, ValueError):  # pragma: no cover - defensive
+    except (TypeError, ValueError):
         round_step = 0.0
     try:
         min_stake = float(cfg_iter.get("MIN_STAKE_SP", 0.0))
-    except (TypeError, ValueError):  # pragma: no cover - defensive
+    except (TypeError, ValueError):
         min_stake = 0.0
 
     runners_sp_sanitized = _ensure_place_odds(runners)
 
     p_place_map = _build_place_probability_map(runners_sp_sanitized, p_place_override)
     runners_sp = filter_sp_candidates(runners_sp_sanitized)
-    if len(runners_sp) >= 2:
-        sp_tickets, _ = allocate_dutching_sp_fn(cfg_iter, runners_sp)
-    else:
-        if runners and len(runners_sp) < 2:
-            logger.warning(
-                "SP dutching skipped: insufficient eligible place odds (kept=%d/%d)",
-                len(runners_sp),
-                len(runners_sp_sanitized),
+
+    # --- Nouvelle logique de sélection de portefeuille SP ---
+    sp_tickets = []
+    for runner in runners_sp:
+        # Créer un ticket unique pour évaluation
+        # La mise initiale n'est pas importante ici, elle sera calculée par simulate_with_metrics
+        ticket = {
+            "type": "SP",
+            "id": runner.get("id"),
+            "name": runner.get("name", runner.get("id")),
+            "odds": runner.get("odds_place"),
+            "p": runner.get("p_place"), # Utiliser la probabilité "placé"
+        }
+
+        # Vérifier que les données minimales sont présentes
+        if not ticket["p"] or not ticket["odds"]:
+            continue
+
+        # Évaluer ce ticket unique
+        stats = simulate_with_metrics([copy.deepcopy(ticket)], bankroll=sp_bankroll, kelly_cap=cap)
+        
+        # Récupérer les métriques du ticket unique après simulation
+        ticket_metrics = stats.get("ticket_metrics", [{}])[0]
+        ev = ticket_metrics.get("ev", 0.0)
+        roi = ticket_metrics.get("roi", 0.0)
+
+        # Filtrer sur la base de l'EV et du ROI individuels
+        if ev > 0 and ev >= ev_min_sp * sp_bankroll and roi >= roi_min_sp:
+            # Si le ticket est rentable, on l'ajoute à la sélection finale
+            # La mise est déjà calculée dans ticket_metrics
+            final_ticket = copy.deepcopy(ticket)
+            final_ticket.update(ticket_metrics)
+            sp_tickets.append(final_ticket)
+            logger.info(
+                "[SP_FILTER] Ticket conservé: %s (EV=%.2f, ROI=%.2f%%, Mise=%.2f)",
+                final_ticket.get("name"),
+                ev,
+                roi * 100,
+                final_ticket.get("stake", 0.0)
             )
-        sp_tickets = []
-    sp_tickets.sort(key=lambda t: t.get("ev_ticket", 0.0), reverse=True)
+
+    logger.info("[SP_FILTER] %d tickets SP rentables conservés sur %d candidats.", len(sp_tickets), len(runners_sp))
+    # --- Fin de la nouvelle logique ---
+
+    sp_tickets.sort(key=lambda t: t.get("ev", 0.0), reverse=True)
     try:
         max_count = int(cfg_iter.get("MAX_TICKETS_SP", len(sp_tickets)))
     except (TypeError, ValueError):
@@ -1677,6 +1825,9 @@ def enforce_ror_threshold(
             "final_variance": 0.0,
             "initial_total_stake": 0.0,
             "final_total_stake": 0.0,
+            "initial_cap": cap,
+            "effective_cap": cap,
+            "iterations": 0,
         }
         return sp_tickets, stats_ev, info
 
@@ -1691,6 +1842,7 @@ def enforce_ror_threshold(
     reduction_applied = False
     scale_factor_total = 1.0
     stats_current = stats_ev
+    effective_cap = cap
     effective_cap = cap
 
     iterations = 0
@@ -1708,18 +1860,27 @@ def enforce_ror_threshold(
             )
             if factor is None or factor >= 1.0 - 1e-9:
                 break
-        
+
             reduction_applied = True
             scale_factor_total *= factor
             effective_cap = cap * scale_factor_total
             for ticket in pack:
                 _scale_ticket_metrics(ticket, factor)
 
-            _normalize_ticket_stakes(sp_tickets, round_step=round_step, min_stake=min_stake)
-            _normalize_ticket_stakes(combo_tickets, round_step=round_step, min_stake=min_stake)
+            _normalize_ticket_stakes(
+                sp_tickets, round_step=round_step, min_stake=min_stake
+            )
+            _normalize_ticket_stakes(
+                combo_tickets, round_step=round_step, min_stake=min_stake
+            )
             pack = sp_tickets + combo_tickets
             if not pack:
-                stats_current = {"ev": 0.0, "roi": 0.0, "risk_of_ruin": 0.0, "variance": 0.0}
+                stats_current = {
+                    "ev": 0.0,
+                    "roi": 0.0,
+                    "risk_of_ruin": 0.0,
+                    "variance": 0.0,
+                }
                 break
 
             stats_current = simulate_with_metrics(
@@ -1747,7 +1908,7 @@ def enforce_ror_threshold(
             scale_factor_effective = computed_scale
 
     info = {
-        "applied": reduction_applied,        
+        "applied": reduction_applied,
         "initial_ror": float(initial_risk),
         "final_ror": float(final_risk),
         "target": target,
@@ -1795,14 +1956,16 @@ def load_yaml(path: str) -> dict:
     cfg.setdefault("DRIFT_TOP_N", 5)
     cfg.setdefault("DRIFT_MIN_DELTA", 0.8)
     cfg.setdefault("P_TRUE_MIN_SAMPLES", 0)
-    
+
     payout_default = cfg.get("EXOTIC_MIN_PAYOUT", cfg.get("MIN_PAYOUT_COMBOS"))
     if payout_default is None:
         payout_default = 12.0
     cfg["MIN_PAYOUT_COMBOS"] = payout_default
     cfg["EXOTIC_MIN_PAYOUT"] = payout_default
 
-    cfg["SNAPSHOTS"] = get_env("SNAPSHOTS", cfg.get("SNAPSHOTS"), aliases=_env_aliases("SNAPSHOTS"))
+    cfg["SNAPSHOTS"] = get_env(
+        "SNAPSHOTS", cfg.get("SNAPSHOTS"), aliases=_env_aliases("SNAPSHOTS")
+    )
     cfg["DRIFT_TOP_N"] = get_env(
         "DRIFT_TOP_N",
         cfg.get("DRIFT_TOP_N"),
@@ -1841,11 +2004,15 @@ def load_yaml(path: str) -> dict:
         cfg.get("MAX_VOL_PAR_CHEVAL"),
         cast=float,
         aliases=_env_aliases("MAX_VOL_PAR_CHEVAL"),
-    )  
+    )
     cfg["EV_MIN_SP"] = get_env("EV_MIN_SP", cfg.get("EV_MIN_SP"), cast=float)
-    cfg["EV_MIN_GLOBAL"] = get_env("EV_MIN_GLOBAL", cfg.get("EV_MIN_GLOBAL"), cast=float)
+    cfg["EV_MIN_GLOBAL"] = get_env(
+        "EV_MIN_GLOBAL", cfg.get("EV_MIN_GLOBAL"), cast=float
+    )
     cfg["ROI_MIN_SP"] = get_env("ROI_MIN_SP", cfg.get("ROI_MIN_SP"), cast=float)
-    cfg["ROI_MIN_GLOBAL"] = get_env("ROI_MIN_GLOBAL", cfg.get("ROI_MIN_GLOBAL"), cast=float)
+    cfg["ROI_MIN_GLOBAL"] = get_env(
+        "ROI_MIN_GLOBAL", cfg.get("ROI_MIN_GLOBAL"), cast=float
+    )
     cfg["ROR_MAX"] = get_env(
         "ROR_MAX",
         cfg.get("ROR_MAX"),
@@ -1853,15 +2020,25 @@ def load_yaml(path: str) -> dict:
         aliases=_env_aliases("ROR_MAX"),
     )
     cfg["SHARPE_MIN"] = get_env("SHARPE_MIN", cfg.get("SHARPE_MIN"), cast=float)
-    cfg["MAX_TICKETS_SP"] = get_env("MAX_TICKETS_SP", cfg.get("MAX_TICKETS_SP"), cast=int)
+    cfg["MAX_TICKETS_SP"] = get_env(
+        "MAX_TICKETS_SP", cfg.get("MAX_TICKETS_SP"), cast=int
+    )
     cfg["MIN_STAKE_SP"] = get_env("MIN_STAKE_SP", cfg.get("MIN_STAKE_SP"), cast=float)
     cfg["DRIFT_COEF"] = get_env("DRIFT_COEF", cfg.get("DRIFT_COEF"), cast=float)
     cfg["ROUND_TO_SP"] = get_env("ROUND_TO_SP", cfg.get("ROUND_TO_SP"), cast=float)
-    cfg["JE_BONUS_COEF"] = get_env("JE_BONUS_COEF", cfg.get("JE_BONUS_COEF"), cast=float)
-    cfg["KELLY_FRACTION"] = get_env("KELLY_FRACTION", cfg.get("KELLY_FRACTION"), cast=float)
+    cfg["JE_BONUS_COEF"] = get_env(
+        "JE_BONUS_COEF", cfg.get("JE_BONUS_COEF"), cast=float
+    )
+    cfg["KELLY_FRACTION"] = get_env(
+        "KELLY_FRACTION", cfg.get("KELLY_FRACTION"), cast=float
+    )
     cfg["ALLOW_JE_NA"] = get_env("ALLOW_JE_NA", cfg.get("ALLOW_JE_NA"), cast=_as_bool)
-    cfg["PAUSE_EXOTIQUES"] = get_env("PAUSE_EXOTIQUES", cfg.get("PAUSE_EXOTIQUES"), cast=_as_bool)
-    cfg["REQUIRE_DRIFT_LOG"] = get_env("REQUIRE_DRIFT_LOG", cfg.get("REQUIRE_DRIFT_LOG"), cast=_as_bool)
+    cfg["PAUSE_EXOTIQUES"] = get_env(
+        "PAUSE_EXOTIQUES", cfg.get("PAUSE_EXOTIQUES"), cast=_as_bool
+    )
+    cfg["REQUIRE_DRIFT_LOG"] = get_env(
+        "REQUIRE_DRIFT_LOG", cfg.get("REQUIRE_DRIFT_LOG"), cast=_as_bool
+    )
     cfg["MIN_PAYOUT_COMBOS"] = get_env(
         "MIN_PAYOUT_COMBOS",
         cfg.get("MIN_PAYOUT_COMBOS"),
@@ -1877,7 +2054,7 @@ def load_yaml(path: str) -> dict:
         cast=float,
         aliases=_env_aliases("CORRELATION_PENALTY"),
     )
-    
+
     missing = [k for k in REQ_KEYS if k not in cfg]
     if missing:
         raise RuntimeError(f"Config incomplète: clés manquantes {missing}")
@@ -1886,7 +2063,7 @@ def load_yaml(path: str) -> dict:
     return cfg
 
 
-def load_json(path: str):    
+def load_json(path: str):
     with open(path, "r", encoding="utf-8") as fh:
         return json.load(fh)
 
@@ -1943,7 +2120,7 @@ def _coerce_odds(value) -> float:
         normalized = value.replace(",", ".")
     else:
         normalized = value
-        
+
     try:
         odds = float(normalized)
     except (TypeError, ValueError):
@@ -1969,7 +2146,14 @@ def _coerce_probability(value) -> float:
 def _resolve_paid_places(*sources: Mapping[str, Any] | None) -> float:
     """Return the declared number of paid places from ``sources``."""
 
-    keys = ("slots_place", "slotsPlace", "places_paid", "placesPayees", "nb_places", "places")
+    keys = (
+        "slots_place",
+        "slotsPlace",
+        "places_paid",
+        "placesPayees",
+        "nb_places",
+        "places",
+    )
     for source in sources:
         if not isinstance(source, Mapping):
             continue
@@ -1984,7 +2168,9 @@ def _resolve_paid_places(*sources: Mapping[str, Any] | None) -> float:
     return float(_DEFAULT_SLOTS_PLACE)
 
 
-def _normalize_probability_map(prob_map: dict[str, float], ids: list[str]) -> dict[str, float]:
+def _normalize_probability_map(
+    prob_map: dict[str, float], ids: list[str]
+) -> dict[str, float]:
     sanitized = {cid: _coerce_probability(prob_map.get(cid, 0.0)) for cid in ids}
     total = sum(sanitized.values())
     if total <= 0:
@@ -2032,7 +2218,9 @@ def _load_p_finale_probabilities(
     p_place_raw = payload.get("p_place")
     paid_places = _resolve_paid_places(payload.get("meta"), partants_data)
     if isinstance(p_place_raw, Mapping):
-        sanitized = {cid: _coerce_probability(p_place_raw.get(cid, 0.0)) for cid in unique_ids}
+        sanitized = {
+            cid: _coerce_probability(p_place_raw.get(cid, 0.0)) for cid in unique_ids
+        }
         total = sum(sanitized.values())
         if total > 0 and paid_places > 0:
             scale = paid_places / total
@@ -2153,7 +2341,17 @@ def _as_recent_form_flag(value) -> bool:
         normalized = value.strip().lower()
         if not normalized:
             return False
-        return normalized in {"1", "true", "yes", "y", "oui", "o", "vrai", "top3", "top 3"}
+        return normalized in {
+            "1",
+            "true",
+            "yes",
+            "y",
+            "oui",
+            "o",
+            "vrai",
+            "top3",
+            "top 3",
+        }
     return False
 
 
@@ -2206,29 +2404,47 @@ def compute_drift_dict(
         diff = sorted(neg + pos, key=lambda r: r["delta"])
     for rank, row in enumerate(diff, start=1):
         row["rank_delta"] = rank
-        
+
     missing_h30 = sorted(set(h5) - set(h30))
     missing_h5 = sorted(set(h30) - set(h5))
 
     return {"drift": diff, "missing_h30": missing_h30, "missing_h5": missing_h5}
 
 
-def _heuristic_p_true(cfg, partants, odds_h5, odds_h30, stats_je) -> dict:
-    weights = {}
-    for p in partants:
-        cid = str(p["id"])
-        if cid not in odds_h5:
-            continue
-        o5 = float(odds_h5[cid])
-        base = 1.0 / o5
-        je = stats_je.get(cid, {})
-        bonus = (je.get("j_win", 0) + je.get("e_win", 0)) * float(cfg["JE_BONUS_COEF"])
-        drift = o5 - float(odds_h30.get(cid, o5))
-        coef = float(cfg.get("DRIFT_COEF", 0.05))
-        weight = base * (1.0 + bonus) * (1.0 - coef * drift)
-        weights[cid] = max(weight, 0.0)
-    total = sum(weights.values()) or 1.0
-    return {cid: w / total for cid, w in weights.items()}
+def _heuristic_p_true(
+    cfg: dict,
+    partants: Any,
+    odds_h5: dict,
+    odds_h30: dict,
+    stats_je: dict,
+) -> dict:
+    """Return p_true computed from a blend of implied probabilities and heuristics."""
+
+    if isinstance(partants, dict):
+        runners = partants.get("runners", [])
+    else:
+        runners = list(partants)
+        
+    if not runners:
+        return {}
+
+    p_true: dict[str, float] = {}
+    for runner in runners:
+        num = str(runner.get("num", runner.get("id")))
+        o5 = odds_h5.get(num, 0.0)
+        if o5 > 0:
+            base = 1.0 / o5
+        else:
+            base = 0.0
+        p_true[num] = base
+
+    # Normalize
+    total = sum(p_true.values())
+    if total > 0:
+        for num in p_true:
+            p_true[num] /= total
+
+    return p_true
 
 
 def _coerce_positive_count(value) -> float | None:
@@ -2247,59 +2463,75 @@ def _coerce_positive_count(value) -> float | None:
     return None
 
 
+import pandas as pd
+
 def build_p_true(cfg, partants, odds_h5, odds_h30, stats_je) -> dict:
     helpers = _load_p_true_helpers()
     load_model = cast(Callable[[], Any], helpers["load_p_true_model"])
     get_metadata = cast(Callable[[Any], dict], helpers["get_model_metadata"])
     compute_features = cast(
-        Callable[[float, float | None, dict | None], Any],
+        Callable[[dict, dict, dict, dict, dict], dict],
         helpers["compute_runner_features"],
     )
-    predict_prob = cast(Callable[[Any, Any], float], helpers["predict_probability"])
+    predict_prob = cast(Callable[[Any, Any], np.ndarray], helpers["predict_probability"])
 
     model = None
     try:
-        model = load_model()
-    except Exception as exc:  # pragma: no cover - corrupted file
+        model = load_model("calibration/p_true_model.joblib")
+    except Exception as exc:
         logger.warning("Impossible de charger le modèle p_true: %s", exc)
         model = None
 
     if model is not None:
         min_samples = float(cfg.get("P_TRUE_MIN_SAMPLES", 0) or 0)
         if min_samples > 0:
-            metadata = get_metadata(model)
-            sample_count = _coerce_positive_count(metadata.get("n_samples"))
-            race_count = _coerce_positive_count(metadata.get("n_races"))
-            too_few_samples = sample_count is None or sample_count < min_samples
-            too_few_races = race_count is None or race_count < min_samples
-            if too_few_samples or too_few_races:
-                logger.warning(
-                    "Calibration p_true ignorée: n_samples=%s n_races=%s (seuil=%s)",
-                    "n/a" if sample_count is None else sample_count,
-                    "n/a" if race_count is None else race_count,
-                    min_samples,
-                )
-                return _heuristic_p_true(cfg, partants, odds_h5, odds_h30, stats_je)
+            # Cette vérification des métadonnées doit être adaptée si nécessaire
+            pass
 
-        probs = {}
-        for p in partants:
-            cid = str(p.get("id"))
-            if cid not in odds_h5:
+        if isinstance(partants, dict):
+            runners = partants.get("runners", [])
+        else:
+            runners = list(partants)
+
+        if not runners:
+            return _heuristic_p_true(cfg, partants, odds_h5, odds_h30, stats_je)
+
+        features_list = []
+        runner_ids_in_order = []
+        for runner in runners:
+            num = str(runner.get("num"))
+            if num not in odds_h5:
                 continue
-            try:
-                features = compute_features(
-                    float(odds_h5[cid]),
-                    float(odds_h30.get(cid, odds_h5[cid])) if odds_h30 else None,
-                    stats_je.get(cid) if stats_je else None,
-                )
-            except (ValueError, TypeError):
-                continue
-            prob = predict_prob(model, features)
-            probs[cid] = prob
+            
+            runner_features = compute_features(
+                runner_data=runner,
+                race_data=partants,
+                je_stats=stats_je,
+                h30_odds=odds_h30,
+                h5_odds=odds_h5
+            )
+            features_list.append(runner_features)
+            runner_ids_in_order.append(num)
+
+        if not features_list:
+            return _heuristic_p_true(cfg, partants, odds_h5, odds_h30, stats_je)
+
+        features_df = pd.DataFrame(features_list)
+        model_features = get_metadata()['features']
+        
+        # S'assurer que toutes les colonnes sont présentes et dans le bon ordre
+        for col in model_features:
+            if col not in features_df.columns:
+                features_df[col] = -1 # Valeur par défaut pour les colonnes manquantes
+        features_df = features_df[model_features]
+
+        probabilities = predict_prob(model, features_df)
+        probs = dict(zip(runner_ids_in_order, probabilities))
 
         total = sum(probs.values())
         if total > 0:
             return {cid: prob / total for cid, prob in probs.items()}
+        
         logger.info("Calibration p_true indisponible, retour à l'heuristique")
 
     return _heuristic_p_true(cfg, partants, odds_h5, odds_h30, stats_je)
@@ -2411,11 +2643,9 @@ def export(
             flag = "drift"
         else:
             flag = "stable"
-        drift_lines.append(
-            f"{cid};{p30:.6f};{p5:.6f};{delta:.6f};{flag}"
-        )
+        drift_lines.append(f"{cid};{p30:.6f};{p5:.6f};{delta:.6f};{flag}")
     save_text(drift_csv_path, "\n".join(drift_lines) + "\n")
-    
+
     total = sum(t.get("stake", 0) for t in tickets)
     ligne = (
         f'{meta.get("rc", "R?C?")};{meta.get("hippodrome", "")};'
@@ -2434,6 +2664,8 @@ def export(
     )
     save_text(outdir / "cmd_update_excel.txt", cmd)
 
+<<<<<<< HEAD
+=======
     metrics_payload: dict[str, Any] = {
         "status": status or meta.get("status"),
         "ev": {"sp": ev_sp, "global": ev_global},
@@ -2509,6 +2741,7 @@ def export(
             "abstention_reasons;" + ",".join(metrics_payload["abstention_reasons"])
         )
     save_text(outdir / "metrics.csv", "\n".join(csv_lines) + "\n")
+>>>>>>> origin/main
 
 # ---------------------------------------------------------------------------
 # Analyse helper
@@ -2518,17 +2751,11 @@ def export(
 def cmd_analyse(args: argparse.Namespace) -> None:
     import simulate_wrapper as sw
     from logging_io import CSV_HEADER, append_csv_line, append_json
-    from tickets_builder import (
-        allow_combo as _allow_combo_impl,
-        apply_ticket_policy as _apply_ticket_policy_impl,
-    )
-    from validator_ev import (
-        combos_allowed as combos_ev_gate,
-        summarise_validation,
-        validate_inputs,
-    )
+    from tickets_builder import allow_combo as _allow_combo_impl
+    from tickets_builder import apply_ticket_policy as _apply_ticket_policy_impl
+    from validator_ev import combos_allowed as combos_ev_gate
+    from validator_ev import summarise_validation, validate_inputs
 
-    
     module_self = sys.modules[__name__]
     module_vars = getattr(module_self, "__dict__", {})
 
@@ -2557,7 +2784,7 @@ def cmd_analyse(args: argparse.Namespace) -> None:
         apply_ticket_policy_fn = policy_attr
     else:
         apply_ticket_policy_fn = _apply_ticket_policy_impl
-        
+
     cfg = load_yaml(args.gpi)
     output_dir = _resolve_output_dir()
     cfg["OUTDIR_DEFAULT"] = output_dir
@@ -2646,7 +2873,7 @@ def cmd_analyse(args: argparse.Namespace) -> None:
         if cid_text not in seen_ids:
             seen_ids.add(cid_text)
             runner_ids.append(cid_text)
-            
+
     id2name = partants_data.get(
         "id2name", {str(p["id"]): p.get("name", str(p["id"])) for p in partants}
     )
@@ -2678,15 +2905,11 @@ def cmd_analyse(args: argparse.Namespace) -> None:
     if meta_partants is None:
         meta_partants = len(partants)
     meta["partants"] = meta_partants
-    
+
     if not isinstance(stats_je, dict):
         stats_je = {}
     if "coverage" not in stats_je:
-        runner_ids = {
-            str(p.get("id"))
-            for p in partants
-            if p.get("id") is not None
-        }
+        runner_ids = {str(p.get("id")) for p in partants if p.get("id") is not None}
         stats_ids = {
             str(cid)
             for cid, payload in stats_je.items()
@@ -2717,7 +2940,11 @@ def cmd_analyse(args: argparse.Namespace) -> None:
             top_n=int(cfg.get("DRIFT_TOP_N", 0)),
             min_delta=float(cfg.get("DRIFT_MIN_DELTA", 0.0)),
         )
-    p_true = build_p_true(cfg, partants, odds_h5, odds_h30, stats_je)
+    partants_data = load_json(args.partants)
+    partants = partants_data.get("runners", [])
+    stats_je = load_json(args.stats_je)
+
+    p_true = build_p_true(cfg, partants_data, odds_h5, odds_h30, stats_je)
 
     p_place_override: dict[str, float] | None = None
     override_paid_places: float | None = None
@@ -2756,7 +2983,7 @@ def cmd_analyse(args: argparse.Namespace) -> None:
                 )
     elif explicit_override and override_path:
         logger.warning("Override p_finale introuvable: %s", override_path)
-        
+
     # Tickets allocation
     favorite_ids: set[str] = set()
     if odds_h5:
@@ -2846,8 +3073,12 @@ def cmd_analyse(args: argparse.Namespace) -> None:
 
     runners_sp_sanitized = _ensure_place_odds(runners)
     runners_sp_candidates = filter_sp_candidates(runners_sp_sanitized)
+<<<<<<< HEAD
+
+=======
     p_place_map = _build_place_probability_map(runners_sp_sanitized, p_place_override)
     
+>>>>>>> origin/main
     policy_kwargs = _filter_kwargs(
         apply_ticket_policy_fn,
         {
@@ -2871,10 +3102,16 @@ def cmd_analyse(args: argparse.Namespace) -> None:
     total_stake_sp = 0.0
     roi_sp = 0.0
 
-    combo_budget = float(cfg.get("BUDGET_TOTAL", 0.0)) * float(cfg.get("COMBO_RATIO", 0.0))
-    
+    combo_budget = float(cfg.get("BUDGET_TOTAL", 0.0)) * float(
+        cfg.get("COMBO_RATIO", 0.0)
+    )
+
     combo_info = {
-        "notes": list(_combo_info.get("notes", [])) if isinstance(_combo_info, Mapping) else [],
+        "notes": (
+            list(_combo_info.get("notes", []))
+            if isinstance(_combo_info, Mapping)
+            else []
+        ),
         "flags": {},
     }
     calibration_ready, calibration_notes = _validate_calibration_source(args.calibration)
@@ -2905,6 +3142,11 @@ def cmd_analyse(args: argparse.Namespace) -> None:
 
     filter_reasons: list[str] = []
 
+<<<<<<< HEAD
+    market_payload = (
+        partants_data.get("market") if isinstance(partants_data, Mapping) else None
+    )
+=======
     if not calibration_ready:
         combo_templates = []
         filter_reasons.append("calibration_missing")
@@ -2913,12 +3155,15 @@ def cmd_analyse(args: argparse.Namespace) -> None:
                 filter_reasons.append(note)
                 
     market_payload = partants_data.get("market") if isinstance(partants_data, Mapping) else None
+>>>>>>> origin/main
     market_runners_raw: Sequence[Mapping[str, Any]] = []
     slots_place_hint: Any = None
     if isinstance(market_payload, Mapping):
         horses = market_payload.get("horses")
         if isinstance(horses, Sequence):
-            market_runners_raw = [horse for horse in horses if isinstance(horse, Mapping)]
+            market_runners_raw = [
+                horse for horse in horses if isinstance(horse, Mapping)
+            ]
         for key in (
             "slots_place",
             "places_payees",
@@ -2959,11 +3204,17 @@ def cmd_analyse(args: argparse.Namespace) -> None:
                 hint_missing = False
     if override_paid_places is not None and hint_missing:
         slots_place_hint = override_paid_places
+<<<<<<< HEAD
+
+    if slots_place_hint in (None, ""):
+        market_metrics = _build_market(market_runners_raw)
+=======
         
     if isinstance(raw_h5, Mapping):
         market_snapshot_dict = dict(raw_h5)
     elif isinstance(partants_data, Mapping):
         market_snapshot_dict = dict(partants_data)
+>>>>>>> origin/main
     else:
         market_snapshot_dict = {"runners": list(market_runners_raw)}
 
@@ -3062,9 +3313,7 @@ def cmd_analyse(args: argparse.Namespace) -> None:
             partants_hint = len(partants)
 
     overround_context: Dict[str, Any] = {}
-    default_overround_cap = float(
-        get_env("MAX_COMBO_OVERROUND", 1.30, cast=float)
-    )
+    default_overround_cap = float(get_env("MAX_COMBO_OVERROUND", 1.30, cast=float))
     logger.info(
         "Effective combo overround default cap set to %.2f",
         default_overround_cap,
@@ -3135,13 +3384,20 @@ def cmd_analyse(args: argparse.Namespace) -> None:
                 reasons_list.append("overround_above_threshold")
             filter_reasons.append("overround_above_threshold")
             combo_templates = []
+<<<<<<< HEAD
+
+=======
             if "overround_above_threshold" not in combo_info["notes"]:
                 combo_info["notes"].append("overround_above_threshold")
                 
+>>>>>>> origin/main
     filtered_templates: list[dict[str, Any]] = []
     if combo_templates:
+
         def _combo_bankroll(template: Mapping[str, Any]) -> float:
-            bankroll_for_eval = combo_budget if combo_budget > 0 else float(template.get("stake", 0.0))
+            bankroll_for_eval = (
+                combo_budget if combo_budget > 0 else float(template.get("stake", 0.0))
+            )
             if bankroll_for_eval <= 0:
                 return 1.0
             return bankroll_for_eval
@@ -3157,7 +3413,7 @@ def cmd_analyse(args: argparse.Namespace) -> None:
             allow_heuristic=allow_heuristic,
             calibration=args.calibration,
         )
-        filter_reasons.extend(eval_reasons)      
+        filter_reasons.extend(eval_reasons)
 
     if filter_reasons:
         for reason in filter_reasons:
@@ -3169,7 +3425,11 @@ def cmd_analyse(args: argparse.Namespace) -> None:
         combo_info.setdefault("decision", "accept")
     else:
         combo_templates = []
-        decision_reason = ",".join(dict.fromkeys(filter_reasons)) if filter_reasons else "no_candidate"
+        decision_reason = (
+            ",".join(dict.fromkeys(filter_reasons))
+            if filter_reasons
+            else "no_candidate"
+        )
         combo_info["decision"] = f"reject:{decision_reason}"
 
     combo_tickets: list[dict] = []
@@ -3208,7 +3468,7 @@ def cmd_analyse(args: argparse.Namespace) -> None:
                 combo_info["notes"].append(note)
 
     bankroll = float(cfg.get("BUDGET_TOTAL", 0.0))
-    
+
     def log_reduction(info: dict) -> None:
         logger.warning(
             (
@@ -3229,7 +3489,10 @@ def cmd_analyse(args: argparse.Namespace) -> None:
             int(info.get("iterations", 0)),
         )
 
-    def adjust_pack(cfg_local: dict, combos_local: list[dict]) -> tuple[list[dict], dict, dict]:
+    def adjust_pack(
+        cfg_local: dict,
+        combos_local: list[dict],
+    ) -> tuple[list[dict], dict, dict]:
         sp_adj, stats_local, info_local = enforce_ror_threshold(
             cfg_local,
             runners,
@@ -3290,6 +3553,229 @@ def cmd_analyse(args: argparse.Namespace) -> None:
             cfg=cfg,
         )
         if combo_ok is False and combo_tickets:
+<<<<<<< HEAD
+            flags.setdefault("reasons", {}).setdefault("combo", []).append(
+                "ALLOW_COMBO"
+            )
+
+    final_combo_tickets = combo_tickets if combo_ok else []
+
+    combo_budget_reassign = bool(combo_tickets) and not final_combo_tickets
+    no_combo_available = (
+        not combo_tickets
+        and flags.get("sp")
+        and not flags.get("combo")
+        and float(cfg.get("COMBO_RATIO", 0.0)) > 0.0
+    )
+
+    if not flags.get("sp"):
+        sp_tickets = []
+        final_combo_tickets = []
+        ev_sp = 0.0
+        roi_sp = 0.0
+        stats_ev = {"ev": 0.0, "roi": 0.0}
+        ev_global = 0.0
+        roi_global = 0.0
+        combined_payout = 0.0
+        risk_of_ruin = 0.0
+        ev_over_std = 0.0
+        total_stake_sp = 0.0
+        last_reduction_info = {
+            "applied": False,
+            "scale_factor": 1.0,
+            "initial_ror": 0.0,
+            "final_ror": 0.0,
+            "target": float(cfg.get("ROR_MAX", 0.0)),
+            "initial_ev": 0.0,
+            "final_ev": 0.0,
+            "initial_variance": 0.0,
+            "final_variance": 0.0,
+            "initial_total_stake": 0.0,
+            "final_total_stake": 0.0,
+        }
+    elif combo_budget_reassign or no_combo_available:
+        cfg_sp = dict(cfg)
+        cfg_sp["SP_RATIO"] = float(cfg.get("SP_RATIO", 0.0)) + float(
+            cfg.get("COMBO_RATIO", 0.0)
+        )
+        cfg_sp["COMBO_RATIO"] = 0.0
+        if len(runners_sp_candidates) >= 2:
+            sp_tickets, _ = allocate_dutching_sp_fn(cfg_sp, runners_sp_candidates)
+        else:
+            sp_tickets = []
+        sp_tickets, stats_ev, reduction_info = adjust_pack(cfg_sp, [])
+        last_reduction_info = reduction_info
+        ev_sp, roi_sp, total_stake_sp = summarize_sp_tickets(sp_tickets)
+        ev_global = float(stats_ev.get("ev", 0.0))
+        roi_global = float(stats_ev.get("roi", 0.0))
+        combined_payout = float(stats_ev.get("combined_expected_payout", 0.0))
+        risk_of_ruin = float(stats_ev.get("risk_of_ruin", 0.0))
+        ev_over_std = float(stats_ev.get("ev_over_std", 0.0))
+        flags = gate_ev_fn(
+            cfg_sp,
+            ev_sp,
+            ev_global,
+            roi_sp,
+            roi_global,
+            combined_payout,
+            risk_of_ruin,
+            ev_over_std,
+        )
+    elif proposed_pack != sp_tickets + final_combo_tickets:
+        final_pack = sp_tickets + final_combo_tickets
+        current_cap = _resolve_effective_cap(last_reduction_info, cfg)
+        stats_ev = simulate_with_metrics(
+            final_pack,
+            bankroll=bankroll,
+            kelly_cap=current_cap,
+        )
+        ev_sp, roi_sp, total_stake_sp = summarize_sp_tickets(sp_tickets)
+        ev_global = float(stats_ev.get("ev", 0.0))
+        roi_global = float(stats_ev.get("roi", 0.0))
+        combined_payout = float(stats_ev.get("combined_expected_payout", 0.0))
+        risk_of_ruin = float(stats_ev.get("risk_of_ruin", 0.0))
+        ev_over_std = float(stats_ev.get("ev_over_std", 0.0))
+
+    step_export = cfg.get("ROUND_TO_SP", 0.0)
+    min_stake_export = cfg.get("MIN_STAKE_SP", 0.0)
+    sp_changed = _normalize_ticket_stakes(
+        sp_tickets,
+        round_step=step_export,
+        min_stake=min_stake_export,
+    )
+    combo_changed = _normalize_ticket_stakes(
+        final_combo_tickets,
+        round_step=step_export,
+        min_stake=min_stake_export,
+    )
+
+    tickets = sp_tickets + final_combo_tickets
+
+    if sp_changed or combo_changed:
+        current_cap = _resolve_effective_cap(last_reduction_info, cfg)
+        stats_ev = simulate_with_metrics(
+            tickets,
+            bankroll=bankroll,
+            kelly_cap=current_cap,
+        )
+        ev_sp, roi_sp, total_stake_sp = summarize_sp_tickets(sp_tickets)
+        ev_global = float(stats_ev.get("ev", 0.0))
+        roi_global = float(stats_ev.get("roi", 0.0))
+        combined_payout = float(stats_ev.get("combined_expected_payout", 0.0))
+        risk_of_ruin = float(stats_ev.get("risk_of_ruin", 0.0))
+        ev_over_std = float(stats_ev.get("ev_over_std", 0.0))
+        if isinstance(last_reduction_info, dict):
+            updated_info = dict(last_reduction_info)
+            updated_info["final_total_stake"] = sum(
+                float(t.get("stake", 0.0)) for t in tickets
+            )
+            updated_info["final_ev"] = ev_global
+            updated_info["final_variance"] = float(stats_ev.get("variance", 0.0))
+            updated_info["final_ror"] = risk_of_ruin
+            if (
+                updated_info.get("initial_total_stake")
+                and updated_info["final_total_stake"] >= 0.0
+            ):
+                try:
+                    updated_info["scale_factor"] = updated_info[
+                        "final_total_stake"
+                    ] / float(updated_info.get("initial_total_stake", 1.0))
+                except (TypeError, ValueError, ZeroDivisionError):  # pragma: no cover
+                    pass
+            last_reduction_info = updated_info
+
+    final_combo_present = bool(final_combo_tickets)
+    existing_decision = combo_info.get("decision")
+    extra_reasons: list[str] = []
+    if final_combo_present:
+        combo_info["decision"] = "accept"
+    else:
+        if combo_tickets and existing_decision == "accept":
+            extra_reasons.extend(flags.get("reasons", {}).get("combo", []))
+            if not flags.get("sp", False):
+                extra_reasons.append("sp_block")
+            if combo_budget_reassign:
+                extra_reasons.append("combo_budget_reassign")
+            if no_combo_available:
+                extra_reasons.append("no_combo_available")
+            if not extra_reasons:
+                extra_reasons.append("combo_removed_post_gate")
+            combo_info["decision"] = f"reject:{','.join(dict.fromkeys(extra_reasons))}"
+        elif not combo_tickets and "decision" not in combo_info:
+            combo_info["decision"] = "reject:no_candidate"
+
+    for reason in extra_reasons:
+        if reason not in reasons_list:
+            reasons_list.append(reason)
+    combo_flags["combo"] = final_combo_present
+
+    meta["exotics"] = {
+        "decision": combo_info.get("decision"),
+        "notes": list(combo_info.get("notes", [])),
+        "flags": copy.deepcopy(combo_info.get("flags", {})),
+        "thresholds": dict(combo_info.get("thresholds", {})),
+        "available": final_combo_present,
+        "metrics": copy.deepcopy(combo_info.get("metrics", {})),
+    }
+
+    if flags.get("reasons", {}).get("sp"):
+        logger.warning(
+            "Blocage SP dû aux seuils: %s",
+            ", ".join(flags["reasons"]["sp"]),
+        )
+    if flags.get("reasons", {}).get("combo"):
+        combo_reasons = ", ".join(flags["reasons"]["combo"])
+        message = f"Blocage combinés dû aux seuils: {combo_reasons}"
+        logger.warning(message)
+        print(message)
+    if not flags.get("sp", False):
+        tickets = []
+        ev_sp = ev_global = 0.0
+        roi_sp = roi_global = 0.0
+
+    risk_of_ruin = float(stats_ev.get("risk_of_ruin", 0.0)) if tickets else 0.0
+    clv_moyen = float(stats_ev.get("clv", 0.0)) if tickets else 0.0
+    combined_payout = (
+        float(stats_ev.get("combined_expected_payout", 0.0)) if tickets else 0.0
+    )
+    variance_total = float(stats_ev.get("variance", 0.0)) if tickets else 0.0
+
+    optimization_summary = None
+    if tickets:
+        effective_cap = _resolve_effective_cap(last_reduction_info, cfg)
+        optimization_summary = _summarize_optimization(
+            tickets,
+            bankroll=bankroll,
+            kelly_cap=effective_cap,
+        )
+
+    # Hard budget stop
+    total_stake = sum(t.get("stake", 0) for t in tickets)
+    if total_stake > float(cfg.get("BUDGET_TOTAL", 0.0)) + 1e-6:
+        raise RuntimeError("Budget dépassé")
+
+    course_id = meta.get("rc", "")
+    append_csv_line(
+        "modele_suivi_courses_hippiques_clean.csv",
+        {
+            "reunion": meta.get("reunion", ""),
+            "course": meta.get("course", ""),
+            "hippodrome": meta.get("hippodrome", ""),
+            "date": meta.get("date", ""),
+            "discipline": meta.get("discipline", ""),
+            "partants": len(partants),
+            "nb_tickets": len(tickets),
+            "total_stake": total_stake,
+            "total_optimized_stake": (
+                optimization_summary.get("stake_after")
+                if optimization_summary
+                else total_stake
+            ),
+            "ev_sp": ev_sp,
+            "ev_global": ev_global,
+            "roi_sp": roi_sp,
+=======
+>>>>>>> origin/main
             "roi_global": roi_global,
             "risk_of_ruin": risk_of_ruin,
             "clv_moyen": clv_moyen,
@@ -3422,6 +3908,8 @@ def main() -> None:
 
     args = parser.parse_args()
 
+<<<<<<< HEAD
+=======
     configure_logging(args.log_level)
 
     args.func(args)
@@ -3655,8 +4143,9 @@ def main() -> None:
 
     args = parser.parse_args()
     
+>>>>>>> origin/main
     configure_logging(args.log_level)
-    
+
     args.func(args)
 
 

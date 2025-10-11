@@ -20,6 +20,7 @@ def test_ev_global_below_default_threshold(monkeypatch):
     with pytest.raises(ValidationError):
         validate_ev(ev_sp=0.5, ev_global=0.34, need_combo=True)
 
+
 def test_validate_policy_roi_below_threshold():
     with pytest.raises(ValidationError):
         validate_policy(ev_global=1.0, roi_global=0.24, min_ev=0.0, min_roi=0.25)

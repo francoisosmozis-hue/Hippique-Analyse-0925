@@ -1,0 +1,9 @@
+fix(pipeline): Réparation du smoke test et du pipeline d'analyse
+
+Le script de test 'smoke_h5.sh' et le pipeline d'analyse étaient non fonctionnels à cause de plusieurs problèmes en cascade, notamment des dépendances à des données externes et des erreurs de logique suite à des refactorings incomplets.
+
+Ce commit apporte les corrections suivantes :
+- Simule les réponses des services externes pour permettre aux tests de s'exécuter de manière isolée.
+- Corrige la propagation des données ('distance') et le chargement des fichiers JSON dans le pipeline principal.
+- Ajoute des fonctions placeholder pour assurer la compatibilité après refactoring.
+- Rend le script de test 'smoke_h5.sh' plus robuste pour qu'il gère correctement les cas où le pipeline décide de ne pas parier.

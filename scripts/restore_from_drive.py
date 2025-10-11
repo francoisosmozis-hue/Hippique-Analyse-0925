@@ -2,6 +2,14 @@
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+# Add project root to sys.path to allow importing project modules.
+project_root = Path(__file__).resolve().parents[1]
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+
 import argparse
 import os
 from pathlib import Path
@@ -11,6 +19,7 @@ from scripts.drive_sync import _build_service, build_remote_path, download_file
 
 BUCKET_ENV = "GCS_BUCKET"
 PREFIX_ENV = "GCS_PREFIX"
+
 
 def _list_blobs(
     service, bucket: str, base_prefix: str, date: str, prefix: str

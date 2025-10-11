@@ -35,7 +35,9 @@ def _invoke(module, monkeypatch, args):
     module.main()
 
 
-def test_single_race_h5_creates_snapshot_and_analysis(tmp_path, monkeypatch, runner_chain_module):
+def test_single_race_h5_creates_snapshot_and_analysis(
+    tmp_path, monkeypatch, runner_chain_module
+):
     _stub_analysis(monkeypatch, runner_chain_module)
 
     snap_dir = tmp_path / "snapshots"
@@ -67,7 +69,9 @@ def test_single_race_h5_creates_snapshot_and_analysis(tmp_path, monkeypatch, run
     assert (analysis_dir / "R1C2" / "analysis.json").exists()
 
 
-def test_missing_calibration_disables_combos(tmp_path, monkeypatch, runner_chain_module):
+def test_missing_calibration_disables_combos(
+    tmp_path, monkeypatch, runner_chain_module
+):
     calls: list[tuple] = []
 
     def fake_simulation(*args, **kwargs):
@@ -112,7 +116,9 @@ def test_missing_calibration_disables_combos(tmp_path, monkeypatch, runner_chain
     assert not calls
 
 
-def test_single_race_h30_only_writes_snapshot(tmp_path, monkeypatch, runner_chain_module):
+def test_single_race_h30_only_writes_snapshot(
+    tmp_path, monkeypatch, runner_chain_module
+):
     _stub_analysis(monkeypatch, runner_chain_module)
 
     snap_dir = tmp_path / "snapshots"
@@ -164,7 +170,7 @@ def test_planning_mode_remains_functional(tmp_path, monkeypatch, runner_chain_mo
         }
     ]
     planning_path.write_text(json.dumps(planning_payload), encoding="utf-8")
-    
+
     class FixedDateTime(dt.datetime):
         @classmethod
         def now(cls, tz=None):  # type: ignore[override]
@@ -221,7 +227,6 @@ def test_planning_mode_errors_when_file_missing(
         "python scripts/online_fetch_zeturf.py --mode planning --out "
         "data/planning/<date>.json" in err
     )
-
 
 
 def test_invalid_cli_payload_exits(monkeypatch, runner_chain_module, caplog, tmp_path):

@@ -5,14 +5,15 @@ SP dutching groups and combined bets via a caller-provided simulation function
 (``simulate_fn``).  Stakes are capped to a fraction of the Kelly criterion
 recommended stake (60% by default).
 """
+
 from __future__ import annotations
 
-from collections import defaultdict
-from collections.abc import Hashable, Mapping, Sequence
 import itertools
 import logging
 import math
 import sys
+from collections import defaultdict
+from collections.abc import Hashable, Mapping, Sequence
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 try:  # pragma: no cover - SciPy is optional
@@ -58,6 +59,7 @@ def _kelly_fraction(p: float, odds: float) -> float:
 
     return kelly_fraction(p, odds, lam=1.0, cap=1.0)
 
+
 def _apply_dutching(tickets: Iterable[Dict[str, Any]]) -> None:
     """Normalise stakes inside each dutching group so that profit is identical.
 
@@ -84,7 +86,7 @@ def _apply_dutching(tickets: Iterable[Dict[str, Any]]) -> None:
         weight_sum = sum(weights)
         for t, w in zip(valid_tickets, weights):
             t["stake"] = total * w / weight_sum
-            
+
 
 def _ticket_label(ticket: Mapping[str, Any], index: int) -> str:
     """Return a readable identifier for ``ticket`` when logging covariance."""
@@ -131,7 +133,9 @@ def _prepare_legs_for_covariance(
     return tuple(legs)
 
 
-def _ticket_dependency_keys(ticket: Mapping[str, Any], legs: Sequence[Any]) -> frozenset[str]:
+def _ticket_dependency_keys(
+    ticket: Mapping[str, Any], legs: Sequence[Any]
+) -> frozenset[str]:
     """Return dependency identifiers extracted from ``ticket`` and ``legs``."""
 
     exposures: set[str] = set()
@@ -254,7 +258,9 @@ def _estimate_joint_probability(
     return max(independence, joint)
 
 
-def _covariance_from_joint(info_i: Dict[str, Any], info_j: Dict[str, Any], joint: float) -> float:
+def _covariance_from_joint(
+    info_i: Dict[str, Any], info_j: Dict[str, Any], joint: float
+) -> float:
     win_i = info_i["win_value"]
     loss_i = info_i["loss_value"]
     win_j = info_j["win_value"]
@@ -369,7 +375,7 @@ def optimize_stake_allocation(
     x0: List[float] = []
     for t in tickets:
         p = t["p"]
-        odds = t["odds"]        
+        odds = t["odds"]
         cap_fraction = kelly_fraction(p, odds, lam=kelly_cap, cap=1.0)
         cap_fraction = min(cap_fraction, 1 - 1e-9)
         p_odds.append((p, odds))
@@ -384,7 +390,9 @@ def optimize_stake_allocation(
 
     constraints = {"type": "ineq", "fun": lambda x: 1.0 - sum(x)}
     if minimize is not None:
-        res = minimize(objective, x0, bounds=bounds, constraints=[constraints], method="SLSQP")
+        res = minimize(
+            objective, x0, bounds=bounds, constraints=[constraints], method="SLSQP"
+        )
         fractions = x0 if not res.success else res.x
     else:
         # Fallback: naive grid search with 5 % granularity
@@ -424,7 +432,7 @@ def risk_of_ruin(
     baseline_variance: Optional[float] = None,
 ) -> float:
     """Return the gambler's ruin approximation for a given EV and variance."""
-    
+
     if bankroll <= 0:
         raise ValueError("bankroll must be > 0")
     if total_ev <= 0:
@@ -442,7 +450,7 @@ def compute_ev_roi(
     simulate_fn: Optional[Callable[[Iterable[Any]], float]] = None,
     *,
     cache_simulations: bool = True,
-     ev_threshold: float = 0.35,
+    ev_threshold: float = 0.35,
     roi_threshold: float = 0.25,
     kelly_cap: float = 0.60,
     round_to: float = 0.10,
@@ -503,7 +511,7 @@ def compute_ev_roi(
         raise ValueError("budget must be > 0")
     if variance_cap is not None and variance_cap <= 0:
         raise ValueError("variance_cap must be > 0")
-        
+
     # First adjust stakes for dutching groups
     _apply_dutching(tickets)
 
@@ -520,7 +528,7 @@ def compute_ev_roi(
     total_clv = 0.0
     clv_count = 0
     ticket_metrics: List[Dict[str, float]] = []
- 
+
     processed: List[Dict[str, Any]] = []
     for t in tickets:
         p = t.get("p")
@@ -559,7 +567,7 @@ def compute_ev_roi(
         else:
             clv = 0.0
             t["clv"] = clv
-            
+
         kelly_stake = _kelly_fraction(p, odds) * budget
         max_stake = kelly_fraction(p, odds, lam=kelly_cap, cap=1.0) * budget
         stake_input = t.get("stake", kelly_stake)
@@ -569,7 +577,7 @@ def compute_ev_roi(
             stake = round(stake / round_to) * round_to
 
         dependencies = _prepare_ticket_dependencies(t, legs_for_probability)
-        
+
         processed.append(
             {
                 "ticket": t,
@@ -623,7 +631,7 @@ def compute_ev_roi(
             total_stake = budget - remaining
 
     covariance_inputs: List[Dict[str, Any]] = []
-    
+
     for d in processed:
         t = d["ticket"]
         stake = d["stake"]
@@ -631,7 +639,7 @@ def compute_ev_roi(
         odds = d["odds"]
 
         ev = stake * (p * (odds - 1) - (1 - p))
-        variance = p * (stake * (odds - 1)) ** 2 + (1 - p) * (-stake) ** 2 - ev ** 2
+        variance = p * (stake * (odds - 1)) ** 2 + (1 - p) * (-stake) ** 2 - ev**2
         roi = ev / stake if stake else 0.0
         expected_payout = p * stake * odds
         ticket_variance = max(variance, 0.0)
@@ -686,54 +694,54 @@ def compute_ev_roi(
         for t, metrics in zip(tickets, ticket_metrics):
             t["stake"] *= scale
             t["ev"] *= scale
-            t["variance"] *= scale ** 2
+            t["variance"] *= scale**2
             metrics["stake"] *= scale
             metrics["ev"] *= scale
-            metrics["variance"] *= scale ** 2
+            metrics["variance"] *= scale**2
             t["expected_payout"] *= scale
             metrics["expected_payout"] *= scale
             t["roi"] = t["ev"] / t["stake"] if t["stake"] else 0.0
             metrics["roi"] = t["roi"]
         total_ev *= scale
         combined_expected_payout *= scale
-        total_variance *= scale ** 2
-        total_variance_naive *= scale ** 2
-        covariance_adjustment *= scale ** 2
+        total_variance *= scale**2
+        total_variance_naive *= scale**2
+        covariance_adjustment *= scale**2
         for detail in covariance_details:
-            detail["covariance"] *= scale ** 2
+            detail["covariance"] *= scale**2
         total_stake_normalized = budget
         total_expected_payout *= scale
 
     variance_exceeded = False
-    var_limit = variance_cap * budget ** 2 if variance_cap is not None else None
+    var_limit = variance_cap * budget**2 if variance_cap is not None else None
     if var_limit is not None and total_variance > var_limit:
         variance_exceeded = True
         scale = math.sqrt(var_limit / total_variance)
         for t, metrics in zip(tickets, ticket_metrics):
             t["stake"] *= scale
             t["ev"] *= scale
-            t["variance"] *= scale ** 2
+            t["variance"] *= scale**2
             metrics["stake"] *= scale
             metrics["ev"] *= scale
-            metrics["variance"] *= scale ** 2
+            metrics["variance"] *= scale**2
             t["expected_payout"] *= scale
             metrics["expected_payout"] *= scale
             t["roi"] = t["ev"] / t["stake"] if t["stake"] else 0.0
             metrics["roi"] = t["roi"]
         total_ev *= scale
         combined_expected_payout *= scale
-        total_variance *= scale ** 2
-        total_variance_naive *= scale ** 2
-        covariance_adjustment *= scale ** 2
+        total_variance *= scale**2
+        total_variance_naive *= scale**2
+        covariance_adjustment *= scale**2
         for detail in covariance_details:
-            detail["covariance"] *= scale ** 2
+            detail["covariance"] *= scale**2
         total_stake_normalized *= scale
         total_expected_payout *= scale
 
     final_variance_naive = total_variance_naive
     final_covariance_adjustment = covariance_adjustment
     final_covariance_details = covariance_details
-    
+
     roi_total = total_ev / total_stake_normalized if total_stake_normalized else 0.0
     ev_ratio = total_ev / budget if budget else 0.0
     ruin_risk = risk_of_ruin(
@@ -766,9 +774,7 @@ def compute_ev_roi(
             odds = t["odds"]
             ev = stake_opt * (p * (odds - 1) - (1 - p))
             variance = (
-                p * (stake_opt * (odds - 1)) ** 2
-                + (1 - p) * (-stake_opt) ** 2
-                - ev ** 2
+                p * (stake_opt * (odds - 1)) ** 2 + (1 - p) * (-stake_opt) ** 2 - ev**2
             )
             roi = ev / stake_opt if stake_opt else 0.0
             expected_payout = p * stake_opt * odds
@@ -824,20 +830,22 @@ def compute_ev_roi(
         if var_limit is not None and opt_variance > var_limit:
             variance_exceeded_opt = True
             scale = math.sqrt(var_limit / opt_variance)
-            for t, metrics, stake_opt in zip(tickets, optimized_metrics, optimized_stakes):
+            for t, metrics, stake_opt in zip(
+                tickets, optimized_metrics, optimized_stakes
+            ):
                 metrics["stake"] *= scale
                 metrics["ev"] *= scale
-                metrics["variance"] *= scale ** 2
+                metrics["variance"] *= scale**2
                 stake_scaled = stake_opt * scale
                 t["optimized_stake"] = stake_scaled
                 metrics["expected_payout"] *= scale
                 t["optimized_expected_payout"] *= scale
             opt_ev *= scale
-            opt_variance *= scale ** 2
-            opt_variance_naive *= scale ** 2
-            opt_covariance_adjustment *= scale ** 2
+            opt_variance *= scale**2
+            opt_variance_naive *= scale**2
+            opt_covariance_adjustment *= scale**2
             for detail in opt_covariance_details:
-                detail["covariance"] *= scale ** 2
+                detail["covariance"] *= scale**2
             opt_stake_sum *= scale
             opt_combined_payout *= scale
             opt_expected_payout *= scale
@@ -867,12 +875,16 @@ def compute_ev_roi(
             opt_variance = total_variance
             opt_variance_naive = baseline_variance_naive
             opt_covariance_adjustment = baseline_covariance_adjustment
-            opt_covariance_details = [dict(detail) for detail in baseline_covariance_details]
+            opt_covariance_details = [
+                dict(detail) for detail in baseline_covariance_details
+            ]
             opt_stake_sum = total_stake_normalized
             opt_combined_payout = combined_expected_payout
             opt_expected_payout = total_expected_payout
             optimized_metrics = baseline_metrics
-            optimized_stakes = [metrics.get("stake", 0.0) for metrics in baseline_metrics]
+            optimized_stakes = [
+                metrics.get("stake", 0.0) for metrics in baseline_metrics
+            ]
             for ticket, metrics in zip(tickets, baseline_metrics):
                 ticket["optimized_stake"] = metrics.get("stake")
                 ticket["optimized_expected_payout"] = metrics.get("expected_payout")
@@ -881,7 +893,7 @@ def compute_ev_roi(
         final_variance_naive = opt_variance_naive
         final_covariance_adjustment = opt_covariance_adjustment
         final_covariance_details = opt_covariance_details
-        
+
         reasons = []
         if ev_ratio_opt < ev_threshold:
             reasons.append(f"EV ratio below {ev_threshold:.2f}")
@@ -924,7 +936,7 @@ def compute_ev_roi(
         if not green_flag:
             result["failure_reasons"] = reasons
         return result
-        
+
     reasons = []
     if ev_ratio < ev_threshold:
         reasons.append(f"EV ratio below {ev_threshold:.2f}")

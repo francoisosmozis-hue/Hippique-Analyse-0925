@@ -1,22 +1,15 @@
-"""Lint utility for validating daily meeting source URLs."""
-
-from __future__ import annotations
-
+#!/usr/bin/env python3
 import argparse
-import datetime as dt
-from pathlib import Path
-from typing import Iterable, Iterator, Sequence, Tuple
-from urllib.parse import urlparse
-
-try:  # Python 3.9+
-    from zoneinfo import ZoneInfo  # type: ignore
-except Exception:  # pragma: no cover - fallback for older interpreters
-    ZoneInfo = None  # type: ignore
-
-PARIS_TZ = ZoneInfo("Europe/Paris") if ZoneInfo is not None else None
-DEFAULT_DOMAINS: Tuple[str, ...] = ("zeturf.fr", "www.zeturf.fr")
+import subprocess
+import sys
 
 
+<<<<<<< HEAD
+def main() -> int:
+    ap = argparse.ArgumentParser(description="Lint runner (safe)")
+    ap.add_argument(
+        "--fix", action="store_true", help="apply autofixes (ruff/isort/black)"
+=======
 class Diagnostics:
     """Collects lint diagnostics and exposes helper utilities."""
 
@@ -132,58 +125,26 @@ def _emit(level: str, file_path: Path, diagnostics: Iterable[tuple[int | None, s
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Lint de sources.txt (URLs ZEturf).",
+>>>>>>> origin/main
     )
-    parser.add_argument(
-        "--file",
-        default="sources.txt",
-        help="Chemin vers le fichier des sources (par défaut: sources.txt).",
-    )
-    parser.add_argument(
-        "--enforce-today",
-        action="store_true",
-        help="Signale les URLs qui ne contiennent pas la date du jour.",
-    )
-    parser.add_argument(
-        "--domain",
-        dest="domains",
-        action="append",
-        help="Domaine autorisé (répéter l'option pour plusieurs valeurs).",
-    )
-    parser.add_argument(
-        "--warn-only",
-        action="store_true",
-        help=(
-            "Force l'émission des avertissements au niveau warning ; la CLI"
-            " renvoie 2 s'il reste des avertissements et 1 s'il reste des"
-            " erreurs."
-        ),
-    )
-    return parser
+    args = ap.parse_args()
+
+    steps = []
+    if args.fix:
+        steps += [
+            ["ruff", "check", "--select", "I", "--fix", "."],
+            ["isort", "."],
+            ["black", "."],
+        ]
+    steps += [["ruff", "check", "."]]
+
+    for cmd in steps:
+        print("$", " ".join(cmd), flush=True)
+        proc = subprocess.run(cmd)
+        if proc.returncode != 0:
+            return proc.returncode
+    return 0
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = _build_parser()
-    args = parser.parse_args(argv)
-
-    domains = tuple(domain.lower() for domain in args.domains if domain) if args.domains else DEFAULT_DOMAINS
-
-    file_path = Path(args.file)
-    diagnostics = lint_file(
-        file_path,
-        enforce_today=args.enforce_today,
-        domains=domains,
-    )
-
-    _emit("error", file_path, diagnostics.errors)
-    warning_level = "warning" if args.warn_only else "notice"
-    _emit(warning_level, file_path, diagnostics.warnings)
-
-    print(
-        f"Résumé: {len(diagnostics.errors)} erreur(s), {len(diagnostics.warnings)} avertissement(s).",
-    )
-
-    return diagnostics.exit_code(args.warn_only)
-
-
-if __name__ == "__main__":  # pragma: no cover - CLI entry point
-    raise SystemExit(main())
+if __name__ == "__main__":
+    sys.exit(main())

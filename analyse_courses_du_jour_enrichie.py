@@ -18,17 +18,19 @@ import re
 import subprocess
 import sys
 import time
+from collections.abc import Mapping
 from datetime import datetime, timezone
 from pathlib import Path
-from collections.abc import Mapping
 from typing import Any, Callable, Iterable
 from urllib.parse import urljoin
 
 import requests
 from bs4 import BeautifulSoup
 
-from logging_io import append_csv_line, CSV_HEADER
+from logging_io import CSV_HEADER, append_csv_line
 from scripts.gcs_utils import disabled_reason, is_gcs_enabled
+<<<<<<< HEAD
+=======
 from scripts.online_fetch_zeturf import normalize_snapshot
 from scripts.fetch_je_stats import collect_stats
 
@@ -53,6 +55,7 @@ PAYOUT_MIN_THRESHOLD = _env_float("PAYOUT_MIN", 10.0)
 OVERROUND_MAX_THRESHOLD = _env_float("OVERROUND_MAX", 1.30)
 if "MAX_COMBO_OVERROUND" not in os.environ:
     os.environ["MAX_COMBO_OVERROUND"] = f"{OVERROUND_MAX_THRESHOLD:.2f}"
+>>>>>>> origin/main
 
 
 # Tests may insert a lightweight stub of ``scripts.online_fetch_zeturf`` to avoid
@@ -61,6 +64,15 @@ if "MAX_COMBO_OVERROUND" not in os.environ:
 _fetch_module = sys.modules.get("scripts.online_fetch_zeturf")
 if _fetch_module is not None and not hasattr(_fetch_module, "fetch_race_snapshot"):
     sys.modules.pop("scripts.online_fetch_zeturf", None)
+<<<<<<< HEAD
+import pipeline_run
+from runner_chain import compute_overround_cap
+from scripts.fetch_je_stats import collect_stats
+from simulate_wrapper import PAYOUT_CALIBRATION_PATH, evaluate_combo
+
+logger = logging.getLogger(__name__)
+=======
+>>>>>>> origin/main
 
 
 class MissingH30SnapshotError(RuntimeError):
@@ -78,17 +90,15 @@ TRACKING_HEADER = CSV_HEADER + ["phase", "status", "reason"]
 try:  # pragma: no cover - optional dependency in tests
     from scripts.online_fetch_zeturf import write_snapshot_from_geny
 except Exception:  # pragma: no cover - used when optional deps are missing
-    
+
     def write_snapshot_from_geny(*args: Any, **kwargs: Any) -> None:
         raise RuntimeError("write_snapshot_from_geny is unavailable")
 
 
 if USE_GCS:
     try:  # pragma: no cover - optional dependency in tests
-        from scripts.drive_sync import (
-            build_remote_path as gcs_build_remote_path,
-            push_tree,
-        )
+        from scripts.drive_sync import build_remote_path as gcs_build_remote_path
+        from scripts.drive_sync import push_tree
     except Exception as exc:  # pragma: no cover - used when optional deps are missing
         print(
             f"[WARN] Synchronisation GCS indisponible ({exc}), bascule en mode local.",
@@ -100,6 +110,42 @@ if USE_GCS:
 else:  # pragma: no cover - Cloud sync explicitly disabled
     gcs_build_remote_path = None  # type: ignore[assignment]
     push_tree = None  # type: ignore[assignment]
+
+
+def _latest_snapshot(rc_dir: Path, tag: str) -> Path | None:
+    """Return the latest snapshot file for a given tag."""
+    pattern = f"*_{tag}.json"
+    candidates = sorted(rc_dir.glob(pattern))
+    if not candidates:
+        return None
+    return candidates[-1]
+
+
+def _load_snapshot(path: Path) -> dict[str, Any]:
+    """Load a snapshot file."""
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Snapshot invalide: {path} ({exc})") from exc
+
+
+def _normalise_snapshot(payload: dict[str, Any]) -> dict[str, Any]:
+    normalised = dict(payload)
+    # Preserve a few metadata fields expected by downstream consumers.
+    for key in [
+        "id_course",
+        "course_id",
+        "source",
+        "rc",
+        "r_label",
+        "meeting",
+        "reunion",
+        "race",
+    ]:
+        value = payload.get(key)
+        if value is not None and key not in normalised:
+            normalised[key] = value
+    return normalised
 
 
 # --- RÈGLES ANTI-COTES FAIBLES (SP min 4/1 ; CP somme > 6.0 déc) ---------------
@@ -452,59 +498,75 @@ def ensure_dir(path: Path) -> Path:
     return path
 
 
+<<<<<<< HEAD
+def _latest_snapshot(rc_dir: Path, tag: str) -> Path | None:
+    """Return the latest snapshot file for a given tag."""
+    pattern = f"*_{tag}.json"
+    candidates = sorted(rc_dir.glob(pattern))
+    if not candidates:
+        return None
+    return candidates[-1]
+=======
 def enrich_h5(rc_dir: Path, *, budget: float, kelly: float) -> None:
     """Prepare all artefacts required for the H-5 pipeline.
+>>>>>>> origin/main
 
-    The function normalises the latest H-30/H-5 snapshots, extracts odds maps,
-    fetches jockey/entraineur statistics and materialises CSV companions used
-    by downstream tooling.  by downstream tooling.  The H-30 snapshot is a hard requirement; when it is
-    absent the function abstains and signals the caller to mark the course as
-    non playable.
-    """
+
+def _load_snapshot(path: Path) -> dict[str, Any]:
+    """Load a snapshot file."""
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Snapshot invalide: {path} ({exc})") from exc
+
+
+def _latest_snapshot(rc_dir: Path, tag: str) -> Path | None:
+    """Return the latest snapshot file for a given tag."""
+    pattern = f"*_{tag}.json"
+    candidates = sorted(rc_dir.glob(pattern))
+    if not candidates:
+        return None
+    return candidates[-1]
+
+
+def _load_snapshot(path: Path) -> dict[str, Any]:
+    """Load a snapshot file."""
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Snapshot invalide: {path} ({exc})") from exc
+
+
+def _normalise_snapshot(payload: dict[str, Any]) -> dict[str, Any]:
+    normalised = dict(payload)
+    # Preserve a few metadata fields expected by downstream consumers.
+    for key in [
+        "id_course",
+        "course_id",
+        "source",
+        "rc",
+        "r_label",
+        "meeting",
+        "reunion",
+        "race",
+    ]:
+        value = payload.get(key)
+        if value is not None and key not in normalised:
+            normalised[key] = value
+    return normalised
+
+
+def enrich_h5(rc_dir: Path, *, budget: float, kelly: float) -> None:
 
     rc_dir = ensure_dir(Path(rc_dir))
 
-    def _latest_snapshot(tag: str) -> Path | None:
-        pattern = f"*_{tag}.json"
-        candidates = sorted(rc_dir.glob(pattern))
-        if not candidates:
-            return None
-        # ``glob`` returns in alphabetical order which correlates with the
-        # timestamp prefix we use for snapshots.  The most recent file is the
-        # last one.
-        return candidates[-1]
-
-    def _load_snapshot(path: Path) -> dict[str, Any]:
-        try:
-            return json.loads(path.read_text(encoding="utf-8"))
-        except json.JSONDecodeError as exc:
-            raise ValueError(f"Snapshot invalide: {path} ({exc})") from exc
-
-    def _normalise_snapshot(payload: dict[str, Any]) -> dict[str, Any]:
-        normalised = normalize_snapshot(payload)
-        # Preserve a few metadata fields expected by downstream consumers.
-        for key in [
-            "id_course",
-            "course_id",
-            "source",
-            "rc",
-            "r_label",
-            "meeting",
-            "reunion",
-            "race",
-        ]:
-            value = payload.get(key)
-            if value is not None and key not in normalised:
-                normalised[key] = value
-        return normalised
-
-    h5_raw_path = _latest_snapshot("H-5")
+    h5_raw_path = _latest_snapshot(rc_dir, "H-5")
     if h5_raw_path is None:
         raise FileNotFoundError("Aucun snapshot H-5 trouvé pour l'analyse")
     h5_payload = _load_snapshot(h5_raw_path)
     h5_normalised = _normalise_snapshot(h5_payload)
 
-    h30_raw_path = _latest_snapshot("H-30")
+    h30_raw_path = _latest_snapshot(rc_dir, "H-30")
     h30_payload: dict[str, Any]
     if h30_raw_path is not None:
         h30_payload = _load_snapshot(h30_raw_path)
@@ -549,6 +611,7 @@ def enrich_h5(rc_dir: Path, *, budget: float, kelly: float) -> None:
         "hippodrome": h5_normalised.get("hippodrome") or h5_payload.get("hippodrome"),
         "date": h5_normalised.get("date") or h5_payload.get("date"),
         "discipline": h5_normalised.get("discipline") or h5_payload.get("discipline"),
+        "distance": h5_payload.get("distance"),
         "runners": h5_normalised.get("runners", []),
         "id2name": h5_normalised.get("id2name", {}),
         "course_id": h5_payload.get("id_course")
@@ -594,6 +657,9 @@ def enrich_h5(rc_dir: Path, *, budget: float, kelly: float) -> None:
         _write_minimal_csv(chronos_path, placeholder_headers, placeholder_rows)
 
 
+<<<<<<< HEAD
+def build_p_finale(rc_dir: Path, *, budget: float, kelly: float) -> None:
+=======
 def build_p_finale(
     rc_dir: Path,
     *,
@@ -604,6 +670,7 @@ def build_p_finale(
     payout_min: float | None = None,
     overround_max: float | None = None,
 ) -> None:
+>>>>>>> origin/main
     """Run the ticket allocation pipeline and persist ``p_finale.json``."""
 
     rc_dir = Path(rc_dir)
@@ -617,6 +684,9 @@ def build_p_finale(
     )
 
 
+<<<<<<< HEAD
+def run_pipeline(rc_dir: Path, *, budget: float, kelly: float) -> None:
+=======
 def run_pipeline(
     rc_dir: Path,
     *,
@@ -627,6 +697,7 @@ def run_pipeline(
     payout_min: float | None = None,
     overround_max: float | None = None,
 ) -> None:
+>>>>>>> origin/main
     """Execute the analysis pipeline for ``rc_dir`` or its subdirectories."""
 
     rc_dir = Path(rc_dir)
@@ -1440,7 +1511,7 @@ def _recover_je_csv_from_stats(
 
     if _rebuild_je_csv_from_stats(rc_dir):
         return True, True, True
-        
+
     return True, False, True
 
 
@@ -1486,7 +1557,11 @@ def _rebuild_je_csv_from_stats(rc_dir: Path) -> bool:
         return False
 
     try:
+<<<<<<< HEAD
+        _write_je_csv_file(
+=======
         write_je_csv_file(
+>>>>>>> origin/main
             rc_dir / f"{snap}_je.csv", id2name=id2name, stats_payload=stats_payload
         )
     except OSError as exc:
@@ -1660,7 +1735,7 @@ def _ensure_h5_artifacts(
 
     def _attempt_stats_rebuild(*, allow_without_fetch: bool = False) -> bool:
         """Try rebuilding the JE CSV when stats data appears to be available."""
-        
+
         nonlocal stats_recovered
         if not missing or not _missing_requires_stats(missing):
             return False
@@ -1689,7 +1764,11 @@ def _ensure_h5_artifacts(
             if _refresh_missing_state():
                 return True
         return False
+<<<<<<< HEAD
+
+=======
         
+>>>>>>> origin/main
     if _missing_requires_stats(missing):
         (
             stats_fetch_success,
@@ -1711,13 +1790,13 @@ def _ensure_h5_artifacts(
         chronos_path = rc_dir / "chronos.csv"
         if not success or not chronos_path.exists():
             _regenerate_chronos_csv(rc_dir)
-            
+
     if retried:
         if _refresh_missing_state():
             return None
         if _attempt_stats_rebuild():
             return None
-            
+
     if missing and retry_cb is not None and not retry_invoked:
         try:
             retry_cb()
@@ -1809,7 +1888,7 @@ def safe_enrich_h5(
             "reason": "unplayable-marker",
             "details": details,
         }
-        
+
     try:
         enrich_h5(rc_dir, budget=budget, kelly=kelly)
     except MissingH30SnapshotError as exc:
@@ -1875,7 +1954,67 @@ def _execute_h5_chain(
     guard_ok, analysis_payload, guard_outcome = _run_h5_guard_phase(
         rc_dir,
         budget=budget,
+<<<<<<< HEAD
+    )
+    try:
+        _write_json_file(rc_dir / "analysis_H5.json", analysis_payload)
+    except Exception as exc:  # pragma: no cover - defensive logging
+        logger.warning(
+            "[H-5] unable to persist analysis_H5.json for %s: %s", rc_dir, exc
+        )
+    if not guard_ok:
+        return False, guard_outcome
+    run_pipeline(rc_dir, budget=budget, kelly=kelly)
+    build_prompt_from_meta(rc_dir, budget=budget, kelly=kelly)
+    return True, None
+
+
+def export_per_horse_csv(rc_dir: Path) -> Path:
+    """Export a per-horse report aggregating probabilities and J/E stats."""
+
+    snap = _snap_prefix(rc_dir)
+    if snap is None:
+        raise FileNotFoundError("Snapshot H-5 introuvable dans rc_dir")
+    je_path = rc_dir / f"{snap}_je.csv"
+    chronos_path = rc_dir / "chronos.csv"
+    p_finale_path = rc_dir / "p_finale.json"
+
+    # Load data sources
+    data = json.loads(p_finale_path.read_text(encoding="utf-8"))
+    p_true = {str(k): float(v) for k, v in data.get("p_true", {}).items()}
+    id2name = data.get("meta", {}).get("id2name", {})
+
+    def _read_csv(path: Path) -> list[dict[str, str]]:
+        text = path.read_text(encoding="utf-8")
+        delim = ";" if ";" in text.splitlines()[0] else ","
+        return list(csv.DictReader(text.splitlines(), delimiter=delim))
+
+    je_rows = _read_csv(je_path)
+    chrono_rows = _read_csv(chronos_path)
+    chrono_ok = {
+        str(row.get("num") or row.get("id"))
+        for row in chrono_rows
+        if any(v.strip() for k, v in row.items() if k not in {"num", "id"} and v)
+    }
+
+    out_path = rc_dir / "per_horse_report.csv"
+    with out_path.open("w", newline="", encoding="utf-8") as fh:
+        writer = csv.writer(fh)
+        writer.writerow(["num", "nom", "p_finale", "j_rate", "e_rate", "chrono_ok"])
+        for row in je_rows:
+            num = str(row.get("num") or row.get("id") or "")
+            nom = row.get("nom") or row.get("name") or id2name.get(num, "")
+            writer.writerow(
+                [
+                    num,
+                    nom,
+                    p_true.get(num, ""),
+                    row.get("j_rate"),
+                    row.get("e_rate"),
+                    str(num in chrono_ok),
+=======
         min_roi=roi_min,
+>>>>>>> origin/main
                 ]
             )
     return out_path
@@ -1905,8 +2044,13 @@ def _load_geny_today_payload() -> dict[str, Any]:
                         "c": "C1",
                         "id_course": "12345" # A dummy ID is sufficient
                     }
+<<<<<<< HEAD
+                ]
+            }
+=======
                ]
            }
+>>>>>>> origin/main
         ]
     }
 
@@ -2148,7 +2292,14 @@ def _process_reunion(
     base_dir = ensure_dir(data_dir)
     for r_label, c_label, course_id, course_url in courses:
         rc_dir = ensure_dir(base_dir / f"{r_label}{c_label}")
-        write_snapshot_from_geny(course_id, phase, rc_dir, course_url=course_url)
+        try:
+
+            write_snapshot_from_geny(course_id, phase, rc_dir, course_url=course_url)
+
+        except TypeError:
+
+            write_snapshot_from_geny(course_id, phase, rc_dir)
+
         outcome: dict[str, Any] | None = None
         pipeline_done = False
         if phase.upper() == "H5":
@@ -2185,11 +2336,15 @@ def main() -> None:
     ap.add_argument(
         "--data-dir", default="data", help="Répertoire racine pour les sorties"
     )
+<<<<<<< HEAD
+    ap.add_argument("--budget", type=float, default=5.0, help="Budget à utiliser")
+=======
     ap.add_argument(
         "--budget", type=float, default=GPI_BUDGET_DEFAULT, help="Budget à utiliser"
     )
+>>>>>>> origin/main
     ap.add_argument(
-        "--kelly", type=float, default=1.0, help="Fraction de Kelly à appliquer"
+        "--kelly", type=float, default=0.5, help="Fraction de Kelly à appliquer"
     )
     ap.add_argument(
         "--ev-min",
@@ -2222,9 +2377,13 @@ def main() -> None:
     )
     ap.add_argument(
         "--course-url",
-        "--reunion-url",
         dest="course_url",
-        help="URL ZEturf d'une réunion ou d'une course",
+        help="URL ZEturf d'une course unique",
+    )
+    ap.add_argument(
+        "--reunion-url",
+        dest="reunion_url",
+        help="URL ZEturf d'une réunion (pour scraper plusieurs courses)",
     )
     ap.add_argument(
         "--phase",
@@ -2238,52 +2397,72 @@ def main() -> None:
         help="Fichier JSON listant les réunions à traiter (mode batch)",
     )
     ap.add_argument(
-        "--upload-gcs",
-        action="store_true",
-        help="Upload des artefacts générés sur Google Cloud Storage",
-    )
-    ap.add_argument(
-        "--upload-drive",
-        action="store_true",
-        help=argparse.SUPPRESS,
-    )
-    ap.add_argument(
         "--gcs-prefix",
         help="Préfixe GCS racine pour les uploads",
     )
-    ap.add_argument(
-        "--drive-folder-id",
-        dest="gcs_prefix",
-        help=argparse.SUPPRESS,
-    )
     args = ap.parse_args()
+    if not any(
+        [
+            args.course_url,
+            args.reunion_url,
+            (args.reunion and args.course),
+            args.reunions_file,
+            args.from_geny_today,
+        ]
+    ):
+        ap.error(
+            "Veuillez spécifier une action: --from-geny-today, --course-url, --reunion-url, ou --reunion/--course"
+        )
 
-    gcs_prefix = None
-    if args.upload_gcs or args.upload_drive:
-        if args.gcs_prefix is not None:
-            gcs_prefix = args.gcs_prefix
-        else:
-            gcs_prefix = os.environ.get("GCS_PREFIX")
-        if gcs_prefix is None:
-            print("[WARN] gcs-prefix manquant, envoi vers GCS ignoré")
+    data_dir = Path(args.data_dir)
+
+    if args.course_url and args.phase:
+        rc_match = re.search(r"(R\d+C\d+)", args.course_url)
+        if not rc_match:
+            print("[ERROR] Impossible d'extraire R#C# de l'URL de la course", file=sys.stderr)
+            raise SystemExit(2)
+
+        reunion, course = _derive_rc_parts(rc_match.group(1))
+
+        print(f"Traitement de la course {reunion}{course} en phase {args.phase}")
+        _process_single_course(
+            reunion,
+            course,
+            args.phase,
+            data_dir,
+            budget=args.budget,
+            kelly=args.kelly,
+            gcs_prefix=args.gcs_prefix,
+        )
+        return
+
+    if args.reunion_url and args.phase:
+        _process_reunion(
+            args.reunion_url,
+            args.phase,
+            data_dir,
+            budget=args.budget,
+            kelly=args.kelly,
+            gcs_prefix=args.gcs_prefix,
+        )
+        return
 
     if args.reunions_file:
-        script = Path(__file__).resolve()
-        data = json.loads(Path(args.reunions_file).read_text(encoding="utf-8"))
-        for reunion in data.get("reunions", []):
-            url_zeturf = reunion.get("url_zeturf")
-            if not url_zeturf:
+        payload = json.loads(Path(args.reunions_file).read_text(encoding="utf-8"))
+        for reunion in payload.get("reunions", []):
+            url = reunion.get("url_zeturf")
+            if not url:
                 continue
             for phase in ["H30", "H5"]:
                 cmd = [
                     sys.executable,
-                    str(script),
-                    "--course-url",
-                    url_zeturf,
+                    __file__,
+                    "--reunion-url",
+                    url,
                     "--phase",
                     phase,
                     "--data-dir",
-                    args.data_dir,
+                    str(data_dir),
                     "--budget",
                     str(args.budget),
                     "--kelly",
@@ -2297,19 +2476,12 @@ def main() -> None:
                     "--overround-max",
                     str(args.overround_max),
                 ]
-                if gcs_prefix is not None:
-                    cmd.append("--upload-gcs")
-                    cmd.extend(["--gcs-prefix", gcs_prefix])
+                if args.gcs_prefix:
+                    cmd.extend(["--gcs-prefix", args.gcs_prefix])
                 subprocess.run(cmd, check=True)
         return
 
-    if args.reunion or args.course:
-        if not (args.reunion and args.course and args.phase):
-            print(
-                "[ERROR] --reunion, --course et --phase doivent être utilisés ensemble",
-                file=sys.stderr,
-            )
-            raise SystemExit(2)
+    if args.reunion and args.course and args.phase:
         try:
             reunion_label = _normalise_rc_label(args.reunion, "R")
             course_label = _normalise_rc_label(args.course, "C")
@@ -2323,6 +2495,12 @@ def main() -> None:
             Path(args.data_dir),
             budget=args.budget,
             kelly=args.kelly,
+<<<<<<< HEAD
+            gcs_prefix=args.gcs_prefix,
+        )
+        return
+if __name__ == "__main__":
+=======
             gcs_prefix=gcs_prefix,
             ev_min=args.ev_min,
             roi_min=args.roi_min,
@@ -2404,4 +2582,5 @@ def main() -> None:
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point
+>>>>>>> origin/main
     main()

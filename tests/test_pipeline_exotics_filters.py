@@ -4,6 +4,14 @@ from pathlib import Path
 from typing import Any, Callable, Mapping
 
 import pytest
+from test_pipeline_smoke import (
+    DEFAULT_CALIBRATION,
+    GPI_YML,
+    odds_h5,
+    odds_h30,
+    partants_sample,
+    stats_sample,
+)
 
 import logging_io
 import pipeline_run
@@ -11,14 +19,6 @@ import simulate_ev
 import simulate_wrapper
 import tickets_builder
 import validator_ev
-from test_pipeline_smoke import (
-    GPI_YML,
-    DEFAULT_CALIBRATION,
-    odds_h30,
-    odds_h5,
-    partants_sample,
-    stats_sample,
-)
 
 
 def _write_inputs(
@@ -34,7 +34,7 @@ def _write_inputs(
     h30_path.write_text(json.dumps(odds_h30()), encoding="utf-8")
     h5_path.write_text(json.dumps(odds_h5()), encoding="utf-8")
     stats_path.write_text(json.dumps(stats_sample()), encoding="utf-8")
-    
+
     partants_payload = partants_sample()
     if partants_override:
         partants_payload.update(partants_override)
@@ -109,15 +109,20 @@ def _prepare_stubs(
         lambda *_args, **_kwargs: overround_cap,
     )
     if compute_cap_stub is None:
+<<<<<<< HEAD
+        compute_cap_stub = lambda *_args, **_kwargs: overround_cap
+
+=======
         def compute_cap_stub(*_args: object, **_kwargs: object) -> float:
             return overround_cap
         
+>>>>>>> origin/main
     monkeypatch.setattr(
         pipeline_run,
         "compute_overround_cap",
         compute_cap_stub,
     )
-    
+
     if market_overround is not None:
         monkeypatch.setattr(
             pipeline_run,
@@ -128,7 +133,7 @@ def _prepare_stubs(
                 "win_coverage_sufficient": True,
             },
         )
-        
+
     def fake_enforce(cfg_local, runners_local, combos_local, bankroll, **_kwargs):
         stats = {
             "ev": 12.0,
@@ -248,7 +253,9 @@ def _run_analysis(
     return meta, log_entry, eval_calls
 
 
-def test_exotics_accept_keeps_combo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_exotics_accept_keeps_combo(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     eval_stats = {
         "status": "ok",
         "ev_ratio": 0.6,
@@ -271,7 +278,9 @@ def test_exotics_accept_keeps_combo(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     assert log_entry.get("exotics", {}).get("decision") == "accept"
 
 
-def test_exotics_rejects_low_ev(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_exotics_rejects_low_ev(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     eval_stats = {
         "status": "ok",
         "ev_ratio": 0.25,
@@ -293,7 +302,9 @@ def test_exotics_rejects_low_ev(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     assert log_decision.startswith("reject")
 
 
-def test_exotics_rejects_on_status(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_exotics_rejects_on_status(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     eval_stats = {
         "status": "insufficient_data",
         "ev_ratio": 0.55,
@@ -433,7 +444,9 @@ def test_filter_combos_strict_limits_to_best_combo() -> None:
     assert "combo_limit_enforced" in reasons
 
 
-def test_exotics_rejects_low_payout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_exotics_rejects_low_payout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Combos with sub-10€ payout should be rejected systematically."""
 
     eval_stats = {
@@ -544,7 +557,9 @@ def test_exotics_rejects_when_place_overround_exceeds_cap(
         partants_override=partants_override,
     )
 
-    assert not eval_calls, "evaluation should be skipped when place overround is too high"
+    assert (
+        not eval_calls
+    ), "evaluation should be skipped when place overround is too high"
 
     exotics_meta = meta.get("exotics")
     assert exotics_meta["available"] is False

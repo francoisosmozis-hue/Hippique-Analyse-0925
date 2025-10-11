@@ -84,10 +84,7 @@ def test_safe_enrich_h5_abstains_without_h30(tmp_path, monkeypatch):
 
     rc_dir = tmp_path / "R1C5"
     snapshot = _write_snapshot(rc_dir)
-    snapshot.write_text(json.dumps({"id_course": "COURSE42"}), encoding="utf-8")
-
-    monkeypatch.setattr(acd, "normalize_snapshot", lambda payload: payload)
-
+    monkeypatch.setattr(acd, "_normalise_snapshot", lambda payload: payload)
     success, outcome = acd.safe_enrich_h5(rc_dir, budget=5.0, kelly=0.05)
 
     assert success is False
@@ -134,7 +131,7 @@ def test_safe_enrich_h5_recovers_after_stats_fetch(tmp_path, monkeypatch):
             je_csv.unlink()
 
     fetch_calls = {"stats": 0, "chrono": 0}
-    
+
     def fake_fetch(script_path: Path, course_dir: Path) -> bool:
         assert course_dir == rc_dir
         if script_path == acd._FETCH_JE_STATS_SCRIPT:
@@ -221,13 +218,13 @@ def test_safe_enrich_h5_retries_when_rebuild_impossible(tmp_path, monkeypatch):
     assert success is True
     assert outcome is None
     assert calls["enrich"] == 2, "enrich_h5 should be retried when rebuild fails"
-    
+
 
 def test_filter_cp_accepts_threshold_sum():
     """Couplé placé odds summing to the threshold should be preserved."""
 
     import analyse_courses_du_jour_enrichie as acd
-    
+
     ticket = {
         "type": "COUPLE_PLACE",
         "legs": [{"cote": "3.0"}, {"cote": "3.0"}],
@@ -325,7 +322,9 @@ def test_ensure_h5_artifacts_rebuilds_csv_from_stats(tmp_path, monkeypatch):
     chronos.write_text("num,chrono\n1,\n", encoding="utf-8")
 
     (rc_dir / "partants.json").write_text(
-        json.dumps({"id2name": {"1": "Bravo"}, "runners": [{"id": "1", "name": "Bravo"}]}),
+        json.dumps(
+            {"id2name": {"1": "Bravo"}, "runners": [{"id": "1", "name": "Bravo"}]}
+        ),
         encoding="utf-8",
     )
 
@@ -388,7 +387,10 @@ def test_ensure_h5_artifacts_rebuilds_after_retry_cb(tmp_path, monkeypatch):
 
     def retry_cb() -> None:
         retry_calls.append(1)
-        payload = {"id2name": {"7": "Juliet"}, "runners": [{"id": "7", "name": "Juliet"}]}
+        payload = {
+            "id2name": {"7": "Juliet"},
+            "runners": [{"id": "7", "name": "Juliet"}],
+        }
         partants_path.write_text(json.dumps(payload), encoding="utf-8")
         normalized_path.write_text(json.dumps(payload), encoding="utf-8")
         je_csv = rc_dir / f"{snap.stem}_je.csv"
@@ -444,7 +446,7 @@ def test_execute_h5_chain_skips_downstream_without_h30(tmp_path, monkeypatch):
     snapshot = _write_snapshot(rc_dir)
     snapshot.write_text(json.dumps({"id_course": "COURSE84"}), encoding="utf-8")
 
-    monkeypatch.setattr(acd, "normalize_snapshot", lambda payload: payload)
+    monkeypatch.setattr(acd, "_normalise_snapshot", lambda payload: payload)
 
     def forbidden(*_args, **_kwargs):  # pragma: no cover - defensive assertion
         raise AssertionError("downstream step should be skipped when H-30 is missing")
@@ -516,7 +518,9 @@ def test_recover_je_csv_from_stats_helper(tmp_path, monkeypatch):
     snap = _write_snapshot(rc_dir)
 
     (rc_dir / "partants.json").write_text(
-        json.dumps({"id2name": {"5": "Delta"}, "runners": [{"id": "5", "name": "Delta"}]}),
+        json.dumps(
+            {"id2name": {"5": "Delta"}, "runners": [{"id": "5", "name": "Delta"}]}
+        ),
         encoding="utf-8",
     )
 
