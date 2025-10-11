@@ -30,9 +30,22 @@ import math
 import os
 import sys
 import argparse
+import statistics as stats
 from pathlib import Path
 from dataclasses import dataclass, asdict
 from typing import Any, Dict, List, Optional, Tuple
+
+try:  # pragma: no cover - optional dependency
+    import yaml
+except Exception:  # pragma: no cover - yaml may be unavailable in slim envs
+    yaml = None  # type: ignore
+
+from hippique.utils.probabilities import expected_value_simple, no_vig_probs
+from hippique.utils.dutching import (
+    diversify_guard,
+    equal_profit_stakes,
+    require_mid_odds,
+)
 
 # ===================== Imports optionnels (helpers du dépôt) =====================
 try:
@@ -51,16 +64,6 @@ try:
 except Exception:
     estimate_expected_payout = None
 
-# =============================== Constantes GPI v5.1 ============================
-BUDGET_DEFAULT = 5.0
-MAX_TICKETS = 2
-RATIO_SP = 0.60  # 60% SP / 40% combinés
-KELLY_CAP = 0.60  # ≤ 60 % de la mise sur un seul cheval
-EV_COMBO_MIN = 0.40  # +40 %
-PAYOUT_MIN = 10.0
-SP_MIN_ODDS = 2.5
-SP_MAX_ODDS = 7.0
-
 # =============================== Structures de données ==========================
 @dataclass
 class Horse:
@@ -72,6 +75,9 @@ class Horse:
     p_impl_h5: Optional[float]
     p_score: Optional[float]  # prob mix/blend finale (après normalisation)
     drift: Optional[float]    # variation de cote (h5 - h30)
+    ecurie: Optional[str] = None
+    driver: Optional[str] = None
+    chrono_last: Optional[float] = None
 
 @dataclass
 class Ticket:
@@ -92,9 +98,251 @@ class Report:
     budget_total: float
     budget_sp: float
     budget_combo: float
+    abstention: Optional[str] = None
 
 # =============================== Utilitaires ====================================
 
+
+def _load_gpi_cfg(path: Path | str = "config/gpi.yml") -> Dict[str, Any]:
+    if yaml is None:
+        return {}
+    config_path = Path(path)
+    if not config_path.exists():
+        return {}
+    with config_path.open("r", encoding="utf-8") as handle:
+        data = yaml.safe_load(handle) or {}
+    if not isinstance(data, dict):
+        return {}
+    return data
+
+
+_GPI_CFG: Dict[str, Any] = _load_gpi_cfg()
+
+
+def _cfg_section(name: str) -> Dict[str, Any]:
+    section = _GPI_CFG.get(name, {}) if isinstance(_GPI_CFG, dict) else {}
+    return section if isinstance(section, dict) else {}
+
+
+# =============================== Constantes GPI v5.1 ============================
+BUDGET_DEFAULT = float(
+    _cfg_section("bankroll").get("stake_cap_per_race", _GPI_CFG.get("BUDGET_TOTAL", 5.0))
+)
+MAX_TICKETS = 2
+RATIO_SP = float(
+    _cfg_section("bankroll").get("split_sp", _GPI_CFG.get("SP_RATIO", 0.60))
+)
+KELLY_CAP = float(
+    _cfg_section("kelly").get("single_leg_cap", _GPI_CFG.get("MAX_VOL_PAR_CHEVAL", 0.60))
+)
+EV_COMBO_MIN = float(
+    _cfg_section("ev").get("min_ev_combo", _GPI_CFG.get("EV_MIN_GLOBAL", 0.40))
+)
+PAYOUT_MIN = float(
+    _cfg_section("ev").get("min_expected_payout_combo", _GPI_CFG.get("MIN_PAYOUT_COMBOS", 10.0))
+)
+SP_MIN_ODDS = 2.5
+SP_MAX_ODDS = 7.0
+
+
+def _overround(odds_list: List[float]) -> float:
+    return sum(1.0 / float(o) for o in odds_list if o)
+
+
+def _pick_overround_cap(discipline: str, n_partants: int) -> float:
+    bands = _cfg_section("overround_bands")
+    if discipline.lower().startswith("trot") and n_partants <= 9:
+        return float(bands.get("trot_small_field_max", 1.25))
+    if discipline.lower().startswith("plat") and n_partants >= 14:
+        return float(bands.get("plat_handicap_14p_max", 1.25))
+    return float(bands.get("default_low_vol_max", 1.25))
+
+
+def _kelly_fraction_guard(ror_daily: float) -> float:
+    kelly_cfg = _cfg_section("kelly")
+    base = float(kelly_cfg.get("base_fraction", 0.5))
+    ror_cap = float(kelly_cfg.get("ror_daily_max", 0.01))
+    if ror_daily <= ror_cap:
+        return base
+    min_fraction = float(kelly_cfg.get("min_fraction", base))
+    return max(min_fraction, base * 0.66)
+
+
+def _estimate_ror_daily(returns: List[float], bankroll: float) -> float:
+    if not returns or bankroll <= 0:
+        return 0.0
+    try:
+        variance = stats.pvariance(returns)
+    except Exception:
+        return 0.0
+    threshold = 0.01 * bankroll
+    return 0.01 if math.sqrt(variance) > threshold else 0.0
+
+
+def _clv_median_ok(clv_series: List[float], gate: float) -> bool:
+    if not clv_series:
+        return False
+    try:
+        return stats.median(clv_series) > gate
+    except Exception:
+        return False
+
+
+def build_tickets_roi_first(
+    market: Dict[str, Any],
+    budget: float,
+    meta: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """ROI-first ticket constructor used by the fast-path tooling.
+
+    Parameters
+    ----------
+    market:
+        Dictionary describing the SP market. Expected keys are ``sp_odds``
+        (list of decimal odds) and ``sp_meta`` (list of metadata dictionaries).
+    budget:
+        Total bankroll available for the race.
+    meta:
+        Optional dictionary containing contextual metrics such as
+        ``discipline`` (str), ``n_partants`` (int), ``bankroll`` (float),
+        ``todays_returns`` (list[float]) or calibration stats.
+
+    Returns
+    -------
+    dict
+        ``{"tickets": [...], "abstention": <str|None>}``
+    """
+
+    meta = dict(meta or {})
+    cfg_bankroll = _cfg_section("bankroll")
+    stake_cap = float(cfg_bankroll.get("stake_cap_per_race", budget))
+    budget = min(budget, stake_cap)
+    split_sp = float(cfg_bankroll.get("split_sp", 0.6))
+    split_combo = float(cfg_bankroll.get("split_combos", 0.4))
+    stake_sp = round(budget * split_sp, 2)
+    stake_combo = round(budget * split_combo, 2)
+
+    discipline = str(meta.get("discipline", ""))
+    n_partants = int(meta.get("n_partants", len(market.get("sp_odds", []))))
+    sp_odds_raw = [float(o) for o in market.get("sp_odds", []) if o]
+
+    if sp_odds_raw:
+        overround_cap = _pick_overround_cap(discipline, n_partants)
+        overround_value = _overround(sp_odds_raw)
+        if overround_value > overround_cap:
+            return {"tickets": [], "abstention": f"OVERROUND>{overround_cap:.2f}"}
+    else:
+        overround_value = None
+
+    clv_cfg = _cfg_section("clv")
+    clv_series = list(market.get("clv_rolling") or meta.get("clv_rolling") or [])
+    allow_exotics = _clv_median_ok(
+        clv_series,
+        float(clv_cfg.get("median_gate_exotics", 0.0)),
+    )
+
+    bankroll = float(meta.get("bankroll", stake_cap))
+    todays_returns = list(meta.get("todays_returns", []))
+    ror_daily = _estimate_ror_daily(todays_returns, bankroll)
+    kelly_fraction = _kelly_fraction_guard(ror_daily)
+
+    tickets: List[Dict[str, Any]] = []
+    sp_meta = market.get("sp_meta") or []
+    if sp_odds_raw and sp_meta:
+        if not diversify_guard(sp_meta):
+            return {"tickets": [], "abstention": "DIVERSIFICATION_FAIL"}
+        if not require_mid_odds(sp_meta):
+            return {"tickets": [], "abstention": "NO_MID_ODDS"}
+
+        stake_sp_actual = max(0.0, round(stake_sp * kelly_fraction, 2))
+        if stake_sp_actual > 0:
+            stakes = equal_profit_stakes(sp_odds_raw, stake_sp_actual)
+            leg_cap = float(_cfg_section("kelly").get("single_leg_cap", 0.6))
+            cap_amount = stake_sp_actual * leg_cap
+            stakes = [min(st, cap_amount) for st in stakes]
+            total = sum(stakes) or 1.0
+            if total > stake_sp_actual and total > 0:
+                factor = stake_sp_actual / total
+                stakes = [st * factor for st in stakes]
+
+            model_probs_raw = market.get("model_probs")
+            if isinstance(model_probs_raw, list) and len(model_probs_raw) == len(sp_odds_raw):
+                probs = [max(0.0, float(p)) for p in model_probs_raw]
+            else:
+                probs = no_vig_probs(sp_odds_raw)
+            evs = [
+                expected_value_simple(prob, odds, stake)
+                for prob, odds, stake in zip(probs, sp_odds_raw, stakes)
+            ]
+            ev_sp = float(sum(evs))
+
+            ev_cfg = _cfg_section("ev")
+            min_ev_sp = float(ev_cfg.get("min_ev_sp_pct_budget", 0.0)) * stake_sp
+            if ev_sp < min_ev_sp:
+                return {"tickets": [], "abstention": "EV_SP_TOO_LOW"}
+
+            legs_payload = []
+            for meta_leg, odds, stake, prob, ev_leg in zip(sp_meta, sp_odds_raw, stakes, probs, evs):
+                leg_payload = dict(meta_leg)
+                leg_payload.update(
+                    {
+                        "odds": odds,
+                        "stake": round(stake, 2),
+                        "prob": prob,
+                        "ev": ev_leg,
+                        "kelly_fraction": kelly_fraction,
+                    }
+                )
+                legs_payload.append(leg_payload)
+
+            tickets.append(
+                {
+                    "type": "SP_DUTCH",
+                    "legs": legs_payload,
+                    "stake": round(sum(stakes), 2),
+                    "ev": ev_sp,
+                }
+            )
+
+    ev_cfg = _cfg_section("ev")
+    min_combo_payout = float(ev_cfg.get("min_expected_payout_combo", 0.0))
+    if allow_exotics and stake_combo > 0:
+        calibration = meta.get("calibration", {})
+        calib_cfg = _cfg_section("calibration")
+        has_calibration = (
+            calibration.get("samples", 0) >= int(calib_cfg.get("min_samples", 0))
+            and calibration.get("ci95_width", 1.0) <= float(calib_cfg.get("max_ci95_width", 1.0))
+            and calibration.get("abs_err", 1.0) <= float(calib_cfg.get("max_abs_error_pct", 1.0))
+            and calibration.get("age_days", 999) <= int(calib_cfg.get("stale_days", 999))
+        )
+        expected_payout = float(market.get("expected_payout_combo", 0.0))
+        if has_calibration and expected_payout >= min_combo_payout:
+            tickets.append(
+                {
+                    "type": "COMBO_AUTO",
+                    "stake": round(stake_combo, 2),
+                    "expected_payout": expected_payout,
+                    "note": "gated by CLV&calibration",
+                }
+            )
+
+    Path("artifacts").mkdir(exist_ok=True)
+    metrics_payload = {
+        "overround": overround_value,
+        "kelly_fraction": kelly_fraction,
+        "clv_median": stats.median(clv_series) if clv_series else None,
+    }
+    with Path("artifacts/metrics.json").open("w", encoding="utf-8") as handle:
+        json.dump(metrics_payload, handle, ensure_ascii=False, indent=2)
+    excel_cmd = (
+        f"python update_excel_with_results.py --race '{meta.get('race_id', 'R?C?')}' "
+        "--excel modele_suivi_courses_hippiques.xlsx"
+    )
+    with Path("artifacts/cmd_update_excel.txt").open("w", encoding="utf-8") as handle:
+        handle.write(excel_cmd + "\n")
+
+    return {"tickets": tickets, "abstention": None}
+    
 def _load_latest(path: Path, pattern: str) -> Optional[Path]:
     files = sorted(path.glob(pattern), key=lambda p: p.stat().st_mtime)
     return files[-1] if files else None
@@ -193,7 +441,9 @@ def load_course(course_dir: str) -> Tuple[List[Horse], Dict[str, Any]]:
 
     horses: List[Horse] = []
     for i, num in enumerate(all_nums):
-        name = idx5.get(num, {}).get("name") or idx30.get(num, {}).get("name")
+        rec5 = idx5.get(num, {})
+        rec30 = idx30.get(num, {})
+        name = rec5.get("name") or rec30.get("name")
         o30 = odds30[i]
         o5 = odds5[i]
         p30 = probs30[i]
@@ -202,10 +452,51 @@ def load_course(course_dir: str) -> Tuple[List[Horse], Dict[str, Any]]:
         drift = None
         if o30 is not None and o5 is not None:
             drift = o5 - o30  # >0: drift défavorable (cote qui monte)
-        horses.append(Horse(
-            num=str(num), name=name, odds_h30=o30, odds_h5=o5,
-            p_impl_h30=p30, p_impl_h5=p5, p_score=blend, drift=drift
-        ))
+        ecurie = rec5.get("ecurie") or rec30.get("ecurie") or rec5.get("stable") or rec30.get("stable")
+        driver = (
+            rec5.get("driver")
+            or rec30.get("driver")
+            or rec5.get("jockey")
+            or rec30.get("jockey")
+            or rec5.get("driver_name")
+            or rec30.get("driver_name")
+        )
+        chrono_last = _safe_float(
+            rec5.get("chrono_last")
+            or rec5.get("chrono_reference")
+            or rec5.get("chrono")
+            or rec30.get("chrono_last")
+            or rec30.get("chrono_reference")
+        )
+
+        horses.append(
+            Horse(
+                num=str(num),
+                name=name,
+                odds_h30=o30,
+                odds_h5=o5,
+                p_impl_h30=p30,
+                p_impl_h5=p5,
+                p_score=blend,
+                drift=drift,
+                ecurie=str(ecurie) if ecurie else None,
+                driver=str(driver) if driver else None,
+                chrono_last=chrono_last,
+            )
+        )
+
+    discipline = (
+        snap_h5.get("discipline")
+        or snap_h5.get("race", {}).get("discipline")
+        or snap_h30.get("discipline")
+        or snap_h30.get("race", {}).get("discipline")
+        or ""
+    )
+
+    clv_series = []
+    clv_source = snap_h5.get("clv_rolling") or snap_h5.get("clv_last")
+    if isinstance(clv_source, list):
+        clv_series = [float(x) for x in clv_source if isinstance(x, (float, int))]
 
     meta = {
         "n_partants": len(horses),
@@ -213,7 +504,9 @@ def load_course(course_dir: str) -> Tuple[List[Horse], Dict[str, Any]]:
         "overround_h5": over5,
         "snapshot_h30": str(p_h30) if p_h30 and p_h30.exists() else None,
         "snapshot_h5": str(p_h5) if p_h5 and p_h5.exists() else None,
-        "course_dir": str(d)
+        "course_dir": str(d),
+        "discipline": str(discipline),
+        "clv_rolling": clv_series,
     }
     return horses, meta
 
