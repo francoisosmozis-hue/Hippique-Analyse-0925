@@ -1,31 +1,31 @@
-"""Loader and inference helpers for the :math:`p_true` calibration model."""
+def compute_runner_features(
+    odds_h5: float,
+    odds_h30: float | None,
+    stats: Mapping[str, float] | None,
+    n_runners: int,
+) -> dict[str, float]:
+    """Return the feature mapping expected by the calibration model."""
 
-from __future__ import annotations
+    o5 = max(float(odds_h5 or 0.0), 0.0)
+    if not math.isfinite(o5) or o5 <= 1.0:
+        raise ValueError("odds_h5 must be > 1 and finite")
 
-from dataclasses import dataclass
-from pathlib import Path
-from typing import Any, Mapping
+    o30 = float(odds_h30) if odds_h30 not in (None, "") else o5
+    if not math.isfinite(o30) or o30 <= 1.0:
+        o30 = o5
 
-import math
-import threading
-
-import yaml
-
-
-MODEL_PATH = Path("calibration/p_true_model.yaml")
-_EPSILON = 1e-9
-
-_MODEL_LOCK = threading.Lock()
-_MODEL_CACHE: tuple[Path, float, "PTrueModel"] | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class PTrueModel:
-    """Representation of the serialized logistic regression."""
-
-    features: tuple[str, ...]
-    intercept: float
-    coefficients: dict[str, float]
+    stats = stats or {}
+    j_win = float(stats.get("j_win", 0.0))
+    e_win = float(stats.get("e_win", 0.0))
+    je_total = j_win + e_win
+ 
+    return {
+        "log_odds": math.log(max(o5, 1.0 + _EPSILON)),
+        "drift": o5 - o30,
+        "je_total": je_total,
+        "implied_prob": 1.0 / o5,
+        "n_runners": float(n_runners),
+    }
     metadata: dict
 
     def predict(self, features: Mapping[str, float]) -> float:
