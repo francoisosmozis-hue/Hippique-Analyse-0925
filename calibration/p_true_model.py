@@ -1,3 +1,19 @@
+from __future__ import annotations
+
+import math
+from pathlib import Path
+from typing import Any, Dict, Mapping, Optional, Sequence
+
+import yaml
+
+
+def _yaml_load(path: str | Path) -> dict:
+    """Load YAML content from ``path`` using ``yaml.safe_load``."""
+
+    p = Path(path)
+    with p.open("r", encoding="utf-8") as fh:
+        return yaml.safe_load(fh) or {}
+        
 def compute_runner_features(
     odds_h5: float,
     odds_h30: float | None,
