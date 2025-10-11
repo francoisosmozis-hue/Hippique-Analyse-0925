@@ -25,15 +25,15 @@ Notes
 """
 from __future__ import annotations
 
+import argparse
+import csv
 import json
 import math
-import os
-import sys
-import argparse
 import statistics as stats
+import sys
+from dataclasses import asdict, dataclass
 from pathlib import Path
-from dataclasses import dataclass, asdict
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple, Union
 
 try:  # pragma: no cover - optional dependency
     import yaml
@@ -246,6 +246,12 @@ def _load_gpi_cfg(path: Path | str = "config/gpi.yml") -> Dict[str, Any]:
 _GPI_CFG: Dict[str, Any] = _load_gpi_cfg()
 
 
+ARTIFACTS_DIR = Path("artifacts")
+METRICS_PATH = ARTIFACTS_DIR / "metrics.json"
+PER_HORSE_REPORT_PATH = ARTIFACTS_DIR / "per_horse_report.csv"
+CMD_UPDATE_EXCEL_PATH = ARTIFACTS_DIR / "cmd_update_excel.txt"
+
+
 def _cfg_section(name: str) -> Dict[str, Any]:
     section = _GPI_CFG.get(name, {}) if isinstance(_GPI_CFG, dict) else {}
     return section if isinstance(section, dict) else {}
@@ -315,6 +321,97 @@ def _clv_median_ok(clv_series: List[float], gate: float) -> bool:
         return False
 
 
+def _extract_float(meta: Mapping[str, Any], keys: Sequence[str], default: float = 0.0) -> float:
+    for key in keys:
+        value = meta.get(key)
+        if value is None:
+            continue
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            continue
+    return default
+
+
+def _per_horse_rows_from_market(sp_odds: Sequence[float], sp_meta: Sequence[Mapping[str, Any]]) -> List[Dict[str, Any]]:
+    rows: List[Dict[str, Any]] = []
+    if not sp_odds:
+        return rows
+    probs = list(no_vig_probs(list(sp_odds))) if sp_odds else []
+    for idx, odds in enumerate(sp_odds):
+        meta = sp_meta[idx] if idx < len(sp_meta) else {}
+        runner_num = meta.get("num") or meta.get("horse") or meta.get("runner") or str(idx + 1)
+        rows.append(
+            {
+                "num": str(runner_num),
+                "odds_win": float(odds) if odds else None,
+                "p_no_vig": probs[idx] if idx < len(probs) else None,
+                "j_rate": _extract_float(meta, ("j_rate", "driver_rate", "jockey_rate"), 0.0),
+                "e_rate": _extract_float(meta, ("e_rate", "ecurie_rate", "stable_rate"), 0.0),
+            }
+        )
+    return rows
+
+
+def _per_horse_rows_from_horses(horses: Sequence[Horse]) -> List[Dict[str, Any]]:
+    rows: List[Dict[str, Any]] = []
+    if not horses:
+        return rows
+    odds = []
+    for horse in horses:
+        odds_value = horse.odds_h5 or horse.odds_h30
+        odds.append(float(odds_value) if odds_value else None)
+    probs, _ = _implied_probs_from_odds(odds)
+    for horse, prob, odds_value in zip(horses, probs, odds):
+        rows.append(
+            {
+                "num": horse.num,
+                "odds_win": odds_value,
+                "p_no_vig": prob,
+                "j_rate": 0.0,
+                "e_rate": 0.0,
+            }
+        )
+    return rows
+
+
+def _default_excel_cmd(race_id: str) -> str:
+    return (
+        "python update_excel_with_results.py --race "
+        f"'{race_id}' --excel modele_suivi_courses_hippiques.xlsx"
+    )
+
+
+def _write_artifacts(
+    metrics: Mapping[str, Any],
+    per_horse_rows: Sequence[Mapping[str, Any]],
+    race_id: str,
+) -> None:
+    ARTIFACTS_DIR.mkdir(exist_ok=True)
+
+    payload = {
+        "overround": metrics.get("overround"),
+        "clv_median_30": metrics.get("clv_median_30"),
+        "kelly_fraction": metrics.get("kelly_fraction"),
+    }
+    with METRICS_PATH.open("w", encoding="utf-8") as handle:
+        json.dump(payload, handle, ensure_ascii=False, indent=2)
+
+    with PER_HORSE_REPORT_PATH.open("w", encoding="utf-8", newline="") as handle:
+        fieldnames = ["num", "odds_win", "p_no_vig", "j_rate", "e_rate"]
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        for row in per_horse_rows:
+            sanitized = {}
+            for key in fieldnames:
+                value = row.get(key, "")
+                sanitized[key] = "" if value is None else value
+            writer.writerow(sanitized)
+
+    with CMD_UPDATE_EXCEL_PATH.open("w", encoding="utf-8") as handle:
+        handle.write(_default_excel_cmd(race_id) + "\n")
+
+
 def build_tickets_roi_first(
     market: Dict[str, Any],
     budget: float,
@@ -353,14 +450,12 @@ def build_tickets_roi_first(
     n_partants = int(meta.get("n_partants", len(market.get("sp_odds", []))))
     sp_odds_raw = [float(o) for o in market.get("sp_odds", []) if o]
 
+    overround_cap = None
+    overround_value = None
     if sp_odds_raw:
         overround_cap = _pick_overround_cap(discipline, n_partants)
         overround_value = _overround(sp_odds_raw)
-        if overround_value > overround_cap:
-            return {"tickets": [], "abstention": f"OVERROUND>{overround_cap:.2f}"}
-    else:
-        overround_value = None
-
+        
     clv_cfg = _cfg_section("clv")
     clv_series = list(market.get("clv_rolling") or meta.get("clv_rolling") or [])
     allow_exotics = _clv_median_ok(
@@ -374,66 +469,74 @@ def build_tickets_roi_first(
     kelly_fraction = _kelly_fraction_guard(ror_daily)
 
     tickets: List[Dict[str, Any]] = []
-    sp_meta = market.get("sp_meta") or []
-    if sp_odds_raw and sp_meta:
-        if not diversify_guard(sp_meta):
-            return {"tickets": [], "abstention": "DIVERSIFICATION_FAIL"}
-        if not require_mid_odds(sp_meta):
-            return {"tickets": [], "abstention": "NO_MID_ODDS"}
+    abstention: Optional[str] = None
+    
+    sp_meta = market.get("sp_meta") or []    
+    per_horse_rows = _per_horse_rows_from_market(sp_odds_raw, sp_meta)
 
-        stake_sp_actual = max(0.0, round(stake_sp * kelly_fraction, 2))
-        if stake_sp_actual > 0:
-            stakes = equal_profit_stakes(sp_odds_raw, stake_sp_actual)
-            leg_cap = float(_cfg_section("kelly").get("single_leg_cap", 0.6))
-            cap_amount = stake_sp_actual * leg_cap
-            stakes = [min(st, cap_amount) for st in stakes]
-            total = sum(stakes) or 1.0
-            if total > stake_sp_actual and total > 0:
-                factor = stake_sp_actual / total
-                stakes = [st * factor for st in stakes]
+    if sp_odds_raw and overround_cap is not None and overround_value is not None:
+        if overround_value > overround_cap:
+            abstention = f"OVERROUND>{overround_cap:.2f}"
+        elif not sp_meta:
+            abstention = "MISSING_SP_META"
+        elif not diversify_guard(sp_meta):
+            abstention = "DIVERSIFICATION_FAIL"
+        elif not require_mid_odds(sp_meta):
+            abstention = "NO_MID_ODDS"
+        else:
+            stake_sp_actual = max(0.0, round(stake_sp * kelly_fraction, 2))
+            if stake_sp_actual > 0:
+                stakes = equal_profit_stakes(sp_odds_raw, stake_sp_actual)
+                leg_cap = float(_cfg_section("kelly").get("single_leg_cap", 0.6))
+                cap_amount = stake_sp_actual * leg_cap
+                stakes = [min(st, cap_amount) for st in stakes]
+                total = sum(stakes) or 1.0
+                if total > stake_sp_actual and total > 0:
+                    factor = stake_sp_actual / total
+                    stakes = [st * factor for st in stakes]
 
-            model_probs_raw = market.get("model_probs")
-            if isinstance(model_probs_raw, list) and len(model_probs_raw) == len(sp_odds_raw):
-                probs = [max(0.0, float(p)) for p in model_probs_raw]
-            else:
-                probs = no_vig_probs(sp_odds_raw)
-            evs = [
-                expected_value_simple(prob, odds, stake)
-                for prob, odds, stake in zip(probs, sp_odds_raw, stakes)
-            ]
-            ev_sp = float(sum(evs))
+                model_probs_raw = market.get("model_probs")
+                if isinstance(model_probs_raw, list) and len(model_probs_raw) == len(sp_odds_raw):
+                    probs = [max(0.0, float(p)) for p in model_probs_raw]
+                else:
+                    probs = list(no_vig_probs(sp_odds_raw))
+                evs = [
+                    expected_value_simple(prob, odds, stake)
+                    for prob, odds, stake in zip(probs, sp_odds_raw, stakes)
+                ]
+                ev_sp = float(sum(evs))
 
-            ev_cfg = _cfg_section("ev")
-            min_ev_sp = float(ev_cfg.get("min_ev_sp_pct_budget", 0.0)) * stake_sp
-            if ev_sp < min_ev_sp:
-                return {"tickets": [], "abstention": "EV_SP_TOO_LOW"}
+                ev_cfg = _cfg_section("ev")
+                min_ev_sp = float(ev_cfg.get("min_ev_sp_pct_budget", 0.0)) * stake_sp
+                if ev_sp < min_ev_sp:
+                    abstention = "EV_SP_TOO_LOW"
+                else:
+                    legs_payload = []
+                    for meta_leg, odds, stake, prob, ev_leg in zip(sp_meta, sp_odds_raw, stakes, probs, evs):
+                        leg_payload = dict(meta_leg)
+                        leg_payload.update(
+                            {
+                                "odds": odds,
+                                "stake": round(stake, 2),
+                                "prob": prob,
+                                "ev": ev_leg,
+                                "kelly_fraction": kelly_fraction,
+                            }
+                        )
+                        legs_payload.append(leg_payload)
 
-            legs_payload = []
-            for meta_leg, odds, stake, prob, ev_leg in zip(sp_meta, sp_odds_raw, stakes, probs, evs):
-                leg_payload = dict(meta_leg)
-                leg_payload.update(
-                    {
-                        "odds": odds,
-                        "stake": round(stake, 2),
-                        "prob": prob,
-                        "ev": ev_leg,
-                        "kelly_fraction": kelly_fraction,
-                    }
-                )
-                legs_payload.append(leg_payload)
-
-            tickets.append(
-                {
-                    "type": "SP_DUTCH",
-                    "legs": legs_payload,
-                    "stake": round(sum(stakes), 2),
-                    "ev": ev_sp,
-                }
-            )
+                    tickets.append(
+                        {
+                            "type": "SP_DUTCH",
+                            "legs": legs_payload,
+                            "stake": round(sum(stakes), 2),
+                            "ev": ev_sp,
+                        }
+                    )       
 
     ev_cfg = _cfg_section("ev")
     min_combo_payout = float(ev_cfg.get("min_expected_payout_combo", 0.0))
-    if allow_exotics and stake_combo > 0:
+    if abstention is None and allow_exotics and stake_combo > 0:
         calibration = meta.get("calibration", {})
         calib_cfg = _cfg_section("calibration")
         has_calibration = (
@@ -453,21 +556,13 @@ def build_tickets_roi_first(
                 }
             )
 
-    Path("artifacts").mkdir(exist_ok=True)
     metrics_payload = {
         "overround": overround_value,
+        "clv_median_30": stats.median(clv_series) if clv_series else None,
         "kelly_fraction": kelly_fraction,
-        "clv_median": stats.median(clv_series) if clv_series else None,
     }
-    with Path("artifacts/metrics.json").open("w", encoding="utf-8") as handle:
-        json.dump(metrics_payload, handle, ensure_ascii=False, indent=2)
-    excel_cmd = (
-        f"python update_excel_with_results.py --race '{meta.get('race_id', 'R?C?')}' "
-        "--excel modele_suivi_courses_hippiques.xlsx"
-    )
-    with Path("artifacts/cmd_update_excel.txt").open("w", encoding="utf-8") as handle:
-        handle.write(excel_cmd + "\n")
-
+    _write_artifacts(metrics_payload, per_horse_rows, str(meta.get("race_id", "R?C?")))
+    
     return {"tickets": tickets, "abstention": None}
     
 def _load_latest(path: Path, pattern: str) -> Optional[Path]:
@@ -722,9 +817,13 @@ def _simulate_trio_ev(legs: List[Horse]) -> Tuple[Optional[float], Optional[floa
 
 # =============================== Construction tickets ===========================
 
-def build_tickets(horses: List[Horse], budget: float = BUDGET_DEFAULT) -> List[Ticket]:
+def _build_tickets_from_horses(
+    horses: List[Horse],
+    budget: float = BUDGET_DEFAULT,
+    meta: Optional[Dict[str, Any]] = None,
+) -> List[Ticket]:
     tickets: List[Ticket] = []
-
+    
     # Ticket 1 — SP Dutching
     budget_sp = round(budget * RATIO_SP, 2)
     sp_candidates = _select_sp_candidates(horses)
@@ -791,8 +890,41 @@ def build_tickets(horses: List[Horse], budget: float = BUDGET_DEFAULT) -> List[T
                 if isinstance(leg.get("stake"), (int, float)):
                     leg["stake"] = round(leg["stake"] * scale, 2)
 
+    metrics_payload = {
+        "overround": (meta or {}).get("overround_h5"),
+        "clv_median_30": None,
+        "kelly_fraction": _cfg_section("kelly").get("base_fraction", 0.5),
+    }
+    clv_series = list((meta or {}).get("clv_rolling") or [])
+    if clv_series:
+        try:
+            metrics_payload["clv_median_30"] = stats.median(clv_series)
+        except Exception:
+            metrics_payload["clv_median_30"] = None
+    _write_artifacts(
+        metrics_payload,
+        _per_horse_rows_from_horses(horses),
+        str((meta or {}).get("race_id", (meta or {}).get("course_dir", "R?C?"))),
+    )
+    
     return tickets
 
+
+def build_tickets(
+    payload: Union[Dict[str, Any], List[Horse]],
+    budget: float = BUDGET_DEFAULT,
+    meta: Optional[Dict[str, Any]] = None,
+):
+    """Dispatch helper supporting both market dicts and horse lists."""
+
+    if isinstance(payload, dict):
+        return build_tickets_roi_first(payload, budget, meta or {})
+    if isinstance(payload, list):
+        if not payload or isinstance(payload[0], Horse):
+            return _build_tickets_from_horses(payload, budget, meta)
+        raise TypeError("Expected Horse instances in list payload")
+    raise TypeError("Unsupported payload type for build_tickets")
+    
 # =============================== Pipeline principal =============================
 
 def run_pipeline(course_dir: str, budget: float = BUDGET_DEFAULT) -> Dict[str, Any]:
@@ -804,7 +936,7 @@ def run_pipeline(course_dir: str, budget: float = BUDGET_DEFAULT) -> Dict[str, A
         best = max(horses, key=lambda h: (h.p_score or 0.0))
         favorite = best.num if (best.p_score or 0) > 0 else None
 
-    tickets = build_tickets(horses, budget)
+    tickets = _build_tickets_from_horses(horses, budget, meta)
 
     budget_sp = 0.0
     budget_combo = 0.0
