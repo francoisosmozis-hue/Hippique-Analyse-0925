@@ -24,7 +24,24 @@ Pipeline **pro** pour planifier, capturer H‑30 / H‑5, analyser et consigner 
 - La phase **H‑5** réessaie automatiquement les collectes `JE`/`chronos` en cas d'absence des CSV, marque la course « non jouable » via `UNPLAYABLE.txt` si la régénération échoue et évite ainsi que le pipeline plante.
 - Les combinés sont désormais filtrés strictement dans `pipeline_run.py` : statut `"ok"` obligatoire, EV ≥ +40 % et payout attendu ≥ 10 € sans heuristique. Le runner et le pipeline partagent la même règle, ce qui garantit un comportement homogène en CLI comme dans les automatisations.
 - Le seuil d'overround est adapté automatiquement (`1.30` standard désormais aligné sur la garde ROI, `1.25` pour les handicaps plats ouverts ≥ 14 partants) pour réduire les tickets exotiques à faible espérance.
-- Chaque analyse écrit systématiquement `out/<RC>/metrics.json|csv`, `p_finale.json` et `cmd_update_excel.txt` afin d'exposer EV, ROI, overround et raisons d'abstention.
+- Chaque analyse écrit systématiquement les artefacts `artifacts/metrics.json`, `artifacts/per_horse_report.csv` et `artifacts/cmd_update_excel.txt` afin d'exposer EV, ROI, overround et raisons d'abstention.
+
+## ✅ CI ROI Guardrails
+
+Les seuils ROI/EV sont vérifiés en continu par un job GitHub Actions `roi-smoke` (Python 3.11) qui exécute `pytest tests/test_roi_smoke.py` sur le dataset minimal `data/ci_sample/`. Les points de contrôle sont alignés sur `config/gpi.yml` :
+
+- **EV_SP ≥ 40 %** du budget SP et **ROI_SP ≥ 20 %** dès qu'une cote 4.0–7.0 est disponible.
+- **ROI combinés ≥ 25 %** et **EV combinés ≥ 40 %** avant d'ajouter `COMBO_AUTO`.
+- **CLV médian (fenêtre 30)** ≤ 0 ⇒ exotiques bloquées ; sinon calibration obligatoire (`samples ≥ 100`, `ci95_width ≤ 0.12`, `abs_err ≤ 0.15`, `stale_days ≤ 7`).
+- **Overround dynamique** : trot ≤ 9 partants plafonné à 1.22, sinon garde-fou par défaut 1.23.
+
+En fin de job, les artefacts `metrics.json`, `per_horse_report.csv` et `cmd_update_excel.txt` sont uploadés pour inspection dans l'onglet *Artifacts*, avec un résumé `EV/ROI gates OK` dans `$GITHUB_STEP_SUMMARY`. Le fichier `cmd_update_excel.txt` rappelle la commande officielle :
+
+```bash
+python update_excel_with_results.py --race 'R?C?' --excel modele_suivi_courses_hippiques.xlsx
+```
+
+Pour la sécurité, **aucun `credentials.json` n'est versionné**. Encodez la clé de service GCP en base64 et exposez‑la via un secret GitHub (`GCS_SERVICE_KEY_B64`) afin que les workflows puissent reconstituer le fichier à la volée.
 - 
 ### API `/analyse`
 
@@ -255,11 +272,13 @@ python scripts/lint_sources.py --file sources.txt --enforce-today
 
      ```bash
      python scripts/drive_sync.py \
-       --push \
-       --folder-id "<ID_DOSSIER_DRIVE>" \
-       --credentials credentials.json \
-       --file modele_suivi_courses_hippiques.xlsx
-     ```
+      --push \
+      --folder-id "<ID_DOSSIER_DRIVE>" \
+      --credentials "$GCS_CREDENTIALS_JSON" \
+      --file modele_suivi_courses_hippiques.xlsx
+    ```
+
+    > `GCS_CREDENTIALS_JSON` doit pointer vers le fichier temporaire reconstruit depuis le secret GitHub `GCS_SERVICE_KEY_B64` (ne jamais committer le JSON brut).
 
 Cette séquence garantit que les colonnes Statut H‑30/H‑5, Jouable et Tickets
 sont enrichies au fur et à mesure des analyses tout en conservant un historique
