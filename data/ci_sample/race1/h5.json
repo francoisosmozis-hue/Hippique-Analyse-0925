@@ -1,0 +1,10 @@
+[
+  {"num": "1", "odds_win": 2.8, "odds_win_h5": 2.8},
+  {"num": "2", "odds_win": 4.5, "odds_win_h5": 4.5},
+  {"num": "3", "odds_win": 5.5, "odds_win_h5": 5.5},
+  {"num": "4", "odds_win": 7.0, "odds_win_h5": 7.0},
+  {"num": "5", "odds_win": 10.0, "odds_win_h5": 10.0},
+  {"num": "6", "odds_win": 14.0, "odds_win_h5": 14.0},
+  {"num": "7", "odds_win": 22.0, "odds_win_h5": 22.0},
+  {"num": "8", "odds_win": 35.0, "odds_win_h5": 35.0}
+]
