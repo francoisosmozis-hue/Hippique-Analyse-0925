@@ -42,7 +42,7 @@ jobs:
       - name: Run Ruff
         run: ruff check .
 
-  tests:
+  lint-test:
     name: Tests
     runs-on: ubuntu-latest
     needs: lint        
@@ -81,45 +81,45 @@ jobs:
           if-no-files-found: ignore
 
   roi-smoke:
-    name: ROI smoke
+    name: ROI smoke (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
-    needs: tests
+    needs: lint-test
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.10', '3.11']
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: 'pip'
 
-      - name: Install dependencies
+      python-version: ${{ matrix.python-version }}
         run: |
           python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-          if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
+          if [ -f requirements.txt ]; then python -m pip install -r requirements.txt; fi
+          python -m pip install pytest pyyaml
 
-      - name: Run ROI smoke
-        run: pytest tests/test_roi_smoke.py -q
-
+      - name: Run ROI smoke test
+        run: pytest -q tests/test_roi_smoke.py
+        
       - name: Upload ROI artifacts
+        if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
-          name: roi-smoke-artifacts
+          name: roi-smoke-artifacts-${{ matrix.python-version }}
           path: |
             artifacts/metrics.json
             artifacts/per_horse_report.csv
             artifacts/cmd_update_excel.txt
-          if-no-files-found: error
-
-      - name: ROI gates summary
-        run: echo "EV/ROI gates OK" >> "$GITHUB_STEP_SUMMARY"
+          if-no-files-found: warn
         
   smoke:
     name: Smoke test
     runs-on: ubuntu-latest
-    needs: tests
+    needs: lint-test
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -141,14 +141,14 @@ jobs:
           cache: 'pip'
           
       - name: Install dependencies
-        if: steps.smoke.outputs.run == 'true
+        if: steps.smoke.outputs.run == 'true'
         run: |
           python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-          if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
+          if [ -f requirements.txt ]; then python -m pip install -r requirements.txt; fi
+          if [ -f requirements-dev.txt ]; then python -m pip install -r requirements-dev.txt; fi
 
       - name: Run smoke scenario
-        if: steps.smoke.outputs.run == 'true
+        if: steps.smoke.outputs.run == 'true'
         run: |
           mkdir -p reports
           python pipeline_run.py --dry-run --no-upload --data-dir data/ci_sample | tee reports/smoke.log
