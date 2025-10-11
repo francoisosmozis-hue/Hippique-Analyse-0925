@@ -2259,9 +2259,14 @@ def build_p_true(cfg, partants, odds_h5, odds_h30, stats_je) -> dict:
 
     model = None
     try:
-        model = load_model()
-    except Exception as exc:  # pragma: no cover - corrupted file
-        logger.warning("Impossible de charger le modèle p_true: %s", exc)
+        features = compute_features(
+            float(odds_h5[cid]),
+            float(odds_h30.get(cid, odds_h5[cid])) if odds_h30 else None,
+            stats_je.get(cid) if stats_je else None,
+            n_runners=len(partants),
+        )            
+    except (ValueError, TypeError):
+        continue
         model = None
 
     if model is not None:
