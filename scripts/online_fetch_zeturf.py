@@ -85,145 +85,144 @@ class ZeturfFetcher:
                 # Vérifier le status code
                 response.raise_for_status()
                 
-                                    odds_map[str(num)] = comb.get('rapport')
+                        odds_map[str(num)] = comb.get('rapport')
     
-               for runner in runners:
-                   if str(runner['num']) in odds_map:
-                       runner['dernier_rapport'] = {'gagnant': odds_map[str(runner['num'])]}
-                       runner['cote'] = odds_map[str(runner['num'])]
+            for runner in runners:
+                if str(runner['num']) in odds_map:
+                    runner['dernier_rapport'] = {'gagnant': odds_map[str(runner['num'])]}
+                    runner['cote'] = odds_map[str(runner['num'])]
     
-       except Exception as e:
-            logger.warning(f"Failed to fetch PMU rapports for R{reunion}C{course}: {e}")
+    except Exception as e:
+        logger.warning(f"Failed to fetch PMU rapports for R{reunion}C{course}: {e}")
 
-    98     return {
-    99         "runners": runners,
-   100         "hippodrome": partants_data.get('hippodrome', {}).get('libelleCourt'),
-   101         "discipline": partants_data.get('discipline'),
-   102         "partants": len(runners),
-   103         "course_id": partants_data.get('id'),
-   104         "reunion": f"R{reunion}",
-   105         "course": f"C{course}",
-   106         "date": date,
-   107     }
-   108 
-   109 def fetch_race_snapshot(
-   110     reunion: str,
-   111     course: str | None = None,
-   112     phase: str = "H30",
-   113     *,
-   114     sources: Mapping[str, Any] | None = None,
-   115     url: str | None = None,
-   116     retries: int = 3,
-   117     backoff: float = 1.5,
-   118     initial_delay: float = 0.5,
-   119 ) -> Dict[str, Any]:
-   120 
-   121     if sources and sources.get("provider") == "pmu":
-   122         if not url:
-   123             raise ValueError("URL is required for PMU provider")
-   124         
-   125         match = re.search(r"(R\d+C\d+)", url)
-   126         if not match:
-   127             raise ValueError("Cannot extract R/C from URL for PMU provider")
-   128         
-   129         rc_label = match.group(1)
-   130         reunion_str, course_str = _derive_rc_parts(rc_label)
-   131         
-   132         today = dt.date.today().strftime("%Y-%m-%d")
-   133         r_num = int(reunion_str.replace("R", ""))
-   134         c_num = int(course_str.replace("C", ""))
-   135         return fetch_from_pmu_api(today, r_num, c_num)
-   136 
-   137     # Zeturf/Geny logic (existing code)
-   138     rc_from_first = _normalise_rc(reunion)
-   139     if course is None and sources is not None and rc_from_first:
-   140         return _fetch_race_snapshot_by_rc(
-   141             rc_from_first,
-   142             phase=phase,
-   143             sources=sources,
-   144             url=url,
-   145             retries=retries,
-   146             backoff=backoff,
-   147             initial_delay=initial_delay,
-   148         )
-   149 
-   150     if course is None:
-   151         raise ValueError(
-   152             "course label is required when reunion/course are provided separately"
-   153         )
-   154 
-   155     reunion_label = _normalise_reunion_label(reunion)
-   156     course_label = _normalise_course_label(course)
-   157     rc = f"{reunion_label}{course_label}"
-   158 
-   159     config: Dict[str, Any]
-   160     if isinstance(sources, MutableMapping):
-   161         config = dict(sources)
-   162     elif isinstance(sources, Mapping):
-   163         config = dict(sources)
-   164     else:
-   165         config = {}
-   166 
-   167     rc_map_raw = (
-   168         config.get("rc_map") if isinstance(config.get("rc_map"), Mapping) else None
-   169     )
-   170     rc_map: Dict[str, Any] = (
-   171         {str(k): v for k, v in rc_map_raw.items()} if rc_map_raw else {}
-   172     )
-   173 
-   174     entry = dict(rc_map.get(rc, {}))
-   175     entry.setdefault("reunion", reunion_label)
-   176     entry.setdefault("course", course_label)
-   177     if url:
-   178         entry["url"] = url
-   179 
-   180     rc_map[rc] = entry
-   181     config["rc_map"] = rc_map
-   182 
-   183     snapshot = _fetch_race_snapshot_by_rc(
-   184         rc,
-   185         phase=phase,
-   186         sources=config,
-   187         url=url,
-   188         retries=retries,
-   189         backoff=backoff,
-   190         initial_delay=initial_delay,
-   191     )
-   192 
-   193     snapshot.setdefault("reunion", reunion_label)
-   194     snapshot.setdefault("course", course_label)
-   195     snapshot.setdefault("rc", rc)
-   196     return snapshot
-   197 
-   198 def write_snapshot_from_geny(course_id: str, phase: str, rc_dir: Path) -> None:
-   199     logger.info("STUB: Writing dummy snapshots for %s in %s", course_id, rc_dir)
-   200     rc_dir.mkdir(parents=True, exist_ok=True)
-   201 
-   202     runners = [
-   203         {"id": "1", "num": "1", "name": "DUMMY 1", "odds": 5.0},
-   204         {"id": "2", "num": "2", "name": "DUMMY 2", "odds": 6.0},
-   205         {"id": "3", "num": "3", "name": "DUMMY 3", "odds": 7.0},
-   206         {"id": "4", "num": "4", "name": "DUMMY 4", "odds": 8.0},
-   207         {"id": "5", "num": "5", "name": "DUMMY 5", "odds": 9.0},
-   208         {"id": "6", "num": "6", "name": "DUMMY 6", "odds": 10.0},
-   209         {"id": "7", "num": "7", "name": "DUMMY 7", "odds": 11.0},
-   210     ]
-   211 
-   212     # Create dummy H-30 file
-   213     h30_file = rc_dir / "dummy_H-30.json"
-   214     with open(h30_file, "w", encoding="utf-8") as f:
-   215         json.dump({"id_course": course_id, "phase": "H-30", "runners": runners, "distance": 2100}, f)
-   216     logger.info("STUB: Wrote dummy H-30 file to %s", h30_file)
-   217 
-   218     # Create dummy H-5 file
-   219     h5_file = rc_dir / "dummy_H-5.json"
-   220     with open(h5_file, "w", encoding="utf-8") as f:
-   221         json.dump({"id_course": course_id, "phase": "H-5", "runners": runners, "distance": 2100}, f)
-   222     logger.info("STUB: Wrote dummy H-5 file to %s", h5_file)
-   223 
-   224 
-   225 
-   226 # ... (le reste du fichier)
+    return {
+        "runners": runners,
+        "hippodrome": partants_data.get('hippodrome', {}).get('libelleCourt'),
+        "discipline": partants_data.get('discipline'),
+        "partants": len(runners),
+        "course_id": partants_data.get('id'),
+        "reunion": f"R{reunion}",
+        "course": f"C{course}",
+        "date": date,
+    }
+def fetch_race_snapshot(
+    reunion: str,
+    course: str | None = None,
+    phase: str = "H30",
+    *,
+    sources: Mapping[str, Any] | None = None,
+    url: str | None = None,
+    retries: int = 3,
+    backoff: float = 1.5,
+    initial_delay: float = 0.5,
+) -> Dict[str, Any]:
+
+    if sources and sources.get("provider") == "pmu":
+        if not url:
+            raise ValueError("URL is required for PMU provider")
+        
+        match = re.search(r"(R\d+C\d+)", url)
+        if not match:
+            raise ValueError("Cannot extract R/C from URL for PMU provider")
+        
+        rc_label = match.group(1)
+        reunion_str, course_str = _derive_rc_parts(rc_label)
+        
+        today = dt.date.today().strftime("%Y-%m-%d")
+        r_num = int(reunion_str.replace("R", ""))
+        c_num = int(course_str.replace("C", ""))
+        return fetch_from_pmu_api(today, r_num, c_num)
+
+    # Zeturf/Geny logic (existing code)
+    rc_from_first = _normalise_rc(reunion)
+    if course is None and sources is not None and rc_from_first:
+        return _fetch_race_snapshot_by_rc(
+            rc_from_first,
+            phase=phase,
+            sources=sources,
+            url=url,
+            retries=retries,
+            backoff=backoff,
+            initial_delay=initial_delay,
+        )
+
+    if course is None:
+        raise ValueError(
+            "course label is required when reunion/course are provided separately"
+        )
+
+    reunion_label = _normalise_reunion_label(reunion)
+    course_label = _normalise_course_label(course)
+    rc = f"{reunion_label}{course_label}"
+
+    config: Dict[str, Any]
+    if isinstance(sources, MutableMapping):
+        config = dict(sources)
+    elif isinstance(sources, Mapping):
+        config = dict(sources)
+    else:
+        config = {}
+
+    rc_map_raw = (
+        config.get("rc_map") if isinstance(config.get("rc_map"), Mapping) else None
+    )
+    rc_map: Dict[str, Any] = (
+        {str(k): v for k, v in rc_map_raw.items()} if rc_map_raw else {}
+    )
+
+    entry = dict(rc_map.get(rc, {}))
+    entry.setdefault("reunion", reunion_label)
+    entry.setdefault("course", course_label)
+    if url:
+        entry["url"] = url
+       
+    rc_map[rc] = entry
+    config["rc_map"] = rc_map
+
+    snapshot = _fetch_race_snapshot_by_rc(
+        rc,
+        phase=phase,
+        sources=config,
+        url=url,
+        retries=retries,
+        backoff=backoff,
+        initial_delay=initial_delay,
+    )
+
+    snapshot.setdefault("reunion", reunion_label)
+    snapshot.setdefault("course", course_label)
+    snapshot.setdefault("rc", rc)
+    return snapshot
+
+def write_snapshot_from_geny(course_id: str, phase: str, rc_dir: Path) -> None:
+    logger.info("STUB: Writing dummy snapshots for %s in %s", course_id, rc_dir)
+    rc_dir.mkdir(parents=True, exist_ok=True)
+
+    runners = [
+        {"id": "1", "num": "1", "name": "DUMMY 1", "odds": 5.0},
+        {"id": "2", "num": "2", "name": "DUMMY 2", "odds": 6.0},
+        {"id": "3", "num": "3", "name": "DUMMY 3", "odds": 7.0},
+        {"id": "4", "num": "4", "name": "DUMMY 4", "odds": 8.0},
+        {"id": "5", "num": "5", "name": "DUMMY 5", "odds": 9.0},
+        {"id": "6", "num": "6", "name": "DUMMY 6", "odds": 10.0},
+        {"id": "7", "num": "7", "name": "DUMMY 7", "odds": 11.0},
+    ]
+
+    # Create dummy H-30 file
+    h30_file = rc_dir / "dummy_H-30.json"
+    with open(h30_file, "w", encoding="utf-8") as f:
+        json.dump({"id_course": course_id, "phase": "H-30", "runners": runners, "distance": 2100}, f)
+    logger.info("STUB: Wrote dummy H-30 file to %s", h30_file)
+
+    # Create dummy H-5 file
+    h5_file = rc_dir / "dummy_H-5.json"
+    with open(h5_file, "w", encoding="utf-8") as f:
+        json.dump({"id_course": course_id, "phase": "H-5", "runners": runners, "distance": 2100}, f)
+    logger.info("STUB: Wrote dummy H-5 file to %s", h5_file)
+
+
+
+# ... (le reste du fichier)
         for idx, runner_elem in enumerate(runners_data, 1):
             try:
                 runner = {
