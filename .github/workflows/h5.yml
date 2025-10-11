@@ -83,6 +83,7 @@ jobs:
             ${{ env.OUT_DIR }}/**/*.csv
             ${{ env.OUT_DIR }}/**/*.txt
           if-no-files-found: warn
-          body: |
-            Le workflow ${{ github.workflow }} (run ${{ github.run_number }}) a échoué.
-            Détails: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      - name: Avertir en cas d'échec
+        if: failure()
+        run: |
+          echo "::error::Le workflow ${GITHUB_WORKFLOW} (run ${GITHUB_RUN_NUMBER}) a échoué."
