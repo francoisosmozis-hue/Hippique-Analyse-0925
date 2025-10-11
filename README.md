@@ -43,6 +43,27 @@ L'API FastAPI expose un endpoint `POST /analyse` (voir `main.py`).
 - Seules les URLs en **HTTPS** et dont le domaine appartient à la liste blanche `zeturf.fr` / `geny.com` (y compris sous-domaines) sont acceptées.
 - Toute URL hors de cette liste retourne une erreur **422** avec un message explicite.
 
+### Rebalancer le bankroll quotidien
+
+Le script `tools/roi_rebalancer.py` exploite les artefacts `analysis.json` pour
+redistribuer un bankroll journalier entre les courses éligibles tout en
+respectant une cible de probabilité de ruine. L'algorithme utilise le ratio EV
+par euro engagé et renforce automatiquement les courses à forte valeur tout en
+écrêtant celles dont la variance est trop élevée.
+
+```bash
+python tools/roi_rebalancer.py \
+  analyses/R* \
+  --bankroll 40 \
+  --target-ror 0.04 \
+  --min-roi 0.15 \
+  --json-out plan_roi.json
+```
+
+La sortie détaille pour chaque course : la mise recommandée, l'EV attendu, la
+probabilité de ruine ajustée et l'EV global estimé. Le fichier JSON généré peut
+servir d'entrée à un dashboard de suivi ROI.
+
 ---
 
 ## 🗂️ Arborescence
