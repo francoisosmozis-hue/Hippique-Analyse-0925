@@ -33,7 +33,7 @@ import argparse
 import statistics as stats
 from pathlib import Path
 from dataclasses import dataclass, asdict
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
 
 try:  # pragma: no cover - optional dependency
     import yaml
@@ -63,6 +63,133 @@ try:
     from validator_ev import estimate_expected_payout  # type: ignore
 except Exception:
     estimate_expected_payout = None
+
+# =============================== Helpers génériques =============================
+PLACE_FEE: float = 0.14
+
+
+def load_yaml(path: str | Path) -> dict[str, Any]:
+    """Safely load a YAML file, returning an empty dict when unavailable."""
+
+    p = Path(path)
+    if not p.exists() or not p.is_file():
+        return {}
+    if yaml is None:
+        return {}
+    with p.open("r", encoding="utf-8") as fh:
+        return yaml.safe_load(fh) or {}
+
+
+def _overround_from_odds_win(odds: Iterable[float]) -> float:
+    """Compute the overround as the sum of inverse win odds."""
+
+    total = 0.0
+    for value in odds or []:
+        try:
+            odd = float(value)
+        except (TypeError, ValueError):
+            continue
+        if odd <= 0.0:
+            continue
+        total += 1.0 / odd
+    return total
+
+
+def _ensure_place_odds(win_odds: Iterable[float], factor: float = 0.33) -> list[float]:
+    """Derive basic place odds from win odds via a linear heuristic."""
+
+    place_odds: list[float] = []
+    for value in win_odds or []:
+        try:
+            odd = float(value)
+        except (TypeError, ValueError):
+            place_odds.append(1.0)
+            continue
+        if odd <= 1.0:
+            place_odds.append(1.0)
+            continue
+        place_odds.append(1.0 + (odd - 1.0) * float(factor))
+    return place_odds
+
+
+def compute_drift_dict(
+    h30: Mapping[str, float] | None,
+    h5: Mapping[str, float] | None,
+) -> Dict[str, float]:
+    """Compute relative drift between H-30 and H-5 odds for each runner."""
+
+    drift: Dict[str, float] = {}
+    if not h30 or not h5:
+        return drift
+    for runner_id, odds_30 in h30.items():
+        try:
+            base = float(odds_30)
+            latest_raw = h5.get(runner_id)
+            latest = float(latest_raw) if latest_raw is not None else None
+        except (TypeError, ValueError):
+            continue
+        if not latest or base <= 0:
+            continue
+        drift[runner_id] = (latest / base) - 1.0
+    return drift
+
+
+def enforce_ror_threshold(
+    ror_daily: float | None,
+    base_kelly: float = 0.50,
+    min_kelly: float = 0.33,
+    max_ror: float = 0.01,
+) -> float:
+    """Adjust Kelly fraction when the estimated risk of ruin exceeds threshold."""
+
+    if ror_daily is None:
+        return base_kelly
+    try:
+        ror = float(ror_daily)
+    except (TypeError, ValueError):
+        return base_kelly
+    if ror <= max_ror:
+        return base_kelly
+    return max(min_kelly, base_kelly * 0.66)
+
+
+def build_p_true(win_odds: Iterable[float]) -> Dict[int, float]:
+    """Derive a naive no-vig probability distribution from win odds."""
+
+    normalized: Dict[int, float] = {}
+    inv_odds: list[float] = []
+    for value in win_odds or []:
+        try:
+            odd = float(value)
+        except (TypeError, ValueError):
+            continue
+        if odd <= 1.0:
+            continue
+        inv_odds.append(1.0 / odd)
+    total = sum(inv_odds)
+    if total <= 0.0:
+        return normalized
+    for idx, inv in enumerate(inv_odds):
+        normalized[idx] = inv / total
+    return normalized
+
+
+def _build_market(win_odds: Iterable[float], place_factor: float = 0.33) -> Dict[str, Any]:
+    """Construct a minimal market snapshot with odds and derived metrics."""
+
+    win_list: list[float] = []
+    for value in win_odds or []:
+        try:
+            win_list.append(float(value))
+        except (TypeError, ValueError):
+            continue
+    place_list = _ensure_place_odds(win_list, factor=place_factor)
+    return {
+        "odds_win": win_list,
+        "odds_place": place_list,
+        "overround_win": _overround_from_odds_win(win_list),
+        "p_true": build_p_true(win_list),
+    }
 
 # =============================== Structures de données ==========================
 @dataclass
