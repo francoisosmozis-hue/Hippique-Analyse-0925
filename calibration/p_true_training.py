@@ -220,7 +220,13 @@ class CalibrationResult:
 def train_logistic_model(
     dataset: pd.DataFrame,
     *,
-    features: Iterable[str],
+    features: Iterable[str] = (
+        "log_odds",
+        "drift",
+        "je_total",
+        "implied_prob",
+        "n_runners",
+    ),
     C: float = 1.0,
     random_state: int = 42,
 ) -> CalibrationResult:
