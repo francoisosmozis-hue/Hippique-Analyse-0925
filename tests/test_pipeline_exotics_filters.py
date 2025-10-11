@@ -109,14 +109,9 @@ def _prepare_stubs(
         lambda *_args, **_kwargs: overround_cap,
     )
     if compute_cap_stub is None:
-<<<<<<< HEAD
-        compute_cap_stub = lambda *_args, **_kwargs: overround_cap
-
-=======
         def compute_cap_stub(*_args: object, **_kwargs: object) -> float:
             return overround_cap
         
->>>>>>> origin/main
     monkeypatch.setattr(
         pipeline_run,
         "compute_overround_cap",

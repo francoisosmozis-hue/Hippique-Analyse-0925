@@ -1,7 +1,4 @@
-<<<<<<< HEAD
-=======
 import importlib
->>>>>>> origin/main
 import json
 import os
 import sys

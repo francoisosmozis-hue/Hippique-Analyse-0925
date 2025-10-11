@@ -1,8 +1,3 @@
-<<<<<<< HEAD
-from __future__ import annotations
-from pathlib import Path
-import json
-=======
 #!/usr/bin/env python3
 """Export p_finale probabilities and race analysis to CSV/Excel format."""
 
@@ -19,22 +14,9 @@ try:
 except ImportError:
     PANDAS_AVAILABLE = False
     pd = None  # type: ignore
->>>>>>> origin/main
 
 __all__ = ["export"]
 
-<<<<<<< HEAD
-def export(p_finale: dict, out_path: str | Path = "p_finale_export.json") -> Path:
-    """
-    Écrit `p_finale` en JSON à `out_path` et retourne le Path.
-    UTF-8, indenté, clés ordonnées (pour des tests stables).
-    """
-    p = Path(out_path)
-    p.parent.mkdir(parents=True, exist_ok=True)
-    with p.open("w", encoding="utf-8") as f:
-        json.dump(p_finale, f, ensure_ascii=False, indent=2, sort_keys=True)
-    return p
-=======
 DRIFT_DELTA = 0.04    # seuil de variation de proba entre H-30 et H-5
 F_STEAM = 1.03        # bonus si le cheval "chauffe"
 F_DRIFT_FAV = 0.97    # malus si le favori H-30 dérive nettement
@@ -158,4 +140,3 @@ def export(outputs_dir: Path | str) -> bool:
     """Compatibility wrapper expected by historical tests."""
 
     return export_p_finale_from_dir(Path(outputs_dir))
->>>>>>> origin/main

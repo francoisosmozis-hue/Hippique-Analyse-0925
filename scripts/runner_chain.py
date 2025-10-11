@@ -21,17 +21,10 @@ from typing import Any, Dict, List, Mapping
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-<<<<<<< HEAD
-import yaml
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field
-from pydantic import ValidationError as PydanticValidationError
-from pydantic import field_validator
-=======
 # CORRECTION: Imports depuis scripts/ au lieu de la racine
 from scripts.simulate_ev import simulate_ev_batch
 from scripts.simulate_wrapper import PAYOUT_CALIBRATION_PATH
 from scripts.validator_ev import ValidationError, validate_ev
->>>>>>> origin/main
 
 from scripts import online_fetch_zeturf as ofz
 from scripts.gcs_utils import disabled_reason, is_gcs_enabled

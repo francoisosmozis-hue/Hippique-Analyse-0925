@@ -13,12 +13,6 @@ import sys
 import time
 import unicodedata
 from dataclasses import dataclass
-<<<<<<< HEAD
-from datetime import datetime
-from pathlib import Path
-from typing import Any, Dict, Iterable, Mapping
-from urllib.parse import urljoin
-=======
 import inspect
 import json
 import subprocess
@@ -29,7 +23,6 @@ from datetime import datetime
 import datetime as dt
 from typing import Any, Dict, Iterable, Mapping, Sequence
 
->>>>>>> origin/main
 from zoneinfo import ZoneInfo
 
 import yaml
@@ -477,11 +470,7 @@ def _double_extract(
         if fallback_data is None:
             fallback_data = _fallback_parse_html(html)
         return fallback_data
-<<<<<<< HEAD
-
-=======
         
->>>>>>> origin/main
     parse_fn = getattr(_impl, "parse_course_page", None)
     snapshot_mode = "H-30" if str(snapshot).upper().replace("-", "") == "H30" else "H-5"
     if callable(parse_fn):
@@ -1340,11 +1329,7 @@ def _fetch_race_snapshot_impl(
             owns_session = True
 
     try:
-<<<<<<< HEAD
-
-=======
         
->>>>>>> origin/main
         def _try_html(urls: Iterable[str]) -> dict[str, Any] | None:
             ordered: list[str] = []
             for candidate in urls:
@@ -1419,11 +1404,7 @@ def _fetch_race_snapshot_impl(
         if signature is not None and "course" in signature.parameters:
             arg_candidates.append((reunion_norm, course_norm))
         arg_candidates.append((rc,))
-<<<<<<< HEAD
-
-=======
                 
->>>>>>> origin/main
         if raw_snapshot is None or not raw_snapshot.get("runners"):
             for args in arg_candidates:
                 try:
@@ -2175,11 +2156,7 @@ def fetch_race_snapshot(
 if hasattr(_impl, "main"):
     main = _impl.main
 else:  # pragma: no cover - defensive fallback for stripped builds
-<<<<<<< HEAD
-
-=======
     
->>>>>>> origin/main
     def main(*_args: Any, **_kwargs: Any) -> None:
         raise RuntimeError("scripts.online_fetch_zeturf.main is unavailable")
 

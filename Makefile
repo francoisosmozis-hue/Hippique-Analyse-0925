@@ -1,23 +1,3 @@
-<<<<<<< HEAD
-.RECIPEPREFIX := >
-.PHONY: compile helpcheck importcheck
-
-compile:
-> python tools/compile_check.py
-
-helpcheck:
-> python tools/ci_check.py --mode helpcheck --timeout 5
-
-importcheck:
-> python tools/ci_check.py --mode importcheck --timeout 5
-
-.PHONY: test doctor
-
-test:
-> pytest -q || true
-
-doctor: compile helpcheck test
-=======
 .PHONY: install lint test smoke
 install:
 	python3 -m venv .venv && . .venv/bin/activate && \
@@ -33,4 +13,3 @@ test:
 
 smoke: install
 	./scripts/cloudshell_verify.sh
->>>>>>> origin/main

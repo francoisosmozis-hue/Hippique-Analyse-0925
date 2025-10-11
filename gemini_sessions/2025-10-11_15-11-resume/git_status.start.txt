@@ -1,0 +1,38 @@
+On branch sweep/local-20251011-1046
+Your branch is up to date with 'origin/sweep/local-20251011-1046'.
+
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+	modified:   .github/workflows/gemini-review.yml
+	modified:   Makefile
+	modified:   analyse_courses_du_jour_enrichie.py
+	modified:   get_arrivee_geny.py
+	modified:   online_fetch_zeturf.py
+	modified:   p_finale_export.py
+	modified:   pipeline_run.py
+	modified:   pytest.ini
+	modified:   requirements.txt
+	modified:   runner_chain.py
+	modified:   scripts/drive_sync.py
+	modified:   scripts/lint_sources.py
+	modified:   scripts/online_fetch_zeturf.py
+	modified:   scripts/runner_chain.py
+	modified:   scripts/simulate_ev.py
+	modified:   scripts/simulate_wrapper.py
+	modified:   scripts/smoke_h5.sh
+	modified:   sources.txt
+	modified:   tests/test_analyse_courses_du_jour_enrichie.py
+	modified:   tests/test_fetch_wrappers.py
+	modified:   tests/test_get_arrivee_geny.py
+	modified:   tests/test_online_fetch_zeturf.py
+	modified:   tests/test_pipeline_exotics_filters.py
+	modified:   tests/test_pipeline_smoke.py
+	modified:   tests/test_runner_chain.py
+	modified:   update_excel_with_results.py
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+	gemini_sessions/
+
+no changes added to commit (use "git add" and/or "git commit -a")

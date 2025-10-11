@@ -155,10 +155,7 @@ def _update_previsionnel_sheet(
     if not rc:
         return
     ws = _get_sheet(wb, sheet_name)
-<<<<<<< HEAD
-=======
     ev_section = ev_data or {}
->>>>>>> origin/main
     row = {
         "R/C": rc,
         "hippodrome": meta.get("hippodrome", ""),

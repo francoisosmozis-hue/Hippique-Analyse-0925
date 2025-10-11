@@ -2,34 +2,12 @@ from __future__ import annotations
 
 import json
 import sys
-<<<<<<< HEAD
-import xml.etree.ElementTree as ET
-from pathlib import Path
-from types import SimpleNamespace
-
-import pytest
-
-if "requests" not in sys.modules:
-
-    class _DummyRequestException(Exception):
-        pass
-
-    def _dummy_get(*args: object, **kwargs: object) -> None:
-        raise NotImplementedError("requests.get should be patched in tests")
-
-    sys.modules["requests"] = SimpleNamespace(
-        RequestException=_DummyRequestException, get=_dummy_get
-    )
-
-
-=======
 from pathlib import Path
 from types import SimpleNamespace
 from xml.etree import ElementTree as ET
 
 import pytest
 
->>>>>>> origin/main
 if "bs4" not in sys.modules:
     # Provide a lightweight BeautifulSoup shim for environments where bs4 is unavailable.
     class _SoupNode:
@@ -44,36 +22,14 @@ if "bs4" not in sys.modules:
                 return value.split()
             return self._element.attrib.get(key, default)
 
-<<<<<<< HEAD
-        def find_all(
-            self,
-            name: str | None = None,
-            href: bool = False,
-            attrs: dict[str, object] | None = None,
-        ):
-=======
         def find_all(self, name: str | None = None):
->>>>>>> origin/main
             matches = []
             for elem in self._element.iter():
                 if name and elem.tag != name:
                     continue                
                 matches.append(_SoupNode(elem))
             return matches
-<<<<<<< HEAD
-
-        def find(
-            self,
-            name: str | None = None,
-            href: bool = False,
-            attrs: dict[str, object] | None = None,
-        ):
-            results = self.find_all(name=name, href=href, attrs=attrs)
-            return results[0] if results else None
-
-=======
         
->>>>>>> origin/main
         def select(self, selector: str):
             parts = [part for part in selector.split() if part]
             nodes = [self]
@@ -99,25 +55,6 @@ if "bs4" not in sys.modules:
                 text = separator.join(part for part in text.split())
             return text
 
-<<<<<<< HEAD
-    def _match_attrs(element: ET.Element, attrs: dict[str, object]) -> bool:
-        for key, value in attrs.items():
-            attr_val = element.attrib.get(key)
-            if value is True:
-                if attr_val is None:
-                    return False
-            elif key == "class":
-                classes = attr_val.split() if attr_val else []
-                expected = value if isinstance(value, (list, tuple)) else [value]
-                if not all(cls in classes for cls in expected):
-                    return False
-            else:
-                if attr_val != value:
-                    return False
-        return True
-
-=======
->>>>>>> origin/main
     def _parse_selector(selector: str) -> tuple[str | None, list[str]]:
         selector = selector.strip()
         if not selector:
@@ -143,11 +80,7 @@ if "bs4" not in sys.modules:
             wrapper = f"<root>{markup}</root>"
             return ET.fromstring(wrapper)
 
-<<<<<<< HEAD
-    def BeautifulSoup(markup: str, parser: str | None = None) -> _SoupNode:  # type: ignore[misc]
-=======
     def BeautifulSoup(markup: str, parser: str | None = None):  # type: ignore[misc]
->>>>>>> origin/main
         return _SoupNode(_build_root(markup))
 
     sys.modules["bs4"] = SimpleNamespace(BeautifulSoup=BeautifulSoup)

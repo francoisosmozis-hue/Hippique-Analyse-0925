@@ -4,12 +4,6 @@ import subprocess
 import sys
 
 
-<<<<<<< HEAD
-def main() -> int:
-    ap = argparse.ArgumentParser(description="Lint runner (safe)")
-    ap.add_argument(
-        "--fix", action="store_true", help="apply autofixes (ruff/isort/black)"
-=======
 class Diagnostics:
     """Collects lint diagnostics and exposes helper utilities."""
 
@@ -125,7 +119,6 @@ def _emit(level: str, file_path: Path, diagnostics: Iterable[tuple[int | None, s
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Lint de sources.txt (URLs ZEturf).",
->>>>>>> origin/main
     )
     args = ap.parse_args()
 

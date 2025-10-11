@@ -555,16 +555,8 @@ def test_lightweight_fetch_snapshot_remote(monkeypatch: pytest.MonkeyPatch) -> N
     assert snapshot["meta"]["course"] == "C2"
     assert captured["snapshot"] == "H-5"
     assert captured["url"] == "https://www.zeturf.fr/fr/course/R1C2"
-<<<<<<< HEAD
-
-
-def test_lightweight_fetch_snapshot_use_cache(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-=======
     
 def test_lightweight_fetch_snapshot_use_cache(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
->>>>>>> origin/main
     """The cache flag should bypass the remote parser and load local files."""
 
     payload = {

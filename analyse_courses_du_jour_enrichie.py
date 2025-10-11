@@ -29,9 +29,7 @@ from bs4 import BeautifulSoup
 
 from logging_io import CSV_HEADER, append_csv_line
 from scripts.gcs_utils import disabled_reason, is_gcs_enabled
-<<<<<<< HEAD
-=======
-from scripts.online_fetch_zeturf import normalize_snapshot
+
 from scripts.fetch_je_stats import collect_stats
 
 import pipeline_run
@@ -55,7 +53,6 @@ PAYOUT_MIN_THRESHOLD = _env_float("PAYOUT_MIN", 10.0)
 OVERROUND_MAX_THRESHOLD = _env_float("OVERROUND_MAX", 1.30)
 if "MAX_COMBO_OVERROUND" not in os.environ:
     os.environ["MAX_COMBO_OVERROUND"] = f"{OVERROUND_MAX_THRESHOLD:.2f}"
->>>>>>> origin/main
 
 
 # Tests may insert a lightweight stub of ``scripts.online_fetch_zeturf`` to avoid
@@ -64,15 +61,6 @@ if "MAX_COMBO_OVERROUND" not in os.environ:
 _fetch_module = sys.modules.get("scripts.online_fetch_zeturf")
 if _fetch_module is not None and not hasattr(_fetch_module, "fetch_race_snapshot"):
     sys.modules.pop("scripts.online_fetch_zeturf", None)
-<<<<<<< HEAD
-import pipeline_run
-from runner_chain import compute_overround_cap
-from scripts.fetch_je_stats import collect_stats
-from simulate_wrapper import PAYOUT_CALIBRATION_PATH, evaluate_combo
-
-logger = logging.getLogger(__name__)
-=======
->>>>>>> origin/main
 
 
 class MissingH30SnapshotError(RuntimeError):
@@ -157,7 +145,6 @@ def _write_json_file(path: Path, payload: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
-
 def _write_minimal_csv(
     path: Path, headers: Iterable[Any], rows: Iterable[Iterable[Any]] | None = None
 ) -> None:
@@ -171,14 +158,12 @@ def _write_minimal_csv(
             for row in rows:
                 writer.writerow(list(row))
 
-
 def _load_json_if_exists(path: Path) -> dict[str, Any] | None:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return None
     return data if isinstance(data, dict) else None
-
 
 def _coerce_int(value: Any) -> int | None:
     try:
@@ -195,17 +180,15 @@ def _coerce_int(value: Any) -> int | None:
         return None
     return None
 
-
 def _derive_rc_parts(label: str) -> tuple[str, str]:
     text = str(label or "").replace(" ", "").upper()
-    match = re.match(r"^(R\d+)(C\d+)$", text)
+    match = re.match(r"^(R\d+)(C\d+)", text)
     if match:
         return match.group(1), match.group(2)
     if text.startswith("R") and "C" in text:
         r_part, c_part = text.split("C", 1)
         return r_part, f"C{c_part}"
     return text or "", ""
-
 
 def _gather_tracking_base(rc_dir: Path) -> dict[str, Any]:
     payloads: list[dict[str, Any]] = []
@@ -269,7 +252,6 @@ def _gather_tracking_base(rc_dir: Path) -> dict[str, Any]:
     }
     return base
 
-
 def _log_tracking_missing(
     rc_dir: Path,
     *,
@@ -292,7 +274,6 @@ def _log_tracking_missing(
     base["status"] = status
     base["reason"] = reason
     append_csv_line(str(rc_dir / "tracking.csv"), base, header=TRACKING_HEADER)
-
 
 def _extract_id2name(payload: Any) -> dict[str, str]:
     """Return an ``id -> name`` mapping from the provided payload."""
@@ -322,7 +303,6 @@ def _extract_id2name(payload: Any) -> dict[str, str]:
             mapping[str(cid)] = "" if name is None else str(name)
     return mapping
 
-
 def _extract_stats_mapping(stats_payload: Any) -> dict[str, dict[str, Any]]:
     """Normalise the stats payload into a ``dict[id] -> stats`` mapping."""
 
@@ -333,7 +313,6 @@ def _extract_stats_mapping(stats_payload: Any) -> dict[str, dict[str, Any]]:
                 continue
             mapping[str(key)] = value
     return mapping
-
 
 def _write_je_csv_file(
     path: Path, *, id2name: dict[str, str], stats_payload: Any
@@ -358,13 +337,11 @@ def _write_je_csv_file(
                 ]
             )
 
-
 def _norm_float(value: Any) -> float | None:
     try:
         return float(str(value).replace(",", "."))
     except Exception:  # pragma: no cover - defensive
         return None
-
 
 def _filter_sp_and_cp_by_odds(payload: dict[str, Any]) -> None:
     tickets = payload.get("tickets", []) or []
@@ -498,65 +475,19 @@ def ensure_dir(path: Path) -> Path:
     return path
 
 
-<<<<<<< HEAD
-def _latest_snapshot(rc_dir: Path, tag: str) -> Path | None:
-    """Return the latest snapshot file for a given tag."""
-    pattern = f"*_{tag}.json"
-    candidates = sorted(rc_dir.glob(pattern))
-    if not candidates:
-        return None
-    return candidates[-1]
-=======
 def enrich_h5(rc_dir: Path, *, budget: float, kelly: float) -> None:
     """Prepare all artefacts required for the H-5 pipeline.
->>>>>>> origin/main
 
-
-def _load_snapshot(path: Path) -> dict[str, Any]:
-    """Load a snapshot file."""
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
-        raise ValueError(f"Snapshot invalide: {path} ({exc})") from exc
-
-
-def _latest_snapshot(rc_dir: Path, tag: str) -> Path | None:
-    """Return the latest snapshot file for a given tag."""
-    pattern = f"*_{tag}.json"
-    candidates = sorted(rc_dir.glob(pattern))
-    if not candidates:
-        return None
-    return candidates[-1]
-
-
-def _load_snapshot(path: Path) -> dict[str, Any]:
-    """Load a snapshot file."""
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
-        raise ValueError(f"Snapshot invalide: {path} ({exc})") from exc
-
-
-def _normalise_snapshot(payload: dict[str, Any]) -> dict[str, Any]:
-    normalised = dict(payload)
-    # Preserve a few metadata fields expected by downstream consumers.
-    for key in [
-        "id_course",
-        "course_id",
-        "source",
-        "rc",
-        "r_label",
-        "meeting",
-        "reunion",
-        "race",
-    ]:
-        value = payload.get(key)
-        if value is not None and key not in normalised:
-            normalised[key] = value
-    return normalised
-
-
-def enrich_h5(rc_dir: Path, *, budget: float, kelly: float) -> None:
+    This helper materialises the following files inside ``rc_dir``:
+    - ``normalized_h5.json``
+    - ``normalized_h30.json``
+    - ``h5.json`` (odds mapping)
+    - ``h30.json`` (odds mapping)
+    - ``partants.json``
+    - ``stats_je.json``
+    - ``*_je.csv``
+    - ``chronos.csv``
+    """
 
     rc_dir = ensure_dir(Path(rc_dir))
 
@@ -656,10 +587,6 @@ def enrich_h5(rc_dir: Path, *, budget: float, kelly: float) -> None:
         placeholder_rows = [["", "", 0]]
         _write_minimal_csv(chronos_path, placeholder_headers, placeholder_rows)
 
-
-<<<<<<< HEAD
-def build_p_finale(rc_dir: Path, *, budget: float, kelly: float) -> None:
-=======
 def build_p_finale(
     rc_dir: Path,
     *,
@@ -670,7 +597,6 @@ def build_p_finale(
     payout_min: float | None = None,
     overround_max: float | None = None,
 ) -> None:
->>>>>>> origin/main
     """Run the ticket allocation pipeline and persist ``p_finale.json``."""
 
     rc_dir = Path(rc_dir)
@@ -683,10 +609,6 @@ def build_p_finale(
         overround_max=overround_max,
     )
 
-
-<<<<<<< HEAD
-def run_pipeline(rc_dir: Path, *, budget: float, kelly: float) -> None:
-=======
 def run_pipeline(
     rc_dir: Path,
     *,
@@ -697,7 +619,6 @@ def run_pipeline(
     payout_min: float | None = None,
     overround_max: float | None = None,
 ) -> None:
->>>>>>> origin/main
     """Execute the analysis pipeline for ``rc_dir`` or its subdirectories."""
 
     rc_dir = Path(rc_dir)
@@ -747,7 +668,6 @@ def run_pipeline(
         ran_any = True
     if not ran_any:
         raise FileNotFoundError(f"Aucune donnée pipeline détectée dans {rc_dir}")
-
 
 def build_prompt_from_meta(rc_dir: Path, *, budget: float, kelly: float) -> None:
     """Generate a human-readable prompt from ``p_finale.json`` metadata."""
@@ -827,14 +747,12 @@ def build_prompt_from_meta(rc_dir: Path, *, budget: float, kelly: float) -> None
         encoding="utf-8",
     )
 
-
 def _is_number(value: Any) -> bool:
     try:
         float(value)
     except (TypeError, ValueError):
         return False
     return True
-
 
 def _write_chronos_csv(path: Path, runners: Iterable[Any]) -> None:
     """Persist a chronos CSV placeholder using runner identifiers."""
@@ -851,7 +769,6 @@ def _write_chronos_csv(path: Path, runners: Iterable[Any]) -> None:
                 continue
             chrono = runner.get("chrono") or runner.get("time") or ""
             writer.writerow([cid, chrono])
-
 
 def _run_single_pipeline(
     rc_dir: Path,
@@ -962,7 +879,6 @@ def _run_single_pipeline(
         encoding="utf-8",
     )
 
-
 def _find_je_csv(rc_dir: Path) -> Path | None:
     """Return the JE CSV produced during enrichment when available."""
 
@@ -976,7 +892,6 @@ def _find_je_csv(rc_dir: Path) -> Path | None:
             return candidate
     return None
 
-
 def _is_combo_ticket(ticket: Mapping[str, Any]) -> bool:
     """Return ``True`` when ``ticket`` refers to an exotic combination."""
 
@@ -986,7 +901,6 @@ def _is_combo_ticket(ticket: Mapping[str, Any]) -> bool:
     if ticket.get("legs"):
         return True
     return ticket_type not in {"SP", "SIMPLE", "SIMPLE_PLACE", "PLACE"}
-
 
 def _evaluate_combo_guard(
     ticket: Mapping[str, Any],
@@ -1011,7 +925,6 @@ def _evaluate_combo_guard(
             "payout_expected": 0.0,
             "notes": [f"evaluation_error:{exc}"],
         }
-
 
 def _run_h5_guard_phase(
     rc_dir: Path,
@@ -1259,7 +1172,6 @@ def _run_h5_guard_phase(
     logger.info("[H-5][guards] course %s validated", rc_dir.name)
     return True, analysis_payload, None
 
-
 def _upload_artifacts(rc_dir: Path, *, gcs_prefix: str | None) -> None:
     """Upload ``rc_dir`` contents to Google Cloud Storage."""
 
@@ -1283,7 +1195,6 @@ def _upload_artifacts(rc_dir: Path, *, gcs_prefix: str | None) -> None:
         push_tree(rc_dir, folder_id=prefix)
     except Exception as exc:  # pragma: no cover - best effort
         print(f"[WARN] Failed to upload {rc_dir}: {exc}")
-
 
 def _snap_prefix(rc_dir: Path) -> str | None:
     """Return the stem of the most recent H-5 snapshot if available."""
@@ -1369,14 +1280,11 @@ def _check_enrich_outputs(
 
     return None
 
-
 def _missing_requires_stats(missing: Iterable[str]) -> bool:
     return any(str(name).endswith("_je.csv") for name in missing)
 
-
 def _missing_requires_chronos(missing: Iterable[str]) -> bool:
     return any(str(name) == "chronos.csv" for name in missing)
-
 
 def _run_fetch_script(script_path: Path, rc_dir: Path) -> bool:
     """Invoke an auxiliary fetch script and report whether it succeeded."""
@@ -1479,7 +1387,6 @@ def _run_fetch_script(script_path: Path, rc_dir: Path) -> bool:
 
     return True
 
-
 def _recover_je_csv_from_stats(
     rc_dir: Path, *, retry_cb: Callable[[], None] | None = None
 ) -> tuple[bool, bool, bool]:
@@ -1513,7 +1420,6 @@ def _recover_je_csv_from_stats(
         return True, True, True
 
     return True, False, True
-
 
 def _rebuild_je_csv_from_stats(rc_dir: Path) -> bool:
     """Attempt to rebuild ``*_je.csv`` using freshly fetched stats."""
@@ -1557,11 +1463,7 @@ def _rebuild_je_csv_from_stats(rc_dir: Path) -> bool:
         return False
 
     try:
-<<<<<<< HEAD
         _write_je_csv_file(
-=======
-        write_je_csv_file(
->>>>>>> origin/main
             rc_dir / f"{snap}_je.csv", id2name=id2name, stats_payload=stats_payload
         )
     except OSError as exc:
@@ -1572,7 +1474,6 @@ def _rebuild_je_csv_from_stats(rc_dir: Path) -> bool:
         return False
 
     return True
-
 
 def _regenerate_chronos_csv(rc_dir: Path) -> bool:
     """Attempt to rebuild ``chronos.csv`` from locally available runner data."""
@@ -1650,7 +1551,6 @@ def _regenerate_chronos_csv(rc_dir: Path) -> bool:
     )
     return False
 
-
 def _mark_course_unplayable(rc_dir: Path, missing: Iterable[str]) -> dict[str, Any]:
     """Write the abstention marker and emit the canonical abstain log.
 
@@ -1699,7 +1599,6 @@ def _mark_course_unplayable(rc_dir: Path, missing: Iterable[str]) -> dict[str, A
     )
 
     return details
-
 
 def _ensure_h5_artifacts(
     rc_dir: Path,
@@ -1764,11 +1663,7 @@ def _ensure_h5_artifacts(
             if _refresh_missing_state():
                 return True
         return False
-<<<<<<< HEAD
-
-=======
         
->>>>>>> origin/main
     if _missing_requires_stats(missing):
         (
             stats_fetch_success,
@@ -1856,7 +1751,6 @@ def _ensure_h5_artifacts(
     )
     return outcome
 
-
 def safe_enrich_h5(
     rc_dir: Path,
     *,
@@ -1921,7 +1815,6 @@ def safe_enrich_h5(
         return False, outcome
     return True, None
 
-
 def _execute_h5_chain(
     rc_dir: Path,
     *,
@@ -1954,67 +1847,70 @@ def _execute_h5_chain(
     guard_ok, analysis_payload, guard_outcome = _run_h5_guard_phase(
         rc_dir,
         budget=budget,
-<<<<<<< HEAD
+        min_roi=roi_min,
     )
-    try:
-        _write_json_file(rc_dir / "analysis_H5.json", analysis_payload)
-    except Exception as exc:  # pragma: no cover - defensive logging
-        logger.warning(
-            "[H-5] unable to persist analysis_H5.json for %s: %s", rc_dir, exc
+    if guard_ok:
+        run_pipeline(
+            rc_dir,
+            budget=budget,
+            kelly=kelly,
+            ev_min=ev_min,
+            roi_min=roi_min,
+            payout_min=payout_min,
+            overround_max=overround_max,
         )
-    if not guard_ok:
+        build_prompt_from_meta(rc_dir, budget=budget, kelly=kelly)
+        return True, None
+
+    if guard_outcome is not None:
         return False, guard_outcome
-    run_pipeline(rc_dir, budget=budget, kelly=kelly)
-    build_prompt_from_meta(rc_dir, budget=budget, kelly=kelly)
-    return True, None
 
-
-def export_per_horse_csv(rc_dir: Path) -> Path:
-    """Export a per-horse report aggregating probabilities and J/E stats."""
-
-    snap = _snap_prefix(rc_dir)
-    if snap is None:
-        raise FileNotFoundError("Snapshot H-5 introuvable dans rc_dir")
-    je_path = rc_dir / f"{snap}_je.csv"
-    chronos_path = rc_dir / "chronos.csv"
-    p_finale_path = rc_dir / "p_finale.json"
-
-    # Load data sources
-    data = json.loads(p_finale_path.read_text(encoding="utf-8"))
-    p_true = {str(k): float(v) for k, v in data.get("p_true", {}).items()}
-    id2name = data.get("meta", {}).get("id2name", {})
-
-    def _read_csv(path: Path) -> list[dict[str, str]]:
-        text = path.read_text(encoding="utf-8")
-        delim = ";" if ";" in text.splitlines()[0] else ","
-        return list(csv.DictReader(text.splitlines(), delimiter=delim))
-
-    je_rows = _read_csv(je_path)
-    chrono_rows = _read_csv(chronos_path)
-    chrono_ok = {
-        str(row.get("num") or row.get("id"))
-        for row in chrono_rows
-        if any(v.strip() for k, v in row.items() if k not in {"num", "id"} and v)
+    if analysis_payload:
+        return False, {
+            "status": "no-bet",
+            "decision": "ABSTENTION",
+            "reason": "guard-failed",
+            "analysis": analysis_payload,
+        }
+    return False, {
+        "status": "no-bet",
+        "decision": "ABSTENTION",
+        "reason": "guard-failed",
     }
 
-    out_path = rc_dir / "per_horse_report.csv"
+def export_per_horse_csv(rc_dir: Path) -> Path:
+    """Generate a per-horse CSV report from ``p_finale.json``."""
+    p_finale_path = rc_dir / "p_finale.json"
+    out_path = rc_dir / "per_horse_stakes.csv"
+    payload = json.loads(p_finale_path.read_text(encoding="utf-8"))
+    tickets = payload.get("tickets", [])
+    id2name = _extract_id2name(payload)
+    stakes: dict[str, float] = {}
+    for ticket in tickets:
+        if not isinstance(ticket, dict):
+            continue
+        stake = _norm_float(ticket.get("stake"))
+        if not stake:
+            continue
+        legs = ticket.get("legs")
+        if not isinstance(legs, list):
+            continue
+        for leg in legs:
+            if not isinstance(leg, dict):
+                continue
+            num = leg.get("num") or leg.get("id")
+            if num is None:
+                continue
+            stakes[str(num)] = stakes.get(str(num), 0.0) + stake
     with out_path.open("w", newline="", encoding="utf-8") as fh:
         writer = csv.writer(fh)
-        writer.writerow(["num", "nom", "p_finale", "j_rate", "e_rate", "chrono_ok"])
-        for row in je_rows:
-            num = str(row.get("num") or row.get("id") or "")
-            nom = row.get("nom") or row.get("name") or id2name.get(num, "")
+        writer.writerow(["num", "nom", "mise"])
+        for num, stake_val in sorted(stakes.items(), key=lambda item: item[0]):
             writer.writerow(
                 [
                     num,
-                    nom,
-                    p_true.get(num, ""),
-                    row.get("j_rate"),
-                    row.get("e_rate"),
-                    str(num in chrono_ok),
-=======
-        min_roi=roi_min,
->>>>>>> origin/main
+                    id2name.get(str(num), ""),
+                    f"{stake_val:.2f}",
                 ]
             )
     return out_path
@@ -2044,40 +1940,33 @@ def _load_geny_today_payload() -> dict[str, Any]:
                         "c": "C1",
                         "id_course": "12345" # A dummy ID is sufficient
                     }
-<<<<<<< HEAD
-                ]
-            }
-=======
                ]
            }
->>>>>>> origin/main
         ]
     }
-
 
 def _normalise_rc_label(label: str | int, prefix: str) -> str:
    """Normalise ``label`` to the canonical ``R``/``C`` format.
 
    ``label`` may be provided without the leading prefix (``"1"``) or with a
-   lowercase variant (``"c3"``). The return value always matches ``R\\d+`` or
-   ``C\\d+`` with no leading zero. ``ValueError`` is raised when the label does
+   lowercase variant (``"c3"``). The return value always matches ``R\d+`` or
+   ``C\d+`` with no leading zero. ``ValueError`` is raised when the label does
     not describe a strictly positive integer.
     """
 
-    text = str(label).strip().upper().replace(" ", "")
-    if not text:
-        raise ValueError(f"Identifiant {prefix} vide")
-    if text.startswith(prefix):
-        text = text[len(prefix) :]
-    elif text.startswith(prefix[0]):
-        text = text[1:]
+   text = str(label).strip().upper().replace(" ", "")
+   if not text:
+       raise ValueError(f"Identifiant {prefix} vide")
+   if text.startswith(prefix):
+       text = text[len(prefix) :]
+   elif text.startswith(prefix[0]):
+       text = text[1:]
    if not text.isdigit():
-        raise ValueError(f"Identifiant {prefix} invalide: {label!r}")
-    number = int(text)
-    if number <= 0:
-        raise ValueError(f"Identifiant {prefix} invalide: {label!r}")
-    return f"{prefix}{number}"
-
+       raise ValueError(f"Identifiant {prefix} invalide: {label!r}")
+   number = int(text)
+   if number <= 0:
+       raise ValueError(f"Identifiant {prefix} invalide: {label!r}")
+   return f"{prefix}{number}"
 
 def _normalise_phase(value: str) -> str:
     """Return a canonical phase string (``H30`` or ``H5``)."""
@@ -2087,7 +1976,6 @@ def _normalise_phase(value: str) -> str:
         raise ValueError(f"Phase inconnue: {value!r} (attendu H30 ou H5)")
     return cleaned
 
-
 def _phase_argument(value: str) -> str:
     """Argument parser wrapper that normalises ``value`` to ``H30``/``H5``."""
    
@@ -2095,7 +1983,6 @@ def _phase_argument(value: str) -> str:
         return _normalise_phase(value)
     except ValueError as exc:  # pragma: no cover - handled by argparse
         raise argparse.ArgumentTypeError(str(exc)) from exc
-   
    
 def _resolve_course_id(reunion: str, course: str) -> str:
     """Return the Geny course identifier matching ``reunion``/``course``."""
@@ -2119,56 +2006,6 @@ def _resolve_course_id(reunion: str, course: str) -> str:
                 break
             return str(course_id)
     raise ValueError(f"Course {reunion}{course} introuvable via discover_geny_today")
-   
-   
-def _process_single_course(
-    reunion: str,
-    course: str,
-    phase: str,
-    data_dir: Path,
-    *,
-    budget: float,
-    kelly: float,
-    gcs_prefix: str | None,
-) -> dict[str, Any] | None:
-    """Fetch and analyse a specific course designated by ``reunion``/``course``."""
-  
-    course_id = _resolve_course_id(reunion, course)
-    base_dir = ensure_dir(data_dir)
-    rc_dir = ensure_dir(base_dir / f"{reunion}{course}")
-    write_snapshot_from_geny(course_id, phase, rc_dir)
-    outcome: dict[str, Any] | None = None
-    pipeline_done = False
-    if phase.upper() == "H5":
-        pipeline_done, outcome = _execute_h5_chain(
-            rc_dir,
-            budget=budget,
-            kelly=kelly,
-        )
-        if pipeline_done:
-            csv_path = export_per_horse_csv(rc_dir)
-            print(f"[INFO] per-horse report écrit: {csv_path}")
-            outcome = None
-        elif outcome is not None:
-            _write_json_file(rc_dir / "decision.json", outcome)
-        else:  # pragma: no cover - defensive fallback
-            _write_json_file(
-                rc_dir / "decision.json",
-                {
-                    "status": "no-bet",
-                    "decision": "ABSTENTION",
-                    "reason": "pipeline-error",
-                },
-            course_id = (
-                course_info.get("id_course")
-                or course_info.get("course_id")
-                or course_info.get("id")
-            )
-            if course_id is None:
-                break
-            return str(course_id)
-    raise ValueError(f"Course {reunion}{course} introuvable via discover_geny_today")
-
 
 def _process_single_course(
     reunion: str,
@@ -2330,19 +2167,14 @@ def _process_reunion(
         if gcs_prefix is not None:
             _upload_artifacts(rc_dir, gcs_prefix=gcs_prefix)
 
-
 def main() -> None:
     ap = argparse.ArgumentParser(description="Analyse courses du jour enrichie")
     ap.add_argument(
         "--data-dir", default="data", help="Répertoire racine pour les sorties"
     )
-<<<<<<< HEAD
-    ap.add_argument("--budget", type=float, default=5.0, help="Budget à utiliser")
-=======
     ap.add_argument(
         "--budget", type=float, default=GPI_BUDGET_DEFAULT, help="Budget à utiliser"
     )
->>>>>>> origin/main
     ap.add_argument(
         "--kelly", type=float, default=0.5, help="Fraction de Kelly à appliquer"
     )
@@ -2400,6 +2232,7 @@ def main() -> None:
         "--gcs-prefix",
         help="Préfixe GCS racine pour les uploads",
     )
+    gcs_prefix = None
     args = ap.parse_args()
     if not any(
         [
@@ -2495,12 +2328,6 @@ def main() -> None:
             Path(args.data_dir),
             budget=args.budget,
             kelly=args.kelly,
-<<<<<<< HEAD
-            gcs_prefix=args.gcs_prefix,
-        )
-        return
-if __name__ == "__main__":
-=======
             gcs_prefix=gcs_prefix,
             ev_min=args.ev_min,
             roi_min=args.roi_min,
@@ -2582,5 +2409,4 @@ if __name__ == "__main__":
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point
->>>>>>> origin/main
     main()

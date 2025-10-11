@@ -1,10 +1,3 @@
-<<<<<<< HEAD
-#!/usr/bin/env python3
-# Placeholder temporaire pour rétablir la CI ; remettra les vrais tests ensuite.
-import json  # noqa: F401
-from pathlib import Path  # noqa: F401
-import pytest  # noqa: F401
-=======
 from __future__ import annotations
 
 import csv
@@ -163,7 +156,6 @@ def test_fetch_je_chrono_enrich_from_snapshot_requires_snapshot(
     assert result == {"je_stats": None, "chronos": None}
     assert not (tmp_path / "artefacts" / "chronos.csv").exists()
     assert any("does not exist" in message for message in caplog.messages)
->>>>>>> origin/main
 
 def test_fetch_je_chrono_enrich_from_snapshot(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     assert True

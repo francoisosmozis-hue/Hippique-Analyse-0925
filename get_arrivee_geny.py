@@ -36,12 +36,6 @@ from typing import Any, Iterable, Iterator, List, Mapping, MutableMapping, Seque
 
 from bs4 import BeautifulSoup
 
-<<<<<<< HEAD
-GENY_BASE = "https://www.geny.com"
-HDRS = {"User-Agent": "Mozilla/5.0 (compatible; get_arrivee_geny/1.0)"}
-
-=======
->>>>>>> origin/main
 ARRIVE_TEXT_RE = re.compile(
     r"arriv[ée]e\s*(?:officielle|définitive)?\s*[:\-–>]*\s*([0-9\s,;:\-–>]+)",
     re.IGNORECASE,
@@ -106,18 +100,7 @@ def _first(obj: MutableMapping[str, Any] | None, *keys: str) -> Any:
 
 
 def _get_course_id(data: MutableMapping[str, Any]) -> str | None:
-<<<<<<< HEAD
-    """Extract a course identifier from ``data`` using known aliases."""
-
-    for container in (
-        data,
-        _first(data, "meta"),
-        _first(data, "course"),
-        _first(data, "race"),
-    ):
-=======
     for container in (data, _first(data, "meta"), _first(data, "course"), _first(data, "race")):
->>>>>>> origin/main
         if isinstance(container, MutableMapping):
             for key in (
                 "course_id",
@@ -222,15 +205,7 @@ class PlanningEntry:
         return {k: v for k, v in meta.items() if v not in (None, "")}
 
 
-<<<<<<< HEAD
-def _iter_planning_entries(
-    data: Any, context: dict[str, Any] | None = None
-) -> Iterable[PlanningEntry]:
-    """Yield :class:`PlanningEntry` objects extracted from ``data``."""
-
-=======
 def _iter_planning_entries(data: Any, context: dict[str, Any] | None = None) -> Iterable[PlanningEntry]:
->>>>>>> origin/main
     ctx = dict(context or {})
     if isinstance(data, MutableMapping):
         date_val = data.get("date")
@@ -320,10 +295,6 @@ def load_planning(path: Path) -> List[PlanningEntry]:
         entry.base_dir = path.parent
         if entry.rc in deduped:
             existing = deduped[entry.rc]
-<<<<<<< HEAD
-            # Merge missing metadata from the new entry.
-=======
->>>>>>> origin/main
             for field_name in (
                 "reunion",
                 "course",
@@ -336,34 +307,15 @@ def load_planning(path: Path) -> List[PlanningEntry]:
             ):
                 if not getattr(existing, field_name) and getattr(entry, field_name):
                     setattr(existing, field_name, getattr(entry, field_name))
-<<<<<<< HEAD
-            existing.meta.update(
-                {k: v for k, v in entry.meta.items() if k not in existing.meta}
-            )
-=======
             existing.meta.update({k: v for k, v in entry.meta.items() if k not in existing.meta})
             existing.local_sources.extend(x for x in entry.local_sources if x not in existing.local_sources)
->>>>>>> origin/main
         else:
             deduped[entry.rc] = entry
     return list(deduped.values())
 
 
 def _extract_arrival_from_json(text: str) -> list[str]:
-<<<<<<< HEAD
-    """Extract arrival numbers from JSON-like payload contained in ``text``."""
-
-    for pattern in (
-        r'"arriv[ée]e"\s*:\s*(\[[^\]]+\])',
-        r'"arrival"\s*:\s*(\[[^\]]+\])',
-    ):
-        match = re.search(pattern, text, re.IGNORECASE)
-        if not match:
-            continue
-        raw = match.group(1)
-=======
     for match in _JSON_LIST_RE.finditer(text): 
->>>>>>> origin/main
         try:
             data = json.loads(match.group(0))
         except json.JSONDecodeError:
@@ -441,59 +393,6 @@ def _extract_arrival_from_list(soup: BeautifulSoup) -> list[str]:
     return []
 
 
-<<<<<<< HEAD
-def _extract_arrival_from_tables(soup: BeautifulSoup) -> list[str]:
-    """Extract arrival numbers from tabular data."""
-
-    for table in soup.find_all("table"):
-        headers = [th.get_text(" ", strip=True).lower() for th in table.find_all("th")]
-        if not headers:
-            continue
-        rank_idx = next(
-            (i for i, h in enumerate(headers) if "arriv" in h or "place" in h), None
-        )
-        if rank_idx is None:
-            continue
-        num_idx = next(
-            (
-                i
-                for i, h in enumerate(headers)
-                if h in {"n", "n°", "num", "numero", "nº", "n° cheval"} or "num" in h
-            ),
-            None,
-        )
-        ranked: list[tuple[int, str]] = []
-        for row in table.find_all("tr"):
-            cols = [td.get_text(" ", strip=True) for td in row.find_all("td")]
-            if not cols:
-                continue
-            try:
-                place_text = cols[rank_idx]
-            except IndexError:
-                continue
-            digits = re.findall(r"\d+", place_text)
-            if not digits:
-                continue
-            place = int(digits[0])
-            num: str | None = None
-            if num_idx is not None and num_idx < len(cols):
-                digits = re.findall(r"\d+", cols[num_idx])
-                if digits:
-                    num = digits[0]
-            if not num:
-                digits = re.findall(r"\d+", cols[0])
-                if digits:
-                    num = digits[0]
-            if num:
-                ranked.append((place, str(num)))
-        if ranked:
-            ranked.sort(key=lambda item: item[0])
-            return [num for _, num in ranked]
-    return []
-
-
-=======
->>>>>>> origin/main
 def _extract_arrival_from_text(text: str) -> list[str]:
     match = ARRIVE_TEXT_RE.search(text)
     candidates: list[str] = []
@@ -511,57 +410,9 @@ def parse_arrival(content: str, *, hint: str | None = None) -> list[str]:
     if not text:
         return []
 
-<<<<<<< HEAD
-
-def parse_arrival(html: str) -> list[str]:
-    """Return arrival numbers extracted from ``html``."""
-
-    numbers = _extract_arrival_from_json(html)
-    if numbers:
-        return numbers
-
-    soup = BeautifulSoup(html, "html.parser")
-    numbers = _extract_arrival_from_list(soup)
-    if numbers:
-        return numbers
-
-    numbers = _extract_arrival_from_tables(soup)
-    if numbers:
-        return numbers
-
-    numbers = _extract_arrival_from_text(soup.get_text(" ", strip=True))
-    return numbers
-
-
-def _course_candidate_urls(course_id: str) -> Sequence[str]:
-    return (
-        f"{GENY_BASE}/resultats-pmu/course/_c{course_id}",
-        f"{GENY_BASE}/resultats-pmu/_c{course_id}",
-        f"{GENY_BASE}/course-pmu/_c{course_id}",
-        f"{GENY_BASE}/partants-pmu/_c{course_id}",
-    )
-
-
-def fetch_arrival_for_course(
-    entry: PlanningEntry,
-) -> tuple[list[str], str | None, str | None]:
-    """Return arrival numbers, resolved URL and optional error message."""
-
-    if not entry.course_id:
-        return [], None, "missing-course-id"
-
-    for url in _course_candidate_urls(entry.course_id):
-        try:
-            resp = _request(url)
-        except requests.RequestException as exc:
-            last_error = f"{exc.__class__.__name__}: {exc}"
-            continue
-        numbers = parse_arrival(resp.text)
-=======
     hint_lower = hint.lower() if hint else None
     if hint_lower == "json":
         numbers = _extract_arrival_from_json(text)
->>>>>>> origin/main
         if numbers:
             return numbers
         return _extract_arrival_from_text(text)
@@ -607,54 +458,9 @@ def _read_local_file(path: Path) -> tuple[str, str | None]:
 
     
 
-<<<<<<< HEAD
-    soup = BeautifulSoup(resp.text, "html.parser")
-    course_key = (entry.course or "").replace(" ", "").upper()
-
-    if entry.course_id:
-        for attr in (
-            "data-course",
-            "data-course-id",
-            "data-idcourse",
-            "data-id-course",
-        ):
-            for node in soup.find_all(attrs={attr: True}):
-                value = node.get(attr)
-                if not value or str(value) != entry.course_id:
-                    continue
-                href = node.get("href")
-                if not href and hasattr(node, "find"):
-                    link = node.find("a", href=True)
-                    if link:
-                        href = link.get("href")
-                if href:
-                    return urljoin(url, href)
-
-    fallback_urls: list[str] = []
-    seen_urls: set[str] = set()
-    for link in soup.find_all("a", href=True):
-        data_course = (
-            link.get("data-course")
-            or link.get("data-course-id")
-            or link.get("data-idcourse")
-            or link.get("data-id-course")
-        )
-        if entry.course_id and data_course and str(data_course) == entry.course_id:
-            return urljoin(url, link["href"])
-        if course_key:
-            text = link.get_text(" ", strip=True).replace(" ", "").upper()
-            if course_key in text:
-                candidate = urljoin(url, link["href"])
-                if candidate not in seen_urls:
-                    fallback_urls.append(candidate)
-                    seen_urls.add(candidate)
-
-    for candidate in fallback_urls:
-=======
 def _resolve_relative(path: str, base_dir: Path | None) -> Path:
     candidate = Path(path)
     if candidate.is_absolute() or base_dir is None:
->>>>>>> origin/main
         return candidate
     return (base_dir / candidate).resolve()
 
@@ -724,50 +530,6 @@ def fetch_arrival(entry: PlanningEntry, search_roots: Sequence[Path] | None = No
         "error": None,
     }
 
-<<<<<<< HEAD
-    numbers, url, error = fetch_arrival_for_course(entry)
-    if numbers:
-        result.update(
-            {
-                "result": numbers,
-                "status": "ok",
-                "url": url,
-                "retrieved_at": datetime.utcnow().isoformat(),
-            }
-        )
-        return result
-
-    if error and error != "missing-course-id":
-        result["error"] = error
-
-    geny_url = entry.url_geny
-    if geny_url:
-        resolved = _resolve_course_url_from_meeting(geny_url, entry)
-        if resolved:
-            try:
-                resp = _request(resolved)
-            except (
-                requests.RequestException
-            ) as exc:  # pragma: no cover - network failure
-                result["error"] = f"{exc.__class__.__name__}: {exc}"
-            else:
-                numbers = parse_arrival(resp.text)
-                if numbers:
-                    result.update(
-                        {
-                            "result": numbers,
-                            "status": "ok",
-                            "url": resolved,
-                            "retrieved_at": datetime.utcnow().isoformat(),
-                        }
-                    )
-                    return result
-                result["error"] = "no-arrival-data"
-
-    if not result.get("error"):
-        if entry.course_id:
-            result["error"] = error
-=======
     search_roots = search_roots or []
     errors: list[str] = []
     for path, hint in _iter_source_paths(entry, search_roots):
@@ -794,7 +556,6 @@ def fetch_arrival(entry: PlanningEntry, search_roots: Sequence[Path] | None = No
             result["error"] = ",".join(errors)
         elif not entry.local_sources and not search_roots:
             result["error"] = "no-source-provided"
->>>>>>> origin/main
         else:
             result["error"] = "arrival-not-found"
     return result
@@ -835,14 +596,6 @@ def _parse_sources_args(raw_sources: Sequence[str]) -> list[Path]:
 
 
 def main(argv: Sequence[str] | None = None) -> None:
-<<<<<<< HEAD
-    parser = argparse.ArgumentParser(
-        description="Fetch arrivals from geny.com based on planning JSON"
-    )
-    parser.add_argument("--planning", required=True, help="Path to planning JSON file")
-    parser.add_argument(
-        "--out", required=True, help="Destination JSON file for arrivals"
-=======
     parser = argparse.ArgumentParser(description="Assembler les arrivées à partir de fichiers locaux")
     parser.add_argument("--planning", required=True, help="Fichier JSON du planning")
     parser.add_argument("--out", required=True, help="Fichier de sortie JSON normalisé")
@@ -852,7 +605,6 @@ def main(argv: Sequence[str] | None = None) -> None:
         action="append",
         default=[],
         help="Chemin supplémentaire (fichier ou dossier) contenant les arrivées",
->>>>>>> origin/main
     )
     args = parser.parse_args(argv)
 

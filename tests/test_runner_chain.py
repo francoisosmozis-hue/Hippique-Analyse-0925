@@ -391,20 +391,6 @@ def test_export_tracking_csv_line(tmp_path):
 
     runner_chain.export_tracking_csv_line(str(path), meta, tickets, stats, alerte=True)
 
-<<<<<<< HEAD
-    lines = path.read_text(encoding="utf-8").splitlines()
-    header = lines[0].split(";")
-    assert header[-1] == "ALERTE_VALUE"
-    assert {
-        "prob_implicite_panier",
-        "ev_simulee_post_arrondi",
-        "roi_simule",
-        "roi_reel",
-        "sharpe",
-        "drift_sign",
-    } <= set(header)
-    assert lines[1].split(";")[-1] == "ALERTE_VALUE"
-=======
     lines = path.read_text(encoding='utf-8').splitlines()
     header = lines[0].split(';')
     assert header[-1] == 'ALERTE_VALUE'
@@ -414,4 +400,3 @@ def test_export_tracking_csv_line(tmp_path):
     assert values['ALERTE_VALUE'] == 'ALERTE_VALUE'
     assert values['nb_tickets'] == '2'
     assert float(values['expected_gross_return_eur']) == pytest.approx(3.6)
->>>>>>> origin/main

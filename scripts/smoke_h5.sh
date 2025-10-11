@@ -33,22 +33,13 @@ analysis_dir=$(dirname "$analysis_path")
 printf '\n==> Artefacts générés dans %s\n' "$analysis_dir"
 ls -1 "$analysis_dir"
 
-<<<<<<< HEAD
-decision=$(grep -o '"decision": "[A-Z]*"' "$analysis_path" | cut -d ' ' -f 2 | tr -d '"' || true)
-
-=======
 decision=$(grep -o '\"decision\": \"[A-Z]*\"' "$analysis_path" | cut -d ' ' -f 2 | tr -d '\"' || true)
  
->>>>>>> origin/main
 if [ "$decision" = "ABSTENTION" ]; then
   echo "[INFO] La décision est ABSTENTION. Le test est considéré comme réussi."
   exit 0
 fi
-<<<<<<< HEAD
-
-=======
  
->>>>>>> origin/main
 je_stats_path=$(ls "$analysis_dir"/*_je.csv 2>/dev/null | head -n 1 || true)
 if [ -z "$je_stats_path" ] || [ ! -f "$je_stats_path" ]; then
   echo "[ERREUR] Fichier de statistiques JE (*_je.csv) manquant" >&2
@@ -66,11 +57,7 @@ if [ -z "$p_finale_path" ]; then
   echo "[ERREUR] Fichier p_finale (*p_finale.json) manquant" >&2
   exit 1
 fi
-<<<<<<< HEAD
-
-=======
   
->>>>>>> origin/main
 grep -F '"decision":' "$analysis_path" >/dev/null || {
   echo "[ERREUR] analysis_H5.json ne contient pas de clé de décision" >&2
   exit 1

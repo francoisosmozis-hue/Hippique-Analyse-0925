@@ -12,51 +12,18 @@ Corrections:
 import sys
 import json
 import time
-<<<<<<< HEAD
-from functools import lru_cache
-from pathlib import Path
-from typing import (
-    Any,
-    Callable,
-    Dict,
-    Iterable,
-    List,
-    Mapping,
-    MutableMapping,
-    Sequence,
-    TypeVar,
-)
-
-try:
-    import requests
-except ModuleNotFoundError as exc:  # pragma: no cover - exercised via dedicated test
-    raise RuntimeError(
-        "The 'requests' package is required to fetch data from Zeturf. "
-        "Install it with 'pip install requests' or switch to the urllib-based fallback implementation."
-    ) from exc
-import re
-
-=======
->>>>>>> origin/main
 import yaml
 import argparse
 import logging
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Mapping, MutableMapping
 from datetime import datetime
 from pathlib import Path
+import re
+import datetime as dt
 
 import requests
 from requests.exceptions import RequestException, Timeout, ConnectionError
 from bs4 import BeautifulSoup
-<<<<<<< HEAD
-
-try:  # pragma: no cover - Python < 3.9 fallbacks are extremely rare
-    from zoneinfo import ZoneInfo
-except Exception:  # pragma: no cover - very defensive
-    ZoneInfo = None  # type: ignore[assignment]
-
-=======
->>>>>>> origin/main
 
 # Configuration du logging
 logging.basicConfig(
@@ -67,54 +34,11 @@ logger = logging.getLogger(__name__)
 
 # ... (le reste du fichier jusqu'à la fin, avec toutes les corrections)
 
-<<<<<<< HEAD
-def fetch_from_pmu_api(date: str, reunion: int, course: int) -> Dict[str, Any]:
-    """
-    Fetches race data from the unofficial PMU Turfinfo API.
-    """
-    date_str = date.replace("-", "")
-    base_url = f"https://offline.turfinfo.api.pmu.fr/rest/client/7/programme/{date_str}/R{reunion}/C{course}"
-=======
 class ZeturfFetchError(Exception):
     """Exception personnalisée pour les erreurs de fetch ZEturf"""
     pass
->>>>>>> origin/main
 
-    try:
-        partants_url = f"{base_url}/participants"
-        partants_resp = _http_get_with_backoff(partants_url)
-        partants_data = partants_resp.json()
-        if not partants_data:
-            logger.error(f"No data returned from PMU participants API for R{reunion}C{course}")
-            return {}
-    except Exception as e:
-        logger.error(f"Failed to fetch PMU participants for R{reunion}C{course}: {e}")
-        return {}
 
-<<<<<<< HEAD
-    runners = []
-    for p in partants_data.get('participants', []):
-        runners.append({
-            "num": p.get('numero'),
-            "name": p.get('nom'),
-            "sexe": p.get('sexe'),
-            "age": p.get('age'),
-            "musique": p.get('musique'),
-        })
-
-    try:
-        rapports_url = f"{base_url}/rapports/SIMPLE_PLACE"
-        rapports_resp = _http_get_with_backoff(rapports_url)
-        rapports_data = rapports_resp.json()
-        if rapports_data:
-            odds_map = {}
-            for rapport in rapports_data.get('rapports', []):
-                if rapport.get('typePari') == 'SIMPLE_PLACE':
-                    for comb in rapport.get('combinaisons', []):
-                        num = comb.get('combinaison')[0]
-                        odds_map[str(num)] = comb.get('rapport')
-
-=======
 class ZeturfFetcher:
     """Classe pour gérer les requêtes ZEturf avec retry et cache"""
     
@@ -164,165 +88,72 @@ class ZeturfFetcher:
                 # Vérifier le status code
                 response.raise_for_status()
                 
-                        odds_map[str(num)] = comb.get('rapport')
-    
->>>>>>> origin/main
-            for runner in runners:
-                if str(runner['num']) in odds_map:
-                    runner['dernier_rapport'] = {'gagnant': odds_map[str(runner['num'])]}
-                    runner['cote'] = odds_map[str(runner['num'])]
-<<<<<<< HEAD
-
-    except Exception as e:
-        logger.warning(f"Failed to fetch PMU rapports for R{reunion}C{course}: {e}")
-
-    return {
-        "runners": runners,
-        "hippodrome": partants_data.get('hippodrome', {}).get('libelleCourt'),
-        "discipline": partants_data.get('discipline'),
-        "partants": len(runners),
-        "course_id": partants_data.get('id'),
-        "reunion": f"R{reunion}",
-        "course": f"C{course}",
-        "date": date,
-    }
-=======
-    
-    except Exception as e:
-        logger.warning(f"Failed to fetch PMU rapports for R{reunion}C{course}: {e}")
->>>>>>> origin/main
-
-    return {
-        "runners": runners,
-        "hippodrome": partants_data.get('hippodrome', {}).get('libelleCourt'),
-        "discipline": partants_data.get('discipline'),
-        "partants": len(runners),
-        "course_id": partants_data.get('id'),
-        "reunion": f"R{reunion}",
-        "course": f"C{course}",
-        "date": date,
-    }
-def fetch_race_snapshot(
-    reunion: str,
-    course: str | None = None,
-    phase: str = "H30",
-    *,
-    sources: Mapping[str, Any] | None = None,
-    url: str | None = None,
-    retries: int = 3,
-    backoff: float = 1.5,
-    initial_delay: float = 0.5,
-) -> Dict[str, Any]:
-
-    if sources and sources.get("provider") == "pmu":
-        if not url:
-            raise ValueError("URL is required for PMU provider")
+                return response
+                
+            except (Timeout, ConnectionError) as e:
+                logger.warning(f"Erreur réseau: {e}")
+                last_exception = e
+                time.sleep(self.delay * (2 ** attempt))
+            except RequestException as e:
+                logger.error(f"Erreur de requête: {e}")
+                last_exception = e
+                break # Ne pas retenter sur les erreurs 4xx/5xx
         
-        match = re.search(r"(R\d+C\d+)", url)
-        if not match:
-            raise ValueError("Cannot extract R/C from URL for PMU provider")
+        raise ZeturfFetchError(f"Échec de la récupération de {url} après {self.max_retries} tentatives") from last_exception
+
+    def fetch_race_snapshot(
+        self,
+        course_id: Optional[str] = None,
+        reunion_url: Optional[str] = None,
+        mode: str = 'h30'
+    ) -> Dict[str, Any]:
+        """
+        Récupère les données d'une course ou d'une réunion
+        """
+        if reunion_url:
+            url = reunion_url
+        elif course_id:
+            url = f"https://www.zeturf.fr/fr/course/{course_id}/partants-pronostics"
+        else:
+            raise ValueError("course_id ou reunion_url doit être fourni")
+
+        # Vérifier le cache
+        if self.use_cache:
+            cached_data = self._check_cache(url, mode)
+            if cached_data:
+                logger.info(f"Données trouvées en cache pour {url}")
+                return cached_data
+
+        # Récupérer le HTML
+        response = self.fetch_with_retry(url)
+        soup = BeautifulSoup(response.text, 'html.parser')
         
-        rc_label = match.group(1)
-        reunion_str, course_str = _derive_rc_parts(rc_label)
+        # Extraire les données
+        data = self._parse_page(soup)
         
-        today = dt.date.today().strftime("%Y-%m-%d")
-        r_num = int(reunion_str.replace("R", ""))
-        c_num = int(course_str.replace("C", ""))
-        return fetch_from_pmu_api(today, r_num, c_num)
+        # Construire le snapshot
+        snapshot = self._build_snapshot(data, mode, url)
+        
+        return snapshot
 
-    # Zeturf/Geny logic (existing code)
-    rc_from_first = _normalise_rc(reunion)
-    if course is None and sources is not None and rc_from_first:
-        return _fetch_race_snapshot_by_rc(
-            rc_from_first,
-            phase=phase,
-            sources=sources,
-            url=url,
-            retries=retries,
-            backoff=backoff,
-            initial_delay=initial_delay,
-        )
-
-    if course is None:
-        raise ValueError(
-            "course label is required when reunion/course are provided separately"
-        )
-
-    reunion_label = _normalise_reunion_label(reunion)
-    course_label = _normalise_course_label(course)
-    rc = f"{reunion_label}{course_label}"
-
-    config: Dict[str, Any]
-    if isinstance(sources, MutableMapping):
-        config = dict(sources)
-    elif isinstance(sources, Mapping):
-        config = dict(sources)
-    else:
-        config = {}
-
-    rc_map_raw = (
-        config.get("rc_map") if isinstance(config.get("rc_map"), Mapping) else None
-    )
-    rc_map: Dict[str, Any] = (
-        {str(k): v for k, v in rc_map_raw.items()} if rc_map_raw else {}
-    )
-
-    entry = dict(rc_map.get(rc, {}))
-    entry.setdefault("reunion", reunion_label)
-    entry.setdefault("course", course_label)
-    if url:
-        entry["url"] = url
-       
-    rc_map[rc] = entry
-    config["rc_map"] = rc_map
-
-    snapshot = _fetch_race_snapshot_by_rc(
-        rc,
-        phase=phase,
-        sources=config,
-        url=url,
-        retries=retries,
-        backoff=backoff,
-        initial_delay=initial_delay,
-    )
-
-    snapshot.setdefault("reunion", reunion_label)
-    snapshot.setdefault("course", course_label)
-    snapshot.setdefault("rc", rc)
-    return snapshot
-
-def write_snapshot_from_geny(course_id: str, phase: str, rc_dir: Path) -> None:
-    logger.info("STUB: Writing dummy snapshots for %s in %s", course_id, rc_dir)
-    rc_dir.mkdir(parents=True, exist_ok=True)
-
-    runners = [
-        {"id": "1", "num": "1", "name": "DUMMY 1", "odds": 5.0},
-        {"id": "2", "num": "2", "name": "DUMMY 2", "odds": 6.0},
-        {"id": "3", "num": "3", "name": "DUMMY 3", "odds": 7.0},
-        {"id": "4", "num": "4", "name": "DUMMY 4", "odds": 8.0},
-        {"id": "5", "num": "5", "name": "DUMMY 5", "odds": 9.0},
-        {"id": "6", "num": "6", "name": "DUMMY 6", "odds": 10.0},
-        {"id": "7", "num": "7", "name": "DUMMY 7", "odds": 11.0},
-    ]
-
-    # Create dummy H-30 file
-    h30_file = rc_dir / "dummy_H-30.json"
-    with open(h30_file, "w", encoding="utf-8") as f:
-        json.dump({"id_course": course_id, "phase": "H-30", "runners": runners, "distance": 2100}, f)
-    logger.info("STUB: Wrote dummy H-30 file to %s", h30_file)
-
-    # Create dummy H-5 file
-    h5_file = rc_dir / "dummy_H-5.json"
-    with open(h5_file, "w", encoding="utf-8") as f:
-        json.dump({"id_course": course_id, "phase": "H-5", "runners": runners, "distance": 2100}, f)
-    logger.info("STUB: Wrote dummy H-5 file to %s", h5_file)
-
-
-
-<<<<<<< HEAD
-# ... (le reste du fichier)
-=======
-# ... (le reste du fichier)
+    def _parse_page(self, soup: BeautifulSoup) -> Dict[str, Any]:
+        """Parse le HTML pour extraire les données de la course"""
+        data = {
+            'runners': [],
+            'partants': [],
+            'market': {},
+            'phase': 'open'
+        }
+        
+        # Extraire l'heure de départ
+        data['start_time'] = self._extract_start_time(soup)
+        
+        # Extraire les partants
+        runners_data = soup.select('.datatable-list-runners .runner-line')
+        if not runners_data:
+            logger.warning("Aucun partant trouvé sur la page")
+            return data
+        
         for idx, runner_elem in enumerate(runners_data, 1):
             try:
                 runner = {
@@ -434,7 +265,6 @@ def write_snapshot_from_geny(course_id: str, phase: str, rc_dir: Path) -> None:
         
         logger.info(f"✓ Snapshot sauvegardé: {output_file}")
 
-
 def main():
     """Point d'entrée du script"""
     parser = argparse.ArgumentParser(
@@ -539,4 +369,3 @@ def main():
 
 if __name__ == '__main__':
     sys.exit(main())
->>>>>>> origin/main
