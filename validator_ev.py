@@ -7,6 +7,7 @@ import argparse
 import json
 import logging
 import os
+import re
 import sys
 from collections.abc import Callable
 from functools import partial
@@ -25,6 +26,34 @@ class ValidationError(Exception):
 
 _LOG = logging.getLogger(__name__)
 _MISSING = object()
+
+
+def _load_cfg() -> dict:
+    if yaml is None:
+        raise RuntimeError("PyYAML required for config validation")
+    path = Path("config/gpi.yml")
+    if not path.exists():
+        return {}
+    with path.open("r", encoding="utf-8") as handle:
+        data = yaml.safe_load(handle) or {}
+    if not isinstance(data, dict):
+        return {}
+    return data
+
+
+def _readme_has_roi_sp(target: float) -> bool:
+    readme = Path("README.md")
+    if not readme.exists():
+        return True
+    text = readme.read_text(encoding="utf-8", errors="ignore")
+    match = re.search(r"ROI[_\s]*SP[^0-9]*([0-9]{1,2})\s*%", text, flags=re.IGNORECASE)
+    if not match:
+        return False
+    try:
+        value = float(match.group(1)) / 100.0
+    except (TypeError, ValueError):
+        return False
+    return value >= target
 
 
 def _log_ev_metrics(
@@ -498,8 +527,30 @@ def _cli(argv: list[str] | None = None) -> int:
         help="Force ALLOW_JE_NA dans la configuration",
     )
 
+    args = parser.parse_args(argv)
+
+    cfg_global = {}
     try:
-        cfg, partants, odds, stats = _prepare_validation_inputs(parser.parse_args(argv))
+        cfg_global = _load_cfg()
+    except Exception as exc:  # pragma: no cover - best effort guard
+        _LOG.warning("impossible de charger config/gpi.yml: %s", exc)
+    roi_target = None
+    if cfg_global:
+        roi_target = cfg_global.get("ev", {}).get("min_roi_sp")
+    if roi_target is not None:
+        try:
+            roi_target = float(roi_target)
+        except (TypeError, ValueError):
+            roi_target = None
+    if roi_target is not None and not _readme_has_roi_sp(roi_target):
+        print(
+            f"[FAIL] README ROI_SP mismatch (<{roi_target * 100:.0f}%)",
+            file=sys.stderr,
+        )
+        return 2
+        
+    try:
+        cfg, partants, odds, stats = _prepare_validation_inputs(args)
     except FileNotFoundError as exc:
         parser.error(str(exc))
     except ValueError as exc:
