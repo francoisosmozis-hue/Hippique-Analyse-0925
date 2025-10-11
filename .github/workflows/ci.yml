@@ -6,7 +6,25 @@ on:
   pull_request:
 
 jobs:
+  roi-fast:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install quick deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pyyaml
+      - name: Config smoke checks
+        run: |
+          test -f config/gpi.yml
+          pytest tests/test_no_vig_ev.py tests/test_dutching_allocation.py \
+            tests/test_clv_gate.py tests/test_readme_config_sync.py -q
+
   tests:
+    needs: roi-fast
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
