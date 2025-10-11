@@ -1,0 +1,11 @@
+[run]
+branch = True
+source = .
+omit =
+    .venv/*
+    data/*
+    **/tests/*
+    scripts/*
+
+[report]
+show_missing = True
