@@ -1876,7 +1876,6 @@ def _execute_h5_chain(
         rc_dir,
         budget=budget,
         min_roi=roi_min,
-                ]
             )
     return out_path
 
