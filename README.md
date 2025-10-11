@@ -26,23 +26,15 @@ Pipeline **pro** pour planifier, capturer H‑30 / H‑5, analyser et consigner 
 - Le seuil d'overround est adapté automatiquement (`1.30` standard désormais aligné sur la garde ROI, `1.25` pour les handicaps plats ouverts ≥ 14 partants) pour réduire les tickets exotiques à faible espérance.
 - Chaque analyse écrit systématiquement les artefacts `artifacts/metrics.json`, `artifacts/per_horse_report.csv` et `artifacts/cmd_update_excel.txt` afin d'exposer EV, ROI, overround et raisons d'abstention.
 
-## ✅ CI ROI Guardrails
-
-Les seuils ROI/EV sont vérifiés en continu par un job GitHub Actions `roi-smoke` (Python 3.11) qui exécute `pytest tests/test_roi_smoke.py` sur le dataset minimal `data/ci_sample/`. Les points de contrôle sont alignés sur `config/gpi.yml` :
-
-- **EV_SP ≥ 40 %** du budget SP et **ROI_SP ≥ 20 %** dès qu'une cote 4.0–7.0 est disponible.
-- **ROI combinés ≥ 25 %** et **EV combinés ≥ 40 %** avant d'ajouter `COMBO_AUTO`.
-- **CLV médian (fenêtre 30)** ≤ 0 ⇒ exotiques bloquées ; sinon calibration obligatoire (`samples ≥ 100`, `ci95_width ≤ 0.12`, `abs_err ≤ 0.15`, `stale_days ≤ 7`).
-- **Overround dynamique** : trot ≤ 9 partants plafonné à 1.22, sinon garde-fou par défaut 1.23.
-
-En fin de job, les artefacts `metrics.json`, `per_horse_report.csv` et `cmd_update_excel.txt` sont uploadés pour inspection dans l'onglet *Artifacts*, avec un résumé `EV/ROI gates OK` dans `$GITHUB_STEP_SUMMARY`. Le fichier `cmd_update_excel.txt` rappelle la commande officielle :
-
-```bash
-python update_excel_with_results.py --race 'R?C?' --excel modele_suivi_courses_hippiques.xlsx
-```
-
-Pour la sécurité, **aucun `credentials.json` n'est versionné**. Encodez la clé de service GCP en base64 et exposez‑la via un secret GitHub (`GCS_SERVICE_KEY_B64`) afin que les workflows puissent reconstituer le fichier à la volée.
-- 
+### CI – ROI Guardrails
+La CI exécute un **ROI smoke test** hors réseau à partir de `data/ci_sample/` :
+- **Overround dynamique** (par défaut trot ≥10 partants : ≤ 1.23) ;
+- **CLV gate** : exotiques désactivés si médiane(CL V rolling) ≤ 0 ;
+- **Artifacts requis** à chaque run :
+  - `artifacts/metrics.json` : overround, clv_median_30, kelly_fraction
+  - `artifacts/per_horse_report.csv` : num, odds_win, p_no_vig
+  - `artifacts/cmd_update_excel.txt` : commande prête pour `update_excel_with_results.py`
+Ces garde-fous réduisent les tickets EV− et sécurisent le pipeline pour le jeu réel.
 ### API `/analyse`
 
 L'API FastAPI expose un endpoint `POST /analyse` (voir `main.py`).
