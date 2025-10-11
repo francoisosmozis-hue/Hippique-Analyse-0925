@@ -3290,284 +3290,145 @@ def cmd_analyse(args: argparse.Namespace) -> None:
             cfg=cfg,
         )
         if combo_ok is False and combo_tickets:
-            flags.setdefault("reasons", {}).setdefault("combo", []).append("ALLOW_COMBO")
-
-    final_combo_tickets = combo_tickets if combo_ok else []
-
-    combo_budget_reassign = bool(combo_tickets) and not final_combo_tickets
-    no_combo_available = (
-        not combo_tickets
-        and flags.get("sp")
-        and not flags.get("combo")
-        and float(cfg.get("COMBO_RATIO", 0.0)) > 0.0
-    )
-
-    if not flags.get("sp"):
-        sp_tickets = []
-        sp_guard_candidates = []
-        final_combo_tickets = []
-        ev_sp = 0.0
-        roi_sp = 0.0
-        stats_ev = {"ev": 0.0, "roi": 0.0}
-        ev_global = 0.0
-        roi_global = 0.0
-        combined_payout = 0.0
-        risk_of_ruin = 0.0
-        ev_over_std = 0.0
-        total_stake_sp = 0.0
-        last_reduction_info = {
-            "applied": False,
-            "scale_factor": 1.0,
-            "initial_ror": 0.0,
-            "final_ror": 0.0,
-            "target": float(cfg.get("ROR_MAX", 0.0)),
-            "initial_ev": 0.0,
-            "final_ev": 0.0,
-            "initial_variance": 0.0,
-            "final_variance": 0.0,
-            "initial_total_stake": 0.0,
-            "final_total_stake": 0.0,
-        }
-    elif combo_budget_reassign or no_combo_available:
-        cfg_sp = dict(cfg)
-        cfg_sp["SP_RATIO"] = float(cfg.get("SP_RATIO", 0.0)) + float(cfg.get("COMBO_RATIO", 0.0))
-        cfg_sp["COMBO_RATIO"] = 0.0
-        if len(runners_sp_candidates) >= 2:
-            sp_tickets, _ = allocate_dutching_sp_fn(cfg_sp, runners_sp_candidates)
-        else:
-            sp_tickets = []
-        sp_tickets, stats_ev, reduction_info = adjust_pack(cfg_sp, [])
-        last_reduction_info = reduction_info
-        ev_sp, roi_sp, total_stake_sp = summarize_sp_tickets(sp_tickets)
-        ev_global = float(stats_ev.get("ev", 0.0))
-        roi_global = float(stats_ev.get("roi", 0.0))
-        combined_payout = float(stats_ev.get("combined_expected_payout", 0.0))
-        risk_of_ruin = float(stats_ev.get("risk_of_ruin", 0.0))
-        ev_over_std = float(stats_ev.get("ev_over_std", 0.0))        
-        flags = gate_ev_fn(
-            cfg_sp,
-            ev_sp,
-            ev_global,
-            roi_sp,
-            roi_global,
-            combined_payout,
-            risk_of_ruin,
-            ev_over_std,
-        )
-        sp_guard_candidates = [dict(ticket) for ticket in sp_tickets]
-    elif proposed_pack != sp_tickets + final_combo_tickets:
-        final_pack = sp_tickets + final_combo_tickets
-        current_cap = _resolve_effective_cap(last_reduction_info, cfg)
-        stats_ev = simulate_with_metrics(
-            final_pack,
-            bankroll=bankroll,
-            kelly_cap=current_cap,
-        )
-        ev_sp, roi_sp, total_stake_sp = summarize_sp_tickets(sp_tickets)
-        ev_global = float(stats_ev.get("ev", 0.0))
-        roi_global = float(stats_ev.get("roi", 0.0))
-        combined_payout = float(stats_ev.get("combined_expected_payout", 0.0))
-        risk_of_ruin = float(stats_ev.get("risk_of_ruin", 0.0))
-        ev_over_std = float(stats_ev.get("ev_over_std", 0.0))
-        sp_guard_candidates = [dict(ticket) for ticket in sp_tickets]
-    reasons_bucket = flags.setdefault("reasons", {}) if isinstance(flags, dict) else {}
-    sp_reasons = reasons_bucket.setdefault("sp", []) if isinstance(reasons_bucket, dict) else []
-    budget_total = float(cfg.get("BUDGET_TOTAL", 0.0))
-    if budget_total <= 0.0:
-        budget_total = 5.0
-    per_runner_cap = budget_total * float(cfg.get("MAX_VOL_PAR_CHEVAL", 0.60) or 0.60)
-    if per_runner_cap <= 0.0:
-        per_runner_cap = budget_total * 0.60
-    guard_ev_sp, guard_roi_sp, guard_total_stake_sp = summarize_sp_tickets(
-        sp_guard_candidates
-    )
-
-    sp_ok = bool(flags.get("sp", True)) if isinstance(flags, dict) else True
-    for ticket in sp_guard_candidates:
-        try:
-            stake_value = float(ticket.get("stake", 0.0))
-        except (TypeError, ValueError):
-            stake_value = 0.0
-        if stake_value > per_runner_cap + 1e-6:
-            sp_ok = False
-            if "stake_over_cap" not in sp_reasons:
-                sp_reasons.append("stake_over_cap")
-            break
-    if guard_total_stake_sp > budget_total + 1e-6:
-        sp_ok = False
-        if "stake_over_budget" not in sp_reasons:
-            sp_reasons.append("stake_over_budget")
-    if guard_total_stake_sp > 0.0:
-        if guard_ev_sp < 0.40 * guard_total_stake_sp - 1e-9:
-            sp_ok = False
-            if "ev_sp_below_40pct" not in sp_reasons:
-                sp_reasons.append("ev_sp_below_40pct")
-        roi_guard_triggered = False
-        if guard_roi_sp < 0.20 - 1e-9:
-            roi_guard_triggered = True
-        else:
-            roi_budget_ratio = guard_ev_sp / budget_total if budget_total > 0 else 0.0
-            if roi_budget_ratio <= 0.20 + 1e-9:
-                roi_guard_triggered = True
-        if roi_guard_triggered:
-            sp_ok = False
-            if "roi_sp_below_0.20" not in sp_reasons:
-                sp_reasons.append("roi_sp_below_0.20")
-    if not sp_ok and isinstance(flags, dict):
-        flags["sp"] = False
-        flags.setdefault("combo", False)
-        
-    step_export = cfg.get("ROUND_TO_SP", 0.0)
-    min_stake_export = cfg.get("MIN_STAKE_SP", 0.0)
-    sp_changed = _normalize_ticket_stakes(
-        sp_tickets,
-        round_step=step_export,
-        min_stake=min_stake_export,
-    )
-    combo_changed = _normalize_ticket_stakes(
-        final_combo_tickets,
-        round_step=step_export,
-        min_stake=min_stake_export,
-    )
-
-    tickets = sp_tickets + final_combo_tickets
-
-    if sp_changed or combo_changed:
-        current_cap = _resolve_effective_cap(last_reduction_info, cfg)
-        stats_ev = simulate_with_metrics(
-            tickets,
-            bankroll=bankroll,
-            kelly_cap=current_cap,
-        )
-        ev_sp, roi_sp, total_stake_sp = summarize_sp_tickets(sp_tickets)
-        ev_global = float(stats_ev.get("ev", 0.0))
-        roi_global = float(stats_ev.get("roi", 0.0))
-        combined_payout = float(stats_ev.get("combined_expected_payout", 0.0))
-        risk_of_ruin = float(stats_ev.get("risk_of_ruin", 0.0))
-        ev_over_std = float(stats_ev.get("ev_over_std", 0.0))
-        if isinstance(last_reduction_info, dict):
-            updated_info = dict(last_reduction_info)
-            updated_info["final_total_stake"] = sum(
-                float(t.get("stake", 0.0)) for t in tickets
-            )
-            updated_info["final_ev"] = ev_global
-            updated_info["final_variance"] = float(stats_ev.get("variance", 0.0))
-            updated_info["final_ror"] = risk_of_ruin
-            if (
-                updated_info.get("initial_total_stake")
-                and updated_info["final_total_stake"] >= 0.0
-            ):
-                try:
-                    updated_info["scale_factor"] = (
-                        updated_info["final_total_stake"]
-                        / float(updated_info.get("initial_total_stake", 1.0))
-                    )
-                except (TypeError, ValueError, ZeroDivisionError):  # pragma: no cover
-                    pass
-            last_reduction_info = updated_info
-
-    final_combo_present = bool(final_combo_tickets)
-    existing_decision = combo_info.get("decision")
-    extra_reasons: list[str] = []
-    if final_combo_present:
-        combo_info["decision"] = "accept"
-    else:
-        if combo_tickets and existing_decision == "accept":
-            extra_reasons.extend(flags.get("reasons", {}).get("combo", []))
-            if not flags.get("sp", False):
-                extra_reasons.append("sp_block")
-            if combo_budget_reassign:
-                extra_reasons.append("combo_budget_reassign")
-            if no_combo_available:
-                extra_reasons.append("no_combo_available")
-            if not extra_reasons:
-                extra_reasons.append("combo_removed_post_gate")
-            combo_info["decision"] = \
-                f"reject:{','.join(dict.fromkeys(extra_reasons))}"
-        elif not combo_tickets and "decision" not in combo_info:
-            combo_info["decision"] = "reject:no_candidate"
-
-    for reason in extra_reasons:
-        if reason not in reasons_list:
-            reasons_list.append(reason)
-    combo_flags["combo"] = final_combo_present
-
-    meta["exotics"] = {
-        "decision": combo_info.get("decision"),
-        "notes": list(combo_info.get("notes", [])),
-        "flags": copy.deepcopy(combo_info.get("flags", {})),
-        "thresholds": dict(combo_info.get("thresholds", {})),
-        "available": final_combo_present,
-        "metrics": copy.deepcopy(combo_info.get("metrics", {})),
-    }
-    
-    if flags.get("reasons", {}).get("sp"):
-        logger.warning(
-            "Blocage SP dû aux seuils: %s",
-            ", ".join(flags["reasons"]["sp"]),
-        )
-    if flags.get("reasons", {}).get("combo"):
-        combo_reasons = ", ".join(flags["reasons"]["combo"])
-        message = f"Blocage combinés dû aux seuils: {combo_reasons}"
-        logger.warning(message)
-        print(message)
-    if not flags.get("sp", False):
-        tickets = []
-        ev_sp = ev_global = 0.0
-        roi_sp = roi_global = 0.0
-
-    risk_of_ruin = float(stats_ev.get("risk_of_ruin", 0.0)) if tickets else 0.0
-    clv_moyen = float(stats_ev.get("clv", 0.0)) if tickets else 0.0
-    combined_payout = float(stats_ev.get("combined_expected_payout", 0.0)) if tickets else 0.0
-    variance_total = float(stats_ev.get("variance", 0.0)) if tickets else 0.0
-
-    optimization_summary = None
-    if tickets:
-        effective_cap = _resolve_effective_cap(last_reduction_info, cfg)
-        optimization_summary = _summarize_optimization(
-            tickets,
-            bankroll=bankroll,
-            kelly_cap=effective_cap,
-        )
-
-    # Hard budget stop
-    total_stake = sum(t.get("stake", 0) for t in tickets)
-    if total_stake > float(cfg.get("BUDGET_TOTAL", 0.0)) + 1e-6:
-        raise RuntimeError("Budget dépassé")
-
-    reason_sources: list[Iterable[str]] = []
-    if isinstance(flags, Mapping):
-        reasons_map = flags.get("reasons")
-        if isinstance(reasons_map, Mapping):
-            for key in ("sp", "combo"):
-                bucket = reasons_map.get(key)
-                if isinstance(bucket, Iterable):
-                    reason_sources.append(str(reason) for reason in bucket if reason)
-    reason_sources.append(reasons_list)
-    reason_sources.append(combo_info.get("notes", []))
-    reason_sources.append(validation_reasons)
-    reason_sources.append(guard_notes)
-
-    abstention_reasons: list[str] = []
-    for source in reason_sources:
-        for reason in source:
-            if not reason:
-                continue
-            reason_text = str(reason)
-            if reason_text not in abstention_reasons:
-                abstention_reasons.append(reason_text)
-
-    pipeline_status = "ok"
-    if not tickets:
-        pipeline_status = "abstain"
-    if not calibration_ready:
-        pipeline_status = "insufficient_data"
-    meta["status"] = pipeline_status
-    if abstention_reasons:
-        meta.setdefault("abstention_reasons", abstention_reasons)
-        
-    course_id = meta.get("rc", "")
-    append_csv_line(
+3293             "roi_global": roi_global,
+   3294             "risk_of_ruin": risk_of_ruin,
+   3295             "clv_moyen": clv_moyen,
+   3296             "model": cfg.get("MODEL", ""),
+   3297         },
+   3298         CSV_HEADER,
+   3299     )
+   3300     append_json(
+   3301         f"journaux/{course_id}_pre.json",
+   3302         {
+   3303             "tickets": tickets,
+   3304             "ev": {"sp": ev_sp, "global": ev_global},
+   3305             "exotics": meta.get("exotics", {}),
+   3306         },
+   3307     )
+   3308 
+   3309     outdir.mkdir(parents=True, exist_ok=True)
+   3310     stake_reduction_info = last_reduction_info or {}
+   3311     stake_reduction_flag = bool(stake_reduction_info.get("applied"))
+   3312     stake_reduction_details = {
+   3313         "scale_factor": stake_reduction_info.get("scale_factor", 1.0),
+   3314         "target": stake_reduction_info.get("target"),
+   3315         "initial_cap": stake_reduction_info.get("initial_cap"),
+   3316         "effective_cap": stake_reduction_info.get("effective_cap"),
+   3317         "iterations": stake_reduction_info.get("iterations"),
+   3318         "initial": {
+   3319             "risk_of_ruin": stake_reduction_info.get("initial_ror"),
+   3320             "ev": stake_reduction_info.get("initial_ev"),
+   3321             "variance": stake_reduction_info.get("initial_variance"),
+   3322             "total_stake": stake_reduction_info.get("initial_total_stake"),
+   3323         },
+   3324         "final": {
+   3325             "risk_of_ruin": stake_reduction_info.get("final_ror"),
+   3326             "ev": stake_reduction_info.get("final_ev"),
+   3327             "variance": stake_reduction_info.get("final_variance"),
+   3328             "total_stake": stake_reduction_info.get("final_total_stake"),
+   3329         },
+   3330     }
+   3331     export(
+   3332         outdir,
+   3333         meta,
+   3334         tickets,
+   3335         ev_sp,
+   3336         ev_global,
+   3337         roi_sp,
+   3338         roi_global,
+   3339         risk_of_ruin,
+   3340         clv_moyen,
+   3341         variance_total,
+   3342         combined_payout,
+   3343         p_true,
+   3344         drift,
+   3345         cfg,
+   3346         runners,
+   3347         stake_reduction_applied=stake_reduction_flag,
+   3348         stake_reduction_details=stake_reduction_details,
+   3349         optimization_details=optimization_summary,
+   3350     )
+   3351     logger.info("OK: analyse exportée dans %s", outdir)
+   3352 
+   3353 
+   3354 def cmd_snapshot(args: argparse.Namespace) -> None:
+   3355     """Write a race-specific snapshot file."""
+   3356 
+   3357     base = Path(args.outdir)
+   3358     src = base / f"{args.when}.json"
+   3359     data = load_json(str(src))
+   3360     rc = f"{args.meeting}{args.race}"
+   3361     dest = base / f"{rc}-{args.when}.json"
+   3362     save_json(dest, data)
+   3363     logger.info("Snapshot écrit: %s", dest)
+   3364 
+   3365 
+   3366 def main() -> None:
+   3367     parser = argparse.ArgumentParser(description="GPI v5.1 pipeline")
+   3368     parser.add_argument(
+   3369         "--log-level",
+   3370         default=None,
+   3371         help=(
+   3372             "Logging level (DEBUG, INFO, WARNING, ERROR). "
+   3373             f"Can also be set via {LOG_LEVEL_ENV_VAR}."
+   3374         ),
+   3375     )
+   3376     sub = parser.add_subparsers(dest="cmd", required=True)
+   3377 
+   3378     snap = sub.add_parser("snapshot", help="Renommer un snapshot h30/h5")
+   3379     snap.add_argument("--when", choices=["h30", "h5"], required=True)
+   3380     snap.add_argument("--meeting", required=True)
+   3381     snap.add_argument("--race", required=True)
+   3382     snap.add_argument("--outdir", required=True)
+   3383     snap.set_defaults(func=cmd_snapshot)
+   3384 
+   3385     ana = sub.add_parser("analyse", help="Analyser une course")
+   3386     ana.add_argument("--h30", required=True)
+   3387     ana.add_argument("--h5", required=True)
+   3388     ana.add_argument("--stats-je", required=True)
+   3389     ana.add_argument("--partants", required=True)
+   3390     ana.add_argument("--gpi", required=True)
+   3391     ana.add_argument("--outdir", default=None)
+   3392     ana.add_argument("--diff", default=None)
+   3393     ana.add_argument("--budget", type=float)
+   3394     ana.add_argument("--ev-global", dest="ev_global", type=float)
+   3395     ana.add_argument("--roi-global", dest="roi_global", type=float)
+   3396     ana.add_argument("--max-vol", dest="max_vol", type=float)
+   3397     ana.add_argument("--min-payout", dest="min_payout", type=float)
+   3398     ana.add_argument("--ev-min-exotic", dest="ev_min_exotic", type=float, default=None)
+   3399     ana.add_argument(
+   3400         "--payout-min-exotic", dest="payout_min_exotic", type=float, default=None
+   3401     )
+   3402     ana.add_argument(
+   3403         "--allow-heuristic",
+   3404         dest="allow_heuristic",
+   3405         action="store_true",
+   3406         help="(obsolète) Conservé pour compatibilité mais ignoré : les combinés "
+   3407         "exigent une calibration payout valide.",
+   3408     )
+   3409     ana.add_argument("--allow-je-na", dest="allow_je_na", action="store_true")
+   3410     ana.add_argument(
+   3411         "--p-finale",
+   3412         dest="p_finale",
+   3413         default=None,
+   3414         help="Chemin vers un fichier p_finale.json pour surcharger p_true/p_place.",
+   3415     )
+   3416     ana.add_argument(
+   3417         "--calibration",
+   3418         default=str(PAYOUT_CALIBRATION_PATH),
+   3419         help="Chemin vers payout_calibration.yaml pour l'évaluation des combinés.",
+   3420     )
+   3421     ana.set_defaults(func=cmd_analyse)
+   3422 
+   3423     args = parser.parse_args()
+   3424 
+   3425     configure_logging(args.log_level)
+   3426 
+   3427     args.func(args)
+   3428 
+   3429 
+   3430 if __name__ == "__main__":
+   3431     main()
         "modele_suivi_courses_hippiques_clean.csv",
         {
             "reunion": meta.get("reunion", ""),
