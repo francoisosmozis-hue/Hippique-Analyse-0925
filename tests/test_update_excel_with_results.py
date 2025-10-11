@@ -80,7 +80,13 @@ def test_update_excel_records_observed_roi(tmp_path: Path) -> None:
     ]
     res = subprocess.run(cmd, capture_output=True, text=True)
     assert res.returncode == 0, res.stderr
-
+    lines = [line for line in res.stdout.splitlines() if line.startswith("Suivi:")]
+    assert lines, res.stdout
+    payload_line = lines[-1].split("Suivi:", 1)[1].strip()
+    printed = json.loads(payload_line)
+    assert printed["R/C"] == "R1C1"
+    assert printed["ROI_reel"] == pytest.approx((10.0 - 3.0) / 3.0, rel=1e-6)
+    
     wb = load_workbook(excel_path)
     assert "Sheet" not in wb.sheetnames
 
@@ -113,3 +119,12 @@ def test_update_excel_records_observed_roi(tmp_path: Path) -> None:
     assert header_map_prevision["ROI_global"] == pytest.approx(
         tickets_data["ev"]["roi_global"]
     )
+
+    ws_suivi = wb["Suivi"]
+    header_map_suivi = {
+        ws_suivi.cell(row=1, column=col).value: ws_suivi.cell(row=2, column=col).value
+        for col in range(1, ws_suivi.max_column + 1)
+        if ws_suivi.cell(row=1, column=col).value
+    }
+    assert header_map_suivi["ROI_reel"] == pytest.approx((10.0 - 3.0) / 3.0)
+    assert header_map_suivi["ROI_estime"] == pytest.approx(tickets_data["ev"]["roi_global"])

@@ -1,3 +1,4 @@
+import importlib
 import os
 import sys
 import types
@@ -11,7 +12,7 @@ stub_fetch = types.ModuleType("scripts.online_fetch_zeturf")
 stub_fetch.normalize_snapshot = lambda payload: payload
 sys.modules.setdefault("scripts.online_fetch_zeturf", stub_fetch)
 
-import analyse_courses_du_jour_enrichie as acde
+acde = importlib.import_module("analyse_courses_du_jour_enrichie")
 
 
 class DummyResp:

@@ -454,6 +454,27 @@ def apply_ticket_policy(
     )
     sharpe_threshold = float(cfg.get("SHARPE_MIN", 0.0))
 
+    calib_candidate = (
+        calibration
+        or os.environ.get("GPI_PAYOUT_CALIBRATION", "config/payout_calibration.yaml")
+    )
+    try:
+        ok_calib = (
+            bool(calib_candidate)
+            and os.path.exists(calib_candidate)
+            and os.path.getsize(calib_candidate) > 0
+        )
+    except Exception:
+        ok_calib = False
+
+    if not ok_calib:
+        notes = info.setdefault("notes", [])
+        if "calibration_missing" not in notes:
+            notes.append("calibration_missing")
+        if "no_calibration_yaml → exotiques désactivés" not in notes:
+            notes.append("no_calibration_yaml → exotiques désactivés")
+        return sp_tickets, [], info
+        
     validated, info = validate_exotics_with_simwrapper(
         combo_candidates,
         bankroll=combo_budget,

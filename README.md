@@ -11,13 +11,12 @@ Pipeline **pro** pour planifier, capturer H‑30 / H‑5, analyser et consigner 
 - **Post‑results (*/15 min)** : récupération **arrivées officielles**, **mise à jour Excel** (ROI réel), **upload GCS**.
 
 **Standards verrouillés** (GPI v5.1) :
-- Budget **max 5 €** / course, **2 tickets max** (SP + 1 combiné éventuel, configurable via `MAX_TICKETS_SP`).
-- **EV globale ≥ +35 %** et **ROI estimé global ≥ +25 %** (**ROI SP ≥ +10 %**) pour valider le **vert**.
-- Combinés uniquement si **payout attendu > 12 €** (calibration).
-- **KELLY_FRACTION = 0.5** : moitié de Kelly pour réduire la variance au prix d'une EV moindre; cap 60 % par cheval.
-- **MIN_STAKE_SP = 0.10** : mise minimale par ticket SP, évite les micro-mises (réduit variance) mais peut bloquer un peu d'EV.
-- **ROUND_TO_SP = 0.10** : arrondi des mises SP à 0,10 €; utiliser `0` pour désactiver l'arrondi sans provoquer de crash tout en conservant le calcul EV/ROI.
-- **SHARPE_MIN = 0.5** : seuil minimal de ratio EV/σ; filtre les paris à variance trop élevée.
+- Budget **max 5 €** / course et **2 tickets max** : un seul SP + un combiné (CP/CG/Trio/ZE4) si et seulement si **EV ≥ +40 %** et **payout attendu ≥ 10 €**.
+- SP « Kelly fractionné » : **EV_SP ≥ +40 %**, **ROI_SP ≥ +20 %**, **≤ 60 % du budget** engagé sur un même cheval.
+- Combinés calibrés : fichier `config/payout_calibration.yaml` valide obligatoire, sinon statut `insufficient_data` et abstention.
+- Surcote place : **overround place > 1.30 ⇒ combinés bloqués** (raison `overround_above_threshold`).
+- **EV globale ≥ +35 %** et **ROI estimé global ≥ +25 %** pour afficher la pastille verte.
+- **KELLY_FRACTION = 0.5**, **MIN_STAKE_SP = 0.10**, **ROUND_TO_SP = 0.10**, **SHARPE_MIN = 0.5** (cf. `config/gpi.yml`).
 
 ### Garde-fous opérationnels
 
@@ -25,7 +24,8 @@ Pipeline **pro** pour planifier, capturer H‑30 / H‑5, analyser et consigner 
 - La phase **H‑5** réessaie automatiquement les collectes `JE`/`chronos` en cas d'absence des CSV, marque la course « non jouable » via `UNPLAYABLE.txt` si la régénération échoue et évite ainsi que le pipeline plante.
 - Les combinés sont désormais filtrés strictement dans `pipeline_run.py` : statut `"ok"` obligatoire, EV ≥ +40 % et payout attendu ≥ 10 € sans heuristique. Le runner et le pipeline partagent la même règle, ce qui garantit un comportement homogène en CLI comme dans les automatisations.
 - Le seuil d'overround est adapté automatiquement (`1.30` standard désormais aligné sur la garde ROI, `1.25` pour les handicaps plats ouverts ≥ 14 partants) pour réduire les tickets exotiques à faible espérance.
-
+- Chaque analyse écrit systématiquement `out/<RC>/metrics.json|csv`, `p_finale.json` et `cmd_update_excel.txt` afin d'exposer EV, ROI, overround et raisons d'abstention.
+- 
 ### API `/analyse`
 
 L'API FastAPI expose un endpoint `POST /analyse` (voir `main.py`).
@@ -159,6 +159,27 @@ Statuts H‑30/H‑5, Jouable H‑5, Tickets H‑5, Commentaires) et réalise un
 doublons. Les commandes ci‑dessus peuvent être enchaînées avec un utilitaire
 d'upload (ex. `scripts/drive_sync.py`) pour pousser le fichier sur Google
 Drive.
+
+---
+
+## ✅ Tests & smoke
+
+- **Tests ciblés des garde-fous EV/overround/SP**
+
+  ```bash
+  pytest tests/test_overround_place.py tests/test_sp_dutching_guards.py
+  ```
+
+- **Suite complète**
+
+  ```bash
+  pytest
+  ```
+
+Les jeux d'entrée utilisés dans `tests/test_pipeline_exotics_filters.py`
+permettent également de vérifier rapidement les exports `out/<RC>/` produits
+par `pipeline_run.run_pipeline`.
+
 
 ### Automatisation GitHub Actions H‑30 / H‑5
 

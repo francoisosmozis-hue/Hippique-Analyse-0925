@@ -21,10 +21,17 @@ from typing import Any, Dict, List, Mapping
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+<<<<<<< HEAD
 import yaml
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 from pydantic import ValidationError as PydanticValidationError
 from pydantic import field_validator
+=======
+# CORRECTION: Imports depuis scripts/ au lieu de la racine
+from scripts.simulate_ev import simulate_ev_batch
+from scripts.simulate_wrapper import PAYOUT_CALIBRATION_PATH
+from scripts.validator_ev import ValidationError, validate_ev
+>>>>>>> origin/main
 
 from scripts import online_fetch_zeturf as ofz
 from scripts.gcs_utils import disabled_reason, is_gcs_enabled
@@ -284,7 +291,7 @@ def _write_analysis(
     mode: str,
     calibration: Path,
     calibration_available: bool,
-) -> None:
+) -> None:    
     """Compute a dummy EV/ROI analysis and write it to disk.
 
     When the payout calibration file is missing the combo generation is skipped
@@ -388,6 +395,7 @@ def _trigger_phase(
         arrivee_path = race_dir / "arrivee_officielle.json"
         race_dir.mkdir(parents=True, exist_ok=True)
         if not arrivee_path.exists():
+            # CORRECTION: Encodage UTF-8 corrigé
             logger.error(
                 "[KO] Arrivée absente… %s (recherché: %s)", race_id, arrivee_path
             )

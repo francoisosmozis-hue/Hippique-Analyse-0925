@@ -53,6 +53,19 @@ def test_estimate_sp_ev_returns_none_when_insufficient(
     assert "B" in caplog.text
 
 
+def test_estimate_sp_ev_imputes_missing_odds_place(caplog: pytest.LogCaptureFixture) -> None:
+    legs = [
+        {"id": "A", "p": 0.3, "market": {"nplace": 2, "n_partants": 12}},
+        {"id": "B", "odds_place": 5.0, "p": 0.2},
+    ]
+
+    with caplog.at_level(logging.INFO):
+        ev, some_missing = runner_chain.estimate_sp_ev(legs)
+
+    assert some_missing is True
+    assert ev == pytest.approx(0.5, rel=1e-2)
+    assert "odds_place_imputed" in legs[0].get("notes", [])
+    assert "Cote place imputée" in caplog.text
 def test_compute_overround_cap_flat_handicap_string_partants() -> None:
     cap = runner_chain.compute_overround_cap("Handicap de Plat", "16 partants")
     assert cap == pytest.approx(1.25)
@@ -378,6 +391,7 @@ def test_export_tracking_csv_line(tmp_path):
 
     runner_chain.export_tracking_csv_line(str(path), meta, tickets, stats, alerte=True)
 
+<<<<<<< HEAD
     lines = path.read_text(encoding="utf-8").splitlines()
     header = lines[0].split(";")
     assert header[-1] == "ALERTE_VALUE"
@@ -390,3 +404,14 @@ def test_export_tracking_csv_line(tmp_path):
         "drift_sign",
     } <= set(header)
     assert lines[1].split(";")[-1] == "ALERTE_VALUE"
+=======
+    lines = path.read_text(encoding='utf-8').splitlines()
+    header = lines[0].split(';')
+    assert header[-1] == 'ALERTE_VALUE'
+    assert {'prob_implicite_panier', 'ev_simulee_post_arrondi', 'roi_simule', 'roi_reel', 'sharpe', 'drift_sign'} <= set(header)
+    assert {'nb_tickets', 'expected_gross_return_eur'} <= set(header)
+    values = dict(zip(header, lines[1].split(';')))
+    assert values['ALERTE_VALUE'] == 'ALERTE_VALUE'
+    assert values['nb_tickets'] == '2'
+    assert float(values['expected_gross_return_eur']) == pytest.approx(3.6)
+>>>>>>> origin/main

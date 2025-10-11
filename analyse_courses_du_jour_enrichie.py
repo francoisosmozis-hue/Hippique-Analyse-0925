@@ -29,6 +29,33 @@ from bs4 import BeautifulSoup
 
 from logging_io import CSV_HEADER, append_csv_line
 from scripts.gcs_utils import disabled_reason, is_gcs_enabled
+<<<<<<< HEAD
+=======
+from scripts.online_fetch_zeturf import normalize_snapshot
+from scripts.fetch_je_stats import collect_stats
+
+import pipeline_run
+from scripts.analysis_utils import compute_overround_cap
+from simulate_wrapper import PAYOUT_CALIBRATION_PATH, evaluate_combo
+
+logger = logging.getLogger(__name__)
+
+
+def _env_float(name: str, default: float) -> float:
+    try:
+        return float(os.getenv(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+
+
+GPI_BUDGET_DEFAULT = _env_float("GPI_BUDGET", 5.0)
+EV_MIN_THRESHOLD = _env_float("EV_MIN", 0.40)
+ROI_SP_MIN_THRESHOLD = _env_float("ROI_SP_MIN", 0.20)
+PAYOUT_MIN_THRESHOLD = _env_float("PAYOUT_MIN", 10.0)
+OVERROUND_MAX_THRESHOLD = _env_float("OVERROUND_MAX", 1.30)
+if "MAX_COMBO_OVERROUND" not in os.environ:
+    os.environ["MAX_COMBO_OVERROUND"] = f"{OVERROUND_MAX_THRESHOLD:.2f}"
+>>>>>>> origin/main
 
 
 # Tests may insert a lightweight stub of ``scripts.online_fetch_zeturf`` to avoid
@@ -37,12 +64,15 @@ from scripts.gcs_utils import disabled_reason, is_gcs_enabled
 _fetch_module = sys.modules.get("scripts.online_fetch_zeturf")
 if _fetch_module is not None and not hasattr(_fetch_module, "fetch_race_snapshot"):
     sys.modules.pop("scripts.online_fetch_zeturf", None)
+<<<<<<< HEAD
 import pipeline_run
 from runner_chain import compute_overround_cap
 from scripts.fetch_je_stats import collect_stats
 from simulate_wrapper import PAYOUT_CALIBRATION_PATH, evaluate_combo
 
 logger = logging.getLogger(__name__)
+=======
+>>>>>>> origin/main
 
 
 class MissingH30SnapshotError(RuntimeError):
@@ -468,6 +498,7 @@ def ensure_dir(path: Path) -> Path:
     return path
 
 
+<<<<<<< HEAD
 def _latest_snapshot(rc_dir: Path, tag: str) -> Path | None:
     """Return the latest snapshot file for a given tag."""
     pattern = f"*_{tag}.json"
@@ -475,6 +506,10 @@ def _latest_snapshot(rc_dir: Path, tag: str) -> Path | None:
     if not candidates:
         return None
     return candidates[-1]
+=======
+def enrich_h5(rc_dir: Path, *, budget: float, kelly: float) -> None:
+    """Prepare all artefacts required for the H-5 pipeline.
+>>>>>>> origin/main
 
 
 def _load_snapshot(path: Path) -> dict[str, Any]:
@@ -622,18 +657,58 @@ def enrich_h5(rc_dir: Path, *, budget: float, kelly: float) -> None:
         _write_minimal_csv(chronos_path, placeholder_headers, placeholder_rows)
 
 
+<<<<<<< HEAD
 def build_p_finale(rc_dir: Path, *, budget: float, kelly: float) -> None:
+=======
+def build_p_finale(
+    rc_dir: Path,
+    *,
+    budget: float,
+    kelly: float,
+    ev_min: float | None = None,
+    roi_min: float | None = None,
+    payout_min: float | None = None,
+    overround_max: float | None = None,
+) -> None:
+>>>>>>> origin/main
     """Run the ticket allocation pipeline and persist ``p_finale.json``."""
 
     rc_dir = Path(rc_dir)
-    _run_single_pipeline(rc_dir, budget=budget)
+    _run_single_pipeline(
+        rc_dir,
+        budget=budget,
+        ev_min=ev_min,
+        roi_min=roi_min,
+        payout_min=payout_min,
+        overround_max=overround_max,
+    )
 
 
+<<<<<<< HEAD
 def run_pipeline(rc_dir: Path, *, budget: float, kelly: float) -> None:
+=======
+def run_pipeline(
+    rc_dir: Path,
+    *,
+    budget: float,
+    kelly: float,
+    ev_min: float | None = None,
+    roi_min: float | None = None,
+    payout_min: float | None = None,
+    overround_max: float | None = None,
+) -> None:
+>>>>>>> origin/main
     """Execute the analysis pipeline for ``rc_dir`` or its subdirectories."""
 
     rc_dir = Path(rc_dir)
 
+    ev_threshold = EV_MIN_THRESHOLD if ev_min is None else float(ev_min)
+    roi_threshold = ROI_SP_MIN_THRESHOLD if roi_min is None else float(roi_min)
+    payout_threshold = PAYOUT_MIN_THRESHOLD if payout_min is None else float(payout_min)
+    overround_threshold = (
+        OVERROUND_MAX_THRESHOLD if overround_max is None else float(overround_max)
+    )
+    
     # If ``rc_dir`` already holds a freshly generated ``p_finale.json`` we do
     # not run the pipeline again – this is the case when ``build_p_finale`` was
     # just invoked on the directory.
@@ -645,13 +720,28 @@ def run_pipeline(rc_dir: Path, *, budget: float, kelly: float) -> None:
         for name in ("h5.json", "partants.json", "stats_je.json")
     )
     if inputs_available:
-        _run_single_pipeline(rc_dir, budget=budget)
+        _run_single_pipeline(
+            rc_dir,
+            budget=budget,
+            ev_min=ev_threshold,
+            roi_min=roi_threshold,
+            payout_min=payout_threshold,
+            overround_max=overround_threshold,
+        )
         return
 
     ran_any = False
     for subdir in sorted(p for p in rc_dir.iterdir() if p.is_dir()):
         try:
-            build_p_finale(subdir, budget=budget, kelly=kelly)
+            build_p_finale(
+                subdir,
+                budget=budget,
+                kelly=kelly,
+                ev_min=ev_threshold,
+                roi_min=roi_threshold,
+                payout_min=payout_threshold,
+                overround_max=overround_threshold,
+            )
         except FileNotFoundError:
             continue
         ran_any = True
@@ -763,10 +853,24 @@ def _write_chronos_csv(path: Path, runners: Iterable[Any]) -> None:
             writer.writerow([cid, chrono])
 
 
-def _run_single_pipeline(rc_dir: Path, *, budget: float) -> None:
+def _run_single_pipeline(
+    rc_dir: Path,
+    *,
+    budget: float,
+    ev_min: float | None = None,
+    roi_min: float | None = None,
+    payout_min: float | None = None,
+    overround_max: float | None = None,
+) -> None:
     """Execute :func:`pipeline_run.cmd_analyse` for ``rc_dir``."""
 
     rc_dir = ensure_dir(rc_dir)
+    ev_threshold = EV_MIN_THRESHOLD if ev_min is None else float(ev_min)
+    roi_threshold = ROI_SP_MIN_THRESHOLD if roi_min is None else float(roi_min)
+    payout_threshold = PAYOUT_MIN_THRESHOLD if payout_min is None else float(payout_min)
+    overround_threshold = (
+        OVERROUND_MAX_THRESHOLD if overround_max is None else float(overround_max)
+    )
     required = {"h30.json", "h5.json", "partants.json", "stats_je.json"}
     missing = [name for name in required if not (rc_dir / name).exists()]
     if missing:
@@ -799,18 +903,26 @@ def _run_single_pipeline(rc_dir: Path, *, budget: float) -> None:
         outdir=str(rc_dir),
         diff=None,
         budget=float(budget),
-        ev_global=None,
-        roi_global=None,
+        ev_global=ev_threshold,
+        roi_global=roi_threshold,
         max_vol=None,
-        min_payout=None,
+        min_payout=payout_threshold,
         ev_min_exotic=None,
         payout_min_exotic=None,
         allow_heuristic=False,
         allow_je_na=allow_je_na,
         calibration=str(PAYOUT_CALIBRATION_PATH),
     )
-    pipeline_run.cmd_analyse(args)
-
+    previous_overround = os.environ.get("MAX_COMBO_OVERROUND")
+    os.environ["MAX_COMBO_OVERROUND"] = f"{overround_threshold:.2f}"
+    try:
+        pipeline_run.cmd_analyse(args)
+    finally:
+        if previous_overround is None:
+            os.environ.pop("MAX_COMBO_OVERROUND", None)
+        else:
+            os.environ["MAX_COMBO_OVERROUND"] = previous_overround
+            
     p_finale_path = rc_dir / "p_finale.json"
     try:
         payload = json.loads(p_finale_path.read_text(encoding="utf-8"))
@@ -1445,7 +1557,11 @@ def _rebuild_je_csv_from_stats(rc_dir: Path) -> bool:
         return False
 
     try:
+<<<<<<< HEAD
         _write_je_csv_file(
+=======
+        write_je_csv_file(
+>>>>>>> origin/main
             rc_dir / f"{snap}_je.csv", id2name=id2name, stats_payload=stats_payload
         )
     except OSError as exc:
@@ -1648,7 +1764,11 @@ def _ensure_h5_artifacts(
             if _refresh_missing_state():
                 return True
         return False
+<<<<<<< HEAD
 
+=======
+        
+>>>>>>> origin/main
     if _missing_requires_stats(missing):
         (
             stats_fetch_success,
@@ -1803,7 +1923,14 @@ def safe_enrich_h5(
 
 
 def _execute_h5_chain(
-    rc_dir: Path, *, budget: float, kelly: float
+    rc_dir: Path,
+    *,
+    budget: float,
+    kelly: float,
+    ev_min: float,
+    roi_min: float,
+    payout_min: float,
+    overround_max: float,
 ) -> tuple[bool, dict[str, Any] | None]:
     """Run the full H-5 enrichment pipeline with fail-safe guards.
 
@@ -1815,10 +1942,19 @@ def _execute_h5_chain(
     if not success:
         return False, outcome
 
-    build_p_finale(rc_dir, budget=budget, kelly=kelly)
+    build_p_finale(
+        rc_dir,
+        budget=budget,
+        kelly=kelly,
+        ev_min=ev_min,
+        roi_min=roi_min,
+        payout_min=payout_min,
+        overround_max=overround_max,
+    )
     guard_ok, analysis_payload, guard_outcome = _run_h5_guard_phase(
         rc_dir,
         budget=budget,
+<<<<<<< HEAD
     )
     try:
         _write_json_file(rc_dir / "analysis_H5.json", analysis_payload)
@@ -1876,6 +2012,9 @@ def export_per_horse_csv(rc_dir: Path) -> Path:
                     row.get("j_rate"),
                     row.get("e_rate"),
                     str(num in chrono_ok),
+=======
+        min_roi=roi_min,
+>>>>>>> origin/main
                 ]
             )
     return out_path
@@ -1905,18 +2044,23 @@ def _load_geny_today_payload() -> dict[str, Any]:
                         "c": "C1",
                         "id_course": "12345" # A dummy ID is sufficient
                     }
+<<<<<<< HEAD
                 ]
             }
+=======
+               ]
+           }
+>>>>>>> origin/main
         ]
     }
 
 
 def _normalise_rc_label(label: str | int, prefix: str) -> str:
-    """Normalise ``label`` to the canonical ``R``/``C`` format.
+   """Normalise ``label`` to the canonical ``R``/``C`` format.
 
-    ``label`` may be provided without the leading prefix (``"1"``) or with a
-    lowercase variant (``"c3"``). The return value always matches ``R\\d+`` or
-    ``C\\d+`` with no leading zero. ``ValueError`` is raised when the label does
+   ``label`` may be provided without the leading prefix (``"1"``) or with a
+   lowercase variant (``"c3"``). The return value always matches ``R\\d+`` or
+   ``C\\d+`` with no leading zero. ``ValueError`` is raised when the label does
     not describe a strictly positive integer.
     """
 
@@ -1927,7 +2071,7 @@ def _normalise_rc_label(label: str | int, prefix: str) -> str:
         text = text[len(prefix) :]
     elif text.startswith(prefix[0]):
         text = text[1:]
-    if not text.isdigit():
+   if not text.isdigit():
         raise ValueError(f"Identifiant {prefix} invalide: {label!r}")
     number = int(text)
     if number <= 0:
@@ -1946,16 +2090,16 @@ def _normalise_phase(value: str) -> str:
 
 def _phase_argument(value: str) -> str:
     """Argument parser wrapper that normalises ``value`` to ``H30``/``H5``."""
-
+   
     try:
         return _normalise_phase(value)
     except ValueError as exc:  # pragma: no cover - handled by argparse
         raise argparse.ArgumentTypeError(str(exc)) from exc
-
-
+   
+   
 def _resolve_course_id(reunion: str, course: str) -> str:
     """Return the Geny course identifier matching ``reunion``/``course``."""
-
+   
     payload = _load_geny_today_payload()
     reunion = reunion.upper()
     course = course.upper()
@@ -1966,6 +2110,55 @@ def _resolve_course_id(reunion: str, course: str) -> str:
             label = str(course_info.get("c", "")).upper()
             if label != course:
                 continue
+            course_id = (
+                course_info.get("id_course")
+                or course_info.get("course_id")
+                or course_info.get("id")
+            )
+            if course_id is None:
+                break
+            return str(course_id)
+    raise ValueError(f"Course {reunion}{course} introuvable via discover_geny_today")
+   
+   
+def _process_single_course(
+    reunion: str,
+    course: str,
+    phase: str,
+    data_dir: Path,
+    *,
+    budget: float,
+    kelly: float,
+    gcs_prefix: str | None,
+) -> dict[str, Any] | None:
+    """Fetch and analyse a specific course designated by ``reunion``/``course``."""
+  
+    course_id = _resolve_course_id(reunion, course)
+    base_dir = ensure_dir(data_dir)
+    rc_dir = ensure_dir(base_dir / f"{reunion}{course}")
+    write_snapshot_from_geny(course_id, phase, rc_dir)
+    outcome: dict[str, Any] | None = None
+    pipeline_done = False
+    if phase.upper() == "H5":
+        pipeline_done, outcome = _execute_h5_chain(
+            rc_dir,
+            budget=budget,
+            kelly=kelly,
+        )
+        if pipeline_done:
+            csv_path = export_per_horse_csv(rc_dir)
+            print(f"[INFO] per-horse report écrit: {csv_path}")
+            outcome = None
+        elif outcome is not None:
+            _write_json_file(rc_dir / "decision.json", outcome)
+        else:  # pragma: no cover - defensive fallback
+            _write_json_file(
+                rc_dir / "decision.json",
+                {
+                    "status": "no-bet",
+                    "decision": "ABSTENTION",
+                    "reason": "pipeline-error",
+                },
             course_id = (
                 course_info.get("id_course")
                 or course_info.get("course_id")
@@ -1986,6 +2179,10 @@ def _process_single_course(
     budget: float,
     kelly: float,
     gcs_prefix: str | None,
+    ev_min: float = EV_MIN_THRESHOLD,
+    roi_min: float = ROI_SP_MIN_THRESHOLD,
+    payout_min: float = PAYOUT_MIN_THRESHOLD,
+    overround_max: float = OVERROUND_MAX_THRESHOLD,
 ) -> dict[str, Any] | None:
     """Fetch and analyse a specific course designated by ``reunion``/``course``."""
 
@@ -2000,6 +2197,10 @@ def _process_single_course(
             rc_dir,
             budget=budget,
             kelly=kelly,
+            ev_min=ev_min,
+            roi_min=roi_min,
+            payout_min=payout_min,
+            overround_max=overround_max,
         )
         if pipeline_done:
             csv_path = export_per_horse_csv(rc_dir)
@@ -2051,6 +2252,10 @@ def _process_reunion(
     budget: float,
     kelly: float,
     gcs_prefix: str | None,
+    ev_min: float = EV_MIN_THRESHOLD,
+    roi_min: float = ROI_SP_MIN_THRESHOLD,
+    payout_min: float = PAYOUT_MIN_THRESHOLD,
+    overround_max: float = OVERROUND_MAX_THRESHOLD,
 ) -> None:
     """Fetch ``url`` and run the pipeline for each course of the meeting."""
 
@@ -2102,6 +2307,10 @@ def _process_reunion(
                 rc_dir,
                 budget=budget,
                 kelly=kelly,
+                ev_min=ev_min,
+                roi_min=roi_min,
+                payout_min=payout_min,
+                overround_max=overround_max
             )
             if pipeline_done:
                 csv_path = export_per_horse_csv(rc_dir)
@@ -2127,9 +2336,39 @@ def main() -> None:
     ap.add_argument(
         "--data-dir", default="data", help="Répertoire racine pour les sorties"
     )
+<<<<<<< HEAD
     ap.add_argument("--budget", type=float, default=5.0, help="Budget à utiliser")
+=======
+    ap.add_argument(
+        "--budget", type=float, default=GPI_BUDGET_DEFAULT, help="Budget à utiliser"
+    )
+>>>>>>> origin/main
     ap.add_argument(
         "--kelly", type=float, default=0.5, help="Fraction de Kelly à appliquer"
+    )
+    ap.add_argument(
+        "--ev-min",
+        type=float,
+        default=EV_MIN_THRESHOLD,
+        help="Seuil EV global minimal (ratio).",
+    )
+    ap.add_argument(
+        "--roi-min",
+        type=float,
+        default=ROI_SP_MIN_THRESHOLD,
+        help="ROI global minimal (ratio).",
+    )
+    ap.add_argument(
+        "--payout-min",
+        type=float,
+        default=PAYOUT_MIN_THRESHOLD,
+        help="Payout combinés minimal (euros).",
+    )
+    ap.add_argument(
+        "--overround-max",
+        type=float,
+        default=OVERROUND_MAX_THRESHOLD,
+        help="Overround place maximum autorisé.",
     )
     ap.add_argument(
         "--from-geny-today",
@@ -2228,6 +2467,14 @@ def main() -> None:
                     str(args.budget),
                     "--kelly",
                     str(args.kelly),
+                    "--ev-min",
+                    str(args.ev_min),
+                    "--roi-min",
+                    str(args.roi_min),
+                    "--payout-min",
+                    str(args.payout_min),
+                    "--overround-max",
+                    str(args.overround_max),
                 ]
                 if args.gcs_prefix:
                     cmd.extend(["--gcs-prefix", args.gcs_prefix])
@@ -2248,8 +2495,92 @@ def main() -> None:
             Path(args.data_dir),
             budget=args.budget,
             kelly=args.kelly,
+<<<<<<< HEAD
             gcs_prefix=args.gcs_prefix,
         )
         return
 if __name__ == "__main__":
+=======
+            gcs_prefix=gcs_prefix,
+            ev_min=args.ev_min,
+            roi_min=args.roi_min,
+            payout_min=args.payout_min,
+            overround_max=args.overround_max,
+        )
+        return
+
+    if args.course_url and args.phase:
+        _process_reunion(
+            args.course_url,
+            args.phase,
+            Path(args.data_dir),
+            budget=args.budget,
+            kelly=args.kelly,
+            gcs_prefix=gcs_prefix,
+        )
+        return
+
+    if args.from_geny_today:
+        payload = _load_geny_today_payload()
+        meetings = payload.get("meetings", [])
+        base_dir = ensure_dir(Path(args.data_dir))
+        for meeting in meetings:
+            r_label = meeting.get("r", "")
+            for course in meeting.get("courses", []):
+                c_label = course.get("c", "")
+                rc_dir = ensure_dir(base_dir / f"{r_label}{c_label}")
+                course_id = course.get("id_course")
+                if not course_id:
+                    continue
+                write_snapshot_from_geny(course_id, "H30", rc_dir)
+                write_snapshot_from_geny(course_id, "H5", rc_dir)
+                success, decision = safe_enrich_h5(
+                    rc_dir, budget=args.budget, kelly=args.kelly
+                )
+                if success:
+                    build_p_finale(
+                        rc_dir,
+                        budget=args.budget,
+                        kelly=args.kelly,
+                        ev_min=args.ev_min,
+                        roi_min=args.roi_min,
+                        payout_min=args.payout_min,
+                        overround_max=args.overround_max,
+                    )
+                    run_pipeline(
+                        rc_dir,
+                        budget=args.budget,
+                        kelly=args.kelly,
+                        ev_min=args.ev_min,
+                        roi_min=args.roi_min,
+                        payout_min=args.payout_min,
+                        overround_max=args.overround_max,
+                    )
+                    build_prompt_from_meta(rc_dir, budget=args.budget, kelly=args.kelly)
+                    csv_path = export_per_horse_csv(rc_dir)
+                    print(f"[INFO] per-horse report écrit: {csv_path}")
+                else:
+                    if decision is not None:
+                        _write_json_file(rc_dir / "decision.json", decision)
+                if gcs_prefix is not None:
+                    _upload_artifacts(rc_dir, gcs_prefix=gcs_prefix)
+        print("[DONE] from-geny-today pipeline terminé.")
+        return
+
+    # Fall back to original behaviour: simply run the pipeline on ``data_dir``
+    run_pipeline(
+        Path(args.data_dir),
+        budget=args.budget,
+        kelly=args.kelly,
+        ev_min=args.ev_min,
+        roi_min=args.roi_min,
+        payout_min=args.payout_min,
+        overround_max=args.overround_max,
+    )
+    if gcs_prefix is not None:
+        _upload_artifacts(Path(args.data_dir), gcs_prefix=gcs_prefix)
+
+
+if __name__ == "__main__":  # pragma: no cover - CLI entry point
+>>>>>>> origin/main
     main()

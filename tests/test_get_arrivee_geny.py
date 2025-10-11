@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sys
+<<<<<<< HEAD
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from types import SimpleNamespace
@@ -21,8 +22,16 @@ if "requests" not in sys.modules:
     )
 
 
-if "bs4" not in sys.modules:
+=======
+from pathlib import Path
+from types import SimpleNamespace
+from xml.etree import ElementTree as ET
 
+import pytest
+
+>>>>>>> origin/main
+if "bs4" not in sys.modules:
+    # Provide a lightweight BeautifulSoup shim for environments where bs4 is unavailable.
     class _SoupNode:
         def __init__(self, element: ET.Element) -> None:
             self._element = element
@@ -35,22 +44,23 @@ if "bs4" not in sys.modules:
                 return value.split()
             return self._element.attrib.get(key, default)
 
+<<<<<<< HEAD
         def find_all(
             self,
             name: str | None = None,
             href: bool = False,
             attrs: dict[str, object] | None = None,
         ):
+=======
+        def find_all(self, name: str | None = None):
+>>>>>>> origin/main
             matches = []
             for elem in self._element.iter():
                 if name and elem.tag != name:
-                    continue
-                if href and "href" not in elem.attrib:
-                    continue
-                if attrs and not _match_attrs(elem, attrs):
-                    continue
+                    continue                
                 matches.append(_SoupNode(elem))
             return matches
+<<<<<<< HEAD
 
         def find(
             self,
@@ -61,6 +71,9 @@ if "bs4" not in sys.modules:
             results = self.find_all(name=name, href=href, attrs=attrs)
             return results[0] if results else None
 
+=======
+        
+>>>>>>> origin/main
         def select(self, selector: str):
             parts = [part for part in selector.split() if part]
             nodes = [self]
@@ -77,10 +90,6 @@ if "bs4" not in sys.modules:
                 nodes = next_nodes
             return nodes
 
-        def select_one(self, selector: str):
-            results = self.select(selector)
-            return results[0] if results else None
-
         def get_text(self, separator: str = "", strip: bool = False) -> str:
             pieces = list(self._element.itertext())
             text = "".join(pieces)
@@ -90,6 +99,7 @@ if "bs4" not in sys.modules:
                 text = separator.join(part for part in text.split())
             return text
 
+<<<<<<< HEAD
     def _match_attrs(element: ET.Element, attrs: dict[str, object]) -> bool:
         for key, value in attrs.items():
             attr_val = element.attrib.get(key)
@@ -106,6 +116,8 @@ if "bs4" not in sys.modules:
                     return False
         return True
 
+=======
+>>>>>>> origin/main
     def _parse_selector(selector: str) -> tuple[str | None, list[str]]:
         selector = selector.strip()
         if not selector:
@@ -131,14 +143,18 @@ if "bs4" not in sys.modules:
             wrapper = f"<root>{markup}</root>"
             return ET.fromstring(wrapper)
 
+<<<<<<< HEAD
     def BeautifulSoup(markup: str, parser: str | None = None) -> _SoupNode:  # type: ignore[misc]
+=======
+    def BeautifulSoup(markup: str, parser: str | None = None):  # type: ignore[misc]
+>>>>>>> origin/main
         return _SoupNode(_build_root(markup))
 
     sys.modules["bs4"] = SimpleNamespace(BeautifulSoup=BeautifulSoup)
 
-from get_arrivee_geny import (
+from get_arrivee_geny import (  # noqa: E402
     PlanningEntry,
-    _resolve_course_url_from_meeting,
+    fetch_arrival,
     load_planning,
     main,
     parse_arrival,
@@ -152,9 +168,9 @@ def test_load_planning_supports_multiple_layouts(tmp_path: Path) -> None:
             {
                 "label": "R1",
                 "hippodrome": "Vincennes",
-                "url_geny": "https://www.geny.com/r1",
+                "url_geny": "https://offline",
                 "races": [
-                    {"course": 3, "idcourse": "123", "time": "13:45"},
+                    {"course": 3, "idcourse": "123", "time": "13:45", "result_path": "R1C3.html"},
                 ],
             }
         ],
@@ -169,62 +185,40 @@ def test_load_planning_supports_multiple_layouts(tmp_path: Path) -> None:
     assert entry.course_id == "123"
     assert entry.date == "2024-09-10"
     assert entry.hippodrome == "Vincennes"
-    assert entry.url_geny == "https://www.geny.com/r1"
+    assert entry.local_sources == ["R1C3.html"]
 
 
-def test_parse_arrival_supports_multiple_patterns() -> None:
+def test_parse_arrival_supports_multiple_formats() -> None:
     html = """
     <html><head><script>var DATA = {"arrivee": [5, "2", 9]};</script></head>
     <body>
     <div>Arrivée officielle : 5 - 2 - 9</div>
     </body></html>
     """
-    numbers = parse_arrival(html)
+    numbers = parse_arrival(html, hint="html")
     assert numbers == ["5", "2", "9"]
 
-    table_html = """
-    <table>
-      <thead><tr><th>Place</th><th>N°</th></tr></thead>
-      <tbody>
-        <tr><td>2</td><td>7</td></tr>
-        <tr><td>1</td><td>4</td></tr>
-      </tbody>
-    </table>
-    """
-    numbers = parse_arrival(table_html)
-    assert numbers == ["4", "7"]
+    text = "Arrivee definitive 4-7-11"
+    assert parse_arrival(text, hint="text") == ["4", "7", "11"]
+
+    csv_text = "place;numero\n1;3\n2;8\n3;5"
+    assert parse_arrival(csv_text, hint="csv") == ["1", "3", "2", "8", "3", "5"]
 
 
-def test_resolve_course_url_checks_all_data_course_nodes(monkeypatch) -> None:
-    html = """
-    <html><body>
-        <a data-course="111" href="/course-111">R1 C2</a>
-        <a data-course="222" href="/course-222">R1 C2</a>
-    </body></html>
-    """
+    
+def test_fetch_arrival_prefers_local_sources(tmp_path: Path) -> None:
+    offline = tmp_path / "R1C2.html"
+    offline.write_text("<div>Arrivée officielle : 8 - 4 - 5</div>", encoding="utf-8")
 
-    class DummyResponse:
-        def __init__(self, text: str) -> None:
-            self.text = text
+    entry = PlanningEntry(rc="R1C2", local_sources=[offline.name])
+    entry.base_dir = tmp_path
 
-    def fake_request(target_url: str) -> DummyResponse:
-        assert target_url == "https://www.geny.com/reunion"
-        return DummyResponse(html)
+    result = fetch_arrival(entry, search_roots=[])
+    assert result["status"] == "ok"
+    assert result["result"] == ["8", "4", "5"]
+    assert Path(result["source_path"]).resolve() == offline.resolve()
 
-    monkeypatch.setattr("get_arrivee_geny._request", fake_request)
-
-    entry = PlanningEntry(rc="R1C2", reunion="R1", course="C2", course_id="222")
-    resolved = _resolve_course_url_from_meeting("https://www.geny.com/reunion", entry)
-    assert resolved == "https://www.geny.com/course-222"
-
-
-def test_main_errors_when_planning_file_missing(tmp_path: Path) -> None:
-    missing_planning = tmp_path / "missing.json"
-    out_path = tmp_path / "arrivals.json"
-
-    with pytest.raises(SystemExit) as excinfo:
-        main(["--planning", str(missing_planning), "--out", str(out_path)])
-
-    message = str(excinfo.value)
-    assert "Planning file" in message
-    assert "online_fetch_zeturf.py --mode planning" in message
+    result = fetch_arrival(entry, search_roots=[])
+    assert result["status"] == "ok"
+    assert result["result"] == ["8", "4", "5"]
+    assert Path(result["source_path"]).resolve() == offline.resolve()

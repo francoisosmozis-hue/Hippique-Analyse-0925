@@ -13,13 +13,19 @@ import re
 import sys
 from functools import lru_cache, partial
 from pathlib import Path
+<<<<<<< HEAD
 from typing import Any, Callable, Dict, Iterable, Mapping, Sequence, cast
 import inspect
 import copy
 import numpy as np
+=======
+from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence, cast
+
+import yaml
+>>>>>>> origin/main
 
 from config.env_utils import get_env
-from runner_chain import compute_overround_cap
+from scripts.analysis_utils import compute_overround_cap
 from simulate_wrapper import PAYOUT_CALIBRATION_PATH
 
 logger = logging.getLogger(__name__)
@@ -56,8 +62,55 @@ elif _place_fee_candidate >= 1.0:
     _place_fee_candidate = 0.99
 PLACE_FEE = _place_fee_candidate
 
-EXOTIC_BASE_EV = 0.40
-EXOTIC_BASE_PAYOUT = 10.0
+
+def _safe_float(x):
+    try:
+        return float(str(x).replace(",", "."))
+    except Exception:
+        return None
+
+
+def _overround_from_odds_win(runners):
+    """Somme des 1/cote gagnant (ignore None)."""
+
+    vals = []
+    for r in runners or []:
+        ow = r.get("odds_win") or r.get("cote_gagnant") or r.get("cote")
+        ow = _safe_float(ow)
+        if ow and ow > 1e-9:
+            vals.append(1.0 / ow)
+    return sum(vals) if vals else None
+
+
+def _n_places(n_partants: int) -> int:
+    if n_partants >= 8:
+        return 3
+    if n_partants >= 4:
+        return 2
+    return 1
+
+
+def _overround_place_proxy(p_place_map, nplace):
+    """
+    Proxy place : si p_place est renormalisé sur nplace, s/nplace ≈ 1.0.
+    Sert d’indicatif quand on n’a pas les cotes gagnant.
+    """
+
+    if not p_place_map:
+        return None
+    s = sum(float(v) for v in p_place_map.values())
+    return (s / float(nplace)) if s > 0 else None
+
+
+def _env_float_default(name: str, default: float) -> float:
+    try:
+        return float(os.getenv(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+
+
+EXOTIC_BASE_EV = max(_env_float_default("EV_MIN", 0.40), 0.40)
+EXOTIC_BASE_PAYOUT = max(_env_float_default("PAYOUT_MIN", 10.0), 10.0)
 
 _DEFAULT_ALLOW_COMBO: Callable[..., Any] | None = None
 _DEFAULT_APPLY_TICKET_POLICY: Callable[..., Any] | None = None
@@ -111,6 +164,84 @@ def _compute_market_overround(odds: Mapping[str, Any]) -> float | None:
     return total
 
 
+def _normalize_partants_runners(snapshot: Mapping[str, Any] | None) -> List[Any]:
+    """Return a runners list while tolerating legacy 'partants' payloads."""
+
+    if not isinstance(snapshot, Mapping):
+        return []
+    runners = snapshot.get("runners")
+    if isinstance(runners, list) and runners:
+        return runners
+    fallback = snapshot.get("partants")
+    if isinstance(fallback, list) and fallback:
+        if isinstance(snapshot, dict):
+            snapshot["runners"] = fallback
+        return fallback
+    return runners if isinstance(runners, list) else []
+
+
+def _estimate_overround_place(
+    odds: Mapping[str, Any] | Sequence[Any] | None,
+) -> float | None:
+    """Return the place-book overround inferred from ``odds``.
+
+    The helper accepts either a mapping of runner identifiers to decimal odds or a
+    sequence of runner payloads.  When runner dictionaries are provided the
+    function searches common keys (``odds_place``, ``place_odds``, ``cote_place``)
+    before falling back to the generic ``odds`` field.  Non-finite or missing
+    odds are ignored.
+    """
+
+    if odds is None:
+        return None
+
+    if isinstance(odds, Mapping):
+        candidates: Iterable[Any] = odds.values()
+    else:
+        candidates = odds
+
+    total = 0.0
+    seen = False
+
+    for entry in candidates:
+        place_odds: float | None = None
+        if isinstance(entry, Mapping):
+            for key in (
+                "odds_place",
+                "place_odds",
+                "cote_place",
+                "place",
+                "place_dec",
+                "odds",
+            ):
+                if key not in entry:
+                    continue
+                try:
+                    place_odds = _coerce_odds(entry.get(key))
+                except Exception:  # pragma: no cover - defensive fallback
+                    place_odds = None
+                if place_odds and place_odds > 0:
+                    break
+        else:
+            try:
+                value = float(entry)
+            except (TypeError, ValueError):
+                value = math.nan
+            if math.isfinite(value) and value > 0:
+                place_odds = value
+
+        if place_odds is None or place_odds <= 0:
+            continue
+
+        total += 1.0 / place_odds
+        seen = True
+
+    if not seen:
+        return None
+
+    return total
+
+
 _DEFAULT_SLOTS_PLACE = 3
 
 
@@ -139,28 +270,94 @@ def _coerce_slots_place(
     return slots_value
 
 
-def _build_market(
-    runners: Sequence[Mapping[str, Any]],
-    slots_place: Any = _DEFAULT_SLOTS_PLACE,
-) -> dict[str, float | int]:
-    """Return market metrics for win and place books.
-
-    The place overround is the *raw* sum of the implied probabilities
-    (``1 / odds``) for each runner.  When a runner is missing a place quote the
-    win odds are used as a conservative fallback so downstream consumers can
-    still derive an indicative overround.  Non-finite aggregates are ignored.
+def build_market(snapshot: dict, p_place_map: Mapping[str, float] | None) -> dict:
     """
+    Vue marché minimale : n_partants, chevaux {num,p,cote_place?}, overround (win si dispo, sinon proxy place).
+    """
+<<<<<<< HEAD
 
     win_total = 0.0
     place_total = 0.0
     total_runners = 0
     win_runners = 0
     has_place = False
+=======
+>>>>>>> origin/main
 
-    for entry in runners:
-        if not isinstance(entry, Mapping):
+    runners = snapshot.get("runners") or snapshot.get("partants") or []
+    horses = []
+    for r in runners:
+        num = str(r.get("num") or r.get("numero") or r.get("id") or "").strip()
+        if not num:
+            continue
+        p = float(p_place_map.get(num, 0.0) or 0.0) if p_place_map else 0.0
+        odds_place = None
+        for key in ("odds_place", "cote_place", "cote"):
+            if r.get(key) is not None:
+                odds_place = _safe_float(r.get(key))
+                break
+        horses.append({"num": num, "p": p, "cote": odds_place})
+
+    n = len(runners)
+    or_win = _overround_from_odds_win(runners)
+    or_place = _overround_place_proxy(p_place_map, _n_places(n))
+    overround = or_win if or_win is not None else or_place
+
+    market = {"n_partants": n, "horses": horses, "overround": overround}
+    if or_win is not None:
+        market["overround_win"] = or_win
+    if or_place is not None:
+        market["overround_place_proxy"] = or_place
+        market.setdefault("overround_place", or_place)
+    return market
+
+    
+_build_market = build_market
+
+
+def _build_place_probability_map(
+    runners: Sequence[Mapping[str, Any]],
+    p_place_override: Mapping[str, float] | None = None,
+) -> dict[str, float]:
+    """Return a mapping of identifiers to place probabilities."""
+    
+    result: dict[str, float] = {}
+    for runner in runners or []:
+        if not isinstance(runner, Mapping):
+            continue
+        identifiers: list[str] = []
+        for key in ("num", "number", "id"):
+            val = runner.get(key)
+            if val in (None, ""):
+                continue
+            text = str(val).strip()
+            if text and text not in identifiers:
+                identifiers.append(text)
+                
+        place_prob: float | None = None
+        probs_block = runner.get("probabilities")
+        if isinstance(probs_block, Mapping):
+            candidate = probs_block.get("p_place")
+            if isinstance(candidate, (int, float)):
+                place_prob = float(candidate)
+        if place_prob is None and isinstance(runner.get("p_place"), (int, float)):
+            place_prob = float(runner["p_place"])
+
+    runner_id = runner.get("id")
+        if place_prob is None and isinstance(p_place_override, Mapping):
+            if runner_id in p_place_override:
+                try:
+                    place_prob = float(p_place_override[runner_id])
+                except (TypeError, ValueError):
+                    place_prob = None
+
+        if place_prob is None and isinstance(runner.get("p"), (int, float)):
+            place_prob = float(runner["p"])
+
+        if place_prob is None or place_prob <= 0.0:
             continue
 
+<<<<<<< HEAD
         total_runners += 1
 
         win_odds = None
@@ -229,6 +426,13 @@ def _build_market(
             metrics["overround_place"] = 0.0
 
     return metrics
+=======
+        targets = identifiers or [str(runner_id).strip()]
+        for ident in targets:
+            if ident:
+                result[ident] = place_prob
+    return result
+>>>>>>> origin/main
 
 
 def _coerce_float(value: Any, default: float = 0.0) -> float:
@@ -471,6 +675,63 @@ def _resolve_output_dir() -> str:
 
     _maybe_load_dotenv()
     return os.getenv("OUTPUT_DIR", DEFAULT_OUTPUT_DIR)
+
+
+def _validate_calibration_source(
+    path: str | os.PathLike[str] | None,
+) -> tuple[bool, list[str]]:
+    """Return whether ``path`` points to a usable payout calibration file."""
+
+    notes: list[str] = []
+    if not path:
+        notes.append("calibration_missing")
+        return False, notes
+
+    calibration_path = Path(path).expanduser()
+    if not calibration_path.exists():
+        notes.append("calibration_missing")
+        return False, notes
+
+    try:
+        raw_data = calibration_path.read_text(encoding="utf-8")
+    except OSError as exc:  # pragma: no cover - filesystem edge case
+        logger.error("Impossible de lire la calibration %s: %s", calibration_path, exc)
+        notes.append("calibration_unreadable")
+        return False, notes
+
+    try:
+        payload = yaml.safe_load(raw_data) or {}
+    except yaml.YAMLError as exc:
+        logger.error("Calibration invalide (%s): %s", calibration_path, exc)
+        notes.append("calibration_invalid")
+        return False, notes
+
+    if not isinstance(payload, Mapping):
+        notes.append("calibration_invalid")
+        return False, notes
+
+    metadata = payload.get("metadata") if isinstance(payload, Mapping) else None
+    version = None
+    if isinstance(metadata, Mapping):
+        version = metadata.get("version")
+
+    if version is None:
+        notes.append("calibration_version_missing")
+
+    has_table = any(
+        isinstance(value, Mapping) and any(isinstance(v, Mapping) for v in value.values())
+        for key, value in payload.items()
+        if key != "metadata"
+    )
+    if not has_table:
+        notes.append("calibration_empty")
+
+    if notes:
+        if "calibration_invalid" not in notes:
+            notes.insert(0, "calibration_invalid")
+        return False, notes
+
+    return True, []
 
 
 def __getattr__(name: str) -> Any:
@@ -1032,6 +1293,53 @@ def _filter_sp_and_cp_tickets(
             notes.append("SP retiré: pool incomplet (<2 jambes ≥ 4/1 (5.0 déc)).")
             filtered_sp = []
 
+        if filtered_sp:
+            place_lookup: dict[str, float] = {}
+            for entry in runners:
+                if not isinstance(entry, Mapping):
+                    continue
+                probability = _extract_best_place_probability(entry)
+                if probability <= 0.0:
+                    continue
+                for ident in _extract_leg_ids(entry):
+                    ident_text = str(ident).strip()
+                    if ident_text and ident_text not in place_lookup:
+                        place_lookup[ident_text] = probability
+    
+        def _ticket_leg_ids(ticket: Mapping[str, Any]) -> list[str]:
+            identifiers: list[str] = []
+            legs_seq = _normalize_sequence(ticket.get("legs"))
+            if legs_seq:
+                for leg in legs_seq:
+                    if isinstance(leg, Mapping):
+                        for ident in _extract_leg_ids(leg):
+                            ident_text = str(ident).strip()
+                            if ident_text:
+                                identifiers.append(ident_text)
+                    elif leg not in (None, ""):
+                        identifiers.append(str(leg))
+            fallback_ids = _extract_leg_ids(ticket)
+            if fallback_ids:
+                identifiers.extend(fallback_ids)
+            return identifiers
+
+        sigma_p = 0.0
+        seen_ids: set[str] = set()
+        for ticket in filtered_sp:
+            for ident in _ticket_leg_ids(ticket):
+                if ident in seen_ids:
+                    continue
+                if ident not in place_lookup:
+                    continue
+                sigma_p += place_lookup[ident]
+                seen_ids.add(ident)
+
+        if sigma_p < 1.20 - 1e-9:
+            notes.append(f"coverage_fail_SigmaP<{sigma_p:.2f}<1.20")
+            filtered_sp = []
+        else:
+            notes.append(f"coverage_ok_SigmaP={sigma_p:.2f}")
+            
     return filtered_sp, filtered_combo, notes
 
 
@@ -1445,6 +1753,8 @@ def enforce_ror_threshold(
         min_stake = 0.0
 
     runners_sp_sanitized = _ensure_place_odds(runners)
+
+    p_place_map = _build_place_probability_map(runners_sp_sanitized, p_place_override)
     runners_sp = filter_sp_candidates(runners_sp_sanitized)
 
     # --- Nouvelle logique de sélection de portefeuille SP ---
@@ -2247,6 +2557,12 @@ def export(
     stake_reduction_applied: bool = False,
     stake_reduction_details: dict | None = None,
     optimization_details: dict | None = None,
+    combo_info: Mapping[str, Any] | None = None,
+    flags: Mapping[str, Any] | None = None,
+    sp_tickets: Sequence[Mapping[str, Any]] | None = None,
+    combo_tickets: Sequence[Mapping[str, Any]] | None = None,
+    abstention_reasons: Sequence[str] | None = None,
+    status: str | None = None,
 ) -> None:
     save_json(
         outdir / "p_finale.json",
@@ -2348,6 +2664,84 @@ def export(
     )
     save_text(outdir / "cmd_update_excel.txt", cmd)
 
+<<<<<<< HEAD
+=======
+    metrics_payload: dict[str, Any] = {
+        "status": status or meta.get("status"),
+        "ev": {"sp": ev_sp, "global": ev_global},
+        "roi": {"sp": roi_sp, "global": roi_global},
+        "risk_of_ruin": risk_of_ruin,
+        "variance": variance,
+        "expected_payout": combined_payout,
+        "tickets": {
+            "total": len(tickets),
+            "sp": len(sp_tickets or []),
+            "combo": len(combo_tickets or []),
+        },
+        "abstention_reasons": list(abstention_reasons or []),
+    }
+
+    if isinstance(flags, Mapping):
+        metrics_payload["gates"] = {
+            "sp": bool(flags.get("sp", False)),
+            "combo": bool(flags.get("combo", False)),
+        }
+        reasons_map = flags.get("reasons")
+        if isinstance(reasons_map, Mapping):
+            metrics_payload["gate_reasons"] = {
+                key: list(str(reason) for reason in value)
+                for key, value in reasons_map.items()
+                if isinstance(value, Iterable)
+            }
+
+    combo_metrics: dict[str, Any] = {}
+    if isinstance(combo_info, Mapping):
+        raw_metrics = combo_info.get("metrics")
+        if isinstance(raw_metrics, Mapping):
+            combo_metrics = dict(raw_metrics)
+        decision = combo_info.get("decision")
+        if decision:
+            combo_metrics.setdefault("decision", decision)
+        notes = combo_info.get("notes")
+        if isinstance(notes, Sequence):
+            combo_metrics.setdefault("notes", list(notes))
+    if combo_metrics:
+        metrics_payload["combo"] = combo_metrics
+        overround_value = combo_metrics.get("overround")
+        if overround_value is not None:
+            metrics_payload.setdefault("overround", overround_value)
+        source_value = combo_metrics.get("overround_source")
+        if source_value:
+            metrics_payload.setdefault("overround_source", source_value)
+
+    if "overround" not in metrics_payload or metrics_payload.get("overround") is None:
+        market_meta = combo_metrics.get("market") if isinstance(combo_metrics, Mapping) else None
+        if isinstance(market_meta, Mapping) and market_meta.get("overround") is not None:
+            metrics_payload["overround"] = market_meta.get("overround")
+        if isinstance(market_meta, Mapping) and market_meta.get("overround_source"):
+            metrics_payload["overround_source"] = market_meta.get("overround_source")
+
+    save_json(outdir / "metrics.json", metrics_payload)
+
+    csv_lines = ["metric;value"]
+    csv_lines.append(f"status;{metrics_payload.get('status')}")
+    csv_lines.append(f"ev_sp;{ev_sp:.6f}")
+    csv_lines.append(f"ev_global;{ev_global:.6f}")
+    csv_lines.append(f"roi_sp;{roi_sp:.6f}")
+    csv_lines.append(f"roi_global;{roi_global:.6f}")
+    if metrics_payload.get("overround") is not None:
+        csv_lines.append(f"overround;{metrics_payload['overround']}")
+    if metrics_payload.get("overround_source"):
+        csv_lines.append(f"overround_source;{metrics_payload['overround_source']}")
+    csv_lines.append(f"tickets_total;{metrics_payload['tickets']['total']}")
+    csv_lines.append(f"tickets_sp;{metrics_payload['tickets']['sp']}")
+    csv_lines.append(f"tickets_combo;{metrics_payload['tickets']['combo']}")
+    if metrics_payload["abstention_reasons"]:
+        csv_lines.append(
+            "abstention_reasons;" + ",".join(metrics_payload["abstention_reasons"])
+        )
+    save_text(outdir / "metrics.csv", "\n".join(csv_lines) + "\n")
+>>>>>>> origin/main
 
 # ---------------------------------------------------------------------------
 # Analyse helper
@@ -2407,7 +2801,15 @@ def cmd_analyse(args: argparse.Namespace) -> None:
         cfg["MIN_PAYOUT_COMBOS"] = args.min_payout
     if args.allow_je_na:
         cfg["ALLOW_JE_NA"] = True
-
+        
+    budget_total = float(cfg.get("BUDGET_TOTAL", 0.0))
+    if budget_total <= 0.0:
+        budget_total = 5.0
+    if budget_total > 5.0:
+        logger.info("Budget total ramené de %.2f€ à 5.00€ (Kelly fractionné).", budget_total)
+        budget_total = 5.0
+    cfg["BUDGET_TOTAL"] = budget_total
+    
     # Exotic thresholds / heuristics overrides
     if args.ev_min_exotic is not None:
         ev_min_exotic = float(args.ev_min_exotic)
@@ -2458,7 +2860,7 @@ def cmd_analyse(args: argparse.Namespace) -> None:
     stats_je = load_json(args.stats_je)
     partants_data = load_json(args.partants)
 
-    partants = partants_data.get("runners", [])
+    partants = _normalize_partants_runners(partants_data)
     runner_ids: list[str] = []
     seen_ids: set[str] = set()
     for entry in partants:
@@ -2521,9 +2923,11 @@ def cmd_analyse(args: argparse.Namespace) -> None:
     validate_inputs_call = partial(validate_inputs, cfg, partants, odds_h5, stats_je)
     validation_summary = summarise_validation(validate_inputs_call)
     meta["validation"] = dict(validation_summary)
+    validation_reasons: list[str] = []
     if not validation_summary["ok"]:
-        logger.error("Validation failed: %s", validation_summary["reason"])
-        validate_inputs_call()
+        reason_text = str(validation_summary.get("reason") or "unknown")
+        logger.error("Validation failed: %s", reason_text)
+        validation_reasons.append(f"validation_failed:{reason_text}")
 
     # Drift & p_true
     if args.diff:
@@ -2669,7 +3073,12 @@ def cmd_analyse(args: argparse.Namespace) -> None:
 
     runners_sp_sanitized = _ensure_place_odds(runners)
     runners_sp_candidates = filter_sp_candidates(runners_sp_sanitized)
+<<<<<<< HEAD
 
+=======
+    p_place_map = _build_place_probability_map(runners_sp_sanitized, p_place_override)
+    
+>>>>>>> origin/main
     policy_kwargs = _filter_kwargs(
         apply_ticket_policy_fn,
         {
@@ -2687,6 +3096,8 @@ def cmd_analyse(args: argparse.Namespace) -> None:
         **policy_kwargs,
     )
 
+    sp_guard_candidates = [dict(ticket) for ticket in sp_tickets]
+    
     ev_sp = 0.0
     total_stake_sp = 0.0
     roi_sp = 0.0
@@ -2703,6 +3114,12 @@ def cmd_analyse(args: argparse.Namespace) -> None:
         ),
         "flags": {},
     }
+    calibration_ready, calibration_notes = _validate_calibration_source(args.calibration)
+    combo_info["status"] = "ok" if calibration_ready else "insufficient_data"
+    if calibration_notes:
+        for note in calibration_notes:
+            if note not in combo_info["notes"]:
+                combo_info["notes"].append(note)
     if isinstance(_combo_info, Mapping):
         flags_raw = _combo_info.get("flags")
         if isinstance(flags_raw, Mapping):
@@ -2725,9 +3142,20 @@ def cmd_analyse(args: argparse.Namespace) -> None:
 
     filter_reasons: list[str] = []
 
+<<<<<<< HEAD
     market_payload = (
         partants_data.get("market") if isinstance(partants_data, Mapping) else None
     )
+=======
+    if not calibration_ready:
+        combo_templates = []
+        filter_reasons.append("calibration_missing")
+        for note in calibration_notes:
+            if note not in filter_reasons:
+                filter_reasons.append(note)
+                
+    market_payload = partants_data.get("market") if isinstance(partants_data, Mapping) else None
+>>>>>>> origin/main
     market_runners_raw: Sequence[Mapping[str, Any]] = []
     slots_place_hint: Any = None
     if isinstance(market_payload, Mapping):
@@ -2776,11 +3204,41 @@ def cmd_analyse(args: argparse.Namespace) -> None:
                 hint_missing = False
     if override_paid_places is not None and hint_missing:
         slots_place_hint = override_paid_places
+<<<<<<< HEAD
 
     if slots_place_hint in (None, ""):
         market_metrics = _build_market(market_runners_raw)
+=======
+        
+    if isinstance(raw_h5, Mapping):
+        market_snapshot_dict = dict(raw_h5)
+    elif isinstance(partants_data, Mapping):
+        market_snapshot_dict = dict(partants_data)
+>>>>>>> origin/main
     else:
-        market_metrics = _build_market(market_runners_raw, slots_place_hint)
+        market_snapshot_dict = {"runners": list(market_runners_raw)}
+
+    market_metrics = build_market(market_snapshot_dict, p_place_map)
+    if slots_place_hint not in (None, ""):
+        try:
+            market_metrics.setdefault(
+                "slots_place",
+                _coerce_slots_place(slots_place_hint),
+            )
+        except Exception:
+            pass
+
+    place_overround_estimate = _estimate_overround_place(runners_sp_sanitized)
+    if place_overround_estimate is None and isinstance(partants_data, Mapping):
+        place_overround_estimate = _estimate_overround_place(partants_data.get("runners"))
+    if place_overround_estimate is not None:
+        rounded_place = round(place_overround_estimate, 4)
+        market_metrics.setdefault("overround_place_estimate", rounded_place)
+        place_candidate = market_metrics.get("overround_place")
+        if not isinstance(place_candidate, (int, float)) or not math.isfinite(
+            float(place_candidate)
+        ):
+            market_metrics["overround_place"] = rounded_place
     if market_metrics.get("overround_win") is None:
         fallback_overround = _compute_market_overround(odds_h5)
         if fallback_overround is not None:
@@ -2793,26 +3251,36 @@ def cmd_analyse(args: argparse.Namespace) -> None:
                 market_metrics["overround"] = rounded_fallback
     overround_source: str | None = None
     market_overround: float | None = None
-    overround_place_candidate = market_metrics.get("overround_place")
-    if isinstance(overround_place_candidate, (int, float)):
-        place_value = float(overround_place_candidate)
-        if math.isfinite(place_value):
-            market_overround = place_value
-            overround_source = "place"
+    overround_general_candidate = market_metrics.get("overround")
+    if isinstance(overround_general_candidate, (int, float)):
+        general_value = float(overround_general_candidate)
+        if math.isfinite(general_value):
+            market_overround = general_value
+            if market_metrics.get("overround_win") is not None and (
+                math.isclose(
+                    market_metrics.get("overround_win", 0.0),
+                    market_overround,
+                    rel_tol=1e-6,
+                    abs_tol=1e-6,
+                )
+            ):
+                overround_source = "win"
+            else:
+                overround_source = "place"
+    if market_overround is None:
+        overround_place_candidate = market_metrics.get("overround_place")
+        if isinstance(overround_place_candidate, (int, float)):
+            place_value = float(overround_place_candidate)
+            if math.isfinite(place_value):
+                market_overround = place_value
+                overround_source = "place"
     if market_overround is None:
         overround_win_candidate = market_metrics.get("overround_win")
         if isinstance(overround_win_candidate, (int, float)):
             win_value = float(overround_win_candidate)
             if math.isfinite(win_value):
                 market_overround = win_value
-                overround_source = "win"
-    if market_overround is None:
-        overround_win_candidate = market_metrics.get("overround_win")
-        if isinstance(overround_win_candidate, (int, float)):
-            win_value = float(overround_win_candidate)
-            if math.isfinite(win_value):
-                market_overround = win_value
-                overround_source = "win"
+                overround_source = "win"    
     course_label_text = (
         partants_data.get("course_label")
         or partants_data.get("label")
@@ -2899,6 +3367,11 @@ def cmd_analyse(args: argparse.Namespace) -> None:
         if overround_source:
             metrics["overround_source"] = overround_source
         if market_overround > overround_cap:
+            logger.warning(
+                "[COMBO] Overround place %.2f au-dessus du seuil %.2f : combinés bloqués.",
+                market_overround,
+                overround_cap,
+            )
             overround_flag = combo_flags.setdefault(
                 "overround",
                 {"value": market_overround, "threshold": overround_cap},
@@ -2911,7 +3384,13 @@ def cmd_analyse(args: argparse.Namespace) -> None:
                 reasons_list.append("overround_above_threshold")
             filter_reasons.append("overround_above_threshold")
             combo_templates = []
+<<<<<<< HEAD
 
+=======
+            if "overround_above_threshold" not in combo_info["notes"]:
+                combo_info["notes"].append("overround_above_threshold")
+                
+>>>>>>> origin/main
     filtered_templates: list[dict[str, Any]] = []
     if combo_templates:
 
@@ -2971,6 +3450,11 @@ def cmd_analyse(args: argparse.Namespace) -> None:
         runners,
         partants_data,
     )
+    if not calibration_ready:
+        guard_notes.append("calibration_missing")
+        sp_tickets = []
+        sp_guard_candidates = []
+        combo_tickets = []
     if guard_notes:
         notes_bucket = meta.setdefault("notes", [])
         if isinstance(notes_bucket, list):
@@ -3069,6 +3553,7 @@ def cmd_analyse(args: argparse.Namespace) -> None:
             cfg=cfg,
         )
         if combo_ok is False and combo_tickets:
+<<<<<<< HEAD
             flags.setdefault("reasons", {}).setdefault("combo", []).append(
                 "ALLOW_COMBO"
             )
@@ -3289,6 +3774,8 @@ def cmd_analyse(args: argparse.Namespace) -> None:
             "ev_sp": ev_sp,
             "ev_global": ev_global,
             "roi_sp": roi_sp,
+=======
+>>>>>>> origin/main
             "roi_global": roi_global,
             "risk_of_ruin": risk_of_ruin,
             "clv_moyen": clv_moyen,
@@ -3421,6 +3908,242 @@ def main() -> None:
 
     args = parser.parse_args()
 
+<<<<<<< HEAD
+=======
+    configure_logging(args.log_level)
+
+    args.func(args)
+
+
+if __name__ == "__main__":
+    main()
+        "modele_suivi_courses_hippiques_clean.csv",
+        {
+            "reunion": meta.get("reunion", ""),
+            "course": meta.get("course", ""),
+            "hippodrome": meta.get("hippodrome", ""),
+            "date": meta.get("date", ""),
+            "discipline": meta.get("discipline", ""),
+            "partants": len(partants),
+            "nb_tickets": len(tickets),
+            "total_stake": total_stake,
+            "total_optimized_stake": (
+                optimization_summary.get("stake_after")
+                if optimization_summary
+                else total_stake
+            ),
+            "ev_sp": ev_sp,
+            "ev_global": ev_global,
+            "roi_sp": roi_sp,
+            "roi_global": roi_global,
+            "risk_of_ruin": risk_of_ruin,
+            "clv_moyen": clv_moyen,
+            "model": cfg.get("MODEL", ""),
+        },
+        CSV_HEADER,
+    )
+    append_json(
+        f"journaux/{course_id}_pre.json",
+        {
+            "tickets": tickets,
+            "ev": {"sp": ev_sp, "global": ev_global},
+            "exotics": meta.get("exotics", {}),
+        },
+    )
+
+
+    outdir.mkdir(parents=True, exist_ok=True)
+    stake_reduction_info = last_reduction_info or {}
+    stake_reduction_flag = bool(stake_reduction_info.get("applied"))
+    stake_reduction_details = {
+        "scale_factor": stake_reduction_info.get("scale_factor", 1.0),
+        "target": stake_reduction_info.get("target"),
+        "initial_cap": stake_reduction_info.get("initial_cap"),
+        "effective_cap": stake_reduction_info.get("effective_cap"),
+        "iterations": stake_reduction_info.get("iterations"),
+        "initial": {
+            "risk_of_ruin": stake_reduction_info.get("initial_ror"),
+            "ev": stake_reduction_info.get("initial_ev"),
+            "variance": stake_reduction_info.get("initial_variance"),
+            "total_stake": stake_reduction_info.get("initial_total_stake"),
+        },
+        "final": {
+            "risk_of_ruin": stake_reduction_info.get("final_ror"),
+            "ev": stake_reduction_info.get("final_ev"),
+            "variance": stake_reduction_info.get("final_variance"),
+            "total_stake": stake_reduction_info.get("final_total_stake"),
+        },
+    }    
+    export(
+        outdir,
+        meta,
+        tickets,
+        ev_sp,
+        ev_global,
+        roi_sp,
+        roi_global,
+        risk_of_ruin,
+        clv_moyen,
+        variance_total,
+        combined_payout,
+        p_true,
+        drift,
+        cfg,
+        runners,
+        stake_reduction_applied=stake_reduction_flag,
+        stake_reduction_details=stake_reduction_details,
+        optimization_details=optimization_summary,
+        combo_info=combo_info,
+        flags=flags,
+        sp_tickets=sp_tickets,
+        combo_tickets=final_combo_tickets,
+        abstention_reasons=abstention_reasons,
+        status=pipeline_status,
+    )
+    logger.info("OK: analyse exportée dans %s", outdir)
+
+
+def run_pipeline(
+    *,
+    h30: str | os.PathLike[str],
+    h5: str | os.PathLike[str],
+    stats_je: str | os.PathLike[str],
+    partants: str | os.PathLike[str],
+    gpi: str | os.PathLike[str] | None = None,
+    outdir: str | os.PathLike[str] | None = None,
+    diff: str | os.PathLike[str] | None = None,
+    budget: float | None = None,
+    ev_global: float | None = None,
+    roi_global: float | None = None,
+    max_vol: float | None = None,
+    min_payout: float | None = None,
+    ev_min_exotic: float | None = None,
+    payout_min_exotic: float | None = None,
+    allow_je_na: bool = False,
+    calibration: str | os.PathLike[str] | None = None,
+) -> dict[str, Any]:
+    """Programmatic entrypoint mirroring the ``analyse`` CLI command."""
+
+    args = argparse.Namespace(
+        h30=str(h30),
+        h5=str(h5),
+        stats_je=str(stats_je),
+        partants=str(partants),
+        gpi=str(gpi or "config/gpi.yml"),
+        outdir=str(outdir) if outdir else None,
+        diff=str(diff) if diff else None,
+        budget=budget,
+        ev_global=ev_global,
+        roi_global=roi_global,
+        max_vol=max_vol,
+        min_payout=min_payout,
+        ev_min_exotic=ev_min_exotic,
+        payout_min_exotic=payout_min_exotic,
+        allow_heuristic=False,
+        allow_je_na=allow_je_na,
+        calibration=str(calibration or PAYOUT_CALIBRATION_PATH),
+    )
+
+    cmd_analyse(args)
+
+    resolved_outdir = Path(args.outdir or _resolve_output_dir())
+    metrics_path = resolved_outdir / "metrics.json"
+    p_finale_path = resolved_outdir / "p_finale.json"
+
+    payload: dict[str, Any] = {}
+    metrics: dict[str, Any] = {}
+    if p_finale_path.exists():
+        try:
+            payload = load_json(str(p_finale_path)) or {}
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.error("Lecture impossible de %s: %s", p_finale_path, exc)
+            payload = {}
+    if metrics_path.exists():
+        try:
+            metrics = load_json(str(metrics_path)) or {}
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.error("Lecture impossible de %s: %s", metrics_path, exc)
+            metrics = {}
+
+    return {
+        "outdir": str(resolved_outdir),
+        "p_finale": payload,
+        "metrics": metrics,
+    }
+
+
+def cmd_snapshot(args: argparse.Namespace) -> None:
+    """Write a race-specific snapshot file."""
+
+    base = Path(args.outdir)
+    src = base / f"{args.when}.json"
+    data = load_json(str(src))
+    rc = f"{args.meeting}{args.race}"
+    dest = base / f"{rc}-{args.when}.json"
+    save_json(dest, data)
+    logger.info("Snapshot écrit: %s", dest)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="GPI v5.1 pipeline")
+    parser.add_argument(
+        "--log-level",
+        default=None,
+        help=(
+            "Logging level (DEBUG, INFO, WARNING, ERROR). "
+            f"Can also be set via {LOG_LEVEL_ENV_VAR}."
+        ),
+    )
+    sub = parser.add_subparsers(dest="cmd", required=True)
+
+    snap = sub.add_parser("snapshot", help="Renommer un snapshot h30/h5")
+    snap.add_argument("--when", choices=["h30", "h5"], required=True)
+    snap.add_argument("--meeting", required=True)
+    snap.add_argument("--race", required=True)
+    snap.add_argument("--outdir", required=True)
+    snap.set_defaults(func=cmd_snapshot)
+
+    ana = sub.add_parser("analyse", help="Analyser une course")
+    ana.add_argument("--h30", required=True)
+    ana.add_argument("--h5", required=True)
+    ana.add_argument("--stats-je", required=True)
+    ana.add_argument("--partants", required=True)
+    ana.add_argument("--gpi", required=True)
+    ana.add_argument("--outdir", default=None)
+    ana.add_argument("--diff", default=None)
+    ana.add_argument("--budget", type=float)
+    ana.add_argument("--ev-global", dest="ev_global", type=float)
+    ana.add_argument("--roi-global", dest="roi_global", type=float)
+    ana.add_argument("--max-vol", dest="max_vol", type=float)
+    ana.add_argument("--min-payout", dest="min_payout", type=float)
+    ana.add_argument("--ev-min-exotic", dest="ev_min_exotic", type=float, default=None)
+    ana.add_argument(
+        "--payout-min-exotic", dest="payout_min_exotic", type=float, default=None
+    )
+    ana.add_argument(
+        "--allow-heuristic",
+        dest="allow_heuristic",
+        action="store_true",
+        help="(obsolète) Conservé pour compatibilité mais ignoré : les combinés "
+        "exigent une calibration payout valide.",
+    )
+    ana.add_argument("--allow-je-na", dest="allow_je_na", action="store_true")
+    ana.add_argument(
+        "--p-finale",
+        dest="p_finale",
+        default=None,
+        help="Chemin vers un fichier p_finale.json pour surcharger p_true/p_place.",
+    )
+    ana.add_argument(
+        "--calibration",
+        default=str(PAYOUT_CALIBRATION_PATH),
+        help="Chemin vers payout_calibration.yaml pour l'évaluation des combinés.",
+    )
+    ana.set_defaults(func=cmd_analyse)
+
+    args = parser.parse_args()
+    
+>>>>>>> origin/main
     configure_logging(args.log_level)
 
     args.func(args)

@@ -1,0 +1,43 @@
+name: CI ROI+ Guardrails
+
+on:
+  push:
+    branches: [ "**" ]
+  pull_request:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install pytest
+
+      - name: Run unit tests
+        run: pytest -q
+
+      - name: Upload artifacts (if any)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: analysis-artifacts
+          path: |
+            data/**/snapshot_H30.json
+            data/**/snapshot_H5.json
+            data/**/*_je.csv
+            data/**/chronos.csv
+            data/**/*_p_finale.json
+            data/**/analysis_H5.json
+            data/**/tracking.csv
+            prompts/*.txt
+          if-no-files-found: ignore

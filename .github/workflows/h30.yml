@@ -1,143 +1,77 @@
-name: Planning H-30 (artifacts)
+H-30 Planning (ROI artifacts)
 
 on:
   workflow_dispatch:
+  inputs:
+      reunion_urls:
+        description: "Liste (multiligne) des URL de réunion H-30."
+        required: false
+        type: string
   schedule:
-    - cron: "30 7 * * *"  # 08:30 Paris
+    - cron: "30 6 * * *"
+    - cron: "30 7 * * *"
 
 permissions:
   contents: read
-  actions: write
 
 env:
   PYTHONUTF8: "1"
   TZ: "Europe/Paris"
-  OUTPUT_DIR: out/h30
-  EXCEL_PATH: out/h30/planning.xlsx
+  OUT_DIR: "out/h30"
+  EXCEL_PATH: "out/h30/planning.xlsx"
+
+concurrency:
+  group: h30-${{ github.workflow }}-${{ github.run_id }}
+  cancel-in-progress: true
 
 jobs:
-  run:
+  h30:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - uses: actions/cache@v4
         with:
-          python-version: "3.11"
-
-      - name: Install dependencies
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt') }}
+          restore-keys: ${{ runner.os }}-pip-
+      - name: Install deps
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: Lint sources.txt
-        id: lint_sources
-        run: |
-          set +e
-          python scripts/lint_sources.py --file sources.txt --enforce-today --warn-only
-          status=$?
-          set -e
-          echo "Lint exit code: ${status}"
-          echo "exit_code=${status}" >> "$GITHUB_OUTPUT"
-          if [ "${status}" -gt 0 ]; then
-            echo "::warning::Lint sources.txt a retourné le code ${status}. Voir les messages ci-dessus."
-          fi
-          exit 0
-
-      - name: Alerte Slack (lint)
-        if: steps.lint_sources.outputs.exit_code != '0' && secrets.SLACK_WEBHOOK != ''
-        env:
-          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
-          LINT_EXIT_CODE: ${{ steps.lint_sources.outputs.exit_code }}
-        run: |
-          python - <<'PY'
-import json
-import os
-import urllib.request
-
-webhook = os.environ["SLACK_WEBHOOK"]
-exit_code = os.environ.get("LINT_EXIT_CODE", "")
-if exit_code == "2":
-    prefix = "⚠️"
-    status = "anomalies détectées"
-else:
-    prefix = "❌"
-    status = "échec du lint"
-workflow = os.environ.get("GITHUB_WORKFLOW", "H-30")
-run_number = os.environ.get("GITHUB_RUN_NUMBER", "?")
-ref = os.environ.get("GITHUB_REF_NAME", os.environ.get("GITHUB_REF", ""))
-repo = os.environ.get("GITHUB_REPOSITORY", "")
-url = f"https://github.com/{repo}/actions/runs/{os.environ.get('GITHUB_RUN_ID', '')}"
-summary = f"{prefix} Lint sources.txt : {status}"
-message = f"{summary} – {workflow} #{run_number} ({ref})"
-payload = {
-    "text": message,
-    "blocks": [
-        {
-            "type": "section",
-            "text": {
-                "type": "mrkdwn",
-                "text": f"{prefix} *Lint sources.txt : {status}*\\n<{url}|Voir le job>",
-            },
-        }
-    ],
-}
-req = urllib.request.Request(
-    webhook,
-    data=json.dumps(payload).encode("utf-8"),
-    headers={"Content-Type": "application/json"},
-)
-with urllib.request.urlopen(req) as resp:
-    resp.read()
-PY
-
-      - name: Fetch H-30 snapshots
+          [ -f requirements.txt ] && pip install -r requirements.txt
+      - name: Build reunion list
+        id: targets
+        shell: bash
         run: |
           set -euo pipefail
-          if [ ! -f sources.txt ]; then
-            echo "::error::sources.txt introuvable à la racine du dépôt" >&2
-            exit 1
+          mkdir -p "${OUT_DIR}"
+          if [ -n "${{ inputs.reunion_urls }}" ]; then
+            echo "${{ inputs.reunion_urls }}" | sed '/^$/d' > "${OUT_DIR}/reunions.txt"
+          else
+            echo "Aucune réunion fournie."
+            exit 78
           fi
-          mkdir -p "${OUTPUT_DIR}"
-          while IFS= read -r raw_url; do
-            url="$(printf '%s' "${raw_url}" | sed 's/#.*$//' | xargs)"
-            if [ -z "${url}" ]; then
-              continue
-            fi
-            echo "→ Snapshot ${url}"
-            python online_fetch_zeturf.py --reunion-url "${url}" --snapshot H-30 --out "${OUTPUT_DIR}"
-          done < sources.txt
-
-      - name: Mettre à jour l'onglet Planning (H-30)
+          echo "list=${OUT_DIR}/reunions.txt" >> "$GITHUB_OUTPUT"
+      - name: Run H-30 for each reunion
+        shell: bash
         run: |
           set -euo pipefail
-          excel_dir=$(dirname "${EXCEL_PATH}")
-          mkdir -p "${excel_dir}"
-          python scripts/update_excel_planning.py \
-            --phase H30 \
-            --in "${OUTPUT_DIR}" \
-            --excel "${EXCEL_PATH}"
-
-      - name: Upload Excel & données
-        if: always()
-        uses: actions/upload-artifact@v4
+          while IFS= read -r url; do
+            [ -z "$url" ] && continue
+            python analyse_courses_du_jour_enrichie.py \
+              --reunion-url "$url" \
+              --phase H30 \
+              --out-dir "${OUT_DIR}" || true
+          done < "${{ steps.targets.outputs.list }}"
+      - uses: actions/upload-artifact@v4
         with:
-          name: h30-${{ github.run_id }}
+          name: h30-artifacts-${{ github.run_id }}
           path: |
-            ${{ env.OUTPUT_DIR }}/**
+            ${{ env.OUT_DIR }}/**/*.json
+            ${{ env.OUT_DIR }}/**/*.csv
             ${{ env.EXCEL_PATH }}
           if-no-files-found: warn
-
-      - name: Synchroniser sur le stockage (optionnel)
-        if: success() && env.EXCEL_PATH != '' && vars.GCS_BUCKET != ''
-        env:
-          GCS_BUCKET: ${{ vars.GCS_BUCKET }}
-          GCS_PREFIX: ${{ vars.GCS_PREFIX || '' }}
-          GCS_SERVICE_KEY_B64: ${{ secrets.GCS_SERVICE_KEY_B64 || '' }}
-        run: |
           set -euo pipefail
           dir=$(dirname "${EXCEL_PATH}")
           python scripts/drive_sync.py --push "${dir}"

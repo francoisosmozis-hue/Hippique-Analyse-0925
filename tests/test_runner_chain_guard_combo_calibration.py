@@ -24,4 +24,7 @@ def test_validate_exotics_requires_calibration(tmp_path, monkeypatch):
     assert info["decision"] == "reject:calibration_missing"
     assert info["flags"]["combo"] is False
     assert info["flags"]["reasons"]["combo"] == ["calibration_missing"]
-    assert info["notes"] == ["calibration_missing"]
+    assert info["notes"] == [
+        "calibration_missing",
+        "no_calibration_yaml → exotiques désactivés",
+    ]
