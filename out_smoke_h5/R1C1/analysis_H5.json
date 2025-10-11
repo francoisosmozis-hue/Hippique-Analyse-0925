@@ -1,0 +1,81 @@
+{
+  "meta": {
+    "rc": "R1C1",
+    "reunion": "R1",
+    "course": "C1",
+    "hippodrome": null,
+    "date": null,
+    "discipline": null,
+    "model": "GPI v5.1",
+    "snapshots": "H30,H5",
+    "drift_top_n": 5,
+    "drift_min_delta": 0.8,
+    "partants": 7,
+    "validation": {
+      "ok": true,
+      "reason": ""
+    },
+    "notes": [
+      "SP retiré: pool incomplet (<2 jambes ≥ 4/1 (5.0 déc))."
+    ],
+    "exotics": {
+      "decision": "reject:no_candidate",
+      "notes": [
+        "SP retiré: pool incomplet (<2 jambes ≥ 4/1 (5.0 déc))."
+      ],
+      "flags": {
+        "reasons": {
+          "combo": []
+        },
+        "combo": false
+      },
+      "thresholds": {
+        "ev_min": 0.4,
+        "payout_min": 12.0,
+        "allow_heuristic": false,
+        "ev_accept_min": 0.4,
+        "payout_accept_min": 10.0,
+        "overround_max": 1.3,
+        "overround_cap_default": 1.3,
+        "overround_context": {
+          "default_cap": 1.3,
+          "cap": 1.3,
+          "course_label": "c1",
+          "partants": 7,
+          "triggered": false
+        }
+      },
+      "available": false,
+      "metrics": {
+        "market": {
+          "runner_count_total": 7,
+          "runner_count_with_win_odds": 7,
+          "win_coverage_ratio": 1.0,
+          "win_coverage_sufficient": true,
+          "overround_win": 0.9365,
+          "overround": 0.9365,
+          "slots_place": 3,
+          "overround_place": 1.235422141689047
+        },
+        "overround": 1.235422141689047,
+        "overround_source": "place"
+      }
+    },
+    "guard_context": {
+      "overround": {
+        "value": 0.9365440115440116,
+        "cap": 1.3
+      },
+      "roi_global": 0.0
+    }
+  },
+  "guards": {
+    "data_ok": true,
+    "calibration_ok": true,
+    "overround_ok": true,
+    "ev_ok": true,
+    "roi_ok": false
+  },
+  "decision": "ABSTENTION",
+  "tickets": []
+}

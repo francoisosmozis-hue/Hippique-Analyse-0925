@@ -1,0 +1,26 @@
+{
+  "status": "no-bet",
+  "decision": "ABSTENTION",
+  "reason": "roi_below_threshold",
+  "jouable": false,
+  "analysis": {
+    "status": "NO_PLAY_GUARDRAIL",
+    "guards": {
+      "data_ok": true,
+      "calibration_ok": true,
+      "overround_ok": true,
+      "ev_ok": true,
+      "roi_ok": false
+    },
+    "decision": "ABSTENTION"
+  },
+  "details": {
+    "guards": {
+      "overround": {
+        "value": 0.9365440115440116,
+        "cap": 1.3
+      },
+      "roi_global": 0.0
+    }
+  }
+}

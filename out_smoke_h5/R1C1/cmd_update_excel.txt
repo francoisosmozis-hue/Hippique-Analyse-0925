@@ -1,0 +1,1 @@
+python update_excel_with_results.py --excel "modele_suivi_courses_hippiques.xlsx" --arrivee "/home/francoisosmozis/work/Hippique-Analyse-0925/out_smoke_h5/R1C1/arrivee_officielle.json" --tickets "/home/francoisosmozis/work/Hippique-Analyse-0925/out_smoke_h5/R1C1/p_finale.json"
