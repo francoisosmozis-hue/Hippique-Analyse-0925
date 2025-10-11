@@ -2291,8 +2291,9 @@ def build_p_true(cfg, partants, odds_h5, odds_h30, stats_je) -> dict:
                     float(odds_h5[cid]),
                     float(odds_h30.get(cid, odds_h5[cid])) if odds_h30 else None,
                     stats_je.get(cid) if stats_je else None,
+                    n_runners=len(partants),
                 )
-            except (ValueError, TypeError):
+             except (ValueError, TypeError):
                 continue
             prob = predict_prob(model, features)
             probs[cid] = prob
