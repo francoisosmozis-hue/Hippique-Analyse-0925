@@ -140,7 +140,7 @@ def assemble_history_dataset(base_dir: Path) -> pd.DataFrame:
     for race_dir in sorted(base_dir.glob("R*C*")):
         if not race_dir.is_dir():
             continue
-
+ 
         report_path = race_dir / "per_horse_report.csv"
         if not report_path.exists():
             continue
@@ -149,6 +149,8 @@ def assemble_history_dataset(base_dir: Path) -> pd.DataFrame:
             report = pd.read_csv(report_path)
         except Exception:  # pragma: no cover - invalid CSV is ignored
             continue
+
+        n_runners = len(report)
 
         results = _extract_winners(_read_json(race_dir / "arrivee_officielle.json"))
         tickets = _extract_backed_ids(_read_json(race_dir / "p_finale.json"))
@@ -180,6 +182,7 @@ def assemble_history_dataset(base_dir: Path) -> pd.DataFrame:
                 {
                     "race_id": race_dir.name,
                     "runner_id": ident,
+                    "n_runners": n_runners,
                     "odds_h5": odds_h5,
                     "odds_h30": odds_h30,
                     "drift": drift,
