@@ -85,8 +85,21 @@ class ZeturfFetcher:
                 # Vérifier le status code
                 response.raise_for_status()
                 
-                        odds_map[str(num)] = comb.get('rapport')
-    
+                        # --- BEGIN odds_map population (fixed) ---
+                odds_map: Dict[str, float] = {}
+                for row in rows:
+                    if not row:
+                        continue
+                    runner_id = row.get("id") or row.get("runner_id")
+                    if not runner_id:
+                        continue
+                    raw = row.get("odds") or row.get("odd") or row.get("sp")
+                    try:
+                        odds_map[str(runner_id)] = float(str(raw).replace(",", "."))
+                    except (TypeError, ValueError):
+                        continue
+                # --- END ---
+
             for runner in runners:
                 if str(runner['num']) in odds_map:
                     runner['dernier_rapport'] = {'gagnant': odds_map[str(runner['num'])]}
