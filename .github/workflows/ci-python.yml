@@ -36,7 +36,7 @@ jobs:
             requirements-dev.txt
 
       - name: Install project dependencies
-        if: hashFiles('requirements.txt') != ''
+        if: ${{ hashFiles('requirements.txt') != '' }}
         run: python -m pip install -r requirements.txt
 
       - name: Install development dependencies
@@ -48,7 +48,7 @@ jobs:
           fi
 
       - name: Run ruff
-        run: ruff check . --extend-exclude ".venv,data,dist"
+        run: ruff check . --extend-exclude ".venv/**,data/**,dist/**"
 
       - name: Run pytest with coverage
         run: |
@@ -96,7 +96,7 @@ jobs:
             requirements-dev.txt
 
       - name: Install project dependencies
-        if: hashFiles('requirements.txt') != ''
+        if: ${{ hashFiles('requirements.txt') != '' }}
         run: python -m pip install -r requirements.txt
 
       - name: Run smoke test
