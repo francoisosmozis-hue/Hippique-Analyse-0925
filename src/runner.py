@@ -106,12 +106,21 @@ def run_course(course_url: str, phase: str, extra_env: Optional[Dict[str, str]] 
     phase = _normalise_phase(phase)
     identifiers = _extract_identifiers(course_url)
     env = os.environ.copy()
-    if extra_env:
-        env.update(extra_env)
     env.setdefault("COURSE_URL", course_url)
     env.setdefault("PHASE", phase)
-
+    env.setdefault("COURSE_DATE", identifiers["date"])
+    env.setdefault("RUN_DATE", identifiers["date"])
+    env.setdefault("PLAN_DATE", identifiers["date"])
+    env.setdefault("TZ", settings.timezone)
+    if extra_env:
+        env.update(extra_env)
+        
     logs: List[str] = []
+    LOGGER.info(
+        "run_started",
+        extra={"course_url": course_url, "phase": phase, "correlation": f"r{identifiers['r']}c{identifiers['c']}"},
+    )
+    
     for script_name in SCRIPTS:
         script = _script_path(script_name)
         if not script:
@@ -165,6 +174,15 @@ def run_course(course_url: str, phase: str, extra_env: Optional[Dict[str, str]] 
         except Exception as exc:  # pragma: no cover - defensive
             LOGGER.warning("artifact_upload_failed", extra={"error": str(exc)})
 
+    LOGGER.info(
+        "run_completed",
+        extra={
+            "course_url": course_url,
+            "phase": phase,
+            "artifacts": len(artifact_paths),
+        },
+    )
+    
     return {
         "ok": True,
         "rc": 0,
