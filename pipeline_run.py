@@ -210,7 +210,7 @@ def _estimate_overround_win(runners: Sequence[Mapping[str, Any]]) -> float | Non
     for runner in runners or []:
         if not isinstance(runner, Mapping):
             continue
-    candidate = (
+        candidate = (
             runner.get("odds")
             or runner.get("odds_win")
             or runner.get("win_odds")
