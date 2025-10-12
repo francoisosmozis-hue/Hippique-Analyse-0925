@@ -2,7 +2,7 @@ import json
 import datetime as dt
 from pathlib import Path
 
-import runner_chain
+from scripts import runner_chain
 
 
 def test_write_analysis_disables_exotics_without_stats(monkeypatch, tmp_path):

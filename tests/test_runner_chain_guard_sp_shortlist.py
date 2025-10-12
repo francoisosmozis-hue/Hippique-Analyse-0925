@@ -1,8 +1,7 @@
 import csv
 from pathlib import Path
 
-import runner_chain
-
+from scripts import runner_chain
 
 _DEF_PARAMS = {
     "budget": 100.0,
@@ -39,7 +38,11 @@ def test_analyse_course_abstains_with_single_sp_candidate(tmp_path):
         ["id", "odds_place", "p_place"],
         [{"id": "A", "odds_place": "2.4", "p_place": "0.45"}],
     )
-    _write_csv(course_dir / "chronos.csv", ["num", "chrono", "ok"], [{"num": "1", "chrono": "1'15\"", "ok": "1"}])
+    _write_csv(
+        course_dir / "chronos.csv",
+        ["num", "chrono", "ok"],
+        [{"num": "1", "chrono": "1'15\"", "ok": "1"}],
+    )
 
     payload = _analyse(course_dir)
 

@@ -79,7 +79,9 @@ def _append_env(entries: Iterable[tuple[str, str]], env_file: Path | None) -> No
 
 
 def main() -> None:  # pragma: no cover - exercised via workflows
-    parser = argparse.ArgumentParser(description="Apply EV/ROI guardrails on analysis outputs")
+    parser = argparse.ArgumentParser(
+        description="Apply EV/ROI guardrails on analysis outputs"
+    )
     parser.add_argument("--analysis", required=True, help="Path to analysis_H5.json")
     parser.add_argument("--ev-min", type=float, required=True, help="Minimum EV ratio")
     parser.add_argument("--roi-min", type=float, required=True, help="Minimum ROI")
@@ -97,7 +99,9 @@ def main() -> None:  # pragma: no cover - exercised via workflows
     if not analysis_path.exists():
         raise SystemExit(f"analysis file not found: {analysis_path}")
 
-    abstain, ev, roi = evaluate_guardrail(analysis_path, ev_min=args.ev_min, roi_min=args.roi_min)
+    abstain, ev, roi = evaluate_guardrail(
+        analysis_path, ev_min=args.ev_min, roi_min=args.roi_min
+    )
 
     env_path = Path(args.env) if args.env else None
     if env_path is None and os.getenv("GITHUB_ENV"):
@@ -122,7 +126,9 @@ def main() -> None:  # pragma: no cover - exercised via workflows
             "roi_global": roi,
             "analysis": str(analysis_path),
         }
-        report_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        report_path.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
 
     status = "ABSTENTION" if abstain else "OK"
     print(f"[guardrails] status={status} ev={ev:.4f} roi={roi:.4f}")

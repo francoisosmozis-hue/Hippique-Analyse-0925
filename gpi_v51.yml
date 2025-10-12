@@ -26,7 +26,7 @@ env:
   ROI_MIN_SP: "0.10"
   ROI_MIN_GLOBAL: "0.25"
   SHARPE_MIN: "0.5"
-  MAX_VOL_PAR_CHEVAL: "0.60"
+  MAX_VOL_PAR_CHEVAL: "0.35"
   ROUND_TO_SP: "0.10"   # arrondi des mises SP (0 désactive l'arrondi sans provoquer d'erreur)
   MIN_PAYOUT_COMBOS: "12.0"  # payout attendu minimal en €
   EXOTIC_MIN_PAYOUT: "12.0"

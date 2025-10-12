@@ -1,11 +1,9 @@
 import logging
 import os
-from collections.abc import Iterable, Mapping, Sequence
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, Iterable, List, Mapping, Sequence, Tuple
 
 from simulate_ev import allocate_dutching_sp
-from runner_chain import validate_exotics_with_simwrapper
-
+from simulate_wrapper import evaluate_combo
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +60,7 @@ def _is_homogeneous_field(runners: Iterable[Mapping[str, Any]]) -> bool:
     spread = max(top_four) - min(top_four)
     return spread < 8.0
 
+
 def allow_combo(
     ev_global: float,
     roi_global: float,
@@ -85,7 +84,10 @@ def allow_combo(
         Optional configuration mapping providing the thresholds used by the
         analysis pipeline.
     """
-    def _resolve(value: float | None, default: float, keys: Tuple[str, ...] = ()) -> float:
+
+    def _resolve(
+        value: float | None, default: float, keys: Tuple[str, ...] = ()
+    ) -> float:
         if value is not None:
             return float(value)
         if cfg is not None:
@@ -112,6 +114,7 @@ def allow_combo(
     if payout_est < resolved_payout:
         return False
     return True
+
 
 def _normalise_legs(value: Any) -> List[str]:
     if value is None:
@@ -221,25 +224,41 @@ def _extract_combo_entries(source: Any) -> List[Tuple[str, Dict[str, Any]]]:
             if isinstance(data, Mapping):
                 if not any(
                     key in data
-                    for key in ("legs", "participants", "runners", "combination", "combinaison")
+                    for key in (
+                        "legs",
+                        "participants",
+                        "runners",
+                        "combination",
+                        "combinaison",
+                    )
                 ):
                     continue
                 item = dict(data)
                 item.setdefault("type", combo_type)
                 entries.append((str(item.get("type", combo_type)).upper(), item))
-            elif isinstance(data, Sequence) and not isinstance(data, (str, bytes, bytearray)):
+            elif isinstance(data, Sequence) and not isinstance(
+                data, (str, bytes, bytearray)
+            ):
                 for item in data:
                     if not isinstance(item, Mapping):
                         continue
                     if not any(
                         key in item
-                        for key in ("legs", "participants", "runners", "combination", "combinaison")
+                        for key in (
+                            "legs",
+                            "participants",
+                            "runners",
+                            "combination",
+                            "combinaison",
+                        )
                     ):
                         continue
                     obj = dict(item)
                     obj.setdefault("type", combo_type)
                     entries.append((str(obj.get("type", combo_type)).upper(), obj))
-    elif isinstance(source, Sequence) and not isinstance(source, (str, bytes, bytearray)):
+    elif isinstance(source, Sequence) and not isinstance(
+        source, (str, bytes, bytearray)
+    ):
         for item in source:
             if not isinstance(item, Mapping):
                 continue
@@ -252,7 +271,13 @@ def _extract_combo_entries(source: Any) -> List[Tuple[str, Dict[str, Any]]]:
             )
             if not any(
                 key in item
-                for key in ("legs", "participants", "runners", "combination", "combinaison")
+                for key in (
+                    "legs",
+                    "participants",
+                    "runners",
+                    "combination",
+                    "combinaison",
+                )
             ):
                 continue
             entries.append((str(combo_type).upper(), dict(item)))
@@ -277,7 +302,12 @@ def _build_combo_candidates(
         )
         if not legs:
             continue
-        odds = raw.get("odds") or raw.get("cote") or raw.get("expected_odds") or raw.get("payout")
+        odds = (
+            raw.get("odds")
+            or raw.get("cote")
+            or raw.get("expected_odds")
+            or raw.get("payout")
+        )
         try:
             odds_val = float(odds)
         except (TypeError, ValueError):
@@ -301,8 +331,7 @@ def _build_combo_candidates(
             context_sources.append(course_context)
         if context_sources:
             ticket["legs_details"] = [
-                _build_leg_details(leg_id, *context_sources)
-                for leg_id in legs
+                _build_leg_details(leg_id, *context_sources) for leg_id in legs
             ]
         if "p" in raw:
             try:
@@ -311,6 +340,52 @@ def _build_combo_candidates(
                 pass
         candidates.append([ticket])
     return candidates
+
+
+def _validate_exotics_with_simwrapper(
+    combo_candidates,
+    bankroll,
+    ev_min,
+    roi_min,
+    payout_min,
+    sharpe_min,
+    allow_heuristic,
+    calibration,
+):
+    validated = []
+    all_info = {"flags": {"reasons": {"combo": []}}, "notes": []}
+    for ticket_list in combo_candidates:
+        result = evaluate_combo(
+            ticket_list,
+            bankroll,
+            calibration=calibration,
+            allow_heuristic=allow_heuristic,
+        )
+        if result["status"] == "ok":
+            if (
+                result["ev_ratio"] >= ev_min
+                and result["roi"] >= roi_min
+                and result["payout_expected"] >= payout_min
+                and result["sharpe"] >= sharpe_min
+            ):
+                validated.append(ticket_list[0])
+            else:
+                if result["ev_ratio"] < ev_min:
+                    all_info["flags"]["reasons"]["combo"].append("ev_below_threshold")
+                if result["roi"] < roi_min:
+                    all_info["flags"]["reasons"]["combo"].append("roi_below_threshold")
+                if result["payout_expected"] < payout_min:
+                    all_info["flags"]["reasons"]["combo"].append(
+                        "payout_expected_below_accept_threshold"
+                    )
+                if result["sharpe"] < sharpe_min:
+                    all_info["flags"]["reasons"]["combo"].append(
+                        "sharpe_below_threshold"
+                    )
+        else:
+            all_info["notes"].append(result.get("message", "evaluation_failed"))
+
+    return validated, all_info
 
 
 def apply_ticket_policy(
@@ -372,7 +447,7 @@ def apply_ticket_policy(
             "ignoré car une calibration payout versionnée est obligatoire."
         )
     allow_heuristic = False
-    
+
     # --- SP tickets -----------------------------------------------------
     sp_tickets, _ = allocate_dutching_sp(cfg, runners_list)
     sp_tickets.sort(key=lambda t: t.get("ev_ticket", 0.0), reverse=True)
@@ -408,8 +483,16 @@ def apply_ticket_policy(
         return sp_tickets, [], info
 
     combo_budget = budget_total * float(cfg.get("COMBO_RATIO", COMBO_SHARE))
-    ev_threshold = float(cfg.get("EV_MIN_GLOBAL", EV_MIN_COMBO)) if ev_threshold is None else ev_threshold
-    roi_threshold = float(cfg.get("ROI_MIN_GLOBAL", 0.0)) if roi_threshold is None else roi_threshold
+    ev_threshold = (
+        float(cfg.get("EV_MIN_GLOBAL", EV_MIN_COMBO))
+        if ev_threshold is None
+        else ev_threshold
+    )
+    roi_threshold = (
+        float(cfg.get("ROI_MIN_GLOBAL", 0.0))
+        if roi_threshold is None
+        else roi_threshold
+    )
     payout_threshold = (
         float(cfg.get("MIN_PAYOUT_COMBOS", PAYOUT_MIN_COMBO))
         if payout_threshold is None
@@ -417,28 +500,7 @@ def apply_ticket_policy(
     )
     sharpe_threshold = float(cfg.get("SHARPE_MIN", 0.0))
 
-    calib_candidate = (
-        calibration
-        or os.environ.get("GPI_PAYOUT_CALIBRATION", "config/payout_calibration.yaml")
-    )
-    try:
-        ok_calib = (
-            bool(calib_candidate)
-            and os.path.exists(calib_candidate)
-            and os.path.getsize(calib_candidate) > 0
-        )
-    except Exception:
-        ok_calib = False
-
-    if not ok_calib:
-        notes = info.setdefault("notes", [])
-        if "calibration_missing" not in notes:
-            notes.append("calibration_missing")
-        if "no_calibration_yaml → exotiques désactivés" not in notes:
-            notes.append("no_calibration_yaml → exotiques désactivés")
-        return sp_tickets, [], info
-        
-    validated, info = validate_exotics_with_simwrapper(
+    validated, info = _validate_exotics_with_simwrapper(
         combo_candidates,
         bankroll=combo_budget,
         ev_min=ev_threshold,
@@ -468,9 +530,7 @@ def apply_ticket_policy(
         else:
             base_legs = [_leg_lookup_key(leg) for leg in base.get("legs", [])]
             if base_legs:
-                base["legs_details"] = [
-                    {"id": leg_id} for leg_id in base_legs
-                ]
+                base["legs_details"] = [{"id": leg_id} for leg_id in base_legs]
         base["legs"] = list(base_legs)
         key = (
             str(base.get("type", "CP")),
@@ -510,8 +570,8 @@ def apply_ticket_policy(
             merged["flags"] = list(ticket.get("flags", []))
         combo_tickets.append(merged)
 
-
     return sp_tickets, combo_tickets, info
+
 
 # Provide a convenient alias
 build_tickets = apply_ticket_policy

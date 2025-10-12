@@ -1,7 +1,9 @@
 from __future__ import annotations
+
 import math
 
 __all__ = ["kelly_fraction", "kelly_stake"]
+
 
 def _to_float(x, default: float | None = None) -> float | None:
     try:
@@ -11,6 +13,7 @@ def _to_float(x, default: float | None = None) -> float | None:
         return v
     except Exception:
         return default
+
 
 def kelly_fraction(p: float, odds: float, lam: float = 1.0, cap: float = 1.0) -> float:
     """
@@ -37,7 +40,7 @@ def kelly_fraction(p: float, odds: float, lam: float = 1.0, cap: float = 1.0) ->
         lam = 1.0
     if not (0.0 < cap <= 1.0):
         cap = 1.0
-        
+
     # Kelly pur pour cotes décimales : f* = (p*o - 1)/(o - 1)
     numerator = p * o - 1.0
     denom = o - 1.0
@@ -59,7 +62,10 @@ def kelly_fraction(p: float, odds: float, lam: float = 1.0, cap: float = 1.0) ->
         f = 1.0
     return f
 
-def kelly_stake(p: float, odds: float, bankroll: float, lam: float = 1.0, cap: float = 1.0) -> float:
+
+def kelly_stake(
+    p: float, odds: float, bankroll: float, lam: float = 1.0, cap: float = 1.0
+) -> float:
     """
     Montant conseillé (en €) selon Kelly fractionné + plafond.
     """

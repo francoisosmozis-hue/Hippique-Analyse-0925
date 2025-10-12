@@ -27,12 +27,15 @@ Notes
 - Si vous passez des cotes gagnant, fournissez des `probs` adaptées (p_win).
 """
 from typing import Callable, Optional, Sequence
+
 import pandas as pd
 
 from kelly import kelly_fraction
 
+
 def _safe_prob(p: float) -> float:
     return max(0.01, min(0.90, float(p)))
+
 
 def dutching_kelly_fractional(
     odds: Sequence[float],
@@ -78,7 +81,9 @@ def dutching_kelly_fractional(
     for p, o in zip(probs, odds):
         p = _safe_prob(float(p))
         o = float(o)
-        f_k.append(kelly_fraction(p, o, lam=float(lambda_kelly), cap=float(cap_per_horse)))
+        f_k.append(
+            kelly_fraction(p, o, lam=float(lambda_kelly), cap=float(cap_per_horse))
+        )
 
     if sum(f_k) <= 0:
         stakes = [total_stake / n] * n
@@ -94,6 +99,7 @@ def dutching_kelly_fractional(
         if step <= 0:
             return float(x)
         return round(x / step) * step
+
     stakes = [_round_to(st, round_to) for st in stakes]
 
     # Corriger l'écart d'arrondi uniquement si dépassement (et arrondi actif)
@@ -107,8 +113,8 @@ def dutching_kelly_fractional(
             stakes[idx] = max(0.0, _round_to(stakes[idx] + diff, round_to))
 
     sum_alloc = sum(stakes)
-    shares = [st/sum_alloc if sum_alloc else 0 for st in stakes]
-  
+    shares = [st / sum_alloc if sum_alloc else 0 for st in stakes]
+
     # Calculs gains/EV
     gains = [st * o for st, o in zip(stakes, odds)]
     evs = []
@@ -118,17 +124,20 @@ def dutching_kelly_fractional(
         ev = p * gain_net - (1.0 - p) * st
         evs.append(ev)
 
-    df = pd.DataFrame({
-        "Cheval": horse_labels,
-        "Cote": [float(o) for o in odds],
-        "p": [float(_safe_prob(p)) for p in probs],
-        "f_kelly": f_k,
-        "Part": shares,
-        "Stake (€)": [round(st,2) for st in stakes],
-        "Gain brut (€)": [round(g,2) for g in gains],
-        "EV (€)": [round(e,2) for e in evs],
-    })
+    df = pd.DataFrame(
+        {
+            "Cheval": horse_labels,
+            "Cote": [float(o) for o in odds],
+            "p": [float(_safe_prob(p)) for p in probs],
+            "f_kelly": f_k,
+            "Part": shares,
+            "Stake (€)": [round(st, 2) for st in stakes],
+            "Gain brut (€)": [round(g, 2) for g in gains],
+            "EV (€)": [round(e, 2) for e in evs],
+        }
+    )
     return df
+
 
 def ev_panier(df: pd.DataFrame) -> float:
     """EV totale (en €) du panier SP."""

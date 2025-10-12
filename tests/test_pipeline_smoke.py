@@ -486,7 +486,7 @@ def test_cmd_analyse_enriches_runners(tmp_path, monkeypatch: pytest.MonkeyPatch)
 
     monkeypatch.setattr("tickets_builder.apply_ticket_policy", stub_apply_ticket_policy)
     monkeypatch.setattr("pipeline_run.enforce_ror_threshold", stub_enforce)
-    monkeypatch.setattr("pipeline_run.append_csv_line", lambda *a, **k: None)
+    monkeypatch.setattr("logging_io.append_csv_line", lambda *a, **k: None)
     monkeypatch.setattr("pipeline_run.append_json", lambda *a, **k: None)
     monkeypatch.setattr(logging_io, "append_csv_line", lambda *a, **k: None)
     monkeypatch.setattr(logging_io, "append_json", lambda *a, **k: None)
@@ -747,7 +747,7 @@ def test_high_risk_pack_is_trimmed(tmp_path, monkeypatch):
         tickets, _ = allocate_dutching_sp(cfg, runners)
         return tickets, [], None
 
-    monkeypatch.setattr("pipeline_run.apply_ticket_policy", fake_apply_ticket_policy)
+    monkeypatch.setattr("tickets_builder.apply_ticket_policy", fake_apply_ticket_policy)
 
     cfg_loaded = load_yaml(str(gpi_path))
     runners = [
@@ -886,7 +886,7 @@ def test_combo_pack_scaled_not_removed(tmp_path, monkeypatch):
     def stub_apply_ticket_policy(cfg, runners, combo_candidates=None, combos_source=None):
         return [dict(sp_ticket)], [dict(combo_template)], {"notes": [], "flags": {}}
 
-    monkeypatch.setattr("pipeline_run.apply_ticket_policy", stub_apply_ticket_policy)
+    monkeypatch.setattr("tickets_builder.apply_ticket_policy", stub_apply_ticket_policy)
 
     args = argparse.Namespace(
         h30=str(h30_path),

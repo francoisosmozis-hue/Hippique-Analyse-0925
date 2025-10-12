@@ -3,45 +3,22 @@ from __future__ import annotations
 import math
 from pathlib import Path
 from typing import Any, Dict, Mapping, Optional, Sequence
+import threading
+from dataclasses import dataclass
 
 import yaml
 
+_MODEL_LOCK = threading.Lock()
+_EPSILON = 1e-6
+_MODEL_CACHE: Optional[tuple[Path, float, PTrueModel]] = None
+MODEL_PATH = Path(__file__).parent / "p_true_model.yaml"
 
-def _yaml_load(path: str | Path) -> dict:
-    """Load YAML content from ``path`` using ``yaml.safe_load``."""
+@dataclass(frozen=True)
+class PTrueModel:
+    features: Sequence[str]
+    intercept: float
+    coefficients: dict[str, float]
 
-    p = Path(path)
-    with p.open("r", encoding="utf-8") as fh:
-        return yaml.safe_load(fh) or {}
-        
-def compute_runner_features(
-    odds_h5: float,
-    odds_h30: float | None,
-    stats: Mapping[str, float] | None,
-    n_runners: int,
-) -> dict[str, float]:
-    """Return the feature mapping expected by the calibration model."""
-
-    o5 = max(float(odds_h5 or 0.0), 0.0)
-    if not math.isfinite(o5) or o5 <= 1.0:
-        raise ValueError("odds_h5 must be > 1 and finite")
-
-    o30 = float(odds_h30) if odds_h30 not in (None, "") else o5
-    if not math.isfinite(o30) or o30 <= 1.0:
-        o30 = o5
-
-    stats = stats or {}
-    j_win = float(stats.get("j_win", 0.0))
-    e_win = float(stats.get("e_win", 0.0))
-    je_total = j_win + e_win
- 
-    return {
-        "log_odds": math.log(max(o5, 1.0 + _EPSILON)),
-        "drift": o5 - o30,
-        "je_total": je_total,
-        "implied_prob": 1.0 / o5,
-        "n_runners": float(n_runners),
-    }
     metadata: dict
 
     def predict(self, features: Mapping[str, float]) -> float:

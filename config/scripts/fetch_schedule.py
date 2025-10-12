@@ -40,10 +40,7 @@ def _flatten(meetings: Iterable[Dict[str, Any]]) -> List[Dict[str, str]]:
         races = meeting.get("races") or meeting.get("courses") or []
         for race in races:
             c_label = (
-                race.get("course")
-                or race.get("c")
-                or race.get("num")
-                or race.get("id")
+                race.get("course") or race.get("c") or race.get("num") or race.get("id")
             )
             time = (
                 race.get("time")
@@ -55,14 +52,22 @@ def _flatten(meetings: Iterable[Dict[str, Any]]) -> List[Dict[str, str]]:
                 continue
             if date and len(str(time)) == 5 and str(time)[2] == ":":
                 time = f"{date}T{time}"
-            entries.append({"reunion": str(r_label), "course": str(c_label), "time": str(time)})
+            entries.append(
+                {"reunion": str(r_label), "course": str(c_label), "time": str(time)}
+            )
     return entries
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Fetch schedule and output meetings.json")
-    parser.add_argument("--sources", default="config/sources.yml", help="YAML endpoints file")
-    parser.add_argument("--out", default="config/meetings.json", help="Destination JSON path")
+    parser = argparse.ArgumentParser(
+        description="Fetch schedule and output meetings.json"
+    )
+    parser.add_argument(
+        "--sources", default="config/sources.yml", help="YAML endpoints file"
+    )
+    parser.add_argument(
+        "--out", default="config/meetings.json", help="Destination JSON path"
+    )
     args = parser.parse_args()
 
     with open(args.sources, "r", encoding="utf-8") as fh:

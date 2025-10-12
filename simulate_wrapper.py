@@ -22,8 +22,8 @@ from collections import OrderedDict
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Tuple
-import yaml
 
+import yaml
 
 logger = logging.getLogger(__name__)
 
@@ -136,7 +136,7 @@ def _combo_key(legs: Sequence[Any]) -> str:
 
 class _RequirementsList(list):
     """Custom list exposing common calibration filenames as virtual members."""
-    
+
     _DEFAULT_HINTS = (
         str(Path("config/payout_calibration.yaml")),
         str(Path("calibration/payout_calibration.yaml")),
@@ -185,7 +185,7 @@ def _normalise_meeting(value: str | None) -> str | None:
     if not meeting.startswith("R") and meeting[0].isdigit():
         meeting = f"R{meeting}"
     return meeting
-    
+
 
 def _normalise_race(value: str | None) -> str | None:
     if value is None:
@@ -477,7 +477,7 @@ def _extract_leg_probability(leg: Any) -> Tuple[float, str, str, Dict[str, Any]]
         prob = _coerce_probability(leg.get("p_true"))
         if prob is not None:
             return prob, "leg_p_true", identifier, {}
-            
+
     entry = _calibration_cache.get(identifier)
     if entry:
         prob = _coerce_probability(entry.get("p"))
@@ -742,7 +742,7 @@ def evaluate_combo(
             "mandatory for combo evaluation."
         )
         allow_heuristic = False
-        
+
     if calibration is None:
         env_calib = os.getenv("CALIB_PATH")
         calib_path = Path(env_calib) if env_calib else PAYOUT_CALIBRATION_PATH

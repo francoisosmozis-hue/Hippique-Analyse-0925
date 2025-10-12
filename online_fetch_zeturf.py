@@ -4,32 +4,34 @@
 from __future__ import annotations
 
 import importlib.util
+import inspect
+import json
 import logging
-import math
 import os
 import re
 import sys
 import time
 import unicodedata
 from dataclasses import dataclass
-import inspect
-import json
-import subprocess
-import tempfile
 from pathlib import Path
+from typing import Any, Dict, Iterable, Mapping
 from urllib.parse import urljoin
-from datetime import datetime
-import datetime as dt
-from typing import Any, Dict, Iterable, Mapping, Sequence
-
-from zoneinfo import ZoneInfo
 
 import yaml
 
-from scripts import online_fetch_zeturf as _raw_impl
+from scripts import online_fetch_zeturf as _impl
+
+# [GPIv5.1] Ré-exporte les détails d'implémentation du module sous-jacent
+# pour que ce wrapper serve de point d'entrée unique.
+# Cela évite les erreurs F401 (import inutilisé) tout en gardant les noms dans __all__.
+http_get = _impl.http_get
+parse_meeting_page = _impl.parse_meeting_page
+parse_course_page = _impl.parse_course_page
+to_pipeline_json = _impl.to_pipeline_json
 
 
 _RC_COMBINED_RE = re.compile(r"R?\s*(\d+)\s*C\s*(\d+)", re.IGNORECASE)
+_ZT_BASE_URL = "https://www.zeturf.fr"
 
 
 def _normalise_rc_tag(reunion: str | int, course: str | int | None) -> str:
@@ -73,72 +75,23 @@ def fetch_race_snapshot(
 ) -> dict[str, Any]:
     """Return a normalised snapshot for ``reunion``/``course`` at ``phase``."""
 
-    if reunion in (None, "") or course in (None, ""):
-        raise ValueError("reunion and course are required")
-
-    try:
-        reunion_norm = _normalise_label(reunion, "R")
-        course_norm = _normalise_label(course, "C")
-    except ValueError as exc:  # pragma: no cover - defensive guard
-        raise ValueError(str(exc)) from exc
-
-    phase_norm = _normalise_phase_alias(phase)
-    snapshot_mode = "H-5" if phase_norm == "H5" else "H-30"
-
-    if date is None:
-        today = datetime.now(ZoneInfo("Europe/Paris")).date()
-        date_text = today.isoformat()
-    else:
+    course_url: str | None
+    if date:
+        try:
+            reunion_norm = _normalise_label(reunion, "R")
+            course_norm = _normalise_label(course, "C")
+        except ValueError as exc:
+            raise ValueError(str(exc)) from exc
         date_text = str(date).strip()
         if not date_text:
             raise ValueError("date must be a non-empty string when provided")
+        course_url = f"{_ZT_BASE_URL}/fr/course/{date_text}/{reunion_norm}{course_norm}"
+    else:
+        course_url = None
 
-    course_url = f"{_ZT_BASE_URL}/fr/course/{date_text}/{reunion_norm}{course_norm}"
-
-    parse_fn = getattr(_impl, "parse_course_page", None)
-    if not callable(parse_fn):
-        raise ValueError("parse_course_page implementation unavailable")
-
-    try:
-        parsed_payload = parse_fn(course_url, snapshot=snapshot_mode)
-    except Exception as exc:  # pragma: no cover - defensive logging
-        raise ValueError(f"unable to parse course page at {course_url}") from exc
-
-    if not isinstance(parsed_payload, Mapping):
-        raise ValueError(f"unexpected payload returned for {course_url}")
-
-    raw_snapshot = dict(parsed_payload)
-
-    hippo_hint = None
-    if isinstance(raw_snapshot.get("meta"), Mapping):
-        meta_mapping = raw_snapshot["meta"]
-        hippo_hint = meta_mapping.get("hippodrome") or meta_mapping.get("meeting")
-    hippo_hint = (
-        hippo_hint or raw_snapshot.get("hippodrome") or raw_snapshot.get("meeting")
+    return fetch_race_snapshot_full(
+        reunion=reunion, course=course, phase=phase, course_url=course_url
     )
-
-    canonical_url = _build_canonical_course_url(
-        date_text, reunion_norm, course_norm, hippo_hint
-    )
-    if canonical_url:
-        course_url = canonical_url
-        
-    raw_snapshot.setdefault("source_url", course_url)
-
-    normalised = _normalise_snapshot_result(
-        raw_snapshot,
-        reunion_hint=reunion_norm,
-        course_hint=course_norm,
-        phase_norm=phase_norm,
-        sources_config=None,
-    )
-
-    partants_count = normalised.get("partants_count")
-    logger.info(
-        "[ZEturf] phase=%s url=%s partants=%s", phase_norm, course_url, partants_count
-    )
-
-    return normalised
 
 
 def _load_full_impl() -> Any:
@@ -161,7 +114,7 @@ def _load_full_impl() -> Any:
     return module
 
 
-def _resolve_impl(module: Any) -> Any:
+def _resolve_impl() -> Any:
     """Ensure the implementation module exposes the expected public API."""
 
     required_attrs = {
@@ -174,12 +127,10 @@ def _resolve_impl(module: Any) -> Any:
         "time",
     }
 
-    if not all(hasattr(module, attr) for attr in required_attrs):
+    if not all(hasattr(_impl, attr) for attr in required_attrs):
         return _load_full_impl()
-    return module
+    return _impl
 
-
-_impl = _resolve_impl(_raw_impl)
 
 try:  # pragma: no cover - requests is always available in production
     import requests
@@ -187,154 +138,6 @@ except Exception:  # pragma: no cover - fallback when requests missing in tests
     requests = None  # type: ignore[assignment]
 
 logger = logging.getLogger(__name__)
-
-
-def _normalize_decimal(value: Any) -> float | None:
-    """Return ``value`` as a positive float if possible."""
-
-    if isinstance(value, str):
-        value = value.replace(",", ".")
-    try:
-        number = float(value)
-    except (TypeError, ValueError):
-        return None
-    if not math.isfinite(number) or number <= 0.0:
-        return None
-    return number
-
-
-def _lookup_runner_value(
-    runner: Mapping[str, Any],
-    keys: Sequence[str],
-    nested: Sequence[str] = (),
-) -> float | None:
-    for key in keys:
-        candidate = runner.get(key)
-        if candidate in (None, ""):
-            continue
-        if isinstance(candidate, Mapping) and nested:
-            for subkey in nested:
-                normalized = _normalize_decimal(candidate.get(subkey))
-                if normalized is not None:
-                    return normalized
-        normalized = _normalize_decimal(candidate)
-        if normalized is not None:
-            return normalized
-    return None
-
-
-def _estimate_overround_from_runners(
-    runners: Sequence[Mapping[str, Any]],
-    *,
-    use_place: bool,
-) -> float | None:
-    total = 0.0
-    count = 0
-    for runner in runners or []:
-        if not isinstance(runner, Mapping):
-            continue
-        if use_place:
-            value = _lookup_runner_value(
-                runner,
-                ("odds_place", "place_odds", "cote_place", "rapport_place"),
-                ("place", "show", "place_1"),
-            )
-            if value is None:
-                value = _lookup_runner_value(
-                    runner,
-                    ("odds", "odds_win", "win_odds", "cote", "rapport_gagnant"),
-                    ("gagnant", "win"),
-                )
-        else:
-            value = _lookup_runner_value(
-                runner,
-                ("odds", "odds_win", "win_odds", "cote", "rapport_gagnant"),
-                ("gagnant", "win"),
-            )
-        if value is None:
-            continue
-        total += 1.0 / value
-        count += 1
-    if count == 0:
-        return None
-    return round(total, 4)
-
-
-def _parse_slots_hint(*values: Any, default: int = 3) -> int:
-    for value in values:
-        if value in (None, ""):
-            continue
-        if isinstance(value, int):
-            return value if value > 0 else default
-        if isinstance(value, float) and value.is_integer():
-            int_value = int(value)
-            return int_value if int_value > 0 else default
-        if isinstance(value, str):
-            match = re.search(r"(\d+)", value)
-            if match:
-                try:
-                    parsed = int(match.group(1))
-                except ValueError:
-                    continue
-                if parsed > 0:
-                    return parsed
-    return default
-
-
-def fetch_race_snapshot_cli(
-    *, course_url: str, phase: str = "H5", out_dir: str | os.PathLike[str] | None = None
-) -> dict[str, Any]:
-    """Run the enrichment CLI to generate a snapshot and load the resulting JSON payload."""
-
-    if not course_url or "/course/" not in course_url:
-        raise ValueError("course_url invalide")
-    phase_norm = str(phase or "H5").strip() or "H5"
-    work_dir = (
-        Path(out_dir).expanduser()
-        if out_dir
-        else Path(tempfile.mkdtemp(prefix="zeturf_snapshot_"))
-    )
-    work_dir.mkdir(parents=True, exist_ok=True)
-    base_cmd = [
-        sys.executable,
-        "-m",
-        "analyse_courses_du_jour_enrichie",
-        "--course-url",
-        course_url,
-        "--phase",
-        phase_norm,
-        "--out-dir",
-        str(work_dir),
-    ]
-    try:
-        subprocess.run(base_cmd, check=True, capture_output=True, text=True)
-    except Exception as exc:
-        logger.debug("[CLI] Primary CLI invocation failed: %s", exc)
-        fallback_cmd = [
-            sys.executable,
-            "analyse_courses_du_jour_enrichie.py",
-            "--course-url",
-            course_url,
-            "--phase",
-            phase_norm,
-            "--out-dir",
-            str(work_dir),
-        ]
-        subprocess.run(fallback_cmd, check=True)
-    candidates: list[Path] = []
-    for path in work_dir.rglob("*.json"):
-        name_lower = path.name.lower()
-        if "snapshot" in name_lower or phase_norm.lower() in name_lower:
-            candidates.append(path)
-    for candidate in sorted(candidates):
-        try:
-            data = json.loads(candidate.read_text(encoding="utf-8"))
-        except Exception:
-            continue
-        if isinstance(data, dict):
-            logger.info("[CLI] snapshot chargé depuis %s", candidate)
-            return data
-    raise ValueError(f"Impossible de charger un snapshot JSON valide dans {work_dir}")
 
 
 @dataclass(slots=True)
@@ -361,7 +164,7 @@ class RaceSnapshot:
         partants_count = self.partants_count
         if partants_count is None and isinstance(runners, list):
             partants_count = len(runners)
-            
+
         payload: Dict[str, Any] = {
             "meeting": self.meeting,
             "date": self.date,
@@ -562,7 +365,7 @@ def _double_extract(
         if fallback_data is None:
             fallback_data = _fallback_parse_html(html)
         return fallback_data
-        
+
     parse_fn = getattr(_impl, "parse_course_page", None)
     snapshot_mode = "H-30" if str(snapshot).upper().replace("-", "") == "H30" else "H-5"
     if callable(parse_fn):
@@ -920,7 +723,7 @@ def _coerce_runner_entry(entry: Mapping[str, Any]) -> dict[str, Any] | None:
                     return candidate
             return None
         return None
-        
+
     def _coerce_float(value: Any) -> float | None:
         if value in (None, ""):
             return None
@@ -940,7 +743,7 @@ def _coerce_runner_entry(entry: Mapping[str, Any]) -> dict[str, Any] | None:
         if place_val is not None:
             runner.setdefault("odds_place", place_val)
             break
-            
+
     for prob_key in ("p", "probability", "p_imp", "p_imp_h5", "p_true"):
         prob_val = _coerce_float(entry.get(prob_key))
         if prob_val is not None:
@@ -1021,7 +824,7 @@ def _coerce_runner_entry(entry: Mapping[str, Any]) -> dict[str, Any] | None:
         coerced = _coerce_metadata_value(value)
         if coerced is not None:
             runner[key] = coerced
-            
+
     return runner
 
 
@@ -1080,7 +883,7 @@ def _build_snapshot_payload(
                 parsed = _coerce_runner_entry(entry)
                 if parsed:
                     runners.append(parsed)
-                    
+
     if runners:
         deduped: list[dict[str, Any]] = []
         by_number: dict[str, dict[str, Any]] = {}
@@ -1110,7 +913,7 @@ def _build_snapshot_payload(
             deduped.append(runner)
             if number:
                 by_number[number] = runner
-                
+
         def _runner_sort_key(item: Mapping[str, Any]) -> tuple[int, str]:
             raw_number = str(item.get("num") or item.get("id") or "").strip()
             match = re.search(r"\d+", raw_number)
@@ -1119,7 +922,7 @@ def _build_snapshot_payload(
 
         deduped.sort(key=_runner_sort_key)
         runners = deduped
-        
+
     partants_count = _coerce_int(raw_snapshot.get("partants"))
 
     meta_raw = (
@@ -1175,7 +978,7 @@ def _build_snapshot_payload(
                 "start_time",
             )
         heure_officielle = _coerce_str(candidate)
-        
+
     if partants_count is None:
         candidate = _first_meta_value(
             meta_raw, "partants", "nb_partants", "n_partants", "participants"
@@ -1265,9 +1068,8 @@ def _fetch_race_snapshot_impl(
     if retry_count_int <= 0:
         retry_count_int = 1
 
-    if not reunion_text:
+    if not reunion_text and not url:
         raise ValueError("reunion value is required")
-
     if not course_text:
         match = _RC_COMBINED_RE.search(reunion_text.upper())
         if match:
@@ -1322,7 +1124,7 @@ def _fetch_race_snapshot_impl(
             or meta_hint.get("meeting")
             or meta_hint.get("venue")
         )
-        
+
     candidate_urls: list[str] = []
     try:
         entry_url = _impl._extract_url_from_entry(entry)
@@ -1400,14 +1202,14 @@ def _fetch_race_snapshot_impl(
     elif fallback_urls:
         primary_url = fallback_urls[0]
     rc_map[rc] = entry
-    
+
     sources_payload["rc_map"] = rc_map
 
     phase_norm = _normalise_phase_alias(phase)
 
     raw_snapshot: dict[str, Any] | None = None
     last_error: Exception | None = None
-    
+
     html_attempted: set[str] = set()
 
     owns_session = False
@@ -1421,7 +1223,7 @@ def _fetch_race_snapshot_impl(
             owns_session = True
 
     try:
-        
+
         def _try_html(urls: Iterable[str]) -> dict[str, Any] | None:
             ordered: list[str] = []
             for candidate in urls:
@@ -1471,7 +1273,7 @@ def _fetch_race_snapshot_impl(
                     break
             else:
                 html_attempted.add(direct_url)
-                
+
         if html_snapshot is None:
             html_snapshot = _try_html(fallback_urls)
         if isinstance(html_snapshot, dict) and html_snapshot:
@@ -1496,7 +1298,7 @@ def _fetch_race_snapshot_impl(
         if signature is not None and "course" in signature.parameters:
             arg_candidates.append((reunion_norm, course_norm))
         arg_candidates.append((rc,))
-                
+
         if raw_snapshot is None or not raw_snapshot.get("runners"):
             for args in arg_candidates:
                 try:
@@ -1568,7 +1370,7 @@ def _fetch_race_snapshot_impl(
             phase=phase_norm,
             source_url=source_url,
         )
-        
+
         meta = raw_snapshot.get("meta") if isinstance(raw_snapshot, Mapping) else None
         if isinstance(meta, dict):
             thresholds = meta.setdefault("exotic_thresholds", {})
@@ -1701,7 +1503,7 @@ def _merge_h30_odds(
             updates["odds_place_h30"] = place
         if not updates:
             odds_map.pop(number, None)
-            
+
     candidates = payload.get("runners")
     runners_iterable = (
         candidates
@@ -1755,7 +1557,7 @@ def _merge_h30_odds(
             number = _coerce_number(key)
             if not number:
                 continue
-                
+
             win_value: Any | None
             place_value: Any | None = None
             if isinstance(value, Mapping):
@@ -1963,36 +1765,6 @@ def _normalise_snapshot_result(
     if phase_norm == "H5":
         _merge_h30_odds(runners, reunion_meta, course_meta)
 
-    market_block = result.get("market") if isinstance(result.get("market"), Mapping) else {}
-    market: dict[str, Any] = dict(market_block) if isinstance(market_block, Mapping) else {}
-    slots_hint = (
-        market.get("slots_place")
-        or meta.get("slots_place")
-        or meta.get("paying_places")
-        or result.get("slots_place")
-        or meta.get("places")
-    )
-
-    slots = _parse_slots_hint(slots_hint, default=market.get("slots_place", 3))
-    if slots:
-        market["slots_place"] = slots
-
-    overround_win = _estimate_overround_from_runners(runners, use_place=False)
-    overround_place = _estimate_overround_from_runners(runners, use_place=True)
-    if overround_win is not None:
-        market["overround_win"] = overround_win
-        market["overround"] = overround_win
-    if overround_place is not None:
-        market["overround_place"] = overround_place
-        market.setdefault("overround", overround_place)
-
-    if market:
-        result["market"] = market
-        if market.get("overround") is not None:
-            result.setdefault("overround", market.get("overround"))
-        meta.setdefault("overround_win", market.get("overround_win"))
-        meta.setdefault("overround_place", market.get("overround_place"))
-
     resolver = getattr(_impl, "resolve_source_url", None)
     if callable(resolver) and isinstance(sources_config, Mapping):
         try:
@@ -2064,7 +1836,7 @@ def fetch_race_snapshot_full(
 
     if course_url is not None:
         fetch_kwargs.setdefault("url", course_url)
-        
+
     sources_config = fetch_kwargs.get("sources")
     if not isinstance(sources_config, Mapping):
         try:
@@ -2091,199 +1863,15 @@ def fetch_race_snapshot_full(
     )
 
 
-# [GPI v5.1 PATCH] --- API normalisée pour runner_chain
-_fetch_race_snapshot_v50 = fetch_race_snapshot
-
-
-def fetch_race_snapshot(
-    reunion: str,
-    course: str,
-    phase: str = "H5",
-    *,
-    date: str | None = None,
-    **kwargs: Any,
-) -> dict[str, Any]:
-    """Return a lightweight snapshot resolved from an environment URL.
-
-    The helper keeps the legacy implementation available when additional
-    keyword arguments are supplied (e.g. ``sources`` or ``use_cache``) so no
-    existing callers are impacted.  When no overrides are provided the
-    simplified pipeline-friendly payload is produced.
-    """
-
-    if kwargs or date is not None:
-        return _fetch_race_snapshot_v50(reunion, course, phase, date=date, **kwargs)
-
-    assert phase in ("H30", "H5"), "phase must be 'H30' or 'H5'"
-
-    env_key = f"ZETURF_URL_{reunion}{course}"
-    url = os.environ.get(env_key)
-    if not url:
-        raise RuntimeError(
-            f"[fetch_race_snapshot] URL ZEturf manquante (env {env_key})"
-        )
-
-    parse_fn = getattr(_impl, "parse_course_page", None)
-    if not callable(parse_fn):
-        raise RuntimeError("parse_course_page implementation unavailable")
-
-    http_get_fn = globals().get("http_get")
-    if not callable(http_get_fn):
-        http_get_fn = globals().get("_http_get")
-
-    snapshot_mode = "H-5" if phase == "H5" else "H-30"
-    raw_payload: Mapping[str, Any] | None = None
-
-    try:
-        raw_candidate = parse_fn(url, snapshot=snapshot_mode)
-    except TypeError:
-        if callable(http_get_fn):
-            html_payload = http_get_fn(url)
-            raw_candidate = parse_fn(html_payload)
-        else:  # pragma: no cover - requests unavailable
-            raise
-    except Exception as exc:  # pragma: no cover - defensive logging
-        raise RuntimeError(f"échec parse_course_page pour {url}: {exc}") from exc
-    else:
-        if isinstance(raw_candidate, Mapping):
-            raw_payload = raw_candidate
-
-    if raw_payload is None:
-        raw_payload = {}
-
-    snapshot_raw = dict(raw_payload)
-    meta_raw = snapshot_raw.get("meta")
-    meta: dict[str, Any] = dict(meta_raw) if isinstance(meta_raw, Mapping) else {}
-
-    date_hint = meta.get("date") or snapshot_raw.get("date")
-    if not date_hint:
-        match = re.search(r"/(\d{4}-\d{2}-\d{2})/R(\d+)C(\d+)", url)
-        if match:
-            date_hint = match.group(1)
-        else:
-            date_hint = dt.date.today().isoformat()
-
-    def _norm_label(value: str, prefix: str) -> str:
-        try:
-            return _normalise_label(value, prefix)
-        except ValueError:
-            cleaned = str(value or "").strip().upper()
-            return f"{prefix}{cleaned.lstrip(prefix)}" if cleaned else prefix
-
-    reunion_label = _norm_label(str(reunion or ""), "R")
-    course_label = _norm_label(str(course or ""), "C")
-
-    meeting = (
-        snapshot_raw.get("meeting")
-        or snapshot_raw.get("hippodrome")
-        or meta.get("meeting")
-        or meta.get("hippodrome")
-    )
-    meeting_text = str(meeting or "").strip()
-    if meeting_text:
-        meeting = meeting_text
-    else:
-        meeting = None
-
-    discipline = snapshot_raw.get("discipline") or meta.get("discipline")
-    discipline_text = str(discipline or "").strip()
-    if not discipline_text:
-        discipline = None
-    else:
-        discipline = discipline_text
-
-    distance_m: int | None = None
-    for key in ("distance_m", "distance", "distance_course"):
-        candidate = snapshot_raw.get(key) or meta.get(key)
-        if candidate in (None, ""):
-            continue
-        match = re.search(r"(\d+)", str(candidate))
-        if match:
-            try:
-                distance_m = int(match.group(1))
-            except ValueError:
-                continue
-            else:
-                break
-
-    runners_raw = snapshot_raw.get("runners") or snapshot_raw.get("partants") or []
-    runners: list[dict[str, Any]] = []
-
-    if isinstance(runners_raw, Iterable):
-        for entry in runners_raw:
-            if not isinstance(entry, Mapping):
-                continue
-            runner = {str(k): v for k, v in entry.items()}
-            num_val = runner.get("num") or runner.get("number") or runner.get("id")
-            num_text = str(num_val or "").strip()
-            if num_text:
-                runner["num"] = num_text
-            name_val = (
-                runner.get("name")
-                or runner.get("runner")
-                or runner.get("cheval")
-                or runner.get("horse")
-            )
-            if name_val is not None:
-                runner["name"] = str(name_val).strip()
-
-            odds_place = None
-            for key in ("odds_place", "cote_place", "place_odds", "cote"):
-                raw_value = runner.get(key)
-                if raw_value in (None, ""):
-                    continue
-                try:
-                    odds_place = float(str(raw_value).replace(",", "."))
-                except (TypeError, ValueError):
-                    continue
-                else:
-                    break
-            if odds_place is not None:
-                runner["odds_place"] = odds_place
-
-            runners.append(runner)
-
-    meta.update(
-        {
-            "date": date_hint,
-            "reunion": reunion_label,
-            "course": course_label,
-            "phase": snapshot_mode,
-        }
-    )
-    if meeting:
-        meta.setdefault("meeting", meeting)
-        meta.setdefault("hippodrome", meeting)
-    if discipline:
-        meta.setdefault("discipline", discipline)
-
-    snapshot = {
-        "meeting": meeting,
-        "date": date_hint,
-        "r_label": reunion_label,
-        "c_label": course_label,
-        "discipline": discipline,
-        "distance_m": distance_m,
-        "runners": runners,
-        "source_url": url,
-        "phase": snapshot_mode,
-        "meta": meta,
-        "partants": len(runners),
-        "partants_count": len(runners),
-    }
-
-    return snapshot
-
-
 if hasattr(_impl, "main"):
     main = _impl.main
 else:  # pragma: no cover - defensive fallback for stripped builds
-    
+
     def main(*_args: Any, **_kwargs: Any) -> None:
         raise RuntimeError("scripts.online_fetch_zeturf.main is unavailable")
 
 
-__all__ = ["fetch_race_snapshot", "fetch_race_snapshot_full", "main"]
+__all__ = ["fetch_race_snapshot", "fetch_race_snapshot_full", "main", "http_get", "parse_meeting_page", "parse_course_page", "to_pipeline_json"]
 
 # Re-export normalisation helper when available so downstream tooling can rely
 # on the same convenience shim regardless of whether it imports the lightweight

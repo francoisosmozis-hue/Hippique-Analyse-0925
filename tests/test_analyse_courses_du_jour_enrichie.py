@@ -640,3 +640,95 @@ def test_h5_pipeline_produces_outputs(
     assert (rc_dir / f"{Path(h5_filename).stem}_je.csv").exists()
     assert (rc_dir / "chronos.csv").exists()
     assert (rc_dir / "prompts" / "prompt.txt").exists()
+
+
+class TestSafeEnrichH5:
+    """Smoke tests for the :func:`safe_enrich_h5` fail-safe wrapper."""
+
+    def test_safe_enrich_h5_happy_path(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """Test the nominal case where enrich_h5 succeeds and creates artefacts."""
+
+        enrich_calls: list[dict[str, Any]] = []
+
+        def fake_enrich(rc_dir: Path, *, budget: float, kelly: float) -> None:
+            enrich_calls.append({"rc_dir": rc_dir, "budget": budget, "kelly": kelly})
+            snap_prefix = "20251011T120000_R1C1_H-5"
+            (rc_dir / f"{snap_prefix}_je.csv").write_text("num,nom\n1,A")
+            (rc_dir / "chronos.csv").write_text("num,chrono\n1,1.0")
+            (rc_dir / f"{snap_prefix}.json").write_text("{}")
+
+        monkeypatch.setattr(acde, "enrich_h5", fake_enrich)
+
+        rc_dir = tmp_path / "R1C1"
+        rc_dir.mkdir()
+
+        success, outcome = acde.safe_enrich_h5(rc_dir, budget=100.0, kelly=0.5)
+
+        assert success is True
+        assert outcome is None
+        assert len(enrich_calls) == 1
+        assert enrich_calls[0]["rc_dir"] == rc_dir
+        assert not (rc_dir / "UNPLAYABLE.txt").exists()
+
+    def test_safe_enrich_h5_missing_h30(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """Test that a missing H-30 snapshot marks the course as unplayable."""
+
+        def fake_enrich_raises(rc_dir: Path, *, budget: float, kelly: float) -> None:
+            raise acde.MissingH30SnapshotError("H-30 snapshot is missing")
+
+        monkeypatch.setattr(acde, "enrich_h5", fake_enrich_raises)
+
+        rc_dir = tmp_path / "R1C1"
+        rc_dir.mkdir()
+
+        success, outcome = acde.safe_enrich_h5(rc_dir, budget=100.0, kelly=0.5)
+
+        assert success is False
+        assert isinstance(outcome, dict)
+        assert outcome.get("reason") == "data-missing"
+        assert "snapshot-H30" in outcome.get("details", {}).get("missing", [])
+        
+        marker = rc_dir / "UNPLAYABLE.txt"
+        assert marker.exists()
+        assert "non jouable" in marker.read_text()
+        assert "snapshot-H30" in marker.read_text()
+
+    def test_safe_enrich_h5_missing_outputs_unrecoverable(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """Test recovery failure when enrichment does not produce CSVs."""
+
+        enrich_calls: list[dict[str, Any]] = []
+
+        def fake_enrich_noop(rc_dir: Path, *, budget: float, kelly: float) -> None:
+            enrich_calls.append({"rc_dir": rc_dir, "budget": budget, "kelly": kelly})
+            # This fake does NOT create the expected CSV files.
+            (rc_dir / "20251011T120000_R1C1_H-5.json").write_text("{}")
+
+
+        monkeypatch.setattr(acde, "enrich_h5", fake_enrich_noop)
+        monkeypatch.setattr(acde.time, "sleep", lambda d: None)
+        # Simulate failure of all recovery mechanisms
+        monkeypatch.setattr(acde, "_run_fetch_script", lambda *a, **k: False)
+        monkeypatch.setattr(acde, "_regenerate_chronos_csv", lambda *a, **k: False)
+
+        rc_dir = tmp_path / "R1C1"
+        rc_dir.mkdir()
+
+        success, outcome = acde.safe_enrich_h5(rc_dir, budget=100.0, kelly=0.5)
+
+        assert success is False
+        assert isinstance(outcome, dict)
+        assert outcome.get("reason") == "data-missing"
+        details = outcome.get("details", {})
+        missing = details.get("missing", [])
+        assert "20251011T120000_R1C1_H-5_je.csv" in missing
+        assert "chronos.csv" in missing
+
+        marker = rc_dir / "UNPLAYABLE.txt"
+        assert marker.exists()
+        assert "data JE/chronos manquante" in marker.read_text()

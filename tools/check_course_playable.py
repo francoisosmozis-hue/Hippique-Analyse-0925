@@ -8,7 +8,7 @@ import os
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-import runner_chain
+from scripts import runner_chain
 from simulate_wrapper import PAYOUT_CALIBRATION_PATH
 
 
@@ -80,7 +80,9 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _format_reason_list(payload: Mapping[str, Any], guards: Mapping[str, Any]) -> list[str]:
+def _format_reason_list(
+    payload: Mapping[str, Any], guards: Mapping[str, Any]
+) -> list[str]:
     reasons: list[str] = []
     payload_reasons = payload.get("reasons")
     if isinstance(payload_reasons, list):

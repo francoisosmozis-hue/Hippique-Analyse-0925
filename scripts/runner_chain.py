@@ -420,7 +420,7 @@ def _trigger_phase(
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Run H-30 and H-5 windows from planning information"
+        description="Exécute les fenêtres H-30/H-5. Opère soit sur un fichier de planning (--planning), soit sur une course unique (--reunion, --course, etc.)"
     )
     parser.add_argument("--planning", help="Path to planning JSON file")
     parser.add_argument("--course-id", help="Numeric course identifier (>= 6 digits)")

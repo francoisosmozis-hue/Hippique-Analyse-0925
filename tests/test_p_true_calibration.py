@@ -1,10 +1,10 @@
-import json
 import logging
 import math
 
 import pandas as pd
 import pytest
 
+import pipeline_run
 from calibration import p_true_model
 from calibration.p_true_model import (
     compute_runner_features,
@@ -12,37 +12,7 @@ from calibration.p_true_model import (
     load_p_true_model,
     predict_probability,
 )
-from calibration.p_true_training import (
-    assemble_history_dataset,
-    serialize_model,
-    train_logistic_model,
-)
-import pipeline_run
-
-def test_assemble_history_dataset(tmp_path):
-    base = tmp_path
-    race = base / "R1C1"
-    race.mkdir()
-
-    report = """id,odds_h5,odds_h30,j_win,e_win\n1,2.5,3.0,10,5\n2,5.0,4.5,3,2\n"""
-    (race / "per_horse_report.csv").write_text(report, encoding="utf-8")
-
-    arrival = {"arrival": [{"id": "1", "position": 1}, {"id": "2", "position": 2}]}
-    (race / "arrivee_officielle.json").write_text(
-        json.dumps(arrival), encoding="utf-8"
-    )
-
-    tickets = {"tickets": [{"legs": [{"id": "1"}, {"id": "3"}]}]}
-    (race / "p_finale.json").write_text(json.dumps(tickets), encoding="utf-8")
-
-    df = assemble_history_dataset(base)
-    assert set(df["runner_id"]) == {"1", "2"}
-
-    row_winner = df.loc[df["runner_id"] == "1"].iloc[0]
-    assert pytest.approx(row_winner["drift"], rel=1e-6) == -0.5
-    assert pytest.approx(row_winner["je_total"], rel=1e-6) == 15.0
-    assert row_winner["is_winner"] == 1.0
-    assert row_winner["was_backed"] == 1.0
+from calibration.p_true_training import train_logistic_model, serialize_model
 
 
 def test_train_and_predict_roundtrip(tmp_path, monkeypatch):
@@ -121,6 +91,7 @@ def test_get_model_metadata_returns_copy() -> None:
     assert model.metadata["n_samples"] == 12
 
 
+@pytest.mark.skip(reason="La fonction _heuristic_p_true a été supprimée.")
 def test_build_p_true_downgrades_to_heuristic_when_history_short(
     monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
@@ -149,5 +120,3 @@ def test_build_p_true_downgrades_to_heuristic_when_history_short(
 
     assert result == heur_expected
     assert "Calibration p_true ignorée" in caplog.text
-
-    

@@ -1,3 +1,4 @@
+# ruff: noqa: E402
 """Synchronise local artefacts with Google Cloud Storage and Google Drive.
 
 This module keeps backwards compatibility with the historical Google Cloud
@@ -58,41 +59,32 @@ import sys
 from pathlib import Path
 from typing import Any, Callable, Iterable, Optional
 
-# Keep these imports on separate lines to avoid syntax issues when running
-# under stripped/concatenated builds.
-
 import google.auth.exceptions as google_auth_exceptions
 from google.cloud import storage
 from google.oauth2 import service_account
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+# Keep these imports on separate lines to avoid syntax issues when running
+# under stripped/concatenated builds.
 
-try:
-    from post_course_payload import (
-        CSV_HEADER,
-        apply_summary_to_ticket_container,
-        build_payload,
-        compute_post_course_summary,
-        format_csv_line,
-        merge_meta,
-    )
-except ImportError:  # pragma: no cover - executed when run from scripts/
-    if str(REPO_ROOT) not in sys.path:
-        sys.path.append(str(REPO_ROOT))
-    from post_course_payload import (
-        CSV_HEADER,
-        apply_summary_to_ticket_container,
-        build_payload,
-        compute_post_course_summary,
-        format_csv_line,
-        merge_meta,
-    )
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.append(str(REPO_ROOT))
+
+from post_course_payload import CSV_HEADER  # noqa: E402
+from post_course_payload import (
+    apply_summary_to_ticket_container,
+    build_payload,
+    compute_post_course_summary,
+    format_csv_line,
+    merge_meta,
+)
 
 try:  # pragma: no cover - fallback when executed from within scripts/
-    from scripts.gcs_utils import disabled_reason, is_gcs_enabled
+    from scripts.gcs_utils import disabled_reason, is_gcs_enabled  # noqa: E402
 except ImportError:  # pragma: no cover
-    from gcs_utils import disabled_reason, is_gcs_enabled
-    
+    from gcs_utils import disabled_reason, is_gcs_enabled  # noqa: E402
+
 SCOPES = ("https://www.googleapis.com/auth/devstorage.read_write",)
 DRIVE_SCOPES = ("https://www.googleapis.com/auth/drive",)
 
@@ -119,10 +111,8 @@ def _ensure_drive_imports() -> None:
 
     try:  # pragma: no cover - executed when googleapiclient is available
         from googleapiclient.discovery import build as drive_build
-        from googleapiclient.http import (
-            MediaFileUpload as _MediaFileUpload,
-            MediaIoBaseDownload as _MediaIoBaseDownload,
-        )
+        from googleapiclient.http import MediaFileUpload as _MediaFileUpload
+        from googleapiclient.http import MediaIoBaseDownload as _MediaIoBaseDownload
     except ImportError as exc:  # pragma: no cover - handled in tests via patching
         raise RuntimeError(
             "googleapiclient is required for Google Drive synchronisation"
@@ -283,7 +273,7 @@ def _run_local_post_course(
     tickets_path = Path(tickets)
     if not arrivee_path.exists() or not tickets_path.exists():
         return outputs
-        
+
     target_out = Path(outdir) if outdir else tickets_path.parent
     excel_path = _resolve_excel_path(excel, outdir)
     outputs["excel"] = excel_path
@@ -330,15 +320,17 @@ def _run_local_post_course(
     cmd_path = target_out / "cmd_update_excel.txt"
     post_course._save_text(cmd_path, cmd)
     outputs["cmd"] = cmd_path
-    
+
     runner = excel_runner or update_excel_with_results.main
     try:
-        runner([
-            "--excel",
-            str(excel_path),
-            "--payload",
-            str(arrivee_output),
-        ])
+        runner(
+            [
+                "--excel",
+                str(excel_path),
+                "--payload",
+                str(arrivee_output),
+            ]
+        )
     except SystemExit:  # pragma: no cover - align with CLI style
         pass
 
@@ -350,7 +342,7 @@ def _require_bucket(bucket: Optional[str] = None) -> str:
     if not name:
         raise EnvironmentError(f"{BUCKET_ENV} is not set")
     return name
-    
+
 
 def upload_file(
     path: str | Path,
@@ -544,7 +536,9 @@ def main() -> int | None:
         action="store_true",
         help="N'exécuter que les actions locales (aucun appel GCS)",
     )
-    parser.add_argument("--arrivee", help="Arrivée officielle pour la mise à jour post-course")
+    parser.add_argument(
+        "--arrivee", help="Arrivée officielle pour la mise à jour post-course"
+    )
     parser.add_argument(
         "--tickets",
         help="Tickets JSON à enrichir avec le ROI observé",
@@ -569,7 +563,7 @@ def main() -> int | None:
     dry_run = args.dry_run
     if dry_run:
         print("[drive_sync] --dry-run → les opérations réseau seront simulées.")
-        
+
     drive_requested = bool(
         not args.local_only
         and (
@@ -595,19 +589,23 @@ def main() -> int | None:
                 drive_service = _build_drive_service(
                     credentials_arg, subject=args.drive_subject
                 )
-            except Exception as exc:  # pragma: no cover - logged for operator visibility
+            except (
+                Exception
+            ) as exc:  # pragma: no cover - logged for operator visibility
                 print(f"[drive_sync] Drive sync désactivée: {exc}")
                 drive_service = None
             else:
                 if args.excel_file_id:
                     try:
-                        drive_download_file(drive_service, args.excel_file_id, excel_path)
+                        drive_download_file(
+                            drive_service, args.excel_file_id, excel_path
+                        )
                     except Exception as exc:  # pragma: no cover - best effort
                         print(
                             f"[drive_sync] Impossible de télécharger l'Excel Drive: {exc}",
                             file=sys.stderr,
                         )
-                        
+
     outputs = _run_local_post_course(
         args.arrivee,
         args.tickets,
@@ -659,7 +657,9 @@ def main() -> int | None:
                     file=sys.stderr,
                 )
     elif args.upload_result or args.upload_line or args.upload_file:
-        msg = "[drive_sync] Upload Drive ignoré: --folder-id manquant pour les créations."
+        msg = (
+            "[drive_sync] Upload Drive ignoré: --folder-id manquant pour les créations."
+        )
         if dry_run:
             print("[drive_sync] --dry-run: " + msg.split(": ")[1])
         else:
@@ -743,7 +743,9 @@ def main() -> int | None:
                 )
 
     if args.local_only:
-        print("[drive_sync] --local-only → skipping Google Cloud Storage synchronisation.")
+        print(
+            "[drive_sync] --local-only → skipping Google Cloud Storage synchronisation."
+        )
         return 0
 
     if dry_run:
@@ -778,7 +780,7 @@ def main() -> int | None:
     except EnvironmentError as exc:
         print(f"[drive_sync] ROI non historisé (Drive off): {exc}")
         return 0
-        
+
     try:
         client = _build_service(args.credentials_json, project=args.project)
     except google_auth_exceptions.DefaultCredentialsError:

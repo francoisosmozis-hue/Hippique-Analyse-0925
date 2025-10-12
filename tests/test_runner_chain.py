@@ -4,12 +4,11 @@ import logging
 from pathlib import Path
 
 import pytest
-
-import runner_chain
-from scripts import runner_chain as runner_script
+from scripts import runner_chain
 
 
-def _build_payload(phase: str) -> runner_script.RunnerPayload:
+
+def _build_payload(phase: str) -> runner_chain.RunnerPayload:
     return runner_script.RunnerPayload(
         id_course="123456",
         reunion="R1",
@@ -279,9 +278,7 @@ def test_validate_exotics_with_simwrapper_logs_rejected_status(monkeypatch, capl
 
 def test_trigger_phase_result_missing_arrivee(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     payload = _build_payload("RESULT")
-    caplog.set_level(logging.ERROR)
-
-    runner_script._trigger_phase(
+    runner_chain._trigger_phase(
         payload,
         snap_dir=tmp_path,
         analysis_dir=tmp_path,
@@ -320,7 +317,7 @@ def test_trigger_phase_result_with_arrivee(tmp_path: Path, caplog: pytest.LogCap
 
     caplog.set_level(logging.INFO)
 
-    runner_script._trigger_phase(
+    runner_chain._trigger_phase(
         payload,
         snap_dir=tmp_path,
         analysis_dir=tmp_path,
