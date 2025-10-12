@@ -1,14 +1,17 @@
 name: Result Exact
-
 on:
   schedule:
     - cron: "*/5 * * * *"
-  workflow_dispatch:
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: result-exact-${{ github.run_id }}
+  cancel-in-progress: true
 
 env:
   TZ: Europe/Paris
   PYTHONUNBUFFERED: "1"
-
 jobs:
   run:
     runs-on: ubuntu-latest
@@ -17,18 +20,24 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Install dependencies
+          cache: "pip"
+      - name: Install deps
+        shell: bash
         run: |
+          set -euo pipefail
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
       - name: Run result window (T+14 to T+16)
+        shell: bash
         run: |
+          set -euo pipefail
           python runner_chain.py --phase RESULT --result-window-min 14 --result-window-max 16
-      - name: Upload artifacts
+      - name: Upload artifacts (always)
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: result-exact-artifacts
+          name: result-exact-${{ github.run_id }}
           path: |
             data/**
-            excel/modele_suivi_courses_hippiques.xlsx
+            excel/*.xlsx
           if-no-files-found: warn
