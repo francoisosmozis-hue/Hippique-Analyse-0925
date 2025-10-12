@@ -28,7 +28,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 # CORRECTION: Imports depuis scripts/ au lieu de la racine
 from simulate_wrapper import PAYOUT_CALIBRATION_PATH, evaluate_combo
 
-from scripts import online_fetch_zeturf as ofz
+try:
+    from scripts import online_fetch_zeturf as ofz
+except Exception:  # pragma: no cover - optional dependency
+    ofz = None  # type: ignore[assignment]
 from scripts.gcs_utils import disabled_reason, is_gcs_enabled
 from scripts import analysis_utils as _analysis_utils
 
@@ -866,14 +869,23 @@ def _write_snapshot(
     path = dest / f"snapshot_{window}.json"
 
     now = dt.datetime.now().isoformat()
-    try:
-        snapshot = ofz.fetch_race_snapshot(
-            payload.reunion,
-            payload.course,
-            window,
-        )
-    except Exception as exc:
-        reason = str(exc)
+    if ofz is None:
+        reason = "fetcher_unavailable"
+        snapshot = None
+    else:
+        try:
+            snapshot = ofz.fetch_race_snapshot(
+                payload.reunion,
+                payload.course,
+                window,
+            )
+        except Exception as exc:
+            reason = str(exc)
+            snapshot = None
+        else:
+            reason = None
+
+    if reason:
         logger.error(
             "[runner] Snapshot fetch failed for %s (%s): %s", race_id, window, reason
         )
@@ -953,10 +965,23 @@ def _write_analysis(
     required = {
         "h30": _discover("h30.json"),
         "h5": _discover("h5.json"),
-        "stats": _discover("stats_je.json"),
         "partants": _discover("partants.json"),
     }
-    missing = [key for key, path in required.items() if path is None]
+    stats_path = _discover("stats_je.json")
+    chronos_path = _discover("chronos.csv")
+
+    mandatory_missing = [key for key, path in required.items() if path is None]
+    optional_inputs: dict[str, Path | None] = {"stats": stats_path, "chronos": chronos_path}
+    exotics_disabled = False
+    notes: list[str] = []
+
+    if stats_path is None:
+        exotics_disabled = True
+        notes.append("exotics disabled: stats_je missing")
+    if chronos_path is None:
+        exotics_disabled = True
+        notes.append("exotics disabled: chronos missing")
+
     analysis_summary: dict[str, Any] = {
         "race_id": race_id,
         "status": "pending",
@@ -965,10 +990,16 @@ def _write_analysis(
         "inputs": {k: str(v) if v else None for k, v in required.items()},
     }
 
-    if missing:
-        reason = f"missing_inputs:{','.join(sorted(missing))}"
+    analysis_summary["inputs"].update({k: str(v) if v else None for k, v in optional_inputs.items()})
+
+    if mandatory_missing:
+        reason = f"missing_inputs:{','.join(sorted(mandatory_missing))}"
         logger.error("[runner] Pipeline bloqué pour %s: %s", race_id, reason)
         analysis_summary.update({"status": "no-data", "reason": reason})
+        if notes:
+            analysis_summary["notes"] = notes
+        if exotics_disabled:
+            analysis_summary["exotics_disabled"] = True
         _write_json_file(race_dir / "analysis.json", analysis_summary)
         return
 
@@ -982,37 +1013,48 @@ def _write_analysis(
     if gpi_path is None:
         logger.error("[runner] Configuration GPI introuvable pour %s", race_id)
         analysis_summary.update({"status": "no-config", "reason": "gpi_missing"})
+        if notes:
+            analysis_summary["notes"] = notes
+        if exotics_disabled:
+            analysis_summary["exotics_disabled"] = True
         _write_json_file(race_dir / "analysis.json", analysis_summary)
         return
 
     allow_je_na = False
-    try:
-        stats_payload = json.loads(required["stats"].read_text(encoding="utf-8"))
-    except Exception:  # pragma: no cover - resilience
-        stats_payload = {}
-    if isinstance(stats_payload, dict):
-        coverage = stats_payload.get("coverage")
-        allow_je_na = isinstance(coverage, (int, float)) and float(coverage) < 100.0
+    if stats_path and stats_path.exists():
+        try:
+            stats_payload = json.loads(stats_path.read_text(encoding="utf-8"))
+        except Exception:  # pragma: no cover - resilience
+            stats_payload = {}
+        if isinstance(stats_payload, dict):
+            coverage = stats_payload.get("coverage")
+            allow_je_na = isinstance(coverage, (int, float)) and float(coverage) < 100.0
 
     calibration_path = calibration if calibration else PAYOUT_CALIBRATION_PATH
 
     try:
-        result = pipeline_run.run_pipeline(
-            h30=str(required["h30"]),
-            h5=str(required["h5"]),
-            stats_je=str(required["stats"]),
-            partants=str(required["partants"]),
-            gpi=str(gpi_path),
-            outdir=str(outdir),
-            budget=float(budget),
-            ev_global=ev_min,
-            roi_global=roi_min,
-            allow_je_na=allow_je_na,
-            calibration=str(calibration_path),
-        )
+        pipeline_kwargs: dict[str, Any] = {
+            "h30": str(required["h30"]),
+            "h5": str(required["h5"]),
+            "partants": str(required["partants"]),
+            "gpi": str(gpi_path),
+            "outdir": str(outdir),
+            "budget": float(budget),
+            "ev_global": ev_min,
+            "roi_global": roi_min,
+            "allow_je_na": allow_je_na,
+            "calibration": str(calibration_path),
+        }
+        if stats_path and stats_path.exists():
+            pipeline_kwargs["stats_je"] = str(stats_path)
+        result = pipeline_run.run_pipeline(**pipeline_kwargs)
     except Exception as exc:  # pragma: no cover - defensive
         logger.exception("[runner] Echec pipeline pour %s: %s", race_id, exc)
         analysis_summary.update({"status": "error", "reason": str(exc)})
+        if notes:
+            analysis_summary["notes"] = notes
+        if exotics_disabled:
+            analysis_summary["exotics_disabled"] = True
         _write_json_file(race_dir / "analysis.json", analysis_summary)
         return
         
@@ -1035,7 +1077,7 @@ def _write_analysis(
                 tickets_payload = p_payload.get("tickets")
                 if isinstance(tickets_payload, list):
                     sanitized = [dict(t) for t in tickets_payload if isinstance(t, Mapping)]
-                    if should_cut_exotics(overround_value):
+                    if should_cut_exotics(overround_value) or exotics_disabled:
                         sanitized = [
                             t
                             for t in sanitized
@@ -1081,6 +1123,10 @@ def _write_analysis(
             "metrics": metrics,
         }
     )
+    if notes:
+        analysis_summary["notes"] = notes
+    if exotics_disabled:
+        analysis_summary["exotics_disabled"] = True
     _write_json_file(race_dir / "analysis.json", analysis_summary)
 
     artefacts_to_copy = [
