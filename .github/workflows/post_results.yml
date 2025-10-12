@@ -60,4 +60,4 @@ jobs:
             gcloud storage cp -r data/** "gs://${BUCKET}/${PREFIX:-}/data/" || true
             gcloud storage cp excel/*.xlsx "gs://${BUCKET}/${PREFIX:-}/excel/" || true
           else
-          echo "GCS_BUCKET non défini, skip."
+            echo "GCS_BUCKET non défini, skip."
