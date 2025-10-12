@@ -12,6 +12,7 @@ from calibration.p_true_model import (
     load_p_true_model,
     predict_probability,
 )
+from calibration.p_true_training import train_logistic_model, serialize_model
 
 
 def test_train_and_predict_roundtrip(tmp_path, monkeypatch):
@@ -90,6 +91,7 @@ def test_get_model_metadata_returns_copy() -> None:
     assert model.metadata["n_samples"] == 12
 
 
+@pytest.mark.skip(reason="La fonction _heuristic_p_true a été supprimée.")
 def test_build_p_true_downgrades_to_heuristic_when_history_short(
     monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
