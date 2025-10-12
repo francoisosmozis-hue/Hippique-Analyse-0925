@@ -87,6 +87,12 @@ jobs:
         run: |
           set -euo pipefail
           pip check
+
+      - name: Audit dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade 'pip-audit~=2.7'
+          pip-audit --progress-spinner=off
           
       - name: Run Ruff
         run: ruff check .
@@ -96,6 +102,10 @@ jobs:
     runs-on: ubuntu-latest
     needs: lint
     timeout-minutes: 30
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    permissions:
+      contents: read
+      actions: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -143,6 +153,10 @@ jobs:
     runs-on: ubuntu-latest
     needs: tests
     timeout-minutes: 20
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    permissions:
+      contents: read
+      actions: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
