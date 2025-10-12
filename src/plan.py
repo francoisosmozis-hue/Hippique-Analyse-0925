@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import random
 import re
 import time
 from dataclasses import dataclass, field
@@ -69,24 +70,38 @@ class CoursePlan:
         }
 
 
-def _throttled_get(url: str, *, timeout: int = 15) -> str:
-    """HTTP GET with throttle and retries."""
-
+def _throttled_get(url: str, *, timeout: int = 15, attempts: int = 3) -> str:
+    """HTTP GET with throttle, retries and jitter backoff."""
+    
     parsed = urlparse(url)
     host = parsed.netloc
-    while True:
-        last_call = _LAST_REQUEST_BY_HOST.get(host)
-        now = time.monotonic()
-        if not last_call or now - last_call >= _REQUEST_INTERVAL_SECONDS:
-            break
-        time.sleep(_REQUEST_INTERVAL_SECONDS - (now - last_call))
     headers = {"User-Agent": USER_AGENT}
-    try:
-        response = requests.get(url, headers=headers, timeout=timeout)
-        response.raise_for_status()
-    finally:
-        _LAST_REQUEST_BY_HOST[host] = time.monotonic()
-    return response.text
+    for attempt in range(1, attempts + 1):
+        while True:
+            last_call = _LAST_REQUEST_BY_HOST.get(host)
+            now = time.monotonic()
+            if not last_call or now - last_call >= _REQUEST_INTERVAL_SECONDS:
+                break
+            time.sleep(_REQUEST_INTERVAL_SECONDS - (now - last_call))
+        try:
+            response = requests.get(url, headers=headers, timeout=timeout)
+            _LAST_REQUEST_BY_HOST[host] = time.monotonic()
+            response.raise_for_status()
+            return response.text
+        except requests.RequestException as exc:
+            LOGGER.warning(
+                "http_retry",
+                extra={
+                    "url": url,
+                    "attempt": attempt,
+                    "error": str(exc),
+                },
+            )
+            if attempt >= attempts:
+                raise
+            sleep_time = _REQUEST_INTERVAL_SECONDS * attempt + random.uniform(0.2, 0.8)
+            time.sleep(sleep_time)
+    raise RuntimeError("Unreachable")
 
 
 def build_plan(date: str) -> List[Dict[str, Optional[str]]]:
