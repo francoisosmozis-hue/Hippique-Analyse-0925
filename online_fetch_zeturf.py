@@ -20,12 +20,15 @@ from urllib.parse import urljoin
 import yaml
 
 from scripts import online_fetch_zeturf as _impl
-from scripts.online_fetch_zeturf import (
-    http_get,
-    parse_meeting_page,
-    parse_course_page,
-    to_pipeline_json,
-)
+
+# [GPIv5.1] Ré-exporte les détails d'implémentation du module sous-jacent
+# pour que ce wrapper serve de point d'entrée unique.
+# Cela évite les erreurs F401 (import inutilisé) tout en gardant les noms dans __all__.
+http_get = _impl.http_get
+parse_meeting_page = _impl.parse_meeting_page
+parse_course_page = _impl.parse_course_page
+to_pipeline_json = _impl.to_pipeline_json
+
 
 _RC_COMBINED_RE = re.compile(r"R?\s*(\d+)\s*C\s*(\d+)", re.IGNORECASE)
 _ZT_BASE_URL = "https://www.zeturf.fr"

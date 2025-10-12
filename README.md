@@ -636,23 +636,43 @@ python scripts/online_fetch_zeturf.py \
   --sources config/sources.yml
 ```
 
-### Forcer une fenêtre (ex : R1C3 à H‑30)
-# Le dossier doit contenir un snapshot (ex: snapshot_H30.json)
+### Exemples d'exécution
+
+Le script `runner_chain.py` peut être utilisé de deux manières :
+
+#### 1. Mode Planning (recommandé)
+
+Ce mode exécute automatiquement les tâches pour toutes les courses d'une journée à partir d'un fichier de planning.
+
 ```bash
-python scripts/runner_chain.py data/R1C3 --phase H30
+# Lancer les fenêtres H-30/H-5 pour toutes les courses du planning
+python scripts/runner_chain.py --planning data/planning/2025-10-12.json
 ```
 
-### Lancer l’analyse H‑5
-# Le dossier doit contenir snapshot_H5.json, je_stats.csv, et chronos.csv
+#### 2. Mode Course Unique (manuel)
+
+Ce mode permet de déclencher une phase spécifique pour une seule course. Tous les arguments (`--reunion`, `--course`, etc.) sont requis.
+
 ```bash
-python scripts/runner_chain.py data/R1C3 --phase H5 \
-  --budget 5 --calibration calibration/payout_calibration.yaml
+# Forcer la phase H-5 pour la course R1C3
+python scripts/runner_chain.py \
+  --reunion R1 \
+  --course C3 \
+  --course-id 202510120103 \
+  --phase H5 \
+  --start-time "2025-10-12T14:30:00+02:00" \
+  --budget 5
 ```
 
-### Post‑course : arrivée + MAJ Excel
-# Le dossier doit contenir arrivee_officielle.json
 ```bash
-python scripts/runner_chain.py data/R1C3 --phase RESULT
+# Forcer la phase post-course pour R1C3
+python scripts/runner_chain.py \
+  --reunion R1 \
+  --course C3 \
+  --course-id 202510120103 \
+  --phase RESULT \
+  --start-time "2025-10-12T14:30:00+02:00" \
+  --budget 5
 ```
 
 Le script autonome `post_course.py` accepte désormais l'option `--places`
