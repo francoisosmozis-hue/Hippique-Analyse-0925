@@ -108,7 +108,6 @@ def build_plan(date: str) -> List[Dict[str, Optional[str]]]:
     """Build the plan for the provided date."""
 
     entries = zeturf.parse_program(date)
-    entries = zeturf.parse_program(date)
     if not entries:
         LOGGER.warning("no_entries_from_zeturf", extra={"date": date})
     filled = geny.fill_times(date, entries)
