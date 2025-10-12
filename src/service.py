@@ -47,6 +47,14 @@ class RunRequest(BaseModel):
     phase: str
     date: str
 
+    @field_validator("phase")
+    @classmethod
+    def normalise_phase(cls, value: str) -> str:
+        cleaned = value.replace("-", "").upper()
+        if cleaned not in {"H30", "H5"}:
+            raise ValueError("phase must be H-30/H30 or H-5/H5")
+        return cleaned
+
 
 class ScheduleSummary(BaseModel):
     identifier: str
@@ -198,6 +206,7 @@ async def schedule_endpoint(request: ScheduleRequest, http_request: Request) -> 
                         method="scheduler",
                         scheduled=created,
                         schedule_time_local=result.get("schedule_time_local"),
+                        schedule_time_utc=result.get("schedule_time_utc"),
                         name=result.get("name"),
                         skipped_reason=None if created else "already_exists",
                     )
@@ -214,7 +223,14 @@ async def schedule_endpoint(request: ScheduleRequest, http_request: Request) -> 
 @app.post("/run", response_model=RunResponse)
 async def run_endpoint(request: RunRequest) -> RunResponse:
     try:
-        result = run_course(request.course_url, request.phase)
+        result = run_course(
+            request.course_url,
+            request.phase,
+            extra_env={
+                "RUN_DATE": request.date,
+                "PLAN_DATE": request.date,
+            },
+        )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     return RunResponse(**result)
