@@ -25,7 +25,6 @@ DEPLOY_ARGS=(
   "--region=${REGION}"
   "--platform=managed"
   "--image=${IMAGE}"
-  "--service-account=${SERVICE_ACCOUNT}"
   "--no-allow-unauthenticated"
   "--port=8080"
   "--memory=1Gi"
@@ -35,10 +34,7 @@ DEPLOY_ARGS=(
   "--set-env-vars=TZ=Europe/Paris"
 )
 
-# Remove empty service account flag if not provided
-if [[ -z "${SERVICE_ACCOUNT}" ]]; then
-  DEPLOY_ARGS=("--project=${PROJECT_ID}" "--region=${REGION}" "--platform=managed" "--image=${IMAGE}" "--no-allow-unauthenticated" "--port=8080" "--memory=1Gi" "--cpu=1" "--min-instances=0" "--max-instances=4" "--set-env-vars=TZ=Europe/Paris")
-else
+if [[ -n "${SERVICE_ACCOUNT}" ]]; then
   DEPLOY_ARGS+=("--service-account=${SERVICE_ACCOUNT}")
 fi
 
