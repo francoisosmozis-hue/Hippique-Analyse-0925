@@ -108,10 +108,10 @@ def build_plan(date: str) -> List[Dict[str, Optional[str]]]:
     """Build the plan for the provided date."""
 
     LOGGER.info("building_plan", extra={"date": date})
-    entries = zeturf_parse_program(date)
+    entries = zeturf.parse_program(date)
     if not entries:
         LOGGER.warning("no_entries_from_zeturf", extra={"date": date})
-    filled = geny_fill_times(date, entries)
+    filled = geny.fill_times(date, entries)
     deduped: Dict[tuple[str, str, str], CoursePlan] = {}
     for entry in filled:
         if entry.key in deduped:
@@ -260,9 +260,26 @@ def _extract_time_from_element(element) -> Optional[str]:
     return None
 
 
+class _ZeturfFacade:
+    @staticmethod
+    def parse_program(date: str) -> List[CoursePlan]:
+        return zeturf_parse_program(date)
+
+
+class _GenyFacade:
+    @staticmethod
+    def fill_times(date: str, plan: Iterable[CoursePlan]) -> List[CoursePlan]:
+        return geny_fill_times(date, plan)
+
+
+zeturf = _ZeturfFacade()
+geny = _GenyFacade()
+
 __all__ = [
     "build_plan",
     "geny_fill_times",
     "zeturf_parse_program",
+    "zeturf",
+    "geny",
     "CoursePlan",
 ]
