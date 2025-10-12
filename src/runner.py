@@ -7,7 +7,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any
 
 try:  # pragma: no cover - imported lazily in tests
     from google.cloud import storage  # type: ignore
@@ -49,7 +49,7 @@ def _normalise_phase(phase: str) -> str:
     return value
 
 
-def _script_path(name: str) -> Optional[Path]:
+def _script_path(name: str) -> Path | None:
     candidate = REPO_ROOT / name
     if candidate.exists():
         return candidate
@@ -62,7 +62,7 @@ def _build_command(
     phase: str,
     *,
     run_dir: Path,
-) -> List[str]:
+) -> list[str]:
     base = [sys.executable, str(script)]
     phase_flag = phase.replace("H", "h")
     if script.name == "analyse_courses_du_jour_enrichie.py":
@@ -88,167 +88,141 @@ def _build_command(
     return base
 
 
-def _extract_identifiers(course_url: str) -> Dict[str, str]:
+def _extract_identifiers(course_url: str) -> dict[str, str]:
     match = COURSE_DETAILS_RE.search(course_url)
     if not match:
-        raise ValueError(f"Unable to parse race identifiers from URL: {course_url}")
+        raise ValueError(f"Cannot parse course URL: {course_url}")
     return {
         "date": match.group("date"),
-        "r": str(int(match.group("r"))),
-        "c": str(int(match.group("c"))),
+        "r": match.group("r"),
+        "c": match.group("c"),
+        "rc_label": f"R{match.group('r')}C{match.group('c')}",
     }
 
 
-def _collect_artifacts() -> List[Path]:
-    found: List[Path] = []
-    for directory in ARTIFACT_DIRECTORIES:
-        if not directory.exists():
-            continue
-        for pattern in ARTIFACT_PATTERNS:
-            found.extend(directory.rglob(pattern))
-    return found
-
-
-def _upload_artifacts(paths: List[Path], *, prefix: str, bucket_name: str) -> List[str]:
-    if storage is None:  # pragma: no cover - optional during tests
-        raise RuntimeError("google-cloud-storage is not available")
-    client = storage.Client()
-    bucket = client.bucket(bucket_name)
-    uploaded: List[str] = []
-    for path in paths:
-        if not path.is_file():
-            continue
-        blob_name = f"{prefix}/{path.name}" if prefix else path.name
-        blob = bucket.blob(blob_name)
-        blob.upload_from_filename(path)
-        uploaded.append(blob.public_url or blob.name)
-    return uploaded
-
-
-def run_course(
+def run_course(  # noqa: PLR0912, PLR0915
     course_url: str,
     phase: str,
-    extra_env: Optional[Dict[str, str]] = None,
-) -> Dict[str, object]:
-    """Execute the legacy analysis chain for a single course."""
-
+    extra_env: dict[str, str] | None = None,
+) -> dict[str, Any]:
     settings = get_settings()
-    phase = _normalise_phase(phase)
-    identifiers = _extract_identifiers(course_url)
-    run_dir = settings.resolved_data_dir / f"{identifiers['date']}_r{identifiers['r']}c{identifiers['c']}"
+    phase_norm = _normalise_phase(phase)
+    try:
+        ids = _extract_identifiers(course_url)
+    except ValueError as exc:
+        LOGGER.error("invalid_course_url", extra={"url": course_url, "error": str(exc)})
+        return {
+            "ok": False,
+            "rc": 1,
+            "stdout_tail": f"Error: {exc}",
+            "artifacts": [],
+            "uploaded": None,
+        }
+
+    rc_label = ids["rc_label"]
+    run_dir = settings.resolved_data_dir / rc_label
     run_dir.mkdir(parents=True, exist_ok=True)
     
     env = os.environ.copy()
-    env.setdefault("COURSE_URL", course_url)
-    env.setdefault("PHASE", phase)
-    env.setdefault("COURSE_DATE", identifiers["date"])
-    env.setdefault("RUN_DATE", identifiers["date"])
-    env.setdefault("PLAN_DATE", identifiers["date"])
-    env.setdefault("TZ", settings.timezone)
+    env.update({
+        "COURSE_URL": course_url,
+        "PHASE": phase_norm,
+        "RC_DIR": str(run_dir),
+        "DATA_DIR": str(settings.resolved_data_dir),
+        "TZ": settings.timezone,
+    })
     if extra_env:
         env.update(extra_env)
         
-    logs: List[str] = []
-    LOGGER.info(
-        "run_started",
-        extra={
-            "course_url": course_url,
-            "phase": phase,
-            "correlation": f"r{identifiers['r']}c{identifiers['c']}",
-        },
-    )
+    artifacts: list[str] = []
+    stdout_lines: list[str] = []
+    overall_rc = 0
     
     for script_name in SCRIPTS:
-        script = _script_path(script_name)
-        if not script:
-            LOGGER.info("script_missing", extra={"script": script_name})
+        script_path = _script_path(script_name)
+        if not script_path:
+            LOGGER.warning("script_not_found", extra={"script": script_name, "rc_label": rc_label})
             continue
-        cmd = _build_command(script, course_url, phase, run_dir=run_dir)
-        LOGGER.info("running_script", extra={"script": script_name, "cmd": cmd})
+        cmd = _build_command(script_path, course_url, phase_norm, run_dir=run_dir)
         try:
             result = subprocess.run(
-                cmd,
-                env=env,
-                capture_output=True,
-                text=True,
-                timeout=DEFAULT_TIMEOUT,
-                check=False,
+                cmd, env=env, capture_output=True, text=True,
+                timeout=DEFAULT_TIMEOUT, check=False
             )
-        except subprocess.TimeoutExpired as exc:
+            if result.stdout:
+                stdout_lines.extend(result.stdout.splitlines()[-50:])
+            if result.returncode != 0:
+                LOGGER.error("script_failed", extra={
+                    "script": script_name, "rc": result.returncode,
+                    "stderr_tail": result.stderr[-500:] if result.stderr else "",
+                    "rc_label": rc_label,
+                })
+                overall_rc = result.returncode
+            else:
+                LOGGER.info("script_success", extra={"script": script_name, "rc_label": rc_label})
+        except subprocess.TimeoutExpired:
             LOGGER.error(
                 "script_timeout",
-                extra={"script": script_name, "timeout": DEFAULT_TIMEOUT},
+                extra={
+                    "script": script_name,
+                    "timeout": DEFAULT_TIMEOUT,
+                    "rc_label": rc_label,
+                },
             )
-            logs.append(f"[{script_name}] timeout after {DEFAULT_TIMEOUT}s")
-            return {
-                "ok": False,
-                "rc": 124,
-                "stdout_tail": "\n".join(logs)[-4000:],
-                "artifacts": [],
-            }
-        logs.append(_format_command_output(script_name, result.stdout, result.stderr, result.returncode))
-        if result.returncode != 0:
-            LOGGER.error(
-                "script_failed",
-                extra={"script": script_name, "returncode": result.returncode},
+            overall_rc = 124
+        except Exception:
+            log_exception(
+                LOGGER,
+                "script_exception",
+                extra={"script": script_name, "rc_label": rc_label},
             )
-            return {
-                "ok": False,
-                "rc": result.returncode,
-                "stdout_tail": "\n".join(logs)[-4000:],
-                "artifacts": [],
-            }
+            overall_rc = 1
 
-    artifacts = _collect_artifacts()
+    for artifact_dir in ARTIFACT_DIRECTORIES:
+        abs_dir = REPO_ROOT / artifact_dir
+        if not abs_dir.exists():
+            continue
+        for pattern in ARTIFACT_PATTERNS:
+            for path in abs_dir.glob(f"**/{pattern}"):
+                if rc_label in str(path):
+                    artifacts.append(str(path.relative_to(REPO_ROOT)))
 
-    if extra_env and extra_env.get("POST_RESULTS") == "1":
-        for script_name in POST_SCRIPTS:
-            script = _script_path(script_name)
-            if not script:
-                continue
-            cmd = [sys.executable, str(script)]
-            LOGGER.info("post_script", extra={"script": script_name})
-            try:
-                subprocess.run(cmd, env=env, check=False)
-            except Exception as exc:  # pragma: no cover - defensive
-                log_exception(LOGGER, "post_script_failed", extra={"script": script_name, "error": str(exc)})
-
-    artifact_paths = [str(path) for path in artifacts]
-    uploaded_refs: List[str] = []
-    if settings.gcs_bucket:
-        prefix = settings.gcs_prefix.strip("/") if settings.gcs_prefix else ""
-        slug = f"runs/{identifiers['date']}/r{identifiers['r']}c{identifiers['c']}/{phase.lower()}"
-        prefix = f"{prefix}/{slug}" if prefix else slug
+    uploaded = None
+    if settings.gcs_bucket and storage:
+        uploaded = []
         try:
-            uploaded_refs = _upload_artifacts(artifacts, prefix=prefix, bucket_name=settings.gcs_bucket)
-        except Exception as exc:  # pragma: no cover - defensive
-            LOGGER.warning("artifact_upload_failed", extra={"error": str(exc)})
+            client = storage.Client()
+            bucket = client.bucket(settings.gcs_bucket)
+            for artifact in artifacts:
+                artifact_path = REPO_ROOT / artifact
+                if not artifact_path.exists():
+                    LOGGER.warning("artifact_missing", extra={"path": artifact})
+                    continue
+                prefix = settings.gcs_prefix.strip("/") if settings.gcs_prefix else ""
+                blob_name = f"{prefix}/{artifact}".strip("/")
+                try:
+                    bucket.blob(blob_name).upload_from_filename(str(artifact_path))
+                    uploaded.append(blob_name)
+                    LOGGER.info("artifact_uploaded", extra={"blob": blob_name})
+                except Exception as exc:
+                    LOGGER.warning(
+                        "artifact_upload_failed",
+                        extra={"artifact": artifact, "error": str(exc)},
+                    )
+            LOGGER.info(
+                "gcs_upload_complete",
+                extra={"rc_label": rc_label, "uploaded_count": len(uploaded)},
+            )
+        except Exception:
+            log_exception(LOGGER, "gcs_upload_error", extra={"rc_label": rc_label})
 
-    LOGGER.info(
-        "run_completed",
-        extra={
-            "course_url": course_url,
-            "phase": phase,
-            "artifacts": len(artifact_paths),
-        },
-    )
-    
     return {
-        "ok": True,
-        "rc": 0,
-        "stdout_tail": "\n".join(logs)[-4000:],
-        "artifacts": artifact_paths,
-        "uploaded": uploaded_refs,
+        "ok": overall_rc == 0,
+        "rc": overall_rc,
+        "stdout_tail": "\n".join(stdout_lines[-20:]),
+        "artifacts": artifacts,
+        "uploaded": uploaded,
     }
-
-
-def _format_command_output(script: str, stdout: str, stderr: str, rc: int) -> str:
-    output = [f"[{script}] rc={rc}"]
-    if stdout:
-        output.append(stdout.strip())
-    if stderr:
-        output.append(f"STDERR:\n{stderr.strip()}")
-    return "\n".join(output)
 
 
 __all__ = ["run_course"]
