@@ -1,61 +1,63 @@
-name: CI ROI+ Guardrails
-
+name: CI
 on:
   push:
-    branches: [ "**" ]
   pull_request:
-
+permissions:
+  contents: read
+  checks: write
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
-  roi-fast:
+  python:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Install quick deps
-        run: |
-          python -m pip install --upgrade pip
-          pip install pytest pyyaml
-      - name: Config smoke checks
-        run: |
-          test -f config/gpi.yml
-          pytest tests/test_no_vig_ev.py tests/test_dutching_allocation.py \
-            tests/test_clv_gate.py tests/test_readme_config_sync.py -q
-
-  tests:
-    needs: roi-fast
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.10"
-          
+          cache: "pip"          
       - name: Install deps
+        shell: bash
         run: |
+          set -euo pipefail
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-          pip install pytest
-
-      - name: Run unit tests
-        run: pytest -q
-
-      - name: Upload artifacts (if any)
+          pip install pytest pytest-cov
+      - name: Lint (ruff) - optional
+        continue-on-error: true
+        run: |
+          pip install ruff
+          ruff check . || true
+      - name: Tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p reports
+          pytest -q --junitxml=reports/pytest.xml
+      - name: Test reporter (JUnit)
+        if: always() && hashFiles('reports/pytest.xml') != ''
+        continue-on-error: true
+        uses: dorny/test-reporter@v1
+        with:
+          name: Pytest (3.11)
+          path: reports/pytest.xml
+          reporter: java-junit
+          fail-on-error: false
+      - name: Upload artifacts (always)
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: analysis-artifacts
+          name: ci-artifacts-${{ github.run_id }}
           path: |
-            data/**/snapshot_H30.json
-            data/**/snapshot_H5.json
-            data/**/*_je.csv
-            data/**/chronos.csv
-            data/**/*_p_finale.json
+            reports/**
             data/**/analysis_H5.json
             data/**/tracking.csv
-            prompts/*.txt
           if-no-files-found: ignore
+  actionlint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: actionlint (best effort)
+        continue-on-error: true
+        uses: reviewdog/action-actionlint@v1
