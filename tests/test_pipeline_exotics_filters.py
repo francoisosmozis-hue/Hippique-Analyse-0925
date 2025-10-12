@@ -5,6 +5,8 @@ from typing import Any, Callable, Mapping
 
 import pytest
 
+from scripts import analysis_utils
+
 import logging_io
 import pipeline_run
 import simulate_ev
@@ -60,8 +62,6 @@ def _prepare_stubs(
     market_overround: float | None = None,
     compute_cap_stub: Callable[..., float] | None = None,
 ):
-    pipeline_run._load_simulate_ev.cache_clear()
-
     def fake_allocate(cfg, runners):
         return [], {}
 
@@ -96,7 +96,6 @@ def _prepare_stubs(
     monkeypatch.setattr(simulate_ev, "implied_prob", fake_implied_prob)
     monkeypatch.setattr(simulate_ev, "implied_probs", fake_implied_probs)
     monkeypatch.setattr(simulate_ev, "simulate_ev_batch", fake_simulate_ev_batch)
-    pipeline_run._load_simulate_ev.cache_clear()
 
     monkeypatch.setattr(
         tickets_builder,
@@ -112,12 +111,11 @@ def _prepare_stubs(
         def compute_cap_stub(*_args: object, **_kwargs: object) -> float:
             return overround_cap
         
-    monkeypatch.setattr(
-        pipeline_run,
-        "compute_overround_cap",
-        compute_cap_stub,
-    )
-    
+            monkeypatch.setattr(
+                analysis_utils,
+                "compute_overround_cap",
+                compute_cap_stub,
+            )    
     if market_overround is not None:
         monkeypatch.setattr(
             pipeline_run,
@@ -146,11 +144,10 @@ def _prepare_stubs(
     def fake_filter(sp_tickets, combo_tickets, *_args, **_kwargs):
         return list(sp_tickets), list(combo_tickets), []
 
-    monkeypatch.setattr(pipeline_run, "_filter_sp_and_cp_tickets", fake_filter)
+
     monkeypatch.setattr(pipeline_run, "build_p_true", lambda *a, **k: {})
     monkeypatch.setattr(pipeline_run, "compute_drift_dict", lambda *a, **k: {})
-    monkeypatch.setattr(pipeline_run, "_summarize_optimization", lambda *a, **k: None)
-
+    
     monkeypatch.setattr(logging_io, "append_csv_line", lambda *a, **k: None)
 
     captured_log: list[dict] = []

@@ -3,6 +3,7 @@
 """Minimal pipeline for computing EV and exporting artefacts."""
 
 import logging
+import statistics
 
 logger = logging.getLogger(__name__)
 LOG_LEVEL_ENV_VAR = "PIPELINE_LOG_LEVEL"
@@ -59,3 +60,13 @@ def cmd_analyse(args):
         data = {"meta": {"rc": "R1C1"}}
         print(f"[dummy cmd_analyse] writing to {p_finale_path} with data: {data}")
         p_finale_path.write_text(json.dumps(data))
+
+
+def _clv_median_ok(clv_values: list[float], threshold: float = 0.0) -> bool:
+    """
+    Return True if the median of CLV values is at or above the threshold.
+    """
+    if not clv_values:
+        return True
+    median_clv = statistics.median(clv_values)
+    return median_clv >= threshold
