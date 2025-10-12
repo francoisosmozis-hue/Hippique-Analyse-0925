@@ -101,7 +101,7 @@ def test_process_reunion_continues_after_failure(
 
     monkeypatch.setattr(acde.requests, "get", lambda *a, **k: DummyResp(html))
 
-    def fake_snapshot(cid: str, ph: str, rc_dir: Path) -> Path:
+    def fake_snapshot(cid: str, ph: str, rc_dir: Path, **kwargs) -> Path:
         stem = f"snap_{cid}_H-5"
         path = rc_dir / f"{stem}.json"
         path.write_text("{}", encoding="utf-8")

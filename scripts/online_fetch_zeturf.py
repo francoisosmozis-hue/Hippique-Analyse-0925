@@ -21,9 +21,12 @@ from typing import Optional, Dict, Any, Mapping, MutableMapping
 from datetime import datetime
 from pathlib import Path
 
-import requests
-from requests.exceptions import RequestException, Timeout, ConnectionError
-from bs4 import BeautifulSoup
+try:
+    import requests
+    from requests.exceptions import RequestException, Timeout, ConnectionError
+    from bs4 import BeautifulSoup
+except ModuleNotFoundError:
+    raise RuntimeError("Les modules 'requests' et 'beautifulsoup4' sont requis. Installez-les avec 'pip install requests beautifulsoup4'")
 
 # Configuration du logging
 logging.basicConfig(

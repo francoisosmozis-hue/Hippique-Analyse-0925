@@ -38,7 +38,7 @@ GENY_BASE = "https://www.geny.com"
 HDRS = {"User-Agent": "Mozilla/5.0 (compatible; get_arrivee_geny/1.0)"}
 
 ARRIVE_TEXT_RE = re.compile(
-    r"arriv[ée]e\s*(?:officielle|définitive)?\s*:?\s*([0-9\s\-–>]+)",
+    r"arriv[ée]e\s*(?:officielle|d[eé]finitive)?\s*:?\s*([0-9\s\-–>]+)",
     re.IGNORECASE,
 )
 
