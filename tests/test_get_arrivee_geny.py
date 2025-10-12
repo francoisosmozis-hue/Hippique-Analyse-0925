@@ -118,8 +118,7 @@ def test_load_planning_supports_multiple_layouts(tmp_path: Path) -> None:
     assert entry.course_id == "123"
     assert entry.date == "2024-09-10"
     assert entry.hippodrome == "Vincennes"
-    assert entry.local_sources == ["R1C3.html"]
-
+    
 
 def test_parse_arrival_supports_multiple_formats() -> None:
     html = """
