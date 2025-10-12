@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import re
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any
 
 from google.api_core import exceptions
 from google.cloud import scheduler_v1, tasks_v2
@@ -23,7 +23,7 @@ COURSE_DETAILS_RE = re.compile(
 )
 
 
-def _extract_identifiers(course_url: str) -> Dict[str, str]:
+def _extract_identifiers(course_url: str) -> dict[str, str]:
     match = COURSE_DETAILS_RE.search(course_url)
     if not match:
         raise ValueError(f"Unable to extract race identifiers from URL: {course_url}")
@@ -41,86 +41,90 @@ def _normalise_phase(phase: str) -> str:
     return value
 
 
-def enqueue_run_task(
+def enqueue_run_task(  # noqa: PLR0913
     settings: Settings,
     *,
     run_url: str,
-    payload: Dict[str, Any],
+    payload: dict[str, Any],
     course_url: str,
     phase: str,
     when_local: datetime,
-    correlation_id: Optional[str] = None,
-) -> Dict[str, Any]:
+    correlation_id: str | None = None,
+) -> dict[str, Any]:
     """Enqueue a Cloud Task to trigger the /run endpoint."""
-
-    identifiers = _extract_identifiers(course_url)
-    normalised_phase = _normalise_phase(phase)
     when_local = ensure_timezone(when_local, settings.timezone)
     when_utc = to_utc(when_local)
-    task_id = f"run-{identifiers['date'].replace('-', '')}-r{identifiers['r']}c{identifiers['c']}-{normalised_phase.lower()}"
-    full_name = f"{settings.queue_path}/tasks/{task_id}"
+    
+    schedule_time = timestamp_pb2.Timestamp()
+    schedule_time.FromDatetime(when_utc)
 
-    client = tasks_v2.CloudTasksClient()
-
-    schedule_ts = timestamp_pb2.Timestamp()
-    schedule_ts.FromDatetime(when_utc)
-
-    audience = settings.service_audience or settings.resolved_service_url or run_url
-    headers = {
-        "Content-Type": "application/json",
-        "User-Agent": settings.http_user_agent,
-        "X-Correlation-ID": correlation_id or task_id,
-    }
-
-    http_request = tasks_v2.HttpRequest(
-        http_method=tasks_v2.HttpMethod.POST,
-        url=run_url,
-        headers=headers,
-        body=json.dumps(payload).encode("utf-8"),
+    ids = _extract_identifiers(course_url)
+    phase_clean = _normalise_phase(phase)
+    task_name = (
+        f"{settings.queue_path}/tasks/"
+        f"run-{ids['date'].replace('-', '')}-"
+        f"r{ids['r']}c{ids['c']}-{phase_clean.lower()}"
     )
+    
+    audience = settings.service_audience or settings.resolved_service_url or run_url
+    
+    http_request = tasks_v2.HttpRequest(
+        url=run_url,
+        http_method=tasks_v2.HttpMethod.POST,
+        headers={
+            "Content-Type": "application/json",
+            "User-Agent": settings.http_user_agent,
+            "X-Correlation-ID": correlation_id or task_name.split("/")[-1],
+        },
+        body=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+    )
+    
     if settings.tasks_service_account_email:
         http_request.oidc_token = tasks_v2.OidcToken(
             service_account_email=settings.tasks_service_account_email,
             audience=audience,
         )
 
-    task = tasks_v2.Task(name=full_name, http_request=http_request, schedule_time=schedule_ts)
+    task = tasks_v2.Task(
+        name=task_name,
+        http_request=http_request,
+        schedule_time=schedule_time,
+    )
 
+    client = tasks_v2.CloudTasksClient()
     created = True
     try:
         response = client.create_task(parent=settings.queue_path, task=task)
-        LOGGER.info(
-            "task_created",
-            extra={
-                "task_name": response.name,
-                "schedule_time": format_rfc3339(when_utc),
-                "phase": normalised_phase,
-            },
-        )
+        LOGGER.info("task_created", extra={
+            "task_name": response.name,
+            "phase": phase,
+            "schedule_time_utc": format_rfc3339(when_utc),
+        })
     except exceptions.AlreadyExists:
         created = False
-        LOGGER.info(
-            "task_exists",
-            extra={"task_name": full_name, "phase": normalised_phase},
-        )
+        LOGGER.info("task_exists", extra={"task_name": task_name, "phase": phase})
+    except Exception as exc:
+        LOGGER.error("task_creation_failed", extra={"task_name": task_name, "error": str(exc)})
+        raise
+        
     return {
-        "name": full_name,
+        "name": task_name,
         "created": created,
-        "phase": normalised_phase,
-        "schedule_time_utc": format_rfc3339(when_utc),
+        "phase": phase,
         "schedule_time_local": when_local.isoformat(),
+        "schedule_time_utc": format_rfc3339(when_utc),
     }
 
 
-def create_one_shot_job(
+def create_one_shot_job(  # noqa: PLR0913
     settings: Settings,
     *,
     job_name: str,
     run_url: str,
-    payload: Dict[str, Any],
+    payload: dict[str, Any],
     when_local: datetime,
-    correlation_id: Optional[str] = None,
-) -> Dict[str, Any]:
+    correlation_id: str | None = None,
+) -> dict[str, Any]:
     """Create a Cloud Scheduler one-shot job as fallback."""
 
     when_local = ensure_timezone(when_local, settings.timezone)
