@@ -439,9 +439,20 @@ def risk_of_ruin(
         return 1.0
     if total_variance <= 0:
         return 0.0
-    if baseline_variance is not None and baseline_variance < 0:
-        baseline_variance = None
-    return math.exp(-2 * total_ev * bankroll / total_variance)
+    if baseline_variance is not None:
+        try:
+            baseline_variance = float(baseline_variance)
+        except (TypeError, ValueError):  # pragma: no cover - defensive
+            baseline_variance = None
+        if baseline_variance is not None and baseline_variance <= 0:
+            baseline_variance = None
+
+    risk = math.exp(-2 * total_ev * bankroll / total_variance)
+    if baseline_variance:
+        baseline_risk = math.exp(-2 * total_ev * bankroll / baseline_variance)
+        # Use the most conservative estimate to avoid understating ruin risk
+        risk = max(risk, baseline_risk)
+    return min(1.0, max(0.0, risk))
 
 
 def compute_ev_roi(

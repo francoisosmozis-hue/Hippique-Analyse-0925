@@ -15,24 +15,31 @@ import json
 import logging
 import os
 import re
-import sys
 from pathlib import Path
 from typing import Any, Dict, List, Mapping
 
+import sys
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import yaml
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field
-from pydantic import ValidationError as PydanticValidationError
-from pydantic import field_validator
+# CORRECTION: Imports depuis scripts/ au lieu de la racine
+from scripts.simulate_ev import simulate_ev_batch
+from scripts.simulate_wrapper import PAYOUT_CALIBRATION_PATH
+from scripts.validator_ev import ValidationError, validate_ev
 
 from scripts import online_fetch_zeturf as ofz
 from scripts.gcs_utils import disabled_reason, is_gcs_enabled
 
-# CORRECTION: Imports depuis scripts/ au lieu de la racine
-from simulate_ev import simulate_ev_batch
-from simulate_wrapper import PAYOUT_CALIBRATION_PATH
-from validator_ev import ValidationError, validate_ev
+from pydantic import (
+    AliasChoices,
+    BaseModel,
+    ConfigDict,
+    ValidationError as PydanticValidationError,
+    Field,
+    field_validator,
+)
+
+import yaml
 
 logger = logging.getLogger(__name__)
 
@@ -78,9 +85,7 @@ class RunnerPayload(BaseModel):
     def _validate_course_id(cls, value: str) -> str:
         text = str(value).strip()
         if not text or not text.isdigit() or len(text) < 6:
-            raise ValueError(
-                "id_course must be a numeric string with at least 6 digits"
-            )
+            raise ValueError("id_course must be a numeric string with at least 6 digits")
         return text
 
     @field_validator("reunion")
@@ -92,7 +97,7 @@ class RunnerPayload(BaseModel):
         if not text.startswith("R"):
             text = f"R{text}"
         if not text[1:].isdigit():
-            raise ValueError(r"reunion must match pattern R\d+")
+            raise ValueError("reunion must match pattern R\\d+")
         return text
 
     @field_validator("course")
@@ -104,7 +109,7 @@ class RunnerPayload(BaseModel):
         if not text.startswith("C"):
             text = f"C{text}"
         if not text[1:].isdigit():
-            raise ValueError(r"course must match pattern C\d+")
+            raise ValueError("course must match pattern C\\d+")
         return text
 
     @field_validator("phase")
@@ -197,13 +202,9 @@ def _write_excel_update_command(
         )
         return
 
-    excel = (
-        excel_path
-        or os.getenv("EXCEL_RESULTS_PATH")
-        or "modele_suivi_courses_hippiques.xlsx"
-    )
+    excel = excel_path or os.getenv("EXCEL_RESULTS_PATH") or "modele_suivi_courses_hippiques.xlsx"
     cmd = (
-        f"python update_excel_with_results.py "
+        f'python update_excel_with_results.py '
         f'--excel "{excel}" '
         f'--arrivee "{arrivee_path}" '
         f'--tickets "{tickets_path}"\n'
@@ -286,9 +287,7 @@ def _write_analysis(
     mode: str,
     calibration: Path,
     calibration_available: bool,
-) -> None:
-    from pipeline_run import enforce_ror_threshold  # Import local
-
+) -> None:    
     """Compute a dummy EV/ROI analysis and write it to disk.
 
     When the payout calibration file is missing the combo generation is skipped
@@ -300,18 +299,6 @@ def _write_analysis(
     print(f"[runner] Mode={mode} RC={race_id} → {dest}")
 
     path = dest / "analysis.json"
-
-    je_stats_path = dest / "je_stats.csv"
-    chronos_path = dest / "chronos.csv"
-    if not je_stats_path.is_file() or not chronos_path.is_file():
-        payload = {
-            "race_id": race_id,
-            "status": "aborted",
-            "reasons": ["data_missing"],
-        }
-        with path.open("w", encoding="utf-8") as fh:
-            json.dump(payload, fh, ensure_ascii=False, indent=2)
-        return
     if not calibration_available:
         calibration_available = calibration.exists()
     if not calibration_available:
@@ -355,7 +342,7 @@ def _write_analysis(
     }
     with path.open("w", encoding="utf-8") as fh:
         json.dump(payload, fh, ensure_ascii=False, indent=2)
-    if USE_GCS and upload_file:
+    if USE_GCS and upload_file:    
         try:
             upload_file(path)
         except EnvironmentError as exc:
@@ -435,18 +422,18 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Run H-30 and H-5 windows from planning information"
     )
-    parser.add_argument(
-        "path",
-        help="Path to a planning JSON file or a specific analysis directory for a single race",
-    )
+    parser.add_argument("--planning", help="Path to planning JSON file")
+    parser.add_argument("--course-id", help="Numeric course identifier (>= 6 digits)")
+    parser.add_argument("--reunion", help="Reunion identifier (e.g. R1)")
+    parser.add_argument("--course", help="Course identifier (e.g. C3)")
+    parser.add_argument("--phase", help="Phase to execute (H30, H5 or RESULT)")
+    parser.add_argument("--start-time", help="Race start time (ISO 8601)")
     parser.add_argument(
         "--course-url",
         "--reunion-url",
         dest="course_url",
-        default=None,
         help="Direct ZEturf course URL overriding rc_map lookups",
     )
-
     parser.add_argument("--h30-window-min", type=int, default=27)
     parser.add_argument("--h30-window-max", type=int, default=33)
     parser.add_argument("--h5-window-min", type=int, default=3)
@@ -472,71 +459,15 @@ def main() -> None:
         help="Répertoire de sortie prioritaire (fallback vers $OUTPUT_DIR puis --analysis-dir)",
     )
     args = parser.parse_args()
-
+    
     snap_dir = Path(args.snap_dir)
     analysis_root = args.output or os.getenv("OUTPUT_DIR") or args.analysis_dir
     analysis_dir = Path(analysis_root)
     calibration_path = Path(args.calibration).expanduser()
     calibration_exists = calibration_path.exists()
-
-    path = Path(args.path)
-    if path.is_file():
-        args.planning = str(path)
-        args.analysis_dir_path = None
-    elif path.is_dir():
-        args.planning = None
-        args.analysis_dir_path = str(path)
-    else:
-        parser.error(f"Path not found: {path}")
-
-    if args.analysis_dir_path:
-        race_path = Path(args.analysis_dir_path)
-        snapshot_path = race_path / "snapshot_H5.json"
-        if not snapshot_path.is_file():
-            snapshot_path = race_path / "snapshot_H30.json"
-        if not snapshot_path.is_file():
-            parser.error(f"Snapshot file not found in {race_path}: {snapshot_path}")
-
-        with snapshot_path.open("r", encoding="utf-8") as f:
-            snapshot_data = json.load(f)
-
-        payload_data = snapshot_data.get("payload", {})
-        payload_dict = {
-            "id_course": payload_data.get("course_id"),
-            "reunion": payload_data.get("reunion"),
-            "course": payload_data.get("course"),
-            "phase": "H5",
-            "start_time": payload_data.get("start_time", dt.datetime.now().isoformat()),
-            "budget": args.budget,
-        }
-        try:
-            payload = _coerce_payload(payload_dict, context=f"dir:{race_path}")
-        except PayloadValidationError as exc:
-            logger.error("[runner] %s", exc)
-            raise SystemExit(1) from exc
-
-        _trigger_phase(
-            payload,
-            snap_dir=snap_dir,
-            analysis_dir=analysis_dir,
-            ev_min=args.ev_min,
-            roi_min=args.roi_min,
-            mode=args.mode,
-            calibration=calibration_path,
-            calibration_available=calibration_exists,
-            course_url=args.course_url,
-        )
-        return
-
+    
     if args.planning:
-        for name in (
-            "course_id",
-            "reunion",
-            "course",
-            "phase",
-            "start_time",
-            "course_url",
-        ):
+        for name in ("course_id", "reunion", "course", "phase", "start_time", "course_url"):
             if getattr(args, name):
                 parser.error("--planning cannot be combined with single-race options")
 
@@ -566,13 +497,11 @@ def main() -> None:
                 course = entry.get("course") or entry.get("race")
                 if not reunion or not course:
                     if rc_label:
-                        match = re.match(r"^(R\d+)(C\d+)", rc_label)
+                        match = re.match(r"^(R\d+)(C\d+)$", rc_label)
                         if match:
                             reunion = reunion or match.group(1)
                             course = course or match.group(2)
-                start = (
-                    entry.get("start") or entry.get("time") or entry.get("start_time")
-                )
+                start = entry.get("start") or entry.get("time") or entry.get("start_time")
                 if not (reunion and course and start and context_id):
                     logger.error(
                         "[runner] Invalid planning entry skipped: missing labels/id_course (%s)",
@@ -582,9 +511,7 @@ def main() -> None:
                 try:
                     start_time = dt.datetime.fromisoformat(start)
                 except ValueError:
-                    logger.error(
-                        "[runner] Invalid ISO timestamp for planning entry %s", entry
-                    )
+                    logger.error("[runner] Invalid ISO timestamp for planning entry %s", entry)
                     raise SystemExit(1)
                 delta = (start_time - now).total_seconds() / 60
                 if args.h30_window_min <= delta <= args.h30_window_max:
@@ -636,6 +563,46 @@ def main() -> None:
             raise SystemExit(1) from exc
         return
 
+    missing = [
+        name
+        for name in ("course_id", "reunion", "course", "phase", "start_time")
+        if not getattr(args, name)
+    ]
+    if missing:
+        parser.error(
+            "Missing required options for single-race mode: " + ", ".join(f"--{m}" for m in missing)
+        )
+
+    payload_dict = {
+        "id_course": args.course_id,
+        "reunion": args.reunion,
+        "course": args.course,
+        "phase": args.phase,
+        "start_time": args.start_time,
+        "budget": args.budget,
+    }
+    try:
+        payload = _coerce_payload(payload_dict, context="cli")
+    except PayloadValidationError as exc:
+        logger.error("[runner] %s", exc)
+        raise SystemExit(1) from exc
+
+    try:
+        _trigger_phase(
+            payload,
+            snap_dir=snap_dir,
+            analysis_dir=analysis_dir,
+            ev_min=args.ev_min,
+            roi_min=args.roi_min,
+            mode=args.mode,
+            calibration=calibration_path,
+            calibration_available=calibration_exists,
+            course_url=args.course_url,
+        ) 
+    except PayloadValidationError as exc:
+        logger.error("[runner] %s", exc)
+        raise SystemExit(1) from exc
+          
 
 if __name__ == "__main__":
     main()

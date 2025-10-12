@@ -750,7 +750,10 @@ def evaluate_combo(
         calib_path = Path(calibration)
     notes: List[str] = []
     requirements: _RequirementsList = _RequirementsList()
-    calibration_used = calib_path.exists()
+    try:
+        calibration_used = calib_path.is_file()
+    except OSError:
+        calibration_used = False
     if not calibration_used:
         notes.append("no_calibration_yaml")
         requirements.append(str(calib_path))

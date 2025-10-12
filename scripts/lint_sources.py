@@ -41,6 +41,7 @@ class Diagnostics:
             return 1
         if self.warnings:
             return 0
+        return 0
 
 
 def _iter_urls(path: Path) -> Iterator[tuple[int, str]]:
@@ -86,9 +87,7 @@ def lint_file(
 
         parsed = urlparse(url)
         if parsed.scheme not in {"http", "https"}:
-            diagnostics.add_error(
-                line_no, f"Schéma invalide (attendu http/https): {url}"
-            )
+            diagnostics.add_error(line_no, f"Schéma invalide (attendu http/https): {url}")
             continue
         if not parsed.netloc:
             diagnostics.add_error(line_no, f"Nom de domaine manquant: {url}")
@@ -122,9 +121,7 @@ def lint_file(
     return diagnostics
 
 
-def _emit(
-    level: str, file_path: Path, diagnostics: Iterable[tuple[int | None, str]]
-) -> None:
+def _emit(level: str, file_path: Path, diagnostics: Iterable[tuple[int | None, str]]) -> None:
     for line, message in diagnostics:
         if line is None:
             print(f"::{level}::{message}")
@@ -168,11 +165,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
 
-    domains = (
-        tuple(domain.lower() for domain in args.domains if domain)
-        if args.domains
-        else DEFAULT_DOMAINS
-    )
+    domains = tuple(domain.lower() for domain in args.domains if domain) if args.domains else DEFAULT_DOMAINS
 
     file_path = Path(args.file)
     diagnostics = lint_file(

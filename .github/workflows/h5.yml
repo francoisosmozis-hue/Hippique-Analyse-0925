@@ -1,137 +1,89 @@
-name: Planning H-5 (artifacts)
+name: H-5 Analysis (ROI artifacts)
 
 on:
   workflow_dispatch:
+    inputs:
+      course_url:
+        description: "URL course ZEturf (ex: https://www.zeturf.fr/fr/course/...)"
+        required: true
+        type: string
   repository_dispatch:
     types: [hminus5]
   schedule:
-    - cron: "*/5 8-20 * * *"  # toutes les 5 min (08:00-20:55 UTC)
+    - cron: "*/5 8-20 * * *"
 
 permissions:
-  contents: write
-  actions: write
+  contents: read
 
 env:
   PYTHONUTF8: "1"
   TZ: "Europe/Paris"
-  OUTPUT_DIR: out/hminus5
-  EXCEL_PATH: out/hminus5/planning.xlsx
+  GPI_BUDGET: "5"
+  EV_MIN: "0.40"
+  ROI_SP_MIN: "0.20"
+  PAYOUT_MIN: "10"
+  OVERROUND_MAX: "1.30"
+  OUT_DIR: "out/h5"
+
+concurrency:
+  group: h5-${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
 
 jobs:
-  run:
+  h5:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - uses: actions/cache@v4
         with:
-          python-version: "3.11"
-
-      - name: Install dependencies
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt') }}
+          restore-keys: ${{ runner.os }}-pip-
+      - name: Install deps
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: Déclencher les analyses H-5 attendues
-        env:
-          RUNNER_SNAP_DIR: ${{ env.OUTPUT_DIR }}/snapshots
-          RUNNER_ANALYSIS_DIR: ${{ env.OUTPUT_DIR }}/analysis
-          RUNNER_OUTPUT_DIR: ${{ env.OUTPUT_DIR }}
+          [ -f requirements.txt ] && pip install -r requirements.txt
+      - name: Resolve course URL
+        id: target
+        shell: bash
         run: |
           set -euo pipefail
-          mkdir -p "${RUNNER_SNAP_DIR}" "${RUNNER_ANALYSIS_DIR}"
-          python scripts/cron_decider.py --meetings config/meetings.json
-
-      - name: Mettre à jour l'onglet Planning (H-5)
-        run: |
-          set -euo pipefail
-          excel_dir=$(dirname "${EXCEL_PATH}")
-          mkdir -p "${excel_dir}"
-          latest_dir=$(find "${OUTPUT_DIR}" -maxdepth 1 -type d -name 'R*C*' | sort | tail -n1)
-          if [ -z "${latest_dir}" ]; then
-            echo "::warning::Aucune analyse H-5 trouvée dans ${OUTPUT_DIR}."
-            exit 0
+          course=""
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            course="${{ inputs.course_url }}"
+          elif [ "${{ github.event_name }}" = "repository_dispatch" ]; then
+            course="${{ github.event.client_payload.course_url || '' }}"
           fi
-          echo "Mise à jour basée sur ${latest_dir}"
-          python scripts/update_excel_planning.py \
-            --phase H5 \
-            --in "${latest_dir}" \
-            --excel "${EXCEL_PATH}"
-
-      - name: Upload Excel & rapports
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: h5-${{ github.run_id }}
-          path: |
-            ${{ env.OUTPUT_DIR }}/**
-            ${{ env.EXCEL_PATH }}
-          if-no-files-found: warn
-
-      - name: Synchroniser sur le stockage (optionnel)
-        if: success() && env.EXCEL_PATH != '' && vars.GCS_BUCKET != ''
-        env:
-          GCS_BUCKET: ${{ vars.GCS_BUCKET }}
-          GCS_PREFIX: ${{ vars.GCS_PREFIX || '' }}
-          GCS_SERVICE_KEY_B64: ${{ secrets.GCS_SERVICE_KEY_B64 || '' }}
+          if [ -z "$course" ]; then
+            echo "Aucune course fournie."
+            exit 78
+          fi
+          echo "course_url=$course" >> "$GITHUB_OUTPUT"
+      - name: Run H-5 pipeline (strict EV/ROI gates)
+        env: { COURSE_URL: ${{ steps.target.outputs.course_url }} }
         run: |
           set -euo pipefail
-          dir=$(dirname "${EXCEL_PATH}")
-          python scripts/drive_sync.py --push "${dir}"
-
-      - name: Alerte Slack (échec)
-        if: failure() && secrets.SLACK_WEBHOOK != ''
-        env:
-          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
-        run: |
-          python - <<'PY'
-import json
-import os
-import urllib.request
-
-webhook = os.environ["SLACK_WEBHOOK"]
-workflow = os.environ.get("GITHUB_WORKFLOW", "H-5")
-run_number = os.environ.get("GITHUB_RUN_NUMBER", "?")
-ref = os.environ.get("GITHUB_REF_NAME", os.environ.get("GITHUB_REF", ""))
-repo = os.environ.get("GITHUB_REPOSITORY", "")
-url = f"https://github.com/{repo}/actions/runs/{os.environ.get('GITHUB_RUN_ID', '')}"
-text = f"❌ Workflow {workflow} #{run_number} en échec sur {ref}"
-payload = {
-    "text": text,
-    "blocks": [
-        {
-            "type": "section",
-            "text": {
-                "type": "mrkdwn",
-                "text": f"❌ *{text}*\\n<{url}|Voir le job>",
-            },
-        }
-    ],
-}
-req = urllib.request.Request(
-    webhook,
-    data=json.dumps(payload).encode("utf-8"),
-    headers={"Content-Type": "application/json"},
-)
-with urllib.request.urlopen(req) as resp:
-    resp.read()
-PY
-
-      - name: Alerte email (échec)
-        if: failure() && secrets.MAIL_SERVER != '' && secrets.MAIL_USERNAME != '' && secrets.MAIL_PASSWORD != '' && secrets.MAIL_TO != ''
-        uses: dawidd6/action-send-mail@v3
+          mkdir -p "${OUT_DIR}"
+          python analyse_courses_du_jour_enrichie.py \
+            --course-url "${COURSE_URL}" \
+            --phase H5 \
+            --budget "${GPI_BUDGET}" \
+            --ev-min "${EV_MIN}" \
+            --roi-sp-min "${ROI_SP_MIN}" \
+            --payout-min "${PAYOUT_MIN}" \
+            --overround-max "${OVERROUND_MAX}" \
+            --out-dir "${OUT_DIR}"
+      - uses: actions/upload-artifact@v4
         with:
-          server_address: ${{ secrets.MAIL_SERVER }}
-          server_port: ${{ secrets.MAIL_PORT || '465' }}
-          username: ${{ secrets.MAIL_USERNAME }}
-          password: ${{ secrets.MAIL_PASSWORD }}
-          subject: "❌ Workflow H-5 en échec"
-          to: ${{ secrets.MAIL_TO }}
-          from: ${{ secrets.MAIL_FROM || secrets.MAIL_USERNAME }}
-          secure: true
-          body: |
-            Le workflow ${{ github.workflow }} (run ${{ github.run_number }}) a échoué.
-            Détails: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          name: h5-artifacts-${{ github.run_id }}
+          path: |
+            ${{ env.OUT_DIR }}/**/*.json
+            ${{ env.OUT_DIR }}/**/*.csv
+            ${{ env.OUT_DIR }}/**/*.txt
+          if-no-files-found: warn
+      - name: Avertir en cas d'échec
+        if: failure()
+        run: |
+          echo "::error::Le workflow ${GITHUB_WORKFLOW} (run ${GITHUB_RUN_NUMBER}) a échoué."

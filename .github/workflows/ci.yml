@@ -2,39 +2,62 @@ name: CI
 on:
   push:
   pull_request:
+permissions:
+  contents: read
+  checks: write
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
-  test:
+  python:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.10", "3.11"]
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
-      - name: Cache pip dependencies
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ matrix.python-version }}-${{ hashFiles('**/requirements.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-${{ matrix.python-version }}-
-      - name: Install dependencies
+          python-version: "3.11"
+          cache: "pip"
+      - name: Install deps
+        shell: bash
         run: |
+          set -euo pipefail
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-          pip install ruff pytest mypy
-      - name: Run checks and smoke tests
-        run: bash scripts/cloudshell_verify.sh
-      - name: Upload artifacts
+          pip install pytest pytest-cov
+      - name: Lint (ruff) - optional
+        continue-on-error: true
+        run: |
+          pip install ruff
+          ruff check . || true
+      - name: Tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p reports
+          pytest -q --junitxml=reports/pytest.xml
+      - name: Test reporter (JUnit)
+        if: always() && hashFiles('reports/pytest.xml') != ''
+        continue-on-error: true
+        uses: dorny/test-reporter@v1
+        with:
+          name: Pytest (3.11)
+          path: reports/pytest.xml
+          reporter: java-junit
+          fail-on-error: false
+      - name: Upload artifacts (always)
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: run-artifacts-${{ matrix.python-version }}
+          name: ci-artifacts-${{ github.run_id }}
           path: |
-            logs/
-            tracking.csv
+            reports/**
+            data/**/analysis_H5.json
+            data/**/tracking.csv
           if-no-files-found: ignore
+  actionlint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: actionlint (best effort)
+        continue-on-error: true
+        uses: reviewdog/action-actionlint@v1

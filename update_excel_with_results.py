@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, Mapping
 
 from openpyxl import Workbook, load_workbook
 from openpyxl.worksheet.worksheet import Worksheet
@@ -54,6 +54,21 @@ OBSERVED_HEADERS = [
 ]
 
 
+SUIVI_HEADERS = [
+    "R/C",
+    "date",
+    "hippodrome",
+    "discipline",
+    "mises",
+    "gains",
+    "ROI_reel",
+    "ROI_estime",
+    "payout_attendu",
+    "verdict",
+    "notes",
+]
+
+
 def _load_json(path: str | Path) -> JsonDict:
     with open(path, "r", encoding="utf-8") as fh:
         return json.load(fh)
@@ -99,7 +114,7 @@ def _upsert_row(
     values: dict[str, Any],
     *,
     key_header: str = "R/C",
-) -> None:
+) -> int | None:
     header_map = _ensure_header_map(ws, headers)
     key_value = values.get(key_header)
     if key_value in (None, ""):
@@ -119,6 +134,7 @@ def _upsert_row(
     for header in headers:
         col_idx = header_map[header]
         ws.cell(row=target_row, column=col_idx, value=values.get(header))
+    return target_row
 
 
 def _as_float(value: Any, default: float = 0.0) -> float:
@@ -208,6 +224,77 @@ def _update_observe_sheet(
     }
     ws = _get_sheet(wb, sheet_name)
     _upsert_row(ws, OBSERVED_HEADERS, row)
+
+
+def _normalise_notes(notes: Any) -> str:
+    if isinstance(notes, (list, tuple, set)):
+        return "; ".join(str(item) for item in notes if str(item).strip())
+    if notes in (None, ""):
+        return ""
+    return str(notes)
+
+
+def _update_suivi_sheet(
+    wb: Workbook,
+    sheet_name: str,
+    meta: JsonDict,
+    *,
+    total_stake: float,
+    total_gain: float,
+    ev_data: JsonDict | None,
+    observed: JsonDict | None,
+    payload: JsonDict,
+) -> tuple[Worksheet, int | None]:
+    rc = meta.get("rc")
+    if not rc:
+        return _get_sheet(wb, sheet_name), None
+
+    ws = _get_sheet(wb, sheet_name)
+    ev_section = ev_data or {}
+    observed_section = observed or {}
+    roi_reel = 0.0
+    if total_stake:
+        roi_reel = (total_gain - total_stake) / total_stake
+    roi_estime = ev_section.get("roi_global")
+    payout = ev_section.get("combined_expected_payout")
+    row = {
+        "R/C": rc,
+        "date": meta.get("date", ""),
+        "hippodrome": meta.get("hippodrome", ""),
+        "discipline": meta.get("discipline", ""),
+        "mises": round(total_stake, 2) if total_stake else 0.0,
+        "gains": round(total_gain, 2) if total_gain else 0.0,
+        "ROI_reel": roi_reel,
+        "ROI_estime": roi_estime,
+        "payout_attendu": payout,
+        "verdict": payload.get("verdict") or observed_section.get("verdict"),
+        "notes": _normalise_notes(payload.get("notes") or observed_section.get("notes")),
+    }
+    row_idx = _upsert_row(ws, SUIVI_HEADERS, row)
+    return ws, row_idx
+
+
+def _collect_row(ws: Worksheet, headers: Iterable[str], row_idx: int) -> dict[str, Any]:
+    header_map = _ensure_header_map(ws, headers)
+    result: dict[str, Any] = {}
+    for header in headers:
+        col_idx = header_map[header]
+        result[header] = ws.cell(row=row_idx, column=col_idx).value
+    return result
+
+
+def _print_row(prefix: str, row: Mapping[str, Any]) -> None:
+    printable: dict[str, Any] = {}
+    for key, value in row.items():
+        if value in (None, ""):
+            continue
+        if isinstance(value, float):
+            printable[key] = round(value, 6)
+        else:
+            printable[key] = value
+    if not printable:
+        return
+    print(f"{prefix} {json.dumps(printable, ensure_ascii=False, sort_keys=True)}")
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -306,6 +393,20 @@ def main(argv: list[str] | None = None) -> None:
         total_gain=total_gain,
     )
 
+    ws_suivi, row_idx = _update_suivi_sheet(
+        wb,
+        "Suivi",
+        meta,
+        total_stake=total_stake,
+        total_gain=total_gain,
+        ev_data=ev_data,
+        observed=observed,
+        payload=payload,
+    )
+    if row_idx:
+        row_data = _collect_row(ws_suivi, SUIVI_HEADERS, row_idx)
+        _print_row("Suivi:", row_data)
+        
     excel_path.parent.mkdir(parents=True, exist_ok=True)
     wb.save(excel_path)
 

@@ -1,0 +1,206 @@
+name: CI - Python
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - 'feat/**'
+      - 'fix/**'
+    paths:
+      - '**/*.py'
+      - '**/*.pyi'
+      - '**/pyproject.toml'
+      - '**/requirements*.txt'
+      - '**/setup.cfg'
+      - '**/Pipfile*'
+      - '**/poetry.lock'
+      - '**/tox.ini'
+      - '**/pytest.ini'
+      - '**/.coveragerc'
+      - '**/.ruff.toml'
+      - '**/ruff.toml'
+      - '.github/workflows/ci-python.yml'
+      - 'Makefile'
+      - 'Dockerfile'
+      - 'scripts/**'
+  pull_request:
+      paths:
+      - '**/*.py'
+      - '**/*.pyi'
+      - '**/pyproject.toml'
+      - '**/requirements*.txt'
+      - '**/setup.cfg'
+      - '**/Pipfile*'
+      - '**/poetry.lock'
+      - '**/tox.ini'
+      - '**/pytest.ini'
+      - '**/.coveragerc'
+      - '**/.ruff.toml'
+      - '**/ruff.toml'
+      - '.github/workflows/ci-python.yml'
+      - 'Makefile'
+      - 'Dockerfile'
+      - 'scripts/**'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+    
+permissions:
+  contents: read
+
+env:
+  PIP_DISABLE_PIP_VERSION_CHECK: '1'
+  PYTHONDONTWRITEBYTECODE: '1'
+  PYTHONUNBUFFERED: '1'
+  PYTHONPATH: .
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
+
+      - name: Validate dependency graph
+        run: |
+          set -euo pipefail
+          pip check
+
+      - name: Audit dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade 'pip-audit~=2.7'
+          pip-audit --progress-spinner=off
+          
+      - name: Run Ruff
+        run: ruff check .
+
+  tests:
+    name: Tests
+    runs-on: ubuntu-latest
+    needs: lint
+    timeout-minutes: 30
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
+
+      - name: Validate dependency graph
+        run: |
+          set -euo pipefail
+          pip check
+          
+      - name: Run test suite
+        run: |
+          set -euo pipefail
+          mkdir -p reports
+          pytest \
+            --junitxml=reports/pytest.xml \
+            --cov=. \
+            --cov-report=xml:reports/coverage.xml \
+            --cov-report=term
+
+      - name: Upload coverage data
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-reports
+          path: |
+            reports/
+            .coverage
+          if-no-files-found: ignore
+
+  smoke:
+    name: Smoke test
+    runs-on: ubuntu-latest
+    needs: tests
+    timeout-minutes: 20
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Determine smoke prerequisites
+        id: smoke
+        run: |
+          set -euo pipefail
+          if [ -f pipeline_run.py ] && [ -d data/ci_sample ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Python
+        if: steps.smoke.outputs.run == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        if: steps.smoke.outputs.run == 'true'
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
+
+      - name: Run smoke scenario
+        if: steps.smoke.outputs.run == 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p reports
+          python pipeline_run.py --dry-run --no-upload --data-dir data/ci_sample | tee reports/smoke.log
+
+      - name: Upload smoke artefacts
+        if: steps.smoke.outputs.run == 'true' && always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-reports
+          path: reports/smoke.log
+          if-no-files-found: ignore
+
+      - name: Smoke test skipped
+        if: steps.smoke.outputs.run != 'true'
+        run: echo "Smoke test prerequisites not met; skipping."

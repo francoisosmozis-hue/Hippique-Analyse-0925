@@ -11,13 +11,12 @@ Pipeline **pro** pour planifier, capturer H‑30 / H‑5, analyser et consigner 
 - **Post‑results (*/15 min)** : récupération **arrivées officielles**, **mise à jour Excel** (ROI réel), **upload GCS**.
 
 **Standards verrouillés** (GPI v5.1) :
-- Budget **max 5 €** / course, **2 tickets max** (SP + 1 combiné éventuel, configurable via `MAX_TICKETS_SP`).
-- **EV globale ≥ +35 %** et **ROI estimé global ≥ +25 %** (**ROI SP ≥ +10 %**) pour valider le **vert**.
-- Combinés uniquement si **payout attendu > 12 €** (calibration).
-- **KELLY_FRACTION = 0.5** : moitié de Kelly pour réduire la variance au prix d'une EV moindre; cap 60 % par cheval.
-- **MIN_STAKE_SP = 0.10** : mise minimale par ticket SP, évite les micro-mises (réduit variance) mais peut bloquer un peu d'EV.
-- **ROUND_TO_SP = 0.10** : arrondi des mises SP à 0,10 €; utiliser `0` pour désactiver l'arrondi sans provoquer de crash tout en conservant le calcul EV/ROI.
-- **SHARPE_MIN = 0.5** : seuil minimal de ratio EV/σ; filtre les paris à variance trop élevée.
+- Budget **max 5 €** / course et **2 tickets max** : un seul SP + un combiné (CP/CG/Trio/ZE4) si et seulement si **EV ≥ +40 %** et **payout attendu ≥ 10 €**.
+- SP « Kelly fractionné » : **EV_SP ≥ +40 %**, **ROI_SP ≥ +20 %**, **≤ 60 % du budget** engagé sur un même cheval.
+- Combinés calibrés : fichier `config/payout_calibration.yaml` valide obligatoire, sinon statut `insufficient_data` et abstention.
+- Surcote place : **overround place > 1.30 ⇒ combinés bloqués** (raison `overround_above_threshold`).
+- **EV globale ≥ +35 %** et **ROI estimé global ≥ +25 %** pour afficher la pastille verte.
+- **KELLY_FRACTION = 0.5**, **MIN_STAKE_SP = 0.10**, **ROUND_TO_SP = 0.10**, **SHARPE_MIN = 0.5** (cf. `config/gpi.yml`).
 
 ### Garde-fous opérationnels
 
@@ -25,7 +24,17 @@ Pipeline **pro** pour planifier, capturer H‑30 / H‑5, analyser et consigner 
 - La phase **H‑5** réessaie automatiquement les collectes `JE`/`chronos` en cas d'absence des CSV, marque la course « non jouable » via `UNPLAYABLE.txt` si la régénération échoue et évite ainsi que le pipeline plante.
 - Les combinés sont désormais filtrés strictement dans `pipeline_run.py` : statut `"ok"` obligatoire, EV ≥ +40 % et payout attendu ≥ 10 € sans heuristique. Le runner et le pipeline partagent la même règle, ce qui garantit un comportement homogène en CLI comme dans les automatisations.
 - Le seuil d'overround est adapté automatiquement (`1.30` standard désormais aligné sur la garde ROI, `1.25` pour les handicaps plats ouverts ≥ 14 partants) pour réduire les tickets exotiques à faible espérance.
+- Chaque analyse écrit systématiquement les artefacts `artifacts/metrics.json`, `artifacts/per_horse_report.csv` et `artifacts/cmd_update_excel.txt` afin d'exposer EV, ROI, overround et raisons d'abstention.
 
+### CI – ROI Guardrails
+La CI exécute un **ROI smoke test** hors réseau à partir de `data/ci_sample/` :
+- **Overround dynamique** (par défaut trot ≥10 partants : ≤ 1.23) ;
+- **CLV gate** : exotiques désactivés si médiane(CL V rolling) ≤ 0 ;
+- **Artifacts requis** à chaque run :
+  - `artifacts/metrics.json` : overround, clv_median_30, kelly_fraction
+  - `artifacts/per_horse_report.csv` : num, odds_win, p_no_vig
+  - `artifacts/cmd_update_excel.txt` : commande prête pour `update_excel_with_results.py`
+Ces garde-fous réduisent les tickets EV− et sécurisent le pipeline pour le jeu réel.
 ### API `/analyse`
 
 L'API FastAPI expose un endpoint `POST /analyse` (voir `main.py`).
@@ -33,6 +42,27 @@ L'API FastAPI expose un endpoint `POST /analyse` (voir `main.py`).
 - Le champ optionnel `course_url` permet de transmettre une URL de réunion à scraper.
 - Seules les URLs en **HTTPS** et dont le domaine appartient à la liste blanche `zeturf.fr` / `geny.com` (y compris sous-domaines) sont acceptées.
 - Toute URL hors de cette liste retourne une erreur **422** avec un message explicite.
+
+### Rebalancer le bankroll quotidien
+
+Le script `tools/roi_rebalancer.py` exploite les artefacts `analysis.json` pour
+redistribuer un bankroll journalier entre les courses éligibles tout en
+respectant une cible de probabilité de ruine. L'algorithme utilise le ratio EV
+par euro engagé et renforce automatiquement les courses à forte valeur tout en
+écrêtant celles dont la variance est trop élevée.
+
+```bash
+python tools/roi_rebalancer.py \
+  analyses/R* \
+  --bankroll 40 \
+  --target-ror 0.04 \
+  --min-roi 0.15 \
+  --json-out plan_roi.json
+```
+
+La sortie détaille pour chaque course : la mise recommandée, l'EV attendu, la
+probabilité de ruine ajustée et l'EV global estimé. Le fichier JSON généré peut
+servir d'entrée à un dashboard de suivi ROI.
 
 ---
 
@@ -160,6 +190,27 @@ doublons. Les commandes ci‑dessus peuvent être enchaînées avec un utilitair
 d'upload (ex. `scripts/drive_sync.py`) pour pousser le fichier sur Google
 Drive.
 
+---
+
+## ✅ Tests & smoke
+
+- **Tests ciblés des garde-fous EV/overround/SP**
+
+  ```bash
+  pytest tests/test_overround_place.py tests/test_sp_dutching_guards.py
+  ```
+
+- **Suite complète**
+
+  ```bash
+  pytest
+  ```
+
+Les jeux d'entrée utilisés dans `tests/test_pipeline_exotics_filters.py`
+permettent également de vérifier rapidement les exports `out/<RC>/` produits
+par `pipeline_run.run_pipeline`.
+
+
 ### Automatisation GitHub Actions H‑30 / H‑5
 
 Deux workflows dédiés (`.github/workflows/h30.yml` et `.github/workflows/h5.yml`)
@@ -234,11 +285,13 @@ python scripts/lint_sources.py --file sources.txt --enforce-today
 
      ```bash
      python scripts/drive_sync.py \
-       --push \
-       --folder-id "<ID_DOSSIER_DRIVE>" \
-       --credentials credentials.json \
-       --file modele_suivi_courses_hippiques.xlsx
-     ```
+      --push \
+      --folder-id "<ID_DOSSIER_DRIVE>" \
+      --credentials "$GCS_CREDENTIALS_JSON" \
+      --file modele_suivi_courses_hippiques.xlsx
+    ```
+
+    > `GCS_CREDENTIALS_JSON` doit pointer vers le fichier temporaire reconstruit depuis le secret GitHub `GCS_SERVICE_KEY_B64` (ne jamais committer le JSON brut).
 
 Cette séquence garantit que les colonnes Statut H‑30/H‑5, Jouable et Tickets
 sont enrichies au fur et à mesure des analyses tout en conservant un historique

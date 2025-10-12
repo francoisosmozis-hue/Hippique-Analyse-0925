@@ -63,11 +63,15 @@ data/*
 !data/analyses/
 !data/analyses/**
 !data/analyses/.gitkeep
+!data/ci_sample/
+!data/ci_sample/**
+!data/ci_sample/**/*.json
 results/
 out_*/
 *.json
 !config/meetings.json
 !data/planning/*.json
+!data/ci_sample/**/*.json
 
 # --- Fichiers projet spécifiques ---
 modele_suivi_courses_hippiques.xlsx
@@ -89,3 +93,4 @@ excel/
 
 # --- Cache divers ---
 .cache/
+

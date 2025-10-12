@@ -1,0 +1,85 @@
+name: Gemini Dispatch
+
+on:
+  workflow_dispatch:
+    inputs:
+      command:
+        description: "Commande à interpréter (ex: /gemini-dispatch h5 https://...)"
+        required: true
+        default: "/gemini-dispatch h5 https://www.zeturf.fr/fr/course/..."
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  actions: write
+  issues: write
+
+jobs:
+  dispatch:
+    if: >-
+      ${{ github.event_name == 'workflow_dispatch' || contains(github.event.comment.body || '', '/gemini-dispatch') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Parse commande et dispatcher
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const core = require('@actions/core');
+            const allowedAssociations = ['MEMBER', 'OWNER', 'COLLABORATOR'];
+            if (context.eventName === 'issue_comment') {
+              const association = (context.payload.comment?.author_association || '').toUpperCase();
+              if (!allowedAssociations.includes(association)) {
+                core.setFailed(`Auteur non autorisé (${association || 'inconnu'})`);
+                return;
+              }
+            }
+            const phaseAliases = {
+              h5: 'h5',
+              'h-5': 'h5',
+              h30: 'h30',
+              'h-30': 'h30'
+            };
+            const source = (core.getInput('command') || '').trim() || (context.payload.comment?.body || '');
+            const match = source.match(/\/gemini-dispatch\s+(h-?30|h-?5)\s+(\S+)/i);
+            if (!match) {
+              core.setFailed('Commande introuvable. Utiliser: /gemini-dispatch h5 <course_url> ou /gemini-dispatch h30 <reunion_url>');
+              return;
+            }
+            const phase = phaseAliases[match[1].toLowerCase()];
+            const target = match[2];
+            const repo = context.repo;
+            const defaultBranch = context.payload.repository?.default_branch || 'main';
+            if (phase === 'h5') {
+              core.info(`Dispatch repository event hminus5 pour ${target}`);
+              await github.rest.repos.createDispatchEvent({
+                owner: repo.owner,
+                repo: repo.repo,
+                event_type: 'hminus5',
+                client_payload: {
+                  course_url: target,
+                  triggered_by: context.eventName,
+                  comment_id: context.payload.comment?.id || null
+                }
+              });
+            } else {
+              const ref = context.payload.workflow_run?.head_branch || context.ref || defaultBranch;
+              core.info(`Déclenchement du workflow h30.yml sur ${ref} pour ${target}`);
+              await github.rest.actions.createWorkflowDispatch({
+                owner: repo.owner,
+                repo: repo.repo,
+                workflow_id: 'h30.yml',
+                ref,
+                inputs: {
+                  reunion_urls: target
+                }
+              });
+            }
+            if (context.eventName === 'issue_comment') {
+              await github.rest.issues.createComment({
+                owner: repo.owner,
+                repo: repo.repo,
+                issue_number: context.payload.issue.number,
+                body: `✅ Dispatch ${phase.toUpperCase()} lancé pour ${target}`
+              });
+            }

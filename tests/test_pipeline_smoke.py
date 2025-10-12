@@ -1,19 +1,19 @@
 import argparse
 import json
-import os
 import subprocess
 import sys
+import os
 
-import pytest
 import yaml
+import pytest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-import logging_io
 import pipeline_run
 import validator_ev
+import logging_io
+from simulate_ev import allocate_dutching_sp, gate_ev, simulate_ev_batch, implied_probs
 from pipeline_run import build_p_true, compute_drift_dict, load_yaml
-from simulate_ev import allocate_dutching_sp, gate_ev, implied_probs, simulate_ev_batch
 from simulate_wrapper import PAYOUT_CALIBRATION_PATH
 
 DEFAULT_CALIBRATION = str(PAYOUT_CALIBRATION_PATH)
@@ -75,7 +75,6 @@ def partants_sample():
         },
     }
 
-
 def odds_h30():
     return {"1": 2.0, "2": 3.0, "3": 4.0, "4": 5.0, "5": 8.0, "6": 10.0}
 
@@ -120,9 +119,7 @@ def test_build_market_normalizes_comma_separated_place_odds():
         {"odds": 4.0, "odds_place": "1,8"},
     ]
 
-    expected = sum(
-        1.0 / float(runner["odds_place"].replace(",", ".")) for runner in runners
-    )
+    expected = sum(1.0 / float(runner["odds_place"].replace(",", ".")) for runner in runners)
 
     metrics = pipeline_run._build_market(runners)
 
@@ -211,7 +208,6 @@ def test_drift_filtering_topn(tmp_path):
     assert any(r["delta"] < 0 for r in diff)
     assert all(abs(r["delta"]) >= 1.5 for r in diff)
 
-
 def test_snapshot_cli(tmp_path):
     """Ensure snapshot subcommand renames snapshot files correctly."""
     src = tmp_path / "h30.json"
@@ -236,7 +232,6 @@ def test_snapshot_cli(tmp_path):
     dest = tmp_path / "R1C1-h30.json"
     assert dest.exists()
     assert json.loads(dest.read_text(encoding="utf-8")) == {}
-
 
 def test_smoke_run(tmp_path):
     partants = partants_sample()
@@ -301,7 +296,7 @@ def test_smoke_run(tmp_path):
     drift_rows = drift_csv.read_text(encoding="utf-8").strip().splitlines()
     assert drift_rows
     assert drift_rows[0] == "num;p30;p5;delta;flag"
-
+    
     data = json.loads((outdir / "p_finale.json").read_text(encoding="utf-8"))
     assert data["meta"].get("validation") == {"ok": True, "reason": ""}
     assert data["meta"]["snapshots"] == "H30,H5"
@@ -311,14 +306,13 @@ def test_smoke_run(tmp_path):
     assert market_meta.get("overround") is not None
     if market_meta.get("overround") is not None:
         expected_market_overround = sum(
-            1.0 / horse["odds"] for horse in partants["market"]["horses"]
+            1.0 / horse["odds"]
+            for horse in partants["market"]["horses"]
         )
-        assert market_meta["overround"] == pytest.approx(
-            expected_market_overround, abs=1e-4
-        )
-    diff_params = json.loads((outdir / "diff_drift.json").read_text(encoding="utf-8"))[
-        "params"
-    ]
+        assert market_meta["overround"] == pytest.approx(expected_market_overround, abs=1e-4)
+    diff_params = json.loads(
+        (outdir / "diff_drift.json").read_text(encoding="utf-8")
+    )["params"]
     assert diff_params == {"snapshots": "H30,H5", "top_n": 5, "min_delta": 0.8}
     tickets = data["tickets"]
     assert len(tickets) <= 1
@@ -351,6 +345,7 @@ def test_smoke_run(tmp_path):
     if stake_reduction.get("iterations") is not None:
         assert stake_reduction["iterations"] in (0,)
 
+    
     if tickets:
         stats_ev = simulate_ev_batch(tickets, bankroll=5)
     else:
@@ -436,9 +431,7 @@ def test_smoke_run(tmp_path):
     assert not flags_ror["combo"]
 
 
-def test_cmd_analyse_enriches_runners(
-    tmp_path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_cmd_analyse_enriches_runners(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
     partants = partants_sample()
     h30 = odds_h30()
     h5 = odds_h5()
@@ -473,9 +466,7 @@ def test_cmd_analyse_enriches_runners(
 
     captured: dict[str, list[dict]] = {}
 
-    def stub_apply_ticket_policy(
-        cfg, runners, combo_candidates=None, combos_source=None
-    ):
+    def stub_apply_ticket_policy(cfg, runners, combo_candidates=None, combos_source=None):
         captured["apply"] = [dict(r) for r in runners]
         return [], [], {}
 
@@ -499,7 +490,7 @@ def test_cmd_analyse_enriches_runners(
     monkeypatch.setattr("pipeline_run.append_json", lambda *a, **k: None)
     monkeypatch.setattr(logging_io, "append_csv_line", lambda *a, **k: None)
     monkeypatch.setattr(logging_io, "append_json", lambda *a, **k: None)
-
+    
     args = argparse.Namespace(
         h30=str(h30_path),
         h5=str(h5_path),
@@ -535,9 +526,7 @@ def test_cmd_analyse_enriches_runners(
         assert "drift_score" in runner
         assert "last2_top3" in runner
         assert runner["p_imp_h5"] == pytest.approx(expected_h5[cid])
-        assert runner["p_imp_h30"] == pytest.approx(
-            expected_h30.get(cid, expected_h5[cid])
-        )
+        assert runner["p_imp_h30"] == pytest.approx(expected_h30.get(cid, expected_h5[cid]))
         drift_expected = h5[cid] - h30.get(cid, h5[cid])
         prob_expected = pipeline_run.drift_points(h30.get(cid), h5[cid])
         assert runner["drift_odds_delta"] == pytest.approx(drift_expected)
@@ -722,7 +711,8 @@ def test_high_risk_pack_is_trimmed(tmp_path, monkeypatch):
     stats = {str(i): {"j_win": 0, "e_win": 0} for i in range(1, 7)}
 
     gpi_txt = (
-        GPI_YML.replace("BUDGET_TOTAL: 5", "BUDGET_TOTAL: 100")
+        GPI_YML
+        .replace("BUDGET_TOTAL: 5", "BUDGET_TOTAL: 100")
         .replace("SP_RATIO: 0.6", "SP_RATIO: 1.0")
         .replace("COMBO_RATIO: 0.4", "COMBO_RATIO: 0.0")
         .replace("EV_MIN_SP: 0.15", "EV_MIN_SP: 0.0")
@@ -753,9 +743,7 @@ def test_high_risk_pack_is_trimmed(tmp_path, monkeypatch):
 
     monkeypatch.setattr("pipeline_run.build_p_true", lambda *a, **k: dict(p_stub))
 
-    def fake_apply_ticket_policy(
-        cfg, runners, combo_candidates=None, combos_source=None
-    ):
+    def fake_apply_ticket_policy(cfg, runners, combo_candidates=None, combos_source=None):
         tickets, _ = allocate_dutching_sp(cfg, runners)
         return tickets, [], None
 
@@ -857,7 +845,8 @@ def test_combo_pack_scaled_not_removed(tmp_path, monkeypatch):
     partants_path.write_text(json.dumps(partants), encoding="utf-8")
 
     gpi_txt = (
-        GPI_YML.replace("BUDGET_TOTAL: 5", "BUDGET_TOTAL: 100")
+        GPI_YML
+        .replace("BUDGET_TOTAL: 5", "BUDGET_TOTAL: 100")
         .replace("SP_RATIO: 0.6", "SP_RATIO: 0.5")
         .replace("COMBO_RATIO: 0.4", "COMBO_RATIO: 0.5")
         .replace("EV_MIN_SP: 0.15", "EV_MIN_SP: 0.0")
@@ -872,10 +861,7 @@ def test_combo_pack_scaled_not_removed(tmp_path, monkeypatch):
     diff_path.write_text("{}", encoding="utf-8")
 
     monkeypatch.setattr("pipeline_run.allow_combo", lambda *a, **k: True)
-    monkeypatch.setattr(
-        "pipeline_run.build_p_true",
-        lambda *a, **k: {str(i): 1 / 6 for i in range(1, 7)},
-    )
+    monkeypatch.setattr("pipeline_run.build_p_true", lambda *a, **k: {str(i): 1 / 6 for i in range(1, 7)})
 
     cfg_loaded = load_yaml(str(gpi_path))
 
@@ -897,9 +883,7 @@ def test_combo_pack_scaled_not_removed(tmp_path, monkeypatch):
         "ev_ticket": 1.0 * (0.21 * (5.0 - 1.0) - (1.0 - 0.21)),
     }
 
-    def stub_apply_ticket_policy(
-        cfg, runners, combo_candidates=None, combos_source=None
-    ):
+    def stub_apply_ticket_policy(cfg, runners, combo_candidates=None, combos_source=None):
         return [dict(sp_ticket)], [dict(combo_template)], {"notes": [], "flags": {}}
 
     monkeypatch.setattr("pipeline_run.apply_ticket_policy", stub_apply_ticket_policy)
@@ -973,8 +957,6 @@ def test_combo_pack_scaled_not_removed(tmp_path, monkeypatch):
     )
     assert data["ev"]["risk_of_ruin"] == pytest.approx(stats_ev["risk_of_ruin"])
     assert stats_ev["risk_of_ruin"] <= target_ror + 1e-9
-
-
 def test_drift_coef_sensitivity(monkeypatch):
     partants = partants_sample()["runners"]
     h30 = odds_h30()
@@ -1027,7 +1009,7 @@ def test_je_bonus_coef_sensitivity(monkeypatch):
 
     p_default = build_p_true({"JE_BONUS_COEF": 0.001}, partants, h5, h30, stats)
     p_no_bonus = build_p_true({"JE_BONUS_COEF": 0.0}, partants, h5, h30, stats)
-
+    
     assert p_default["1"] > p_no_bonus["1"]
     pipeline_run._load_p_true_helpers.cache_clear()
 
@@ -1055,9 +1037,7 @@ def test_load_yaml_ror_defaults_and_env(tmp_path, monkeypatch):
     assert cfg_env["ROR_MAX"] == pytest.approx(0.123)
 
     cfg_override_path = tmp_path / "gpi_override.yml"
-    cfg_override_path.write_text(
-        GPI_YML.replace("ROR_MAX: 0.05", "ROR_MAX: 0.02"), encoding="utf-8"
-    )
+    cfg_override_path.write_text(GPI_YML.replace("ROR_MAX: 0.05", "ROR_MAX: 0.02"), encoding="utf-8")
     cfg_override = load_yaml(str(cfg_override_path))
     assert cfg_override["ROR_MAX"] == pytest.approx(0.123)
 

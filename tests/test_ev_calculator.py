@@ -33,6 +33,28 @@ def test_risk_of_ruin_decreases_with_lower_variance() -> None:
     assert risk_low < risk_high
 
 
+def test_risk_of_ruin_respects_baseline_variance() -> None:
+    """Baseline variance acts as a conservative floor for ruin risk."""
+
+    ev = 3.0
+    bankroll = 80.0
+    optimistic_variance = 120.0
+    baseline_variance = 240.0
+
+    optimistic_risk = risk_of_ruin(ev, optimistic_variance, bankroll)
+    guarded_risk = risk_of_ruin(
+        ev,
+        optimistic_variance,
+        bankroll,
+        baseline_variance=baseline_variance,
+    )
+
+    baseline_risk = math.exp(-2 * ev * bankroll / baseline_variance)
+
+    assert guarded_risk >= optimistic_risk
+    assert guarded_risk == pytest.approx(baseline_risk)
+
+
 def test_covariance_increases_ror_for_shared_runner() -> None:
     """Tickets sharing the same runner should increase risk via covariance."""
 
