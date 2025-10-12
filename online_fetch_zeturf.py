@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import importlib.util
 import logging
+import math
 import os
 import re
 import sys
@@ -186,6 +187,98 @@ except Exception:  # pragma: no cover - fallback when requests missing in tests
     requests = None  # type: ignore[assignment]
 
 logger = logging.getLogger(__name__)
+
+
+def _normalize_decimal(value: Any) -> float | None:
+    """Return ``value`` as a positive float if possible."""
+
+    if isinstance(value, str):
+        value = value.replace(",", ".")
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(number) or number <= 0.0:
+        return None
+    return number
+
+
+def _lookup_runner_value(
+    runner: Mapping[str, Any],
+    keys: Sequence[str],
+    nested: Sequence[str] = (),
+) -> float | None:
+    for key in keys:
+        candidate = runner.get(key)
+        if candidate in (None, ""):
+            continue
+        if isinstance(candidate, Mapping) and nested:
+            for subkey in nested:
+                normalized = _normalize_decimal(candidate.get(subkey))
+                if normalized is not None:
+                    return normalized
+        normalized = _normalize_decimal(candidate)
+        if normalized is not None:
+            return normalized
+    return None
+
+
+def _estimate_overround_from_runners(
+    runners: Sequence[Mapping[str, Any]],
+    *,
+    use_place: bool,
+) -> float | None:
+    total = 0.0
+    count = 0
+    for runner in runners or []:
+        if not isinstance(runner, Mapping):
+            continue
+        if use_place:
+            value = _lookup_runner_value(
+                runner,
+                ("odds_place", "place_odds", "cote_place", "rapport_place"),
+                ("place", "show", "place_1"),
+            )
+            if value is None:
+                value = _lookup_runner_value(
+                    runner,
+                    ("odds", "odds_win", "win_odds", "cote", "rapport_gagnant"),
+                    ("gagnant", "win"),
+                )
+        else:
+            value = _lookup_runner_value(
+                runner,
+                ("odds", "odds_win", "win_odds", "cote", "rapport_gagnant"),
+                ("gagnant", "win"),
+            )
+        if value is None:
+            continue
+        total += 1.0 / value
+        count += 1
+    if count == 0:
+        return None
+    return round(total, 4)
+
+
+def _parse_slots_hint(*values: Any, default: int = 3) -> int:
+    for value in values:
+        if value in (None, ""):
+            continue
+        if isinstance(value, int):
+            return value if value > 0 else default
+        if isinstance(value, float) and value.is_integer():
+            int_value = int(value)
+            return int_value if int_value > 0 else default
+        if isinstance(value, str):
+            match = re.search(r"(\d+)", value)
+            if match:
+                try:
+                    parsed = int(match.group(1))
+                except ValueError:
+                    continue
+                if parsed > 0:
+                    return parsed
+    return default
 
 
 def fetch_race_snapshot_cli(
@@ -1869,6 +1962,36 @@ def _normalise_snapshot_result(
 
     if phase_norm == "H5":
         _merge_h30_odds(runners, reunion_meta, course_meta)
+
+    market_block = result.get("market") if isinstance(result.get("market"), Mapping) else {}
+    market: dict[str, Any] = dict(market_block) if isinstance(market_block, Mapping) else {}
+    slots_hint = (
+        market.get("slots_place")
+        or meta.get("slots_place")
+        or meta.get("paying_places")
+        or result.get("slots_place")
+        or meta.get("places")
+    )
+
+    slots = _parse_slots_hint(slots_hint, default=market.get("slots_place", 3))
+    if slots:
+        market["slots_place"] = slots
+
+    overround_win = _estimate_overround_from_runners(runners, use_place=False)
+    overround_place = _estimate_overround_from_runners(runners, use_place=True)
+    if overround_win is not None:
+        market["overround_win"] = overround_win
+        market["overround"] = overround_win
+    if overround_place is not None:
+        market["overround_place"] = overround_place
+        market.setdefault("overround", overround_place)
+
+    if market:
+        result["market"] = market
+        if market.get("overround") is not None:
+            result.setdefault("overround", market.get("overround"))
+        meta.setdefault("overround_win", market.get("overround_win"))
+        meta.setdefault("overround_place", market.get("overround_place"))
 
     resolver = getattr(_impl, "resolve_source_url", None)
     if callable(resolver) and isinstance(sources_config, Mapping):
