@@ -107,7 +107,7 @@ def _throttled_get(url: str, *, timeout: int = 15, attempts: int = 3) -> str:
 def build_plan(date: str) -> List[Dict[str, Optional[str]]]:
     """Build the plan for the provided date."""
 
-    LOGGER.info("building_plan", extra={"date": date})
+    entries = zeturf.parse_program(date)
     entries = zeturf.parse_program(date)
     if not entries:
         LOGGER.warning("no_entries_from_zeturf", extra={"date": date})
