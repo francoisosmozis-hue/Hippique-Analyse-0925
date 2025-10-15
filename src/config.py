@@ -1,73 +1,47 @@
-"""Application configuration helpers."""
-
-from __future__ import annotations
-
-from functools import lru_cache
-from pathlib import Path
+"""Configuration management for Cloud Run service."""
+import os
+from zoneinfo import ZoneInfo
 from typing import Optional
 
-from pydantic import Field
-from pydantic_settings import BaseSettings, SettingsConfigDict
 
-
-class Settings(BaseSettings):
-    """Configuration loaded from environment variables."""
-
-    project_id: str = Field("", alias="PROJECT_ID")
-    region: str = Field("europe-west1", alias="REGION")
-    service_name: str = Field("hippique-analyse", alias="SERVICE_NAME")
-    queue_id: str = Field("hippique-run-queue", alias="QUEUE_ID")
-    timezone: str = Field("Europe/Paris", alias="TZ")
-    service_url: str = Field("", alias="SERVICE_URL")
-    service_audience: str = Field("", alias="SERVICE_AUDIENCE")
-    require_auth: bool = Field(False, alias="REQUIRE_AUTH")
-    gcs_bucket: str = Field("", alias="GCS_BUCKET")
-    gcs_prefix: str = Field("", alias="GCS_PREFIX")
-    data_dir: Path = Field(Path("data/runtime"), alias="DATA_DIR")
-    http_user_agent: str = Field(
-        "Hippique-Analyse/1.0 (+https://cloud.run/hippique)", alias="HTTP_USER_AGENT"
-    )
-    tasks_service_account_email: str = Field(
-        "", alias="TASKS_SERVICE_ACCOUNT_EMAIL"
-    )
-    scheduler_service_account_email: str = Field(
-        "", alias="SCHEDULER_SERVICE_ACCOUNT_EMAIL"
-    )
-
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        case_sensitive=False,
-        extra="ignore",
-    )
-
-    @property
-    def queue_path(self) -> str:
-        return f"projects/{self.project_id}/locations/{self.region}/queues/{self.queue_id}"
-
-    @property
-    def scheduler_parent(self) -> str:
-        return f"projects/{self.project_id}/locations/{self.region}"
-
-    @property
-    def resolved_data_dir(self) -> Path:
-        return Path(self.data_dir).resolve()
-
-    @property
-    def plan_path(self) -> Path:
-        directory = self.resolved_data_dir
-        directory.mkdir(parents=True, exist_ok=True)
-        return directory / "plan.json"
-
-    @property
-    def resolved_service_url(self) -> Optional[str]:
-        return self.service_url or None
-
-
-@lru_cache(maxsize=1)
-def get_settings() -> Settings:
-    """Return the application settings (cached)."""
-
-    settings = Settings()
-    settings.resolved_data_dir.mkdir(parents=True, exist_ok=True)
-    return settings
+class Config:
+    """Application configuration from environment."""
+    
+    def __init__(self):
+        # GCP
+        self.PROJECT_ID = os.getenv("PROJECT_ID", os.getenv("GOOGLE_CLOUD_PROJECT", ""))
+        self.REGION = os.getenv("REGION", "europe-west1")
+        self.SERVICE_NAME = os.getenv("SERVICE_NAME", "hippique-orchestrator")
+        self.SERVICE_URL = os.getenv("SERVICE_URL", f"https://{self.SERVICE_NAME}-{self.REGION}.run.app")
+        
+        # Cloud Tasks
+        self.QUEUE_ID = os.getenv("QUEUE_ID", "hippique-tasks")
+        self.QUEUE_LOCATION = os.getenv("QUEUE_LOCATION", self.REGION)
+        
+        # Storage
+        self.GCS_BUCKET = os.getenv("GCS_BUCKET", "")
+        self.GCS_PREFIX = os.getenv("GCS_PREFIX", "")
+        
+        # Security
+        self.REQUIRE_AUTH = os.getenv("REQUIRE_AUTH", "true").lower() == "true"
+        self.SERVICE_ACCOUNT = os.getenv("SERVICE_ACCOUNT", "")
+        
+        # Timezone
+        self.TZ = ZoneInfo("Europe/Paris")
+        self.UTC = ZoneInfo("UTC")
+        
+        # Data paths
+        self.DATA_DIR = os.getenv("DATA_DIR", "/tmp/data")
+        self.CALIBRATION_PATH = os.getenv("CALIBRATION_PATH", "calibration/payout_calibration.yaml")
+        
+        # GPI parameters
+        self.BUDGET = float(os.getenv("BUDGET", "5.0"))
+        self.EV_MIN = float(os.getenv("EV_MIN", "0.40"))
+        self.ROI_MIN = float(os.getenv("ROI_MIN", "0.25"))
+        
+    def validate(self):
+        """Validate required configuration."""
+        if not self.PROJECT_ID:
+            raise ValueError("PROJECT_ID or GOOGLE_CLOUD_PROJECT required")
+        if not self.SERVICE_NAME:
+            raise ValueError("SERVICE_NAME required")

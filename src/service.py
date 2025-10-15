@@ -1,280 +1,293 @@
-"""FastAPI service exposing scheduling and runner endpoints."""
-
-from __future__ import annotations
-
+"""
+Service principal Cloud Run pour orchestration analyse hippique GPI v5.1
+Endpoints: POST /schedule, POST /run, GET /healthz
+"""
+import os
 import json
-from pathlib import Path
-from typing import Any, Dict, List, Optional
+import logging
+from datetime import datetime
+from typing import Optional, Dict, Any
+from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI, HTTPException, Request, status
+from fastapi import FastAPI, Request, HTTPException, Depends
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field, validator
+import google.auth
 from google.auth.transport import requests as google_requests
-from google.oauth2 import id_token
-from pydantic import BaseModel, Field, field_validator
 
-from .config import Settings, get_settings
-from .logging_utils import get_logger, setup_logging
-from .plan import build_plan
-from .runner import run_course
-from .scheduler import create_one_shot_job, enqueue_run_task
-from .time_utils import (
-    combine_local_datetime,
-    minutes,
-    now_local,
-    parse_plan_date,
+from src.config import Config
+from src.logging_utils import setup_logging, get_correlation_id
+from src.plan import build_plan
+from src.scheduler import CloudTasksScheduler, CloudSchedulerFallback
+from src.runner import CourseRunner
+
+# Setup logging
+logger = setup_logging()
+config = Config()
+
+# OIDC verification
+def verify_oidc_token(request: Request) -> Optional[Dict[str, Any]]:
+    """Vérifie le token OIDC si REQUIRE_AUTH=true"""
+    if not config.REQUIRE_AUTH:
+        return {"sub": "anonymous"}
+    
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
+    
+    token = auth_header.split(" ")[1]
+    try:
+        request_adapter = google_requests.Request()
+        id_info = google.oauth2.id_token.verify_oauth2_token(
+            token, request_adapter, audience=config.SERVICE_URL
+        )
+        return id_info
+    except Exception as e:
+        logger.error(f"OIDC verification failed: {e}")
+        raise HTTPException(status_code=403, detail="Invalid token")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifecycle management"""
+    logger.info("Starting service", extra={
+        "project_id": config.PROJECT_ID,
+        "region": config.REGION,
+        "service": config.SERVICE_NAME
+    })
+    yield
+    logger.info("Shutting down service")
+
+app = FastAPI(
+    title="Analyse Hippique Orchestrator",
+    version="1.0.0",
+    lifespan=lifespan
 )
 
-setup_logging()
-LOGGER = get_logger(__name__)
-app = FastAPI(title="Hippique Analyse Orchestrator", version="1.0.0")
-
-
+# Request Models
 class ScheduleRequest(BaseModel):
-    date: str = Field(default="today", description="Date YYYY-MM-DD or 'today'")
-    mode: str = Field(default="tasks", description="Scheduling backend: tasks or scheduler")
-
-    @field_validator("mode")
-    @classmethod
-    def validate_mode(cls, value: str) -> str:
-        value = value.lower()
-        if value not in {"tasks", "scheduler"}:
-            raise ValueError("mode must be 'tasks' or 'scheduler'")
-        return value
-
+    date: str = Field(..., description="YYYY-MM-DD or 'today'")
+    mode: str = Field(default="tasks", description="tasks|scheduler")
+    
+    @validator('date')
+    def validate_date(cls, v):
+        if v == "today":
+            from src.time_utils import now_paris
+            return now_paris().strftime("%Y-%m-%d")
+        try:
+            datetime.strptime(v, "%Y-%m-%d")
+            return v
+        except ValueError:
+            raise ValueError("Date must be YYYY-MM-DD or 'today'")
+    
+    @validator('mode')
+    def validate_mode(cls, v):
+        if v not in ["tasks", "scheduler"]:
+            raise ValueError("Mode must be 'tasks' or 'scheduler'")
+        return v
 
 class RunRequest(BaseModel):
-    course_url: str
-    phase: str
-    date: str
+    course_url: str = Field(..., description="URL course ZEturf")
+    phase: str = Field(..., description="H-30|H30|H-5|H5")
+    date: str = Field(..., description="YYYY-MM-DD")
+    
+    @validator('phase')
+    def normalize_phase(cls, v):
+        v_upper = v.upper().replace("-", "")
+        if v_upper not in ["H30", "H5"]:
+            raise ValueError("Phase must be H-30, H30, H-5, or H5")
+        return v_upper
 
-    @field_validator("phase")
-    @classmethod
-    def normalise_phase(cls, value: str) -> str:
-        cleaned = value.replace("-", "").upper()
-        if cleaned not in {"H30", "H5"}:
-            raise ValueError("phase must be H-30/H30 or H-5/H5")
-        return cleaned
-
-
-class ScheduleSummary(BaseModel):
-    identifier: str
-    phase: str
-    method: str
-    scheduled: bool
-    schedule_time_local: Optional[str] = None
-    schedule_time_utc: Optional[str] = None
-    skipped_reason: Optional[str] = None
-    name: Optional[str] = None
-
-
-class ScheduleResponse(BaseModel):
-    plan: List[Dict[str, Any]]
-    scheduled: List[ScheduleSummary]
-    plan_path: str
-    plan_uploaded: Optional[str]
-
-
-class RunResponse(BaseModel):
-    ok: bool
-    rc: int
-    stdout_tail: str
-    artifacts: List[str]
-    uploaded: Optional[List[str]] = None
-
-
-async def ensure_authenticated(request: Request, settings: Settings = Depends(get_settings)) -> None:
-    """Validate the request authentication if required."""
-
-    if not settings.require_auth:
-        return
-    auth_header = request.headers.get("Authorization", "")
-    if not auth_header.startswith("Bearer "):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="missing bearer token")
-    token = auth_header.split(" ", 1)[1]
-    try:
-        id_token.verify_oauth2_token(
-            token,
-            google_requests.Request(),
-            audience=settings.service_audience or settings.resolved_service_url,
-        )
-    except Exception as exc:  # pragma: no cover - dependent on env
-        LOGGER.warning("auth_failed", extra={"error": str(exc)})
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid token") from exc
-
-
-@app.middleware("http")
-async def auth_middleware(request: Request, call_next):
-    settings = get_settings()
-    if settings.require_auth:
-        try:
-            await ensure_authenticated(request, settings)
-        except HTTPException as exc:
-            return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
-    return await call_next(request)
-
-
+# Endpoints
 @app.get("/healthz")
-async def healthz() -> Dict[str, str]:
-    return {"status": "ok"}
+async def healthz():
+    """Health check"""
+    return {"status": "healthy", "timestamp": datetime.utcnow().isoformat()}
 
-
-@app.post("/schedule", response_model=ScheduleResponse)
-async def schedule_endpoint(request: ScheduleRequest, http_request: Request) -> ScheduleResponse:
-    settings = get_settings()
-    plan_date = parse_plan_date(request.date, tz_name=settings.timezone)
-    plan = build_plan(plan_date.isoformat())
-    plan_path = _persist_plan(plan, settings, plan_date.isoformat())
-    uploaded = _upload_plan(plan, settings, plan_date.isoformat())
-
-    run_url = _resolve_run_url(settings, http_request)
-    summaries: List[ScheduleSummary] = []
-    now = now_local(settings.timezone)
-
-    for entry in plan:
-        identifier = f"{entry['date']}-{entry['r_label']}{entry['c_label']}"
-        if not entry.get("time_local"):
-            summaries.append(
-                ScheduleSummary(
-                    identifier=identifier,
-                    phase="-",
-                    method=request.mode,
-                    scheduled=False,
-                    skipped_reason="missing_time",
-                )
-            )
-            continue
-        course_time = combine_local_datetime(plan_date, entry["time_local"], tz_name=settings.timezone)
-        offsets = [("H30", minutes(30)), ("H5", minutes(5))]
-        for phase, delta in offsets:
-            run_time = course_time - delta
-            if run_time <= now:
-                summaries.append(
-                    ScheduleSummary(
-                        identifier=identifier,
-                        phase=phase,
-                        method=request.mode,
-                        scheduled=False,
-                        schedule_time_local=run_time.isoformat(),
-                        skipped_reason="in_past",
-                    )
-                )
-                continue
-            payload = {
-                "course_url": entry["course_url"],
-                "phase": phase,
-                "date": entry["date"],
-            }
-            correlation_id = f"{entry['date']}-{entry['r_label'].lower()}-{entry['c_label'].lower()}-{phase.lower()}"
-            if request.mode == "tasks":
-                result = enqueue_run_task(
-                    settings,
-                    run_url=run_url,
-                    payload=payload,
-                    course_url=entry["course_url"],
-                    phase=phase,
-                    when_local=run_time,
-                    correlation_id=correlation_id,
-                )
-                created = result.get("created", True)
-                summaries.append(
-                    ScheduleSummary(
-                        identifier=identifier,
-                        phase=phase,
-                        method="tasks",
-                        scheduled=created,
-                        schedule_time_local=result["schedule_time_local"],
-                        schedule_time_utc=result["schedule_time_utc"],
-                        name=result["name"],
-                        skipped_reason=None if created else "already_exists",
-                    )
-                )
-            else:
-                job_name = _build_scheduler_job_name(entry, phase)
-                result = create_one_shot_job(
-                    settings,
-                    job_name=job_name,
-                    run_url=run_url,
-                    payload=payload,
-                    when_local=run_time,
-                    correlation_id=correlation_id,
-                )
-                created = result.get("created", True)
-                summaries.append(
-                    ScheduleSummary(
-                        identifier=identifier,
-                        phase=phase,
-                        method="scheduler",
-                        scheduled=created,
-                        schedule_time_local=result.get("schedule_time_local"),
-                        schedule_time_utc=result.get("schedule_time_utc"),
-                        name=result.get("name"),
-                        skipped_reason=None if created else "already_exists",
-                    )
-                )
-
-    return ScheduleResponse(
-        plan=plan,
-        scheduled=summaries,
-        plan_path=str(plan_path),
-        plan_uploaded=uploaded,
-    )
-
-
-@app.post("/run", response_model=RunResponse)
-async def run_endpoint(request: RunRequest) -> RunResponse:
+@app.post("/schedule")
+async def schedule(
+    req: ScheduleRequest,
+    request: Request,
+    user: Dict = Depends(verify_oidc_token)
+):
+    """
+    Génère le plan du jour et programme les tâches H-30/H-5
+    """
+    correlation_id = get_correlation_id()
+    logger.info("Schedule request received", extra={
+        "correlation_id": correlation_id,
+        "date": req.date,
+        "mode": req.mode,
+        "user": user.get("sub", "unknown")
+    })
+    
     try:
-        result = run_course(
-            request.course_url,
-            request.phase,
-            extra_env={
-                "RUN_DATE": request.date,
-                "PLAN_DATE": request.date,
-            },
+        # Build plan
+        logger.info(f"Building plan for {req.date}")
+        plan = build_plan(req.date)
+        
+        if not plan:
+            logger.warning(f"No races found for {req.date}")
+            return JSONResponse({
+                "ok": True,
+                "date": req.date,
+                "races_count": 0,
+                "message": "No races found for this date",
+                "scheduled_tasks": []
+            })
+        
+        # Save plan.json
+        from pathlib import Path
+        plan_file = Path(config.DATA_DIR) / f"plan_{req.date}.json"
+        plan_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(plan_file, 'w', encoding='utf-8') as f:
+            json.dump(plan, f, ensure_ascii=False, indent=2)
+        logger.info(f"Plan saved to {plan_file}, {len(plan)} races")
+        
+        # Upload to GCS if configured
+        if config.GCS_BUCKET:
+            from google.cloud import storage
+            client = storage.Client(project=config.PROJECT_ID)
+            bucket = client.bucket(config.GCS_BUCKET)
+            blob_name = f"{config.GCS_PREFIX}/plans/plan_{req.date}.json"
+            blob = bucket.blob(blob_name)
+            blob.upload_from_filename(str(plan_file))
+            logger.info(f"Plan uploaded to gs://{config.GCS_BUCKET}/{blob_name}")
+        
+        # Schedule tasks
+        scheduled = []
+        if req.mode == "tasks":
+            scheduler = CloudTasksScheduler(config)
+        else:
+            scheduler = CloudSchedulerFallback(config)
+        
+        run_url = f"{config.SERVICE_URL}/run"
+        
+        from src.time_utils import parse_time_local, subtract_minutes
+        
+        for race in plan:
+            race_id = f"{race['r_label']}{race['c_label']}"
+            
+            # Parse race time (HH:MM in Europe/Paris)
+            race_time_str = race.get('time_local')
+            if not race_time_str:
+                logger.warning(f"No time for {race_id}, skipping")
+                continue
+            
+            try:
+                race_dt = parse_time_local(req.date, race_time_str)
+            except Exception as e:
+                logger.error(f"Failed to parse time for {race_id}: {e}")
+                continue
+            
+            # Schedule H-30 and H-5
+            h30_dt = subtract_minutes(race_dt, 30)
+            h5_dt = subtract_minutes(race_dt, 5)
+            
+            payload_h30 = {
+                "course_url": race['course_url'],
+                "phase": "H30",
+                "date": req.date
+            }
+            payload_h5 = {
+                "course_url": race['course_url'],
+                "phase": "H5",
+                "date": req.date
+            }
+            
+            try:
+                task_h30 = scheduler.schedule_task(
+                    run_url=run_url,
+                    race_id=race_id,
+                    phase="h30",
+                    when_local=h30_dt,
+                    payload=payload_h30,
+                    date=req.date
+                )
+                task_h5 = scheduler.schedule_task(
+                    run_url=run_url,
+                    race_id=race_id,
+                    phase="h5",
+                    when_local=h5_dt,
+                    payload=payload_h5,
+                    date=req.date
+                )
+                
+                scheduled.append({
+                    "race_id": race_id,
+                    "race_time": race_time_str,
+                    "h30_scheduled": h30_dt.isoformat(),
+                    "h5_scheduled": h5_dt.isoformat(),
+                    "tasks": [task_h30, task_h5]
+                })
+                
+            except Exception as e:
+                logger.error(f"Failed to schedule {race_id}: {e}", exc_info=True)
+                scheduled.append({
+                    "race_id": race_id,
+                    "error": str(e)
+                })
+        
+        response = {
+            "ok": True,
+            "correlation_id": correlation_id,
+            "date": req.date,
+            "races_count": len(plan),
+            "scheduled_count": len([s for s in scheduled if "error" not in s]),
+            "mode": req.mode,
+            "scheduled_tasks": scheduled
+        }
+        
+        logger.info("Schedule completed", extra={
+            "correlation_id": correlation_id,
+            "races": len(plan),
+            "scheduled": response["scheduled_count"]
+        })
+        
+        return JSONResponse(response)
+        
+    except Exception as e:
+        logger.error(f"Schedule failed: {e}", exc_info=True, extra={
+            "correlation_id": correlation_id
+        })
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/run")
+async def run(
+    req: RunRequest,
+    request: Request,
+    user: Dict = Depends(verify_oidc_token)
+):
+    """
+    Exécute l'analyse d'une course (H-30 ou H-5)
+    """
+    correlation_id = get_correlation_id()
+    logger.info("Run request received", extra={
+        "correlation_id": correlation_id,
+        "course_url": req.course_url,
+        "phase": req.phase,
+        "date": req.date,
+        "user": user.get("sub", "unknown")
+    })
+    
+    try:
+        runner = CourseRunner(config)
+        result = runner.run_course(
+            course_url=req.course_url,
+            phase=req.phase,
+            date=req.date,
+            correlation_id=correlation_id
         )
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    return RunResponse(**result)
-
-
-def _resolve_run_url(settings: Settings, http_request: Request) -> str:
-    if settings.resolved_service_url:
-        return settings.resolved_service_url.rstrip("/") + "/run"
-    return str(http_request.url_for("run_endpoint"))
-
-
-def _persist_plan(plan: List[Dict[str, Any]], settings: Settings, plan_date: str) -> Path:
-    path = settings.plan_path
-    data = {
-        "date": plan_date,
-        "generated_at": now_local(settings.timezone).isoformat(),
-        "entries": plan,
-    }
-    path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
-    return path
-
-
-def _upload_plan(plan: List[Dict[str, Any]], settings: Settings, plan_date: str) -> Optional[str]:
-    if not settings.gcs_bucket:
-        return None
-    from google.cloud import storage
-
-    client = storage.Client()
-    bucket = client.bucket(settings.gcs_bucket)
-    prefix = settings.gcs_prefix.strip("/") if settings.gcs_prefix else ""
-    blob_name = f"plan-{plan_date}.json"
-    if prefix:
-        blob_name = f"{prefix}/{blob_name}"
-    blob = bucket.blob(blob_name)
-    blob.upload_from_string(
-        data=json.dumps({"date": plan_date, "entries": plan}, ensure_ascii=False),
-        content_type="application/json",
-    )
-    return blob.public_url or blob.name
-
-
-def _build_scheduler_job_name(entry: Dict[str, Any], phase: str) -> str:
-    base = f"run-{entry['date'].replace('-', '')}-{entry['r_label'].lower()}-{entry['c_label'].lower()}-{phase.lower()}"
-    return base.replace("_", "-")
-
-
-__all__ = ["app"]
+        
+        logger.info("Run completed", extra={
+            "correlation_id": correlation_id,
+            "success": result["ok"],
+            "rc": result.get("rc")
+        })
+        
+        return JSONResponse(result)
+        
+    except Exception as e:
+        logger.error(f"Run failed: {e}", exc_info=True, extra={
+            "correlation_id": correlation_id
+        })
+        raise HTTPException(status_code=500, detail=str(e))

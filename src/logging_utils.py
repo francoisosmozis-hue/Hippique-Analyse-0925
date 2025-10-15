@@ -1,75 +1,64 @@
-"""Logging utilities for structured output compatible with Cloud Logging."""
-
-from __future__ import annotations
-
-import json
+"""Structured logging utilities for Cloud Logging."""
 import logging
+import json
 import sys
-from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+import uuid
+from contextvars import ContextVar
+from typing import Any, Dict
 
 
-_RESERVED_FIELDS = {
-    "msg",
-    "args",
-    "levelname",
-    "levelno",
-    "created",
-    "msecs",
-    "relativeCreated",
-    "pathname",
-    "filename",
-    "module",
-    "lineno",
-    "funcName",
-    "stack_info",
-    "exc_text",
-    "exc_info",
-}
+# Context variable for correlation ID
+correlation_id_var: ContextVar[str] = ContextVar("correlation_id", default="")
 
 
-class JsonFormatter(logging.Formatter):
-    """Format log records as structured JSON."""
+def get_correlation_id() -> str:
+    """Get or create correlation ID for current context."""
+    cid = correlation_id_var.get()
+    if not cid:
+        cid = str(uuid.uuid4())
+        correlation_id_var.set(cid)
+    return cid
 
-    def format(self, record: logging.LogRecord) -> str:  # noqa: D401 - short description
-        payload: Dict[str, Any] = {
-            "severity": record.levelname,
+
+class StructuredFormatter(logging.Formatter):
+    """JSON formatter for Cloud Logging."""
+    
+    def format(self, record: logging.LogRecord) -> str:
+        log_obj: Dict[str, Any] = {
             "message": record.getMessage(),
-            "time": datetime.fromtimestamp(record.created, tz=timezone.utc).isoformat(),
+            "severity": record.levelname,
+            "timestamp": self.formatTime(record, self.datefmt),
             "logger": record.name,
         }
+        
+        # Add correlation ID if available
+        cid = correlation_id_var.get()
+        if cid:
+            log_obj["correlation_id"] = cid
+        
+        # Add extra fields
+        if hasattr(record, "extra"):
+            log_obj.update(record.extra)
+        
+        # Add exception info
         if record.exc_info:
-            payload["exception"] = self.formatException(record.exc_info)
-        for key, value in record.__dict__.items():
-            if key.startswith("_"):
-                continue
-            if key in payload or key in _RESERVED_FIELDS:
-                continue
-            payload[key] = value
-        return json.dumps(payload, ensure_ascii=False)
+            log_obj["exception"] = self.formatException(record.exc_info)
+        
+        return json.dumps(log_obj)
 
 
-def setup_logging(level: int = logging.INFO) -> None:
-    """Configure root logger to use JSON formatting."""
-
+def setup_logging(level: int = logging.INFO) -> logging.Logger:
+    """Configure structured logging for Cloud Run."""
+    logger = logging.getLogger()
+    logger.setLevel(level)
+    
+    # Remove existing handlers
+    for handler in logger.handlers[:]:
+        logger.removeHandler(handler)
+    
+    # Add structured handler
     handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(JsonFormatter())
-
-    logging.basicConfig(level=level, handlers=[handler], force=True)
-
-
-def get_logger(name: str) -> logging.Logger:
-    """Get a structured logger."""
-
-    logger = logging.getLogger(name)
-    if not logger.handlers:
-        setup_logging()
+    handler.setFormatter(StructuredFormatter())
+    logger.addHandler(handler)
+    
     return logger
-
-
-def log_exception(
-    logger: logging.Logger, message: str, *, extra: Optional[Dict[str, Any]] = None
-) -> None:
-    """Log an exception with structured context."""
-
-    logger.exception(message, extra=extra or {})
