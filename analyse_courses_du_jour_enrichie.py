@@ -41,6 +41,7 @@ except (ImportError, SyntaxError) as _normalize_import_error:  # pragma: no cove
 
     normalize_snapshot = _raise_normalize_snapshot
 from scripts.fetch_je_stats import collect_stats
+from scripts.online_fetch_zeturf import ZeturfFetcher
 
 import pipeline_run
 from scripts.analysis_utils import compute_overround_cap
@@ -2125,7 +2126,16 @@ def _process_reunion(
     base_dir = ensure_dir(data_dir)
     for r_label, c_label, course_id, course_url in courses:
         rc_dir = ensure_dir(base_dir / f"{r_label}{c_label}")
-        write_snapshot_from_geny(course_id, phase, rc_dir, course_url=course_url)
+
+        # --- CORRECTED LOGIC ---
+        print(f"[INFO] Fetching real snapshot for {course_url}...")
+        fetcher = ZeturfFetcher()
+        snapshot = fetcher.fetch_race_snapshot(reunion_url=course_url, mode=phase)
+        snapshot_filename = f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{phase}.json"
+        fetcher.save_snapshot(snapshot, rc_dir / snapshot_filename)
+        print(f"[INFO] Saved real snapshot to {rc_dir / snapshot_filename}")
+        # --- END OF CORRECTION ---
+
         outcome: dict[str, Any] | None = None
         pipeline_done = False
         if phase.upper() == "H5":

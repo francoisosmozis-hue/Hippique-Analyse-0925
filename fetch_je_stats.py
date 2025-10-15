@@ -178,4 +178,224 @@ def _write_csv(path: Path, rows: Iterable[dict[str, str]], columns: Iterable[str
             writer.writerow([row.get(column, "") for column in header])
 
 
-__all__ = ["enrich_from_snapshot"]
+def http_get(
+    url: str,
+    *,
+    session: requests.Session | None = None,
+    timeout: int = DEFAULT_TIMEOUT,
+    headers: Mapping[str, str] | None = None,
+) -> str:
+    """Return the body of an HTTP ``GET`` request.
+
+    The helper centralises default headers and converts ``requests`` specific
+    exceptions into ``RuntimeError`` instances so that callers do not have to
+    depend on the underlying library.
+    """
+
+    caller: Callable[..., requests.Response]
+    if session is None:
+        caller = requests.get
+    else:
+        caller = session.get
+
+    merged_headers = dict(DEFAULT_HEADERS)
+    if headers:
+        merged_headers.update(headers)
+
+    try:
+        response = caller(url, headers=merged_headers, timeout=timeout)
+        response.raise_for_status()
+    except requests.RequestException as exc:  # pragma: no cover - network errors
+        raise RuntimeError(f"HTTP request failed for {url}") from exc
+
+    return response.text
+
+
+@lru_cache(maxsize=512)
+def _normalise_text(value: str) -> str:
+    """Return a case and diacritics insensitive representation of ``value``."""
+
+    decomposed = unicodedata.normalize("NFKD", value)
+    cleaned = "".join(char for char in decomposed if char.isalnum())
+    return cleaned.lower()
+
+
+def discover_horse_url_by_name(
+    name: str,
+    *,
+    get: Callable[[str], str] | None = None,
+) -> str | None:
+    """Return the Geny horse profile URL for ``name`` when available."""
+
+    if not name or not name.strip():
+        return None
+
+    fetch = get or http_get
+    query = quote_plus(name.strip())
+    search_url = f"{GENY_BASE_URL}/recherche?query={query}"
+
+    try:
+        html = fetch(search_url)
+    except RuntimeError:
+        LOGGER.warning("Failed to fetch Geny search results for %s", name)
+        return None
+
+    soup = BeautifulSoup(html, "html.parser")
+    target_norm = _normalise_text(name)
+
+    best_url: str | None = None
+    best_score = 0.0
+
+    for link in soup.select("a[href]"):
+        href = link.get("href")
+        if not href or "/chev" not in href:
+            continue
+
+        candidate_text = link.get_text(" ", strip=True)
+        if not candidate_text:
+            continue
+
+        candidate_norm = _normalise_text(candidate_text)
+        if candidate_norm == target_norm:
+            return urljoin(GENY_BASE_URL, href)
+
+        score = difflib.SequenceMatcher(None, target_norm, candidate_norm).ratio()
+        if score > best_score:
+            best_score = score
+            best_url = urljoin(GENY_BASE_URL, href)
+
+    return best_url
+
+
+def extract_links_from_horse_page(html: str) -> dict[str, str]:
+    """Return profile links for the jockey and the trainer."""
+
+    soup = BeautifulSoup(html, "html.parser")
+    links: dict[str, str] = {}
+
+    for anchor in soup.select("a[href]"):
+        href = anchor.get("href")
+        if not href:
+            continue
+
+        absolute = urljoin(GENY_BASE_URL, href)
+        text = anchor.get_text(" ", strip=True).lower()
+        href_lower = absolute.lower()
+
+        if "jockey" in text or "driver" in text or re.search(r"/jockey|/driver", href_lower):
+            links.setdefault("jockey", absolute)
+        if (
+            "entraine" in text
+            or "entraîne" in text
+            or "trainer" in text
+            or "coach" in text
+            or re.search(r"/entraine|/entraineur|/trainer|/coach", href_lower)
+        ):
+            links.setdefault("trainer", absolute)
+
+    return links
+
+
+_PERCENT_RE = re.compile(r"(\d+(?:[.,]\d+)?)\s*%")
+_RATIO_RE = re.compile(r"(\d+)\s*/\s*(\d+)")
+_VICTORY_RE = re.compile(r"victoires?\s*[:=]\s*(\d+)", re.IGNORECASE)
+
+
+def _parse_percentage(text: str) -> float | None:
+    """Extract a percentage-like value from ``text``."""
+
+    if not text:
+        return None
+
+    percent = _PERCENT_RE.search(text)
+    if percent:
+        return float(percent.group(1).replace(",", "."))
+
+    ratio = _RATIO_RE.search(text)
+    if ratio:
+        numerator = int(ratio.group(1))
+        denominator = int(ratio.group(2))
+        if denominator:
+            return round(100.0 * numerator / denominator, 2)
+
+    victory = _VICTORY_RE.search(text)
+    if victory:
+        return float(victory.group(1))
+
+    number = re.search(r"(\d+(?:[.,]\d+)?)", text)
+    if not number:
+        return None
+
+    try:
+        value = float(number.group(1).replace(",", "."))
+    except ValueError:
+        return None
+
+    if 0.0 <= value <= 1.0:
+        return round(value * 100, 2)
+    if 0.0 <= value <= 100.0:
+        return value
+    return None
+
+
+def extract_rate_from_profile(html: str) -> float | None:
+    """Return the win percentage contained in a profile page."""
+
+    soup = BeautifulSoup(html, "html.parser")
+
+    for element in soup.find_all(["span", "div", "td", "th", "p", "li", "strong", "b"]):
+        text = element.get_text(" ", strip=True)
+        rate = _parse_percentage(text)
+        if rate is not None:
+            return rate
+
+    fallback = soup.get_text(" ", strip=True)
+    return _parse_percentage(fallback)
+
+
+def parse_horse_percentages(
+    horse_name: str,
+    *,
+    get: Callable[[str], str] | None = None,
+) -> tuple[float | None, float | None]:
+    """Return the jockey and trainer win percentages for ``horse_name``."""
+
+    fetch = get or http_get
+    horse_url = discover_horse_url_by_name(horse_name, get=fetch)
+    if not horse_url:
+        return None, None
+
+    try:
+        horse_html = fetch(horse_url)
+    except RuntimeError:
+        LOGGER.warning("Failed to fetch horse page %s", horse_url)
+        return None, None
+
+    links = extract_links_from_horse_page(horse_html)
+    jockey_rate = trainer_rate = None
+
+    jockey_link = links.get("jockey")
+    if jockey_link:
+        try:
+            jockey_rate = extract_rate_from_profile(fetch(jockey_link))
+        except RuntimeError:
+            LOGGER.warning("Failed to fetch jockey profile %s", jockey_link)
+
+    trainer_link = links.get("trainer")
+    if trainer_link:
+        try:
+            trainer_rate = extract_rate_from_profile(fetch(trainer_link))
+        except RuntimeError:
+            LOGGER.warning("Failed to fetch trainer profile %s", trainer_link)
+
+    return jockey_rate, trainer_rate
+
+
+__all__ = [
+    "enrich_from_snapshot",
+    "discover_horse_url_by_name",
+    "http_get",
+    "extract_links_from_horse_page",
+    "extract_rate_from_profile",
+    "parse_horse_percentages",
+]
