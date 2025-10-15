@@ -3,15 +3,30 @@
 from __future__ import annotations
 
 import csv
+import difflib
 import json
 import logging
+import re
+import unicodedata
+from functools import lru_cache
 from pathlib import Path
-from typing import Any, Iterable, Mapping, TypeAlias
+from typing import Any, Callable, Iterable, Mapping, TypeAlias
+from urllib.parse import quote_plus, urljoin
+
+import requests
+from bs4 import BeautifulSoup
 
 
 LOGGER = logging.getLogger(__name__)
 
 ResultDict: TypeAlias = dict[str, str | None]
+
+GENY_BASE_URL = "https://www.geny.com"
+DEFAULT_TIMEOUT = 15
+DEFAULT_HEADERS = {
+    "User-Agent": "Hippique-Analyse/1.0 (contact: ops@hippique.local)",
+    "Accept-Language": "fr-FR,fr;q=0.9,en;q=0.5",
+}
 
 
 def enrich_from_snapshot(snapshot_path: str, out_dir: str) -> dict:
