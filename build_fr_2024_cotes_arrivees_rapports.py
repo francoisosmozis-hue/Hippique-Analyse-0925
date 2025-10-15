@@ -71,24 +71,6 @@ for dstr, d_iso in iter_dates_sept_2025():
                     "num": num, "cheval": nom, "cote": cote,
                     "arrivee_rang": rang.get(int(num)) if num is not None else None
                 })
-                num = p.get("numeroPmu") or p.get("numPmu") or p.get("numero") or p.get("num")
-                nom = (p.get("nom") or p.get("nomCheval") or p.get("cheval", {}).get("nom") or "").strip()
-                # clé 'cote' (ex. 'cote', 'coteProbable', 'odds', 'coteDirect')
-                cote = None
-                for k in ["cote", "coteProbable", "odd", "odds", "coteDirect", "cotePmu"]:
-                    if k in p:
-                        cote = p[k]; break
-                # parfois la cote est imbriquée
-                if cote is None:
-                    infos = p.get("infos") or {}
-                    for k in ["cote", "coteProbable", "odds"]:
-                        if k in infos:
-                            cote = infos[k]; break
-                rows.append({
-                    "date": d_iso, "reunion": R, "course": C,
-                    "num": num, "cheval": nom, "cote": cote,
-                    "arrivee_rang": rang.get(int(num)) if num is not None else None
-                })
     time.sleep(0.6)  # simple throttle pour rester cool
 
 pd.DataFrame(rows).to_csv("fr_2025_sept_partants_cotes_arrivees.csv", index=False)

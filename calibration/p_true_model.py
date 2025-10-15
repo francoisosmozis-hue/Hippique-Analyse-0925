@@ -6,6 +6,9 @@ from typing import Any, Dict, Mapping, Optional, Sequence
 
 import yaml
 
+MODEL_PATH = Path("calibration/p_true_model_v5.yaml")
+
+
 
 def _yaml_load(path: str | Path) -> dict:
     """Load YAML content from ``path`` using ``yaml.safe_load``."""

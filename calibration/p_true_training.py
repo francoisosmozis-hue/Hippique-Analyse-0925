@@ -43,6 +43,12 @@ def assemble_dataset_from_csv(csv_path: Path) -> pd.DataFrame:
     df["n_runners"] = df.groupby("race_id")["num"].transform("count")
     df["log_odds"] = df["cote"].apply(lambda x: math.log(max(x, _MIN_ODDS + _EPSILON)))
     
+    # Placeholder for J/E stats and drift - to be populated with real data in future datasets
+    df["j_rate"] = 0.0
+    df["e_rate"] = 0.0
+    df["je_total"] = 0.0
+    df["drift"] = 0.0
+
     # Rename columns for compatibility
     df.rename(columns={"date": "race_date", "num": "runner_id", "cote": "odds_h5"}, inplace=True)
 
@@ -124,14 +130,14 @@ def train_and_evaluate_model(
     )
 
 
-def serialize_model(result: CalibrationResult, path: Path, *, C: float = 1.0) -> None:
+def serialize_model(result: CalibrationResult, path: Path, *, C: float = 1.0, version: int = 4) -> None:
     """Write ``result`` to ``path`` using the repository YAML schema."""
 
     coefs = result.model.coef_[0]
     intercept = float(result.model.intercept_[0])
 
     payload = {
-        "version": 4, # Added p_market_no_vig
+        "version": version,
         "features": result.features,
         "intercept": intercept,
         "coefficients": {
@@ -168,7 +174,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--output-model",
         type=Path,
-        default=Path("calibration/p_true_model_v4.yaml"),
+        default=Path("calibration/p_true_model_v5.yaml"),
         help="Path to save the trained model YAML file."
     )
     args = parser.parse_args()
@@ -182,10 +188,15 @@ if __name__ == "__main__":
     print(f"   Found {len(dataset)} total records.")
 
     split_date = "2025-09-15"
-    print(f"\n2. Training and evaluating model with split date {split_date}...")
+    
+    # Define the new feature set for the v5 model
+    features_v5 = ["log_odds", "n_runners", "p_market_no_vig", "j_rate", "e_rate", "je_total", "drift"]
+    
+    print(f"\n2. Training and evaluating model v5 with split date {split_date}...")
+    print(f"   Features: {features_v5}")
     
     try:
-        result = train_and_evaluate_model(dataset, split_date=split_date)
+        result = train_and_evaluate_model(dataset, split_date=split_date, features=features_v5)
         
         print(f"\n--- Evaluation on Test Set (>= {split_date}) ---")
         print(f"   Test samples: {result.n_test_samples}")
@@ -193,7 +204,7 @@ if __name__ == "__main__":
         print(f"   Log Loss: {result.test_log_loss:.4f}")
         
         print(f"\n3. Serializing model to {args.output_model}...")
-        serialize_model(result, args.output_model)
+        serialize_model(result, args.output_model, version=5)
         
         print("\nDone.")
     except ValueError as e:

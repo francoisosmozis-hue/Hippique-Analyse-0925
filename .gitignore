@@ -95,7 +95,7 @@ excel/
 .cache/
 
 # Fichiers de modèle générés
-calibration/p_true_model_v*.yaml
+
 
 # Répertoire de travail temporaire
 _work_hippiques_2024/
