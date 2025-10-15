@@ -1,228 +1,272 @@
-"""Wrapper around legacy scripts to execute a single course analysis."""
-
-from __future__ import annotations
-
-import os
-import re
+"""Course runner - executes analysis for a single race."""
+import logging
+import json
 import subprocess
-import sys
+import tempfile
 from pathlib import Path
-from typing import Any
+from typing import Dict, Any, Optional
+from datetime import datetime
 
-try:  # pragma: no cover - imported lazily in tests
-    from google.cloud import storage  # type: ignore
-except Exception:  # pragma: no cover - optional dependency in unit tests
-    storage = None  # type: ignore
+from config import Config
 
-from .config import get_settings
-from .logging_utils import get_logger, log_exception
-
-LOGGER = get_logger(__name__)
-
-REPO_ROOT = Path(__file__).resolve().parent.parent
-SCRIPTS = [
-    "analyse_courses_du_jour_enrichie.py",
-    "online_fetch_zeturf.py",
-    "fetch_je_stats.py",
-    "fetch_je_chrono.py",
-    "p_finale_export.py",
-    "simulate_ev.py",
-    "pipeline_run.py",
-]
-POST_SCRIPTS = [
-    "get_arrivee_geny.py",
-    "update_excel_with_results.py",
-]
-COURSE_DETAILS_RE = re.compile(
-    r"/course/(?P<date>\d{4}-\d{2}-\d{2})/R(?P<r>\d+)C(?P<c>\d+)",
-    re.IGNORECASE,
-)
-ARTIFACT_PATTERNS = ("*.json", "*.csv", "*.xlsx")
-ARTIFACT_DIRECTORIES = (Path("data"), Path("exports"), Path("output"))
-DEFAULT_TIMEOUT = int(os.getenv("RUNNER_TIMEOUT", "1800"))
+logger = logging.getLogger(__name__)
 
 
-def _normalise_phase(phase: str) -> str:
-    value = phase.replace("-", "").upper()
-    if value not in {"H30", "H5"}:
-        raise ValueError(f"Unsupported phase: {phase}")
-    return value
-
-
-def _script_path(name: str) -> Path | None:
-    candidate = REPO_ROOT / name
-    if candidate.exists():
-        return candidate
-    return None
-
-
-def _build_command(
-    script: Path,
-    course_url: str,
-    phase: str,
-    *,
-    run_dir: Path,
-) -> list[str]:
-    base = [sys.executable, str(script)]
-    phase_flag = phase.replace("H", "h")
-    if script.name == "analyse_courses_du_jour_enrichie.py":
-        return base + ["--course-url", course_url, "--phase", phase]
-    if script.name == "online_fetch_zeturf.py":
-        out_path = run_dir / f"snapshot_{phase}.json"
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        return base + [
-            "--mode",
-            phase_flag,
-            "--reunion-url",
-            course_url,
-            "--out",
-            str(out_path),
-        ]
-    if script.name in {"fetch_je_stats.py", "fetch_je_chrono.py"}:
-        snapshot = run_dir / f"snapshot_{phase}.json"
-        return base + ["--snapshot", str(snapshot)]
-    if script.name in {"p_finale_export.py", "simulate_ev.py"}:
-        return base + ["--phase", phase]
-    if script.name == "pipeline_run.py":
-        return base + ["--phase", phase, "--course-url", course_url]
-    return base
-
-
-def _extract_identifiers(course_url: str) -> dict[str, str]:
-    match = COURSE_DETAILS_RE.search(course_url)
-    if not match:
-        raise ValueError(f"Cannot parse course URL: {course_url}")
-    return {
-        "date": match.group("date"),
-        "r": match.group("r"),
-        "c": match.group("c"),
-        "rc_label": f"R{match.group('r')}C{match.group('c')}",
-    }
-
-
-def run_course(  # noqa: PLR0912, PLR0915
-    course_url: str,
-    phase: str,
-    extra_env: dict[str, str] | None = None,
-) -> dict[str, Any]:
-    settings = get_settings()
-    phase_norm = _normalise_phase(phase)
-    try:
-        ids = _extract_identifiers(course_url)
-    except ValueError as exc:
-        LOGGER.error("invalid_course_url", extra={"url": course_url, "error": str(exc)})
-        return {
-            "ok": False,
-            "rc": 1,
-            "stdout_tail": f"Error: {exc}",
-            "artifacts": [],
-            "uploaded": None,
-        }
-
-    rc_label = ids["rc_label"]
-    run_dir = settings.resolved_data_dir / rc_label
-    run_dir.mkdir(parents=True, exist_ok=True)
+class CourseRunner:
+    """Execute race analysis using runner_chain.py."""
     
-    env = os.environ.copy()
-    env.update({
-        "COURSE_URL": course_url,
-        "PHASE": phase_norm,
-        "RC_DIR": str(run_dir),
-        "DATA_DIR": str(settings.resolved_data_dir),
-        "TZ": settings.timezone,
-    })
-    if extra_env:
-        env.update(extra_env)
+    def __init__(self, config: Config):
+        self.config = config
+    
+    def run_course(
+        self,
+        course_url: str,
+        phase: str,
+        date: str,
+        correlation_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Run analysis for one course at given phase (H30 or H5).
         
-    artifacts: list[str] = []
-    stdout_lines: list[str] = []
-    overall_rc = 0
+        Uses runner_chain.py with minimal planning file for single course.
+        
+        Returns result dict with status, artifacts, etc.
+        """
+        logger.info(f"Running {course_url} phase={phase}", extra={
+            "correlation_id": correlation_id
+        })
+        
+        # Normalize phase
+        phase_norm = phase.upper().replace("-", "")
+        if phase_norm not in ["H30", "H5"]:
+            return {
+                "ok": False,
+                "error": f"Invalid phase: {phase}",
+                "course_url": course_url
+            }
+        
+        # Extract R/C from URL
+        try:
+            rc_match = self._extract_rc_from_url(course_url)
+            if not rc_match:
+                return {
+                    "ok": False,
+                    "error": "Cannot extract R/C from URL",
+                    "course_url": course_url
+                }
+            
+            r_label, c_label = rc_match
+            race_id = f"{r_label}{c_label}"
+            
+        except Exception as e:
+            return {
+                "ok": False,
+                "error": f"Failed to parse URL: {e}",
+                "course_url": course_url
+            }
+        
+        # Create minimal planning file for runner_chain.py
+        try:
+            planning = self._create_planning_file(
+                date, r_label, c_label, race_id, course_url
+            )
+        except Exception as e:
+            logger.error(f"Failed to create planning: {e}", exc_info=True)
+            return {
+                "ok": False,
+                "error": f"Planning creation failed: {e}",
+                "course_url": course_url
+            }
+        
+        # Run runner_chain.py
+        try:
+            result = self._run_runner_chain(planning, phase_norm, race_id)
+            
+            # Upload artifacts to GCS if configured
+            if self.config.GCS_BUCKET and result.get("ok"):
+                self._upload_artifacts(race_id, date)
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Runner chain failed: {e}", exc_info=True)
+            return {
+                "ok": False,
+                "error": str(e),
+                "course_url": course_url,
+                "rc": race_id
+            }
+        finally:
+            # Cleanup planning file
+            try:
+                Path(planning).unlink(missing_ok=True)
+            except:
+                pass
     
-    for script_name in SCRIPTS:
-        script_path = _script_path(script_name)
-        if not script_path:
-            LOGGER.warning("script_not_found", extra={"script": script_name, "rc_label": rc_label})
-            continue
-        cmd = _build_command(script_path, course_url, phase_norm, run_dir=run_dir)
+    def _extract_rc_from_url(self, url: str) -> Optional[tuple]:
+        """Extract (R#, C#) from ZEturf URL."""
+        import re
+        match = re.search(r'/(R\d+)(C\d+)[-/]', url)
+        if match:
+            return match.group(1), match.group(2)
+        return None
+    
+    def _create_planning_file(
+        self,
+        date: str,
+        r_label: str,
+        c_label: str,
+        race_id: str,
+        course_url: str
+    ) -> str:
+        """Create minimal planning JSON for single race."""
+        
+        # Generate course_id (can be any unique value)
+        course_id = f"{date.replace('-', '')}{race_id}"
+        
+        planning_data = [
+            {
+                "id": race_id,
+                "id_course": course_id,
+                "reunion": r_label,
+                "course": c_label,
+                "start": f"{date}T12:00:00+01:00",  # Dummy time
+                "url": course_url
+            }
+        ]
+        
+        # Write to temp file
+        with tempfile.NamedTemporaryFile(
+            mode='w',
+            suffix='.json',
+            delete=False
+        ) as f:
+            json.dump(planning_data, f, ensure_ascii=False, indent=2)
+            return f.name
+    
+    def _run_runner_chain(
+        self,
+        planning_file: str,
+        phase: str,
+        race_id: str
+    ) -> Dict[str, Any]:
+        """Execute runner_chain.py subprocess."""
+        
+        # Determine window based on phase
+        if phase == "H30":
+            h30_min, h30_max = -9999, 9999  # Always run
+            h5_min, h5_max = 9999, 9999  # Never run
+        else:  # H5
+            h30_min, h30_max = 9999, 9999  # Never run
+            h5_min, h5_max = -9999, 9999  # Always run
+        
+        cmd = [
+            "python", "scripts/runner_chain.py",
+            "--planning", planning_file,
+            "--data-dir", self.config.DATA_DIR,
+            "--budget", str(self.config.BUDGET),
+            "--ev-min", str(self.config.EV_MIN),
+            "--roi-min", str(self.config.ROI_MIN),
+            "--calibration", str(self.config.CALIBRATION_PATH),
+            "--h30-window-min", str(h30_min),
+            "--h30-window-max", str(h30_max),
+            "--h5-window-min", str(h5_min),
+            "--h5-window-max", str(h5_max),
+        ]
+        
         try:
             result = subprocess.run(
-                cmd, env=env, capture_output=True, text=True,
-                timeout=DEFAULT_TIMEOUT, check=False
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=300,  # 5 minutes max
+                check=False
             )
-            if result.stdout:
-                stdout_lines.extend(result.stdout.splitlines()[-50:])
-            if result.returncode != 0:
-                LOGGER.error("script_failed", extra={
-                    "script": script_name, "rc": result.returncode,
-                    "stderr_tail": result.stderr[-500:] if result.stderr else "",
-                    "rc_label": rc_label,
-                })
-                overall_rc = result.returncode
-            else:
-                LOGGER.info("script_success", extra={"script": script_name, "rc_label": rc_label})
+            
+            stdout = result.stdout
+            stderr = result.stderr
+            rc = result.returncode
+            
+            # Log output
+            if stdout:
+                logger.info(f"Runner stdout (last 500 chars): {stdout[-500:]}")
+            if stderr:
+                logger.warning(f"Runner stderr: {stderr}")
+            
+            # Find artifacts
+            race_dir = Path(self.config.DATA_DIR) / race_id
+            artifacts = self._collect_artifacts(race_dir)
+            
+            return {
+                "ok": rc == 0,
+                "rc": rc,
+                "race_id": race_id,
+                "phase": phase,
+                "stdout_tail": stdout[-500:] if stdout else "",
+                "stderr_tail": stderr[-500:] if stderr else "",
+                "artifacts": artifacts
+            }
+            
         except subprocess.TimeoutExpired:
-            LOGGER.error(
-                "script_timeout",
-                extra={
-                    "script": script_name,
-                    "timeout": DEFAULT_TIMEOUT,
-                    "rc_label": rc_label,
-                },
-            )
-            overall_rc = 124
-        except Exception:
-            log_exception(
-                LOGGER,
-                "script_exception",
-                extra={"script": script_name, "rc_label": rc_label},
-            )
-            overall_rc = 1
-
-    for artifact_dir in ARTIFACT_DIRECTORIES:
-        abs_dir = REPO_ROOT / artifact_dir
-        if not abs_dir.exists():
-            continue
-        for pattern in ARTIFACT_PATTERNS:
-            for path in abs_dir.glob(f"**/{pattern}"):
-                if rc_label in str(path):
-                    artifacts.append(str(path.relative_to(REPO_ROOT)))
-
-    uploaded = None
-    if settings.gcs_bucket and storage:
-        uploaded = []
+            logger.error(f"Runner timeout for {race_id}")
+            return {
+                "ok": False,
+                "error": "timeout",
+                "race_id": race_id
+            }
+        except Exception as e:
+            logger.error(f"Runner execution failed: {e}", exc_info=True)
+            return {
+                "ok": False,
+                "error": str(e),
+                "race_id": race_id
+            }
+    
+    def _collect_artifacts(self, race_dir: Path) -> Dict[str, str]:
+        """Collect paths to generated artifacts."""
+        artifacts = {}
+        
+        if not race_dir.exists():
+            return artifacts
+        
+        for name in [
+            "analysis.json",
+            "metrics.json",
+            "metrics.csv",
+            "p_finale.json",
+            "tickets.json",
+            "snapshot_H30.json",
+            "snapshot_H5.json",
+            "h30.json",
+            "h5.json"
+        ]:
+            path = race_dir / name
+            if path.exists():
+                artifacts[name] = str(path)
+        
+        return artifacts
+    
+    def _upload_artifacts(self, race_id: str, date: str) -> None:
+        """Upload artifacts to GCS."""
         try:
-            client = storage.Client()
-            bucket = client.bucket(settings.gcs_bucket)
-            for artifact in artifacts:
-                artifact_path = REPO_ROOT / artifact
-                if not artifact_path.exists():
-                    LOGGER.warning("artifact_missing", extra={"path": artifact})
-                    continue
-                prefix = settings.gcs_prefix.strip("/") if settings.gcs_prefix else ""
-                blob_name = f"{prefix}/{artifact}".strip("/")
-                try:
-                    bucket.blob(blob_name).upload_from_filename(str(artifact_path))
-                    uploaded.append(blob_name)
-                    LOGGER.info("artifact_uploaded", extra={"blob": blob_name})
-                except Exception as exc:
-                    LOGGER.warning(
-                        "artifact_upload_failed",
-                        extra={"artifact": artifact, "error": str(exc)},
-                    )
-            LOGGER.info(
-                "gcs_upload_complete",
-                extra={"rc_label": rc_label, "uploaded_count": len(uploaded)},
-            )
-        except Exception:
-            log_exception(LOGGER, "gcs_upload_error", extra={"rc_label": rc_label})
-
-    return {
-        "ok": overall_rc == 0,
-        "rc": overall_rc,
-        "stdout_tail": "\n".join(stdout_lines[-20:]),
-        "artifacts": artifacts,
-        "uploaded": uploaded,
-    }
-
-
-__all__ = ["run_course"]
+            from google.cloud import storage
+            
+            client = storage.Client(project=self.config.PROJECT_ID)
+            bucket = client.bucket(self.config.GCS_BUCKET)
+            
+            race_dir = Path(self.config.DATA_DIR) / race_id
+            
+            for file_path in race_dir.glob("*.json"):
+                blob_name = f"{self.config.GCS_PREFIX}/analyses/{date}/{race_id}/{file_path.name}"
+                blob = bucket.blob(blob_name)
+                blob.upload_from_filename(str(file_path))
+                logger.info(f"Uploaded {file_path.name} to gs://{self.config.GCS_BUCKET}/{blob_name}")
+            
+            for file_path in race_dir.glob("*.csv"):
+                blob_name = f"{self.config.GCS_PREFIX}/analyses/{date}/{race_id}/{file_path.name}"
+                blob = bucket.blob(blob_name)
+                blob.upload_from_filename(str(file_path))
+                logger.info(f"Uploaded {file_path.name} to gs://{self.config.GCS_BUCKET}/{blob_name}")
+                
+        except Exception as e:
+            logger.warning(f"GCS upload failed: {e}")
