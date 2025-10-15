@@ -1,80 +1,50 @@
-"""Timezone aware helpers for the orchestration service."""
-
-from __future__ import annotations
-
-from datetime import date, datetime, time, timedelta
-from typing import Iterable
+"""Timezone utilities for Europe/Paris and UTC conversions."""
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 
-def get_timezone(name: str) -> ZoneInfo:
-    """Return a ZoneInfo instance for the provided timezone name."""
-
-    return ZoneInfo(name)
+TZ_PARIS = ZoneInfo("Europe/Paris")
+TZ_UTC = ZoneInfo("UTC")
 
 
-def parse_plan_date(value: str, *, tz_name: str = "Europe/Paris") -> date:
-    """Parse the schedule date from input."""
-
-    if value.lower() in {"today", "now"}:
-        return datetime.now(tz=get_timezone(tz_name)).date()
-    return datetime.strptime(value, "%Y-%m-%d").date()
-
-
-def combine_local_datetime(
-    plan_date: date, clock: str, *, tz_name: str = "Europe/Paris"
-) -> datetime:
-    """Combine a date and an HH:MM string into an aware datetime."""
-
-    hour, minute = map(int, clock.split(":", 1))
-    tz = get_timezone(tz_name)
-    return datetime.combine(plan_date, time(hour=hour, minute=minute, tzinfo=tz))
-
-
-def ensure_timezone(dt: datetime, tz_name: str) -> datetime:
-    """Ensure a datetime is aware in the provided timezone."""
-
-    tz = get_timezone(tz_name)
-    if dt.tzinfo is None:
-        return dt.replace(tzinfo=tz)
-    return dt.astimezone(tz)
-
-
-def to_utc(dt: datetime) -> datetime:
-    """Convert a datetime to UTC."""
-
-    return dt.astimezone(ZoneInfo("UTC"))
-
-
-def format_rfc3339(dt: datetime) -> str:
-    """Return the RFC3339 representation of a datetime."""
-
-    return dt.astimezone(ZoneInfo("UTC")).isoformat().replace("+00:00", "Z")
-
-
-def subtract_offsets(
-    base: datetime, offsets: Iterable[timedelta]
-) -> list[tuple[timedelta, datetime]]:
-    """Return offsets applied to the base datetime, sorted soonest first."""
-
-    entries = [(offset, base - offset) for offset in offsets]
-    entries.sort(key=lambda item: item[1])
-    return entries
-
-
-def minutes(value: int) -> timedelta:
-    """Return a timedelta representing N minutes."""
-
-    return timedelta(minutes=value)
+def now_paris() -> datetime:
+    """Current time in Europe/Paris."""
+    return datetime.now(TZ_PARIS)
 
 
 def now_utc() -> datetime:
-    """Return current UTC time."""
+    """Current time in UTC."""
+    return datetime.now(TZ_UTC)
 
-    return datetime.now(tz=ZoneInfo("UTC"))
+
+def paris_to_utc(dt: datetime) -> datetime:
+    """Convert Paris time to UTC."""
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=TZ_PARIS)
+    return dt.astimezone(TZ_UTC)
 
 
-def now_local(tz_name: str = "Europe/Paris") -> datetime:
-    """Return current time in provided timezone."""
+def utc_to_paris(dt: datetime) -> datetime:
+    """Convert UTC to Paris time."""
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=TZ_UTC)
+    return dt.astimezone(TZ_PARIS)
 
-    return datetime.now(tz=get_timezone(tz_name))
+
+def format_rfc3339(dt: datetime) -> str:
+    """Format datetime as RFC3339 (for Cloud Tasks scheduleTime)."""
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=TZ_PARIS)
+    utc_dt = dt.astimezone(TZ_UTC)
+    return utc_dt.isoformat().replace("+00:00", "Z")
+
+
+def parse_time_local(date_str: str, time_str: str) -> datetime:
+    """Parse date (YYYY-MM-DD) and time (HH:MM) as Paris timezone."""
+    dt = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M")
+    return dt.replace(tzinfo=TZ_PARIS)
+
+
+def subtract_minutes(dt: datetime, minutes: int) -> datetime:
+    """Subtract minutes from datetime."""
+    return dt - timedelta(minutes=minutes)
