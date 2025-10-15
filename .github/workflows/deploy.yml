@@ -1,53 +1,234 @@
 name: Deploy to Cloud Run
+
 on:
   push:
-    branches: ["main"]
-permissions:
-  contents: read
-  id-token: write
-concurrency:
-  group: deploy-${{ github.ref }}
-  cancel-in-progress: true
+    branches:
+      - main
+      - staging
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+
 env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
   REGION: europe-west1
-  REPO: hippiq-repo
-  SERVICE: analyse-hippique-api
-  DEFAULT_BUDGET: "5"
-  MAX_VOLAT_PER_HORSE: "0.60"
-  DATA_MODE: "prod"
+  SERVICE_NAME: hippique-orchestrator
+
 jobs:
-  deploy:
+  test:
+    name: Run Tests
     runs-on: ubuntu-latest
+    
     steps:
-      - uses: actions/checkout@v4
-      - uses: google-github-actions/auth@v2
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
-          service_account: ${{ secrets.GCP_WIF_SERVICE_ACCOUNT }}
-          token_format: access_token
-      - uses: google-github-actions/setup-gcloud@v2
-        with:
-          project_id: ${{ secrets.GCP_PROJECT_ID }}
-      - name: Configure Artifact Registry
-        run: gcloud auth configure-docker "${{ env.REGION }}-docker.pkg.dev" -q
-      - name: Build & Push (Docker)
-        shell: bash
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: Install dependencies
         run: |
-          set -euo pipefail
-          IMAGE="${REGION}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${REPO}/${SERVICE}:${GITHUB_SHA}"
+          pip install -r requirements.txt
+          pip install pytest pytest-cov
+      
+      - name: Run tests
+        run: |
+          pytest tests/ -v --cov=src --cov-report=xml --cov-report=term
+      
+      - name: Upload coverage
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./coverage.xml
+          flags: unittests
+          name: codecov-umbrella
+
+  lint:
+    name: Lint Code
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install linters
+        run: |
+          pip install flake8 black isort mypy
+      
+      - name: Run black
+        run: black --check src/ tests/
+      
+      - name: Run isort
+        run: isort --check-only src/ tests/
+      
+      - name: Run flake8
+        run: flake8 src/ tests/ --max-line-length=100 --extend-ignore=E203,W503
+
+  build-and-deploy:
+    name: Build and Deploy
+    runs-on: ubuntu-latest
+    needs: [test, lint]
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    
+    permissions:
+      contents: read
+      id-token: write
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Determine environment
+        id: env
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "environment=${{ github.event.inputs.environment }}" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            echo "environment=production" >> $GITHUB_OUTPUT
+          else
+            echo "environment=staging" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+      
+      - name: Configure Docker for GCR
+        run: |
+          gcloud auth configure-docker
+      
+      - name: Build image
+        run: |
+          IMAGE="gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}:${{ github.sha }}"
           docker build -t "$IMAGE" .
+          docker tag "$IMAGE" "gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}:latest"
           docker push "$IMAGE"
-          echo "IMAGE=$IMAGE" >> $GITHUB_ENV
-      - name: Deploy
-        shell: bash
+          docker push "gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}:latest"
+      
+      - name: Deploy to Cloud Run
         run: |
-          set -euo pipefail
-          gcloud run deploy "${SERVICE}" \
-            --image "${IMAGE}" \
-            --region "${REGION}" \
+          ENV="${{ steps.env.outputs.environment }}"
+          SERVICE="${{ env.SERVICE_NAME }}-${ENV}"
+          IMAGE="gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}:${{ github.sha }}"
+          
+          gcloud run deploy "$SERVICE" \
+            --image "$IMAGE" \
             --platform managed \
-            --allow-unauthenticated \
+            --region ${{ env.REGION }} \
+            --memory 2Gi \
+            --cpu 2 \
             --timeout 600 \
-            --set-env-vars "DEFAULT_BUDGET=${DEFAULT_BUDGET},MAX_VOLAT_PER_HORSE=${MAX_VOLAT_PER_HORSE},DATA_MODE=${DATA_MODE}"
-          gcloud run services describe "${SERVICE}" --region "${REGION}" --format='value(status.url)'
-            
+            --concurrency 10 \
+            --min-instances 0 \
+            --max-instances 10 \
+            --service-account="${{ secrets.GCP_SA_EMAIL }}" \
+            --set-env-vars "PROJECT_ID=${{ env.PROJECT_ID }},REGION=${{ env.REGION }},TZ=Europe/Paris" \
+            --tag "${{ github.sha }}" \
+            --no-traffic
+      
+      - name: Run smoke tests
+        run: |
+          ENV="${{ steps.env.outputs.environment }}"
+          SERVICE="${{ env.SERVICE_NAME }}-${ENV}"
+          
+          # Get service URL with specific tag
+          SERVICE_URL=$(gcloud run services describe "$SERVICE" \
+            --platform managed \
+            --region ${{ env.REGION }} \
+            --format 'value(status.url)')
+          
+          TAG_URL="${SERVICE_URL/https:\/\//https://${{ github.sha }}---}"
+          
+          # Test healthz endpoint
+          TOKEN=$(gcloud auth print-identity-token)
+          
+          RESPONSE=$(curl -s -w "\n%{http_code}" \
+            -H "Authorization: Bearer $TOKEN" \
+            "${TAG_URL}/healthz")
+          
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | head -n-1)
+          
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "❌ Health check failed with status $HTTP_CODE"
+            echo "$BODY"
+            exit 1
+          fi
+          
+          echo "✅ Health check passed"
+      
+      - name: Migrate traffic (production only)
+        if: steps.env.outputs.environment == 'production'
+        run: |
+          ENV="${{ steps.env.outputs.environment }}"
+          SERVICE="${{ env.SERVICE_NAME }}-${ENV}"
+          
+          # Gradual traffic migration
+          gcloud run services update-traffic "$SERVICE" \
+            --region ${{ env.REGION }} \
+            --to-tags "${{ github.sha }}=10"
+          
+          echo "✅ Migrated 10% traffic to new revision"
+          echo "📝 Monitor for 5 minutes, then run:"
+          echo "   gcloud run services update-traffic $SERVICE --to-latest"
+      
+      - name: Full traffic migration (staging)
+        if: steps.env.outputs.environment == 'staging'
+        run: |
+          SERVICE="${{ env.SERVICE_NAME }}-staging"
+          gcloud run services update-traffic "$SERVICE" \
+            --region ${{ env.REGION }} \
+            --to-latest
+          
+          echo "✅ Deployed to staging with full traffic"
+      
+      - name: Output summary
+        run: |
+          ENV="${{ steps.env.outputs.environment }}"
+          SERVICE="${{ env.SERVICE_NAME }}-${ENV}"
+          
+          SERVICE_URL=$(gcloud run services describe "$SERVICE" \
+            --platform managed \
+            --region ${{ env.REGION }} \
+            --format 'value(status.url)')
+          
+          echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment:** ${ENV}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Service:** ${SERVICE}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Image:** gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}:${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **URL:** ${SERVICE_URL}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Next Steps" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ "$ENV" == "production" ]; then
+            echo "- Monitor metrics for 5 minutes" >> $GITHUB_STEP_SUMMARY
+            echo "- Migrate remaining traffic:" >> $GITHUB_STEP_SUMMARY
+            echo "  \`\`\`bash" >> $GITHUB_STEP_SUMMARY
+            echo "  gcloud run services update-traffic ${SERVICE} --to-latest --region ${{ env.REGION }}" >> $GITHUB_STEP_SUMMARY
+            echo "  \`\`\`" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- ✅ Staging deployment complete" >> $GITHUB_STEP_SUMMARY
+            echo "- Test the service: ${SERVICE_URL}" >> $GITHUB_STEP_SUMMARY
+          fi
