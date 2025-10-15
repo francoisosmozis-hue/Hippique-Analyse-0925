@@ -855,7 +855,7 @@ def _run_single_pipeline(
     previous_overround = os.environ.get("MAX_COMBO_OVERROUND")
     os.environ["MAX_COMBO_OVERROUND"] = f"{overround_threshold:.2f}"
     try:
-        pipeline_run.cmd_analyse(args)
+        pipeline_run.run_pipeline(**vars(args))
     finally:
         if previous_overround is None:
             os.environ.pop("MAX_COMBO_OVERROUND", None)
@@ -1017,7 +1017,7 @@ def _run_h5_guard_phase(
         except json.JSONDecodeError:  # pragma: no cover - defensive
             odds_payload = {}
         if isinstance(odds_payload, Mapping):
-            overround_value = pipeline_run._compute_market_overround(odds_payload)
+            overround_value = pipeline_run._overround_from_odds_win(odds_payload.values())
 
     partants_payload: Mapping[str, Any] = {}
     if partants_path.exists():
@@ -1180,6 +1180,10 @@ def _run_h5_guard_phase(
                 "guards": guards_context,
             },
         }
+        analysis_file_path = rc_dir / "analysis_H5.json"
+        with open(analysis_file_path, "w", encoding="utf-8") as f:
+            json.dump(analysis_payload, f, indent=2, ensure_ascii=False)
+
         if data_missing:
             logger.warning(
                 "[H-5][guards] data missing for %s (reason=data_missing, missing=%s)",
@@ -1193,6 +1197,10 @@ def _run_h5_guard_phase(
                 failure_reason,
             )
         return False, analysis_payload, outcome
+
+    analysis_file_path = rc_dir / "analysis_H5.json"
+    with open(analysis_file_path, "w", encoding="utf-8") as f:
+        json.dump(analysis_payload, f, indent=2, ensure_ascii=False)
 
     analysis_payload["decision"] = "PLAY"
     logger.info("[H-5][guards] course %s validated", rc_dir.name)
@@ -1887,7 +1895,7 @@ def _execute_h5_chain(
         budget=budget,
         min_roi=roi_min,
     )
-    return out_path
+    return guard_ok, guard_outcome
 
 
 _DISCOVER_SCRIPT = Path(__file__).resolve().with_name("discover_geny_today.py")

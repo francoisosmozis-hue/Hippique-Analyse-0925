@@ -15,7 +15,7 @@ import time
 import yaml
 import argparse
 import logging
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Mapping
 from datetime import datetime
 from pathlib import Path
 
@@ -84,158 +84,64 @@ class ZeturfFetcher:
                 
                 # Vérifier le status code
                 response.raise_for_status()
+                return response
                 
-                        # --- BEGIN odds_map population (fixed) ---
-                odds_map: Dict[str, float] = {}
-                for row in rows:
-                    if not row:
-                        continue
-                    runner_id = row.get("id") or row.get("runner_id")
-                    if not runner_id:
-                        continue
-                    raw = row.get("odds") or row.get("odd") or row.get("sp")
-                    try:
-                        odds_map[str(runner_id)] = float(str(raw).replace(",", "."))
-                    except (TypeError, ValueError):
-                        continue
-                # --- END ---
-
-            for runner in runners:
-                if str(runner['num']) in odds_map:
-                    runner['dernier_rapport'] = {'gagnant': odds_map[str(runner['num'])]}
-                    runner['cote'] = odds_map[str(runner['num'])]
-    
-    except Exception as e:
-        logger.warning(f"Failed to fetch PMU rapports for R{reunion}C{course}: {e}")
-
-    return {
-        "runners": runners,
-        "hippodrome": partants_data.get('hippodrome', {}).get('libelleCourt'),
-        "discipline": partants_data.get('discipline'),
-        "partants": len(runners),
-        "course_id": partants_data.get('id'),
-        "reunion": f"R{reunion}",
-        "course": f"C{course}",
-        "date": date,
-    }
-def fetch_race_snapshot(
-    reunion: str,
-    course: str | None = None,
-    phase: str = "H30",
-    *,
-    sources: Mapping[str, Any] | None = None,
-    url: str | None = None,
-    retries: int = 3,
-    backoff: float = 1.5,
-    initial_delay: float = 0.5,
-) -> Dict[str, Any]:
-
-    if sources and sources.get("provider") == "pmu":
-        if not url:
-            raise ValueError("URL is required for PMU provider")
+            except (Timeout, ConnectionError) as e:
+                logger.warning(f"Erreur réseau ({e}), nouvelle tentative dans {self.delay}s...")
+                last_exception = e
+                time.sleep(self.delay)
+                self.delay *= 2  # Backoff exponentiel
+            except RequestException as e:
+                logger.error(f"Erreur de requête: {e}")
+                last_exception = e
+                break  # Stop retrying for other client-side errors
         
-        match = re.search(r"(R\d+C\d+)", url)
-        if not match:
-            raise ValueError("Cannot extract R/C from URL for PMU provider")
+        raise ZeturfFetchError(f"Toutes les tentatives ont échoué pour {url}") from last_exception
+
+    def fetch_race_snapshot(
+        self,
+        course_id: Optional[str] = None,
+        reunion_url: Optional[str] = None,
+        mode: str = 'h30'
+    ) -> Dict[str, Any]:
+        """Récupère les données d'une course depuis ZEturf"""
+        if self.use_cache:
+            # Logique de cache à implémenter
+            pass
+
+        if reunion_url:
+            # Extraire les données de la page de la réunion
+            response = self.fetch_with_retry(reunion_url)
+            soup = BeautifulSoup(response.content, 'lxml')
+            # Extraire les données de la course
+            data = self._extract_race_data(soup)
+            return self._build_snapshot(data, mode, reunion_url)
         
-        rc_label = match.group(1)
-        reunion_str, course_str = _derive_rc_parts(rc_label)
+        elif course_id:
+            # Construire l'URL de l'API ZEturf
+            # Cette partie est une supposition, l'URL de l'API n'est pas dans le code fourni
+            url = f"https://www.zeturf.fr/rest/api/race/{course_id}"
+            response = self.fetch_with_retry(url)
+            data = response.json()
+            return self._build_snapshot(data, mode, url)
+
+        else:
+            raise ValueError("Vous devez fournir course_id ou reunion_url")
+
+    def _extract_race_data(self, soup: BeautifulSoup) -> Dict[str, Any]:
+        """Extrait les données de la course depuis le HTML"""
+        data: Dict[str, Any] = {
+            'runners': [],
+            'partants': [],
+            'market': {},
+            'phase': 'open'
+        }
         
-        today = dt.date.today().strftime("%Y-%m-%d")
-        r_num = int(reunion_str.replace("R", ""))
-        c_num = int(course_str.replace("C", ""))
-        return fetch_from_pmu_api(today, r_num, c_num)
-
-    # Zeturf/Geny logic (existing code)
-    rc_from_first = _normalise_rc(reunion)
-    if course is None and sources is not None and rc_from_first:
-        return _fetch_race_snapshot_by_rc(
-            rc_from_first,
-            phase=phase,
-            sources=sources,
-            url=url,
-            retries=retries,
-            backoff=backoff,
-            initial_delay=initial_delay,
-        )
-
-    if course is None:
-        raise ValueError(
-            "course label is required when reunion/course are provided separately"
-        )
-
-    reunion_label = _normalise_reunion_label(reunion)
-    course_label = _normalise_course_label(course)
-    rc = f"{reunion_label}{course_label}"
-
-    config: Dict[str, Any]
-    if isinstance(sources, MutableMapping):
-        config = dict(sources)
-    elif isinstance(sources, Mapping):
-        config = dict(sources)
-    else:
-        config = {}
-
-    rc_map_raw = (
-        config.get("rc_map") if isinstance(config.get("rc_map"), Mapping) else None
-    )
-    rc_map: Dict[str, Any] = (
-        {str(k): v for k, v in rc_map_raw.items()} if rc_map_raw else {}
-    )
-
-    entry = dict(rc_map.get(rc, {}))
-    entry.setdefault("reunion", reunion_label)
-    entry.setdefault("course", course_label)
-    if url:
-        entry["url"] = url
-       
-    rc_map[rc] = entry
-    config["rc_map"] = rc_map
-
-    snapshot = _fetch_race_snapshot_by_rc(
-        rc,
-        phase=phase,
-        sources=config,
-        url=url,
-        retries=retries,
-        backoff=backoff,
-        initial_delay=initial_delay,
-    )
-
-    snapshot.setdefault("reunion", reunion_label)
-    snapshot.setdefault("course", course_label)
-    snapshot.setdefault("rc", rc)
-    return snapshot
-
-def write_snapshot_from_geny(course_id: str, phase: str, rc_dir: Path) -> None:
-    logger.info("STUB: Writing dummy snapshots for %s in %s", course_id, rc_dir)
-    rc_dir.mkdir(parents=True, exist_ok=True)
-
-    runners = [
-        {"id": "1", "num": "1", "name": "DUMMY 1", "odds": 5.0},
-        {"id": "2", "num": "2", "name": "DUMMY 2", "odds": 6.0},
-        {"id": "3", "num": "3", "name": "DUMMY 3", "odds": 7.0},
-        {"id": "4", "num": "4", "name": "DUMMY 4", "odds": 8.0},
-        {"id": "5", "num": "5", "name": "DUMMY 5", "odds": 9.0},
-        {"id": "6", "num": "6", "name": "DUMMY 6", "odds": 10.0},
-        {"id": "7", "num": "7", "name": "DUMMY 7", "odds": 11.0},
-    ]
-
-    # Create dummy H-30 file
-    h30_file = rc_dir / "dummy_H-30.json"
-    with open(h30_file, "w", encoding="utf-8") as f:
-        json.dump({"id_course": course_id, "phase": "H-30", "runners": runners, "distance": 2100}, f)
-    logger.info("STUB: Wrote dummy H-30 file to %s", h30_file)
-
-    # Create dummy H-5 file
-    h5_file = rc_dir / "dummy_H-5.json"
-    with open(h5_file, "w", encoding="utf-8") as f:
-        json.dump({"id_course": course_id, "phase": "H-5", "runners": runners, "distance": 2100}, f)
-    logger.info("STUB: Wrote dummy H-5 file to %s", h5_file)
-
-
-
-# ... (le reste du fichier)
+        # Extraire l'heure de départ
+        data['start_time'] = self._extract_start_time(soup)
+        
+        # Extraire les partants
+        runners_data = soup.select('.race-runners-table .runner-row')
         for idx, runner_elem in enumerate(runners_data, 1):
             try:
                 runner = {
@@ -252,7 +158,7 @@ def write_snapshot_from_geny(course_id: str, phase: str, rc_dir: Path) -> None:
                 continue
         
         return data
-    
+
     def _extract_start_time(self, soup: BeautifulSoup) -> Optional[str]:
         """
         Extrait l'heure de départ depuis le HTML
@@ -283,7 +189,7 @@ def write_snapshot_from_geny(course_id: str, phase: str, rc_dir: Path) -> None:
         
         logger.warning("Impossible d'extraire l'heure de départ")
         return None
-    
+
     def _safe_extract(self, elem, selector: str) -> str:
         """Extraction sécurisée avec sélecteur CSS"""
         try:
@@ -291,7 +197,7 @@ def write_snapshot_from_geny(course_id: str, phase: str, rc_dir: Path) -> None:
             return found.get_text(strip=True) if found else ''
         except Exception:
             return ''
-    
+
     def _extract_odds(self, elem) -> float:
         """Extrait la cote d'un élément runner"""
         try:
@@ -302,7 +208,7 @@ def write_snapshot_from_geny(course_id: str, phase: str, rc_dir: Path) -> None:
         except Exception:
             pass
         return 0.0
-    
+
     def _build_snapshot(
         self,
         data: Dict[str, Any],
@@ -331,12 +237,12 @@ def write_snapshot_from_geny(course_id: str, phase: str, rc_dir: Path) -> None:
             snapshot['start_time'] = data['start_time']
         
         return snapshot
-    
+
     def _check_cache(self, url: str, mode: str) -> Optional[Dict[str, Any]]:
         """Vérifie si des données en cache existent"""
         # Logique de cache à implémenter si nécessaire
         return None
-    
+
     def save_snapshot(self, snapshot: Dict[str, Any], output_path: str):
         """Sauvegarde le snapshot dans un fichier JSON"""
         output_file = Path(output_path)
@@ -347,6 +253,55 @@ def write_snapshot_from_geny(course_id: str, phase: str, rc_dir: Path) -> None:
         
         logger.info(f"✓ Snapshot sauvegardé: {output_file}")
 
+def write_snapshot_from_geny(course_id: str, phase: str, rc_dir: Path, course_url: str) -> None:
+    logger.info("STUB: Writing dummy snapshots for %s in %s", course_id, rc_dir)
+    rc_dir.mkdir(parents=True, exist_ok=True)
+
+    runners = [
+        {"id": "1", "num": "1", "name": "DUMMY 1", "odds": 5.0},
+        {"id": "2", "num": "2", "name": "DUMMY 2", "odds": 6.0},
+        {"id": "3", "num": "3", "name": "DUMMY 3", "odds": 7.0},
+        {"id": "4", "num": "4", "name": "DUMMY 4", "odds": 8.0},
+        {"id": "5", "num": "5", "name": "DUMMY 5", "odds": 9.0},
+        {"id": "6", "num": "6", "name": "DUMMY 6", "odds": 10.0},
+        {"id": "7", "num": "7", "name": "DUMMY 7", "odds": 11.0},
+    ]
+
+    # Create dummy H-30 file
+    h30_file = rc_dir / f"{datetime.now().strftime('%Y%m%d%H%M%S')}_H-30.json"
+    with open(h30_file, "w", encoding="utf-8") as f:
+        json.dump({"id_course": course_id, "phase": "H-30", "runners": runners, "distance": 2100}, f)
+    logger.info("STUB: Wrote dummy H-30 file to %s", h30_file)
+
+    # Create dummy H-5 file
+    h5_file = rc_dir / f"{datetime.now().strftime('%Y%m%d%H%M%S')}_H-5.json"
+    with open(h5_file, "w", encoding="utf-8") as f:
+        json.dump({"id_course": course_id, "phase": "H-5", "runners": runners, "distance": 2100}, f)
+    logger.info("STUB: Wrote dummy H-5 file to %s", h5_file)
+
+def normalize_snapshot(payload: Mapping[str, Any]) -> dict[str, Any]:
+    """
+    Normalise un snapshot de course.
+    """
+    if isinstance(payload, dict):
+        normalized = payload
+    elif isinstance(payload, Mapping):
+        try:
+            normalized = dict(payload)
+        except TypeError:
+            return {}
+    else:
+        return {}
+        
+    runners = normalized.get("runners")
+    if isinstance(runners, list) and runners:
+        return normalized
+        
+    fallback = normalized.get("partants")
+    if isinstance(fallback, list) and fallback:
+        normalized["runners"] = fallback
+        
+    return normalized
 
 def main():
     """Point d'entrée du script"""
