@@ -1,185 +1,189 @@
-"""Cloud Tasks / Scheduler orchestration helpers."""
-
-from __future__ import annotations
-
+"""Scheduling utilities for Cloud Tasks and Cloud Scheduler."""
+import logging
 import json
-import re
+import hashlib
 from datetime import datetime
-from typing import Any
+from typing import Dict, Any
 
-from google.api_core import exceptions
-from google.cloud import scheduler_v1, tasks_v2
+from google.cloud import tasks_v2
+from google.cloud import scheduler_v1
 from google.protobuf import timestamp_pb2
 
-from .config import Settings
-from .logging_utils import get_logger
-from .time_utils import ensure_timezone, format_rfc3339, to_utc
+from config import Config
+from time_utils import format_rfc3339, paris_to_utc
 
-LOGGER = get_logger(__name__)
-
-COURSE_DETAILS_RE = re.compile(
-    r"/course/(?P<date>\d{4}-\d{2}-\d{2})/R(?P<r>\d+)C(?P<c>\d+)",
-    re.IGNORECASE,
-)
+logger = logging.getLogger(__name__)
 
 
-def _extract_identifiers(course_url: str) -> dict[str, str]:
-    match = COURSE_DETAILS_RE.search(course_url)
-    if not match:
-        raise ValueError(f"Unable to extract race identifiers from URL: {course_url}")
-    return {
-        "date": match.group("date"),
-        "r": str(int(match.group("r"))),
-        "c": str(int(match.group("c"))),
-    }
-
-
-def _normalise_phase(phase: str) -> str:
-    value = phase.replace("-", "").upper()
-    if value not in {"H30", "H5"}:
-        raise ValueError(f"Unsupported phase: {phase}")
-    return value
-
-
-def enqueue_run_task(  # noqa: PLR0913
-    settings: Settings,
-    *,
-    run_url: str,
-    payload: dict[str, Any],
-    course_url: str,
-    phase: str,
-    when_local: datetime,
-    correlation_id: str | None = None,
-) -> dict[str, Any]:
-    """Enqueue a Cloud Task to trigger the /run endpoint."""
-    when_local = ensure_timezone(when_local, settings.timezone)
-    when_utc = to_utc(when_local)
+class CloudTasksScheduler:
+    """Schedule tasks using Cloud Tasks."""
     
-    schedule_time = timestamp_pb2.Timestamp()
-    schedule_time.FromDatetime(when_utc)
-
-    ids = _extract_identifiers(course_url)
-    phase_clean = _normalise_phase(phase)
-    task_name = (
-        f"{settings.queue_path}/tasks/"
-        f"run-{ids['date'].replace('-', '')}-"
-        f"r{ids['r']}c{ids['c']}-{phase_clean.lower()}"
-    )
-    
-    audience = settings.service_audience or settings.resolved_service_url or run_url
-    
-    http_request = tasks_v2.HttpRequest(
-        url=run_url,
-        http_method=tasks_v2.HttpMethod.POST,
-        headers={
-            "Content-Type": "application/json",
-            "User-Agent": settings.http_user_agent,
-            "X-Correlation-ID": correlation_id or task_name.split("/")[-1],
-        },
-        body=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-    )
-    
-    if settings.tasks_service_account_email:
-        http_request.oidc_token = tasks_v2.OidcToken(
-            service_account_email=settings.tasks_service_account_email,
-            audience=audience,
+    def __init__(self, config: Config):
+        self.config = config
+        self.client = tasks_v2.CloudTasksClient()
+        self.queue_path = self.client.queue_path(
+            config.PROJECT_ID,
+            config.QUEUE_LOCATION,
+            config.QUEUE_ID
         )
-
-    task = tasks_v2.Task(
-        name=task_name,
-        http_request=http_request,
-        schedule_time=schedule_time,
-    )
-
-    client = tasks_v2.CloudTasksClient()
-    created = True
-    try:
-        response = client.create_task(parent=settings.queue_path, task=task)
-        LOGGER.info("task_created", extra={
-            "task_name": response.name,
-            "phase": phase,
-            "schedule_time_utc": format_rfc3339(when_utc),
-        })
-    except exceptions.AlreadyExists:
-        created = False
-        LOGGER.info("task_exists", extra={"task_name": task_name, "phase": phase})
-    except Exception as exc:
-        LOGGER.error("task_creation_failed", extra={"task_name": task_name, "error": str(exc)})
-        raise
+    
+    def schedule_task(
+        self,
+        run_url: str,
+        race_id: str,
+        phase: str,
+        when_local: datetime,
+        payload: Dict[str, Any],
+        date: str
+    ) -> Dict[str, str]:
+        """
+        Schedule a task to run at when_local (Europe/Paris).
         
-    return {
-        "name": task_name,
-        "created": created,
-        "phase": phase,
-        "schedule_time_local": when_local.isoformat(),
-        "schedule_time_utc": format_rfc3339(when_utc),
-    }
+        Returns task info dict.
+        """
+        # Convert to UTC for Cloud Tasks
+        when_utc = paris_to_utc(when_local)
+        
+        # Create deterministic task name (RFC-1035 compliant)
+        task_name_base = f"run-{date.replace('-', '')}-{race_id.lower()}-{phase.lower()}"
+        task_name = self._make_task_name(task_name_base)
+        task_path = f"{self.queue_path}/tasks/{task_name}"
+        
+        # Check if task already exists (idempotence)
+        try:
+            existing = self.client.get_task(name=task_path)
+            logger.info(f"Task {task_name} already exists, skipping")
+            return {
+                "name": task_name,
+                "status": "existing",
+                "schedule_time": when_utc.isoformat()
+            }
+        except Exception:
+            pass  # Task doesn't exist, create it
+        
+        # Create task
+        task = {
+            "name": task_path,
+            "http_request": {
+                "http_method": tasks_v2.HttpMethod.POST,
+                "url": run_url,
+                "headers": {
+                    "Content-Type": "application/json"
+                },
+                "body": json.dumps(payload).encode(),
+            },
+            "schedule_time": timestamp_pb2.Timestamp(
+                seconds=int(when_utc.timestamp())
+            ),
+        }
+        
+        # Add OIDC token if service account configured
+        if self.config.SERVICE_ACCOUNT:
+            task["http_request"]["oidc_token"] = {
+                "service_account_email": self.config.SERVICE_ACCOUNT,
+                "audience": run_url
+            }
+        
+        try:
+            response = self.client.create_task(
+                parent=self.queue_path,
+                task=task
+            )
+            logger.info(f"Created task {task_name} for {when_utc.isoformat()}")
+            return {
+                "name": task_name,
+                "status": "created",
+                "schedule_time": when_utc.isoformat(),
+                "task_path": response.name
+            }
+        except Exception as e:
+            logger.error(f"Failed to create task {task_name}: {e}")
+            raise
+    
+    def _make_task_name(self, base: str) -> str:
+        """Create RFC-1035 compliant task name."""
+        # Hash to ensure uniqueness and compliance
+        h = hashlib.md5(base.encode()).hexdigest()[:8]
+        safe_base = base.replace("_", "-").lower()
+        # Limit to 63 chars
+        return f"{safe_base[:50]}-{h}"
 
 
-def create_one_shot_job(  # noqa: PLR0913
-    settings: Settings,
-    *,
-    job_name: str,
-    run_url: str,
-    payload: dict[str, Any],
-    when_local: datetime,
-    correlation_id: str | None = None,
-) -> dict[str, Any]:
-    """Create a Cloud Scheduler one-shot job as fallback."""
-
-    when_local = ensure_timezone(when_local, settings.timezone)
-    when_utc = to_utc(when_local)
-    audience = settings.service_audience or settings.resolved_service_url or run_url
-
-    schedule = f"{when_local.minute} {when_local.hour} {when_local.day} {when_local.month} *"
-    full_name = f"{settings.scheduler_parent}/jobs/{job_name}"
-
-    client = scheduler_v1.CloudSchedulerClient()
-
-    http_target = scheduler_v1.HttpTarget(
-        uri=run_url,
-        http_method=scheduler_v1.HttpMethod.POST,
-        headers={
-            "Content-Type": "application/json",
-            "User-Agent": settings.http_user_agent,
-            "X-Correlation-ID": correlation_id or job_name,
-        },
-        body=json.dumps(payload).encode("utf-8"),
-    )
-    if settings.scheduler_service_account_email:
-        http_target.oidc_token = scheduler_v1.OidcToken(
-            service_account_email=settings.scheduler_service_account_email,
-            audience=audience,
-        )
-
-    retry_config = scheduler_v1.RetryConfig(max_retry_attempts=1, max_retry_duration={"seconds": 0})
-    job = scheduler_v1.Job(
-        name=full_name,
-        http_target=http_target,
-        schedule=schedule,
-        time_zone=settings.timezone,
-        description="One-shot job auto-generated by Hippique orchestration",
-        retry_config=retry_config,
-    )
-
-    created = True
-    try:
-        response = client.create_job(parent=settings.scheduler_parent, job=job)
-        LOGGER.info(
-            "scheduler_job_created",
-            extra={"job_name": response.name, "schedule": schedule},
-        )
-    except exceptions.AlreadyExists:
-        created = False
-        LOGGER.info("scheduler_job_exists", extra={"job_name": full_name})
-    return {
-        "name": full_name,
-        "created": created,
-        "phase": payload.get("phase"),
-        "schedule": schedule,
-        "schedule_time_local": when_local.isoformat(),
-        "schedule_time_utc": format_rfc3339(when_utc),
-    }
-
-
-__all__ = ["enqueue_run_task", "create_one_shot_job"]
+class CloudSchedulerFallback:
+    """Fallback scheduler using Cloud Scheduler (for one-shot jobs)."""
+    
+    def __init__(self, config: Config):
+        self.config = config
+        self.client = scheduler_v1.CloudSchedulerClient()
+        self.parent = f"projects/{config.PROJECT_ID}/locations/{config.REGION}"
+    
+    def schedule_task(
+        self,
+        run_url: str,
+        race_id: str,
+        phase: str,
+        when_local: datetime,
+        payload: Dict[str, Any],
+        date: str
+    ) -> Dict[str, str]:
+        """
+        Create one-shot Cloud Scheduler job.
+        
+        Note: Cloud Scheduler doesn't support one-shot jobs natively.
+        This creates a job that runs once then must be manually deleted.
+        """
+        job_name = f"run-{date.replace('-', '')}-{race_id.lower()}-{phase.lower()}"
+        job_path = f"{self.parent}/jobs/{job_name}"
+        
+        # Check if exists
+        try:
+            existing = self.client.get_job(name=job_path)
+            logger.info(f"Scheduler job {job_name} already exists")
+            return {
+                "name": job_name,
+                "status": "existing",
+                "schedule_time": when_local.isoformat()
+            }
+        except Exception:
+            pass
+        
+        # Convert to cron schedule (run once at specific time)
+        # Format: minute hour day month dayofweek
+        cron = f"{when_local.minute} {when_local.hour} {when_local.day} {when_local.month} *"
+        
+        job = {
+            "name": job_path,
+            "schedule": cron,
+            "time_zone": "Europe/Paris",
+            "http_target": {
+                "uri": run_url,
+                "http_method": scheduler_v1.HttpMethod.POST,
+                "headers": {
+                    "Content-Type": "application/json"
+                },
+                "body": json.dumps(payload).encode(),
+            },
+        }
+        
+        # Add OIDC if configured
+        if self.config.SERVICE_ACCOUNT:
+            job["http_target"]["oidc_token"] = {
+                "service_account_email": self.config.SERVICE_ACCOUNT,
+                "audience": run_url
+            }
+        
+        try:
+            response = self.client.create_job(
+                parent=self.parent,
+                job=job
+            )
+            logger.info(f"Created scheduler job {job_name}")
+            return {
+                "name": job_name,
+                "status": "created",
+                "schedule_time": when_local.isoformat(),
+                "cron": cron
+            }
+        except Exception as e:
+            logger.error(f"Failed to create job {job_name}: {e}")
+            raise
