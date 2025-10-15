@@ -10,7 +10,6 @@ def iter_dates_sept_2025():
     d = date(2025,9,1)
     while d.month == 9 and d.year == 2025:
         yield d.strftime("%d%m%Y"), d.isoformat()
-        d += timedelta(days=1)
 
 rows = []
 for dstr, d_iso in iter_dates_sept_2025():
@@ -62,16 +61,19 @@ for dstr, d_iso in iter_dates_sept_2025():
             for p in participants:
                 num = p.get("numeroPmu") or p.get("numPmu") or p.get("numero") or p.get("num")
                 nom = (p.get("nom") or p.get("nomCheval") or p.get("cheval", {}).get("nom") or "").strip()
+                jockey = (p.get("driver") or p.get("jockey") or p.get("nomJockey") or p.get("nomDriver") or "").strip()
+                entraineur = (p.get("entraineur") or p.get("trainer") or "").strip()
                 
                 # CORRECTED LOGIC
                 cote = (p.get("dernierRapportDirect") or {}).get("rapport")
 
                 rows.append({
                     "date": d_iso, "reunion": R, "course": C,
-                    "num": num, "cheval": nom, "cote": cote,
+                    "num": num, "cheval": nom, "jockey": jockey, "entraineur": entraineur, "cote": cote,
                     "arrivee_rang": rang.get(int(num)) if num is not None else None
                 })
     time.sleep(0.6)  # simple throttle pour rester cool
 
 pd.DataFrame(rows).to_csv("fr_2025_sept_partants_cotes_arrivees.csv", index=False)
 print("OK -> fr_2025_sept_partants_cotes_arrivees.csv")
+
