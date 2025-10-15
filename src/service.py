@@ -15,11 +15,11 @@ from pydantic import BaseModel, Field, validator
 import google.auth
 from google.auth.transport import requests as google_requests
 
-from config import Config
-from logging_utils import setup_logging, get_correlation_id
-from plan import build_plan
-from scheduler import CloudTasksScheduler, CloudSchedulerFallback
-from runner import CourseRunner
+from src.config import Config
+from src.logging_utils import setup_logging, get_correlation_id
+from src.plan import build_plan
+from src.scheduler import CloudTasksScheduler, CloudSchedulerFallback
+from src.runner import CourseRunner
 
 # Setup logging
 logger = setup_logging()
@@ -71,7 +71,8 @@ class ScheduleRequest(BaseModel):
     @validator('date')
     def validate_date(cls, v):
         if v == "today":
-            return datetime.now(config.TZ).strftime("%Y-%m-%d")
+            from src.time_utils import now_paris
+            return now_paris().strftime("%Y-%m-%d")
         try:
             datetime.strptime(v, "%Y-%m-%d")
             return v
@@ -135,7 +136,9 @@ async def schedule(
             })
         
         # Save plan.json
-        plan_file = f"/tmp/plan_{req.date}.json"
+        from pathlib import Path
+        plan_file = Path(config.DATA_DIR) / f"plan_{req.date}.json"
+        plan_file.parent.mkdir(parents=True, exist_ok=True)
         with open(plan_file, 'w', encoding='utf-8') as f:
             json.dump(plan, f, ensure_ascii=False, indent=2)
         logger.info(f"Plan saved to {plan_file}, {len(plan)} races")
@@ -145,9 +148,10 @@ async def schedule(
             from google.cloud import storage
             client = storage.Client(project=config.PROJECT_ID)
             bucket = client.bucket(config.GCS_BUCKET)
-            blob = bucket.blob(f"plans/plan_{req.date}.json")
-            blob.upload_from_filename(plan_file)
-            logger.info(f"Plan uploaded to gs://{config.GCS_BUCKET}/plans/plan_{req.date}.json")
+            blob_name = f"{config.GCS_PREFIX}/plans/plan_{req.date}.json"
+            blob = bucket.blob(blob_name)
+            blob.upload_from_filename(str(plan_file))
+            logger.info(f"Plan uploaded to gs://{config.GCS_BUCKET}/{blob_name}")
         
         # Schedule tasks
         scheduled = []
@@ -158,8 +162,10 @@ async def schedule(
         
         run_url = f"{config.SERVICE_URL}/run"
         
+        from src.time_utils import parse_time_local, subtract_minutes
+        
         for race in plan:
-            race_id = f"R{race['r_label']}C{race['c_label']}"
+            race_id = f"{race['r_label']}{race['c_label']}"
             
             # Parse race time (HH:MM in Europe/Paris)
             race_time_str = race.get('time_local')
@@ -168,16 +174,14 @@ async def schedule(
                 continue
             
             try:
-                race_dt = datetime.strptime(f"{req.date} {race_time_str}", "%Y-%m-%d %H:%M")
-                race_dt = config.TZ.localize(race_dt)
+                race_dt = parse_time_local(req.date, race_time_str)
             except Exception as e:
                 logger.error(f"Failed to parse time for {race_id}: {e}")
                 continue
             
-            # Schedule H-30
-            from datetime import timedelta
-            h30_dt = race_dt - timedelta(minutes=30)
-            h5_dt = race_dt - timedelta(minutes=5)
+            # Schedule H-30 and H-5
+            h30_dt = subtract_minutes(race_dt, 30)
+            h5_dt = subtract_minutes(race_dt, 5)
             
             payload_h30 = {
                 "course_url": race['course_url'],
@@ -212,9 +216,7 @@ async def schedule(
                     "race_id": race_id,
                     "race_time": race_time_str,
                     "h30_scheduled": h30_dt.isoformat(),
-                    "h30_scheduled_utc": h30_dt.astimezone(config.UTC).isoformat(),
                     "h5_scheduled": h5_dt.isoformat(),
-                    "h5_scheduled_utc": h5_dt.astimezone(config.UTC).isoformat(),
                     "tasks": [task_h30, task_h5]
                 })
                 
@@ -285,4 +287,7 @@ async def run(
         return JSONResponse(result)
         
     except Exception as e:
-        logger.error(
+        logger.error(f"Run failed: {e}", exc_info=True, extra={
+            "correlation_id": correlation_id
+        })
+        raise HTTPException(status_code=500, detail=str(e))
