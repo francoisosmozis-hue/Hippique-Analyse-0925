@@ -12,6 +12,8 @@ import json
 from pathlib import Path
 from typing import Dict, Any
 
+from simulate_wrapper import evaluate_combo
+
 
 import shutil
 
@@ -81,10 +83,24 @@ def calculate_cp_profit(ticket: Dict[str, Any], results: Dict[str, Any]) -> floa
             num_winning_horses += 1
     
     if num_winning_horses >= 2:
-        # The payout for a CP bet is not straightforward to calculate from the odds.
-        # For now, I will assume a fixed payout of 10 for a winning CP ticket.
-        # This is a limitation that I will address later.
-        profit += 10
+        combo_results = evaluate_combo([ticket], bankroll=ticket["stake"])
+        profit += combo_results.get("payout_expected", 0)
+        
+    return profit
+
+def calculate_trio_profit(ticket: Dict[str, Any], results: Dict[str, Any]) -> float:
+    """
+    Calcule le gain/perte pour un ticket Trio.
+    """
+    profit = -ticket["stake"]
+    winning_horses = results["arrivee"]
+    
+    chosen_horses = [leg["horse"] for leg in ticket["legs"]]
+    
+    # Check if the three chosen horses are in the first three places
+    if set(chosen_horses) == set(winning_horses[:3]):
+        combo_results = evaluate_combo([ticket], bankroll=ticket["stake"])
+        profit += combo_results.get("payout_expected", 0)
         
     return profit
 
