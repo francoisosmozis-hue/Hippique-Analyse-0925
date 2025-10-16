@@ -1,232 +1,250 @@
 #!/bin/bash
-set -e
+# scripts/deploy_cloud_run.sh - Déploiement Cloud Run
 
-# ============================================================================
-# Script de déploiement Cloud Run - Orchestrateur Hippique
-# ============================================================================
-# Usage: ./deploy_cloud_run.sh [--no-build]
-# ============================================================================
+set -euo pipefail
 
-# Couleurs pour output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+# ============================================
+# Configuration
+# ============================================
 
-echo -e "${BLUE}🐴 Déploiement Orchestrateur Hippique Cloud Run${NC}"
-echo "=============================================="
-
-# ----------------------------------------------------------------------------
-# Configuration (depuis .env ou variables d'environnement)
-# ----------------------------------------------------------------------------
+# Charger .env si présent
 if [ -f .env ]; then
-    echo -e "${GREEN}📄 Chargement .env${NC}"
     export $(cat .env | grep -v '^#' | xargs)
 fi
 
-PROJECT_ID=${PROJECT_ID:-$(gcloud config get-value project)}
-REGION=${REGION:-"europe-west1"}
-SERVICE_NAME=${SERVICE_NAME:-"horse-racing-orchestrator"}
-SA_EMAIL=${SA_EMAIL:-"${SERVICE_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"}
+# Variables obligatoires
+PROJECT_ID="${PROJECT_ID:-}"
+REGION="${REGION:-europe-west1}"
+SERVICE_NAME="${SERVICE_NAME:-hippique-orchestrator}"
+SERVICE_ACCOUNT_EMAIL="${SERVICE_ACCOUNT_EMAIL:-}"
 
-# Vérifications
 if [ -z "$PROJECT_ID" ]; then
-    echo -e "${RED}❌ PROJECT_ID non défini${NC}"
+    echo "❌ PROJECT_ID is required"
     exit 1
 fi
 
-echo -e "${YELLOW}Configuration:${NC}"
-echo "  Project ID: ${PROJECT_ID}"
-echo "  Region: ${REGION}"
-echo "  Service: ${SERVICE_NAME}"
-echo "  Service Account: ${SA_EMAIL}"
-echo ""
-
-# ----------------------------------------------------------------------------
-# Service Account (création si nécessaire)
-# ----------------------------------------------------------------------------
-echo -e "${BLUE}🔐 Vérification Service Account...${NC}"
-
-if ! gcloud iam service-accounts describe ${SA_EMAIL} --project=${PROJECT_ID} &>/dev/null; then
-    echo -e "${YELLOW}Création du Service Account...${NC}"
-    gcloud iam service-accounts create ${SERVICE_NAME} \
-        --display-name="Horse Racing Orchestrator" \
-        --project=${PROJECT_ID}
-    
-    # Accorder rôles nécessaires
-    echo -e "${YELLOW}Attribution des rôles...${NC}"
-    
-    # Cloud Run Invoker (pour Scheduler/Tasks)
-    gcloud projects add-iam-policy-binding ${PROJECT_ID} \
-        --member="serviceAccount:${SA_EMAIL}" \
-        --role="roles/run.invoker"
-    
-    # Cloud Tasks Enqueuer
-    gcloud projects add-iam-policy-binding ${PROJECT_ID} \
-        --member="serviceAccount:${SA_EMAIL}" \
-        --role="roles/cloudtasks.enqueuer"
-    
-    # Storage Object Admin (si GCS utilisé)
-    gcloud projects add-iam-policy-binding ${PROJECT_ID} \
-        --member="serviceAccount:${SA_EMAIL}" \
-        --role="roles/storage.objectAdmin"
-    
-    echo -e "${GREEN}✅ Service Account créé et configuré${NC}"
-else
-    echo -e "${GREEN}✅ Service Account existe déjà${NC}"
+if [ -z "$SERVICE_ACCOUNT_EMAIL" ]; then
+    echo "❌ SERVICE_ACCOUNT_EMAIL is required"
+    exit 1
 fi
 
-# ----------------------------------------------------------------------------
-# Build de l'image (sauf si --no-build)
-# ----------------------------------------------------------------------------
-if [ "$1" != "--no-build" ]; then
-    echo ""
-    echo -e "${BLUE}🔨 Build de l'image Docker...${NC}"
+# Variables optionnelles
+GCS_BUCKET="${GCS_BUCKET:-}"
+GCS_PREFIX="${GCS_PREFIX:-prod}"
+MEMORY="${MEMORY:-2Gi}"
+CPU="${CPU:-1}"
+TIMEOUT="${TIMEOUT:-600}"
+MAX_INSTANCES="${MAX_INSTANCES:-10}"
+MIN_INSTANCES="${MIN_INSTANCES:-0}"
+
+echo "🚀 Déploiement de $SERVICE_NAME sur Cloud Run"
+echo "================================================"
+echo "Project ID: $PROJECT_ID"
+echo "Region: $REGION"
+echo "Service Account: $SERVICE_ACCOUNT_EMAIL"
+echo "Memory: $MEMORY"
+echo "CPU: $CPU"
+echo "Timeout: ${TIMEOUT}s"
+echo ""
+
+# ============================================
+# Vérifications préalables
+# ============================================
+
+echo "🔍 Vérification des prérequis..."
+
+# Vérifier gcloud
+if ! command -v gcloud &> /dev/null; then
+    echo "❌ gcloud CLI n'est pas installé"
+    exit 1
+fi
+
+# Vérifier Docker
+if ! command -v docker &> /dev/null; then
+    echo "❌ Docker n'est pas installé"
+    exit 1
+fi
+
+# Vérifier que le projet existe
+if ! gcloud projects describe "$PROJECT_ID" &> /dev/null; then
+    echo "❌ Projet $PROJECT_ID introuvable"
+    exit 1
+fi
+
+# Set project
+gcloud config set project "$PROJECT_ID"
+
+# ============================================
+# Activer les APIs nécessaires
+# ============================================
+
+echo ""
+echo "🔧 Activation des APIs GCP..."
+
+APIS=(
+    "run.googleapis.com"
+    "cloudtasks.googleapis.com"
+    "cloudscheduler.googleapis.com"
+    "cloudbuild.googleapis.com"
+    "artifactregistry.googleapis.com"
+)
+
+for api in "${APIS[@]}"; do
+    echo "  - Activation de $api..."
+    gcloud services enable "$api" --project="$PROJECT_ID" --quiet
+done
+
+# ============================================
+# Créer Artifact Registry si nécessaire
+# ============================================
+
+echo ""
+echo "📦 Vérification Artifact Registry..."
+
+REPO_NAME="hippique-images"
+REPO_LOCATION="$REGION"
+
+if ! gcloud artifacts repositories describe "$REPO_NAME" \
+    --location="$REPO_LOCATION" \
+    --project="$PROJECT_ID" &> /dev/null; then
     
-    IMAGE_URL="gcr.io/${PROJECT_ID}/${SERVICE_NAME}:latest"
-    
+    echo "  - Création du repository Artifact Registry..."
+    gcloud artifacts repositories create "$REPO_NAME" \
+        --repository-format=docker \
+        --location="$REPO_LOCATION" \
+        --description="Hippique Orchestrator images" \
+        --project="$PROJECT_ID"
+else
+    echo "  - Repository Artifact Registry existe déjà"
+fi
+
+# ============================================
+# Build et push de l'image
+# ============================================
+
+echo ""
+echo "🏗️  Build de l'image Docker..."
+
+IMAGE_TAG="${REPO_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/${SERVICE_NAME}:latest"
+
+# Configure Docker auth pour Artifact Registry
+gcloud auth configure-docker "${REPO_LOCATION}-docker.pkg.dev" --quiet
+
+# Build avec Cloud Build (recommandé) ou Docker local
+USE_CLOUD_BUILD="${USE_CLOUD_BUILD:-true}"
+
+if [ "$USE_CLOUD_BUILD" = "true" ]; then
+    echo "  - Build avec Cloud Build..."
     gcloud builds submit \
-        --tag ${IMAGE_URL} \
-        --project=${PROJECT_ID} \
-        --timeout=15m
-    
-    echo -e "${GREEN}✅ Image buildée: ${IMAGE_URL}${NC}"
+        --tag="$IMAGE_TAG" \
+        --project="$PROJECT_ID" \
+        --timeout=20m \
+        .
 else
-    echo -e "${YELLOW}⏭️  Skip build (--no-build)${NC}"
-    IMAGE_URL="gcr.io/${PROJECT_ID}/${SERVICE_NAME}:latest"
+    echo "  - Build local avec Docker..."
+    docker build -t "$IMAGE_TAG" .
+    docker push "$IMAGE_TAG"
 fi
 
-# ----------------------------------------------------------------------------
-# Déploiement Cloud Run
-# ----------------------------------------------------------------------------
+echo "✅ Image construite: $IMAGE_TAG"
+
+# ============================================
+# Créer Cloud Tasks Queue si nécessaire
+# ============================================
+
 echo ""
-echo -e "${BLUE}🚀 Déploiement sur Cloud Run...${NC}"
+echo "📋 Vérification Cloud Tasks Queue..."
 
-gcloud run deploy ${SERVICE_NAME} \
-    --image ${IMAGE_URL} \
-    --platform managed \
-    --region ${REGION} \
-    --project ${PROJECT_ID} \
-    --service-account ${SA_EMAIL} \
-    --no-allow-unauthenticated \
-    --memory 2Gi \
-    --cpu 2 \
-    --timeout 300 \
-    --concurrency 10 \
-    --min-instances 0 \
-    --max-instances 10 \
-    --set-env-vars "PROJECT_ID=${PROJECT_ID},REGION=${REGION},SERVICE_NAME=${SERVICE_NAME},TIMEZONE=Europe/Paris" \
-    --set-secrets "GCS_BUCKET=GCS_BUCKET:latest" 2>/dev/null || \
-    gcloud run deploy ${SERVICE_NAME} \
-    --image ${IMAGE_URL} \
-    --platform managed \
-    --region ${REGION} \
-    --project ${PROJECT_ID} \
-    --service-account ${SA_EMAIL} \
-    --no-allow-unauthenticated \
-    --memory 2Gi \
-    --cpu 2 \
-    --timeout 300 \
-    --concurrency 10 \
-    --min-instances 0 \
-    --max-instances 10 \
-    --set-env-vars "PROJECT_ID=${PROJECT_ID},REGION=${REGION},SERVICE_NAME=${SERVICE_NAME},TIMEZONE=Europe/Paris"
+QUEUE_ID="${QUEUE_ID:-hippique-tasks}"
 
-# ----------------------------------------------------------------------------
-# Récupération URL et mise à jour IAM
-# ----------------------------------------------------------------------------
-SERVICE_URL=$(gcloud run services describe ${SERVICE_NAME} \
-    --region ${REGION} \
-    --project ${PROJECT_ID} \
-    --format 'value(status.url)')
-
-echo -e "${GREEN}✅ Service déployé${NC}"
-echo -e "${GREEN}   URL: ${SERVICE_URL}${NC}"
-
-# Mettre à jour IAM pour que le SA puisse invoker le service
-echo ""
-echo -e "${BLUE}🔐 Configuration IAM Invoker...${NC}"
-gcloud run services add-iam-policy-binding ${SERVICE_NAME} \
-    --region ${REGION} \
-    --project ${PROJECT_ID} \
-    --member "serviceAccount:${SA_EMAIL}" \
-    --role "roles/run.invoker"
-
-echo -e "${GREEN}✅ IAM configuré${NC}"
-
-# ----------------------------------------------------------------------------
-# Cloud Tasks Queue (création si nécessaire)
-# ----------------------------------------------------------------------------
-echo ""
-echo -e "${BLUE}📋 Vérification Cloud Tasks Queue...${NC}"
-
-QUEUE_ID=${QUEUE_ID:-"horse-racing-queue"}
-QUEUE_PATH="projects/${PROJECT_ID}/locations/${REGION}/queues/${QUEUE_ID}"
-
-if ! gcloud tasks queues describe ${QUEUE_ID} --location=${REGION} --project=${PROJECT_ID} &>/dev/null; then
-    echo -e "${YELLOW}Création de la queue...${NC}"
-    gcloud tasks queues create ${QUEUE_ID} \
-        --location=${REGION} \
-        --project=${PROJECT_ID} \
-        --max-dispatches-per-second=5 \
+if ! gcloud tasks queues describe "$QUEUE_ID" \
+    --location="$REGION" \
+    --project="$PROJECT_ID" &> /dev/null; then
+    
+    echo "  - Création de la queue Cloud Tasks..."
+    gcloud tasks queues create "$QUEUE_ID" \
+        --location="$REGION" \
+        --project="$PROJECT_ID" \
         --max-concurrent-dispatches=10 \
-        --max-attempts=3
-    
-    echo -e "${GREEN}✅ Queue créée: ${QUEUE_ID}${NC}"
+        --max-dispatches-per-second=5
 else
-    echo -e "${GREEN}✅ Queue existe déjà: ${QUEUE_ID}${NC}"
+    echo "  - Queue Cloud Tasks existe déjà"
 fi
 
-# ----------------------------------------------------------------------------
-# Test Healthcheck
-# ----------------------------------------------------------------------------
+# ============================================
+# Déployer le service Cloud Run
+# ============================================
+
 echo ""
-echo -e "${BLUE}🏥 Test du healthcheck...${NC}"
+echo "☁️  Déploiement sur Cloud Run..."
 
-# Attendre que le service soit prêt
-sleep 5
+# Construire la commande de déploiement
+DEPLOY_CMD=(
+    gcloud run deploy "$SERVICE_NAME"
+    --image="$IMAGE_TAG"
+    --platform=managed
+    --region="$REGION"
+    --project="$PROJECT_ID"
+    --service-account="$SERVICE_ACCOUNT_EMAIL"
+    --memory="$MEMORY"
+    --cpu="$CPU"
+    --timeout="${TIMEOUT}s"
+    --max-instances="$MAX_INSTANCES"
+    --min-instances="$MIN_INSTANCES"
+    --no-allow-unauthenticated
+    --set-env-vars="PROJECT_ID=$PROJECT_ID,REGION=$REGION,SERVICE_NAME=$SERVICE_NAME,QUEUE_ID=$QUEUE_ID,SERVICE_ACCOUNT_EMAIL=$SERVICE_ACCOUNT_EMAIL,TZ=Europe/Paris"
+)
 
-# Obtenir un token d'identité pour tester
-TOKEN=$(gcloud auth print-identity-token --audiences=${SERVICE_URL})
-
-HEALTH_RESPONSE=$(curl -s -w "\n%{http_code}" \
-    -H "Authorization: Bearer ${TOKEN}" \
-    "${SERVICE_URL}/healthz")
-
-HTTP_CODE=$(echo "$HEALTH_RESPONSE" | tail -n1)
-BODY=$(echo "$HEALTH_RESPONSE" | head -n-1)
-
-if [ "$HTTP_CODE" == "200" ]; then
-    echo -e "${GREEN}✅ Service en bonne santé${NC}"
-    echo "   Response: ${BODY}"
-else
-    echo -e "${RED}❌ Healthcheck failed (HTTP ${HTTP_CODE})${NC}"
-    echo "   Response: ${BODY}"
+# Ajouter GCS_BUCKET si défini
+if [ -n "$GCS_BUCKET" ]; then
+    DEPLOY_CMD+=(--set-env-vars="GCS_BUCKET=$GCS_BUCKET,GCS_PREFIX=$GCS_PREFIX")
 fi
 
-# ----------------------------------------------------------------------------
-# Résumé & Prochaines étapes
-# ----------------------------------------------------------------------------
+# Exécuter le déploiement
+"${DEPLOY_CMD[@]}"
+
+# ============================================
+# Configurer IAM
+# ============================================
+
 echo ""
-echo -e "${BLUE}================================================${NC}"
-echo -e "${GREEN}✅ DÉPLOIEMENT TERMINÉ${NC}"
-echo -e "${BLUE}================================================${NC}"
+echo "🔐 Configuration IAM..."
+
+# Permettre au service account d'invoquer le service
+gcloud run services add-iam-policy-binding "$SERVICE_NAME" \
+    --region="$REGION" \
+    --project="$PROJECT_ID" \
+    --member="serviceAccount:$SERVICE_ACCOUNT_EMAIL" \
+    --role="roles/run.invoker"
+
+# Permettre à Cloud Tasks d'invoquer le service
+gcloud run services add-iam-policy-binding "$SERVICE_NAME" \
+    --region="$REGION" \
+    --project="$PROJECT_ID" \
+    --member="serviceAccount:$SERVICE_ACCOUNT_EMAIL" \
+    --role="roles/run.invoker"
+
+# ============================================
+# Récupérer l'URL du service
+# ============================================
+
+SERVICE_URL=$(gcloud run services describe "$SERVICE_NAME" \
+    --region="$REGION" \
+    --project="$PROJECT_ID" \
+    --format="value(status.url)")
+
 echo ""
-echo -e "${YELLOW}📝 Informations:${NC}"
-echo "   Service URL: ${SERVICE_URL}"
-echo "   Service Account: ${SA_EMAIL}"
-echo "   Queue: ${QUEUE_ID}"
+echo "✅ Déploiement réussi!"
+echo "================================================"
+echo "Service URL: $SERVICE_URL"
 echo ""
-echo -e "${YELLOW}🔄 Prochaines étapes:${NC}"
-echo "   1. Mettre à jour .env avec SERVICE_URL=${SERVICE_URL}"
-echo "   2. Créer le job Scheduler 09:00:"
-echo "      ./scripts/create_scheduler_0900.sh"
-echo "   3. Tester manuellement:"
-echo "      TOKEN=\$(gcloud auth print-identity-token --audiences=${SERVICE_URL})"
-echo "      curl -X POST -H \"Authorization: Bearer \$TOKEN\" \\"
-echo "           -H \"Content-Type: application/json\" \\"
-echo "           -d '{\"date\":\"today\",\"mode\":\"tasks\"}' \\"
-echo "           ${SERVICE_URL}/schedule"
+echo "📝 Prochaines étapes:"
+echo "1. Mettre à jour .env avec OIDC_AUDIENCE=$SERVICE_URL"
+echo "2. Créer le job Cloud Scheduler:"
+echo "   ./scripts/create_scheduler_0900.sh"
+echo "3. Tester les endpoints:"
+echo "   curl -H \"Authorization: Bearer \$(gcloud auth print-identity-token)\" \\"
+echo "     -X POST $SERVICE_URL/schedule \\"
+echo "     -H \"Content-Type: application/json\" \\"
+echo "     -d '{\"date\":\"today\",\"mode\":\"tasks\"}'"
 echo ""
-echo -e "${GREEN}🐴 Happy racing!${NC}"
