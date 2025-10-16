@@ -1,92 +1,84 @@
-# ============================================================================
-# CONFIGURATION ORCHESTRATEUR HIPPIQUE - CLOUD RUN
-# ============================================================================
-# Copier ce fichier en .env et remplir les valeurs
+# .env.example - Configuration Template
+# Copy to .env and fill with your values
 
-# ----------------------------------------------------------------------------
-# GCP Project & Region
-# ----------------------------------------------------------------------------
-PROJECT_ID=your-gcp-project-id
+# ============================================
+# GCP Configuration (REQUIRED)
+# ============================================
+
+# Your GCP project ID
+PROJECT_ID=analyse-hippique
+
+# GCP region for Cloud Run and Cloud Tasks
 REGION=europe-west1
-SERVICE_NAME=horse-racing-orchestrator
 
-# URL du service Cloud Run (rempli après déploiement)
-SERVICE_URL=https://horse-racing-orchestrator-xxxxx-ew.a.run.app
+# Cloud Run service name
+SERVICE_NAME=hippique-orchestrator
 
-# ----------------------------------------------------------------------------
-# Cloud Tasks & Scheduler
-# ----------------------------------------------------------------------------
-# Nom de la queue Cloud Tasks
-QUEUE_ID=horse-racing-queue
+# Cloud Run service URL (fill after first deployment)
+SERVICE_URL=https://hippique-orchestrator-1084663881709.europe-west4.run.app
 
-# Service Account pour Scheduler/Tasks (format: name@project.iam.gserviceaccount.com)
-SCHEDULER_SA_EMAIL=scheduler-sa@your-project.iam.gserviceaccount.com
+# Service account email for authentication
+SERVICE_ACCOUNT_EMAIL=hippique-orchestrator@analyse-hippique.iam.gserviceaccount.com
 
-# Nom du job quotidien 09:00
-SCHEDULER_JOB_0900=daily-plan-0900
+# Cloud Tasks queue ID
+QUEUE_ID=hippique-tasks
 
-# ----------------------------------------------------------------------------
-# Authentification & Sécurité
-# ----------------------------------------------------------------------------
-# Activer la vérification OIDC (true pour production)
+# ============================================
+# Timezone
+# ============================================
+
+# Timezone for race times (DO NOT CHANGE)
+TZ=Europe/Paris
+
+# ============================================
+# Security
+# ============================================
+
+# Require OIDC authentication (true for production)
 REQUIRE_AUTH=true
 
-# Audience OIDC (généralement = SERVICE_URL)
-OIDC_AUDIENCE=
+# ============================================
+# HTTP Configuration
+# ============================================
 
-# ----------------------------------------------------------------------------
-# Storage
-# ----------------------------------------------------------------------------
-# Bucket GCS pour archiver artefacts (optionnel)
-GCS_BUCKET=your-bucket-name
+# User-Agent for HTTP requests
+USER_AGENT=Mozilla/5.0 (Hippique-Orchestrator/2.0)
 
-# Répertoire local dans le conteneur
-LOCAL_DATA_DIR=/tmp/horse_data
+# Rate limiting (requests per second per host)
+REQUESTS_PER_SECOND=1.0
 
-# ----------------------------------------------------------------------------
-# Timezone & Planification
-# ----------------------------------------------------------------------------
-# Timezone pour calculs (ne pas changer)
-TIMEZONE=Europe/Paris
+# Subprocess timeout in seconds
+TIMEOUT_SECONDS=600
 
-# Heure du déclenchement quotidien (format 24h)
-DAILY_SCHEDULE_HOUR=9
+# ============================================
+# Google Cloud Storage (OPTIONAL)
+# ============================================
 
-# ----------------------------------------------------------------------------
-# Throttling & Retries
-# ----------------------------------------------------------------------------
-# Timeout requêtes HTTP (secondes)
-REQUEST_TIMEOUT=30
+# GCS bucket for artifact storage (leave empty to disable)
+GCS_BUCKET=
 
-# Nombre de retries en cas d'échec
-MAX_RETRIES=3
+# GCS path prefix
+GCS_PREFIX=prod/snapshots
 
-# Délai entre requêtes (secondes) - respect CGU
-RATE_LIMIT_DELAY=1.0
+# ============================================
+# GPI Configuration
+# ============================================
 
-# User-Agent pour requêtes HTTP
-USER_AGENT=HorseRacingAnalyzer/5.1 (Educational; contact@example.com)
+# Budget per race (euros)
+BUDGET_PER_RACE=5.0
 
-# ----------------------------------------------------------------------------
-# Paramètres GPI (Gestion Pronostique Intelligente)
-# ----------------------------------------------------------------------------
-# Budget maximum par course (euros)
-GPI_BUDGET_PER_RACE=5.0
+# ============================================
+# Environment
+# ============================================
 
-# Espérance de Valeur minimale pour combos (%)
-GPI_MIN_EV_PERCENT=40.0
+# Environment name (development, staging, production)
+ENVIRONMENT=production
 
-# ----------------------------------------------------------------------------
-# Logging
-# ----------------------------------------------------------------------------
-# Niveau de log (DEBUG, INFO, WARNING, ERROR)
-LOG_LEVEL=INFO
+# Gunicorn workers (2 recommended for Cloud Run)
+GUNICORN_WORKERS=2
 
-# ----------------------------------------------------------------------------
-# Gunicorn (optionnel, par défaut dans gunicorn.conf.py)
-# ----------------------------------------------------------------------------
-# Nombre de workers
-WORKERS=2
+# Gunicorn timeout (same as TIMEOUT_SECONDS)
+GUNICORN_TIMEOUT=600
 
-# Port (défini par Cloud Run)
-PORT=8080
+# Log level (debug, info, warning, error)
+LOG_LEVEL=info
