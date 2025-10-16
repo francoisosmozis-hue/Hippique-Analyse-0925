@@ -1,208 +1,250 @@
-# Déploiement Cloud Run - Analyse Hippique GPI v5.1
+#!/bin/bash
+# scripts/deploy_cloud_run.sh - Déploiement Cloud Run
 
-## Architecture
+set -euo pipefail
 
-```
-Cloud Scheduler (09:00 Paris)
-    ↓
-Cloud Run Service (POST /schedule)
-    ↓
-Cloud Tasks Queue
-    ↓ (H-30 et H-5 pour chaque course)
-Cloud Run Service (POST /run)
-    ↓
-Runner Chain → GCS Upload
-```
+# ============================================
+# Configuration
+# ============================================
 
-## Prérequis
+# Charger .env si présent
+if [ -f .env ]; then
+    export $(cat .env | grep -v '^#' | xargs)
+fi
 
-1. **Projet GCP** avec APIs activées:
-   ```bash
-   gcloud services enable \
-     run.googleapis.com \
-     cloudtasks.googleapis.com \
-     cloudscheduler.googleapis.com \
-     cloudbuild.googleapis.com \
-     storage.googleapis.com
-   ```
+# Variables obligatoires
+PROJECT_ID="${PROJECT_ID:-}"
+REGION="${REGION:-europe-west1}"
+SERVICE_NAME="${SERVICE_NAME:-hippique-orchestrator}"
+SERVICE_ACCOUNT_EMAIL="${SERVICE_ACCOUNT_EMAIL:-}"
 
-2. **Service Account** avec roles:
-   - `roles/run.invoker` (pour Cloud Scheduler → Cloud Run)
-   - `roles/cloudtasks.enqueuer` (pour créer des tâches)
-   - `roles/storage.objectAdmin` (pour GCS)
+if [ -z "$PROJECT_ID" ]; then
+    echo "❌ PROJECT_ID is required"
+    exit 1
+fi
 
-3. **Cloud Tasks Queue**:
-   ```bash
-   gcloud tasks queues create hippique-tasks --location=europe-west1
-   ```
+if [ -z "$SERVICE_ACCOUNT_EMAIL" ]; then
+    echo "❌ SERVICE_ACCOUNT_EMAIL is required"
+    exit 1
+fi
 
-4. **GCS Bucket**:
-   ```bash
-   gsutil mb -p YOUR_PROJECT -l europe-west1 gs://your-hippique-bucket
-   ```
+# Variables optionnelles
+GCS_BUCKET="${GCS_BUCKET:-}"
+GCS_PREFIX="${GCS_PREFIX:-prod}"
+MEMORY="${MEMORY:-2Gi}"
+CPU="${CPU:-1}"
+TIMEOUT="${TIMEOUT:-600}"
+MAX_INSTANCES="${MAX_INSTANCES:-10}"
+MIN_INSTANCES="${MIN_INSTANCES:-0}"
 
-## Déploiement
+echo "🚀 Déploiement de $SERVICE_NAME sur Cloud Run"
+echo "================================================"
+echo "Project ID: $PROJECT_ID"
+echo "Region: $REGION"
+echo "Service Account: $SERVICE_ACCOUNT_EMAIL"
+echo "Memory: $MEMORY"
+echo "CPU: $CPU"
+echo "Timeout: ${TIMEOUT}s"
+echo ""
 
-### 1. Configuration
+# ============================================
+# Vérifications préalables
+# ============================================
 
-Copier `.env.example` et ajuster:
-```bash
-cp .env.example .env
-# Éditer .env avec vos valeurs
-```
+echo "🔍 Vérification des prérequis..."
 
-### 2. Build & Deploy
+# Vérifier gcloud
+if ! command -v gcloud &> /dev/null; then
+    echo "❌ gcloud CLI n'est pas installé"
+    exit 1
+fi
 
-```bash
-export PROJECT_ID=your-project-id
-export SA_EMAIL=hippique-sa@your-project-id.iam.gserviceaccount.com
-export GCS_BUCKET=your-hippique-bucket
+# Vérifier Docker
+if ! command -v docker &> /dev/null; then
+    echo "❌ Docker n'est pas installé"
+    exit 1
+fi
 
-./scripts/deploy_cloud_run.sh
-```
+# Vérifier que le projet existe
+if ! gcloud projects describe "$PROJECT_ID" &> /dev/null; then
+    echo "❌ Projet $PROJECT_ID introuvable"
+    exit 1
+fi
 
-### 3. Créer le Scheduler quotidien
+# Set project
+gcloud config set project "$PROJECT_ID"
 
-```bash
-./scripts/create_scheduler_0900.sh
-```
+# ============================================
+# Activer les APIs nécessaires
+# ============================================
 
-## Endpoints
+echo ""
+echo "🔧 Activation des APIs GCP..."
 
-### GET /healthz
-Health check
-```bash
-curl https://your-service-url.run.app/healthz
-```
+APIS=(
+    "run.googleapis.com"
+    "cloudtasks.googleapis.com"
+    "cloudscheduler.googleapis.com"
+    "cloudbuild.googleapis.com"
+    "artifactregistry.googleapis.com"
+)
 
-### POST /schedule
-Génère le plan et programme H-30/H-5
-```bash
-curl -X POST https://your-service-url.run.app/schedule \
-  -H "Authorization: Bearer $(gcloud auth print-identity-token)" \
-  -H "Content-Type: application/json" \
-  -d '{"date":"2025-01-15","mode":"tasks"}'
-```
+for api in "${APIS[@]}"; do
+    echo "  - Activation de $api..."
+    gcloud services enable "$api" --project="$PROJECT_ID" --quiet
+done
 
-Réponse:
-```json
-{
-  "ok": true,
-  "date": "2025-01-15",
-  "races_count": 42,
-  "scheduled_count": 42,
-  "scheduled_tasks": [
-    {
-      "race_id": "R1C1",
-      "race_time": "13:45",
-      "h30_scheduled": "2025-01-15T13:15:00+01:00",
-      "h5_scheduled": "2025-01-15T13:40:00+01:00",
-      "tasks": [...]
-    }
-  ]
-}
-```
+# ============================================
+# Créer Artifact Registry si nécessaire
+# ============================================
 
-### POST /run
-Exécute l'analyse d'une course
-```bash
-curl -X POST https://your-service-url.run.app/run \
-  -H "Authorization: Bearer $(gcloud auth print-identity-token)" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "course_url":"https://www.zeturf.fr/fr/course/2025-01-15/R1C1-paris-vincennes",
-    "phase":"H30",
-    "date":"2025-01-15"
-  }'
-```
+echo ""
+echo "📦 Vérification Artifact Registry..."
 
-Réponse:
-```json
-{
-  "ok": true,
-  "rc": 0,
-  "race_id": "R1C1",
-  "phase": "H30",
-  "artifacts": {
-    "snapshot_H30.json": "/tmp/data/R1C1/snapshot_H30.json",
-    "h30.json": "/tmp/data/R1C1/h30.json"
-  }
-}
-```
+REPO_NAME="hippique-images"
+REPO_LOCATION="$REGION"
 
-## Workflow quotidien
+if ! gcloud artifacts repositories describe "$REPO_NAME" \
+    --location="$REPO_LOCATION" \
+    --project="$PROJECT_ID" &> /dev/null; then
+    
+    echo "  - Création du repository Artifact Registry..."
+    gcloud artifacts repositories create "$REPO_NAME" \
+        --repository-format=docker \
+        --location="$REPO_LOCATION" \
+        --description="Hippique Orchestrator images" \
+        --project="$PROJECT_ID"
+else
+    echo "  - Repository Artifact Registry existe déjà"
+fi
 
-1. **09:00 Paris**: Cloud Scheduler → `POST /schedule`
-   - Construit le plan via ZEturf + Geny
-   - Crée ~80 tâches Cloud Tasks (H-30 + H-5 pour chaque course)
+# ============================================
+# Build et push de l'image
+# ============================================
 
-2. **H-30**: Cloud Tasks → `POST /run` avec `phase=H30`
-   - Snapshot cotes
-   - Stats J/E si disponibles
-   - Upload GCS
+echo ""
+echo "🏗️  Build de l'image Docker..."
 
-3. **H-5**: Cloud Tasks → `POST /run` avec `phase=H5`
-   - Enrichissement chronos
-   - Pipeline GPI (tickets, EV/ROI)
-   - Export JSON/CSV/Excel
-   - Upload GCS
+IMAGE_TAG="${REPO_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/${SERVICE_NAME}:latest"
 
-## Monitoring
+# Configure Docker auth pour Artifact Registry
+gcloud auth configure-docker "${REPO_LOCATION}-docker.pkg.dev" --quiet
 
-### Logs
-```bash
-# Service logs
-gcloud logs read "resource.type=cloud_run_revision AND resource.labels.service_name=hippique-orchestrator" \
-  --project=YOUR_PROJECT --limit=50 --format=json
+# Build avec Cloud Build (recommandé) ou Docker local
+USE_CLOUD_BUILD="${USE_CLOUD_BUILD:-true}"
 
-# Scheduler logs
-gcloud scheduler jobs logs read hippique-daily-planning \
-  --location=europe-west1 --limit=50
+if [ "$USE_CLOUD_BUILD" = "true" ]; then
+    echo "  - Build avec Cloud Build..."
+    gcloud builds submit \
+        --tag="$IMAGE_TAG" \
+        --project="$PROJECT_ID" \
+        --timeout=20m \
+        .
+else
+    echo "  - Build local avec Docker..."
+    docker build -t "$IMAGE_TAG" .
+    docker push "$IMAGE_TAG"
+fi
 
-# Tasks logs
-gcloud tasks queues describe hippique-tasks --location=europe-west1
-```
+echo "✅ Image construite: $IMAGE_TAG"
 
-### Métriques
-Dans Cloud Console:
-- Cloud Run > hippique-orchestrator > Metrics
-- Cloud Tasks > hippique-tasks > Metrics
+# ============================================
+# Créer Cloud Tasks Queue si nécessaire
+# ============================================
 
-## Troubleshooting
+echo ""
+echo "📋 Vérification Cloud Tasks Queue..."
 
-### Erreur "No races found"
-- Vérifier que `scripts/fetch_reunions_geny.py` fonctionne
-- Vérifier que `scripts/online_fetch_zeturf.py --mode planning` retourne des données
+QUEUE_ID="${QUEUE_ID:-hippique-tasks}"
 
-### Timeout sur /run
-- Augmenter `--timeout` lors du deploy (max 3600s)
-- Vérifier les logs du runner_chain.py
+if ! gcloud tasks queues describe "$QUEUE_ID" \
+    --location="$REGION" \
+    --project="$PROJECT_ID" &> /dev/null; then
+    
+    echo "  - Création de la queue Cloud Tasks..."
+    gcloud tasks queues create "$QUEUE_ID" \
+        --location="$REGION" \
+        --project="$PROJECT_ID" \
+        --max-concurrent-dispatches=10 \
+        --max-dispatches-per-second=5
+else
+    echo "  - Queue Cloud Tasks existe déjà"
+fi
 
-### Tasks non exécutées
-- Vérifier IAM: service account doit avoir `roles/run.invoker`
-- Vérifier que la queue n'est pas en pause
+# ============================================
+# Déployer le service Cloud Run
+# ============================================
 
-### Upload GCS échoue
-- Vérifier `GCS_BUCKET` et `GCS_PREFIX`
-- Vérifier IAM: service account doit avoir `roles/storage.objectAdmin`
+echo ""
+echo "☁️  Déploiement sur Cloud Run..."
 
-## Coûts estimés
+# Construire la commande de déploiement
+DEPLOY_CMD=(
+    gcloud run deploy "$SERVICE_NAME"
+    --image="$IMAGE_TAG"
+    --platform=managed
+    --region="$REGION"
+    --project="$PROJECT_ID"
+    --service-account="$SERVICE_ACCOUNT_EMAIL"
+    --memory="$MEMORY"
+    --cpu="$CPU"
+    --timeout="${TIMEOUT}s"
+    --max-instances="$MAX_INSTANCES"
+    --min-instances="$MIN_INSTANCES"
+    --no-allow-unauthenticated
+    --set-env-vars="PROJECT_ID=$PROJECT_ID,REGION=$REGION,SERVICE_NAME=$SERVICE_NAME,QUEUE_ID=$QUEUE_ID,SERVICE_ACCOUNT_EMAIL=$SERVICE_ACCOUNT_EMAIL,TZ=Europe/Paris"
+)
 
-- Cloud Run: ~10€/mois (2Gi RAM, peu de trafic)
-- Cloud Tasks: ~0€ (< 1M tâches/mois gratuit)
-- Cloud Scheduler: ~0.10€/mois (1 job)
-- GCS: ~1€/mois (stockage + operations)
+# Ajouter GCS_BUCKET si défini
+if [ -n "$GCS_BUCKET" ]; then
+    DEPLOY_CMD+=(--set-env-vars="GCS_BUCKET=$GCS_BUCKET,GCS_PREFIX=$GCS_PREFIX")
+fi
 
-**Total: ~11€/mois**
+# Exécuter le déploiement
+"${DEPLOY_CMD[@]}"
 
-## Sécurité
+# ============================================
+# Configurer IAM
+# ============================================
 
-✅ Service privé avec OIDC  
-✅ Service account dédié avec principe du moindre privilège  
-✅ Secrets via Secret Manager (si credentials.json nécessaire)  
-✅ Logs structurés JSON vers Cloud Logging  
-✅ Pas de stockage localStorage (non supporté)
+echo ""
+echo "🔐 Configuration IAM..."
 
-## Support
+# Permettre au service account d'invoquer le service
+gcloud run services add-iam-policy-binding "$SERVICE_NAME" \
+    --region="$REGION" \
+    --project="$PROJECT_ID" \
+    --member="serviceAccount:$SERVICE_ACCOUNT_EMAIL" \
+    --role="roles/run.invoker"
 
-Pour questions/bugs, ouvrir une issue sur le repo.
+# Permettre à Cloud Tasks d'invoquer le service
+gcloud run services add-iam-policy-binding "$SERVICE_NAME" \
+    --region="$REGION" \
+    --project="$PROJECT_ID" \
+    --member="serviceAccount:$SERVICE_ACCOUNT_EMAIL" \
+    --role="roles/run.invoker"
+
+# ============================================
+# Récupérer l'URL du service
+# ============================================
+
+SERVICE_URL=$(gcloud run services describe "$SERVICE_NAME" \
+    --region="$REGION" \
+    --project="$PROJECT_ID" \
+    --format="value(status.url)")
+
+echo ""
+echo "✅ Déploiement réussi!"
+echo "================================================"
+echo "Service URL: $SERVICE_URL"
+echo ""
+echo "📝 Prochaines étapes:"
+echo "1. Mettre à jour .env avec OIDC_AUDIENCE=$SERVICE_URL"
+echo "2. Créer le job Cloud Scheduler:"
+echo "   ./scripts/create_scheduler_0900.sh"
+echo "3. Tester les endpoints:"
+echo "   curl -H \"Authorization: Bearer \$(gcloud auth print-identity-token)\" \\"
+echo "     -X POST $SERVICE_URL/schedule \\"
+echo "     -H \"Content-Type: application/json\" \\"
+echo "     -d '{\"date\":\"today\",\"mode\":\"tasks\"}'"
+echo ""
