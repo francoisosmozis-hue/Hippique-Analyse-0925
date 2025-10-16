@@ -1,150 +1,91 @@
 """
-src/logging_utils.py - Configuration des logs structurés pour Cloud Logging
+src/logging_utils.py - Logs Structurés JSON
+
+Logs structurés pour Cloud Logging avec severity, timestamp, correlation_id.
 """
+
+from __future__ import annotations
 
 import json
 import logging
 import sys
-import traceback
 from datetime import datetime
 from typing import Any, Dict, Optional
 
-from config import get_config
-
-
-class StructuredLogger(logging.Logger):
-    """Logger qui émet des logs au format JSON structuré."""
+class StructuredLogger:
+    """Logger with JSON-structured output for Cloud Logging"""
     
-    def _log_structured(
+    def __init__(self, name: str):
+        self.name = name
+        self.logger = logging.getLogger(name)
+        
+        # Configure logger
+        if not self.logger.handlers:
+            handler = logging.StreamHandler(sys.stdout)
+            handler.setFormatter(logging.Formatter("%(message)s"))
+            self.logger.addHandler(handler)
+            self.logger.setLevel(logging.INFO)
+    
+    def _log(
         self,
-        level: int,
-        msg: str,
-        *,
-        extra: Optional[Dict[str, Any]] = None,
-        exc_info: Any = None,
+        severity: str,
+        message: str,
         **kwargs: Any
     ) -> None:
-        """Émet un log structuré JSON."""
+        """
+        Log a structured message.
         
-        record = {
+        Args:
+            severity: "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"
+            message: Log message
+            **kwargs: Additional fields (correlation_id, etc.)
+        """
+        log_entry = {
+            "severity": severity,
+            "message": message,
             "timestamp": datetime.utcnow().isoformat() + "Z",
-            "severity": logging.getLevelName(level),
-            "message": str(msg),
             "logger": self.name,
         }
         
-        # Ajouter extra fields
-        if extra:
-            record.update(extra)
-        
-        # Ajouter kwargs
+        # Add custom fields
         for key, value in kwargs.items():
-            if key not in record:
-                record[key] = value
+            if value is not None:
+                log_entry[key] = value
         
-        # Ajouter exception info
+        # Print JSON line
+        print(json.dumps(log_entry), flush=True)
+    
+    def debug(self, message: str, **kwargs: Any) -> None:
+        """Log DEBUG level"""
+        self._log("DEBUG", message, **kwargs)
+    
+    def info(self, message: str, **kwargs: Any) -> None:
+        """Log INFO level"""
+        self._log("INFO", message, **kwargs)
+    
+    def warning(self, message: str, **kwargs: Any) -> None:
+        """Log WARNING level"""
+        self._log("WARNING", message, **kwargs)
+    
+    def error(self, message: str, exc_info: Optional[Exception] = None, **kwargs: Any) -> None:
+        """Log ERROR level"""
         if exc_info:
-            if isinstance(exc_info, BaseException):
-                exc_info = (type(exc_info), exc_info, exc_info.__traceback__)
-            elif exc_info is True:
-                exc_info = sys.exc_info()
-            
-            if exc_info and exc_info[0] is not None:
-                record["exception"] = {
-                    "type": exc_info[0].__name__,
-                    "message": str(exc_info[1]),
-                    "stacktrace": "".join(traceback.format_exception(*exc_info)),
-                }
-        
-        # Émettre le log JSON
-        print(json.dumps(record, default=str), file=sys.stdout, flush=True)
+            import traceback
+            kwargs["traceback"] = traceback.format_exc()
+        self._log("ERROR", message, **kwargs)
     
-    def debug(self, msg: str, *args: Any, **kwargs: Any) -> None:
-        """Log DEBUG structuré."""
-        if self.isEnabledFor(logging.DEBUG):
-            self._log_structured(logging.DEBUG, msg % args if args else msg, **kwargs)
-    
-    def info(self, msg: str, *args: Any, **kwargs: Any) -> None:
-        """Log INFO structuré."""
-        if self.isEnabledFor(logging.INFO):
-            self._log_structured(logging.INFO, msg % args if args else msg, **kwargs)
-    
-    def warning(self, msg: str, *args: Any, **kwargs: Any) -> None:
-        """Log WARNING structuré."""
-        if self.isEnabledFor(logging.WARNING):
-            self._log_structured(logging.WARNING, msg % args if args else msg, **kwargs)
-    
-    def error(self, msg: str, *args: Any, exc_info: Any = None, **kwargs: Any) -> None:
-        """Log ERROR structuré."""
-        if self.isEnabledFor(logging.ERROR):
-            self._log_structured(
-                logging.ERROR,
-                msg % args if args else msg,
-                exc_info=exc_info,
-                **kwargs
-            )
-    
-    def critical(self, msg: str, *args: Any, exc_info: Any = None, **kwargs: Any) -> None:
-        """Log CRITICAL structuré."""
-        if self.isEnabledFor(logging.CRITICAL):
-            self._log_structured(
-                logging.CRITICAL,
-                msg % args if args else msg,
-                exc_info=exc_info,
-                **kwargs
-            )
+    def critical(self, message: str, exc_info: Optional[Exception] = None, **kwargs: Any) -> None:
+        """Log CRITICAL level"""
+        if exc_info:
+            import traceback
+            kwargs["traceback"] = traceback.format_exc()
+        self._log("CRITICAL", message, **kwargs)
 
-
-def setup_logging() -> None:
-    """Configure le logging global pour le service."""
-    config = get_config()
-    
-    # Définir le niveau global
-    level = getattr(logging, config.log_level, logging.INFO)
-    
-    # Remplacer la classe Logger par défaut
-    logging.setLoggerClass(StructuredLogger)
-    
-    # Configurer le root logger
-    root = logging.getLogger()
-    root.setLevel(level)
-    
-    # Supprimer les handlers par défaut
-    root.handlers.clear()
-    
-    # Ajouter un handler simple (print JSON)
-    handler = logging.StreamHandler(sys.stdout)
-    handler.setLevel(level)
-    handler.setFormatter(logging.Formatter("%(message)s"))  # Pas de formatage supplémentaire
-    root.addHandler(handler)
-    
-    # Réduire la verbosité des librairies tierces
-    logging.getLogger("urllib3").setLevel(logging.WARNING)
-    logging.getLogger("google").setLevel(logging.WARNING)
-    logging.getLogger("googleapiclient").setLevel(logging.WARNING)
-
+# Cache loggers
+_loggers: Dict[str, StructuredLogger] = {}
 
 def get_logger(name: str) -> StructuredLogger:
-    """Retourne un logger structuré pour le module donné."""
-    return logging.getLogger(name)  # type: ignore
-
-
-def log_request(
-    method: str,
-    path: str,
-    status: int,
-    duration_ms: float,
-    correlation_id: Optional[str] = None,
-    **extra: Any
-) -> None:
-    """Log une requête HTTP."""
-    logger = get_logger("http")
-    logger.info(
-        f"{method} {path} {status}",
-        method=method,
-        path=path,
-        status=status,
-        duration_ms=round(duration_ms, 2),
-        correlation_id=correlation_id,
-        **extra
-    )
+    """Get or create a structured logger"""
+    if name not in _loggers:
+        _loggers[name] = StructuredLogger(name)
+    return _loggers[name]

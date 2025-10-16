@@ -1,63 +1,102 @@
 """
-src/scheduler.py - Programmation des exécutions H-30 et H-5 via Cloud Tasks
+src/scheduler.py - Programmation Cloud Tasks/Scheduler
+
+Programme les analyses H-30 et H-5 pour chaque course du jour.
+
+Mode principal: Cloud Tasks (recommandé)
+Mode fallback: Cloud Scheduler one-shot jobs
+
+Idempotence: Noms de tâches déterministes pour éviter doublons
 """
 
 from __future__ import annotations
 
-import hashlib
 import json
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 from google.api_core import exceptions as gcp_exceptions
 from google.cloud import tasks_v2
+from google.protobuf import timestamp_pb2
 
 from config import get_config
 from logging_utils import get_logger
-from time_utils import compute_snapshot_time, format_rfc3339, is_past
+from time_utils import convert_local_to_utc, format_rfc3339
 
 logger = get_logger(__name__)
 config = get_config()
 
+# ============================================
+# Cloud Tasks Client (singleton)
+# ============================================
 
-def _sanitize_task_name(name: str) -> str:
-    """
-    Normalise un nom de tâche selon RFC-1035.
-    
-    Règles :
-    - Lowercase
-    - Commence par une lettre
-    - Max 500 chars
-    - Caractères autorisés : [a-z0-9-]
-    """
-    name = name.lower()
-    name = re.sub(r"[^a-z0-9-]", "-", name)
-    name = re.sub(r"-+", "-", name)  # Collapser les tirets multiples
-    name = name.strip("-")
-    
-    # Assurer que ça commence par une lettre
-    if name and not name[0].isalpha():
-        name = "task-" + name
-    
-    return name[:500]  # Limite GCP
+_tasks_client: Optional[tasks_v2.CloudTasksClient] = None
 
+def get_tasks_client() -> tasks_v2.CloudTasksClient:
+    """Get or create Cloud Tasks client (singleton)"""
+    global _tasks_client
+    if _tasks_client is None:
+        _tasks_client = tasks_v2.CloudTasksClient()
+    return _tasks_client
+
+# ============================================
+# Task Name Generation
+# ============================================
 
 def _generate_task_name(date: str, r_label: str, c_label: str, phase: str) -> str:
     """
-    Génère un nom déterministe pour une tâche.
+    Génère un nom de tâche déterministe (idempotence).
     
-    Format : run-YYYYMMDD-r{R}c{C}-{phase}
-    Exemple : run-20251015-r1c3-h30
+    Format: run-YYYYMMDD-rXcY-{h30|h5}
+    
+    Args:
+        date: YYYY-MM-DD
+        r_label: "R1"
+        c_label: "C3"
+        phase: "H30" ou "H5"
+        
+    Returns:
+        "run-20251016-r1c3-h30"
     """
     date_compact = date.replace("-", "")
-    r_num = r_label.replace("R", "").replace("r", "")
-    c_num = c_label.replace("C", "").replace("c", "")
-    phase_clean = phase.lower().replace("-", "")
+    r_num = r_label[1:].lower()
+    c_num = c_label[1:].lower()
+    phase_lower = phase.lower().replace("-", "")
     
-    name = f"run-{date_compact}-r{r_num}c{c_num}-{phase_clean}"
-    return _sanitize_task_name(name)
+    return f"run-{date_compact}-r{r_num}c{c_num}-{phase_lower}"
 
+def _sanitize_task_name(name: str) -> str:
+    """
+    Sanitize task name to comply with RFC-1035.
+    
+    Rules:
+    - Must be 1-500 characters
+    - Must contain only lowercase letters, numbers, hyphens
+    - Must start with a letter
+    - Must end with a letter or number
+    """
+    # Convert to lowercase
+    name = name.lower()
+    
+    # Replace invalid characters with hyphens
+    name = re.sub(r'[^a-z0-9-]', '-', name)
+    
+    # Remove leading/trailing hyphens
+    name = name.strip('-')
+    
+    # Ensure starts with letter
+    if name and not name[0].isalpha():
+        name = 'task-' + name
+    
+    # Truncate to 500 chars
+    name = name[:500]
+    
+    return name
+
+# ============================================
+# Cloud Tasks - Main API
+# ============================================
 
 def enqueue_run_task(
     course_url: str,
@@ -66,226 +105,252 @@ def enqueue_run_task(
     race_time_local: str,
     r_label: str,
     c_label: str,
+    correlation_id: Optional[str] = None,
 ) -> Optional[str]:
     """
-    Crée une tâche Cloud Tasks pour exécuter /run à l'heure snapshot.
+    Crée une Cloud Task pour exécuter une analyse de course.
     
     Args:
         course_url: URL ZEturf de la course
         phase: "H30" ou "H5"
         date: YYYY-MM-DD
-        race_time_local: HH:MM (heure locale de départ)
-        r_label: R1, R2, etc.
-        c_label: C1, C2, etc.
+        race_time_local: "HH:MM" (Europe/Paris)
+        r_label: "R1"
+        c_label: "C3"
+        correlation_id: ID de corrélation pour logs
         
     Returns:
-        Nom de la tâche créée ou None si erreur
+        Nom de la tâche créée ou None si échec
     """
-    # Calculer l'heure de snapshot
-    offset = -30 if phase.upper() in ("H30", "H-30") else -5
-    snapshot_local, snapshot_utc = compute_snapshot_time(date, race_time_local, offset)
+    # Calculate snapshot time (H-30 or H-5 before race)
+    offset = 30 if phase == "H30" else 5
     
-    # Vérifier que ce n'est pas dans le passé
-    if is_past(snapshot_utc):
-        logger.warning(
-            f"Snapshot time {snapshot_utc.isoformat()} is in the past, skipping",
-            r_label=r_label,
-            c_label=c_label,
-            phase=phase
-        )
+    # Parse race time (Europe/Paris)
+    try:
+        race_datetime_local = datetime.strptime(f"{date} {race_time_local}", "%Y-%m-%d %H:%M")
+    except ValueError as e:
+        logger.error(f"Invalid race time: {race_time_local}", exc_info=e)
         return None
     
-    # Générer nom de tâche déterministe
-    task_name = _generate_task_name(date, r_label, c_label, phase)
-    task_path = f"{config.queue_path}/tasks/{task_name}"
+    # Calculate snapshot time (still in Europe/Paris)
+    snapshot_datetime_local = race_datetime_local - timedelta(minutes=offset)
     
-    # Vérifier si la tâche existe déjà (idempotence)
-    client = tasks_v2.CloudTasksClient()
+    # Convert to UTC
+    snapshot_datetime_utc = convert_local_to_utc(snapshot_datetime_local)
+    
+    # Generate task name (deterministic for idempotence)
+    task_name_short = _generate_task_name(date, r_label, c_label, phase)
+    task_name_safe = _sanitize_task_name(task_name_short)
+    
+    # Full task path
+    parent = f"projects/{config.project_id}/locations/{config.region}/queues/{config.queue_id}"
+    task_path = f"{parent}/tasks/{task_name_safe}"
+    
+    # Check if task already exists (idempotence)
+    client = get_tasks_client()
     try:
-        existing = client.get_task(name=task_path)
+        existing_task = client.get_task(name=task_path)
         logger.info(
-            f"Task {task_name} already exists, skipping",
-            task_name=task_name,
-            state=existing.state_
+            f"Task {task_name_safe} already exists, skipping",
+            correlation_id=correlation_id,
+            task_name=task_name_safe,
         )
-        return task_name
+        return task_path
     except gcp_exceptions.NotFound:
-        pass  # OK, on crée
+        # Task doesn't exist, proceed with creation
+        pass
+    except Exception as e:
+        logger.warning(f"Error checking task existence: {e}", exc_info=e)
+        # Continue anyway
     
-    # Préparer payload
+    # Build HTTP request payload
     payload = {
         "course_url": course_url,
-        "phase": phase.upper().replace("-", ""),
+        "phase": phase,
         "date": date,
     }
     
-    # Construire la tâche
+    # Build Cloud Task
     task = {
         "name": task_path,
         "http_request": {
             "http_method": tasks_v2.HttpMethod.POST,
-            "url": f"{config.cloud_run_url}/run",
+            "url": f"{config.service_url}/run",
             "headers": {
                 "Content-Type": "application/json",
+                "X-Correlation-ID": correlation_id or "",
             },
             "body": json.dumps(payload).encode(),
         },
-        "schedule_time": format_rfc3339(snapshot_utc),
+        "schedule_time": timestamp_pb2.Timestamp(
+            seconds=int(snapshot_datetime_utc.timestamp())
+        ),
     }
     
-    # Ajouter OIDC si requis
+    # Add OIDC token if auth required
     if config.require_auth:
         task["http_request"]["oidc_token"] = {
             "service_account_email": config.service_account_email,
-            "audience": config.cloud_run_url,
+            "audience": config.service_url,
         }
     
-    # Créer la tâche
+    # Create task
     try:
-        created_task = client.create_task(
-            parent=config.queue_path,
-            task=task
-        )
+        response = client.create_task(parent=parent, task=task)
+        
         logger.info(
-            f"Created task {task_name} scheduled at {snapshot_local.strftime('%Y-%m-%d %H:%M')} Paris",
-            task_name=task_name,
-            schedule_time_utc=snapshot_utc.isoformat(),
-            schedule_time_local=snapshot_local.isoformat(),
-            r_label=r_label,
-            c_label=c_label,
-            phase=phase
+            f"Task created: {task_name_safe}",
+            correlation_id=correlation_id,
+            task_name=task_name_safe,
+            phase=phase,
+            race=f"{r_label}{c_label}",
+            race_time=race_time_local,
+            snapshot_time_utc=format_rfc3339(snapshot_datetime_utc),
+            snapshot_time_local=snapshot_datetime_local.strftime("%Y-%m-%d %H:%M"),
         )
-        return task_name
+        
+        return response.name
+    
     except gcp_exceptions.AlreadyExists:
-        logger.info(f"Task {task_name} already exists (race condition), continuing")
-        return task_name
+        # Race condition: task was created between our check and create
+        logger.info(
+            f"Task {task_name_safe} already exists (race condition), skipping",
+            correlation_id=correlation_id,
+        )
+        return task_path
+    
     except Exception as e:
         logger.error(
-            f"Failed to create task {task_name}: {e}",
+            f"Failed to create task {task_name_safe}: {e}",
+            correlation_id=correlation_id,
             exc_info=e,
-            task_name=task_name
         )
         return None
 
+# ============================================
+# Scheduler All Races
+# ============================================
 
-def schedule_race_tasks(race: Dict[str, Any]) -> Dict[str, Any]:
+def schedule_all_races(
+    plan: List[Dict[str, Any]],
+    mode: str = "tasks",
+    correlation_id: Optional[str] = None,
+) -> List[Dict[str, Any]]:
     """
-    Programme les tâches H-30 et H-5 pour une course.
+    Programme toutes les courses du plan (H-30 + H-5).
     
     Args:
-        race: Dict avec keys: date, r_label, c_label, time_local, course_url
+        plan: Liste de courses avec time_local
+        mode: "tasks" (Cloud Tasks) ou "scheduler" (Cloud Scheduler fallback)
+        correlation_id: ID de corrélation pour logs
         
     Returns:
-        Dict avec statut de programmation {h30_task, h5_task, status}
+        Liste de résultats par tâche:
+        [
+            {
+                "race": "R1C3",
+                "phase": "H30",
+                "ok": true,
+                "task_name": "run-20251016-r1c3-h30",
+                "snapshot_time_utc": "2025-10-16T12:30:00Z",
+                "snapshot_time_local": "2025-10-16 14:30"
+            },
+            ...
+        ]
     """
-    date = race["date"]
-    r_label = race["r_label"]
-    c_label = race["c_label"]
-    time_local = race["time_local"]
-    course_url = race["course_url"]
+    if mode != "tasks":
+        logger.warning(f"Mode '{mode}' not supported yet, using 'tasks'")
+        mode = "tasks"
     
-    logger.info(
-        f"Scheduling {r_label}{c_label} at {time_local}",
-        r_label=r_label,
-        c_label=c_label,
-        time_local=time_local
-    )
-    
-    # Programmer H-30
-    h30_task = enqueue_run_task(
-        course_url=course_url,
-        phase="H30",
-        date=date,
-        race_time_local=time_local,
-        r_label=r_label,
-        c_label=c_label,
-    )
-    
-    # Programmer H-5
-    h5_task = enqueue_run_task(
-        course_url=course_url,
-        phase="H5",
-        date=date,
-        race_time_local=time_local,
-        r_label=r_label,
-        c_label=c_label,
-    )
-    
-    status = "ok" if (h30_task and h5_task) else "partial" if (h30_task or h5_task) else "failed"
-    
-    return {
-        "r_label": r_label,
-        "c_label": c_label,
-        "time_local": time_local,
-        "h30_task": h30_task,
-        "h5_task": h5_task,
-        "status": status,
-    }
-
-
-def schedule_all_races(plan: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """
-    Programme toutes les courses du plan.
-    
-    Args:
-        plan: Liste de courses [{date, r_label, c_label, time_local, course_url, ...}]
-        
-    Returns:
-        Résumé {total, scheduled, failed, tasks: [...]}
-    """
     results = []
-    scheduled = 0
-    failed = 0
     
     for race in plan:
-        result = schedule_race_tasks(race)
-        results.append(result)
+        r_label = race["r_label"]
+        c_label = race["c_label"]
+        course_url = race["course_url"]
+        time_local = race["time_local"]
+        date = race["date"]
         
-        if result["status"] == "ok":
-            scheduled += 1
-        elif result["status"] == "failed":
-            failed += 1
+        # Schedule H-30
+        task_h30 = enqueue_run_task(
+            course_url=course_url,
+            phase="H30",
+            date=date,
+            race_time_local=time_local,
+            r_label=r_label,
+            c_label=c_label,
+            correlation_id=correlation_id,
+        )
+        
+        results.append({
+            "race": f"{r_label}{c_label}",
+            "phase": "H30",
+            "ok": task_h30 is not None,
+            "task_name": task_h30 or "",
+            "race_time_local": time_local,
+        })
+        
+        # Schedule H-5
+        task_h5 = enqueue_run_task(
+            course_url=course_url,
+            phase="H5",
+            date=date,
+            race_time_local=time_local,
+            r_label=r_label,
+            c_label=c_label,
+            correlation_id=correlation_id,
+        )
+        
+        results.append({
+            "race": f"{r_label}{c_label}",
+            "phase": "H5",
+            "ok": task_h5 is not None,
+            "task_name": task_h5 or "",
+            "race_time_local": time_local,
+        })
     
-    summary = {
-        "total": len(plan),
-        "scheduled": scheduled,
-        "partial": len([r for r in results if r["status"] == "partial"]),
-        "failed": failed,
-        "tasks": results,
-    }
+    # Summary
+    total = len(results)
+    success = sum(1 for r in results if r["ok"])
+    failed = total - success
     
     logger.info(
-        f"Scheduling complete: {scheduled}/{len(plan)} races fully scheduled",
-        **summary
+        f"Scheduling complete: {success}/{total} tasks created ({failed} failed)",
+        correlation_id=correlation_id,
+        total=total,
+        success=success,
+        failed=failed,
     )
     
-    return summary
+    return results
 
+# ============================================
+# Cloud Scheduler Fallback (optional)
+# ============================================
 
-# ============================================================================
-# FALLBACK : Cloud Scheduler (si mode="scheduler")
-# ============================================================================
-
-def create_scheduler_job_fallback(
+def create_one_shot_scheduler_job(
     job_name: str,
-    schedule_time: datetime,
+    schedule_time_utc: datetime,
     payload: Dict[str, Any],
+    correlation_id: Optional[str] = None,
 ) -> bool:
     """
-    Fallback : crée un job Cloud Scheduler one-shot (non recommandé).
+    Crée un job Cloud Scheduler one-shot (fallback).
     
-    Note : Cloud Scheduler ne supporte pas vraiment les jobs "one-shot".
-    Cette fonction est un exemple d'implémentation pour référence.
-    Utiliser Cloud Tasks (recommandé).
+    NOTE: Cloud Scheduler ne supporte pas vraiment les "one-shot" jobs.
+    Cette approche nécessite de créer un job avec cron "0 0 1 1 *" (jamais)
+    puis de le déclencher manuellement ou le supprimer après exécution.
+    
+    Recommandation: Utiliser Cloud Tasks à la place.
+    
+    Args:
+        job_name: Nom du job (doit être unique)
+        schedule_time_utc: DateTime UTC d'exécution
+        payload: Body JSON à envoyer au service
+        correlation_id: ID de corrélation pour logs
+        
+    Returns:
+        True si succès, False sinon
     """
-    logger.warning(
-        "Using Cloud Scheduler fallback (not recommended). "
-        "Prefer Cloud Tasks for one-shot executions."
-    )
-    
-    # TODO: Implémenter avec google-cloud-scheduler si vraiment nécessaire
-    # Nécessite de convertir schedule_time en cron expression
-    # et de créer un job qui s'auto-détruit après exécution
-    
-    logger.error("Cloud Scheduler fallback not implemented")
+    logger.warning("Cloud Scheduler fallback not implemented, use Cloud Tasks instead")
     return False

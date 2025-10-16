@@ -1,15 +1,29 @@
 """
-src/runner.py - Orchestrateur d'exécution des analyses GPI v5.1
+src/runner.py - Orchestrateur des Modules GPI v5.1
+
+Exécute les modules Python existants via subprocess:
+  - analyse_courses_du_jour_enrichie.py (principal)
+  - p_finale_export.py
+  - simulate_ev.py
+  - pipeline_run.py
+  - update_excel_with_results.py (post-course)
+  - get_arrivee_geny.py (post-course)
+
+Correction bug #3: Mode simplifié avec --course-url directement
+(pas besoin de --reunion --course --course-id)
 """
 
 from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
+
+from google.cloud import storage
 
 from config import get_config
 from logging_utils import get_logger
@@ -21,12 +35,38 @@ config = get_config()
 MODULES_DIR = Path(__file__).parent.parent / "modules"
 DATA_DIR = Path(__file__).parent.parent / "data"
 
+# Créer DATA_DIR si nécessaire
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+# ============================================
+# Helpers
+# ============================================
+
+def _extract_rc_from_url(course_url: str) -> Tuple[str, str]:
+    """
+    Extrait R et C depuis une URL ZEturf (pour logging uniquement).
+    
+    Args:
+        course_url: https://www.zeturf.fr/fr/course/2025-10-16/R1C3-...
+        
+    Returns:
+        ("R1", "C3")
+        
+    Raises:
+        ValueError si format incorrect
+    """
+    match = re.search(r"/R(\d+)C(\d+)[-_]", course_url)
+    if not match:
+        raise ValueError(f"Cannot extract R/C from URL: {course_url}")
+    
+    r_num, c_num = match.groups()
+    return f"R{int(r_num)}", f"C{int(c_num)}"
 
 def _run_subprocess(
     cmd: List[str],
     timeout: int = 600,
     cwd: Optional[Path] = None,
-) -> tuple[int, str, str]:
+) -> Tuple[int, str, str]:
     """
     Exécute une commande subprocess et capture stdout/stderr.
     
@@ -57,43 +97,187 @@ def _run_subprocess(
         logger.error(f"Command failed: {e}", exc_info=e)
         return -1, "", str(e)
 
+def _collect_artifacts(rc_dir: Path) -> List[str]:
+    """
+    Collecte tous les artefacts générés dans le répertoire de la course.
+    
+    Args:
+        rc_dir: Répertoire data/R1C3/
+        
+    Returns:
+        Liste de chemins relatifs
+    """
+    if not rc_dir.exists():
+        return []
+    
+    artifacts = []
+    for file_path in rc_dir.rglob("*"):
+        if file_path.is_file():
+            artifacts.append(str(file_path.relative_to(Path.cwd())))
+    
+    return sorted(artifacts)
+
+def _upload_artifacts_to_gcs(rc_dir: Path, artifacts: List[str]) -> None:
+    """
+    Upload les artefacts vers GCS (si configuré).
+    
+    Args:
+        rc_dir: Répertoire data/R1C3/
+        artifacts: Liste de chemins d'artefacts
+    """
+    if not config.gcs_bucket:
+        return
+    
+    try:
+        client = storage.Client()
+        bucket = client.bucket(config.gcs_bucket)
+        
+        for artifact_path in artifacts:
+            local_file = Path(artifact_path)
+            if not local_file.exists():
+                continue
+            
+            # GCS path: {prefix}/YYYY-MM-DD/R1C3/filename
+            gcs_path = f"{config.gcs_prefix}/{local_file.parent.name}/{local_file.name}"
+            
+            blob = bucket.blob(gcs_path)
+            blob.upload_from_filename(str(local_file))
+            
+            logger.debug(f"Uploaded {artifact_path} → gs://{config.gcs_bucket}/{gcs_path}")
+        
+        logger.info(f"Uploaded {len(artifacts)} artifacts to GCS")
+    
+    except Exception as e:
+        logger.error(f"Failed to upload artifacts to GCS: {e}", exc_info=e)
+
+# ============================================
+# Main Runner
+# ============================================
 
 def run_course(
     course_url: str,
     phase: str,
     date: str,
+    correlation_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
-    Exécute l'analyse complète d'une course.
+    Exécute l'analyse complète d'une course avec les modules GPI v5.1.
+    
+    MODE SIMPLIFIÉ : Utilise directement --course-url (correction bug #3).
     
     Args:
         course_url: URL ZEturf de la course
-        phase: "H30" ou "H5"
+        phase: "H30" ou "H5" (case-insensitive, avec ou sans dash)
         date: YYYY-MM-DD
+        correlation_id: ID de corrélation pour logs
         
     Returns:
-        {ok: bool, phase: str, returncode: int, stdout_tail: str, artifacts: [...]}
+        {
+          "ok": bool,
+          "phase": str,
+          "returncode": int,
+          "stdout_tail": str,
+          "stderr": str,
+          "artifacts": [...]
+        }
     """
+    # Normalize phase
     phase_clean = phase.upper().replace("-", "")
-    correlation_id = f"run-{date.replace('-', '')}-{course_url.split('/')[-1]}-{phase_clean.lower()}"
+    
+    # Extraire R/C pour logging et artefacts
+    try:
+        reunion, course = _extract_rc_from_url(course_url)
+    except ValueError as e:
+        logger.error(str(e))
+        return {
+            "ok": False,
+            "phase": phase_clean,
+            "returncode": -1,
+            "error": str(e),
+            "artifacts": [],
+        }
     
     logger.info(
         f"Starting course analysis",
         correlation_id=correlation_id,
-        course_url=course_url,
+        reunion=reunion,
+        course=course,
         phase=phase_clean,
-        date=date
+        date=date,
+        course_url=course_url,
     )
     
     artifacts = []
     
-    # Étape 1 : Analyse enrichie (H30 ou H5)
-    logger.info("Step 1/5: analyse_courses_du_jour_enrichie", correlation_id=correlation_id)
+    # Créer répertoire de sortie
+    rc_dir = DATA_DIR / f"{reunion}{course}"
+    rc_dir.mkdir(parents=True, exist_ok=True)
+    
+    # ========================================================================
+    # Pipeline H30 : Snapshot simple
+    # ========================================================================
+    
+    if phase_clean == "H30":
+        logger.info("Step 1/1: Snapshot H30", correlation_id=correlation_id)
+        
+        # MODE SIMPLIFIÉ : --course-url directement
+        cmd_analyse = [
+            sys.executable,
+            str(MODULES_DIR / "analyse_courses_du_jour_enrichie.py"),
+            "--course-url", course_url,
+            "--phase", "H30",
+            "--data-dir", str(DATA_DIR),
+        ]
+        
+        rc, stdout, stderr = _run_subprocess(cmd_analyse, timeout=config.timeout_seconds)
+        
+        if rc != 0:
+            logger.error(
+                f"H30 analysis failed",
+                correlation_id=correlation_id,
+                returncode=rc,
+                stderr=stderr[:500]
+            )
+            return {
+                "ok": False,
+                "phase": "H30",
+                "returncode": rc,
+                "stdout_tail": stdout[-1000:] if stdout else "",
+                "stderr": stderr[:500],
+                "artifacts": _collect_artifacts(rc_dir),
+            }
+        
+        # Collecter artefacts
+        artifacts = _collect_artifacts(rc_dir)
+        
+        # Upload GCS si configuré
+        if config.gcs_bucket:
+            _upload_artifacts_to_gcs(rc_dir, artifacts)
+        
+        logger.info("H30 analysis complete", correlation_id=correlation_id)
+        return {
+            "ok": True,
+            "phase": "H30",
+            "returncode": 0,
+            "stdout_tail": stdout[-500:] if stdout else "",
+            "artifacts": artifacts,
+        }
+    
+    # ========================================================================
+    # Pipeline H5 complet
+    # ========================================================================
+    
+    logger.info("Starting H5 pipeline", correlation_id=correlation_id)
+    
+    # Étape 1 : Analyse enrichie H5
+    logger.info("Step 1/6: analyse_courses_du_jour_enrichie H5", correlation_id=correlation_id)
+    
+    # MODE SIMPLIFIÉ : --course-url directement
     cmd_analyse = [
         sys.executable,
         str(MODULES_DIR / "analyse_courses_du_jour_enrichie.py"),
         "--course-url", course_url,
-        "--phase", phase_clean,
+        "--phase", "H5",
         "--data-dir", str(DATA_DIR),
     ]
     
@@ -108,102 +292,116 @@ def run_course(
         )
         return {
             "ok": False,
-            "phase": phase_clean,
+            "phase": "H5",
             "returncode": rc,
             "stdout_tail": stdout[-1000:] if stdout else "",
             "stderr": stderr[:500],
-            "artifacts": artifacts,
+            "artifacts": _collect_artifacts(rc_dir),
         }
     
-    # Si H30, on s'arrête là (snapshot simple)
-    if phase_clean == "H30":
-        logger.info("H30 analysis complete", correlation_id=correlation_id)
-        return {
-            "ok": True,
-            "phase": "H30",
-            "returncode": 0,
-            "stdout_tail": stdout[-500:] if stdout else "",
-            "artifacts": artifacts,
-        }
+    # Étape 2 : Fetch chronos (optionnel)
+    logger.info("Step 2/6: fetch_je_chrono (optional)", correlation_id=correlation_id)
     
-    # ========================================================================
-    # Pipeline H5 complet
-    # ========================================================================
+    cmd_chrono = [
+        sys.executable,
+        str(MODULES_DIR / "fetch_je_chrono.py"),
+        "--course-url", course_url,
+        "--data-dir", str(DATA_DIR),
+    ]
     
-    # Étape 2 : Export p_finale (si nécessaire)
-    logger.info("Step 2/5: p_finale_export", correlation_id=correlation_id)
+    # Optionnel : échec non bloquant
+    rc_chrono, _, _ = _run_subprocess(cmd_chrono, timeout=120)
+    if rc_chrono != 0:
+        logger.warning("fetch_je_chrono failed (non-blocking)", correlation_id=correlation_id)
+    
+    # Étape 3 : p_finale_export.py
+    logger.info("Step 3/6: p_finale_export", correlation_id=correlation_id)
+    
     cmd_p_finale = [
         sys.executable,
         str(MODULES_DIR / "p_finale_export.py"),
-        "--data-dir", str(DATA_DIR),
+        "--rc-dir", str(rc_dir),
     ]
-    rc, stdout2, stderr2 = _run_subprocess(cmd_p_finale, timeout=120)
-    if rc != 0:
-        logger.warning(f"p_finale_export failed (non-blocking)", returncode=rc)
     
-    # Étape 3 : Simulation EV
-    logger.info("Step 3/5: simulate_ev", correlation_id=correlation_id)
-    cmd_ev = [
+    rc, stdout, stderr = _run_subprocess(cmd_p_finale, timeout=180)
+    
+    if rc != 0:
+        logger.error(
+            f"p_finale_export failed",
+            correlation_id=correlation_id,
+            returncode=rc,
+            stderr=stderr[:500]
+        )
+        return {
+            "ok": False,
+            "phase": "H5",
+            "returncode": rc,
+            "stdout_tail": stdout[-1000:] if stdout else "",
+            "stderr": stderr[:500],
+            "artifacts": _collect_artifacts(rc_dir),
+        }
+    
+    # Étape 4 : simulate_ev.py
+    logger.info("Step 4/6: simulate_ev", correlation_id=correlation_id)
+    
+    cmd_simulate = [
         sys.executable,
         str(MODULES_DIR / "simulate_ev.py"),
-        "--data-dir", str(DATA_DIR),
-        "--budget", str(config.budget_total),
+        "--p-finale", str(rc_dir / "p_finale.json"),
+        "--output", str(rc_dir / "ev_simulation.json"),
     ]
-    rc, stdout3, stderr3 = _run_subprocess(cmd_ev, timeout=180)
-    if rc != 0:
-        logger.warning(f"simulate_ev failed (non-blocking)", returncode=rc)
     
-    # Étape 4 : Pipeline run (génération tickets)
-    logger.info("Step 4/5: pipeline_run", correlation_id=correlation_id)
+    rc, stdout, stderr = _run_subprocess(cmd_simulate, timeout=180)
+    
+    if rc != 0:
+        logger.warning(
+            f"simulate_ev failed (non-critical)",
+            correlation_id=correlation_id,
+            returncode=rc,
+        )
+    
+    # Étape 5 : pipeline_run.py (génération tickets)
+    logger.info("Step 5/6: pipeline_run (ticket generation)", correlation_id=correlation_id)
+    
     cmd_pipeline = [
         sys.executable,
         str(MODULES_DIR / "pipeline_run.py"),
-        "--data-dir", str(DATA_DIR),
-        "--budget", str(config.budget_total),
-        "--ev-min", str(config.ev_min_global),
-        "--roi-min", str(config.roi_min_global),
+        "--rc-dir", str(rc_dir),
+        "--budget", str(config.budget_per_race),
     ]
-    rc, stdout4, stderr4 = _run_subprocess(cmd_pipeline, timeout=300)
+    
+    rc, stdout, stderr = _run_subprocess(cmd_pipeline, timeout=300)
     
     if rc != 0:
         logger.error(
             f"pipeline_run failed",
             correlation_id=correlation_id,
             returncode=rc,
-            stderr=stderr4[:500]
+            stderr=stderr[:500]
         )
         return {
             "ok": False,
             "phase": "H5",
             "returncode": rc,
-            "stdout_tail": stdout4[-1000:] if stdout4 else "",
-            "stderr": stderr4[:500],
-            "artifacts": artifacts,
+            "stdout_tail": stdout[-1000:] if stdout else "",
+            "stderr": stderr[:500],
+            "artifacts": _collect_artifacts(rc_dir),
         }
     
-    # Étape 5 : Export Excel (optionnel)
-    logger.info("Step 5/5: update_excel_with_results", correlation_id=correlation_id)
-    cmd_excel = [
-        sys.executable,
-        str(MODULES_DIR / "update_excel_with_results.py"),
-        "--data-dir", str(DATA_DIR),
-    ]
-    rc, stdout5, stderr5 = _run_subprocess(cmd_excel, timeout=60)
-    if rc != 0:
-        logger.warning(f"update_excel_with_results failed (non-blocking)", returncode=rc)
+    # Étape 6 : Collecter artefacts
+    logger.info("Step 6/6: Collecting artifacts", correlation_id=correlation_id)
     
-    # Collecter artifacts
-    artifacts = _collect_artifacts(date, course_url)
-    
-    logger.info(
-        f"H5 pipeline complete",
-        correlation_id=correlation_id,
-        artifacts_count=len(artifacts)
-    )
+    artifacts = _collect_artifacts(rc_dir)
     
     # Upload GCS si configuré
     if config.gcs_bucket:
-        _upload_artifacts_to_gcs(artifacts)
+        _upload_artifacts_to_gcs(rc_dir, artifacts)
+    
+    logger.info(
+        "H5 pipeline complete",
+        correlation_id=correlation_id,
+        artifacts_count=len(artifacts),
+    )
     
     return {
         "ok": True,
@@ -213,127 +411,86 @@ def run_course(
         "artifacts": artifacts,
     }
 
+# ============================================
+# Post-course Updates (optional)
+# ============================================
 
-def _collect_artifacts(date: str, course_url: str) -> List[str]:
+def update_with_results(
+    course_url: str,
+    date: str,
+    correlation_id: Optional[str] = None,
+) -> Dict[str, Any]:
     """
-    Collecte les artefacts générés dans data/.
+    Met à jour l'Excel avec les résultats officiels (post-course).
     
-    Returns:
-        Liste de chemins relatifs
-    """
-    artifacts = []
-    
-    # Extraire R/C de l'URL
-    match = re.search(r"R(\d+)C(\d+)", course_url)
-    if not match:
-        return artifacts
-    
-    r, c = match.groups()
-    rc_dir = DATA_DIR / f"R{r}C{c}"
-    
-    if not rc_dir.exists():
-        return artifacts
-    
-    # Lister les fichiers importants
-    patterns = [
-        "snapshot_*.json",
-        "p_finale.json",
-        "decision.json",
-        "tickets_*.json",
-        "*.csv",
-        "*.xlsx",
-    ]
-    
-    import glob
-    for pattern in patterns:
-        for file in glob.glob(str(rc_dir / pattern)):
-            artifacts.append(str(Path(file).relative_to(DATA_DIR.parent)))
-    
-    return artifacts
-
-
-def _upload_artifacts_to_gcs(artifacts: List[str]) -> None:
-    """
-    Upload les artefacts vers GCS.
+    Exécute:
+      1. get_arrivee_geny.py (fetch résultats)
+      2. update_excel_with_results.py (mise à jour Excel)
     
     Args:
-        artifacts: Liste de chemins relatifs à uploader
-    """
-    if not config.gcs_bucket:
-        return
-    
-    logger.info(f"Uploading {len(artifacts)} artifacts to GCS", bucket=config.gcs_bucket)
-    
-    try:
-        from google.cloud import storage
-        
-        client = storage.Client()
-        bucket = client.bucket(config.gcs_bucket)
-        
-        for artifact in artifacts:
-            local_path = DATA_DIR.parent / artifact
-            if not local_path.exists():
-                logger.warning(f"Artifact not found: {artifact}")
-                continue
-            
-            blob_name = f"{config.gcs_prefix}/{artifact}"
-            blob = bucket.blob(blob_name)
-            
-            blob.upload_from_filename(str(local_path))
-            logger.debug(f"Uploaded {artifact} to gs://{config.gcs_bucket}/{blob_name}")
-        
-        logger.info(f"GCS upload complete")
-    except Exception as e:
-        logger.error(f"Failed to upload to GCS: {e}", exc_info=e)
-
-
-# ============================================================================
-# Post-course : récupération résultats
-# ============================================================================
-
-def run_post_race_results(date: str) -> Dict[str, Any]:
-    """
-    Récupère les résultats des courses terminées et met à jour Excel.
-    
-    Args:
+        course_url: URL ZEturf de la course
         date: YYYY-MM-DD
+        correlation_id: ID de corrélation pour logs
         
     Returns:
-        {ok: bool, results_count: int}
+        {
+          "ok": bool,
+          "returncode": int,
+          "message": str
+        }
     """
-    logger.info(f"Fetching post-race results for {date}")
+    try:
+        reunion, course = _extract_rc_from_url(course_url)
+    except ValueError as e:
+        return {"ok": False, "error": str(e)}
     
-    # Étape 1 : get_arrivee_geny
+    logger.info(
+        "Updating with results",
+        correlation_id=correlation_id,
+        reunion=reunion,
+        course=course,
+    )
+    
+    # Étape 1 : Fetch arrivée
     cmd_arrivee = [
         sys.executable,
         str(MODULES_DIR / "get_arrivee_geny.py"),
+        "--course-url", course_url,
         "--date", date,
-        "--out", str(DATA_DIR / "results" / f"arrivees_{date}.json"),
     ]
     
-    rc, stdout, stderr = _run_subprocess(cmd_arrivee, timeout=180)
-    if rc != 0:
-        logger.error(f"get_arrivee_geny failed", returncode=rc, stderr=stderr[:500])
-        return {"ok": False, "results_count": 0}
+    rc, stdout, stderr = _run_subprocess(cmd_arrivee, timeout=60)
     
-    # Étape 2 : update_excel_with_results
-    cmd_excel = [
+    if rc != 0:
+        logger.error(f"get_arrivee_geny failed: {stderr[:200]}")
+        return {
+            "ok": False,
+            "returncode": rc,
+            "message": "Failed to fetch results",
+        }
+    
+    # Étape 2 : Update Excel
+    cmd_update = [
         sys.executable,
         str(MODULES_DIR / "update_excel_with_results.py"),
-        "--results", str(DATA_DIR / "results" / f"arrivees_{date}.json"),
+        "--reunion", reunion,
+        "--course", course,
+        "--date", date,
     ]
     
-    rc, stdout2, stderr2 = _run_subprocess(cmd_excel, timeout=60)
+    rc, stdout, stderr = _run_subprocess(cmd_update, timeout=120)
+    
     if rc != 0:
-        logger.warning(f"update_excel_with_results failed", returncode=rc)
+        logger.error(f"update_excel_with_results failed: {stderr[:200]}")
+        return {
+            "ok": False,
+            "returncode": rc,
+            "message": "Failed to update Excel",
+        }
     
-    # Uploader Excel vers GCS
-    excel_path = Path("excel/modele_suivi_courses_hippiques.xlsx")
-    if config.gcs_bucket and excel_path.exists():
-        _upload_artifacts_to_gcs([str(excel_path)])
-    
-    logger.info("Post-race results processed")
-    return {"ok": True, "results_count": 1}
-
-
-import re  # Ajout de l'import manquant
+    logger.info("Results updated successfully", correlation_id=correlation_id)
+    return {
+        "ok": True,
+        "returncode": 0,
+        "message": "Results updated successfully",
+    }
