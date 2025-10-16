@@ -6,13 +6,12 @@ def get_json(url):
     r.raise_for_status()
     return r.json()
 
-def iter_dates_sept_2025():
-    d = date(2025,9,1)
-    while d.month == 9 and d.year == 2025:
-        yield d.strftime("%d%m%Y"), d.isoformat()
+def iter_dates_today():
+    d = date(2025, 10, 15)
+    yield d.strftime("%d%m%Y"), d.isoformat()
 
 rows = []
-for dstr, d_iso in iter_dates_sept_2025():
+for dstr, d_iso in iter_dates_today():
     # programme du jour (réunions/courses)
     try:
         prog = get_json(f"https://offline.turfinfo.api.pmu.fr/rest/client/7/programme/{dstr}")

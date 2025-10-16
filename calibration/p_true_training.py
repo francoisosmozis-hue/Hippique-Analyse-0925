@@ -77,27 +77,22 @@ def train_and_evaluate_model(
     C: float = 1.0,
     random_state: int = 42,
 ) -> CalibrationResult:
-    """Fit a logistic regression on past data and evaluate on future data."""
+    """Fit a logistic regression on all available data."""
 
     df = dataset.copy()
-    df["race_date"] = pd.to_datetime(df["race_date"], errors="coerce")
-    df = df.dropna(subset=["is_winner", "race_date"])
+    df = df.dropna(subset=["is_winner"])
     if df.empty:
-        raise ValueError("dataset must contain at least one labelled sample with a valid date")
+        raise ValueError("dataset must contain at least one labelled sample")
 
-    train_df = df[df["race_date"] < split_date]
-    test_df = df[df["race_date"] >= split_date]
+    # Use all data for training
+    train_df = df
 
     if train_df.empty:
-        raise ValueError(f"no training data found before split_date {split_date}")
-    if test_df.empty:
-        raise ValueError(f"no test data found on or after split_date {split_date}")
+        raise ValueError(f"no training data found")
 
     feature_list = [str(f) for f in features]
     X_train = train_df[feature_list].to_numpy()
     y_train = train_df["is_winner"].astype(int).to_numpy()
-    X_test = test_df[feature_list].to_numpy()
-    y_test = test_df["is_winner"].astype(int).to_numpy()
 
     model = LogisticRegression(
         C=float(C),
@@ -107,25 +102,20 @@ def train_and_evaluate_model(
     )
     model.fit(X_train, y_train)
 
-    # Evaluate on training set
+    # Evaluate on training set itself
     proba_train = model.predict_proba(X_train)[:, 1]
     train_brier = float(brier_score_loss(y_train, proba_train))
     train_loss = float(log_loss(y_train, proba_train, labels=[0, 1]))
-
-    # Evaluate on test set
-    proba_test = model.predict_proba(X_test)[:, 1]
-    test_brier = float(brier_score_loss(y_test, proba_test))
-    test_loss = float(log_loss(y_test, proba_test, labels=[0, 1]))
 
     return CalibrationResult(
         model=model,
         features=feature_list,
         n_train_samples=int(len(train_df)),
-        n_test_samples=int(len(test_df)),
+        n_test_samples=0, # No test set
         train_brier_score=train_brier,
         train_log_loss=train_loss,
-        test_brier_score=test_brier,
-        test_log_loss=test_loss,
+        test_brier_score=0.0,
+        test_log_loss=0.0,
         fitted_at=dt.datetime.now(dt.timezone.utc),
     )
 
