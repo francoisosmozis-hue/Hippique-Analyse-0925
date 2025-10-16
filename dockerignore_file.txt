@@ -1,0 +1,88 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Documentation
+*.md
+!README.md
+docs/
+
+# Tests
+tests/
+test_*.py
+*_test.py
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+
+# Environnement
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+logs/
+
+# Données locales
+data/
+tmp/
+*.csv
+*.xlsx
+*.json
+!requirements.txt
+!package.json
+
+# Docker
+Dockerfile.*
+docker-compose*.yml
+.dockerignore
+
+# Scripts non nécessaires en production
+scripts/test_local.sh
+scripts/setup_dev.sh
+
+# Fichiers temporaires
+*.tmp
+*.bak
+*.backup

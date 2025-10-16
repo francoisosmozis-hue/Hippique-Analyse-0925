@@ -1,0 +1,224 @@
+# ============================================================================
+# .gitignore - Orchestrateur Hippique
+# ============================================================================
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Virtual environments
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.venv/
+
+# Testing
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+htmlcov/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+*.sublime-project
+*.sublime-workspace
+.project
+.pydevproject
+.settings/
+
+# Jupyter
+.ipynb_checkpoints
+*.ipynb
+
+# Environment variables
+.env
+.env.*
+!.env.example
+.envrc
+
+# Logs
+*.log
+logs/
+log/
+*.log.*
+
+# Données locales / temporaires
+data/
+tmp/
+temp/
+*.tmp
+*.bak
+*.backup
+.cache/
+
+# Artefacts GPI
+*.csv
+*.xlsx
+*.xls
+*.json
+!plan_test.json
+!requirements.json
+!package.json
+!tsconfig.json
+p_finale*.json
+results*.csv
+report*.xlsx
+
+# PDF & documents
+*.pdf
+!docs/*.pdf
+
+# Archives
+*.zip
+*.tar.gz
+*.rar
+*.7z
+
+# Base de données
+*.db
+*.sqlite
+*.sqlite3
+
+# GCP & Cloud
+.gcloud/
+credentials.json
+service-account-key.json
+*-key.json
+gcp-credentials.json
+
+# Secrets (double sécurité)
+*secret*
+*SECRET*
+*credentials*
+*CREDENTIALS*
+*.pem
+*.key
+*.cert
+!requirements.txt
+
+# Docker
+*.pid
+*.seed
+*.pid.lock
+.dockerignore.local
+
+# OS
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.Spotlight-V100
+.Trashes
+._*
+
+# Backup
+*~
+*.orig
+*.rej
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+
+# Terraform (si utilisé)
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl
+
+# Node (si frontend ajouté)
+node_modules/
+package-lock.json
+yarn.lock
+
+# Documentation générée
+site/
+_build/
+docs/_build/
+
+# Profiling
+*.prof
+*.lprof
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath
+*.sage.py
+
+# Spyder
+.spyderproject
+.spyproject
+
+# Rope
+.ropeproject
+
+# mkdocs
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# pytype static type analyzer
+.pytype/
+
+# Cython debug symbols
+cython_debug/
