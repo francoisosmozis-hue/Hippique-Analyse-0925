@@ -1,272 +1,339 @@
-"""Course runner - executes analysis for a single race."""
-import logging
+"""
+src/runner.py - Orchestrateur d'exécution des analyses GPI v5.1
+"""
+
+from __future__ import annotations
+
 import json
+import os
 import subprocess
-import tempfile
+import sys
 from pathlib import Path
-from typing import Dict, Any, Optional
-from datetime import datetime
+from typing import Any, Dict, List, Optional
 
-from config import Config
+from config import get_config
+from logging_utils import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
+config = get_config()
+
+# Chemins des modules GPI
+MODULES_DIR = Path(__file__).parent.parent / "modules"
+DATA_DIR = Path(__file__).parent.parent / "data"
 
 
-class CourseRunner:
-    """Execute race analysis using runner_chain.py."""
+def _run_subprocess(
+    cmd: List[str],
+    timeout: int = 600,
+    cwd: Optional[Path] = None,
+) -> tuple[int, str, str]:
+    """
+    Exécute une commande subprocess et capture stdout/stderr.
     
-    def __init__(self, config: Config):
-        self.config = config
+    Args:
+        cmd: Liste de commande et arguments
+        timeout: Timeout en secondes
+        cwd: Working directory
+        
+    Returns:
+        (returncode, stdout, stderr)
+    """
+    logger.debug(f"Running: {' '.join(cmd)}", command=cmd)
     
-    def run_course(
-        self,
-        course_url: str,
-        phase: str,
-        date: str,
-        correlation_id: Optional[str] = None
-    ) -> Dict[str, Any]:
-        """
-        Run analysis for one course at given phase (H30 or H5).
-        
-        Uses runner_chain.py with minimal planning file for single course.
-        
-        Returns result dict with status, artifacts, etc.
-        """
-        logger.info(f"Running {course_url} phase={phase}", extra={
-            "correlation_id": correlation_id
-        })
-        
-        # Normalize phase
-        phase_norm = phase.upper().replace("-", "")
-        if phase_norm not in ["H30", "H5"]:
-            return {
-                "ok": False,
-                "error": f"Invalid phase: {phase}",
-                "course_url": course_url
-            }
-        
-        # Extract R/C from URL
-        try:
-            rc_match = self._extract_rc_from_url(course_url)
-            if not rc_match:
-                return {
-                    "ok": False,
-                    "error": "Cannot extract R/C from URL",
-                    "course_url": course_url
-                }
-            
-            r_label, c_label = rc_match
-            race_id = f"{r_label}{c_label}"
-            
-        except Exception as e:
-            return {
-                "ok": False,
-                "error": f"Failed to parse URL: {e}",
-                "course_url": course_url
-            }
-        
-        # Create minimal planning file for runner_chain.py
-        try:
-            planning = self._create_planning_file(
-                date, r_label, c_label, race_id, course_url
-            )
-        except Exception as e:
-            logger.error(f"Failed to create planning: {e}", exc_info=True)
-            return {
-                "ok": False,
-                "error": f"Planning creation failed: {e}",
-                "course_url": course_url
-            }
-        
-        # Run runner_chain.py
-        try:
-            result = self._run_runner_chain(planning, phase_norm, race_id)
-            
-            # Upload artifacts to GCS if configured
-            if self.config.GCS_BUCKET and result.get("ok"):
-                self._upload_artifacts(race_id, date)
-            
-            return result
-            
-        except Exception as e:
-            logger.error(f"Runner chain failed: {e}", exc_info=True)
-            return {
-                "ok": False,
-                "error": str(e),
-                "course_url": course_url,
-                "rc": race_id
-            }
-        finally:
-            # Cleanup planning file
-            try:
-                Path(planning).unlink(missing_ok=True)
-            except:
-                pass
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            cwd=cwd or Path.cwd(),
+            env=os.environ.copy(),
+        )
+        return result.returncode, result.stdout, result.stderr
+    except subprocess.TimeoutExpired as e:
+        logger.error(f"Command timed out after {timeout}s: {' '.join(cmd)}")
+        return -1, "", f"Timeout after {timeout}s"
+    except Exception as e:
+        logger.error(f"Command failed: {e}", exc_info=e)
+        return -1, "", str(e)
+
+
+def run_course(
+    course_url: str,
+    phase: str,
+    date: str,
+) -> Dict[str, Any]:
+    """
+    Exécute l'analyse complète d'une course.
     
-    def _extract_rc_from_url(self, url: str) -> Optional[tuple]:
-        """Extract (R#, C#) from ZEturf URL."""
-        import re
-        match = re.search(r'/(R\d+)(C\d+)[-/]', url)
-        if match:
-            return match.group(1), match.group(2)
-        return None
+    Args:
+        course_url: URL ZEturf de la course
+        phase: "H30" ou "H5"
+        date: YYYY-MM-DD
+        
+    Returns:
+        {ok: bool, phase: str, returncode: int, stdout_tail: str, artifacts: [...]}
+    """
+    phase_clean = phase.upper().replace("-", "")
+    correlation_id = f"run-{date.replace('-', '')}-{course_url.split('/')[-1]}-{phase_clean.lower()}"
     
-    def _create_planning_file(
-        self,
-        date: str,
-        r_label: str,
-        c_label: str,
-        race_id: str,
-        course_url: str
-    ) -> str:
-        """Create minimal planning JSON for single race."""
-        
-        # Generate course_id (can be any unique value)
-        course_id = f"{date.replace('-', '')}{race_id}"
-        
-        planning_data = [
-            {
-                "id": race_id,
-                "id_course": course_id,
-                "reunion": r_label,
-                "course": c_label,
-                "start": f"{date}T12:00:00+01:00",  # Dummy time
-                "url": course_url
-            }
-        ]
-        
-        # Write to temp file
-        with tempfile.NamedTemporaryFile(
-            mode='w',
-            suffix='.json',
-            delete=False
-        ) as f:
-            json.dump(planning_data, f, ensure_ascii=False, indent=2)
-            return f.name
+    logger.info(
+        f"Starting course analysis",
+        correlation_id=correlation_id,
+        course_url=course_url,
+        phase=phase_clean,
+        date=date
+    )
     
-    def _run_runner_chain(
-        self,
-        planning_file: str,
-        phase: str,
-        race_id: str
-    ) -> Dict[str, Any]:
-        """Execute runner_chain.py subprocess."""
-        
-        # Determine window based on phase
-        if phase == "H30":
-            h30_min, h30_max = -9999, 9999  # Always run
-            h5_min, h5_max = 9999, 9999  # Never run
-        else:  # H5
-            h30_min, h30_max = 9999, 9999  # Never run
-            h5_min, h5_max = -9999, 9999  # Always run
-        
-        cmd = [
-            "python", "scripts/runner_chain.py",
-            "--planning", planning_file,
-            "--data-dir", self.config.DATA_DIR,
-            "--budget", str(self.config.BUDGET),
-            "--ev-min", str(self.config.EV_MIN),
-            "--roi-min", str(self.config.ROI_MIN),
-            "--calibration", str(self.config.CALIBRATION_PATH),
-            "--h30-window-min", str(h30_min),
-            "--h30-window-max", str(h30_max),
-            "--h5-window-min", str(h5_min),
-            "--h5-window-max", str(h5_max),
-        ]
-        
-        try:
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=300,  # 5 minutes max
-                check=False
-            )
-            
-            stdout = result.stdout
-            stderr = result.stderr
-            rc = result.returncode
-            
-            # Log output
-            if stdout:
-                logger.info(f"Runner stdout (last 500 chars): {stdout[-500:]}")
-            if stderr:
-                logger.warning(f"Runner stderr: {stderr}")
-            
-            # Find artifacts
-            race_dir = Path(self.config.DATA_DIR) / race_id
-            artifacts = self._collect_artifacts(race_dir)
-            
-            return {
-                "ok": rc == 0,
-                "rc": rc,
-                "race_id": race_id,
-                "phase": phase,
-                "stdout_tail": stdout[-500:] if stdout else "",
-                "stderr_tail": stderr[-500:] if stderr else "",
-                "artifacts": artifacts
-            }
-            
-        except subprocess.TimeoutExpired:
-            logger.error(f"Runner timeout for {race_id}")
-            return {
-                "ok": False,
-                "error": "timeout",
-                "race_id": race_id
-            }
-        except Exception as e:
-            logger.error(f"Runner execution failed: {e}", exc_info=True)
-            return {
-                "ok": False,
-                "error": str(e),
-                "race_id": race_id
-            }
+    artifacts = []
     
-    def _collect_artifacts(self, race_dir: Path) -> Dict[str, str]:
-        """Collect paths to generated artifacts."""
-        artifacts = {}
-        
-        if not race_dir.exists():
-            return artifacts
-        
-        for name in [
-            "analysis.json",
-            "metrics.json",
-            "metrics.csv",
-            "p_finale.json",
-            "tickets.json",
-            "snapshot_H30.json",
-            "snapshot_H5.json",
-            "h30.json",
-            "h5.json"
-        ]:
-            path = race_dir / name
-            if path.exists():
-                artifacts[name] = str(path)
-        
+    # Étape 1 : Analyse enrichie (H30 ou H5)
+    logger.info("Step 1/5: analyse_courses_du_jour_enrichie", correlation_id=correlation_id)
+    cmd_analyse = [
+        sys.executable,
+        str(MODULES_DIR / "analyse_courses_du_jour_enrichie.py"),
+        "--course-url", course_url,
+        "--phase", phase_clean,
+        "--data-dir", str(DATA_DIR),
+    ]
+    
+    rc, stdout, stderr = _run_subprocess(cmd_analyse, timeout=config.timeout_seconds)
+    
+    if rc != 0:
+        logger.error(
+            f"analyse_courses_du_jour_enrichie failed",
+            correlation_id=correlation_id,
+            returncode=rc,
+            stderr=stderr[:500]
+        )
+        return {
+            "ok": False,
+            "phase": phase_clean,
+            "returncode": rc,
+            "stdout_tail": stdout[-1000:] if stdout else "",
+            "stderr": stderr[:500],
+            "artifacts": artifacts,
+        }
+    
+    # Si H30, on s'arrête là (snapshot simple)
+    if phase_clean == "H30":
+        logger.info("H30 analysis complete", correlation_id=correlation_id)
+        return {
+            "ok": True,
+            "phase": "H30",
+            "returncode": 0,
+            "stdout_tail": stdout[-500:] if stdout else "",
+            "artifacts": artifacts,
+        }
+    
+    # ========================================================================
+    # Pipeline H5 complet
+    # ========================================================================
+    
+    # Étape 2 : Export p_finale (si nécessaire)
+    logger.info("Step 2/5: p_finale_export", correlation_id=correlation_id)
+    cmd_p_finale = [
+        sys.executable,
+        str(MODULES_DIR / "p_finale_export.py"),
+        "--data-dir", str(DATA_DIR),
+    ]
+    rc, stdout2, stderr2 = _run_subprocess(cmd_p_finale, timeout=120)
+    if rc != 0:
+        logger.warning(f"p_finale_export failed (non-blocking)", returncode=rc)
+    
+    # Étape 3 : Simulation EV
+    logger.info("Step 3/5: simulate_ev", correlation_id=correlation_id)
+    cmd_ev = [
+        sys.executable,
+        str(MODULES_DIR / "simulate_ev.py"),
+        "--data-dir", str(DATA_DIR),
+        "--budget", str(config.budget_total),
+    ]
+    rc, stdout3, stderr3 = _run_subprocess(cmd_ev, timeout=180)
+    if rc != 0:
+        logger.warning(f"simulate_ev failed (non-blocking)", returncode=rc)
+    
+    # Étape 4 : Pipeline run (génération tickets)
+    logger.info("Step 4/5: pipeline_run", correlation_id=correlation_id)
+    cmd_pipeline = [
+        sys.executable,
+        str(MODULES_DIR / "pipeline_run.py"),
+        "--data-dir", str(DATA_DIR),
+        "--budget", str(config.budget_total),
+        "--ev-min", str(config.ev_min_global),
+        "--roi-min", str(config.roi_min_global),
+    ]
+    rc, stdout4, stderr4 = _run_subprocess(cmd_pipeline, timeout=300)
+    
+    if rc != 0:
+        logger.error(
+            f"pipeline_run failed",
+            correlation_id=correlation_id,
+            returncode=rc,
+            stderr=stderr4[:500]
+        )
+        return {
+            "ok": False,
+            "phase": "H5",
+            "returncode": rc,
+            "stdout_tail": stdout4[-1000:] if stdout4 else "",
+            "stderr": stderr4[:500],
+            "artifacts": artifacts,
+        }
+    
+    # Étape 5 : Export Excel (optionnel)
+    logger.info("Step 5/5: update_excel_with_results", correlation_id=correlation_id)
+    cmd_excel = [
+        sys.executable,
+        str(MODULES_DIR / "update_excel_with_results.py"),
+        "--data-dir", str(DATA_DIR),
+    ]
+    rc, stdout5, stderr5 = _run_subprocess(cmd_excel, timeout=60)
+    if rc != 0:
+        logger.warning(f"update_excel_with_results failed (non-blocking)", returncode=rc)
+    
+    # Collecter artifacts
+    artifacts = _collect_artifacts(date, course_url)
+    
+    logger.info(
+        f"H5 pipeline complete",
+        correlation_id=correlation_id,
+        artifacts_count=len(artifacts)
+    )
+    
+    # Upload GCS si configuré
+    if config.gcs_bucket:
+        _upload_artifacts_to_gcs(artifacts)
+    
+    return {
+        "ok": True,
+        "phase": "H5",
+        "returncode": 0,
+        "stdout_tail": stdout[-500:] if stdout else "",
+        "artifacts": artifacts,
+    }
+
+
+def _collect_artifacts(date: str, course_url: str) -> List[str]:
+    """
+    Collecte les artefacts générés dans data/.
+    
+    Returns:
+        Liste de chemins relatifs
+    """
+    artifacts = []
+    
+    # Extraire R/C de l'URL
+    match = re.search(r"R(\d+)C(\d+)", course_url)
+    if not match:
         return artifacts
     
-    def _upload_artifacts(self, race_id: str, date: str) -> None:
-        """Upload artifacts to GCS."""
-        try:
-            from google.cloud import storage
+    r, c = match.groups()
+    rc_dir = DATA_DIR / f"R{r}C{c}"
+    
+    if not rc_dir.exists():
+        return artifacts
+    
+    # Lister les fichiers importants
+    patterns = [
+        "snapshot_*.json",
+        "p_finale.json",
+        "decision.json",
+        "tickets_*.json",
+        "*.csv",
+        "*.xlsx",
+    ]
+    
+    import glob
+    for pattern in patterns:
+        for file in glob.glob(str(rc_dir / pattern)):
+            artifacts.append(str(Path(file).relative_to(DATA_DIR.parent)))
+    
+    return artifacts
+
+
+def _upload_artifacts_to_gcs(artifacts: List[str]) -> None:
+    """
+    Upload les artefacts vers GCS.
+    
+    Args:
+        artifacts: Liste de chemins relatifs à uploader
+    """
+    if not config.gcs_bucket:
+        return
+    
+    logger.info(f"Uploading {len(artifacts)} artifacts to GCS", bucket=config.gcs_bucket)
+    
+    try:
+        from google.cloud import storage
+        
+        client = storage.Client()
+        bucket = client.bucket(config.gcs_bucket)
+        
+        for artifact in artifacts:
+            local_path = DATA_DIR.parent / artifact
+            if not local_path.exists():
+                logger.warning(f"Artifact not found: {artifact}")
+                continue
             
-            client = storage.Client(project=self.config.PROJECT_ID)
-            bucket = client.bucket(self.config.GCS_BUCKET)
+            blob_name = f"{config.gcs_prefix}/{artifact}"
+            blob = bucket.blob(blob_name)
             
-            race_dir = Path(self.config.DATA_DIR) / race_id
-            
-            for file_path in race_dir.glob("*.json"):
-                blob_name = f"{self.config.GCS_PREFIX}/analyses/{date}/{race_id}/{file_path.name}"
-                blob = bucket.blob(blob_name)
-                blob.upload_from_filename(str(file_path))
-                logger.info(f"Uploaded {file_path.name} to gs://{self.config.GCS_BUCKET}/{blob_name}")
-            
-            for file_path in race_dir.glob("*.csv"):
-                blob_name = f"{self.config.GCS_PREFIX}/analyses/{date}/{race_id}/{file_path.name}"
-                blob = bucket.blob(blob_name)
-                blob.upload_from_filename(str(file_path))
-                logger.info(f"Uploaded {file_path.name} to gs://{self.config.GCS_BUCKET}/{blob_name}")
-                
-        except Exception as e:
-            logger.warning(f"GCS upload failed: {e}")
+            blob.upload_from_filename(str(local_path))
+            logger.debug(f"Uploaded {artifact} to gs://{config.gcs_bucket}/{blob_name}")
+        
+        logger.info(f"GCS upload complete")
+    except Exception as e:
+        logger.error(f"Failed to upload to GCS: {e}", exc_info=e)
+
+
+# ============================================================================
+# Post-course : récupération résultats
+# ============================================================================
+
+def run_post_race_results(date: str) -> Dict[str, Any]:
+    """
+    Récupère les résultats des courses terminées et met à jour Excel.
+    
+    Args:
+        date: YYYY-MM-DD
+        
+    Returns:
+        {ok: bool, results_count: int}
+    """
+    logger.info(f"Fetching post-race results for {date}")
+    
+    # Étape 1 : get_arrivee_geny
+    cmd_arrivee = [
+        sys.executable,
+        str(MODULES_DIR / "get_arrivee_geny.py"),
+        "--date", date,
+        "--out", str(DATA_DIR / "results" / f"arrivees_{date}.json"),
+    ]
+    
+    rc, stdout, stderr = _run_subprocess(cmd_arrivee, timeout=180)
+    if rc != 0:
+        logger.error(f"get_arrivee_geny failed", returncode=rc, stderr=stderr[:500])
+        return {"ok": False, "results_count": 0}
+    
+    # Étape 2 : update_excel_with_results
+    cmd_excel = [
+        sys.executable,
+        str(MODULES_DIR / "update_excel_with_results.py"),
+        "--results", str(DATA_DIR / "results" / f"arrivees_{date}.json"),
+    ]
+    
+    rc, stdout2, stderr2 = _run_subprocess(cmd_excel, timeout=60)
+    if rc != 0:
+        logger.warning(f"update_excel_with_results failed", returncode=rc)
+    
+    # Uploader Excel vers GCS
+    excel_path = Path("excel/modele_suivi_courses_hippiques.xlsx")
+    if config.gcs_bucket and excel_path.exists():
+        _upload_artifacts_to_gcs([str(excel_path)])
+    
+    logger.info("Post-race results processed")
+    return {"ok": True, "results_count": 1}
+
+
+import re  # Ajout de l'import manquant

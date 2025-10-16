@@ -1,189 +1,291 @@
-"""Scheduling utilities for Cloud Tasks and Cloud Scheduler."""
-import logging
-import json
+"""
+src/scheduler.py - Programmation des exécutions H-30 et H-5 via Cloud Tasks
+"""
+
+from __future__ import annotations
+
 import hashlib
+import json
+import re
 from datetime import datetime
-from typing import Dict, Any
+from typing import Any, Dict, List, Optional
 
+from google.api_core import exceptions as gcp_exceptions
 from google.cloud import tasks_v2
-from google.cloud import scheduler_v1
-from google.protobuf import timestamp_pb2
 
-from config import Config
-from time_utils import format_rfc3339, paris_to_utc
+from config import get_config
+from logging_utils import get_logger
+from time_utils import compute_snapshot_time, format_rfc3339, is_past
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
+config = get_config()
 
 
-class CloudTasksScheduler:
-    """Schedule tasks using Cloud Tasks."""
+def _sanitize_task_name(name: str) -> str:
+    """
+    Normalise un nom de tâche selon RFC-1035.
     
-    def __init__(self, config: Config):
-        self.config = config
-        self.client = tasks_v2.CloudTasksClient()
-        self.queue_path = self.client.queue_path(
-            config.PROJECT_ID,
-            config.QUEUE_LOCATION,
-            config.QUEUE_ID
+    Règles :
+    - Lowercase
+    - Commence par une lettre
+    - Max 500 chars
+    - Caractères autorisés : [a-z0-9-]
+    """
+    name = name.lower()
+    name = re.sub(r"[^a-z0-9-]", "-", name)
+    name = re.sub(r"-+", "-", name)  # Collapser les tirets multiples
+    name = name.strip("-")
+    
+    # Assurer que ça commence par une lettre
+    if name and not name[0].isalpha():
+        name = "task-" + name
+    
+    return name[:500]  # Limite GCP
+
+
+def _generate_task_name(date: str, r_label: str, c_label: str, phase: str) -> str:
+    """
+    Génère un nom déterministe pour une tâche.
+    
+    Format : run-YYYYMMDD-r{R}c{C}-{phase}
+    Exemple : run-20251015-r1c3-h30
+    """
+    date_compact = date.replace("-", "")
+    r_num = r_label.replace("R", "").replace("r", "")
+    c_num = c_label.replace("C", "").replace("c", "")
+    phase_clean = phase.lower().replace("-", "")
+    
+    name = f"run-{date_compact}-r{r_num}c{c_num}-{phase_clean}"
+    return _sanitize_task_name(name)
+
+
+def enqueue_run_task(
+    course_url: str,
+    phase: str,
+    date: str,
+    race_time_local: str,
+    r_label: str,
+    c_label: str,
+) -> Optional[str]:
+    """
+    Crée une tâche Cloud Tasks pour exécuter /run à l'heure snapshot.
+    
+    Args:
+        course_url: URL ZEturf de la course
+        phase: "H30" ou "H5"
+        date: YYYY-MM-DD
+        race_time_local: HH:MM (heure locale de départ)
+        r_label: R1, R2, etc.
+        c_label: C1, C2, etc.
+        
+    Returns:
+        Nom de la tâche créée ou None si erreur
+    """
+    # Calculer l'heure de snapshot
+    offset = -30 if phase.upper() in ("H30", "H-30") else -5
+    snapshot_local, snapshot_utc = compute_snapshot_time(date, race_time_local, offset)
+    
+    # Vérifier que ce n'est pas dans le passé
+    if is_past(snapshot_utc):
+        logger.warning(
+            f"Snapshot time {snapshot_utc.isoformat()} is in the past, skipping",
+            r_label=r_label,
+            c_label=c_label,
+            phase=phase
         )
+        return None
     
-    def schedule_task(
-        self,
-        run_url: str,
-        race_id: str,
-        phase: str,
-        when_local: datetime,
-        payload: Dict[str, Any],
-        date: str
-    ) -> Dict[str, str]:
-        """
-        Schedule a task to run at when_local (Europe/Paris).
-        
-        Returns task info dict.
-        """
-        # Convert to UTC for Cloud Tasks
-        when_utc = paris_to_utc(when_local)
-        
-        # Create deterministic task name (RFC-1035 compliant)
-        task_name_base = f"run-{date.replace('-', '')}-{race_id.lower()}-{phase.lower()}"
-        task_name = self._make_task_name(task_name_base)
-        task_path = f"{self.queue_path}/tasks/{task_name}"
-        
-        # Check if task already exists (idempotence)
-        try:
-            existing = self.client.get_task(name=task_path)
-            logger.info(f"Task {task_name} already exists, skipping")
-            return {
-                "name": task_name,
-                "status": "existing",
-                "schedule_time": when_utc.isoformat()
-            }
-        except Exception:
-            pass  # Task doesn't exist, create it
-        
-        # Create task
-        task = {
-            "name": task_path,
-            "http_request": {
-                "http_method": tasks_v2.HttpMethod.POST,
-                "url": run_url,
-                "headers": {
-                    "Content-Type": "application/json"
-                },
-                "body": json.dumps(payload).encode(),
+    # Générer nom de tâche déterministe
+    task_name = _generate_task_name(date, r_label, c_label, phase)
+    task_path = f"{config.queue_path}/tasks/{task_name}"
+    
+    # Vérifier si la tâche existe déjà (idempotence)
+    client = tasks_v2.CloudTasksClient()
+    try:
+        existing = client.get_task(name=task_path)
+        logger.info(
+            f"Task {task_name} already exists, skipping",
+            task_name=task_name,
+            state=existing.state_
+        )
+        return task_name
+    except gcp_exceptions.NotFound:
+        pass  # OK, on crée
+    
+    # Préparer payload
+    payload = {
+        "course_url": course_url,
+        "phase": phase.upper().replace("-", ""),
+        "date": date,
+    }
+    
+    # Construire la tâche
+    task = {
+        "name": task_path,
+        "http_request": {
+            "http_method": tasks_v2.HttpMethod.POST,
+            "url": f"{config.cloud_run_url}/run",
+            "headers": {
+                "Content-Type": "application/json",
             },
-            "schedule_time": timestamp_pb2.Timestamp(
-                seconds=int(when_utc.timestamp())
-            ),
-        }
-        
-        # Add OIDC token if service account configured
-        if self.config.SERVICE_ACCOUNT:
-            task["http_request"]["oidc_token"] = {
-                "service_account_email": self.config.SERVICE_ACCOUNT,
-                "audience": run_url
-            }
-        
-        try:
-            response = self.client.create_task(
-                parent=self.queue_path,
-                task=task
-            )
-            logger.info(f"Created task {task_name} for {when_utc.isoformat()}")
-            return {
-                "name": task_name,
-                "status": "created",
-                "schedule_time": when_utc.isoformat(),
-                "task_path": response.name
-            }
-        except Exception as e:
-            logger.error(f"Failed to create task {task_name}: {e}")
-            raise
+            "body": json.dumps(payload).encode(),
+        },
+        "schedule_time": format_rfc3339(snapshot_utc),
+    }
     
-    def _make_task_name(self, base: str) -> str:
-        """Create RFC-1035 compliant task name."""
-        # Hash to ensure uniqueness and compliance
-        h = hashlib.md5(base.encode()).hexdigest()[:8]
-        safe_base = base.replace("_", "-").lower()
-        # Limit to 63 chars
-        return f"{safe_base[:50]}-{h}"
+    # Ajouter OIDC si requis
+    if config.require_auth:
+        task["http_request"]["oidc_token"] = {
+            "service_account_email": config.service_account_email,
+            "audience": config.cloud_run_url,
+        }
+    
+    # Créer la tâche
+    try:
+        created_task = client.create_task(
+            parent=config.queue_path,
+            task=task
+        )
+        logger.info(
+            f"Created task {task_name} scheduled at {snapshot_local.strftime('%Y-%m-%d %H:%M')} Paris",
+            task_name=task_name,
+            schedule_time_utc=snapshot_utc.isoformat(),
+            schedule_time_local=snapshot_local.isoformat(),
+            r_label=r_label,
+            c_label=c_label,
+            phase=phase
+        )
+        return task_name
+    except gcp_exceptions.AlreadyExists:
+        logger.info(f"Task {task_name} already exists (race condition), continuing")
+        return task_name
+    except Exception as e:
+        logger.error(
+            f"Failed to create task {task_name}: {e}",
+            exc_info=e,
+            task_name=task_name
+        )
+        return None
 
 
-class CloudSchedulerFallback:
-    """Fallback scheduler using Cloud Scheduler (for one-shot jobs)."""
+def schedule_race_tasks(race: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Programme les tâches H-30 et H-5 pour une course.
     
-    def __init__(self, config: Config):
-        self.config = config
-        self.client = scheduler_v1.CloudSchedulerClient()
-        self.parent = f"projects/{config.PROJECT_ID}/locations/{config.REGION}"
+    Args:
+        race: Dict avec keys: date, r_label, c_label, time_local, course_url
+        
+    Returns:
+        Dict avec statut de programmation {h30_task, h5_task, status}
+    """
+    date = race["date"]
+    r_label = race["r_label"]
+    c_label = race["c_label"]
+    time_local = race["time_local"]
+    course_url = race["course_url"]
     
-    def schedule_task(
-        self,
-        run_url: str,
-        race_id: str,
-        phase: str,
-        when_local: datetime,
-        payload: Dict[str, Any],
-        date: str
-    ) -> Dict[str, str]:
-        """
-        Create one-shot Cloud Scheduler job.
+    logger.info(
+        f"Scheduling {r_label}{c_label} at {time_local}",
+        r_label=r_label,
+        c_label=c_label,
+        time_local=time_local
+    )
+    
+    # Programmer H-30
+    h30_task = enqueue_run_task(
+        course_url=course_url,
+        phase="H30",
+        date=date,
+        race_time_local=time_local,
+        r_label=r_label,
+        c_label=c_label,
+    )
+    
+    # Programmer H-5
+    h5_task = enqueue_run_task(
+        course_url=course_url,
+        phase="H5",
+        date=date,
+        race_time_local=time_local,
+        r_label=r_label,
+        c_label=c_label,
+    )
+    
+    status = "ok" if (h30_task and h5_task) else "partial" if (h30_task or h5_task) else "failed"
+    
+    return {
+        "r_label": r_label,
+        "c_label": c_label,
+        "time_local": time_local,
+        "h30_task": h30_task,
+        "h5_task": h5_task,
+        "status": status,
+    }
+
+
+def schedule_all_races(plan: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    Programme toutes les courses du plan.
+    
+    Args:
+        plan: Liste de courses [{date, r_label, c_label, time_local, course_url, ...}]
         
-        Note: Cloud Scheduler doesn't support one-shot jobs natively.
-        This creates a job that runs once then must be manually deleted.
-        """
-        job_name = f"run-{date.replace('-', '')}-{race_id.lower()}-{phase.lower()}"
-        job_path = f"{self.parent}/jobs/{job_name}"
+    Returns:
+        Résumé {total, scheduled, failed, tasks: [...]}
+    """
+    results = []
+    scheduled = 0
+    failed = 0
+    
+    for race in plan:
+        result = schedule_race_tasks(race)
+        results.append(result)
         
-        # Check if exists
-        try:
-            existing = self.client.get_job(name=job_path)
-            logger.info(f"Scheduler job {job_name} already exists")
-            return {
-                "name": job_name,
-                "status": "existing",
-                "schedule_time": when_local.isoformat()
-            }
-        except Exception:
-            pass
-        
-        # Convert to cron schedule (run once at specific time)
-        # Format: minute hour day month dayofweek
-        cron = f"{when_local.minute} {when_local.hour} {when_local.day} {when_local.month} *"
-        
-        job = {
-            "name": job_path,
-            "schedule": cron,
-            "time_zone": "Europe/Paris",
-            "http_target": {
-                "uri": run_url,
-                "http_method": scheduler_v1.HttpMethod.POST,
-                "headers": {
-                    "Content-Type": "application/json"
-                },
-                "body": json.dumps(payload).encode(),
-            },
-        }
-        
-        # Add OIDC if configured
-        if self.config.SERVICE_ACCOUNT:
-            job["http_target"]["oidc_token"] = {
-                "service_account_email": self.config.SERVICE_ACCOUNT,
-                "audience": run_url
-            }
-        
-        try:
-            response = self.client.create_job(
-                parent=self.parent,
-                job=job
-            )
-            logger.info(f"Created scheduler job {job_name}")
-            return {
-                "name": job_name,
-                "status": "created",
-                "schedule_time": when_local.isoformat(),
-                "cron": cron
-            }
-        except Exception as e:
-            logger.error(f"Failed to create job {job_name}: {e}")
-            raise
+        if result["status"] == "ok":
+            scheduled += 1
+        elif result["status"] == "failed":
+            failed += 1
+    
+    summary = {
+        "total": len(plan),
+        "scheduled": scheduled,
+        "partial": len([r for r in results if r["status"] == "partial"]),
+        "failed": failed,
+        "tasks": results,
+    }
+    
+    logger.info(
+        f"Scheduling complete: {scheduled}/{len(plan)} races fully scheduled",
+        **summary
+    )
+    
+    return summary
+
+
+# ============================================================================
+# FALLBACK : Cloud Scheduler (si mode="scheduler")
+# ============================================================================
+
+def create_scheduler_job_fallback(
+    job_name: str,
+    schedule_time: datetime,
+    payload: Dict[str, Any],
+) -> bool:
+    """
+    Fallback : crée un job Cloud Scheduler one-shot (non recommandé).
+    
+    Note : Cloud Scheduler ne supporte pas vraiment les jobs "one-shot".
+    Cette fonction est un exemple d'implémentation pour référence.
+    Utiliser Cloud Tasks (recommandé).
+    """
+    logger.warning(
+        "Using Cloud Scheduler fallback (not recommended). "
+        "Prefer Cloud Tasks for one-shot executions."
+    )
+    
+    # TODO: Implémenter avec google-cloud-scheduler si vraiment nécessaire
+    # Nécessite de convertir schedule_time en cron expression
+    # et de créer un job qui s'auto-détruit après exécution
+    
+    logger.error("Cloud Scheduler fallback not implemented")
+    return False
