@@ -20,7 +20,7 @@ from typing import Any, Dict, List, Mapping
 
 import sys
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 
 # CORRECTION: Imports depuis scripts/ au lieu de la racine
 from scripts.simulate_ev import simulate_ev_batch

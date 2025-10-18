@@ -8,7 +8,7 @@ from typing import Any
 
 import pytest
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 
 stub_fetch = types.ModuleType("scripts.online_fetch_zeturf")
 stub_fetch.normalize_snapshot = lambda payload: payload

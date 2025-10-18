@@ -62,6 +62,22 @@ if "MAX_COMBO_OVERROUND" not in os.environ:
     os.environ["MAX_COMBO_OVERROUND"] = f"{OVERROUND_MAX_THRESHOLD:.2f}"
 
 
+def _env_float(name: str, default: float) -> float:
+    try:
+        return float(os.getenv(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+
+
+GPI_BUDGET_DEFAULT = _env_float("GPI_BUDGET", 5.0)
+EV_MIN_THRESHOLD = _env_float("EV_MIN", 0.40)
+ROI_SP_MIN_THRESHOLD = _env_float("ROI_SP_MIN", 0.20)
+PAYOUT_MIN_THRESHOLD = _env_float("PAYOUT_MIN", 10.0)
+OVERROUND_MAX_THRESHOLD = _env_float("OVERROUND_MAX", 1.30)
+if "MAX_COMBO_OVERROUND" not in os.environ:
+    os.environ["MAX_COMBO_OVERROUND"] = f"{OVERROUND_MAX_THRESHOLD:.2f}"
+
+
 # Tests may insert a lightweight stub of ``scripts.online_fetch_zeturf`` to avoid
 # pulling heavy scraping dependencies.  Ensure the stub does not linger in
 # ``sys.modules`` so that later imports retrieve the fully-featured module.

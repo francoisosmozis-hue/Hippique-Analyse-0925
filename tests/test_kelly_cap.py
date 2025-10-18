@@ -3,7 +3,7 @@ import sys
 
 import pytest
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 
 from ev_calculator import compute_ev_roi
 from validator_ev import ValidationError, validate_budget
