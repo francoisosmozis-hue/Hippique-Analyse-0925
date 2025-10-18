@@ -54,7 +54,7 @@ bankroll:
   split_combos: 0.40
 
 calibration:
-  min_samples: 100
+  min_samples: 100000
   max_abs_error_pct: 0.15
   max_ci95_width: 0.12
   stale_days: 7
