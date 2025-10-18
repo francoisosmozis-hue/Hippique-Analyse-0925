@@ -1,4 +1,9 @@
 from __future__ import annotations
+
+class ValidationError(Exception):
+    """Custom exception for validation errors."""
+    pass
+
 from dataclasses import dataclass
 from typing import Dict, List, Tuple
 

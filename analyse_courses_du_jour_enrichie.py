@@ -31,17 +31,13 @@ from logging_io import append_csv_line, CSV_HEADER
 from scripts.gcs_utils import disabled_reason, is_gcs_enabled
 try:
     from scripts.online_fetch_zeturf import normalize_snapshot
-except (ImportError, SyntaxError) as _normalize_import_error:  # pragma: no cover - fallback
-    def _raise_normalize_snapshot(payload: Mapping[str, Any]) -> dict[str, Any]:
-        """Placeholder lorsque :mod:`scripts.online_fetch_zeturf` est invalide."""
-
+except (ImportError, SyntaxError) as e:  # pragma: no cover - fallback
+    def normalize_snapshot(payload: Mapping[str, Any], exc=e) -> dict[str, Any]:
         raise RuntimeError(
             "normalize_snapshot indisponible (erreur d'import scripts.online_fetch_zeturf)"
-        ) from _normalize_import_error
-
-    normalize_snapshot = _raise_normalize_snapshot
+        ) from exc
 from scripts.fetch_je_stats import collect_stats
-from scripts.online_fetch_zeturf import ZeturfFetcher
+
 
 import pipeline_run
 from scripts.analysis_utils import compute_overround_cap
@@ -1505,7 +1501,7 @@ def _rebuild_je_csv_from_stats(rc_dir: Path) -> bool:
         return False
 
     try:
-        write_je_csv_file(
+        _write_je_csv_file(
             rc_dir / f"{snap}_je.csv", id2name=id2name, stats_payload=stats_payload
         )
     except OSError as exc:
@@ -2037,8 +2033,8 @@ def _process_single_course(
             overround_max=overround_max,
         )
         if pipeline_done:
-            csv_path = export_per_horse_csv(rc_dir)
-            print(f"[INFO] per-horse report écrit: {csv_path}")
+            # csv_path = export_per_horse_csv(rc_dir)
+            # print(f"[INFO] per-horse report écrit: {csv_path}")
             outcome = None
         elif outcome is not None:
             _write_json_file(rc_dir / "decision.json", outcome)
@@ -2127,14 +2123,7 @@ def _process_reunion(
     for r_label, c_label, course_id, course_url in courses:
         rc_dir = ensure_dir(base_dir / f"{r_label}{c_label}")
 
-        # --- CORRECTED LOGIC ---
-        print(f"[INFO] Fetching real snapshot for {course_url}...")
-        fetcher = ZeturfFetcher()
-        snapshot = fetcher.fetch_race_snapshot(reunion_url=course_url, mode=phase)
-        snapshot_filename = f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{phase}.json"
-        fetcher.save_snapshot(snapshot, rc_dir / snapshot_filename)
-        print(f"[INFO] Saved real snapshot to {rc_dir / snapshot_filename}")
-        # --- END OF CORRECTION ---
+        write_snapshot_from_geny(course_id, phase, rc_dir, course_url=course_url)
 
         outcome: dict[str, Any] | None = None
         pipeline_done = False
@@ -2149,8 +2138,8 @@ def _process_reunion(
                 overround_max=overround_max
             )
             if pipeline_done:
-                csv_path = export_per_horse_csv(rc_dir)
-                print(f"[INFO] per-horse report écrit: {csv_path}")
+                # csv_path = export_per_horse_csv(rc_dir)
+                # print(f"[INFO] per-horse report écrit: {csv_path}")
                 outcome = None
             elif outcome is not None:
                 _write_json_file(rc_dir / "decision.json", outcome)
@@ -2366,8 +2355,8 @@ def main() -> None:
                         overround_max=args.overround_max,
                     )
                     build_prompt_from_meta(rc_dir, budget=args.budget, kelly=args.kelly)
-                    csv_path = export_per_horse_csv(rc_dir)
-                    print(f"[INFO] per-horse report écrit: {csv_path}")
+                    # csv_path = export_per_horse_csv(rc_dir)
+                    # print(f"[INFO] per-horse report écrit: {csv_path}")
                 else:
                     if decision is not None:
                         _write_json_file(rc_dir / "decision.json", decision)
