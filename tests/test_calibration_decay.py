@@ -2,13 +2,9 @@
 """Tests for calibration decay weighting."""
 
 import csv
-import os
-import sys
 from pathlib import Path
 
 import pytest
-
-
 
 from calibration import calibrate_simulator as calibrate
 

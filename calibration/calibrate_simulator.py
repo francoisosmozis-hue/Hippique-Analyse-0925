@@ -17,9 +17,9 @@ import argparse
 import csv
 import math
 from collections import defaultdict
+from collections.abc import Mapping
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Mapping
 
 import yaml
 
@@ -89,7 +89,7 @@ def _row_timestamp(row: Mapping[str, object]) -> str | None:
 
 def update_probabilities(
     results_file: str, calibration_file: str, *, decay: float | None = None
-) -> Dict[str, float]:
+) -> dict[str, float]:
     """Update calibrated probabilities using a Beta-Binomial model.
 
     Parameters
@@ -131,10 +131,10 @@ def update_probabilities(
     if decay is None:
         decay = DEFAULT_DECAY
     decay = _normalise_decay(decay)
-    params: Dict[str, Dict[str, float]] = defaultdict(
+    params: dict[str, dict[str, float]] = defaultdict(
         lambda: {"alpha": 1.0, "beta": 1.0}
     )
-    extras: Dict[str, Dict[str, object]] = defaultdict(dict)
+    extras: dict[str, dict[str, object]] = defaultdict(dict)
     for key, val in existing.items():
         if key == METADATA_KEY:
             continue
@@ -175,7 +175,7 @@ def update_probabilities(
             extras_combo["weight"] = p["alpha"] + p["beta"]
 
     # Compute posterior probabilities and write back to YAML
-    out_data: Dict[str, Dict[str, float]] = {}
+    out_data: dict[str, dict[str, float]] = {}
     for combo, p in params.items():
         alpha, beta = p["alpha"], p["beta"]
         prob = alpha / (alpha + beta)

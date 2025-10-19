@@ -1,9 +1,5 @@
-import os
-import sys
 
 import pytest
-
-
 
 from ev_calculator import compute_ev_roi
 from validator_ev import ValidationError, validate_budget

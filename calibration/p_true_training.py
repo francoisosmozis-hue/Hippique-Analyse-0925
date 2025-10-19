@@ -19,20 +19,19 @@ calibration model implemented in :mod:`calibration.p_true_model`.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from pathlib import Path
-from typing import Iterable, Mapping
-
 import datetime as dt
 import json
 import math
 import numbers
+from collections.abc import Iterable, Mapping
+from dataclasses import dataclass
+from pathlib import Path
 
 import pandas as pd
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import brier_score_loss, log_loss
 import yaml
 
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import brier_score_loss, log_loss
 
 # ---------------------------------------------------------------------------
 # Data loading helpers
@@ -140,7 +139,7 @@ def assemble_history_dataset(base_dir: Path) -> pd.DataFrame:
     for race_dir in sorted(base_dir.glob("R*C*")):
         if not race_dir.is_dir():
             continue
- 
+
         report_path = race_dir / "per_horse_report.csv"
         if not report_path.exists():
             continue

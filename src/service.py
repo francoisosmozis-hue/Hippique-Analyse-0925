@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.responses import JSONResponse
@@ -61,25 +61,25 @@ class ScheduleSummary(BaseModel):
     phase: str
     method: str
     scheduled: bool
-    schedule_time_local: Optional[str] = None
-    schedule_time_utc: Optional[str] = None
-    skipped_reason: Optional[str] = None
-    name: Optional[str] = None
+    schedule_time_local: str | None = None
+    schedule_time_utc: str | None = None
+    skipped_reason: str | None = None
+    name: str | None = None
 
 
 class ScheduleResponse(BaseModel):
-    plan: List[Dict[str, Any]]
-    scheduled: List[ScheduleSummary]
+    plan: list[dict[str, Any]]
+    scheduled: list[ScheduleSummary]
     plan_path: str
-    plan_uploaded: Optional[str]
+    plan_uploaded: str | None
 
 
 class RunResponse(BaseModel):
     ok: bool
     rc: int
     stdout_tail: str
-    artifacts: List[str]
-    uploaded: Optional[List[str]] = None
+    artifacts: list[str]
+    uploaded: list[str] | None = None
 
 
 async def ensure_authenticated(request: Request, settings: Settings = Depends(get_settings)) -> None:
@@ -114,7 +114,7 @@ async def auth_middleware(request: Request, call_next):
 
 
 @app.get("/healthz")
-async def healthz() -> Dict[str, str]:
+async def healthz() -> dict[str, str]:
     return {"status": "ok"}
 
 
@@ -127,7 +127,7 @@ async def schedule_endpoint(request: ScheduleRequest, http_request: Request) -> 
     uploaded = _upload_plan(plan, settings, plan_date.isoformat())
 
     run_url = _resolve_run_url(settings, http_request)
-    summaries: List[ScheduleSummary] = []
+    summaries: list[ScheduleSummary] = []
     now = now_local(settings.timezone)
 
     for entry in plan:
@@ -242,7 +242,7 @@ def _resolve_run_url(settings: Settings, http_request: Request) -> str:
     return str(http_request.url_for("run_endpoint"))
 
 
-def _persist_plan(plan: List[Dict[str, Any]], settings: Settings, plan_date: str) -> Path:
+def _persist_plan(plan: list[dict[str, Any]], settings: Settings, plan_date: str) -> Path:
     path = settings.plan_path
     data = {
         "date": plan_date,
@@ -253,7 +253,7 @@ def _persist_plan(plan: List[Dict[str, Any]], settings: Settings, plan_date: str
     return path
 
 
-def _upload_plan(plan: List[Dict[str, Any]], settings: Settings, plan_date: str) -> Optional[str]:
+def _upload_plan(plan: list[dict[str, Any]], settings: Settings, plan_date: str) -> str | None:
     if not settings.gcs_bucket:
         return None
     from google.cloud import storage
@@ -272,7 +272,7 @@ def _upload_plan(plan: List[Dict[str, Any]], settings: Settings, plan_date: str)
     return blob.public_url or blob.name
 
 
-def _build_scheduler_job_name(entry: Dict[str, Any], phase: str) -> str:
+def _build_scheduler_job_name(entry: dict[str, Any], phase: str) -> str:
     base = f"run-{entry['date'].replace('-', '')}-{entry['r_label'].lower()}-{entry['c_label'].lower()}-{phase.lower()}"
     return base.replace("_", "-")
 

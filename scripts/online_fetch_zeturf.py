@@ -9,22 +9,22 @@ Corrections:
 - Logging structuré
 """
 
-import sys
-import json
-import time
-import yaml
 import argparse
+import datetime as dt
+import json
 import logging
 import re
-import datetime as dt
-from typing import Optional, Dict, Any, Mapping, MutableMapping
+import sys
+import time
+from collections.abc import Mapping, MutableMapping
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 try:
     import requests
-    from requests.exceptions import RequestException, Timeout, ConnectionError
     from bs4 import BeautifulSoup
+    from requests.exceptions import ConnectionError, RequestException, Timeout
 except ModuleNotFoundError:
     raise RuntimeError("Les modules 'requests' et 'beautifulsoup4' sont requis. Installez-les avec 'pip install requests beautifulsoup4'")
 
@@ -70,7 +70,7 @@ class ZeturfFetchError(Exception):
     """Exception personnalisée pour les erreurs de fetch ZEturf"""
     pass
 
-def fetch_from_pmu_api(date: str, reunion: int, course: int) -> Dict[str, Any]:
+def fetch_from_pmu_api(date: str, reunion: int, course: int) -> dict[str, Any]:
     """
     This function was reconstructed from the broken code block.
     Its logic is likely incomplete as it depends on external API calls.
@@ -83,9 +83,9 @@ def fetch_from_pmu_api(date: str, reunion: int, course: int) -> Dict[str, Any]:
         rows = []
         runners = []
         partants_data = {}
-        
+
         # --- BEGIN odds_map population (fixed) ---
-        odds_map: Dict[str, float] = {}
+        odds_map: dict[str, float] = {}
         for row in rows:
             if not row:
                 continue
@@ -103,7 +103,7 @@ def fetch_from_pmu_api(date: str, reunion: int, course: int) -> Dict[str, Any]:
             if str(runner['num']) in odds_map:
                 runner['dernier_rapport'] = {'gagnant': odds_map[str(runner['num'])]}
                 runner['cote'] = odds_map[str(runner['num'])]
-        
+
         return {
             "runners": runners,
             "hippodrome": partants_data.get('hippodrome', {}).get('libelleCourt'),
@@ -125,7 +125,7 @@ def fetch_from_pmu_api(date: str, reunion: int, course: int) -> Dict[str, Any]:
 
 class ZeturfFetcher:
     """Classe pour gérer les requêtes ZEturf avec retry et cache"""
-    
+
     def __init__(
         self,
         max_retries: int = 3,
@@ -143,7 +143,7 @@ class ZeturfFetcher:
             'Accept': 'application/json, text/html',
             'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7'
         })
-    
+
     def fetch_with_retry(self, url: str) -> requests.Response:
         """
         Effectue une requête HTTP avec retry et backoff exponentiel
@@ -159,10 +159,10 @@ class ZeturfFetcher:
                 last_exception = e
                 logger.warning(f"Erreur réseau ({e}), tentative {attempt + 1} échouée. Nouvelle tentative...")
                 time.sleep(self.delay * (2 ** attempt))
-        
+
         raise ZeturfFetchError(f"Échec final de la récupération de {url} après {self.max_retries} tentatives") from last_exception
 
-    def fetch_race_snapshot(self, course_id: str, reunion_url: str, mode: str) -> Dict[str, Any]:
+    def fetch_race_snapshot(self, course_id: str, reunion_url: str, mode: str) -> dict[str, Any]:
         logger.warning("STUB: ZeturfFetcher.fetch_race_snapshot is not fully implemented.")
         url = reunion_url
         if not url and course_id:
@@ -171,13 +171,13 @@ class ZeturfFetcher:
 
         if not url:
             raise ZeturfFetchError("URL de la réunion ou ID de course requis.")
-        
+
         response = self.fetch_with_retry(url)
         soup = BeautifulSoup(response.text, 'html.parser')
-        
+
         data = {'runners': [], 'partants': []}
         # This selector is a guess and needs to be confirmed.
-        runners_data = soup.select('.runner-item') 
+        runners_data = soup.select('.runner-item')
         for idx, runner_elem in enumerate(runners_data, 1):
             try:
                 runner = {
@@ -192,11 +192,11 @@ class ZeturfFetcher:
             except Exception as e:
                 logger.warning(f"Erreur extraction runner {idx}: {e}")
                 continue
-        
+
         data['start_time'] = self._extract_start_time(soup)
         return self._build_snapshot(data, mode, url)
 
-    def _extract_start_time(self, soup: BeautifulSoup) -> Optional[str]:
+    def _extract_start_time(self, soup: BeautifulSoup) -> str | None:
         """
         Extrait l'heure de départ depuis le HTML
         Gère plusieurs formats possibles
@@ -209,20 +209,20 @@ class ZeturfFetcher:
                 return dt.strftime('%H:%M')
             except Exception:
                 pass
-        
+
         elem = soup.find(attrs={'data-start-time': True})
         if elem:
             return elem.get('data-start-time')
-        
+
         text = soup.get_text()
         match = re.search(r'(\d{1,2})[h:\s]+(\d{2})', text)
         if match:
             hour, minute = match.groups()
             return f"{hour.zfill(2)}:{minute}"
-        
+
         logger.warning("Impossible d'extraire l'heure de départ")
         return None
-    
+
     def _safe_extract(self, elem, selector: str) -> str:
         """Extraction sécurisée avec sélecteur CSS"""
         try:
@@ -230,7 +230,7 @@ class ZeturfFetcher:
             return found.get_text(strip=True) if found else ''
         except Exception:
             return ''
-    
+
     def _extract_odds(self, elem) -> float:
         """Extrait la cote d'un élément runner"""
         try:
@@ -241,16 +241,16 @@ class ZeturfFetcher:
         except Exception:
             pass
         return 0.0
-    
+
     def _build_snapshot(
         self,
-        data: Dict[str, Any],
+        data: dict[str, Any],
         mode: str,
         url: str
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Construit le snapshot final avec métadonnées"""
         now = datetime.now()
-        
+
         snapshot = {
             'meta': {
                 'timestamp': now.isoformat(),
@@ -263,25 +263,25 @@ class ZeturfFetcher:
             'market': data.get('market', {}),
             'phase': data.get('phase', 'open')
         }
-        
+
         if 'start_time' in data:
             snapshot['meta']['start_time'] = data['start_time']
             snapshot['start_time'] = data['start_time']
-        
+
         return snapshot
-    
-    def _check_cache(self, url: str, mode: str) -> Optional[Dict[str, Any]]:
+
+    def _check_cache(self, url: str, mode: str) -> dict[str, Any] | None:
         """Vérifie si des données en cache existent"""
         return None
-    
-    def save_snapshot(self, snapshot: Dict[str, Any], output_path: str):
+
+    def save_snapshot(self, snapshot: dict[str, Any], output_path: str):
         """Sauvegarde le snapshot dans un fichier JSON"""
         output_file = Path(output_path)
         output_file.parent.mkdir(parents=True, exist_ok=True)
-        
+
         with open(output_file, 'w', encoding='utf-8') as f:
             json.dump(snapshot, f, indent=2, ensure_ascii=False)
-        
+
         logger.info(f"✓ Snapshot sauvegardé: {output_file}")
 
 
@@ -295,19 +295,19 @@ def fetch_race_snapshot(
     retries: int = 3,
     backoff: float = 1.5,
     initial_delay: float = 0.5,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
 
     if sources and sources.get("provider") == "pmu":
         if not url:
             raise ValueError("URL is required for PMU provider")
-        
+
         match = re.search(r"(R\d+C\d+)", url)
         if not match:
             raise ValueError("Cannot extract R/C from URL for PMU provider")
-        
+
         rc_label = match.group(1)
         reunion_str, course_str = _derive_rc_parts(rc_label)
-        
+
         today = dt.date.today().strftime("%Y-%m-%d")
         r_num = int(reunion_str.replace("R", ""))
         c_num = int(course_str.replace("C", ""))
@@ -334,7 +334,7 @@ def fetch_race_snapshot(
     course_label = _normalise_course_label(course)
     rc = f"{reunion_label}{course_label}"
 
-    config: Dict[str, Any]
+    config: dict[str, Any]
     if isinstance(sources, MutableMapping):
         config = dict(sources)
     elif isinstance(sources, Mapping):
@@ -345,7 +345,7 @@ def fetch_race_snapshot(
     rc_map_raw = (
         config.get("rc_map") if isinstance(config.get("rc_map"), Mapping) else None
     )
-    rc_map: Dict[str, Any] = (
+    rc_map: dict[str, Any] = (
         {str(k): v for k, v in rc_map_raw.items()} if rc_map_raw else {}
     )
 
@@ -354,7 +354,7 @@ def fetch_race_snapshot(
     entry.setdefault("course", course_label)
     if url:
         entry["url"] = url
-       
+
     rc_map[rc] = entry
     config["rc_map"] = rc_map
 
@@ -398,7 +398,7 @@ def write_snapshot_from_geny(course_id: str, phase: str, rc_dir: Path) -> None:
 # Nous les définissons ici comme des wrappers légers autour de la classe ZeturfFetcher
 # pour combler le fossé entre l'ancienne API à base de fonctions et la nouvelle.
 
-def http_get(url: str, session: Optional[requests.Session] = None, **kwargs) -> str:
+def http_get(url: str, session: requests.Session | None = None, **kwargs) -> str:
     """
     Wrapper léger pour ZeturfFetcher pour maintenir la compatibilité API pour la récupération de contenu HTML.
     """
@@ -409,20 +409,20 @@ def http_get(url: str, session: Optional[requests.Session] = None, **kwargs) -> 
     response = fetcher.fetch_with_retry(url)
     return response.text
 
-def parse_course_page(url: str, snapshot: str) -> Dict[str, Any]:
+def parse_course_page(url: str, snapshot: str) -> dict[str, Any]:
     """
     Wrapper pour parser une page de course, pour maintenir la compatibilité API.
     """
     logger.info(f"[compat-wrapper] parse_course_page appelé pour {url} (snapshot: {snapshot})")
     fetcher = ZeturfFetcher()
     mode = snapshot.lower().replace('-', '')
-    
+
     response = fetcher.fetch_with_retry(url)
     soup = BeautifulSoup(response.text, 'html.parser')
-    
+
     data = {'runners': [], 'partants': []}
     # Ce sélecteur est une supposition et doit être confirmé en inspectant les pages ZEturf.
-    runners_data = soup.select('.race-runner-row') 
+    runners_data = soup.select('.race-runner-row')
     for idx, runner_elem in enumerate(runners_data, 1):
         try:
             runner = {
@@ -437,21 +437,21 @@ def parse_course_page(url: str, snapshot: str) -> Dict[str, Any]:
         except Exception as e:
             logger.warning(f"Erreur extraction runner {idx}: {e}")
             continue
-    
+
     data['start_time'] = fetcher._extract_start_time(soup)
     return fetcher._build_snapshot(data, mode, url)
 
-def parse_meeting_page(url: str) -> Dict[str, Any]:
+def parse_meeting_page(url: str) -> dict[str, Any]:
     """Stub pour la compatibilité API."""
     logger.warning(f"STUB: parse_meeting_page appelé pour {url}, mais non implémenté.")
     return {"url": url, "courses": []}
 
-def to_pipeline_json(snapshot: Dict[str, Any]) -> str:
+def to_pipeline_json(snapshot: dict[str, Any]) -> str:
     """Stub pour la compatibilité API."""
     logger.warning("STUB: to_pipeline_json appelé, mais non implémenté.")
     return json.dumps(snapshot)
 
-def normalize_snapshot(snapshot: Dict[str, Any]) -> Dict[str, Any]:
+def normalize_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
     """Stub pour la compatibilité API."""
     logger.warning("STUB: normalize_snapshot appelé, mais non implémenté.")
     return snapshot
@@ -478,26 +478,26 @@ def main():
     parser.add_argument('--max-retries', type=int, default=3, help='Nombre max de tentatives')
     parser.add_argument('--timeout', type=int, default=10, help='Timeout en secondes')
     parser.add_argument('--verbose', action='store_true', help='Mode verbeux')
-    
+
     args = parser.parse_args()
-    
+
     if args.verbose:
         logger.setLevel(logging.DEBUG)
-    
+
     if not args.course_id and not args.reunion_url:
         parser.error("Vous devez fournir --course-id ou --reunion-url")
-    
+
     mode = args.mode
     if args.snapshot:
         mode = 'h30' if args.snapshot == 'H-30' else 'h5'
-    
+
     try:
         fetcher = ZeturfFetcher(
             max_retries=args.max_retries,
             timeout=args.timeout,
             use_cache=args.use_cache
         )
-        
+
         # In the original file, fetch_race_snapshot was called on the fetcher instance.
         # But it's a global function. I'm assuming it should be a method.
         snapshot = fetcher.fetch_race_snapshot(
@@ -505,16 +505,16 @@ def main():
             reunion_url=args.reunion_url,
             mode=mode
         )
-        
+
         fetcher.save_snapshot(snapshot, args.out)
-        
+
         logger.info("✓ Collecte terminée avec succès")
         return 0
-        
+
     except ZeturfFetchError as e:
         logger.error(f"✗ Erreur de collecte: {e}")
         return 1
-        
+
     except Exception as e:
         logger.error(f"✗ Erreur inattendue: {e}", exc_info=True)
         return 2

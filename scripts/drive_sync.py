@@ -56,8 +56,9 @@ import json
 import mimetypes
 import os
 import sys
+from collections.abc import Callable, Iterable
 from pathlib import Path
-from typing import Any, Callable, Iterable, Optional
+from typing import Any
 
 import google.auth.exceptions as google_auth_exceptions
 from google.cloud import storage
@@ -71,8 +72,8 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.append(str(REPO_ROOT))
 
-from post_course_payload import CSV_HEADER  # noqa: E402
 from post_course_payload import (
+    CSV_HEADER,  # noqa: E402
     apply_summary_to_ticket_container,
     build_payload,
     compute_post_course_summary,
@@ -123,7 +124,7 @@ def _ensure_drive_imports() -> None:
     _MEDIA_DOWNLOAD = _MediaIoBaseDownload
 
 
-def _load_credentials(credentials_json: Optional[str] = None):
+def _load_credentials(credentials_json: str | None = None):
     """Return service account credentials when available.
 
     ``credentials_json`` may contain the raw JSON payload.  When omitted, the
@@ -153,7 +154,7 @@ def _load_credentials(credentials_json: Optional[str] = None):
 
 
 def _build_service(
-    credentials_json: Optional[str] = None, *, project: Optional[str] = None
+    credentials_json: str | None = None, *, project: str | None = None
 ) -> storage.Client:
     """Instantiate and return a ``storage.Client``."""
 
@@ -337,18 +338,18 @@ def _run_local_post_course(
     return outputs
 
 
-def _require_bucket(bucket: Optional[str] = None) -> str:
+def _require_bucket(bucket: str | None = None) -> str:
     name = bucket or os.environ.get(BUCKET_ENV)
     if not name:
-        raise EnvironmentError(f"{BUCKET_ENV} is not set")
+        raise OSError(f"{BUCKET_ENV} is not set")
     return name
 
 
 def upload_file(
     path: str | Path,
     *,
-    folder_id: Optional[str] = None,
-    bucket: Optional[str] = None,
+    folder_id: str | None = None,
+    bucket: str | None = None,
     service: storage.Client | None = None,
 ) -> str:
     """Upload ``path`` to the configured bucket and return the object name."""
@@ -421,7 +422,7 @@ def download_file(
     object_name: str,
     dest: str | Path,
     *,
-    bucket: Optional[str] = None,
+    bucket: str | None = None,
     service: storage.Client | None = None,
 ) -> Path:
     """Download ``object_name`` from the bucket into ``dest`` and return the path."""
@@ -438,8 +439,8 @@ def download_file(
 def push_tree(
     base: str | Path,
     *,
-    folder_id: Optional[str] = None,
-    bucket: Optional[str] = None,
+    folder_id: str | None = None,
+    bucket: str | None = None,
     service: storage.Client | None = None,
 ) -> None:
     """Recursively upload ``base`` into ``folder_id`` (treated as prefix)."""
@@ -730,17 +731,16 @@ def main() -> int | None:
                         f"[drive_sync] Upload Drive échoué pour {extra_path}: {exc}",
                         file=sys.stderr,
                     )
+        elif dry_run:
+            print(
+                "[drive_sync] --dry-run: upload ignoré (folder-id manquant) pour "
+                f"{extra_path}"
+            )
         else:
-            if dry_run:
-                print(
-                    "[drive_sync] --dry-run: upload ignoré (folder-id manquant) pour "
-                    f"{extra_path}"
-                )
-            else:
-                print(
-                    f"[drive_sync] Upload ignoré (folder-id manquant): {extra_path}",
-                    file=sys.stderr,
-                )
+            print(
+                f"[drive_sync] Upload ignoré (folder-id manquant): {extra_path}",
+                file=sys.stderr,
+            )
 
     if args.local_only:
         print(
@@ -777,7 +777,7 @@ def main() -> int | None:
 
     try:
         bucket_name = _require_bucket(args.bucket)
-    except EnvironmentError as exc:
+    except OSError as exc:
         print(f"[drive_sync] ROI non historisé (Drive off): {exc}")
         return 0
 

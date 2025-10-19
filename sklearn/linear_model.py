@@ -26,7 +26,7 @@ class LogisticRegression:  # pragma: no cover - simple numerical implementation
         self.coef_: np.ndarray | None = None
         self.intercept_: np.ndarray | None = None
 
-    def fit(self, X: np.ndarray, y: np.ndarray) -> "LogisticRegression":
+    def fit(self, X: np.ndarray, y: np.ndarray) -> LogisticRegression:
         X = np.asarray(X, dtype=float)
         y = np.asarray(y, dtype=float)
 

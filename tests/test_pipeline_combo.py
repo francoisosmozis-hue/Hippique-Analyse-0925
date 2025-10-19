@@ -483,7 +483,11 @@ def test_pipeline_uses_capped_stake_in_exports(tmp_path, monkeypatch):
         "p": 0.55,
     }
 
-    monkeypatch.setattr(tickets_builder, "apply_ticket_policy", fake_apply_ticket_policy)
+    monkeypatch.setattr(
+        tickets_builder,
+        "apply_ticket_policy",
+        lambda *args, **kwargs: ([base_ticket], [], None),
+    )
     monkeypatch.setattr(pipeline_run, "allow_combo", lambda *args, **kwargs: False)
 
     capped: dict[str, float] = {}
@@ -570,7 +574,7 @@ def test_pipeline_uses_capped_stake_in_exports(tmp_path, monkeypatch):
     tracking_lines = tracking_path.read_text(encoding="utf-8").strip().splitlines()
     header = tracking_lines[0].split(";")
     values = tracking_lines[-1].split(";")
-    tracking = dict(zip(header, values))
+    tracking = dict(zip(header, values, strict=False))
     assert float(tracking["total_stake"]) == pytest.approx(capped["capped"])
 
 
@@ -617,7 +621,7 @@ def test_pipeline_optimization_preserves_ev_and_budget(tmp_path, monkeypatch):
     tracking_lines = tracking_path.read_text(encoding="utf-8").strip().splitlines()
     header = tracking_lines[0].split(";")
     values = tracking_lines[-1].split(";")
-    tracking = dict(zip(header, values))
+    tracking = dict(zip(header, values, strict=False))
     assert float(tracking["total_optimized_stake"]) >= 0.0
 
     capped: dict[str, object] = {}
@@ -715,7 +719,7 @@ def test_pipeline_optimization_preserves_ev_and_budget(tmp_path, monkeypatch):
     tracking_lines = tracking_path.read_text(encoding="utf-8").strip().splitlines()
     header = tracking_lines[0].split(";")
     values = tracking_lines[-1].split(";")
-    tracking = dict(zip(header, values))
+    tracking = dict(zip(header, values, strict=False))
 
     assert float(tracking["total_stake"]) == pytest.approx(total_stake)
     assert float(tracking["roi_sp"]) == pytest.approx(data["ev"]["roi_sp"])

@@ -15,31 +15,27 @@ import json
 import logging
 import os
 import re
+import sys
 from pathlib import Path
 from typing import Any, Dict, List, Mapping
 
-import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+import yaml
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
+from pydantic import ValidationError as PydanticValidationError
+from pydantic import field_validator
 
+import pandas as pd
 
-# CORRECTION: Imports depuis scripts/ au lieu de la racine
-from scripts.simulate_ev import simulate_ev_batch
-from scripts.simulate_wrapper import PAYOUT_CALIBRATION_PATH
-from scripts.validator_ev import ValidationError, validate_ev
-
+from module_dutching_pmu import dutching_kelly_fractional
 from scripts import online_fetch_zeturf as ofz
 from scripts.gcs_utils import disabled_reason, is_gcs_enabled
 
-from pydantic import (
-    AliasChoices,
-    BaseModel,
-    ConfigDict,
-    ValidationError as PydanticValidationError,
-    Field,
-    field_validator,
-)
-
-import yaml
+# CORRECTION: Imports depuis scripts/ au lieu de la racine
+from simulate_ev import simulate_ev_batch
+from simulate_wrapper import PAYOUT_CALIBRATION_PATH
+from validator_ev import ValidationError, validate_ev
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +81,9 @@ class RunnerPayload(BaseModel):
     def _validate_course_id(cls, value: str) -> str:
         text = str(value).strip()
         if not text or not text.isdigit() or len(text) < 6:
-            raise ValueError("id_course must be a numeric string with at least 6 digits")
+            raise ValueError(
+                "id_course must be a numeric string with at least 6 digits"
+            )
         return text
 
     @field_validator("reunion")
@@ -97,7 +95,7 @@ class RunnerPayload(BaseModel):
         if not text.startswith("R"):
             text = f"R{text}"
         if not text[1:].isdigit():
-            raise ValueError("reunion must match pattern R\\d+")
+            raise ValueError(r"reunion must match pattern R\d+")
         return text
 
     @field_validator("course")
@@ -109,7 +107,7 @@ class RunnerPayload(BaseModel):
         if not text.startswith("C"):
             text = f"C{text}"
         if not text[1:].isdigit():
-            raise ValueError("course must match pattern C\\d+")
+            raise ValueError(r"course must match pattern C\d+")
         return text
 
     @field_validator("phase")
@@ -202,9 +200,13 @@ def _write_excel_update_command(
         )
         return
 
-    excel = excel_path or os.getenv("EXCEL_RESULTS_PATH") or "modele_suivi_courses_hippiques.xlsx"
+    excel = (
+        excel_path
+        or os.getenv("EXCEL_RESULTS_PATH")
+        or "modele_suivi_courses_hippiques.xlsx"
+    )
     cmd = (
-        f'python update_excel_with_results.py '
+        f"python update_excel_with_results.py "
         f'--excel "{excel}" '
         f'--arrivee "{arrivee_path}" '
         f'--tickets "{tickets_path}"\n'
@@ -241,6 +243,7 @@ def _write_snapshot(
             payload.reunion,
             payload.course,
             window,
+            course_url=course_url,
         )
     except Exception as exc:
         reason = str(exc)
@@ -287,71 +290,116 @@ def _write_analysis(
     mode: str,
     calibration: Path,
     calibration_available: bool,
-) -> None:    
-    """Compute a dummy EV/ROI analysis and write it to disk.
+) -> None:
+    from pipeline_run import enforce_ror_threshold  # Import local
 
-    When the payout calibration file is missing the combo generation is skipped
-    and an ``insufficient_data`` payload mirroring the behaviour of the main
-    pipeline is written instead of running the EV simulation.
-    """
     dest = base / race_id
     dest.mkdir(parents=True, exist_ok=True)
     print(f"[runner] Mode={mode} RC={race_id} → {dest}")
 
-    path = dest / "analysis.json"
-    if not calibration_available:
-        calibration_available = calibration.exists()
-    if not calibration_available:
-        logger.warning(
-            "[runner] Payout calibration missing (%s); combos disabled for %s",
-            calibration,
-            race_id,
-        )
+    analysis_path = dest / "analysis.json"
+    snapshot_path = dest / "snapshot_H5.json"
+
+    je_stats_path = dest / "je_stats.csv"
+    chronos_path = dest / "chronos.csv"
+    if not je_stats_path.is_file() or not chronos_path.is_file():
         payload = {
             "race_id": race_id,
-            "status": "insufficient_data",
-            "notes": ["calibration_missing"],
-            "calibration": str(calibration),
+            "status": "aborted",
+            "reasons": ["data_missing"],
         }
-        with path.open("w", encoding="utf-8") as fh:
-            json.dump(payload, fh, ensure_ascii=False, indent=2)
-        if USE_GCS and upload_file:
-            try:
-                upload_file(path)
-            except EnvironmentError as exc:
-                logger.warning("Skipping cloud upload for %s: %s", path, exc)
-        else:
-            reason = disabled_reason()
-            detail = f"{reason}=false" if reason else "USE_GCS disabled"
-            logger.info("[gcs] Skipping upload for %s (%s)", path, detail)
+        _write_json_file(analysis_path, payload)
         return
 
-    tickets = [{"p": 0.5, "odds": 2.0, "stake": 1.0}]
-    stats = simulate_ev_batch(tickets, bankroll=budget)
     try:
-        validate_ev(float(stats.get("ev", 0.0)), None, need_combo=False)
-    except ValidationError:
-        return
-    payload = {
-        "race_id": race_id,
-        "status": "ok",
-        "ev": stats.get("ev"),
-        "roi": stats.get("roi"),
-        "green": stats.get("green"),
-        "calibration": str(calibration),
-    }
-    with path.open("w", encoding="utf-8") as fh:
-        json.dump(payload, fh, ensure_ascii=False, indent=2)
-    if USE_GCS and upload_file:    
-        try:
-            upload_file(path)
-        except EnvironmentError as exc:
-            logger.warning("Skipping cloud upload for %s: %s", path, exc)
-    else:
-        reason = disabled_reason()
-        detail = f"{reason}=false" if reason else "USE_GCS disabled"
-        logger.info("[gcs] Skipping upload for %s (%s)", path, detail)
+        with snapshot_path.open("r", encoding="utf-8") as f:
+            snapshot_data = json.load(f)
+        
+        runners_data = snapshot_data.get("payload", {}).get("runners", [])
+        if not runners_data:
+            raise ValueError("No runners found in snapshot")
 
+    except (FileNotFoundError, json.JSONDecodeError, ValueError) as e:
+        payload = {
+            "race_id": race_id,
+            "status": "aborted",
+            "reasons": ["snapshot_loading_failed"],
+            "error": str(e),
+        }
+        _write_json_file(analysis_path, payload)
+        return
+
+    odds_list = []
+    horse_labels = []
+    runners_for_threshold = []
+    for runner in runners_data:
+        odd = runner.get("odds") or runner.get("cote")
+        if odd:
+            try:
+                odds_list.append(float(str(odd).replace(",", ".")))
+                num = str(runner.get("num", ""))
+                horse_labels.append(num)
+                runners_for_threshold.append({"id": num})
+            except (ValueError, TypeError):
+                continue
+
+    if not odds_list:
+        payload = {
+            "race_id": race_id,
+            "status": "aborted",
+            "reasons": ["no_valid_odds_in_snapshot"],
+        }
+        _write_json_file(analysis_path, payload)
+        return
+
+    bets_df = dutching_kelly_fractional(
+        odds=odds_list,
+        total_stake=budget,
+        cap_per_horse=0.60,
+        horse_labels=horse_labels,
+    )
+
+    total_ev = bets_df["EV (€)"].sum()
+    total_stake = bets_df["Stake (€)"].sum()
+    
+    global_roi = total_ev / total_stake if total_stake > 0 else 0.0
+
+    tickets_list = bets_df.to_dict(orient="records")
+
+    final_tickets, _, validation_meta = enforce_ror_threshold(
+        cfg={},
+        runners=runners_for_threshold,
+        combo_tickets=tickets_list,
+        bankroll=budget,
+        global_roi=global_roi,
+        roi_min_threshold=roi_min,
+    )
+
+    if final_tickets:
+        payload = {
+            "race_id": race_id,
+            "status": "ok",
+            "ev": {"global": total_ev, "roi": global_roi},
+            "tickets": final_tickets,
+            "notes": ["ROI validation passed"],
+            "validation_meta": validation_meta,
+        }
+    else:
+        payload = {
+            "race_id": race_id,
+            "status": "aborted",
+            "reasons": ["policy_validation_failed", validation_meta.get("status")],
+            "ev": {"global": total_ev, "roi": global_roi},
+            "validation_meta": validation_meta,
+        }
+    
+    _write_json_file(analysis_path, payload)
+
+    if USE_GCS and upload_file:
+        try:
+            upload_file(analysis_path)
+        except EnvironmentError as exc:
+            logger.warning("Skipping cloud upload for %s: %s", analysis_path, exc)
 
 def _trigger_phase(
     payload: RunnerPayload,
@@ -420,20 +468,20 @@ def _trigger_phase(
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Exécute les fenêtres H-30/H-5. Opère soit sur un fichier de planning (--planning), soit sur une course unique (--reunion, --course, etc.)"
+        description="Run H-30 and H-5 windows from planning information"
     )
-    parser.add_argument("--planning", help="Path to planning JSON file")
-    parser.add_argument("--course-id", help="Numeric course identifier (>= 6 digits)")
-    parser.add_argument("--reunion", help="Reunion identifier (e.g. R1)")
-    parser.add_argument("--course", help="Course identifier (e.g. C3)")
-    parser.add_argument("--phase", help="Phase to execute (H30, H5 or RESULT)")
-    parser.add_argument("--start-time", help="Race start time (ISO 8601)")
+    parser.add_argument(
+        "path",
+        help="Path to a planning JSON file or a specific analysis directory for a single race",
+    )
     parser.add_argument(
         "--course-url",
         "--reunion-url",
         dest="course_url",
+        default=None,
         help="Direct ZEturf course URL overriding rc_map lookups",
     )
+
     parser.add_argument("--h30-window-min", type=int, default=27)
     parser.add_argument("--h30-window-max", type=int, default=33)
     parser.add_argument("--h5-window-min", type=int, default=3)
@@ -459,15 +507,71 @@ def main() -> None:
         help="Répertoire de sortie prioritaire (fallback vers $OUTPUT_DIR puis --analysis-dir)",
     )
     args = parser.parse_args()
-    
+
     snap_dir = Path(args.snap_dir)
     analysis_root = args.output or os.getenv("OUTPUT_DIR") or args.analysis_dir
     analysis_dir = Path(analysis_root)
     calibration_path = Path(args.calibration).expanduser()
     calibration_exists = calibration_path.exists()
-    
+
+    path = Path(args.path)
+    if path.is_file():
+        args.planning = str(path)
+        args.analysis_dir_path = None
+    elif path.is_dir():
+        args.planning = None
+        args.analysis_dir_path = str(path)
+    else:
+        parser.error(f"Path not found: {path}")
+
+    if args.analysis_dir_path:
+        race_path = Path(args.analysis_dir_path)
+        snapshot_path = race_path / "snapshot_H5.json"
+        if not snapshot_path.is_file():
+            snapshot_path = race_path / "snapshot_H30.json"
+        if not snapshot_path.is_file():
+            parser.error(f"Snapshot file not found in {race_path}: {snapshot_path}")
+
+        with snapshot_path.open("r", encoding="utf-8") as f:
+            snapshot_data = json.load(f)
+
+        payload_data = snapshot_data.get("payload", {})
+        payload_dict = {
+            "id_course": payload_data.get("course_id"),
+            "reunion": payload_data.get("reunion"),
+            "course": payload_data.get("course"),
+            "phase": "H5",
+            "start_time": payload_data.get("start_time", dt.datetime.now().isoformat()),
+            "budget": args.budget,
+        }
+        try:
+            payload = _coerce_payload(payload_dict, context=f"dir:{race_path}")
+        except PayloadValidationError as exc:
+            logger.error("[runner] %s", exc)
+            raise SystemExit(1) from exc
+
+        _trigger_phase(
+            payload,
+            snap_dir=snap_dir,
+            analysis_dir=analysis_dir,
+            ev_min=args.ev_min,
+            roi_min=args.roi_min,
+            mode=args.mode,
+            calibration=calibration_path,
+            calibration_available=calibration_exists,
+            course_url=args.course_url,
+        )
+        return
+
     if args.planning:
-        for name in ("course_id", "reunion", "course", "phase", "start_time", "course_url"):
+        for name in (
+            "course_id",
+            "reunion",
+            "course",
+            "phase",
+            "start_time",
+            "course_url",
+        ):
             if getattr(args, name):
                 parser.error("--planning cannot be combined with single-race options")
 
@@ -497,11 +601,13 @@ def main() -> None:
                 course = entry.get("course") or entry.get("race")
                 if not reunion or not course:
                     if rc_label:
-                        match = re.match(r"^(R\d+)(C\d+)$", rc_label)
+                        match = re.match(r"^(R\d+)(C\d+)", rc_label)
                         if match:
                             reunion = reunion or match.group(1)
                             course = course or match.group(2)
-                start = entry.get("start") or entry.get("time") or entry.get("start_time")
+                start = (
+                    entry.get("start") or entry.get("time") or entry.get("start_time")
+                )
                 if not (reunion and course and start and context_id):
                     logger.error(
                         "[runner] Invalid planning entry skipped: missing labels/id_course (%s)",
@@ -511,7 +617,9 @@ def main() -> None:
                 try:
                     start_time = dt.datetime.fromisoformat(start)
                 except ValueError:
-                    logger.error("[runner] Invalid ISO timestamp for planning entry %s", entry)
+                    logger.error(
+                        "[runner] Invalid ISO timestamp for planning entry %s", entry
+                    )
                     raise SystemExit(1)
                 delta = (start_time - now).total_seconds() / 60
                 if args.h30_window_min <= delta <= args.h30_window_max:
@@ -563,46 +671,6 @@ def main() -> None:
             raise SystemExit(1) from exc
         return
 
-    missing = [
-        name
-        for name in ("course_id", "reunion", "course", "phase", "start_time")
-        if not getattr(args, name)
-    ]
-    if missing:
-        parser.error(
-            "Missing required options for single-race mode: " + ", ".join(f"--{m}" for m in missing)
-        )
-
-    payload_dict = {
-        "id_course": args.course_id,
-        "reunion": args.reunion,
-        "course": args.course,
-        "phase": args.phase,
-        "start_time": args.start_time,
-        "budget": args.budget,
-    }
-    try:
-        payload = _coerce_payload(payload_dict, context="cli")
-    except PayloadValidationError as exc:
-        logger.error("[runner] %s", exc)
-        raise SystemExit(1) from exc
-
-    try:
-        _trigger_phase(
-            payload,
-            snap_dir=snap_dir,
-            analysis_dir=analysis_dir,
-            ev_min=args.ev_min,
-            roi_min=args.roi_min,
-            mode=args.mode,
-            calibration=calibration_path,
-            calibration_available=calibration_exists,
-            course_url=args.course_url,
-        ) 
-    except PayloadValidationError as exc:
-        logger.error("[runner] %s", exc)
-        raise SystemExit(1) from exc
-          
 
 if __name__ == "__main__":
     main()

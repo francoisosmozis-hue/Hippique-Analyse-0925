@@ -1,12 +1,12 @@
-import pytest
 import json
 import shutil
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 
 def test_fetch_race_snapshot_returns_list_of_partants(monkeypatch: Any) -> None:
-    import pytest
 
     import online_fetch_zeturf as ofz
 

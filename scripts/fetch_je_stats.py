@@ -22,9 +22,9 @@ import logging
 import os
 import re
 import unicodedata
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterable, Iterator, List, Optional, Tuple
 
 import requests
 from bs4 import BeautifulSoup
@@ -41,13 +41,13 @@ class RunnerStat:
 
     num: str
     name: str
-    j_win: Optional[float]
-    e_win: Optional[float]
+    j_win: float | None
+    e_win: float | None
 
-    def as_payload(self) -> Dict[str, float]:
+    def as_payload(self) -> dict[str, float]:
         """Return a serialisable dictionary with defaulted numeric values."""
 
-        payload: Dict[str, float] = {}
+        payload: dict[str, float] = {}
         if self.j_win is not None:
             payload["j_win"] = float(self.j_win)
         if self.e_win is not None:
@@ -63,7 +63,7 @@ def _normalize(text: str) -> str:
     return value.lower()
 
 
-def _clean_number(text: str) -> Optional[str]:
+def _clean_number(text: str) -> str | None:
     """Normalise a race number to its canonical string form."""
 
     if not text:
@@ -76,7 +76,7 @@ def _clean_number(text: str) -> Optional[str]:
     return num
 
 
-def _parse_percentage(text: str) -> Optional[float]:
+def _parse_percentage(text: str) -> float | None:
     """Extract a percentage value from ``text``.
 
     The function attempts to parse common formats encountered on Geny,
@@ -107,10 +107,10 @@ def _parse_percentage(text: str) -> Optional[float]:
     return None
 
 
-def extract_stats_from_table(soup: BeautifulSoup) -> List[RunnerStat]:
+def extract_stats_from_table(soup: BeautifulSoup) -> list[RunnerStat]:
     """Parse the main runners table and extract jockey/coach stats."""
 
-    stats: List[RunnerStat] = []
+    stats: list[RunnerStat] = []
     for row in soup.find_all("tr"):
         cells = row.find_all("td")
         if len(cells) < 4:
@@ -130,7 +130,7 @@ def extract_stats_from_table(soup: BeautifulSoup) -> List[RunnerStat]:
     return stats
 
 
-def _extract_json_blob(html: str) -> Optional[dict]:
+def _extract_json_blob(html: str) -> dict | None:
     """Return the ``window.__NUXT__`` data structure if present."""
 
     match = re.search(r"window\.__NUXT__=({.+?});\s*</script>", html, flags=re.DOTALL)
@@ -156,7 +156,7 @@ def _iter_dicts(obj: object) -> Iterator[dict]:
             yield from _iter_dicts(item)
 
 
-def _extract_percentage_from_node(node: object) -> Optional[float]:
+def _extract_percentage_from_node(node: object) -> float | None:
     """Search ``node`` for a plausible win percentage value."""
 
     if node is None:
@@ -205,15 +205,15 @@ def _extract_percentage_from_node(node: object) -> Optional[float]:
     return None
 
 
-def extract_stats_from_json(html: str) -> List[RunnerStat]:
+def extract_stats_from_json(html: str) -> list[RunnerStat]:
     """Extract runner statistics from the embedded Nuxt payload."""
 
     blob = _extract_json_blob(html)
     if not blob:
         return []
 
-    stats: List[RunnerStat] = []
-    seen: set[Tuple[str, str]] = set()
+    stats: list[RunnerStat] = []
+    seen: set[tuple[str, str]] = set()
 
     for node in _iter_dicts(blob):
         keys = {k.lower() for k in node.keys()}
@@ -276,7 +276,7 @@ def extract_stats_from_json(html: str) -> List[RunnerStat]:
     return stats
 
 
-def load_runner_index(path: Path | str | None) -> "RunnerIndex":
+def load_runner_index(path: Path | str | None) -> RunnerIndex:
     """Load the H-5 snapshot and build a lookup index."""
 
     if path is None:
@@ -293,9 +293,9 @@ class RunnerIndex:
     """Mapping helper between runner numbers/names and identifiers."""
 
     def __init__(self, runners: Iterable[dict]):
-        self.by_num: Dict[str, str] = {}
-        self.by_name: Dict[str, List[str]] = {}
-        self.ids: List[str] = []
+        self.by_num: dict[str, str] = {}
+        self.by_name: dict[str, list[str]] = {}
+        self.ids: list[str] = []
 
         for runner in runners:
             rid = runner.get("id") or runner.get("ID") or runner.get("runner_id")
@@ -324,7 +324,7 @@ class RunnerIndex:
     def total(self) -> int:
         return len(self.ids)
 
-    def lookup(self, stat: RunnerStat) -> Optional[str]:
+    def lookup(self, stat: RunnerStat) -> str | None:
         if stat.num:
             num = _clean_number(stat.num)
             if num and num in self.by_num:
@@ -338,12 +338,12 @@ class RunnerIndex:
 
 
 def map_stats_to_ids(
-    stats: List[RunnerStat], index: RunnerIndex
-) -> Tuple[float, Dict[str, Dict[str, float]], List[RunnerStat]]:
+    stats: list[RunnerStat], index: RunnerIndex
+) -> tuple[float, dict[str, dict[str, float]], list[RunnerStat]]:
     """Map scraped statistics to Zeturf identifiers."""
 
-    mapped: Dict[str, Dict[str, float]] = {}
-    unmatched: List[RunnerStat] = []
+    mapped: dict[str, dict[str, float]] = {}
+    unmatched: list[RunnerStat] = []
 
     for stat in stats:
         rid = index.lookup(stat)
@@ -363,7 +363,7 @@ def map_stats_to_ids(
     return coverage, mapped, unmatched
 
 
-def fetch_course_html(course_id: str, url: Optional[str] = None) -> str:
+def fetch_course_html(course_id: str, url: str | None = None) -> str:
     """Download the Geny HTML page for ``course_id``."""
 
     headers = {
@@ -384,8 +384,8 @@ def fetch_course_html(course_id: str, url: Optional[str] = None) -> str:
 
 
 def collect_stats(
-    course_id: str, h5_path: Optional[str] = None, url: Optional[str] = None
-) -> Tuple[float, Dict[str, Dict[str, float]]]:
+    course_id: str, h5_path: str | None = None, url: str | None = None
+) -> tuple[float, dict[str, dict[str, float]]]:
     """Fetch and map jockey/trainer stats for ``course_id``."""
 
     html = fetch_course_html(course_id, url=url)
@@ -424,7 +424,7 @@ def main() -> None:  # pragma: no cover - CLI glue
 
     coverage, mapped = collect_stats(args.course_id, h5_path=args.h5, url=args.url)
 
-    payload: Dict[str, object] = {"coverage": coverage}
+    payload: dict[str, object] = {"coverage": coverage}
     payload.update(mapped)
 
     out_path = Path(args.out)

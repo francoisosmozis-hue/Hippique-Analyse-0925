@@ -1,13 +1,10 @@
 import json
-import os
 import subprocess
 import sys
 from functools import partial
 from pathlib import Path
 
 import pytest
-
-
 
 from validator_ev import (
     ValidationError,
@@ -204,7 +201,7 @@ def test_validator_cli_returns_non_zero_on_failure(tmp_path):
 
     result = subprocess.run(
         [sys.executable, str(script), "--artefacts", str(artefacts_dir)],
-        capture_output=True,
+        check=False, capture_output=True,
         text=True,
     )
 

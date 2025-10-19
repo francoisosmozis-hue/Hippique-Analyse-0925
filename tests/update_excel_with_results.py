@@ -21,8 +21,9 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 from openpyxl import Workbook, load_workbook
 from openpyxl.worksheet.worksheet import Worksheet
@@ -67,7 +68,7 @@ OBSERVED_HEADERS = [
 
 
 def _load_json(path: str | Path) -> JsonDict:
-    with open(path, "r", encoding="utf-8") as fh:
+    with open(path, encoding="utf-8") as fh:
         return json.load(fh)
 
 

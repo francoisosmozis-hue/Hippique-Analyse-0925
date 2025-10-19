@@ -4,7 +4,7 @@ import re
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import List, Literal, Optional, Tuple
+from typing import Literal
 from urllib.parse import urlparse
 
 from fastapi import FastAPI, HTTPException
@@ -34,19 +34,19 @@ ALLOWED_COURSE_URL_DOMAINS: tuple[str, ...] = (
 # =========================
 class AnalyseParams(BaseModel):
     # Paramètres clefs pour déclencher le pipeline
-    meeting: Optional[str] = Field(
+    meeting: str | None = Field(
         default=None,
         description="Identifiant réunion/courses (si utilisé par tes scripts, ex: 'R1C3').",
     )
-    reunion: Optional[str] = Field(
+    reunion: str | None = Field(
         default=None,
         description="Identifiant de la réunion (ex: 'R1').",
     )
-    course: Optional[str] = Field(
+    course: str | None = Field(
         default=None,
         description="Identifiant de la course (ex: 'C3').",
     )
-    course_url: Optional[str] = Field(
+    course_url: str | None = Field(
         default=None, description="URL ZEturf/Geny pour scrap (si DATA_MODE='web')."
     )
     phase: Literal["H30", "H5"] = Field(
@@ -54,11 +54,11 @@ class AnalyseParams(BaseModel):
     )
 
     # Overrides facultatifs
-    default_budget: Optional[float] = Field(default=None, ge=0)
-    min_ev_sp: Optional[float] = Field(default=None)
-    min_ev_combo: Optional[float] = Field(default=None)
-    max_volat_per_horse: Optional[float] = Field(default=None)
-    data_mode: Optional[Literal["web", "local"]] = Field(default=None)
+    default_budget: float | None = Field(default=None, ge=0)
+    min_ev_sp: float | None = Field(default=None)
+    min_ev_combo: float | None = Field(default=None)
+    max_volat_per_horse: float | None = Field(default=None)
+    data_mode: Literal["web", "local"] | None = Field(default=None)
 
     # Avancé : flags pour activer/désactiver certaines étapes
     run_prompt: bool = Field(
@@ -71,10 +71,10 @@ class AnalyseResult(BaseModel):
     ok: bool
     app: str
     params: AnalyseParams
-    outputs_dir: Optional[str] = None
-    p_finale_path: Optional[str] = None
-    tickets: Optional[dict] = None
-    logs: Optional[List[str]] = None
+    outputs_dir: str | None = None
+    p_finale_path: str | None = None
+    tickets: dict | None = None
+    logs: list[str] | None = None
 
 
 # =========================
@@ -103,7 +103,7 @@ def healthz():
 # =========================
 # Endpoint /analyse
 # =========================
-def _read_json_if_exists(p: Path) -> Optional[dict]:
+def _read_json_if_exists(p: Path) -> dict | None:
     try:
         if p.exists() and p.is_file():
             return json.loads(p.read_text(encoding="utf-8"))
@@ -114,7 +114,7 @@ def _read_json_if_exists(p: Path) -> Optional[dict]:
 
 def _format_subprocess_failure(label: str, proc: subprocess.CompletedProcess) -> str:
     """Format stdout/stderr from a subprocess failure for easier debugging."""
-    parts: List[str] = [f"{label} (code {proc.returncode})."]
+    parts: list[str] = [f"{label} (code {proc.returncode})."]
     if proc.stdout:
         parts.append("STDOUT:")
         parts.append(proc.stdout.strip())
@@ -143,7 +143,7 @@ def _normalise_rc_component(value: str, prefix: str) -> str:
     return f"{prefix}{number}"
 
 
-def _split_meeting_label(value: str) -> Tuple[str, str]:
+def _split_meeting_label(value: str) -> tuple[str, str]:
     cleaned = value.strip().upper().replace(" ", "").replace("-", "")
     match = re.fullmatch(r"R(?P<reunion>\d+)C(?P<course>\d+)", cleaned)
     if not match:
@@ -157,9 +157,9 @@ def _split_meeting_label(value: str) -> Tuple[str, str]:
 
 def _resolve_reunion_course(
     params: AnalyseParams,
-) -> Tuple[Optional[str], Optional[str]]:
-    meeting_reunion: Optional[str] = None
-    meeting_course: Optional[str] = None
+) -> tuple[str | None, str | None]:
+    meeting_reunion: str | None = None
+    meeting_course: str | None = None
     if params.meeting:
         meeting_reunion, meeting_course = _split_meeting_label(params.meeting)
 
@@ -232,7 +232,7 @@ def analyse(body: AnalyseParams):
 
     # Dossier de sortie dédié à l’appel
     outputs_dir = Path(tempfile.mkdtemp(prefix="hippique_"))
-    logs: List[str] = []
+    logs: list[str] = []
 
     # Prépare l’environnement pour les scripts Python appelés
     env = os.environ.copy()
@@ -249,7 +249,7 @@ def analyse(body: AnalyseParams):
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
-    validated_course_url: Optional[str] = None
+    validated_course_url: str | None = None
     if body.course_url:
         try:
             validated_course_url = _validate_course_url(body.course_url)

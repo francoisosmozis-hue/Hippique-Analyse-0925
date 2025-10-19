@@ -2,20 +2,21 @@
 Module d'extraction avancée des données ZEturf
 Version intégrée pour l'orchestrateur Cloud Run
 """
-import re
 import json
-from typing import Optional, Dict, Any
-from bs4 import BeautifulSoup
-import requests
-from time import sleep
 import logging
+import re
+from time import sleep
+from typing import Any
+
+import requests
+from bs4 import BeautifulSoup
 
 # Configuration du logging standard
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 
-def _extract_start_time(html_content: str, course_id: str = "") -> Optional[str]:
+def _extract_start_time(html_content: str, course_id: str = "") -> str | None:
     """
     Extrait l'heure de départ d'une course depuis le HTML ZEturf.
     
@@ -28,7 +29,7 @@ def _extract_start_time(html_content: str, course_id: str = "") -> Optional[str]
     """
     try:
         soup = BeautifulSoup(html_content, 'html.parser')
-        
+
         # 1. Chercher dans JSON-LD (métadonnées structurées)
         for script in soup.find_all('script', type='application/ld+json'):
             try:
@@ -43,7 +44,7 @@ def _extract_start_time(html_content: str, course_id: str = "") -> Optional[str]
                         return time_str
             except (json.JSONDecodeError, TypeError):
                 continue
-        
+
         # 2. Chercher dans les balises <time>
         time_tags = soup.find_all('time')
         for tag in time_tags:
@@ -54,7 +55,7 @@ def _extract_start_time(html_content: str, course_id: str = "") -> Optional[str]
                 time_str = f"{match.group(1).zfill(2)}:{match.group(2)}"
                 logger.info(f"Extracted time from <time> tag: {time_str}")
                 return time_str
-        
+
         # 3. Patterns textuels
         patterns = [
             r'Départ[^\d]*(\d{1,2})[h:](\d{2})',
@@ -62,23 +63,23 @@ def _extract_start_time(html_content: str, course_id: str = "") -> Optional[str]
             r'départ[^\d]*(\d{1,2})[h:](\d{2})',
             r'(\d{1,2})[h:](\d{2})\s*(?:Départ|départ)?',
         ]
-        
+
         for pattern in patterns:
             match = re.search(pattern, html_content, re.IGNORECASE)
             if match:
                 time_str = f"{match.group(1).zfill(2)}:{match.group(2)}"
                 logger.info(f"Extracted time from pattern: {time_str}")
                 return time_str
-        
+
         logger.warning(f"No time found for course {course_id}")
         return None
-        
+
     except Exception as e:
         logger.error(f"Error extracting time: {e}")
         return None
 
 
-def fetch_course_details(course_url: str, throttle: float = 1.0) -> Dict[str, Any]:
+def fetch_course_details(course_url: str, throttle: float = 1.0) -> dict[str, Any]:
     """
     Récupère les détails d'une course (heure, partants, hippodrome).
     
@@ -95,28 +96,28 @@ def fetch_course_details(course_url: str, throttle: float = 1.0) -> Dict[str, An
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9',
             'Accept-Language': 'fr-FR,fr;q=0.9',
         }
-        
+
         sleep(throttle)
         logger.info(f"Fetching course details: {course_url}")
-        
+
         resp = requests.get(course_url, headers=headers, timeout=15)
         resp.raise_for_status()
-        
+
         soup = BeautifulSoup(resp.text, 'html.parser')
-        
+
         # Extraire l'heure
         course_id = course_url.split('/')[-1] if '/' in course_url else ""
         start_time = _extract_start_time(resp.text, course_id)
-        
+
         # Extraire hippodrome
         hippodrome = None
         h1 = soup.find('h1')
         if h1:
             hippodrome = h1.get_text(strip=True)
-        
+
         # Compter les partants (approximation)
         partants_count = len(soup.find_all('tr', class_=re.compile(r'partant|runner')))
-        
+
         return {
             'url': course_url,
             'start_time': start_time,
@@ -125,7 +126,7 @@ def fetch_course_details(course_url: str, throttle: float = 1.0) -> Dict[str, An
             'html_size': len(resp.text),
             'status': 'ok'
         }
-        
+
     except requests.RequestException as e:
         logger.error(f"Request error for {course_url}: {e}")
         return {

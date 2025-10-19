@@ -1,4 +1,6 @@
+import importlib
 import inspect
+import sys
 import textwrap
 from pathlib import Path
 
@@ -96,9 +98,6 @@ def purge_pycache() -> None:
 
 
 def verify_import() -> None:
-    import importlib
-    import sys
-
     module_name = "kelly"
     if module_name in sys.modules:
         del sys.modules[module_name]

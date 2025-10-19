@@ -1,15 +1,10 @@
 #!/usr/bin/env python3
 
+import inspect
 import math
-import os
-import sys
-from typing import Any, List
+from typing import Any
 
 import pytest
-
-
-
-import inspect
 
 from ev_calculator import compute_ev_roi, risk_of_ruin
 
@@ -144,7 +139,7 @@ def test_green_flag_true_when_thresholds_met() -> None:
     ],
 )
 def test_green_flag_failure_reasons(
-    tickets: List[dict[str, Any]], budget: float, expected_reasons: List[str]
+    tickets: list[dict[str, Any]], budget: float, expected_reasons: list[str]
 ) -> None:
     """Check that failing criteria produce the appropriate reasons."""
     res = compute_ev_roi(

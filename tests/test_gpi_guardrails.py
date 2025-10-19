@@ -12,14 +12,13 @@ The scenarios mirror the safeguards enforced by the live automation:
 
 from __future__ import annotations
 
-import pytest
-
 import json
 from pathlib import Path
 
+import pytest
+
 import p_finale_export
-from scripts import runner_chain
-from scripts import simulate_wrapper
+from scripts import runner_chain, simulate_wrapper
 
 
 @pytest.mark.skip(reason="La fonction validate_exotics_with_simwrapper a été supprimée.")

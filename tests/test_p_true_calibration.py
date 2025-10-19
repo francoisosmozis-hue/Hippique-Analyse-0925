@@ -12,7 +12,7 @@ from calibration.p_true_model import (
     load_p_true_model,
     predict_probability,
 )
-from calibration.p_true_training import train_logistic_model, serialize_model
+from calibration.p_true_training import serialize_model, train_logistic_model
 
 
 def test_train_and_predict_roundtrip(tmp_path, monkeypatch):

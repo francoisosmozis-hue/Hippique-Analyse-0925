@@ -6,8 +6,8 @@ from __future__ import annotations
 import argparse
 import json
 import os
+from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
-from typing import Iterable, Mapping, Sequence
 
 JsonMapping = Mapping[str, object]
 

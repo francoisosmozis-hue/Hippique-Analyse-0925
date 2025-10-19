@@ -1,14 +1,10 @@
 #!/usr/bin/env python3
 import math
-import os
-import sys
 from collections import OrderedDict
-from typing import Any, Dict
+from typing import Any
 
 import pytest
 import yaml
-
-
 
 import simulate_wrapper as sw
 
@@ -187,7 +183,7 @@ def test_correlation_penalty_reduces_probability_and_ev(
     def run_scenario(
         penalty: float, rho: float | None = None
     ) -> tuple[float, float, list[dict]]:
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "correlations": {"meeting_course": {"penalty": penalty}}
         }
         if rho is not None:

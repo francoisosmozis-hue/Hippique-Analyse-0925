@@ -7,7 +7,6 @@ import re
 import subprocess
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional
 
 try:  # pragma: no cover - imported lazily in tests
     from google.cloud import storage  # type: ignore
@@ -49,7 +48,7 @@ def _normalise_phase(phase: str) -> str:
     return value
 
 
-def _script_path(name: str) -> Optional[Path]:
+def _script_path(name: str) -> Path | None:
     candidate = REPO_ROOT / name
     if candidate.exists():
         return candidate
@@ -62,7 +61,7 @@ def _build_command(
     phase: str,
     *,
     run_dir: Path,
-) -> List[str]:
+) -> list[str]:
     base = [sys.executable, str(script)]
     phase_flag = phase.replace("H", "h")
     if script.name == "analyse_courses_du_jour_enrichie.py":
@@ -88,7 +87,7 @@ def _build_command(
     return base
 
 
-def _extract_identifiers(course_url: str) -> Dict[str, str]:
+def _extract_identifiers(course_url: str) -> dict[str, str]:
     match = COURSE_DETAILS_RE.search(course_url)
     if not match:
         raise ValueError(f"Unable to parse race identifiers from URL: {course_url}")
@@ -99,8 +98,8 @@ def _extract_identifiers(course_url: str) -> Dict[str, str]:
     }
 
 
-def _collect_artifacts() -> List[Path]:
-    found: List[Path] = []
+def _collect_artifacts() -> list[Path]:
+    found: list[Path] = []
     for directory in ARTIFACT_DIRECTORIES:
         if not directory.exists():
             continue
@@ -109,12 +108,12 @@ def _collect_artifacts() -> List[Path]:
     return found
 
 
-def _upload_artifacts(paths: List[Path], *, prefix: str, bucket_name: str) -> List[str]:
+def _upload_artifacts(paths: list[Path], *, prefix: str, bucket_name: str) -> list[str]:
     if storage is None:  # pragma: no cover - optional during tests
         raise RuntimeError("google-cloud-storage is not available")
     client = storage.Client()
     bucket = client.bucket(bucket_name)
-    uploaded: List[str] = []
+    uploaded: list[str] = []
     for path in paths:
         if not path.is_file():
             continue
@@ -128,8 +127,8 @@ def _upload_artifacts(paths: List[Path], *, prefix: str, bucket_name: str) -> Li
 def run_course(
     course_url: str,
     phase: str,
-    extra_env: Optional[Dict[str, str]] = None,
-) -> Dict[str, object]:
+    extra_env: dict[str, str] | None = None,
+) -> dict[str, object]:
     """Execute the legacy analysis chain for a single course."""
 
     settings = get_settings()
@@ -137,7 +136,7 @@ def run_course(
     identifiers = _extract_identifiers(course_url)
     run_dir = settings.resolved_data_dir / f"{identifiers['date']}_r{identifiers['r']}c{identifiers['c']}"
     run_dir.mkdir(parents=True, exist_ok=True)
-    
+
     env = os.environ.copy()
     env.setdefault("COURSE_URL", course_url)
     env.setdefault("PHASE", phase)
@@ -147,8 +146,8 @@ def run_course(
     env.setdefault("TZ", settings.timezone)
     if extra_env:
         env.update(extra_env)
-        
-    logs: List[str] = []
+
+    logs: list[str] = []
     LOGGER.info(
         "run_started",
         extra={
@@ -157,7 +156,7 @@ def run_course(
             "correlation": f"r{identifiers['r']}c{identifiers['c']}",
         },
     )
-    
+
     for script_name in SCRIPTS:
         script = _script_path(script_name)
         if not script:
@@ -174,7 +173,7 @@ def run_course(
                 timeout=DEFAULT_TIMEOUT,
                 check=False,
             )
-        except subprocess.TimeoutExpired as exc:
+        except subprocess.TimeoutExpired:
             LOGGER.error(
                 "script_timeout",
                 extra={"script": script_name, "timeout": DEFAULT_TIMEOUT},
@@ -214,7 +213,7 @@ def run_course(
                 log_exception(LOGGER, "post_script_failed", extra={"script": script_name, "error": str(exc)})
 
     artifact_paths = [str(path) for path in artifacts]
-    uploaded_refs: List[str] = []
+    uploaded_refs: list[str] = []
     if settings.gcs_bucket:
         prefix = settings.gcs_prefix.strip("/") if settings.gcs_prefix else ""
         slug = f"runs/{identifiers['date']}/r{identifiers['r']}c{identifiers['c']}/{phase.lower()}"
@@ -232,7 +231,7 @@ def run_course(
             "artifacts": len(artifact_paths),
         },
     )
-    
+
     return {
         "ok": True,
         "rc": 0,

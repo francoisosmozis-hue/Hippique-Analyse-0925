@@ -14,7 +14,7 @@ def _read_planning_rows(excel_path: Path):
     for values in ws.iter_rows(min_row=2, values_only=True):
         if not any(values):
             continue
-        rows.append(dict(zip(headers, values)))
+        rows.append(dict(zip(headers, values, strict=False)))
     return rows
 
 

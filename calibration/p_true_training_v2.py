@@ -19,19 +19,19 @@ python calibration/p_true_training_v2.py \
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 from dataclasses import dataclass
 from pathlib import Path
-import datetime as dt
+
 import joblib
 import lightgbm as lgb
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import StratifiedKFold
-from sklearn.metrics import brier_score_loss, log_loss
 
 # Import de la fonction d'assemblage de données du script original
 from calibration.p_true_training import assemble_history_dataset
-
+from sklearn.metrics import brier_score_loss, log_loss
 
 # --- Définition du conteneur de résultat ---
 
@@ -76,7 +76,7 @@ def train_lgbm_cv_model(
     y = df["is_winner"].astype(int).to_numpy()
 
     skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=random_state)
-    
+
     models = []
     oof_preds = np.zeros(len(df), dtype=float)
 
@@ -104,7 +104,7 @@ def train_lgbm_cv_model(
             eval_metric='logloss',
             callbacks=[lgb.early_stopping(100, verbose=False)],
         )
-        
+
         preds = model.predict_proba(X_val)[:, 1]
         oof_preds[val_idx] = preds
         models.append(model)
@@ -112,7 +112,7 @@ def train_lgbm_cv_model(
     # Calcul des métriques sur l'ensemble des prédictions "out-of-fold"
     brier = float(brier_score_loss(y, oof_preds))
     loss = float(log_loss(y, oof_preds, labels=[0, 1]))
-    
+
     print("Entraînement terminé.")
     print(f"Score Brier (OOF): {brier:.4f}")
     print(f"Log Loss (OOF): {loss:.4f}")
@@ -187,7 +187,7 @@ def main():
         "implied_prob",
         "n_runners",
     ]
-    
+
     try:
         result = train_lgbm_cv_model(dataset, features=features)
     except ValueError as e:
@@ -196,7 +196,7 @@ def main():
 
     # 3. Sauvegarder le modèle
     serialize_lgbm_models(result, args.model_out)
-    
+
     print("\nNOTE: Assurez-vous que 'lightgbm' et 'joblib' sont dans votre requirements.txt")
 
 

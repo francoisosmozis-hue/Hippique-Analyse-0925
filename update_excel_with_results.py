@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections.abc import Iterable, Mapping
 from pathlib import Path
-from typing import Any, Iterable, Mapping
+from typing import Any
 
 from openpyxl import Workbook, load_workbook
 from openpyxl.worksheet.worksheet import Worksheet
@@ -70,7 +71,7 @@ SUIVI_HEADERS = [
 
 
 def _load_json(path: str | Path) -> JsonDict:
-    with open(path, "r", encoding="utf-8") as fh:
+    with open(path, encoding="utf-8") as fh:
         return json.load(fh)
 
 
@@ -406,7 +407,7 @@ def main(argv: list[str] | None = None) -> None:
     if row_idx:
         row_data = _collect_row(ws_suivi, SUIVI_HEADERS, row_idx)
         _print_row("Suivi:", row_data)
-        
+
     excel_path.parent.mkdir(parents=True, exist_ok=True)
     wb.save(excel_path)
 

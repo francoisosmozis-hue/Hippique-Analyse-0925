@@ -8,7 +8,6 @@ import json
 import re
 import unicodedata
 from datetime import date
-from typing import Dict, List
 
 import requests
 from bs4 import BeautifulSoup
@@ -24,13 +23,13 @@ def _slugify(value: str) -> str:
     return value.strip("-")
 
 
-def _fetch_reunions() -> List[Dict[str, str]]:
+def _fetch_reunions() -> list[dict[str, str]]:
     """Download Geny page and extract reunion data."""
     resp = requests.get(GENY_URL, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
     resp.raise_for_status()
     soup = BeautifulSoup(resp.text, "html.parser")
 
-    reunions: List[Dict[str, str]] = []
+    reunions: list[dict[str, str]] = []
     for section in soup.select("section.reunion"):
         title_el = section.select_one("h2")
         if not title_el:

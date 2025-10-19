@@ -18,8 +18,9 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 """Project root used as the working directory for subprocess calls."""

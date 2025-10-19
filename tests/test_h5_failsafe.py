@@ -6,8 +6,6 @@ from pathlib import Path
 
 import pytest
 
-
-
 stub_fetch = types.ModuleType("scripts.online_fetch_zeturf")
 stub_fetch.normalize_snapshot = lambda payload: payload
 sys.modules.setdefault("scripts.online_fetch_zeturf", stub_fetch)
@@ -176,6 +174,6 @@ def test_mark_course_unplayable_writes_marker(
     assert info["marker_path"].endswith("UNPLAYABLE.txt")
     assert info["marker_written"] is True
     assert "chronos.csv" in info["marker_message"]
-    
+
     captured = capsys.readouterr()
     assert "Course non jouable" in captured.err

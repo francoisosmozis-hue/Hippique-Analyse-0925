@@ -6,8 +6,7 @@ import json
 import logging
 import sys
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
-
+from typing import Any
 
 _RESERVED_FIELDS = {
     "msg",
@@ -32,7 +31,7 @@ class JsonFormatter(logging.Formatter):
     """Format log records as structured JSON."""
 
     def format(self, record: logging.LogRecord) -> str:  # noqa: D401 - short description
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "severity": record.levelname,
             "message": record.getMessage(),
             "time": datetime.fromtimestamp(record.created, tz=timezone.utc).isoformat(),
@@ -68,7 +67,7 @@ def get_logger(name: str) -> logging.Logger:
 
 
 def log_exception(
-    logger: logging.Logger, message: str, *, extra: Optional[Dict[str, Any]] = None
+    logger: logging.Logger, message: str, *, extra: dict[str, Any] | None = None
 ) -> None:
     """Log an exception with structured context."""
 

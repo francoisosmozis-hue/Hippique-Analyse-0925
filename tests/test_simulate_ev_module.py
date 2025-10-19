@@ -1,10 +1,6 @@
 import math
-import os
-import sys
 
 import pytest
-
-
 
 from kelly import kelly_fraction
 from simulate_ev import (

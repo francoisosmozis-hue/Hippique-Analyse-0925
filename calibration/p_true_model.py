@@ -1,16 +1,17 @@
 from __future__ import annotations
 
 import math
-from pathlib import Path
-from typing import Any, Dict, Mapping, Optional, Sequence
 import threading
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
 
 import yaml
 
 _MODEL_LOCK = threading.Lock()
 _EPSILON = 1e-6
-_MODEL_CACHE: Optional[tuple[Path, float, PTrueModel]] = None
+_MODEL_CACHE: tuple[Path, float, PTrueModel] | None = None
 MODEL_PATH = Path(__file__).parent / "p_true_model.yaml"
 
 @dataclass(frozen=True)
@@ -33,7 +34,7 @@ class PTrueModel:
         """Return a shallow copy of the calibration metadata."""
 
         return get_model_metadata(self)
-        
+
 def _sigmoid(value: float) -> float:
     if value >= 0:
         z = math.exp(-value)

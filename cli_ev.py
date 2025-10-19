@@ -5,7 +5,7 @@ import argparse
 import inspect
 import json
 from pathlib import Path
-from typing import Any, List
+from typing import Any
 
 import yaml
 
@@ -17,7 +17,7 @@ DEFAULT_ROI_THRESHOLD = SIG.parameters["roi_threshold"].default
 DEFAULT_KELLY_CAP = SIG.parameters["kelly_cap"].default
 
 
-def load_tickets(path: Path) -> List[dict[str, Any]]:
+def load_tickets(path: Path) -> list[dict[str, Any]]:
     """Load ticket definitions from a JSON or YAML file."""
 
     with path.open() as handle:

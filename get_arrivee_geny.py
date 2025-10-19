@@ -25,10 +25,11 @@ import argparse
 import json
 import os
 import re
+from collections.abc import Iterable, MutableMapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Iterable, List, MutableMapping, Sequence
+from typing import Any
 from urllib.parse import urljoin
 
 import requests
@@ -256,7 +257,7 @@ def _iter_planning_entries(
     yield entry
 
 
-def load_planning(path: Path) -> List[PlanningEntry]:
+def load_planning(path: Path) -> list[PlanningEntry]:
     """Return normalized planning entries from ``path``."""
 
     data = json.loads(path.read_text(encoding="utf-8"))

@@ -5,8 +5,9 @@ from __future__ import annotations
 import argparse
 import json
 import os
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 from scripts import runner_chain
 from simulate_wrapper import PAYOUT_CALIBRATION_PATH

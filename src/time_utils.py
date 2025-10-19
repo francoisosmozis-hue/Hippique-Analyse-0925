@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from datetime import date, datetime, time, timedelta
-from typing import Iterable
 from zoneinfo import ZoneInfo
 
 

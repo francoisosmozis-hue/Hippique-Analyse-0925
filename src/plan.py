@@ -5,8 +5,8 @@ from __future__ import annotations
 import random
 import re
 import time
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import Dict, Iterable, List, Optional
 from urllib.parse import urljoin, urlparse
 
 import requests
@@ -20,7 +20,7 @@ ZETURF_BASE_URL = "https://www.zeturf.fr"
 GENY_BASE_URL = "https://www.geny.com"
 USER_AGENT = "Hippique-Analyse/1.0 (contact: ops@hippique.local)"
 _REQUEST_INTERVAL_SECONDS = 1.1  # throttle 1 req/s per host
-_LAST_REQUEST_BY_HOST: Dict[str, float] = {}
+_LAST_REQUEST_BY_HOST: dict[str, float] = {}
 
 COURSE_RE = re.compile(
     r"/fr/course/(?P<date>\d{4}-\d{2}-\d{2})/R(?P<r>\d+)C(?P<c>\d+)-",
@@ -38,9 +38,9 @@ class CoursePlan:
     r_label: str
     c_label: str
     meeting: str
-    time_local: Optional[str]
+    time_local: str | None
     course_url: str
-    reunion_url: Optional[str] = None
+    reunion_url: str | None = None
 
     def __post_init__(self) -> None:
         self.sort_index = self._compute_sort_index()
@@ -58,7 +58,7 @@ class CoursePlan:
     def key(self) -> tuple[str, str, str]:
         return (self.date, self.r_label, self.c_label)
 
-    def to_dict(self) -> Dict[str, Optional[str]]:
+    def to_dict(self) -> dict[str, str | None]:
         return {
             "date": self.date,
             "r_label": self.r_label,
@@ -72,7 +72,7 @@ class CoursePlan:
 
 def _throttled_get(url: str, *, timeout: int = 15, attempts: int = 3) -> str:
     """HTTP GET with throttle, retries and jitter backoff."""
-    
+
     parsed = urlparse(url)
     host = parsed.netloc
     headers = {"User-Agent": USER_AGENT}
@@ -104,14 +104,14 @@ def _throttled_get(url: str, *, timeout: int = 15, attempts: int = 3) -> str:
     raise RuntimeError("Unreachable")
 
 
-def build_plan(date: str) -> List[Dict[str, Optional[str]]]:
+def build_plan(date: str) -> list[dict[str, str | None]]:
     """Build the plan for the provided date."""
 
     entries = zeturf.parse_program(date)
     if not entries:
         LOGGER.warning("no_entries_from_zeturf", extra={"date": date})
     filled = geny.fill_times(date, entries)
-    deduped: Dict[tuple[str, str, str], CoursePlan] = {}
+    deduped: dict[tuple[str, str, str], CoursePlan] = {}
     for entry in filled:
         if entry.key in deduped:
             LOGGER.debug("duplicate_entry", extra={"key": entry.key})
@@ -122,13 +122,13 @@ def build_plan(date: str) -> List[Dict[str, Optional[str]]]:
     return [item.to_dict() for item in plan]
 
 
-def zeturf_parse_program(date: str) -> List[CoursePlan]:
+def zeturf_parse_program(date: str) -> list[CoursePlan]:
     """Parse the ZEturf program for the given date."""
 
     url = f"{ZETURF_BASE_URL}/fr/programmes-et-pronostics?date={date}"
     html = _throttled_get(url)
     soup = BeautifulSoup(html, "lxml")
-    entries: List[CoursePlan] = []
+    entries: list[CoursePlan] = []
     for link in soup.select('a[href*="/fr/course/"]'):
         href = link.get("href")
         if not href:
@@ -172,7 +172,7 @@ def _extract_meeting_name(link) -> str:
     return ""
 
 
-def _extract_time_from_link(link) -> Optional[str]:
+def _extract_time_from_link(link) -> str | None:
     for attr in ("data-time", "data-course-time", "data-time-local"):
         value = link.get(attr)
         if value:
@@ -186,7 +186,7 @@ def _extract_time_from_link(link) -> Optional[str]:
     return None
 
 
-def _extract_reunion_url(link) -> Optional[str]:
+def _extract_reunion_url(link) -> str | None:
     parent_link = link.find_parent("a")
     if parent_link and parent_link.get("href"):
         return urljoin(ZETURF_BASE_URL, parent_link["href"])
@@ -203,7 +203,7 @@ def _normalise_time(value: str) -> str:
     return f"{int(hour):02d}:{int(minute):02d}"
 
 
-def geny_fill_times(date: str, plan: Iterable[CoursePlan]) -> List[CoursePlan]:
+def geny_fill_times(date: str, plan: Iterable[CoursePlan]) -> list[CoursePlan]:
     """Complete missing times using Geny as fallback."""
 
     entries = list(plan)
@@ -217,7 +217,7 @@ def geny_fill_times(date: str, plan: Iterable[CoursePlan]) -> List[CoursePlan]:
         LOGGER.warning("geny_fetch_failed", extra={"url": url, "error": str(exc)})
         return entries
     soup = BeautifulSoup(html, "lxml")
-    times_map: Dict[tuple[str, str], str] = {}
+    times_map: dict[tuple[str, str], str] = {}
     for element in soup.select("[data-race], a[href*='R'][href*='C']"):
         race_id = element.get("data-race") or element.get("data-race-id")
         if not race_id and element.has_attr("href"):
@@ -240,14 +240,14 @@ def geny_fill_times(date: str, plan: Iterable[CoursePlan]) -> List[CoursePlan]:
     return entries
 
 
-def _extract_race_from_href(href: str) -> Optional[str]:
+def _extract_race_from_href(href: str) -> str | None:
     match = COURSE_ID_RE.search(href)
     if match:
         return match.group(0)
     return None
 
 
-def _extract_time_from_element(element) -> Optional[str]:
+def _extract_time_from_element(element) -> str | None:
     for attr in ("data-time", "data-course-time", "data-time-local"):
         value = element.get(attr)
         if value:
@@ -261,13 +261,13 @@ def _extract_time_from_element(element) -> Optional[str]:
 
 class _ZeturfFacade:
     @staticmethod
-    def parse_program(date: str) -> List[CoursePlan]:
+    def parse_program(date: str) -> list[CoursePlan]:
         return zeturf_parse_program(date)
 
 
 class _GenyFacade:
     @staticmethod
-    def fill_times(date: str, plan: Iterable[CoursePlan]) -> List[CoursePlan]:
+    def fill_times(date: str, plan: Iterable[CoursePlan]) -> list[CoursePlan]:
         return geny_fill_times(date, plan)
 
 

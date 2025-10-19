@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 module_dutching_pmu.py — GPI v5.1
 ---------------------------------
@@ -26,7 +25,7 @@ Notes
 - Prévu pour des **cotes décimales** de type **placé**.
 - Si vous passez des cotes gagnant, fournissez des `probs` adaptées (p_win).
 """
-from typing import Callable, Optional, Sequence
+from collections.abc import Callable, Sequence
 
 import pandas as pd
 
@@ -40,12 +39,12 @@ def _safe_prob(p: float) -> float:
 def dutching_kelly_fractional(
     odds: Sequence[float],
     total_stake: float = 5.0,
-    probs: Optional[Sequence[float]] = None,
+    probs: Sequence[float] | None = None,
     prob_fallback: Callable[[float], float] = lambda o: 1 / max(1.01, float(o)),
     lambda_kelly: float = 0.5,
     cap_per_horse: float = 0.60,
     round_to: float = 0.10,
-    horse_labels: Optional[Sequence[str]] = None,
+    horse_labels: Sequence[str] | None = None,
 ) -> pd.DataFrame:
     """
     Calcule une allocation Kelly fractionnée et capée.
@@ -78,7 +77,7 @@ def dutching_kelly_fractional(
 
     # Fraction Kelly directe par cheval (déjà capée)
     f_k = []
-    for p, o in zip(probs, odds):
+    for p, o in zip(probs, odds, strict=False):
         p = _safe_prob(float(p))
         o = float(o)
         f_k.append(
@@ -116,9 +115,9 @@ def dutching_kelly_fractional(
     shares = [st / sum_alloc if sum_alloc else 0 for st in stakes]
 
     # Calculs gains/EV
-    gains = [st * o for st, o in zip(stakes, odds)]
+    gains = [st * o for st, o in zip(stakes, odds, strict=False)]
     evs = []
-    for st, o, p in zip(stakes, odds, probs):
+    for st, o, p in zip(stakes, odds, probs, strict=False):
         p = _safe_prob(float(p))
         gain_net = st * (o - 1.0)
         ev = p * gain_net - (1.0 - p) * st

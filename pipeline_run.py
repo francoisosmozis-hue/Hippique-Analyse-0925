@@ -2,8 +2,11 @@
 # -*- coding: utf-8 -*-
 """Minimal pipeline for computing EV and exporting artefacts."""
 
+import json
 import logging
 import statistics
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 LOG_LEVEL_ENV_VAR = "PIPELINE_LOG_LEVEL"
@@ -12,19 +15,33 @@ DEFAULT_OUTPUT_DIR = "out/hminus5"
 PLACE_FEE = 0.15
 
 
-def build_p_true(cfg, partants, odds_h5, odds_h30, stats_je):
+def build_p_true(
+    cfg: Dict[str, Any],
+    partants: List[Dict[str, Any]],
+    odds_h5: Dict[str, Any],
+    odds_h30: Dict[str, Any],
+    stats_je: Dict[str, Any],
+) -> Dict:
     return {}
 
 
-def compute_drift_dict(h30, h5, id2name, top_n=5, min_delta=0.8):
+def compute_drift_dict(
+    h30: Dict[str, float],
+    h5: Dict[str, float],
+    id2name: Dict[str, str],
+    top_n: int = 5,
+    min_delta: float = 0.8,
+) -> Dict[str, List]:
     return {"missing_h30": [], "missing_h5": [], "drift": []}
 
 
-def load_yaml(path):
+def load_yaml(path: str) -> Dict:
     return {}
 
 
-def _build_market(runners, slots_place_str=None):
+def _build_market(
+    runners: List[Dict[str, Any]], slots_place_str: Optional[str] = None
+) -> Dict[str, Any]:
     return {
         "slots_place": 3,
         "overround_place": 1.0,
@@ -37,25 +54,59 @@ def _build_market(runners, slots_place_str=None):
     }
 
 
-def _ensure_place_odds(runners, market):
+def _ensure_place_odds(runners: List[Dict[str, Any]], market: Dict[str, Any]) -> None:
     pass
 
 
-def enforce_ror_threshold(cfg, runners, combo_tickets, bankroll, **kwargs):
-    return [], {}, {"applied": False}
+def enforce_ror_threshold(
+    cfg: Dict,
+    runners: List,
+    combo_tickets: List,
+    bankroll: float,
+    *,
+    global_roi: float,
+    roi_min_threshold: float,
+    **kwargs: Any,
+) -> Tuple[List, Dict, Dict]:
+    """
+    Enforces the minimum global ROI threshold.
+    If the provided global_roi is below the threshold, it returns empty tickets,
+    indicating that no bets should be placed.
+    """
+    if global_roi >= roi_min_threshold:
+        # ROI is fine, return original tickets
+        return (
+            combo_tickets,
+            {},
+            {
+                "applied": False,
+                "status": "success",
+                "roi": global_roi,
+                "threshold": roi_min_threshold,
+            },
+        )
+    else:
+        # ROI is too low, reject all tickets.
+        return (
+            [],
+            {},
+            {
+                "applied": True,
+                "status": "rejected_roi",
+                "roi": global_roi,
+                "threshold": roi_min_threshold,
+            },
+        )
 
 
-def market_drift_signal(odds1, odds2, is_favorite):
+def market_drift_signal(odds1: float, odds2: float, is_favorite: bool) -> int:
     return 0
 
 
-def cmd_analyse(args):
+def cmd_analyse(args: Any) -> None:
     outdir = args.outdir
     print(f"[dummy cmd_analyse] outdir: {outdir}")
     if outdir:
-        import json
-        from pathlib import Path
-
         p_finale_path = Path(outdir) / "p_finale.json"
         data = {"meta": {"rc": "R1C1"}}
         print(f"[dummy cmd_analyse] writing to {p_finale_path} with data: {data}")

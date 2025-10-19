@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
-from typing import Optional
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -60,7 +59,7 @@ class Settings(BaseSettings):
         return directory / "plan.json"
 
     @property
-    def resolved_service_url(self) -> Optional[str]:
+    def resolved_service_url(self) -> str | None:
         return self.service_url or None
 
 

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """Utilities to export pipeline artefacts in a post-results friendly layout."""
 
 from __future__ import annotations
@@ -7,9 +6,10 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable, Iterator
+from typing import Any
 
 JsonDict = dict[str, Any]
 

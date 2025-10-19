@@ -13,8 +13,8 @@ import logging
 import math
 import sys
 from collections import defaultdict
-from collections.abc import Hashable, Mapping, Sequence
-from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
+from collections.abc import Callable, Hashable, Iterable, Mapping, Sequence
+from typing import Any
 
 try:  # pragma: no cover - SciPy is optional
     from scipy.optimize import minimize
@@ -60,14 +60,14 @@ def _kelly_fraction(p: float, odds: float) -> float:
     return kelly_fraction(p, odds, lam=1.0, cap=1.0)
 
 
-def _apply_dutching(tickets: Iterable[Dict[str, Any]]) -> None:
+def _apply_dutching(tickets: Iterable[dict[str, Any]]) -> None:
     """Normalise stakes inside each dutching group so that profit is identical.
 
     Tickets that share the same ``dutching`` key are adjusted so that each
     ticket's potential profit ``stake * (odds - 1)`` is constant while keeping
     the total stake of the group unchanged.
     """
-    groups: Dict[Any, List[Dict[str, Any]]] = defaultdict(list)
+    groups: dict[Any, list[dict[str, Any]]] = defaultdict(list)
     for t in tickets:
         group = t.get("dutching")
         if group is not None:
@@ -84,7 +84,7 @@ def _apply_dutching(tickets: Iterable[Dict[str, Any]]) -> None:
         total = sum(t.get("stake", 0) for t in valid_tickets)
         weights = [1 / (t["odds"] - 1) for t in valid_tickets]
         weight_sum = sum(weights)
-        for t, w in zip(valid_tickets, weights):
+        for t, w in zip(valid_tickets, weights, strict=False):
             t["stake"] = total * w / weight_sum
 
 
@@ -108,8 +108,8 @@ def _clone_leg(leg: Any) -> Any:
 
 def _prepare_legs_for_covariance(
     ticket: Mapping[str, Any],
-    legs_for_probability: Optional[Iterable[Any]],
-) -> Tuple[Any, ...]:
+    legs_for_probability: Iterable[Any] | None,
+) -> tuple[Any, ...]:
     """Return legs usable for covariance estimation for ``ticket``."""
 
     legs_iterable: Iterable[Any] | None = None
@@ -120,7 +120,7 @@ def _prepare_legs_for_covariance(
         if isinstance(payload, Iterable) and not isinstance(payload, (str, bytes)):
             legs_iterable = payload
 
-    legs: List[Any] = []
+    legs: list[Any] = []
     if legs_iterable is not None:
         for leg in legs_iterable:
             legs.append(_clone_leg(leg))
@@ -145,7 +145,7 @@ def _ticket_dependency_keys(
             exposures.add(f"id:{value}")
 
     for leg in legs:
-        identifier: Optional[str] = None
+        identifier: str | None = None
         if isinstance(leg, Mapping):
             for leg_key in ("id", "runner", "participant", "num", "name", "code"):
                 data = leg.get(leg_key) if isinstance(leg, Mapping) else None
@@ -160,8 +160,8 @@ def _ticket_dependency_keys(
 
 
 def _prepare_ticket_dependencies(
-    ticket: Mapping[str, Any], legs_for_probability: Optional[Iterable[Any]]
-) -> Dict[str, Any]:
+    ticket: Mapping[str, Any], legs_for_probability: Iterable[Any] | None
+) -> dict[str, Any]:
     legs = _prepare_legs_for_covariance(ticket, legs_for_probability)
     exposures = _ticket_dependency_keys(ticket, legs)
     return {"legs": legs, "exposures": exposures}
@@ -190,8 +190,8 @@ def _approx_joint_probability(p_i: float, p_j: float, rho: float) -> float:
     return max(independence, estimate)
 
 
-def _merge_legs(a: Sequence[Any], b: Sequence[Any]) -> List[Any]:
-    merged: List[Any] = []
+def _merge_legs(a: Sequence[Any], b: Sequence[Any]) -> list[Any]:
+    merged: list[Any] = []
     seen: set[Any] = set()
     for source in (a, b):
         for leg in source:
@@ -205,9 +205,9 @@ def _merge_legs(a: Sequence[Any], b: Sequence[Any]) -> List[Any]:
 
 def _simulate_joint_probability(
     legs: Sequence[Any],
-    simulate_fn: Optional[Callable[[Iterable[Any]], float]],
-    cache: Optional[Dict[Tuple[Any, ...], float]],
-) -> Optional[float]:
+    simulate_fn: Callable[[Iterable[Any]], float] | None,
+    cache: dict[tuple[Any, ...], float] | None,
+) -> float | None:
     if not simulate_fn or not legs:
         return None
 
@@ -226,14 +226,14 @@ def _simulate_joint_probability(
 
 
 def _estimate_joint_probability(
-    info_i: Dict[str, Any],
-    info_j: Dict[str, Any],
-    simulate_fn: Optional[Callable[[Iterable[Any]], float]],
-    cache: Optional[Dict[Tuple[Any, ...], float]],
+    info_i: dict[str, Any],
+    info_j: dict[str, Any],
+    simulate_fn: Callable[[Iterable[Any]], float] | None,
+    cache: dict[tuple[Any, ...], float] | None,
 ) -> float:
     shared: frozenset[str] = info_i["exposures"] & info_j["exposures"]
     rho = _rho_for_shared_exposures(shared)
-    joint: Optional[float] = None
+    joint: float | None = None
 
     legs_i: Sequence[Any] = info_i.get("legs_for_sim", ())
     legs_j: Sequence[Any] = info_j.get("legs_for_sim", ())
@@ -259,7 +259,7 @@ def _estimate_joint_probability(
 
 
 def _covariance_from_joint(
-    info_i: Dict[str, Any], info_j: Dict[str, Any], joint: float
+    info_i: dict[str, Any], info_j: dict[str, Any], joint: float
 ) -> float:
     win_i = info_i["win_value"]
     loss_i = info_i["loss_value"]
@@ -293,22 +293,22 @@ def _covariance_from_joint(
 
 
 def compute_joint_moments(
-    ticket_infos: Sequence[Dict[str, Any]],
+    ticket_infos: Sequence[dict[str, Any]],
     *,
-    simulate_fn: Optional[Callable[[Iterable[Any]], float]] = None,
-    cache: Optional[Dict[Tuple[Any, ...], float]] = None,
-) -> Tuple[float, List[Dict[str, Any]]]:
+    simulate_fn: Callable[[Iterable[Any]], float] | None = None,
+    cache: dict[tuple[Any, ...], float] | None = None,
+) -> tuple[float, list[dict[str, Any]]]:
     """Return covariance adjustment and detailed pairs for correlated tickets."""
 
     if len(ticket_infos) < 2:
         return 0.0, []
 
-    exposure_map: Dict[str, List[int]] = defaultdict(list)
+    exposure_map: dict[str, list[int]] = defaultdict(list)
     for idx, info in enumerate(ticket_infos):
         for key in info.get("exposures", frozenset()):
             exposure_map[key].append(idx)
 
-    candidate_pairs: set[Tuple[int, int]] = set()
+    candidate_pairs: set[tuple[int, int]] = set()
     for indices in exposure_map.values():
         if len(indices) < 2:
             continue
@@ -319,7 +319,7 @@ def compute_joint_moments(
         return 0.0, []
 
     adjustment = 0.0
-    details: List[Dict[str, Any]] = []
+    details: list[dict[str, Any]] = []
     for i, j in sorted(candidate_pairs):
         info_i = ticket_infos[i]
         info_j = ticket_infos[j]
@@ -344,10 +344,10 @@ def compute_joint_moments(
 
 
 def optimize_stake_allocation(
-    tickets: List[Dict[str, Any]],
+    tickets: list[dict[str, Any]],
     budget: float,
     kelly_cap: float,
-) -> List[float]:
+) -> list[float]:
     """Optimise stakes to maximise the sum of expected log-returns.
 
     Each ticket's stake is bounded above by ``kelly_cap`` times its Kelly
@@ -370,9 +370,9 @@ def optimize_stake_allocation(
         Optimised stakes for each ticket.
     """
 
-    p_odds: List[Tuple[float, float]] = []
-    bounds: List[Tuple[float, float]] = []
-    x0: List[float] = []
+    p_odds: list[tuple[float, float]] = []
+    bounds: list[tuple[float, float]] = []
+    x0: list[float] = []
     for t in tickets:
         p = t["p"]
         odds = t["odds"]
@@ -384,7 +384,7 @@ def optimize_stake_allocation(
 
     def objective(fractions: Iterable[float]) -> float:
         total = 0.0
-        for f, (p, odds) in zip(fractions, p_odds):
+        for f, (p, odds) in zip(fractions, p_odds, strict=False):
             total += p * math.log1p(f * (odds - 1)) + (1 - p) * math.log1p(-f)
         return -total
 
@@ -400,7 +400,7 @@ def optimize_stake_allocation(
         best_val = float("inf")
         best_fracs = x0[:]
 
-        def search(i: int, remaining: float, current: List[float]) -> None:
+        def search(i: int, remaining: float, current: list[float]) -> None:
             nonlocal best_val, best_fracs
             if i == len(p_odds):
                 if remaining < -1e-9:
@@ -429,7 +429,7 @@ def risk_of_ruin(
     total_variance: float,
     bankroll: float,
     *,
-    baseline_variance: Optional[float] = None,
+    baseline_variance: float | None = None,
 ) -> float:
     """Return the gambler's ruin approximation for a given EV and variance."""
 
@@ -456,19 +456,19 @@ def risk_of_ruin(
 
 
 def compute_ev_roi(
-    tickets: List[Dict[str, Any]],
+    tickets: list[dict[str, Any]],
     budget: float,
-    simulate_fn: Optional[Callable[[Iterable[Any]], float]] = None,
+    simulate_fn: Callable[[Iterable[Any]], float] | None = None,
     *,
     cache_simulations: bool = True,
     ev_threshold: float = 0.35,
     roi_threshold: float = 0.25,
-    ror_threshold: Optional[float] = None,
+    ror_threshold: float | None = None,
     kelly_cap: float = 0.60,
     round_to: float = 0.10,
     optimize: bool = False,
-    variance_cap: Optional[float] = None,
-) -> Dict[str, Any]:
+    variance_cap: float | None = None,
+) -> dict[str, Any]:
     """Compute EV and ROI for a list of betting tickets.
 
     Parameters
@@ -530,7 +530,7 @@ def compute_ev_roi(
     if simulate_fn is None:
         simulate_fn = simulate_wrapper
 
-    cache: Dict[Tuple[Any, ...], float] = {}
+    cache: dict[tuple[Any, ...], float] = {}
     total_ev = 0.0
     total_variance = 0.0
     total_stake = 0.0
@@ -539,9 +539,9 @@ def compute_ev_roi(
     has_combined = False
     total_clv = 0.0
     clv_count = 0
-    ticket_metrics: List[Dict[str, float]] = []
+    ticket_metrics: list[dict[str, float]] = []
 
-    processed: List[Dict[str, Any]] = []
+    processed: list[dict[str, Any]] = []
     for t in tickets:
         p = t.get("p")
         legs_for_probability = t.get("legs_details") or t.get("legs")
@@ -553,7 +553,7 @@ def compute_ev_roi(
                         "simulate_fn must be provided when tickets include 'legs'"
                     )
                 if cache_simulations:
-                    key: Tuple[Any, ...] = tuple(
+                    key: tuple[Any, ...] = tuple(
                         _make_hashable(leg) for leg in legs_for_sim
                     )
                     p = cache.get(key)
@@ -642,7 +642,7 @@ def compute_ev_roi(
                         break
             total_stake = budget - remaining
 
-    covariance_inputs: List[Dict[str, Any]] = []
+    covariance_inputs: list[dict[str, Any]] = []
 
     for d in processed:
         t = d["ticket"]
@@ -690,7 +690,7 @@ def compute_ev_roi(
 
     total_variance_naive = total_variance
     covariance_adjustment = 0.0
-    covariance_details: List[Dict[str, Any]] = []
+    covariance_details: list[dict[str, Any]] = []
     joint_cache = cache if cache_simulations else None
     if covariance_inputs:
         covariance_adjustment, covariance_details = compute_joint_moments(
@@ -703,7 +703,7 @@ def compute_ev_roi(
     total_stake_normalized = total_stake
     if total_stake > budget:
         scale = budget / total_stake
-        for t, metrics in zip(tickets, ticket_metrics):
+        for t, metrics in zip(tickets, ticket_metrics, strict=False):
             t["stake"] *= scale
             t["ev"] *= scale
             t["variance"] *= scale**2
@@ -729,7 +729,7 @@ def compute_ev_roi(
     if var_limit is not None and total_variance > var_limit:
         variance_exceeded = True
         scale = math.sqrt(var_limit / total_variance)
-        for t, metrics in zip(tickets, ticket_metrics):
+        for t, metrics in zip(tickets, ticket_metrics, strict=False):
             t["stake"] *= scale
             t["ev"] *= scale
             t["variance"] *= scale**2
@@ -778,10 +778,10 @@ def compute_ev_roi(
         opt_variance = 0.0
         opt_stake_sum = 0.0
         opt_combined_payout = 0.0
-        optimized_metrics: List[Dict[str, float]] = []
+        optimized_metrics: list[dict[str, float]] = []
         opt_expected_payout = 0.0
-        opt_covariance_inputs: List[Dict[str, Any]] = []
-        for idx, (t, stake_opt) in enumerate(zip(tickets, optimized_stakes)):
+        opt_covariance_inputs: list[dict[str, Any]] = []
+        for idx, (t, stake_opt) in enumerate(zip(tickets, optimized_stakes, strict=False)):
             p = t["p"]
             odds = t["odds"]
             ev = stake_opt * (p * (odds - 1) - (1 - p))
@@ -829,7 +829,7 @@ def compute_ev_roi(
 
         opt_variance_naive = opt_variance
         opt_covariance_adjustment = 0.0
-        opt_covariance_details: List[Dict[str, Any]] = []
+        opt_covariance_details: list[dict[str, Any]] = []
         if opt_covariance_inputs:
             opt_covariance_adjustment, opt_covariance_details = compute_joint_moments(
                 opt_covariance_inputs,
@@ -843,7 +843,7 @@ def compute_ev_roi(
             variance_exceeded_opt = True
             scale = math.sqrt(var_limit / opt_variance)
             for t, metrics, stake_opt in zip(
-                tickets, optimized_metrics, optimized_stakes
+                tickets, optimized_metrics, optimized_stakes, strict=False
             ):
                 metrics["stake"] *= scale
                 metrics["ev"] *= scale
@@ -897,7 +897,7 @@ def compute_ev_roi(
             optimized_stakes = [
                 metrics.get("stake", 0.0) for metrics in baseline_metrics
             ]
-            for ticket, metrics in zip(tickets, baseline_metrics):
+            for ticket, metrics in zip(tickets, baseline_metrics, strict=False):
                 ticket["optimized_stake"] = metrics.get("stake")
                 ticket["optimized_expected_payout"] = metrics.get("expected_payout")
                 ticket["optimized_sharpe"] = metrics.get("sharpe")

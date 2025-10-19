@@ -1,11 +1,18 @@
 import argparse
 import json
+from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import Any, Callable, Mapping
+from typing import Any
 
 import pytest
-
-from scripts import analysis_utils
+from test_pipeline_smoke import (
+    DEFAULT_CALIBRATION,
+    GPI_YML,
+    odds_h5,
+    odds_h30,
+    partants_sample,
+    stats_sample,
+)
 
 import logging_io
 import pipeline_run
@@ -13,14 +20,7 @@ import simulate_ev
 import simulate_wrapper
 import tickets_builder
 import validator_ev
-from test_pipeline_smoke import (
-    GPI_YML,
-    DEFAULT_CALIBRATION,
-    odds_h30,
-    odds_h5,
-    partants_sample,
-    stats_sample,
-)
+from scripts import analysis_utils
 
 
 def _write_inputs(
@@ -36,7 +36,7 @@ def _write_inputs(
     h30_path.write_text(json.dumps(odds_h30()), encoding="utf-8")
     h5_path.write_text(json.dumps(odds_h5()), encoding="utf-8")
     stats_path.write_text(json.dumps(stats_sample()), encoding="utf-8")
-    
+
     partants_payload = partants_sample()
     if partants_override:
         partants_payload.update(partants_override)
@@ -110,12 +110,12 @@ def _prepare_stubs(
     if compute_cap_stub is None:
         def compute_cap_stub(*_args: object, **_kwargs: object) -> float:
             return overround_cap
-        
+
             monkeypatch.setattr(
                 analysis_utils,
                 "compute_overround_cap",
                 compute_cap_stub,
-            )    
+            )
     if market_overround is not None:
         monkeypatch.setattr(
             pipeline_run,
@@ -126,7 +126,7 @@ def _prepare_stubs(
                 "win_coverage_sufficient": True,
             },
         )
-        
+
     def fake_enforce(cfg_local, runners_local, combos_local, bankroll, **_kwargs):
         stats = {
             "ev": 12.0,
@@ -147,7 +147,7 @@ def _prepare_stubs(
 
     monkeypatch.setattr(pipeline_run, "build_p_true", lambda *a, **k: {})
     monkeypatch.setattr(pipeline_run, "compute_drift_dict", lambda *a, **k: {})
-    
+
     monkeypatch.setattr(logging_io, "append_csv_line", lambda *a, **k: None)
 
     captured_log: list[dict] = []
@@ -514,7 +514,7 @@ def test_exotics_rejects_when_place_overround_exceeds_cap(
     win_odds = [4.5, 5.0, 6.0, 8.0, 10.0, 12.0]
     horses = [
         {"id": str(idx), "odds": win, "odds_place": place}
-        for idx, (win, place) in enumerate(zip(win_odds, place_odds), start=1)
+        for idx, (win, place) in enumerate(zip(win_odds, place_odds, strict=False), start=1)
     ]
     runners_override = [
         {

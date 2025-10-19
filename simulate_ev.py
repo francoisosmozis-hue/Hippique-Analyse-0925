@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import math
-from typing import Any, Dict, List, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 from ev_calculator import compute_ev_roi
 from kelly import kelly_fraction
@@ -22,10 +23,10 @@ def implied_prob(odds: float) -> float:
     return 1.0 / value
 
 
-def normalize_overround(probs: Dict[str, float]) -> Dict[str, float]:
+def normalize_overround(probs: dict[str, float]) -> dict[str, float]:
     """Normalise a probability dictionary to remove the bookmaker overround."""
 
-    cleaned: Dict[str, float] = {}
+    cleaned: dict[str, float] = {}
     total = 0.0
     for key, value in probs.items():
         try:
@@ -41,7 +42,7 @@ def normalize_overround(probs: Dict[str, float]) -> Dict[str, float]:
     return {key: prob / total for key, prob in cleaned.items()}
 
 
-def implied_probs(odds_list: Sequence[float]) -> List[float]:
+def implied_probs(odds_list: Sequence[float]) -> list[float]:
     """Return normalised implied probabilities from decimal ``odds_list``."""
 
     raw = {str(index): implied_prob(odds) for index, odds in enumerate(odds_list)}
@@ -50,8 +51,8 @@ def implied_probs(odds_list: Sequence[float]) -> List[float]:
 
 
 def allocate_dutching_sp(
-    cfg: Dict[str, float], runners: List[Dict[str, Any]]
-) -> tuple[List[Dict[str, Any]], float]:
+    cfg: dict[str, float], runners: list[dict[str, Any]]
+) -> tuple[list[dict[str, Any]], float]:
     """Allocate SP dutching stakes according to a Kelly share with 60% cap.
 
     When each ``runner`` provides an estimated win probability ``p``, those
@@ -62,10 +63,10 @@ def allocate_dutching_sp(
     if not runners:
         return [], 0.0
 
-    odds: List[float] = []
-    direct_probs: Dict[str, float] = {}
-    fallback_probs: Dict[str, float] = {}
-    ordered_keys: List[str] = []
+    odds: list[float] = []
+    direct_probs: dict[str, float] = {}
+    fallback_probs: dict[str, float] = {}
+    ordered_keys: list[str] = []
 
     for index, runner in enumerate(runners):
         key = str(runner.get("id", index))
@@ -110,7 +111,7 @@ def allocate_dutching_sp(
             fallback_value = implied_prob(odds_value) if odds_value > 0 else 0.0
         fallback_probs[key] = fallback_value
 
-    combined_probs: Dict[str, float] = {}
+    combined_probs: dict[str, float] = {}
     if direct_probs and not fallback_probs:
         total_direct = sum(direct_probs.values())
         if total_direct > 1.0:
@@ -136,9 +137,9 @@ def allocate_dutching_sp(
     budget = float(cfg.get("BUDGET_TOTAL", 0.0)) * float(cfg.get("SP_RATIO", 1.0))
     cap = float(cfg.get("MAX_VOL_PAR_CHEVAL", 0.60))
 
-    valid: List[tuple[Dict[str, Any], float, float]] = []
+    valid: list[tuple[dict[str, Any], float, float]] = []
     total_kelly = 0.0
-    for runner, p, o in zip(runners, probs, odds):
+    for runner, p, o in zip(runners, probs, odds, strict=False):
         if not (0.0 < p < 1.0) or o <= 1.0:
             continue
         k = kelly_fraction(p, o, lam=1.0, cap=1.0)
@@ -153,18 +154,16 @@ def allocate_dutching_sp(
     min_stake = float(cfg.get("MIN_STAKE_SP", 0.1))
     rounding_enabled = step > 0
 
-    tickets: List[Dict[str, Any]] = []
+    tickets: list[dict[str, Any]] = []
     ev_sp = 0.0
     for runner, p, o in valid:
         frac = kelly_fraction(p, o, lam=kelly_coef / total_kelly, cap=1.0)
         raw_stake = budget * frac
         cap_value = budget * cap
-        if raw_stake > cap_value:
-            raw_stake = cap_value
+        raw_stake = min(raw_stake, cap_value)
         if rounding_enabled:
             stake = round(raw_stake / step) * step
-            if stake > cap_value:
-                stake = cap_value
+            stake = min(stake, cap_value)
         else:
             stake = raw_stake
         if stake <= 0 or stake < min_stake:
@@ -207,7 +206,7 @@ def allocate_dutching_sp(
 
 
 def gate_ev(
-    cfg: Dict[str, float],
+    cfg: dict[str, float],
     ev_sp: float,
     ev_global: float,
     roi_sp: float,
@@ -216,7 +215,7 @@ def gate_ev(
     risk_of_ruin: float = 0.0,
     ev_over_std: float = 0.0,
     homogeneous_field: bool = False,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Return activation flags and failure reasons for SP and combinés.
 
     When ``homogeneous_field`` is true the SP EV threshold falls back to
@@ -263,18 +262,18 @@ def gate_ev(
 
 
 def simulate_ev_batch(
-    tickets: List[Dict[str, Any]],
+    tickets: list[dict[str, Any]],
     bankroll: float,
     *,
     kelly_cap: float | None = None,
     optimize: bool = False,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Return EV/ROI statistics for ``tickets`` given a ``bankroll``.
 
     This is a thin wrapper around :func:`compute_ev_roi` that also hooks into
     :func:`simulate_wrapper` to estimate probabilities of combined bets.
     """
-    kwargs: Dict[str, Any] = {}
+    kwargs: dict[str, Any] = {}
     if kelly_cap is not None:
         kwargs["kelly_cap"] = kelly_cap
     if optimize:

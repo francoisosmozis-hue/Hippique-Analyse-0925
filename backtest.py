@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Script de backtesting pour évaluer la performance historique de la stratégie de paris.
 
@@ -21,7 +20,7 @@ import subprocess
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 # Ajout du répertoire du projet au path pour permettre les imports relatifs
 project_root = Path(__file__).resolve().parent
@@ -57,7 +56,7 @@ def parse_arguments() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def get_race_results(race_dir: Path) -> Dict[str, Any] | None:
+def get_race_results(race_dir: Path) -> dict[str, Any] | None:
     """Charge les résultats d'une course depuis arrivee.json."""
     results_path = race_dir / "arrivee.json"
     if not results_path.exists():
@@ -65,13 +64,13 @@ def get_race_results(race_dir: Path) -> Dict[str, Any] | None:
     try:
         with results_path.open("r", encoding="utf-8") as f:
             return json.load(f)
-    except (json.JSONDecodeError, IOError):
+    except (OSError, json.JSONDecodeError):
         return None
 
 
 def calculate_pnl(
-    tickets: List[Dict[str, Any]], results: Dict[str, Any]
-) -> Tuple[float, float]:
+    tickets: list[dict[str, Any]], results: dict[str, Any]
+) -> tuple[float, float]:
     """
     Calcule le Profit & Loss (P&L) pour une liste de tickets.
 
@@ -222,7 +221,7 @@ def main():
                 tickets = p_finale_data.get("tickets", [])
                 if not tickets:
                     continue
-            except (json.JSONDecodeError, IOError):
+            except (OSError, json.JSONDecodeError):
                 continue
 
             # Étape 3: Charger les résultats de la course

@@ -53,8 +53,7 @@ def kelly_fraction(p: float, odds: float, lam: float = 1.0, cap: float = 1.0) ->
 
     # Kelly fractionné + plafond
     f = f * lam
-    if f > cap:
-        f = cap
+    f = min(f, cap)
     # clamp final de sécurité
     if f < 0.0:
         f = 0.0

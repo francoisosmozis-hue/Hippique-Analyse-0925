@@ -62,7 +62,7 @@ def test_round_to_zero_keeps_continuous_ev():
     assert df["Stake (€)"].tolist() == expected_stakes_rounded
 
     expected_evs = []
-    for st, o, p in zip(expected_stakes, odds, probs):
+    for st, o, p in zip(expected_stakes, odds, probs, strict=False):
         gain_net = st * (o - 1.0)
         expected_evs.append(round(p * gain_net - (1.0 - p) * st, 2))
 

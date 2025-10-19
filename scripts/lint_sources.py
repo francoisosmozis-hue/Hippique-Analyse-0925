@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+from collections.abc import Iterable, Iterator, Sequence
 from pathlib import Path
-from typing import Iterable, Iterator, Sequence, Tuple
 from urllib.parse import urlparse
 
 try:  # Python 3.9+
@@ -14,7 +14,7 @@ except Exception:  # pragma: no cover - fallback for older interpreters
     ZoneInfo = None  # type: ignore
 
 PARIS_TZ = ZoneInfo("Europe/Paris") if ZoneInfo is not None else None
-DEFAULT_DOMAINS: Tuple[str, ...] = ("zeturf.fr", "www.zeturf.fr")
+DEFAULT_DOMAINS: tuple[str, ...] = ("zeturf.fr", "www.zeturf.fr")
 
 
 class Diagnostics:

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import re
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any
 
 from google.api_core import exceptions
 from google.cloud import scheduler_v1, tasks_v2
@@ -23,7 +23,7 @@ COURSE_DETAILS_RE = re.compile(
 )
 
 
-def _extract_identifiers(course_url: str) -> Dict[str, str]:
+def _extract_identifiers(course_url: str) -> dict[str, str]:
     match = COURSE_DETAILS_RE.search(course_url)
     if not match:
         raise ValueError(f"Unable to extract race identifiers from URL: {course_url}")
@@ -45,12 +45,12 @@ def enqueue_run_task(
     settings: Settings,
     *,
     run_url: str,
-    payload: Dict[str, Any],
+    payload: dict[str, Any],
     course_url: str,
     phase: str,
     when_local: datetime,
-    correlation_id: Optional[str] = None,
-) -> Dict[str, Any]:
+    correlation_id: str | None = None,
+) -> dict[str, Any]:
     """Enqueue a Cloud Task to trigger the /run endpoint."""
 
     identifiers = _extract_identifiers(course_url)
@@ -117,10 +117,10 @@ def create_one_shot_job(
     *,
     job_name: str,
     run_url: str,
-    payload: Dict[str, Any],
+    payload: dict[str, Any],
     when_local: datetime,
-    correlation_id: Optional[str] = None,
-) -> Dict[str, Any]:
+    correlation_id: str | None = None,
+) -> dict[str, Any]:
     """Create a Cloud Scheduler one-shot job as fallback."""
 
     when_local = ensure_timezone(when_local, settings.timezone)

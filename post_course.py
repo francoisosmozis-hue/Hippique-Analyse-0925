@@ -13,7 +13,7 @@ import argparse
 import json
 from datetime import date
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 from post_course_payload import (
     CSV_HEADER,
@@ -24,11 +24,11 @@ from post_course_payload import (
 )
 
 
-def _load_json(path: str | Path) -> Dict[str, Any]:
+def _load_json(path: str | Path) -> dict[str, Any]:
     return json.loads(Path(path).read_text(encoding="utf-8"))
 
 
-def _save_json(path: str | Path, obj: Dict[str, Any]) -> None:
+def _save_json(path: str | Path, obj: dict[str, Any]) -> None:
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps(obj, ensure_ascii=False, indent=2), encoding="utf-8")
