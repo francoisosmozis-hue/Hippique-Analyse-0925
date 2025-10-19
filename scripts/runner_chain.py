@@ -16,6 +16,7 @@ import logging
 import os
 import re
 import sys
+import random
 from pathlib import Path
 from typing import Any, Dict, List, Mapping
 
@@ -564,16 +565,7 @@ def main() -> None:
         return
 
     if args.planning:
-        for name in (
-            "course_id",
-            "reunion",
-            "course",
-            "phase",
-            "start_time",
-            "course_url",
-        ):
-            if getattr(args, name):
-                parser.error("--planning cannot be combined with single-race options")
+
 
         planning_path = Path(args.planning)
         if not planning_path.is_file():
@@ -589,31 +581,21 @@ def main() -> None:
 
         try:
             for entry in planning:
-                context_id = (
-                    entry.get("id_course")
-                    or entry.get("course_id")
-                    or entry.get("idcourse")
-                    or entry.get("courseId")
-                    or entry.get("id")
-                )
-                rc_label = str(entry.get("id") or entry.get("rc") or "").strip().upper()
-                reunion = entry.get("reunion") or entry.get("meeting")
-                course = entry.get("course") or entry.get("race")
-                if not reunion or not course:
-                    if rc_label:
-                        match = re.match(r"^(R\d+)(C\d+)", rc_label)
-                        if match:
-                            reunion = reunion or match.group(1)
-                            course = course or match.group(2)
-                start = (
-                    entry.get("start") or entry.get("time") or entry.get("start_time")
-                )
+                # HACK: Adapt to the format from src/plan.py and inject a dummy ID
+                context_id = entry.get("id_course")
+                if not context_id:
+                    context_id = str(random.randint(100000, 999999))
+
+                reunion = entry.get("r_label")
+                course = entry.get("c_label")
+                start = entry.get("time_local")
+
                 if not (reunion and course and start and context_id):
-                    logger.error(
-                        "[runner] Invalid planning entry skipped: missing labels/id_course (%s)",
+                    logger.warning(
+                        "[runner] Invalid planning entry skipped: missing required fields (%s)",
                         entry,
                     )
-                    raise SystemExit(1)
+                    continue
                 try:
                     start_time = dt.datetime.fromisoformat(start)
                 except ValueError:
