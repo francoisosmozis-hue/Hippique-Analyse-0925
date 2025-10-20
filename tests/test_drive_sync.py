@@ -55,6 +55,21 @@ def test_upload_file_missing_bucket(tmp_path, monkeypatch):
         drive_sync.upload_file(path, service=MagicMock())
 
 
+def test_upload_file_missing_credentials(tmp_path, monkeypatch):
+    path = tmp_path / "cred.txt"
+    path.write_text("cred", encoding="utf-8")
+    monkeypatch.setenv("GCS_BUCKET", "bucket")
+    monkeypatch.setattr(
+        drive_sync,
+        "_build_service",
+        MagicMock(side_effect=DefaultCredentialsError("missing")),
+    )
+
+    with pytest.raises(EnvironmentError) as excinfo:
+        drive_sync.upload_file(path)
+
+    assert "credentials" in str(excinfo.value).lower()
+
 def test_download_file_calls_blob(tmp_path, monkeypatch):
     dest = tmp_path / "out" / "file.txt"
     monkeypatch.setenv("GCS_BUCKET", "bucket")
