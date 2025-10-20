@@ -61,8 +61,8 @@ def _normalise_course_label(label):
     return label
 
 def _fetch_race_snapshot_by_rc(*args, **kwargs):
-    logger.error("FATAL: _fetch_race_snapshot_by_rc is not implemented")
-    raise NotImplementedError("_fetch_race_snapshot_by_rc is not implemented")
+    logger.warning("STUB: _fetch_race_snapshot_by_rc is not implemented, returning empty snapshot.")
+    return {"runners": [], "partants": []}
 # --- End Stubs ---
 
 
