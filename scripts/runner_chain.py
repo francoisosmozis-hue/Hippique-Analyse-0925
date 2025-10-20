@@ -233,7 +233,7 @@ def _write_snapshot(
     window: str,
     base: Path,
     *,
-    course_url: str | None = None,
+    url: str | None = None,
 ) -> None:
     """Write a snapshot file for ``race_id`` under ``base``.
 
@@ -257,7 +257,7 @@ def _write_snapshot(
             payload.reunion,
             payload.course,
             window,
-            course_url=course_url,
+            url=url,
         )
     except Exception as exc:
         reason = str(exc)
