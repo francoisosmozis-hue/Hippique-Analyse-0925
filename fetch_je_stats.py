@@ -262,5 +262,16 @@ def main():
     out_csv = collect_stats(args.h5, args.out, timeout=args.timeout, delay=args.delay, retries=args.retries, cache=bool(args.cache), cache_dir=args.cache_dir, ttl_seconds=args.ttl_seconds, neutral_on_fail=bool(args.neutral_on_fail))
     print(f"[OK] je_stats.csv écrit → {out_csv}")
 
+# À la fin de fetch_je_stats.py
+def enrich_from_snapshot(snapshot_path: str, reunion: str = "", course: str = "") -> str:
+    from pathlib import Path
+    h5 = Path(snapshot_path)
+    out = h5.parent / f"{h5.stem}_je.csv"
+    import subprocess, shlex
+    cmd = f'python fetch_je_stats.py --h5 "{h5}" --out "{out}" --cache --ttl-seconds 86400'
+    subprocess.run(shlex.split(cmd), check=True)
+    return str(out)
+
+
 if __name__ == "__main__":
     main()
