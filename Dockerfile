@@ -16,6 +16,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libxml2-dev \
     libxslt1-dev \
+    pkg-config \
+    libdbus-1-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Copie le fichier de dépendances et installe les packages dans le venv
