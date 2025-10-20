@@ -361,7 +361,10 @@ def upload_file(
 ) -> str:
     """Upload ``path`` to the configured bucket and return the object name."""
 
-    client = service or _build_service()
+    try:
+        client = service or _build_service()
+    except google_auth_exceptions.DefaultCredentialsError as exc:
+        raise EnvironmentError("Google Cloud credentials are not configured") from exc
     bucket_name = _require_bucket(bucket)
     prefix = folder_id or os.environ.get(PREFIX_ENV)
     blob_name = _remote_path(prefix, Path(path).name)
@@ -434,7 +437,10 @@ def download_file(
 ) -> Path:
     """Download ``object_name`` from the bucket into ``dest`` and return the path."""
 
-    client = service or _build_service()
+    try:
+        client = service or _build_service()
+    except google_auth_exceptions.DefaultCredentialsError as exc:
+        raise EnvironmentError("Google Cloud credentials are not configured") from exc
     bucket_name = _require_bucket(bucket)
     dest_path = Path(dest)
     dest_path.parent.mkdir(parents=True, exist_ok=True)
