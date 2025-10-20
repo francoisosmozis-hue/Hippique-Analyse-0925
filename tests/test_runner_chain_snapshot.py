@@ -101,9 +101,9 @@ def test_cli_single_race_uses_course_url(tmp_path, monkeypatch):
 
     # 2. Mock _trigger_phase to capture arguments
     captured_args = {}
-    def fake_trigger_phase(payload, course_url=None, **kwargs):
+    def fake_trigger_phase(payload, url=None, **kwargs):
         captured_args['payload'] = payload
-        captured_args['course_url'] = course_url
+        captured_args['url'] = url
 
     monkeypatch.setattr(rc, "_trigger_phase", fake_trigger_phase)
 
@@ -120,5 +120,5 @@ def test_cli_single_race_uses_course_url(tmp_path, monkeypatch):
     rc.main()
 
     # 5. Assertions
-    assert captured_args['course_url'] == "https://example.test/r1c2"
+    assert captured_args['url'] == "https://example.test/r1c2"
     assert captured_args['payload'].race_id == "R1C2"
