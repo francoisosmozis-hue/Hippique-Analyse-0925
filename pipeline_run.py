@@ -21,7 +21,7 @@ def build_p_true(
     odds_h5: Dict[str, Any],
     odds_h30: Dict[str, Any],
     stats_je: Dict[str, Any],
-) -> Dict:
+) -> Dict[str, Any]:
     return {}
 
 
@@ -31,11 +31,11 @@ def compute_drift_dict(
     id2name: Dict[str, str],
     top_n: int = 5,
     min_delta: float = 0.8,
-) -> Dict[str, List]:
+) -> Dict[str, List[Any]]:
     return {"missing_h30": [], "missing_h5": [], "drift": []}
 
 
-def load_yaml(path: str) -> Dict:
+def load_yaml(path: str) -> Dict[str, Any]:
     return {}
 
 
@@ -59,15 +59,15 @@ def _ensure_place_odds(runners: List[Dict[str, Any]], market: Dict[str, Any]) ->
 
 
 def enforce_ror_threshold(
-    cfg: Dict,
-    runners: List,
-    combo_tickets: List,
+    cfg: Dict[str, Any],
+    runners: List[Dict[str, Any]],
+    combo_tickets: List[Dict[str, Any]],
     bankroll: float,
     *,
     global_roi: float,
     roi_min_threshold: float,
     **kwargs: Any,
-) -> Tuple[List, Dict, Dict]:
+) -> Tuple[List[Dict[str, Any]], Dict[str, Any], Dict[str, Any]]:
     """
     Enforces the minimum global ROI threshold.
     If the provided global_roi is below the threshold, it returns empty tickets,
