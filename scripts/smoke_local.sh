@@ -6,25 +6,31 @@ python -m pip install -U pip wheel
 [ -f requirements.txt ] && pip install -r requirements.txt || true
 pip install pandas pyyaml beautifulsoup4 lxml openpyxl
 
-mkdir -p out/smoke
-if [ -f analyse_courses_du_jour_enrichie.py ]; then
-  python analyse_courses_du_jour_enrichie.py \
-    --phase H5 \
-    --h30 data/smoke/h30.json \
-    --h5  data/smoke/h5.json  \
-    --budget 5 \
-    --outdir out/smoke
-elif [ -f pipeline_run.py ]; then
-  python pipeline_run.py analyse \
-    --phase H5 \
-    --h30 data/smoke/h30.json \
-    --h5  data/smoke/h5.json  \
-    --budget 5 \
-    --outdir out/smoke
-else
-  echo "❌ Aucun entrypoint pipeline trouvé."
-  exit 1
-fi
+SMOKE_RACE_DIR="out/smoke/R1C1"
+mkdir -p "$SMOKE_RACE_DIR"
+
+# Create a dummy snapshot for runner_chain.py to use
+cat <<EOF > "$SMOKE_RACE_DIR/snapshot_H5.json"
+{
+  "payload": {
+    "course_id": "123456",
+    "reunion": "R1",
+    "course": "C1",
+    "start_time": "2024-01-01T12:00:00",
+    "runners": [
+      {"num": "1", "odds": 2.0},
+      {"num": "2", "odds": 3.0}
+    ]
+  }
+}
+EOF
+
+# Copy other needed files if they exist
+[ -f data/ci_sample/je_stats.csv ] && cp data/ci_sample/je_stats.csv "$SMOKE_RACE_DIR/je_stats.csv"
+[ -f data/ci_sample/chronos.csv ] && cp data/ci_sample/chronos.csv "$SMOKE_RACE_DIR/chronos.csv"
+
+# Run the new pipeline entrypoint
+python scripts/runner_chain.py "$SMOKE_RACE_DIR"
 
 echo "✅ Smoke local terminé. Contenu out/smoke :"
 ls -R out/smoke || true
