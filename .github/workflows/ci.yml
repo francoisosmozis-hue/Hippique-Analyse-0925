@@ -34,7 +34,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p reports
-          pytest -q --junitxml=reports/pytest.xml
+          PYTHONPATH=. pytest -q --junitxml=reports/pytest.xml
       - name: Test reporter (JUnit)
         if: always() && hashFiles('reports/pytest.xml') != ''
         continue-on-error: true
