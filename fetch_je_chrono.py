@@ -177,5 +177,14 @@ def _write_csv(path: Path, rows: Iterable[dict[str, str]], columns: Iterable[str
         for row in rows:
             writer.writerow([row.get(column, "") for column in header])
 
+def enrich_from_snapshot(snapshot_path: str, reunion: str = "", course: str = "") -> str:
+    from pathlib import Path, subprocess, shlex
+    h5 = Path(snapshot_path)
+    out = h5.parent / "chronos.csv"
+    cmd = f'python fetch_je_chrono.py --h5 "{h5}" --out "{out}"'
+    subprocess.run(shlex.split(cmd), check=True)
+    return str(out)
+
+
 
 __all__ = ["enrich_from_snapshot"]
