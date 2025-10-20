@@ -1,9 +1,16 @@
 import json
 import sys
+from unittest import mock
 
 import pytest
 
 from cloud import app as cloud_app
+
+
+@pytest.fixture(autouse=True)
+def mock_google_auth():
+    with mock.patch("google.auth.default", return_value=(None, None)) as m:
+        yield m
 
 
 class DummyRequest:
