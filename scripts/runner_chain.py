@@ -480,7 +480,7 @@ def _trigger_phase(
     mode: str,
     calibration: Path,
     calibration_available: bool,
-    course_url: str | None = None,
+    url: str | None = None,
 ) -> None:
     """Run snapshot and/or analysis tasks for ``phase``."""
 
@@ -488,10 +488,10 @@ def _trigger_phase(
     race_id = payload.race_id
     budget = float(payload.budget)
     if phase_norm == "H30":
-        _write_snapshot(payload, "H30", snap_dir, course_url=course_url)
+        _write_snapshot(payload, "H30", snap_dir, url=url)
         return
     if phase_norm == "H5":
-        _write_snapshot(payload, "H5", snap_dir, course_url=course_url)
+        _write_snapshot(payload, "H5", snap_dir, url=url)
         _write_analysis(
             race_id,
             analysis_dir,
@@ -628,7 +628,7 @@ def main() -> None:
             mode=args.mode,
             calibration=calibration_path,
             calibration_available=calibration_exists,
-            course_url=args.course_url,
+            url=args.course_url,
         )
         return
 
