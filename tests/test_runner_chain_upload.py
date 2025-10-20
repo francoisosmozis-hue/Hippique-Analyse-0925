@@ -36,11 +36,24 @@ def test_upload_file_called_for_analysis(tmp_path, monkeypatch):
         called.append(pathlib.Path(path))
 
     monkeypatch.setattr(rc, "upload_file", fake_upload)
-    monkeypatch.setattr(
-        rc, "simulate_ev_batch", lambda *a, **k: {"ev": 0.5, "roi": 0.3, "green": True}
-    )
-    monkeypatch.setattr(rc, "validate_ev", lambda *a, **k: None)
     monkeypatch.setattr(rc, "USE_GCS", True)
+
+    # Create dummy files required by _write_analysis
+    race_dir = tmp_path / "R1C1"
+    race_dir.mkdir()
+    (race_dir / "snapshot_H5.json").write_text('{"payload": {"runners": [{"num": "1", "odds": 2.0}]}}')
+    (race_dir / "je_stats.csv").touch()
+    (race_dir / "chronos.csv").touch()
+
+    # Mock dutching to return a passing portfolio
+    import pandas as pd
+    bets_df = pd.DataFrame({
+        "EV (€)": [1.0], "Stake (€)": [1.0], "Gain brut (€)": [11.0]
+    })
+    monkeypatch.setattr(rc, "dutching_kelly_fractional", lambda **kwargs: bets_df)
+    
+    # Mock config loading to ensure gates pass
+    monkeypatch.setattr(rc, "_load_gpi_config", lambda: {"ROI_MIN_SP": 0.1, "EV_MIN_SP": 0.1})
 
     rc._write_analysis(
         "R1C1",
@@ -49,6 +62,8 @@ def test_upload_file_called_for_analysis(tmp_path, monkeypatch):
         ev_min=0.4,
         roi_min=0.2,
         mode="test",
+        calibration=tmp_path / "cal.yaml",
+        calibration_available=False,
     )
 
     assert called == [tmp_path / "R1C1" / "analysis.json"]

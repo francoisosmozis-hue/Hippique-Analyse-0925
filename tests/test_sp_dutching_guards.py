@@ -28,6 +28,7 @@ def _write_gpi_config(tmp_path: Path, config: dict):
     return gpi_file
 
 def test_sp_guard_blocks_low_ev(tmp_path, monkeypatch):
+    monkeypatch.setattr(runner_chain, "USE_GCS", False)
     analysis_dir, race_dir = _setup_race_files(tmp_path)
     
     # Config with EV_MIN_SP = 30% of SP budget
@@ -56,6 +57,7 @@ def test_sp_guard_blocks_low_ev(tmp_path, monkeypatch):
     assert "EV_MIN_SP" in result["reasons"]
 
 def test_sp_guard_blocks_low_roi(tmp_path, monkeypatch):
+    monkeypatch.setattr(runner_chain, "USE_GCS", False)
     analysis_dir, race_dir = _setup_race_files(tmp_path)
     
     # Config with ROI_MIN_SP = 50%

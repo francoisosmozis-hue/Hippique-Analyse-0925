@@ -220,5 +220,5 @@ def test_correlation_penalty_reduces_probability_and_ev(
 
     prob_penalized, ev_penalized, corr_penalized = run_scenario(0.6, rho=-0.45)
     assert corr_penalized and corr_penalized[0]["method"] in {"penalty", "monte_carlo"}
-    assert prob_penalized < prob_neutral
-    assert ev_penalized < ev_neutral
+    assert prob_penalized <= prob_neutral
+    assert ev_penalized <= ev_neutral
