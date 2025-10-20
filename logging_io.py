@@ -52,6 +52,4 @@ def append_json(path: str, data: object) -> None:
     """Write JSON data to *path* creating parent directories."""
     file_path = Path(path)
     file_path.parent.mkdir(parents=True, exist_ok=True)
-    file_path.write_text(
-        json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    file_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")

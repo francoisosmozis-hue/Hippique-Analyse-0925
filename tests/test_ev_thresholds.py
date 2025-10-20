@@ -1,4 +1,3 @@
-
 import pytest
 
 from validator_ev import ValidationError, validate_ev, validate_policy

@@ -279,9 +279,7 @@ def load_planning(path: Path) -> list[PlanningEntry]:
             ):
                 if not getattr(existing, field_name) and getattr(entry, field_name):
                     setattr(existing, field_name, getattr(entry, field_name))
-            existing.meta.update(
-                {k: v for k, v in entry.meta.items() if k not in existing.meta}
-            )
+            existing.meta.update({k: v for k, v in entry.meta.items() if k not in existing.meta})
         else:
             deduped[entry.rc] = entry
     return list(deduped.values())
@@ -349,9 +347,7 @@ def _extract_arrival_from_tables(soup: BeautifulSoup) -> list[str]:
         headers = [th.get_text(" ", strip=True).lower() for th in table.find_all("th")]
         if not headers:
             continue
-        rank_idx = next(
-            (i for i, h in enumerate(headers) if "arriv" in h or "place" in h), None
-        )
+        rank_idx = next((i for i, h in enumerate(headers) if "arriv" in h or "place" in h), None)
         if rank_idx is None:
             continue
         num_idx = next(
@@ -540,9 +536,7 @@ def fetch_arrival(entry: PlanningEntry) -> dict[str, Any]:
         if resolved:
             try:
                 resp = _request(resolved)
-            except (
-                requests.RequestException
-            ) as exc:  # pragma: no cover - network failure
+            except requests.RequestException as exc:  # pragma: no cover - network failure
                 result["error"] = f"{exc.__class__.__name__}: {exc}"
             else:
                 numbers = parse_arrival(resp.text)
@@ -594,9 +588,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         description="Fetch arrivals from geny.com based on planning JSON"
     )
     parser.add_argument("--planning", required=True, help="Path to planning JSON file")
-    parser.add_argument(
-        "--out", required=True, help="Destination JSON file for arrivals"
-    )
+    parser.add_argument("--out", required=True, help="Destination JSON file for arrivals")
     args = parser.parse_args(argv)
 
     planning_path = Path(args.planning)

@@ -9,9 +9,7 @@ import yaml
 import simulate_wrapper as sw
 
 
-def test_calibration_details_expose_metadata(
-    monkeypatch: pytest.MonkeyPatch, tmp_path
-) -> None:
+def test_calibration_details_expose_metadata(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     """Cached calibrations should expose decay metadata within details."""
 
     cal = tmp_path / "probabilities.yaml"
@@ -77,9 +75,7 @@ def test_combination_order(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     assert math.isclose(p1, 0.25) and math.isclose(p2, 0.25)
 
 
-def test_cache_prevents_recomputation(
-    monkeypatch: pytest.MonkeyPatch, tmp_path
-) -> None:
+def test_cache_prevents_recomputation(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     """Repeated calls to a missing combination should use cached result."""
     cal = tmp_path / "probabilities.yaml"
     cal.write_text("")
@@ -124,9 +120,7 @@ def test_cache_eviction(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     assert list(sw._calibration_cache.keys()) == ["b", "c"]
 
 
-def test_fallback_uses_leg_probabilities(
-    monkeypatch: pytest.MonkeyPatch, tmp_path
-) -> None:
+def test_fallback_uses_leg_probabilities(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     """Probabilities provided on legs override calibration and odds."""
     cal = tmp_path / "probabilities.yaml"
     cal.write_text("")
@@ -180,12 +174,8 @@ def test_correlation_penalty_reduces_probability_and_ev(
         {"id": "L2", "p": 0.55, "meeting": "R1", "race": "C1", "rc": "R1C1"},
     ]
 
-    def run_scenario(
-        penalty: float, rho: float | None = None
-    ) -> tuple[float, float, list[dict]]:
-        payload: dict[str, Any] = {
-            "correlations": {"meeting_course": {"penalty": penalty}}
-        }
+    def run_scenario(penalty: float, rho: float | None = None) -> tuple[float, float, list[dict]]:
+        payload: dict[str, Any] = {"correlations": {"meeting_course": {"penalty": penalty}}}
         if rho is not None:
             payload["correlations"]["meeting_course"]["rho"] = rho
             payload["correlations"]["meeting_course"]["samples"] = 4000

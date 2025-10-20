@@ -19,35 +19,32 @@ def _build_payload(phase: str) -> runner_chain.RunnerPayload:
         budget=5.0,
     )
 
+
 def test_write_analysis_exotic_policy_validation(tmp_path, monkeypatch):
     """Tests the exotic policy validation logic added to _write_analysis."""
     race_id = "R1C1"
     analysis_dir = tmp_path / "analysis"
     race_dir = analysis_dir / race_id
     race_dir.mkdir(parents=True)
-    (race_dir / "snapshot_H5.json").write_text(json.dumps({
-        "payload": {
-            "runners": [{"num": "1", "odds": 2.0}, {"num": "2", "odds": 3.0}]
-        }
-    }))
+    (race_dir / "snapshot_H5.json").write_text(
+        json.dumps({"payload": {"runners": [{"num": "1", "odds": 2.0}, {"num": "2", "odds": 3.0}]}})
+    )
     (race_dir / "je_stats.csv").touch()
     (race_dir / "chronos.csv").touch()
 
     # --- Scenario 1: Fails due to low ROI (< 0.40) ---
-    bets_df_low_roi = pd.DataFrame({
-        "Cheval": ["1", "2"],
-        "Cote": [2.0, 3.0],
-        "p": [0.6, 0.4],
-        "Stake (€)": [2.5, 2.5],
-        "Gain brut (€)": [5.0, 7.5],  # Total payout = 12.5 > 10
-        "EV (€)": [0.5, 0.5],          # Total EV = 1.0, Stake = 5.0, ROI = 0.20 < 0.40
-    })
-    
-    monkeypatch.setattr(
-        runner_chain, 
-        "dutching_kelly_fractional", 
-        lambda **kwargs: bets_df_low_roi
+    bets_df_low_roi = pd.DataFrame(
+        {
+            "Cheval": ["1", "2"],
+            "Cote": [2.0, 3.0],
+            "p": [0.6, 0.4],
+            "Stake (€)": [2.5, 2.5],
+            "Gain brut (€)": [5.0, 7.5],  # Total payout = 12.5 > 10
+            "EV (€)": [0.5, 0.5],  # Total EV = 1.0, Stake = 5.0, ROI = 0.20 < 0.40
+        }
     )
+
+    monkeypatch.setattr(runner_chain, "dutching_kelly_fractional", lambda **kwargs: bets_df_low_roi)
 
     runner_chain._write_analysis(
         race_id=race_id,
@@ -67,19 +64,19 @@ def test_write_analysis_exotic_policy_validation(tmp_path, monkeypatch):
     assert "exotic_policy_validation_failed" in result_low_roi["reasons"]
 
     # --- Scenario 2: Fails due to low payout (< 10) ---
-    bets_df_low_payout = pd.DataFrame({
-        "Cheval": ["1", "2"],
-        "Cote": [2.0, 3.0],
-        "p": [0.6, 0.4],
-        "Stake (€)": [1.0, 1.0],
-        "Gain brut (€)": [2.0, 3.0], # Total payout = 5.0 < 10
-        "EV (€)": [0.8, 0.8],         # Total EV = 1.6, Stake = 2.0, ROI = 0.80 > 0.40
-    })
+    bets_df_low_payout = pd.DataFrame(
+        {
+            "Cheval": ["1", "2"],
+            "Cote": [2.0, 3.0],
+            "p": [0.6, 0.4],
+            "Stake (€)": [1.0, 1.0],
+            "Gain brut (€)": [2.0, 3.0],  # Total payout = 5.0 < 10
+            "EV (€)": [0.8, 0.8],  # Total EV = 1.6, Stake = 2.0, ROI = 0.80 > 0.40
+        }
+    )
 
     monkeypatch.setattr(
-        runner_chain, 
-        "dutching_kelly_fractional", 
-        lambda **kwargs: bets_df_low_payout
+        runner_chain, "dutching_kelly_fractional", lambda **kwargs: bets_df_low_payout
     )
 
     runner_chain._write_analysis(
@@ -100,20 +97,18 @@ def test_write_analysis_exotic_policy_validation(tmp_path, monkeypatch):
     assert "exotic_policy_validation_failed" in result_low_payout["reasons"]
 
     # --- Scenario 3: Passes ---
-    bets_df_pass = pd.DataFrame({
-        "Cheval": ["1", "2"],
-        "Cote": [3.0, 4.0],
-        "p": [0.5, 0.4],
-        "Stake (€)": [2.5, 2.5],
-        "Gain brut (€)": [7.5, 10.0], # Total payout = 17.5 > 10
-        "EV (€)": [1.25, 1.5],       # Total EV = 2.75, Stake = 5.0, ROI = 0.55 > 0.40
-    })
-
-    monkeypatch.setattr(
-        runner_chain, 
-        "dutching_kelly_fractional", 
-        lambda **kwargs: bets_df_pass
+    bets_df_pass = pd.DataFrame(
+        {
+            "Cheval": ["1", "2"],
+            "Cote": [3.0, 4.0],
+            "p": [0.5, 0.4],
+            "Stake (€)": [2.5, 2.5],
+            "Gain brut (€)": [7.5, 10.0],  # Total payout = 17.5 > 10
+            "EV (€)": [1.25, 1.5],  # Total EV = 2.75, Stake = 5.0, ROI = 0.55 > 0.40
+        }
     )
+
+    monkeypatch.setattr(runner_chain, "dutching_kelly_fractional", lambda **kwargs: bets_df_pass)
 
     runner_chain._write_analysis(
         race_id=race_id,
@@ -174,6 +169,8 @@ def test_estimate_sp_ev_imputes_missing_odds_place(caplog: pytest.LogCaptureFixt
     assert ev == pytest.approx(0.5, rel=1e-2)
     assert "odds_place_imputed" in legs[0].get("notes", [])
     assert "Cote place imputée" in caplog.text
+
+
 def test_compute_overround_cap_flat_handicap_string_partants() -> None:
     cap = runner_chain.compute_overround_cap("Handicap de Plat", "16 partants")
     assert cap == pytest.approx(1.25)
@@ -247,7 +244,7 @@ def test_validate_exotics_with_simwrapper_filters_and_alert(monkeypatch):
                 'payout_expected': 5.0,
                 'sharpe': 0.2,
                 'notes': [],
-                'requirements': []
+                'requirements': [],
             }
         return {
             'ev_ratio': 0.6,
@@ -255,7 +252,7 @@ def test_validate_exotics_with_simwrapper_filters_and_alert(monkeypatch):
             'payout_expected': 25.0,
             'sharpe': 0.2,
             'notes': [],
-            'requirements': []
+            'requirements': [],
         }
 
     monkeypatch.setattr(runner_chain, 'evaluate_combo', fake_eval)
@@ -280,7 +277,7 @@ def test_validate_exotics_with_simwrapper_rejects_low_payout(monkeypatch):
             'payout_expected': 5.0,
             'sharpe': 0.7,
             'notes': [],
-            'requirements': []
+            'requirements': [],
         }
 
     monkeypatch.setattr(runner_chain, 'evaluate_combo', fake_eval)
@@ -299,8 +296,22 @@ def test_validate_exotics_with_simwrapper_rejects_low_payout(monkeypatch):
 
 def test_validate_exotics_with_simwrapper_caps_best_and_alert(monkeypatch):
     results = {
-        'a': {'ev_ratio': 0.6, 'roi': 0.7, 'payout_expected': 30.0, 'sharpe': 0.6, 'notes': [], 'requirements': []},
-        'b': {'ev_ratio': 0.8, 'roi': 0.9, 'payout_expected': 35.0, 'sharpe': 0.8, 'notes': [], 'requirements': []},
+        'a': {
+            'ev_ratio': 0.6,
+            'roi': 0.7,
+            'payout_expected': 30.0,
+            'sharpe': 0.6,
+            'notes': [],
+            'requirements': [],
+        },
+        'b': {
+            'ev_ratio': 0.8,
+            'roi': 0.9,
+            'payout_expected': 35.0,
+            'sharpe': 0.8,
+            'notes': [],
+            'requirements': [],
+        },
     }
 
     def fake_eval(tickets, bankroll, calibration=None, allow_heuristic=True):
@@ -329,7 +340,7 @@ def test_validate_exotics_with_simwrapper_skips_unreliable(monkeypatch):
             'payout_expected': 30.0,
             'sharpe': 0.6,
             'notes': ['combo_probabilities_unreliable'],
-            'requirements': []
+            'requirements': [],
         }
 
     monkeypatch.setattr(runner_chain, 'evaluate_combo', fake_eval)
@@ -353,7 +364,7 @@ def test_validate_exotics_with_simwrapper_rejects_low_sharpe(monkeypatch):
             'payout_expected': 30.0,
             'sharpe': 0.3,
             'notes': [],
-            'requirements': []
+            'requirements': [],
         }
 
     monkeypatch.setattr(runner_chain, 'evaluate_combo', fake_eval)
@@ -389,7 +400,9 @@ def test_validate_exotics_with_simwrapper_logs_rejected_status(monkeypatch, capl
     assert any(reason.startswith('status_') for reason in info['flags']['reasons']['combo'])
 
 
-def test_trigger_phase_result_missing_arrivee(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+def test_trigger_phase_result_missing_arrivee(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
     payload = _build_payload("RESULT")
     runner_chain._trigger_phase(
         payload,
@@ -421,7 +434,9 @@ def test_trigger_phase_result_missing_arrivee(tmp_path: Path, caplog: pytest.Log
     assert any("Arrivée absente" in record.message for record in caplog.records)
 
 
-def test_trigger_phase_result_with_arrivee(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+def test_trigger_phase_result_with_arrivee(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
     payload = _build_payload("RESULT")
     race_dir = tmp_path / "R1C2"
     race_dir.mkdir(parents=True, exist_ok=True)
@@ -450,10 +465,16 @@ def test_trigger_phase_result_with_arrivee(tmp_path: Path, caplog: pytest.LogCap
     assert not any("Arrivée absente" in record.message for record in caplog.records)
 
 
-
 def test_export_tracking_csv_line(tmp_path):
     path = tmp_path / 'track.csv'
-    meta = {'reunion': 'R1', 'course': 'C1', 'hippodrome': 'X', 'date': '2024-01-01', 'discipline': 'plat', 'partants': 8}
+    meta = {
+        'reunion': 'R1',
+        'course': 'C1',
+        'hippodrome': 'X',
+        'date': '2024-01-01',
+        'discipline': 'plat',
+        'partants': 8,
+    }
     tickets = [{'stake': 2.0, 'p': 0.4}, {'stake': 1.0, 'p': 0.3}]
     stats = {
         'ev_sp': 0.3,
@@ -474,7 +495,14 @@ def test_export_tracking_csv_line(tmp_path):
     lines = path.read_text(encoding='utf-8').splitlines()
     header = lines[0].split(';')
     assert header[-1] == 'ALERTE_VALUE'
-    assert {'prob_implicite_panier', 'ev_simulee_post_arrondi', 'roi_simule', 'roi_reel', 'sharpe', 'drift_sign'} <= set(header)
+    assert {
+        'prob_implicite_panier',
+        'ev_simulee_post_arrondi',
+        'roi_simule',
+        'roi_reel',
+        'sharpe',
+        'drift_sign',
+    } <= set(header)
     assert {'nb_tickets', 'expected_gross_return_eur'} <= set(header)
     values = dict(zip(header, lines[1].split(';'), strict=False))
     assert values['ALERTE_VALUE'] == 'ALERTE_VALUE'

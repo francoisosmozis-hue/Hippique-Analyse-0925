@@ -41,17 +41,18 @@ def test_upload_file_called_for_analysis(tmp_path, monkeypatch):
     # Create dummy files required by _write_analysis
     race_dir = tmp_path / "R1C1"
     race_dir.mkdir()
-    (race_dir / "snapshot_H5.json").write_text('{"payload": {"runners": [{"num": "1", "odds": 2.0}]}}')
+    (race_dir / "snapshot_H5.json").write_text(
+        '{"payload": {"runners": [{"num": "1", "odds": 2.0}]}}'
+    )
     (race_dir / "je_stats.csv").touch()
     (race_dir / "chronos.csv").touch()
 
     # Mock dutching to return a passing portfolio
     import pandas as pd
-    bets_df = pd.DataFrame({
-        "EV (€)": [1.0], "Stake (€)": [1.0], "Gain brut (€)": [11.0]
-    })
+
+    bets_df = pd.DataFrame({"EV (€)": [1.0], "Stake (€)": [1.0], "Gain brut (€)": [11.0]})
     monkeypatch.setattr(rc, "dutching_kelly_fractional", lambda **kwargs: bets_df)
-    
+
     # Mock config loading to ensure gates pass
     monkeypatch.setattr(rc, "_load_gpi_config", lambda: {"ROI_MIN_SP": 0.1, "EV_MIN_SP": 0.1})
 

@@ -59,9 +59,7 @@ def get_env(
     if raw_value is None:
         if required:
             raise RuntimeError(f"Missing required environment variable '{name}'")
-        logger.warning(
-            "Environment variable %s not set; using default %r", name, default
-        )
+        logger.warning("Environment variable %s not set; using default %r", name, default)
         return default  # type: ignore[return-value]
 
     try:
@@ -72,12 +70,8 @@ def get_env(
         ) from exc
 
     if source != name:
-        logger.info(
-            "Environment variable %s=%r used as alias for %s", source, value, name
-        )
+        logger.info("Environment variable %s=%r used as alias for %s", source, value, name)
 
     if default is not None and value != default:
-        logger.info(
-            "Environment variable %s=%r overrides default %r", source, value, default
-        )
+        logger.info("Environment variable %s=%r overrides default %r", source, value, default)
     return value

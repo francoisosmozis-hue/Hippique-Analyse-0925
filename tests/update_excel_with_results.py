@@ -89,9 +89,7 @@ def _ensure_header_map(ws: Worksheet, headers: Iterable[str]) -> dict[str, int]:
     max_column = ws.max_column
     # ``openpyxl`` initialises empty worksheets with a single ``None`` cell.
     blank_sheet = (
-        ws.max_row <= 1
-        and ws.max_column == 1
-        and ws.cell(row=1, column=1).value in (None, "")
+        ws.max_row <= 1 and ws.max_column == 1 and ws.cell(row=1, column=1).value in (None, "")
     )
     if not blank_sheet:
         for col in range(1, max_column + 1):
@@ -306,18 +304,14 @@ def _update_observe_sheet(
 
 
 def main(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(
-        description="Mettre à jour le ROI dans l'Excel de suivi"
-    )
+    parser = argparse.ArgumentParser(description="Mettre à jour le ROI dans l'Excel de suivi")
     parser.add_argument(
         "--excel",
         default="modele_suivi_courses_hippiques.xlsx",
         help="Chemin du classeur Excel à mettre à jour",
     )
     parser.add_argument("--arrivee", required=True, help="JSON de l'arrivée officielle")
-    parser.add_argument(
-        "--tickets", required=True, help="JSON des tickets (p_finale.json)"
-    )
+    parser.add_argument("--tickets", required=True, help="JSON des tickets (p_finale.json)")
     parser.add_argument(
         "--sheet-prevision",
         default="ROI Prévisionnel",

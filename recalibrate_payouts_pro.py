@@ -5,12 +5,8 @@ from pathlib import Path
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Recalibrate payouts and set PAUSE_EXOTIQUES flag"
-    )
-    parser.add_argument(
-        "--history", nargs="+", required=True, help="Fichiers JSON de rapports"
-    )
+    parser = argparse.ArgumentParser(description="Recalibrate payouts and set PAUSE_EXOTIQUES flag")
+    parser.add_argument("--history", nargs="+", required=True, help="Fichiers JSON de rapports")
     parser.add_argument("--out", default="payout_calibration.yaml")
     args = parser.parse_args()
 

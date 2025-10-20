@@ -164,9 +164,7 @@ def assemble_history_dataset(base_dir: Path) -> pd.DataFrame:
             if odds_h5 <= _MIN_ODDS:
                 continue
 
-            odds_h30 = _select_column(
-                row, ("odds_h30", "cote_h30", "odds_h_30", "h30")
-            )
+            odds_h30 = _select_column(row, ("odds_h30", "cote_h30", "odds_h_30", "h30"))
             if odds_h30 <= _MIN_ODDS:
                 odds_h30 = odds_h5
 
@@ -273,8 +271,7 @@ def serialize_model(result: CalibrationResult, path: Path, *, C: float = 1.0) ->
         "features": result.features,
         "intercept": intercept,
         "coefficients": {
-            name: float(value)
-            for name, value in zip(result.features, coefs, strict=True)
+            name: float(value) for name, value in zip(result.features, coefs, strict=True)
         },
         "metadata": {
             "regularization": float(C),

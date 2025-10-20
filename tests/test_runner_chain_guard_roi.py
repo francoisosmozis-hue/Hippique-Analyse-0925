@@ -14,9 +14,7 @@ _DEF_PARAMS = {
 }
 
 
-def _write_csv(
-    path: Path, fieldnames: list[str], rows: list[dict[str, object]]
-) -> None:
+def _write_csv(path: Path, fieldnames: list[str], rows: list[dict[str, object]]) -> None:
     with path.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
         writer.writeheader()

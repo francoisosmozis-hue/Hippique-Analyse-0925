@@ -39,12 +39,8 @@ def load_tickets(path: Path) -> list[dict[str, Any]]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Compute EV/ROI for betting tickets")
-    parser.add_argument(
-        "--tickets", required=True, help="Path to tickets file (JSON or YAML)"
-    )
-    parser.add_argument(
-        "--budget", type=float, required=True, help="Bankroll budget to use"
-    )
+    parser.add_argument("--tickets", required=True, help="Path to tickets file (JSON or YAML)")
+    parser.add_argument("--budget", type=float, required=True, help="Bankroll budget to use")
     parser.add_argument(
         "--ev-threshold",
         type=float,

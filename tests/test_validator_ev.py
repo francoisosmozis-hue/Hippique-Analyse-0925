@@ -57,9 +57,7 @@ def test_validate_ev_logs_context(monkeypatch, caplog):
 
     assert result is True
     logged = [
-        record.message
-        for record in caplog.records
-        if "[validate_ev] context" in record.message
+        record.message for record in caplog.records if "[validate_ev] context" in record.message
     ]
     assert logged, "validate_ev should log contextual metrics"
     log_line = logged[-1]
@@ -201,7 +199,8 @@ def test_validator_cli_returns_non_zero_on_failure(tmp_path):
 
     result = subprocess.run(
         [sys.executable, str(script), "--artefacts", str(artefacts_dir)],
-        check=False, capture_output=True,
+        check=False,
+        capture_output=True,
         text=True,
     )
 

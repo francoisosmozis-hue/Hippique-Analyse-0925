@@ -134,7 +134,9 @@ def run_course(
     settings = get_settings()
     phase = _normalise_phase(phase)
     identifiers = _extract_identifiers(course_url)
-    run_dir = settings.resolved_data_dir / f"{identifiers['date']}_r{identifiers['r']}c{identifiers['c']}"
+    run_dir = (
+        settings.resolved_data_dir / f"{identifiers['date']}_r{identifiers['r']}c{identifiers['c']}"
+    )
     run_dir.mkdir(parents=True, exist_ok=True)
 
     env = os.environ.copy()
@@ -185,7 +187,9 @@ def run_course(
                 "stdout_tail": "\n".join(logs)[-4000:],
                 "artifacts": [],
             }
-        logs.append(_format_command_output(script_name, result.stdout, result.stderr, result.returncode))
+        logs.append(
+            _format_command_output(script_name, result.stdout, result.stderr, result.returncode)
+        )
         if result.returncode != 0:
             LOGGER.error(
                 "script_failed",
@@ -210,7 +214,9 @@ def run_course(
             try:
                 subprocess.run(cmd, env=env, check=False)
             except Exception as exc:  # pragma: no cover - defensive
-                log_exception(LOGGER, "post_script_failed", extra={"script": script_name, "error": str(exc)})
+                log_exception(
+                    LOGGER, "post_script_failed", extra={"script": script_name, "error": str(exc)}
+                )
 
     artifact_paths = [str(path) for path in artifacts]
     uploaded_refs: list[str] = []
@@ -219,7 +225,9 @@ def run_course(
         slug = f"runs/{identifiers['date']}/r{identifiers['r']}c{identifiers['c']}/{phase.lower()}"
         prefix = f"{prefix}/{slug}" if prefix else slug
         try:
-            uploaded_refs = _upload_artifacts(artifacts, prefix=prefix, bucket_name=settings.gcs_bucket)
+            uploaded_refs = _upload_artifacts(
+                artifacts, prefix=prefix, bucket_name=settings.gcs_bucket
+            )
         except Exception as exc:  # pragma: no cover - defensive
             LOGGER.warning("artifact_upload_failed", extra={"error": str(exc)})
 

@@ -98,16 +98,10 @@ def allocate_dutching_sp(
 
         fallback_source = runner.get("p_imp_h5", runner.get("p_imp"))
         try:
-            fallback_value = (
-                float(fallback_source) if fallback_source is not None else None
-            )
+            fallback_value = float(fallback_source) if fallback_source is not None else None
         except (TypeError, ValueError):
             fallback_value = None
-        if (
-            fallback_value is None
-            or not math.isfinite(fallback_value)
-            or fallback_value <= 0.0
-        ):
+        if fallback_value is None or not math.isfinite(fallback_value) or fallback_value <= 0.0:
             fallback_value = implied_prob(odds_value) if odds_value > 0 else 0.0
         fallback_probs[key] = fallback_value
 
@@ -235,9 +229,7 @@ def gate_ev(
     if roi_sp < float(cfg.get("ROI_MIN_SP", 0.0)):
         reasons["sp"].append("ROI_MIN_SP")
 
-    if ev_global < float(cfg.get("EV_MIN_GLOBAL", 0.0)) * float(
-        cfg.get("BUDGET_TOTAL", 0.0)
-    ):
+    if ev_global < float(cfg.get("EV_MIN_GLOBAL", 0.0)) * float(cfg.get("BUDGET_TOTAL", 0.0)):
         reasons["combo"].append("EV_MIN_GLOBAL")
     if roi_global < float(cfg.get("ROI_MIN_GLOBAL", 0.0)):
         reasons["combo"].append("ROI_MIN_GLOBAL")

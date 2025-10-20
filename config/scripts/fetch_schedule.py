@@ -32,43 +32,27 @@ def _flatten(meetings: Iterable[dict[str, Any]]) -> list[dict[str, str]]:
     entries: list[dict[str, str]] = []
     for meeting in meetings:
         r_label = (
-            meeting.get("label")
-            or meeting.get("r")
-            or meeting.get("id")
-            or meeting.get("reunion")
+            meeting.get("label") or meeting.get("r") or meeting.get("id") or meeting.get("reunion")
         )
         date = meeting.get("date")
         races = meeting.get("races") or meeting.get("courses") or []
         for race in races:
-            c_label = (
-                race.get("course") or race.get("c") or race.get("num") or race.get("id")
-            )
+            c_label = race.get("course") or race.get("c") or race.get("num") or race.get("id")
             time = (
-                race.get("time")
-                or race.get("start")
-                or race.get("hour")
-                or race.get("start_time")
+                race.get("time") or race.get("start") or race.get("hour") or race.get("start_time")
             )
             if not (r_label and c_label and time):
                 continue
             if date and len(str(time)) == 5 and str(time)[2] == ":":
                 time = f"{date}T{time}"
-            entries.append(
-                {"reunion": str(r_label), "course": str(c_label), "time": str(time)}
-            )
+            entries.append({"reunion": str(r_label), "course": str(c_label), "time": str(time)})
     return entries
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Fetch schedule and output meetings.json"
-    )
-    parser.add_argument(
-        "--sources", default="config/sources.yml", help="YAML endpoints file"
-    )
-    parser.add_argument(
-        "--out", default="config/meetings.json", help="Destination JSON path"
-    )
+    parser = argparse.ArgumentParser(description="Fetch schedule and output meetings.json")
+    parser.add_argument("--sources", default="config/sources.yml", help="YAML endpoints file")
+    parser.add_argument("--out", default="config/meetings.json", help="Destination JSON path")
     args = parser.parse_args()
 
     with open(args.sources, encoding="utf-8") as fh:

@@ -133,9 +133,7 @@ def test_fetch_je_chrono_enrich_from_snapshot_builds_chronos_csv(
         encoding="utf-8",
     )
 
-    result = fetch_je_chrono.enrich_from_snapshot(
-        str(snapshot), str(tmp_path / "artefacts")
-    )
+    result = fetch_je_chrono.enrich_from_snapshot(str(snapshot), str(tmp_path / "artefacts"))
 
     chronos_path = tmp_path / "artefacts" / "chronos.csv"
     assert result["chronos"] == str(chronos_path)
@@ -152,9 +150,7 @@ def test_fetch_je_chrono_enrich_from_snapshot_requires_snapshot(
     caplog.set_level("WARNING")
     missing = tmp_path / "R1C1_H-5.json"
 
-    result = fetch_je_chrono.enrich_from_snapshot(
-        str(missing), str(tmp_path / "artefacts")
-    )
+    result = fetch_je_chrono.enrich_from_snapshot(str(missing), str(tmp_path / "artefacts"))
 
     assert result == {"je_stats": None, "chronos": None}
     assert not (tmp_path / "artefacts" / "chronos.csv").exists()

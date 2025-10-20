@@ -91,9 +91,7 @@ def _ensure_header_map(ws: Worksheet, headers: Iterable[str]) -> dict[str, int]:
     header_map: dict[str, int] = {}
     max_column = ws.max_column
     blank_sheet = (
-        ws.max_row <= 1
-        and ws.max_column == 1
-        and ws.cell(row=1, column=1).value in (None, "")
+        ws.max_row <= 1 and ws.max_column == 1 and ws.cell(row=1, column=1).value in (None, "")
     )
     if not blank_sheet:
         for col in range(1, max_column + 1):
@@ -214,9 +212,7 @@ def _update_observe_sheet(
         "gains": round(total_gain, 2) if total_gain else 0.0,
         "ROI_reel": roi_observed,
         "result_moyen": observed_section.get("result_moyen", summary.result_mean),
-        "ROI_reel_moyen": observed_section.get(
-            "roi_reel_moyen", summary.roi_ticket_mean
-        ),
+        "ROI_reel_moyen": observed_section.get("roi_reel_moyen", summary.roi_ticket_mean),
         "Brier_total": observed_section.get("brier_total", summary.brier_total),
         "Brier_moyen": observed_section.get("brier_moyen", summary.brier_mean),
         "EV_total": observed_section.get("ev_total", summary.ev_total),
@@ -299,9 +295,7 @@ def _print_row(prefix: str, row: Mapping[str, Any]) -> None:
 
 
 def main(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(
-        description="Mettre à jour le ROI dans l'Excel de suivi"
-    )
+    parser = argparse.ArgumentParser(description="Mettre à jour le ROI dans l'Excel de suivi")
     parser.add_argument(
         "--excel",
         default="modele_suivi_courses_hippiques.xlsx",
@@ -346,9 +340,7 @@ def main(argv: list[str] | None = None) -> None:
 
     raw_tickets = payload.get("tickets")
     tickets_list = (
-        [t for t in raw_tickets if isinstance(t, dict)]
-        if isinstance(raw_tickets, list)
-        else []
+        [t for t in raw_tickets if isinstance(t, dict)] if isinstance(raw_tickets, list) else []
     )
     summary = summarise_ticket_metrics(tickets_list)
 

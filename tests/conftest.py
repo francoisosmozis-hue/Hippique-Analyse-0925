@@ -5,6 +5,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 
+
 @pytest.fixture(autouse=True, scope="session")
 def _configure_rounding_step() -> None:
     """Ensure simulations use the finer 0.05 rounding step expected by tests."""
@@ -21,6 +22,7 @@ def _configure_rounding_step() -> None:
 
 
 from unittest import mock
+
 
 @pytest.fixture(autouse=True)
 def mock_google_auth():

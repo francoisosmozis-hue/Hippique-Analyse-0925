@@ -25,6 +25,7 @@ Notes
 - Prévu pour des **cotes décimales** de type **placé**.
 - Si vous passez des cotes gagnant, fournissez des `probs` adaptées (p_win).
 """
+
 from collections.abc import Callable, Sequence
 
 import pandas as pd
@@ -73,16 +74,14 @@ def dutching_kelly_fractional(
     if probs is None:
         probs = [prob_fallback(float(o)) for o in odds]
     if horse_labels is None:
-        horse_labels = [f"#{i+1}" for i in range(n)]
+        horse_labels = [f"#{i + 1}" for i in range(n)]
 
     # Fraction Kelly directe par cheval (déjà capée)
     f_k = []
     for p, o in zip(probs, odds, strict=True):
         p = _safe_prob(float(p))
         o = float(o)
-        f_k.append(
-            kelly_fraction(p, o, lam=float(lambda_kelly), cap=float(cap_per_horse))
-        )
+        f_k.append(kelly_fraction(p, o, lam=float(lambda_kelly), cap=float(cap_per_horse)))
 
     if sum(f_k) <= 0:
         stakes = [total_stake / n] * n

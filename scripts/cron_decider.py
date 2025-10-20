@@ -6,6 +6,7 @@ current local time in Paris and invokes ``runner_chain.py`` for races
 that fall within the H-30 or H-5 windows. ``ALLOW_HEURISTIC`` is forced
 to ``0`` for reproducible computations.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -95,9 +96,7 @@ def _invoke_runner(reunion: str, course: str, phase: str) -> None:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(
-        description="Trigger runner_chain phases based on timing"
-    )
+    ap = argparse.ArgumentParser(description="Trigger runner_chain phases based on timing")
     ap.add_argument("--meetings", default="meetings.json", help="Planning JSON file")
     args = ap.parse_args()
 

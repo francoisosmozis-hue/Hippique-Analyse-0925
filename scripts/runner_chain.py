@@ -7,6 +7,7 @@ window matches, snapshot/analysis files are written under the designated
 directories.  The analysis step now leverages :func:`simulate_ev_batch` and
 ``validate_ev`` to compute and validate EV/ROI metrics.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -66,9 +67,7 @@ class RunnerPayload(BaseModel):
     reunion: str = Field(validation_alias=AliasChoices("reunion", "meeting", "R"))
     course: str = Field(validation_alias=AliasChoices("course", "race", "C"))
     phase: str = Field(validation_alias=AliasChoices("phase", "when"))
-    start_time: dt.datetime = Field(
-        validation_alias=AliasChoices("start_time", "time", "start")
-    )
+    start_time: dt.datetime = Field(validation_alias=AliasChoices("start_time", "time", "start"))
     budget: float = Field(
         validation_alias=AliasChoices("budget", "budget_total", "bankroll"),
         ge=1.0,
@@ -80,9 +79,7 @@ class RunnerPayload(BaseModel):
     def _validate_course_id(cls, value: str) -> str:
         text = str(value).strip()
         if not text or not text.isdigit() or len(text) < 6:
-            raise ValueError(
-                "id_course must be a numeric string with at least 6 digits"
-            )
+            raise ValueError("id_course must be a numeric string with at least 6 digits")
         return text
 
     @field_validator("reunion")
@@ -129,8 +126,7 @@ def _coerce_payload(data: Mapping[str, Any], *, context: str) -> RunnerPayload:
         return RunnerPayload.model_validate(data)
     except PydanticValidationError as exc:
         formatted = "; ".join(
-            f"{'.'.join(str(loc) for loc in err['loc'])}: {err['msg']}"
-            for err in exc.errors()
+            f"{'.'.join(str(loc) for loc in err['loc'])}: {err['msg']}" for err in exc.errors()
         )
         raise PayloadValidationError(f"{context}: {formatted}") from exc
 
@@ -209,16 +205,10 @@ def _write_excel_update_command(
                 tickets_path = maybe
                 break
     if tickets_path is None:
-        logger.warning(
-            "[runner] No tickets file found in %s, skipping Excel command", race_dir
-        )
+        logger.warning("[runner] No tickets file found in %s, skipping Excel command", race_dir)
         return
 
-    excel = (
-        excel_path
-        or os.getenv("EXCEL_RESULTS_PATH")
-        or "modele_suivi_courses_hippiques.xlsx"
-    )
+    excel = excel_path or os.getenv("EXCEL_RESULTS_PATH") or "modele_suivi_courses_hippiques.xlsx"
     cmd = (
         f"python update_excel_with_results.py "
         f'--excel "{excel}" '
@@ -261,9 +251,7 @@ def _write_snapshot(
         )
     except Exception as exc:
         reason = str(exc)
-        logger.error(
-            "[runner] Snapshot fetch failed for %s (%s): %s", race_id, window, reason
-        )
+        logger.error("[runner] Snapshot fetch failed for %s (%s): %s", race_id, window, reason)
         payload_out = {
             "status": "no-data",
             "rc": race_id,
@@ -328,7 +316,7 @@ def _write_analysis(
     try:
         with snapshot_path.open("r", encoding="utf-8") as f:
             snapshot_data = json.load(f)
-        
+
         runners_data = snapshot_data.get("payload", {}).get("runners", [])
         if not runners_data:
             raise ValueError("No runners found in snapshot")
@@ -383,7 +371,7 @@ def _write_analysis(
         cfg=gpi_config,
         ev_sp=ev_sp,
         roi_sp=roi_sp,
-        ev_global=ev_sp, 
+        ev_global=ev_sp,
         roi_global=roi_sp,
         min_payout_combos=0,
     )
@@ -412,7 +400,9 @@ def _write_analysis(
 
     expected_payout_total = bets_df["Gain brut (€)"].sum()
 
-    if not combos_allowed(ev_basket=global_roi, expected_payout=expected_payout_total, min_ev=0.40, min_payout=10.0):
+    if not combos_allowed(
+        ev_basket=global_roi, expected_payout=expected_payout_total, min_ev=0.40, min_payout=10.0
+    ):
         payload = {
             "race_id": race_id,
             "status": "aborted",
@@ -461,7 +451,7 @@ def _write_analysis(
             "ev": {"global": total_ev, "roi": global_roi},
             "validation_meta": validation_meta,
         }
-    
+
     _write_json_file(analysis_path, payload)
 
     if USE_GCS and upload_file:
@@ -469,6 +459,7 @@ def _write_analysis(
             upload_file(analysis_path)
         except EnvironmentError as exc:
             logger.warning("Skipping cloud upload for %s: %s", analysis_path, exc)
+
 
 def _trigger_phase(
     payload: RunnerPayload,
@@ -509,9 +500,7 @@ def _trigger_phase(
         race_dir.mkdir(parents=True, exist_ok=True)
         if not arrivee_path.exists():
             # CORRECTION: Encodage UTF-8 corrigé
-            logger.error(
-                "[KO] Arrivée absente… %s (recherché: %s)", race_id, arrivee_path
-            )
+            logger.error("[KO] Arrivée absente… %s (recherché: %s)", race_id, arrivee_path)
             arrivee_missing = {
                 "status": "missing",
                 "R": payload.reunion,
@@ -567,9 +556,7 @@ def main() -> None:
         default=str(PAYOUT_CALIBRATION_PATH),
         help="Path to payout_calibration.yaml used for combo validation.",
     )
-    parser.add_argument(
-        "--mode", default="hminus5", help="Mode de traitement (log only)"
-    )
+    parser.add_argument("--mode", default="hminus5", help="Mode de traitement (log only)")
     parser.add_argument(
         "--output",
         default=None,
@@ -633,8 +620,6 @@ def main() -> None:
         return
 
     if args.planning:
-
-
         planning_path = Path(args.planning)
         if not planning_path.is_file():
             parser.error(
@@ -667,9 +652,7 @@ def main() -> None:
                 try:
                     start_time = dt.datetime.fromisoformat(start)
                 except ValueError:
-                    logger.error(
-                        "[runner] Invalid ISO timestamp for planning entry %s", entry
-                    )
+                    logger.error("[runner] Invalid ISO timestamp for planning entry %s", entry)
                     raise SystemExit(1)
                 delta = (start_time - now).total_seconds() / 60
                 if args.h30_window_min <= delta <= args.h30_window_max:
@@ -681,9 +664,7 @@ def main() -> None:
                         "start": start,
                         "budget": entry.get("budget", args.budget),
                     }
-                    payload = _coerce_payload(
-                        payload_dict, context=f"planning:{context_id}:H30"
-                    )
+                    payload = _coerce_payload(payload_dict, context=f"planning:{context_id}:H30")
                     _trigger_phase(
                         payload,
                         snap_dir=snap_dir,
@@ -703,9 +684,7 @@ def main() -> None:
                         "start": start,
                         "budget": entry.get("budget", args.budget),
                     }
-                    payload = _coerce_payload(
-                        payload_dict, context=f"planning:{context_id}:H5"
-                    )
+                    payload = _coerce_payload(payload_dict, context=f"planning:{context_id}:H5")
                     _trigger_phase(
                         payload,
                         snap_dir=snap_dir,

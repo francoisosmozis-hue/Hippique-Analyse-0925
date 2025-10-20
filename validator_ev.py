@@ -129,9 +129,7 @@ def validate(h30: dict, h5: dict, allow_je_na: bool) -> bool:
     for snap, label in [(h30, "H-30"), (h5, "H-5")]:
         for r in snap.get("runners", []):
             if "odds" not in r or r["odds"] in (None, ""):
-                raise ValueError(
-                    f"Cotes manquantes {label} pour {r.get('name', r.get('id'))}."
-                )
+                raise ValueError(f"Cotes manquantes {label} pour {r.get('name', r.get('id'))}.")
             try:
                 if float(r["odds"]) <= 1.01:
                     raise ValueError(
@@ -226,9 +224,7 @@ def validate_ev(
     return True
 
 
-def validate_policy(
-    ev_global: float, roi_global: float, min_ev: float, min_roi: float
-) -> bool:
+def validate_policy(ev_global: float, roi_global: float, min_ev: float, min_roi: float) -> bool:
     """Validate global EV and ROI against minimum thresholds."""
     if ev_global < min_ev:
         raise ValidationError("EV global below threshold")
@@ -237,9 +233,7 @@ def validate_policy(
     return True
 
 
-def validate_budget(
-    stakes: Dict[str, float], budget_cap: float, max_vol_per_horse: float
-) -> bool:
+def validate_budget(stakes: Dict[str, float], budget_cap: float, max_vol_per_horse: float) -> bool:
     """Ensure total stake and per-horse stakes respect budget constraints."""
     total = sum(stakes.values())
     if total > budget_cap:
@@ -385,9 +379,7 @@ def _load_odds(path: Path) -> dict[str, float]:
     payload = _load_json_payload(path)
     odds_map: dict[str, float] = {}
     if isinstance(payload, dict):
-        runners = (
-            payload.get("runners") if isinstance(payload.get("runners"), list) else None
-        )
+        runners = payload.get("runners") if isinstance(payload.get("runners"), list) else None
         if runners is not None:
             for runner in runners:
                 if not isinstance(runner, dict):
@@ -466,14 +458,10 @@ def _prepare_validation_inputs(
     args: argparse.Namespace,
 ) -> tuple[dict, list[dict], dict[str, float], dict]:
     phase = _normalise_phase(args.phase)
-    rc_dir = _resolve_rc_directory(
-        args.artefacts, args.base_dir, args.reunion, args.course
-    )
+    rc_dir = _resolve_rc_directory(args.artefacts, args.base_dir, args.reunion, args.course)
 
     partants_path = (
-        Path(args.partants)
-        if args.partants
-        else _discover_file(rc_dir, _PARTANTS_CANDIDATES)
+        Path(args.partants) if args.partants else _discover_file(rc_dir, _PARTANTS_CANDIDATES)
     )
     stats_path = (
         Path(args.stats_je)
@@ -481,9 +469,7 @@ def _prepare_validation_inputs(
         else _discover_file(rc_dir, _STATS_CANDIDATES, required=False)
     )
     odds_candidates = _ODDS_CANDIDATES.get(phase, _ODDS_CANDIDATES["H5"])
-    odds_path = (
-        Path(args.odds) if args.odds else _discover_file(rc_dir, odds_candidates)
-    )
+    odds_path = Path(args.odds) if args.odds else _discover_file(rc_dir, odds_candidates)
     config_path: Path | None
     if args.config:
         config_path = Path(args.config)
@@ -506,9 +492,7 @@ def _cli(argv: list[str] | None = None) -> int:
         description="Valide les artefacts d'une course via validate_inputs.",
     )
     parser.add_argument("--artefacts", help="Dossier contenant les artefacts de course")
-    parser.add_argument(
-        "--base-dir", help="Dossier racine où trouver R?C?", default=None
-    )
+    parser.add_argument("--base-dir", help="Dossier racine où trouver R?C?", default=None)
     parser.add_argument("--reunion", help="Identifiant réunion (ex: R1)")
     parser.add_argument("--course", help="Identifiant course (ex: C3)")
     parser.add_argument("--phase", help="Phase (H5 ou H30)", default="H5")

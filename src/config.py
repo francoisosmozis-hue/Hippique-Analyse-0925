@@ -26,12 +26,8 @@ class Settings(BaseSettings):
     http_user_agent: str = Field(
         "Hippique-Analyse/1.0 (+https://cloud.run/hippique)", alias="HTTP_USER_AGENT"
     )
-    tasks_service_account_email: str = Field(
-        "", alias="TASKS_SERVICE_ACCOUNT_EMAIL"
-    )
-    scheduler_service_account_email: str = Field(
-        "", alias="SCHEDULER_SERVICE_ACCOUNT_EMAIL"
-    )
+    tasks_service_account_email: str = Field("", alias="TASKS_SERVICE_ACCOUNT_EMAIL")
+    scheduler_service_account_email: str = Field("", alias="SCHEDULER_SERVICE_ACCOUNT_EMAIL")
 
     model_config = SettingsConfigDict(
         env_file=".env",

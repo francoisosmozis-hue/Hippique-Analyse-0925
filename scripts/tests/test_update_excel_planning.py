@@ -80,9 +80,7 @@ def test_update_excel_planning_h30_then_h5(tmp_path):
             },
         ],
     }
-    (course_dir / "analysis_H5.json").write_text(
-        json.dumps(h5_payload), encoding="utf-8"
-    )
+    (course_dir / "analysis_H5.json").write_text(json.dumps(h5_payload), encoding="utf-8")
 
     planner.main(
         [

@@ -43,7 +43,9 @@ def test_check_enrich_outputs_retries_once(monkeypatch: pytest.MonkeyPatch, tmp_
     assert sleeps == [0.0]
 
 
-def test_check_enrich_outputs_no_bet_payload(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_check_enrich_outputs_no_bet_payload(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     snap = tmp_path / "snap_H-5.json"
     snap.write_text("{}", encoding="utf-8")
 
@@ -85,6 +87,8 @@ def test_check_enrich_outputs_prefers_latest_snapshot(
             ]
         },
     }
+
+
 def test_process_reunion_continues_after_failure(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

@@ -1,0 +1,1838 @@
+[
+  {
+    "date": "2025-10-19",
+    "r_label": "R1",
+    "c_label": "C1",
+    "meeting": "1",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R1C1-paris-longchamp-prix-de-belleville",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-20",
+    "r_label": "R1",
+    "c_label": "C1",
+    "meeting": "",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-20/R1C1-deauville-prix-de-la-foret-de-lyons?prefill=39",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-21",
+    "r_label": "R1",
+    "c_label": "C1",
+    "meeting": "",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-21/R1C1-clairefontaine-prix-genybet-prix-des-equidays?prefill=39",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R1",
+    "c_label": "C2",
+    "meeting": "2",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R1C2-paris-longchamp-prix-de-la-chapelle",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R1",
+    "c_label": "C3",
+    "meeting": "3",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R1C3-paris-longchamp-prix-du-conseil-de-paris",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R1",
+    "c_label": "C4",
+    "meeting": "4",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R1C4-paris-longchamp-prix-rieussec",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R1",
+    "c_label": "C5",
+    "meeting": "5",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R1C5-paris-longchamp-prix-casimir-delamarre",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R1",
+    "c_label": "C6",
+    "meeting": "6",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R1C6-paris-longchamp-prix-de-saint-cyr",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R1",
+    "c_label": "C7",
+    "meeting": "7",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R1C7-paris-longchamp-prix-de-la-chaussee",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R1",
+    "c_label": "C8",
+    "meeting": "8",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R1C8-paris-longchamp-prix-des-haudriettes",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R1",
+    "c_label": "C9",
+    "meeting": "9",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R1C9-paris-longchamp-prix-des-erables",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R3",
+    "c_label": "C1",
+    "meeting": "1",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R3C1-baden-baden-das-neue-welle-auftaktrennen",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R3",
+    "c_label": "C2",
+    "meeting": "2",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R3C2-baden-baden-preis-der-r-v-versicherung",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R3",
+    "c_label": "C3",
+    "meeting": "3",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R3C3-baden-baden-preis-der-vr-bank-in-mittelbaden-eg",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R3",
+    "c_label": "C4",
+    "meeting": "4",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R3C4-baden-baden-carla-kellner-zukunftsrennen-preis-der-winterkonigin",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R3",
+    "c_label": "C5",
+    "meeting": "5",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R3C5-baden-baden-preis-der-fa-wirth-exklusiv-fenstertechnik-gmbh",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R3",
+    "c_label": "C6",
+    "meeting": "6",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R3C6-baden-baden-b-a-u-herbst-trophy",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-20",
+    "r_label": "R3",
+    "c_label": "C8",
+    "meeting": "Report de cagnotte : 3 080 € Demain - R3C8 COMPIEGNE Parier",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-20/R3C8-compiegne-prix-jumna?prefill=12",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R4",
+    "c_label": "C1",
+    "meeting": "1",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R4C1-caen-prix-des-primeveres",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R4",
+    "c_label": "C2",
+    "meeting": "2",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R4C2-caen-prix-de-planquery",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R4",
+    "c_label": "C3",
+    "meeting": "3",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R4C3-caen-prix-de-nehou",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R4",
+    "c_label": "C4",
+    "meeting": "4",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R4C4-caen-prix-d-airan",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R4",
+    "c_label": "C5",
+    "meeting": "5",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R4C5-caen-prix-stuart",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R4",
+    "c_label": "C6",
+    "meeting": "6",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R4C6-caen-prix-de-bourg-l-abbe",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R4",
+    "c_label": "C7",
+    "meeting": "7",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R4C7-caen-prix-d-argentre",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R4",
+    "c_label": "C8",
+    "meeting": "8",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R4C8-caen-prix-de-champcerie",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R5",
+    "c_label": "C1",
+    "meeting": "1",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R5C1-reims-prix-pmu-le-cafe-du-centre",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R5",
+    "c_label": "C2",
+    "meeting": "2",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R5C2-reims-grand-prix-du-champagne-gardet",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R5",
+    "c_label": "C3",
+    "meeting": "3",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R5C3-reims-prix-de-la-semaine-bleue",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R5",
+    "c_label": "C4",
+    "meeting": "4",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R5C4-reims-prix-de-la-toque",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R5",
+    "c_label": "C5",
+    "meeting": "5",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R5C5-reims-prix-de-la-ville-de-reims",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R5",
+    "c_label": "C6",
+    "meeting": "6",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R5C6-reims-prix-octobre-rose",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R5",
+    "c_label": "C7",
+    "meeting": "7",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R5C7-reims-prix-du-sulky",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R5",
+    "c_label": "C8",
+    "meeting": "8",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R5C8-reims-prix-de-la-selle",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R6",
+    "c_label": "C1",
+    "meeting": "1",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R6C1-maronas-prix-cibeles-2018",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R6",
+    "c_label": "C2",
+    "meeting": "2",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R6C2-maronas-prix-inalcanzada-2019",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R6",
+    "c_label": "C3",
+    "meeting": "3",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R6C3-maronas-prix-que-felicidad-2020",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R6",
+    "c_label": "C4",
+    "meeting": "4",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R6C4-maronas-prix-demi-moore-2021",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R6",
+    "c_label": "C5",
+    "meeting": "5",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R6C5-maronas-prix-suprema-dor-2022",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R6",
+    "c_label": "C6",
+    "meeting": "6",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R6C6-maronas-prix-linda-dama-2023-2024",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R6",
+    "c_label": "C7",
+    "meeting": "7",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R6C7-maronas-prix-dimar-silva",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R6",
+    "c_label": "C8",
+    "meeting": "8",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R6C8-maronas-prix-uruguay",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R6",
+    "c_label": "C9",
+    "meeting": "9",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R6C9-maronas-prix-chile",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R6",
+    "c_label": "C10",
+    "meeting": "10",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R6C10-maronas-prix-carlos-reyles",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R6",
+    "c_label": "C11",
+    "meeting": "11",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R6C11-maronas-prix-socrates-2022-2023",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R6",
+    "c_label": "C12",
+    "meeting": "12",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R6C12-maronas-prix-leopard-dance-2024",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R7",
+    "c_label": "C1",
+    "meeting": "1",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R7C1-kalgoorlie-prix-thank-you-qwest-cranes-handicap",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R7",
+    "c_label": "C2",
+    "meeting": "2",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R7C2-kalgoorlie-prix-thank-you-blue-spec-drilling-handicap",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R7",
+    "c_label": "C3",
+    "meeting": "3",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R7C3-kalgoorlie-prix-thank-you-rebel-dam-builders-handicap",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R7",
+    "c_label": "C4",
+    "meeting": "4",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R7C4-kalgoorlie-prix-force-by-emeco-ray-mcgee-memorial-maiden",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R7",
+    "c_label": "C5",
+    "meeting": "5",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R7C5-kalgoorlie-prix-tabtouch-regional-championship-road-to-ascot",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R7",
+    "c_label": "C6",
+    "meeting": "6",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R7C6-kalgoorlie-prix-esperance-bay-turf-club-handicap",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R7",
+    "c_label": "C7",
+    "meeting": "7",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R7C7-kalgoorlie-prix-tonkin-newmarket-handicap",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R8",
+    "c_label": "C1",
+    "meeting": "1",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R8C1-lyon-parilly-prix-du-cercle-de-l-etrier",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R8",
+    "c_label": "C2",
+    "meeting": "2",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R8C2-lyon-parilly-prix-bacplus",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R8",
+    "c_label": "C3",
+    "meeting": "3",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R8C3-lyon-parilly-prix-missile",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R8",
+    "c_label": "C4",
+    "meeting": "4",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R8C4-lyon-parilly-prix-louis-tresca",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R8",
+    "c_label": "C5",
+    "meeting": "5",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R8C5-lyon-parilly-prix-du-maine-et-loire",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R8",
+    "c_label": "C6",
+    "meeting": "6",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R8C6-lyon-parilly-prix-du-brionnais-groupe-a",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R8",
+    "c_label": "C7",
+    "meeting": "7",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R8C7-lyon-parilly-prix-du-brionnais-groupe-b",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R8",
+    "c_label": "C8",
+    "meeting": "8",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R8C8-lyon-parilly-prix-du-val-de-saone",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R8",
+    "c_label": "C9",
+    "meeting": "9",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R8C9-lyon-parilly-prix-de-la-corse-du-sud",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R9",
+    "c_label": "C1",
+    "meeting": "1",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R9C1-salon-de-provence-prix-mistral",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R9",
+    "c_label": "C2",
+    "meeting": "2",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R9C2-salon-de-provence-prix-de-la-touloubre",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R9",
+    "c_label": "C3",
+    "meeting": "3",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R9C3-salon-de-provence-prix-de-la-societe-du-trotteur-francais",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R9",
+    "c_label": "C4",
+    "meeting": "4",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R9C4-salon-de-provence-prix-edouard-bonnet",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R9",
+    "c_label": "C5",
+    "meeting": "5",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R9C5-salon-de-provence-prix-l-onguent-du-marechal",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R9",
+    "c_label": "C6",
+    "meeting": "6",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R9C6-salon-de-provence-prix-roquepine",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R9",
+    "c_label": "C7",
+    "meeting": "7",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R9C7-salon-de-provence-prix-denis-marc-bernard",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R10",
+    "c_label": "C1",
+    "meeting": "1",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R10C1-bordeaux-le-bouscat-prix-jag-de-bellouet",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R10",
+    "c_label": "C2",
+    "meeting": "2",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R10C2-bordeaux-le-bouscat-prix-michel-guy-bourguignon",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R10",
+    "c_label": "C3",
+    "meeting": "3",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R10C3-bordeaux-le-bouscat-prix-sisyphe-ii",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R10",
+    "c_label": "C4",
+    "meeting": "4",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R10C4-bordeaux-le-bouscat-prix-de-tivoli",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R10",
+    "c_label": "C5",
+    "meeting": "5",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R10C5-bordeaux-le-bouscat-prix-de-la-banque-alimentaire-bordeaux-gironde",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R10",
+    "c_label": "C6",
+    "meeting": "6",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R10C6-bordeaux-le-bouscat-prix-de-l-hippodrome-de-luxe-groupe-a",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R10",
+    "c_label": "C7",
+    "meeting": "7",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R10C7-bordeaux-le-bouscat-prix-de-l-hippodrome-de-luxe-groupe-b",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R10",
+    "c_label": "C8",
+    "meeting": "8",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R10C8-bordeaux-le-bouscat-prix-de-beaulac",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R11",
+    "c_label": "C1",
+    "meeting": "1",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R11C1-tarbes-prix-georges-thusseau",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R11",
+    "c_label": "C2",
+    "meeting": "2",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R11C2-tarbes-grand-prix-des-pouliches-a-12-5",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R11",
+    "c_label": "C3",
+    "meeting": "3",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R11C3-tarbes-prix-du-ministere-de-l-agriculture-a-37-5",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R11",
+    "c_label": "C4",
+    "meeting": "4",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R11C4-tarbes-grand-prix-des-pouliches-a-37-5",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R11",
+    "c_label": "C5",
+    "meeting": "5",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R11C5-tarbes-prix-du-ministere-de-l-agriculture-a-12-5-prix-charles-de-ginestet",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R11",
+    "c_label": "C6",
+    "meeting": "6",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R11C6-tarbes-prix-caroline-de-freycinet",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R11",
+    "c_label": "C7",
+    "meeting": "7",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R11C7-tarbes-prix-jean-laborde",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R12",
+    "c_label": "C4",
+    "meeting": "4",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R12C4-son-pardo-campionat-europeu-d-aprenents-v",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R12",
+    "c_label": "C5",
+    "meeting": "5",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R12C5-son-pardo-premi-inneto",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R12",
+    "c_label": "C6",
+    "meeting": "6",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R12C6-son-pardo-premi-lucinda",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R13",
+    "c_label": "C1",
+    "meeting": "1",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R13C1-keeneland-race-1",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R13",
+    "c_label": "C2",
+    "meeting": "2",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R13C2-keeneland-race-2",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R13",
+    "c_label": "C3",
+    "meeting": "3",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R13C3-keeneland-race-3",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R13",
+    "c_label": "C4",
+    "meeting": "4",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R13C4-keeneland-maiden-special-weight",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R13",
+    "c_label": "C5",
+    "meeting": "5",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R13C5-keeneland-starter-allowance",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R13",
+    "c_label": "C6",
+    "meeting": "6",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R13C6-keeneland-allowance",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R13",
+    "c_label": "C7",
+    "meeting": "7",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R13C7-keeneland-allowance",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R13",
+    "c_label": "C8",
+    "meeting": "8",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R13C8-keeneland-rood-riddle-dowager-stakes",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R13",
+    "c_label": "C9",
+    "meeting": "9",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R13C9-keeneland-maiden-special-weight",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R14",
+    "c_label": "C1",
+    "meeting": "1",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R14C1-gulfstream-park-race-1",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R14",
+    "c_label": "C2",
+    "meeting": "2",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R14C2-gulfstream-park-race-2",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R14",
+    "c_label": "C3",
+    "meeting": "3",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R14C3-gulfstream-park-race-3",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R14",
+    "c_label": "C4",
+    "meeting": "4",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R14C4-gulfstream-park-race-4",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R14",
+    "c_label": "C5",
+    "meeting": "5",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R14C5-gulfstream-park-race-5",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R14",
+    "c_label": "C6",
+    "meeting": "6",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R14C6-gulfstream-park-race-6",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R14",
+    "c_label": "C7",
+    "meeting": "7",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R14C7-gulfstream-park-race-7",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R14",
+    "c_label": "C8",
+    "meeting": "8",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R14C8-gulfstream-park-race-8",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R14",
+    "c_label": "C9",
+    "meeting": "9",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R14C9-gulfstream-park-race-9",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R14",
+    "c_label": "C10",
+    "meeting": "10",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R14C10-gulfstream-park-starter-optional-claiming",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R14",
+    "c_label": "C11",
+    "meeting": "11",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R14C11-gulfstream-park-maiden-special-weight",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R14",
+    "c_label": "C12",
+    "meeting": "12",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R14C12-gulfstream-park-simulcast-from-maronas-uruguay",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R14",
+    "c_label": "C13",
+    "meeting": "13",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R14C13-gulfstream-park-simulcast-from-maronas-uruguay",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R50",
+    "c_label": "C1",
+    "meeting": "1",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R50C1-orebro-course-1",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R50",
+    "c_label": "C2",
+    "meeting": "2",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R50C2-orebro-p21-lopp-spartrappa",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R50",
+    "c_label": "C3",
+    "meeting": "3",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R50C3-orebro-e3-bonus-hostserien-forsok-7-agria-djurforsakring",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R50",
+    "c_label": "C4",
+    "meeting": "4",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R50C4-orebro-course-4",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R50",
+    "c_label": "C5",
+    "meeting": "5",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R50C5-orebro-svensk-travsports-unghastserie-fyraaringslopp-ston",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R50",
+    "c_label": "C6",
+    "meeting": "6",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R50C6-orebro-course-6",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R50",
+    "c_label": "C7",
+    "meeting": "7",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R50C7-orebro-course-7",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R50",
+    "c_label": "C8",
+    "meeting": "8",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R50C8-orebro-trearingslopp-ston-spartrappa",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R50",
+    "c_label": "C9",
+    "meeting": "9",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R50C9-orebro-svampen-orebro-gr-ii-int",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R50",
+    "c_label": "C10",
+    "meeting": "10",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R50C10-orebro-course-10",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R51",
+    "c_label": "C1",
+    "meeting": "1",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R51C1-bro-park-mischa-kahns-minneslopning",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R51",
+    "c_label": "C2",
+    "meeting": "2",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R51C2-bro-park-sm-classic-2025",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R51",
+    "c_label": "C3",
+    "meeting": "3",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R51C3-bro-park-sm-sprinters-2025",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R51",
+    "c_label": "C4",
+    "meeting": "4",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R51C4-bro-park-mr-ascot-vinterfavoriternas-pris",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R51",
+    "c_label": "C5",
+    "meeting": "5",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R51C5-bro-park-klass-1-handicap",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R51",
+    "c_label": "C6",
+    "meeting": "6",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R51C6-bro-park-sm-for-2-ariga-hastar",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R51",
+    "c_label": "C7",
+    "meeting": "7",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R51C7-bro-park-appel-au-maitre-stockholm-fillies-mares-stakes",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R51",
+    "c_label": "C8",
+    "meeting": "8",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R51C8-bro-park-maidenlopning",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R51",
+    "c_label": "C9",
+    "meeting": "9",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R51C9-bro-park-sm-for-amatorryttare",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R51",
+    "c_label": "C10",
+    "meeting": "10",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R51C10-bro-park-ellicatsprinten",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R52",
+    "c_label": "C1",
+    "meeting": "1",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R52C1-jarlsberg-course-1",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R52",
+    "c_label": "C2",
+    "meeting": "2",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R52C2-jarlsberg-course-2",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R52",
+    "c_label": "C3",
+    "meeting": "3",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R52C3-jarlsberg-montelopp",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R52",
+    "c_label": "C4",
+    "meeting": "4",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R52C4-jarlsberg-kallblodslopp",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R52",
+    "c_label": "C5",
+    "meeting": "5",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R52C5-jarlsberg-kallblodslopp",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R52",
+    "c_label": "C6",
+    "meeting": "6",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R52C6-jarlsberg-course-6",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R52",
+    "c_label": "C7",
+    "meeting": "7",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R52C7-jarlsberg-kallblodslopp",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R52",
+    "c_label": "C8",
+    "meeting": "8",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R52C8-jarlsberg-kallblodslopp-montelopp",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R52",
+    "c_label": "C9",
+    "meeting": "9",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R52C9-jarlsberg-kallblodslopp",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R52",
+    "c_label": "C10",
+    "meeting": "10",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R52C10-jarlsberg-course-10",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R53",
+    "c_label": "C1",
+    "meeting": "1",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R53C1-greyville-maiden-plate-f-m",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R53",
+    "c_label": "C2",
+    "meeting": "2",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R53C2-greyville-maiden-plate",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R53",
+    "c_label": "C3",
+    "meeting": "3",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R53C3-greyville-maiden-plate-f-m",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R53",
+    "c_label": "C4",
+    "meeting": "4",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R53C4-greyville-d-stakes",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R53",
+    "c_label": "C5",
+    "meeting": "5",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R53C5-greyville-class-4",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R53",
+    "c_label": "C6",
+    "meeting": "6",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R53C6-greyville-c-stakes-f-m",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R53",
+    "c_label": "C7",
+    "meeting": "7",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R53C7-greyville-class-4",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R53",
+    "c_label": "C8",
+    "meeting": "8",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R53C8-greyville-conditions-plate",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R53",
+    "c_label": "C9",
+    "meeting": "9",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R53C9-greyville-b-stakes",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R53",
+    "c_label": "C10",
+    "meeting": "10",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R53C10-greyville-d-stakes",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R54",
+    "c_label": "C1",
+    "meeting": "1",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R54C1-berlin-mariendorf-orlando-jet-rennen-trotteur-francais",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R54",
+    "c_label": "C2",
+    "meeting": "2",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R54C2-berlin-mariendorf-breeders-crown-fur-2-jahrige-stuten",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R54",
+    "c_label": "C3",
+    "meeting": "3",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R54C3-berlin-mariendorf-breeders-crown-fur-2-jahrige-hengste-wallache",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R54",
+    "c_label": "C4",
+    "meeting": "4",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R54C4-berlin-mariendorf-breeders-crown-fur-4-jahrige-stuten",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R54",
+    "c_label": "C5",
+    "meeting": "5",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R54C5-berlin-mariendorf-breeders-crown-fur-3-jahrige-stuten",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R54",
+    "c_label": "C6",
+    "meeting": "6",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R54C6-berlin-mariendorf-breeders-crown-fur-3-jahrige-hengste-wallache",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R54",
+    "c_label": "C7",
+    "meeting": "7",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R54C7-berlin-mariendorf-cosy-wasch-trophy-amateurfahren",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R54",
+    "c_label": "C8",
+    "meeting": "8",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R54C8-berlin-mariendorf-breeders-crown-fur-4-jahrige-stuten",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R54",
+    "c_label": "C9",
+    "meeting": "9",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R54C9-berlin-mariendorf-breeders-crown-fur-4-jahrige-hengste-wallache",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R54",
+    "c_label": "C10",
+    "meeting": "10",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R54C10-berlin-mariendorf-breeders-crown-ausklang-dreierwetten-jackpot-rennen-dreierwetten-jackpot-3-000-euro",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R55",
+    "c_label": "C1",
+    "meeting": "1",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R55C1-leopardstown-maiden",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R55",
+    "c_label": "C2",
+    "meeting": "2",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R55C2-leopardstown-stakes-listed",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R55",
+    "c_label": "C3",
+    "meeting": "3",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R55C3-leopardstown-handicap",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R55",
+    "c_label": "C4",
+    "meeting": "4",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R55C4-leopardstown-stakes-listed",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R55",
+    "c_label": "C5",
+    "meeting": "5",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R55C5-leopardstown-handicap",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R55",
+    "c_label": "C6",
+    "meeting": "6",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R55C6-leopardstown-handicap-premier-handicap",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R55",
+    "c_label": "C7",
+    "meeting": "7",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R55C7-leopardstown-handicap",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R56",
+    "c_label": "C1",
+    "meeting": "1",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R56C1-limerick-mares-maiden-hurdle",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R56",
+    "c_label": "C2",
+    "meeting": "2",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R56C2-limerick--c-g-maiden-hurdle",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R56",
+    "c_label": "C3",
+    "meeting": "3",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R56C3-limerick-handicap-hurdle",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R56",
+    "c_label": "C4",
+    "meeting": "4",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R56C4-limerick--q-r-handicap-hurdle",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R56",
+    "c_label": "C5",
+    "meeting": "5",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R56C5-limerick-handicap-chase-grade-3",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R56",
+    "c_label": "C6",
+    "meeting": "6",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R56C6-limerick-handicap-chase",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R56",
+    "c_label": "C7",
+    "meeting": "7",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R56C7-limerick-ebf-mares-beginners-chase",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R57",
+    "c_label": "C1",
+    "meeting": "1",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R57C1-kempton-novices-handicap-hurdle-gbb-race",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R57",
+    "c_label": "C2",
+    "meeting": "2",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R57C2-kempton-novices-limited-handicap-chase-gbb-race",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R57",
+    "c_label": "C3",
+    "meeting": "3",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R57C3-kempton-juvenile-hurdle-gbb-race",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R57",
+    "c_label": "C4",
+    "meeting": "4",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R57C4-kempton-handicap-chase-gbb-race",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R57",
+    "c_label": "C5",
+    "meeting": "5",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R57C5-kempton-hurdle-listed-gbb-race",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R57",
+    "c_label": "C6",
+    "meeting": "6",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R57C6-kempton-handicap-chase-gbb-race",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R57",
+    "c_label": "C7",
+    "meeting": "7",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R57C7-kempton-handicap-hurdle",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R58",
+    "c_label": "C1",
+    "meeting": "1",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R58C1-sedgefield-maiden-hurdle-gbb-race",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R58",
+    "c_label": "C2",
+    "meeting": "2",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R58C2-sedgefield-conditional-jockeys-handicap-chase",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R58",
+    "c_label": "C3",
+    "meeting": "3",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R58C3-sedgefield-juvenile-maiden-hurdle-gbb-race",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R58",
+    "c_label": "C4",
+    "meeting": "4",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R58C4-sedgefield-handicap-chase-gbb-race",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R58",
+    "c_label": "C5",
+    "meeting": "5",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R58C5-sedgefield-national-handicap-chase-gbb-race",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R58",
+    "c_label": "C6",
+    "meeting": "6",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R58C6-sedgefield-handicap-hurdle",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R58",
+    "c_label": "C7",
+    "meeting": "7",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R58C7-sedgefield-open-nh-flat-race-gbb-race",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R59",
+    "c_label": "C1",
+    "meeting": "1",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R59C1-belmont-at-the-big-a-race-1",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R59",
+    "c_label": "C2",
+    "meeting": "2",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R59C2-belmont-at-the-big-a-race-2",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R59",
+    "c_label": "C3",
+    "meeting": "3",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R59C3-belmont-at-the-big-a-race-3",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R59",
+    "c_label": "C4",
+    "meeting": "4",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R59C4-belmont-at-the-big-a-race-4",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R59",
+    "c_label": "C5",
+    "meeting": "5",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R59C5-belmont-at-the-big-a-race-5",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R59",
+    "c_label": "C6",
+    "meeting": "6",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R59C6-belmont-at-the-big-a-carle-place-stakes-stakes",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R59",
+    "c_label": "C7",
+    "meeting": "7",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R59C7-belmont-at-the-big-a-noble-damsel-stakes-stakes",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R59",
+    "c_label": "C8",
+    "meeting": "8",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R59C8-belmont-at-the-big-a-race-8",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R59",
+    "c_label": "C9",
+    "meeting": "9",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R59C9-belmont-at-the-big-a-autumn-days-stakes-stakes",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R60",
+    "c_label": "C1",
+    "meeting": "1",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R60C1-santa-anita-park-race-1",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R60",
+    "c_label": "C2",
+    "meeting": "2",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R60C2-santa-anita-park-anoakia-stakes-stakes",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R60",
+    "c_label": "C3",
+    "meeting": "3",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R60C3-santa-anita-park-race-3",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R60",
+    "c_label": "C4",
+    "meeting": "4",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R60C4-santa-anita-park-race-4",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R60",
+    "c_label": "C5",
+    "meeting": "5",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R60C5-santa-anita-park-race-5",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R60",
+    "c_label": "C6",
+    "meeting": "6",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R60C6-santa-anita-park-race-6",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R60",
+    "c_label": "C7",
+    "meeting": "7",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R60C7-santa-anita-park-race-7",
+    "reunion_url": null
+  },
+  {
+    "date": "2025-10-19",
+    "r_label": "R60",
+    "c_label": "C8",
+    "meeting": "8",
+    "time_local": null,
+    "course_url": "https://www.zeturf.fr/fr/course/2025-10-19/R60C8-santa-anita-park-race-8",
+    "reunion_url": null
+  }
+]

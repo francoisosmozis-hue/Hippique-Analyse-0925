@@ -86,9 +86,7 @@ def _prepare_sheet(wb: Workbook, title: str) -> Worksheet:
 def _ensure_headers(ws: Worksheet, headers: Sequence[str]) -> Mapping[str, int]:
     header_map: dict[str, int] = {}
     blank_sheet = (
-        ws.max_row <= 1
-        and ws.max_column == 1
-        and ws.cell(row=1, column=1).value in (None, "")
+        ws.max_row <= 1 and ws.max_column == 1 and ws.cell(row=1, column=1).value in (None, "")
     )
     max_col = 0 if blank_sheet else ws.max_column
     if not blank_sheet:
@@ -214,18 +212,14 @@ def _extract_common_meta(
     def _values(meta_keys: Sequence[str], payload_keys: Sequence[str]) -> list[Any]:
         candidates: list[Any] = []
         for source in sources:
-            meta = (
-                source.get("meta") if isinstance(source.get("meta"), Mapping) else None
-            )
+            meta = source.get("meta") if isinstance(source.get("meta"), Mapping) else None
             if isinstance(meta, Mapping):
                 candidates.extend(meta.get(key) for key in meta_keys)
             candidates.extend(source.get(key) for key in payload_keys)
         return candidates
 
     date = _first_non_empty(*_values(["date"], ["date"]))
-    hippodrome = _first_non_empty(
-        *_values(["hippodrome", "hippo"], ["hippodrome", "hippo"])
-    )
+    hippodrome = _first_non_empty(*_values(["hippodrome", "hippo"], ["hippodrome", "hippo"]))
     rc_value = _first_non_empty(*_values(["rc"], ["rc", "rc_label"]))
     reunion = _first_non_empty(
         *_values(["reunion", "meeting", "r"], ["reunion", "meeting", "r", "r_label"])
@@ -267,17 +261,13 @@ def _extract_common_meta(
     )
     if partants in (None, ""):
         for source in sources:
-            meta = (
-                source.get("meta") if isinstance(source.get("meta"), Mapping) else None
-            )
+            meta = source.get("meta") if isinstance(source.get("meta"), Mapping) else None
             runners = None
             if isinstance(meta, Mapping):
                 runners = meta.get("runners")
             if not runners:
                 runners = source.get("runners")
-            if isinstance(runners, Iterable) and not isinstance(
-                runners, (str, bytes, Mapping)
-            ):
+            if isinstance(runners, Iterable) and not isinstance(runners, (str, bytes, Mapping)):
                 partants = sum(1 for _ in runners)
                 if partants not in (None, ""):
                     break
@@ -394,9 +384,7 @@ def _extract_course_payloads(
             next_parents = parents + (value,)
             for child in value.values():
                 _walk(child, next_parents)
-        elif isinstance(value, Sequence) and not isinstance(
-            value, (str, bytes, bytearray)
-        ):
+        elif isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
             for item in value:
                 _walk(item, parents)
 
@@ -432,8 +420,7 @@ def _upsert(
     max_row = ws.max_row
     for row_idx in range(2, max_row + 1):
         if all(
-            str(ws.cell(row=row_idx, column=header_map[key]).value or "")
-            == str(key_values[key])
+            str(ws.cell(row=row_idx, column=header_map[key]).value or "") == str(key_values[key])
             for key in keys
         ):
             target_row = row_idx
@@ -487,9 +474,7 @@ def _consume_selection(values: Any, horses: list[str]) -> None:
 
 
 def _summarise_tickets(tickets: Any) -> str:
-    if not isinstance(tickets, Iterable) or isinstance(
-        tickets, (str, bytes, bytearray)
-    ):
+    if not isinstance(tickets, Iterable) or isinstance(tickets, (str, bytes, bytearray)):
         return ""
     summaries: list[str] = []
     for ticket in tickets:
@@ -521,9 +506,7 @@ def _summarise_tickets(tickets: Any) -> str:
             ):
                 if key in ticket:
                     _consume_selection(ticket.get(key), horses)
-        odds = _first_non_empty(
-            ticket.get("odds"), ticket.get("rapport"), ticket.get("payout")
-        )
+        odds = _first_non_empty(ticket.get("odds"), ticket.get("rapport"), ticket.get("payout"))
         horses_joined = "-".join(str(horse) for horse in horses if str(horse))
         base = ""
         normalised_label = _normalise_ticket_label(label)
@@ -690,9 +673,7 @@ def _prepare_h5_row(payload: Mapping[str, Any], status_label: str) -> dict[str, 
 
 
 def main(argv: Sequence[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(
-        description="Met à jour l'onglet Planning de l'Excel"
-    )
+    parser = argparse.ArgumentParser(description="Met à jour l'onglet Planning de l'Excel")
     parser.add_argument(
         "--phase",
         required=True,
@@ -707,9 +688,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         help="Fichier ou dossier source",
     )
     parser.add_argument("--excel", required=True, help="Chemin du classeur Excel")
-    parser.add_argument(
-        "--sheet", default="Planning", help="Nom de l'onglet à mettre à jour"
-    )
+    parser.add_argument("--sheet", default="Planning", help="Nom de l'onglet à mettre à jour")
     parser.add_argument(
         "--status-h30",
         default="Collecté",
@@ -743,9 +722,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         row = _prepare_h5_row(payload, status_label=args.status_h5)
         keys = ("Date", "Réunion", "Course")
         if not all(row.get(key) for key in keys):
-            raise ValueError(
-                "Impossible de déterminer Date/Réunion/Course pour la mise à jour H-5"
-            )
+            raise ValueError("Impossible de déterminer Date/Réunion/Course pour la mise à jour H-5")
         _upsert(ws, header_map, row, keys)
         detail = _format_row_identifier(row)
         suffix = f" ({detail})" if detail else ""

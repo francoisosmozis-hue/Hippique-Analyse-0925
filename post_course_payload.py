@@ -66,9 +66,7 @@ def merge_meta(arrivee: JsonDict | None, tickets: JsonDict | None) -> JsonDict:
         if isinstance(arrivee, dict):
             source_value = arrivee.get(key)
             if source_value is None:
-                arrivee_meta = (
-                    arrivee.get("meta") if isinstance(arrivee, dict) else None
-                )
+                arrivee_meta = arrivee.get("meta") if isinstance(arrivee, dict) else None
                 if isinstance(arrivee_meta, dict):
                     source_value = arrivee_meta.get(key)
         if source_value is None and isinstance(tickets, dict):
@@ -216,9 +214,7 @@ def summarise_ticket_metrics(tickets: Iterable[JsonDict]) -> PostCourseSummary:
     )
 
 
-def apply_summary_to_ticket_container(
-    container: JsonDict, summary: PostCourseSummary
-) -> None:
+def apply_summary_to_ticket_container(container: JsonDict, summary: PostCourseSummary) -> None:
     """Update ``container`` in place with aggregate metrics from ``summary``."""
 
     container["roi_reel"] = summary.roi

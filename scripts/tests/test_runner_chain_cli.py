@@ -67,9 +67,7 @@ def test_single_race_h5_creates_analysis(tmp_path, monkeypatch, runner_chain_mod
     _stub_analysis(monkeypatch, runner_chain_module)
     course_dir = _create_test_env(tmp_path, "R1C2", "H5")
 
-    monkeypatch.setattr(
-        runner_chain_module.ofz, "fetch_race_snapshot", lambda *_, **__: {}
-    )
+    monkeypatch.setattr(runner_chain_module.ofz, "fetch_race_snapshot", lambda *_, **__: {})
 
     _invoke(
         runner_chain_module,
@@ -84,9 +82,7 @@ def test_single_race_h5_creates_analysis(tmp_path, monkeypatch, runner_chain_mod
     assert (course_dir / "analysis.json").exists()
 
 
-def test_missing_calibration_disables_combos(
-    tmp_path, monkeypatch, runner_chain_module
-):
+def test_missing_calibration_disables_combos(tmp_path, monkeypatch, runner_chain_module):
     calls: list[tuple] = []
 
     def fake_simulation(*args, **kwargs):
@@ -96,9 +92,7 @@ def test_missing_calibration_disables_combos(
     monkeypatch.setattr(runner_chain_module, "simulate_ev_batch", fake_simulation)
     monkeypatch.setattr(runner_chain_module, "validate_ev", lambda *_, **__: True)
 
-    monkeypatch.setattr(
-        runner_chain_module.ofz, "fetch_race_snapshot", lambda *_, **__: {}
-    )
+    monkeypatch.setattr(runner_chain_module.ofz, "fetch_race_snapshot", lambda *_, **__: {})
 
     course_dir = _create_test_env(tmp_path, "R1C2", "H5")
     calibration_path = tmp_path / "missing_calibration.yaml"
@@ -121,16 +115,12 @@ def test_missing_calibration_disables_combos(
     assert "calibration_missing" in payload["notes"]
 
 
-def test_single_race_h30_only_writes_snapshot(
-    tmp_path, monkeypatch, runner_chain_module
-):
+def test_single_race_h30_only_writes_snapshot(tmp_path, monkeypatch, runner_chain_module):
     _stub_analysis(monkeypatch, runner_chain_module)
     course_dir = _create_test_env(tmp_path, "R1C2", "H30")
 
     # Mock snapshot fetch to avoid network calls
-    monkeypatch.setattr(
-        runner_chain_module.ofz, "fetch_race_snapshot", lambda *_, **__: {}
-    )
+    monkeypatch.setattr(runner_chain_module.ofz, "fetch_race_snapshot", lambda *_, **__: {})
 
     _invoke(
         runner_chain_module,
@@ -145,9 +135,7 @@ def test_single_race_h30_only_writes_snapshot(
     assert not (course_dir / "analysis_H5.json").exists()
 
 
-def test_missing_snapshot_file_exits(
-    tmp_path, monkeypatch, runner_chain_module, capsys
-):
+def test_missing_snapshot_file_exits(tmp_path, monkeypatch, runner_chain_module, capsys):
     course_dir = _create_test_env(tmp_path, "R1C2", "H5", with_snapshot=False)
 
     with pytest.raises(SystemExit) as excinfo:
@@ -169,9 +157,7 @@ def test_missing_analysis_csv_aborts(tmp_path, monkeypatch, runner_chain_module)
     _stub_analysis(monkeypatch, runner_chain_module)
     course_dir = _create_test_env(tmp_path, "R1C2", "H5", with_csv=False)
 
-    monkeypatch.setattr(
-        runner_chain_module.ofz, "fetch_race_snapshot", lambda *_, **__: {}
-    )
+    monkeypatch.setattr(runner_chain_module.ofz, "fetch_race_snapshot", lambda *_, **__: {})
 
     _invoke(
         runner_chain_module,

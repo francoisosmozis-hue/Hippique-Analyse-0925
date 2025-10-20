@@ -4,6 +4,7 @@ import pytest
 # and data structures from the tickets_builder.py module. The old
 # `build_tickets` function it was testing has been removed.
 
+
 @pytest.mark.skip(reason="build_tickets API has been refactored into tickets_builder.py")
 def test_roi_smoke_guardrails():
     pass

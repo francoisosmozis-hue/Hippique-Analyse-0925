@@ -108,6 +108,7 @@ def _prepare_stubs(
         lambda *_args, **_kwargs: overround_cap,
     )
     if compute_cap_stub is None:
+
         def compute_cap_stub(*_args: object, **_kwargs: object) -> float:
             return overround_cap
 
@@ -116,6 +117,7 @@ def _prepare_stubs(
                 "compute_overround_cap",
                 compute_cap_stub,
             )
+
     if market_overround is not None:
         monkeypatch.setattr(
             pipeline_run,
@@ -143,7 +145,6 @@ def _prepare_stubs(
 
     def fake_filter(sp_tickets, combo_tickets, *_args, **_kwargs):
         return list(sp_tickets), list(combo_tickets), []
-
 
     monkeypatch.setattr(pipeline_run, "build_p_true", lambda *a, **k: {})
     monkeypatch.setattr(pipeline_run, "compute_drift_dict", lambda *a, **k: {})

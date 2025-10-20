@@ -10,6 +10,7 @@ probability of ruin.  Stakes are scaled quadratically with respect to the
 reported ROR so that doubling the stake roughly quadruples the risk, which is a
 conservative approximation in the absence of the full covariance matrix.
 """
+
 from __future__ import annotations
 
 import json
@@ -243,7 +244,12 @@ def compute_allocation_plan(
             )
         )
     aggregate_risk = min(0.99, aggregate_risk)
-    return AllocationPlan(allocations, bankroll=bankroll, expected_return=expected_return, aggregate_risk=aggregate_risk)
+    return AllocationPlan(
+        allocations,
+        bankroll=bankroll,
+        expected_return=expected_return,
+        aggregate_risk=aggregate_risk,
+    )
 
 
 __all__ = [

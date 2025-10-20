@@ -49,9 +49,7 @@ class AnalyseParams(BaseModel):
     course_url: str | None = Field(
         default=None, description="URL ZEturf/Geny pour scrap (si DATA_MODE='web')."
     )
-    phase: Literal["H30", "H5"] = Field(
-        default="H5", description="Phase d’analyse (H30 ou H5)."
-    )
+    phase: Literal["H30", "H5"] = Field(default="H5", description="Phase d’analyse (H30 ou H5).")
 
     # Overrides facultatifs
     default_budget: float | None = Field(default=None, ge=0)
@@ -61,9 +59,7 @@ class AnalyseParams(BaseModel):
     data_mode: Literal["web", "local"] | None = Field(default=None)
 
     # Avancé : flags pour activer/désactiver certaines étapes
-    run_prompt: bool = Field(
-        default=True, description="Générer le prompt final Lyra GPI v5.1"
-    )
+    run_prompt: bool = Field(default=True, description="Générer le prompt final Lyra GPI v5.1")
     run_export: bool = Field(default=True, description="Exporter p_finale et tickets")
 
 
@@ -147,9 +143,7 @@ def _split_meeting_label(value: str) -> tuple[str, str]:
     cleaned = value.strip().upper().replace(" ", "").replace("-", "")
     match = re.fullmatch(r"R(?P<reunion>\d+)C(?P<course>\d+)", cleaned)
     if not match:
-        raise ValueError(
-            "Paramètre meeting doit suivre le format 'R<num>C<num>' (ex: 'R1C3')."
-        )
+        raise ValueError("Paramètre meeting doit suivre le format 'R<num>C<num>' (ex: 'R1C3').")
     reunion = _normalise_rc_component(match.group("reunion"), "R")
     course = _normalise_rc_component(match.group("course"), "C")
     return reunion, course
@@ -216,17 +210,11 @@ def analyse(body: AnalyseParams):
     """
 
     # Résolution des paramètres effectifs (env -> overrides -> body)
-    eff_default_budget = (
-        body.default_budget if body.default_budget is not None else DEFAULT_BUDGET
-    )
+    eff_default_budget = body.default_budget if body.default_budget is not None else DEFAULT_BUDGET
     eff_min_ev_sp = body.min_ev_sp if body.min_ev_sp is not None else MIN_EV_SP
-    eff_min_ev_combo = (
-        body.min_ev_combo if body.min_ev_combo is not None else MIN_EV_COMBO
-    )
+    eff_min_ev_combo = body.min_ev_combo if body.min_ev_combo is not None else MIN_EV_COMBO
     eff_max_volat = (
-        body.max_volat_per_horse
-        if body.max_volat_per_horse is not None
-        else MAX_VOLAT_PER_HORSE
+        body.max_volat_per_horse if body.max_volat_per_horse is not None else MAX_VOLAT_PER_HORSE
     )
     eff_data_mode = body.data_mode if body.data_mode is not None else DATA_MODE
 
@@ -293,9 +281,7 @@ def analyse(body: AnalyseParams):
         if proc.stdout:
             logs += [line for line in proc.stdout.splitlines() if line.strip()]
         if proc.stderr:
-            logs += [
-                f"[stderr] {line}" for line in proc.stderr.splitlines() if line.strip()
-            ]
+            logs += [f"[stderr] {line}" for line in proc.stderr.splitlines() if line.strip()]
 
         if proc.returncode != 0:
             detail = _format_subprocess_failure(
@@ -303,9 +289,7 @@ def analyse(body: AnalyseParams):
             )
             raise HTTPException(status_code=500, detail=detail)
     except subprocess.TimeoutExpired:
-        raise HTTPException(
-            status_code=504, detail="Timeout pipeline analyse (12 min)."
-        )
+        raise HTTPException(status_code=504, detail="Timeout pipeline analyse (12 min).")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erreur lancement pipeline: {e}")
 
@@ -334,16 +318,10 @@ def analyse(body: AnalyseParams):
             if proc2.stdout:
                 logs += [line for line in proc2.stdout.splitlines() if line.strip()]
             if proc2.stderr:
-                logs += [
-                    f"[stderr] {line}"
-                    for line in proc2.stderr.splitlines()
-                    if line.strip()
-                ]
+                logs += [f"[stderr] {line}" for line in proc2.stderr.splitlines() if line.strip()]
 
             if proc2.returncode != 0:
-                detail = _format_subprocess_failure(
-                    "p_finale_export.py a échoué", proc2
-                )
+                detail = _format_subprocess_failure("p_finale_export.py a échoué", proc2)
                 raise HTTPException(status_code=500, detail=detail)
 
             # Convention: le script export crée p_finale.json et tickets.json dans outputs_dir

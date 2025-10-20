@@ -86,9 +86,7 @@ def allow_combo(
         analysis pipeline.
     """
 
-    def _resolve(
-        value: float | None, default: float, keys: tuple[str, ...] = ()
-    ) -> float:
+    def _resolve(value: float | None, default: float, keys: tuple[str, ...] = ()) -> float:
         if value is not None:
             return float(value)
         if cfg is not None:
@@ -237,9 +235,7 @@ def _extract_combo_entries(source: Any) -> list[tuple[str, dict[str, Any]]]:
                 item = dict(data)
                 item.setdefault("type", combo_type)
                 entries.append((str(item.get("type", combo_type)).upper(), item))
-            elif isinstance(data, Sequence) and not isinstance(
-                data, (str, bytes, bytearray)
-            ):
+            elif isinstance(data, Sequence) and not isinstance(data, (str, bytes, bytearray)):
                 for item in data:
                     if not isinstance(item, Mapping):
                         continue
@@ -257,9 +253,7 @@ def _extract_combo_entries(source: Any) -> list[tuple[str, dict[str, Any]]]:
                     obj = dict(item)
                     obj.setdefault("type", combo_type)
                     entries.append((str(obj.get("type", combo_type)).upper(), obj))
-    elif isinstance(source, Sequence) and not isinstance(
-        source, (str, bytes, bytearray)
-    ):
+    elif isinstance(source, Sequence) and not isinstance(source, (str, bytes, bytearray)):
         for item in source:
             if not isinstance(item, Mapping):
                 continue
@@ -303,12 +297,7 @@ def _build_combo_candidates(
         )
         if not legs:
             continue
-        odds = (
-            raw.get("odds")
-            or raw.get("cote")
-            or raw.get("expected_odds")
-            or raw.get("payout")
-        )
+        odds = raw.get("odds") or raw.get("cote") or raw.get("expected_odds") or raw.get("payout")
         try:
             odds_val = float(odds)
         except (TypeError, ValueError):
@@ -380,9 +369,7 @@ def _validate_exotics_with_simwrapper(
                         "payout_expected_below_accept_threshold"
                     )
                 if result["sharpe"] < sharpe_min:
-                    all_info["flags"]["reasons"]["combo"].append(
-                        "sharpe_below_threshold"
-                    )
+                    all_info["flags"]["reasons"]["combo"].append("sharpe_below_threshold")
         else:
             all_info["notes"].append(result.get("message", "evaluation_failed"))
 
@@ -485,14 +472,10 @@ def apply_ticket_policy(
 
     combo_budget = budget_total * float(cfg.get("COMBO_RATIO", COMBO_SHARE))
     ev_threshold = (
-        float(cfg.get("EV_MIN_GLOBAL", EV_MIN_COMBO))
-        if ev_threshold is None
-        else ev_threshold
+        float(cfg.get("EV_MIN_GLOBAL", EV_MIN_COMBO)) if ev_threshold is None else ev_threshold
     )
     roi_threshold = (
-        float(cfg.get("ROI_MIN_GLOBAL", 0.0))
-        if roi_threshold is None
-        else roi_threshold
+        float(cfg.get("ROI_MIN_GLOBAL", 0.0)) if roi_threshold is None else roi_threshold
     )
     payout_threshold = (
         float(cfg.get("MIN_PAYOUT_COMBOS", PAYOUT_MIN_COMBO))
@@ -524,8 +507,7 @@ def apply_ticket_policy(
         leg_details = base.get("legs_details")
         if isinstance(leg_details, list):
             base["legs_details"] = [
-                dict(ld) if isinstance(ld, Mapping) else {"id": str(ld)}
-                for ld in leg_details
+                dict(ld) if isinstance(ld, Mapping) else {"id": str(ld)} for ld in leg_details
             ]
             base_legs = [_leg_lookup_key(ld) for ld in base["legs_details"]]
         else:
@@ -563,8 +545,7 @@ def apply_ticket_policy(
             merged["legs"] = [_leg_lookup_key(ld) for ld in merged["legs_details"]]
         else:
             merged["legs"] = [
-                _leg_lookup_key(leg)
-                for leg in ticket.get("legs", merged.get("legs", []))
+                _leg_lookup_key(leg) for leg in ticket.get("legs", merged.get("legs", []))
             ]
         merged["ev_check"] = ticket.get("ev_check", {})
         if "flags" in ticket:

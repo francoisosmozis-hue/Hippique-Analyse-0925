@@ -14,6 +14,7 @@ _EPSILON = 1e-6
 _MODEL_CACHE: tuple[Path, float, PTrueModel] | None = None
 MODEL_PATH = Path(__file__).parent / "p_true_model.yaml"
 
+
 @dataclass(frozen=True)
 class PTrueModel:
     features: Sequence[str]
@@ -34,6 +35,7 @@ class PTrueModel:
         """Return a shallow copy of the calibration metadata."""
 
         return get_model_metadata(self)
+
 
 def _sigmoid(value: float) -> float:
     if value >= 0:

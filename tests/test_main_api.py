@@ -169,9 +169,7 @@ def test_analyse_export_discovers_p_finale(monkeypatch, tmp_path):
             idx = cmd.index("--outputs-dir")
             export_dir = Path(cmd[idx + 1])
             export_dir.mkdir(parents=True, exist_ok=True)
-            (export_dir / "p_finale.json").write_text(
-                '{"status": "ok"}', encoding="utf-8"
-            )
+            (export_dir / "p_finale.json").write_text('{"status": "ok"}', encoding="utf-8")
         return subprocess.CompletedProcess(cmd, 0, stdout="ok\n", stderr="")
 
     monkeypatch.setattr(main.tempfile, "mkdtemp", fake_mkdtemp)
@@ -248,15 +246,11 @@ def test_fastapi_analyse_returns_500_on_pipeline_failure(monkeypatch):
 
         await main.app(scope, receive, send)
 
-        start_message = next(
-            msg for msg in messages if msg["type"] == "http.response.start"
-        )
+        start_message = next(msg for msg in messages if msg["type"] == "http.response.start")
         status_code = start_message["status"]
         headers = start_message.get("headers", [])
         body_chunks = [
-            msg.get("body", b"")
-            for msg in messages
-            if msg["type"] == "http.response.body"
+            msg.get("body", b"") for msg in messages if msg["type"] == "http.response.body"
         ]
         return status_code, headers, b"".join(body_chunks)
 
@@ -343,15 +337,11 @@ def test_fastapi_analyse_accepts_declared_phases(monkeypatch, tmp_path):
 
         await main.app(scope, receive, send)
 
-        start_message = next(
-            msg for msg in messages if msg["type"] == "http.response.start"
-        )
+        start_message = next(msg for msg in messages if msg["type"] == "http.response.start")
         status_code = start_message["status"]
         headers = start_message.get("headers", [])
         body_chunks = [
-            msg.get("body", b"")
-            for msg in messages
-            if msg["type"] == "http.response.body"
+            msg.get("body", b"") for msg in messages if msg["type"] == "http.response.body"
         ]
         return status_code, headers, b"".join(body_chunks)
 

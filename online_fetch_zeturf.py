@@ -2,6 +2,7 @@
 Module d'extraction avancée des données ZEturf
 Version intégrée pour l'orchestrateur Cloud Run
 """
+
 import json
 import logging
 import re
@@ -12,18 +13,20 @@ import requests
 from bs4 import BeautifulSoup
 
 # Configuration du logging standard
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
 
 def _extract_start_time(html_content: str, course_id: str = "") -> str | None:
     """
     Extrait l'heure de départ d'une course depuis le HTML ZEturf.
-    
+
     Args:
         html_content: HTML de la page course
         course_id: Identifiant R?C? de la course (optionnel)
-    
+
     Returns:
         Heure au format "HH:MM" ou None
     """
@@ -82,11 +85,11 @@ def _extract_start_time(html_content: str, course_id: str = "") -> str | None:
 def fetch_course_details(course_url: str, throttle: float = 1.0) -> dict[str, Any]:
     """
     Récupère les détails d'une course (heure, partants, hippodrome).
-    
+
     Args:
         course_url: URL complète de la course ZEturf
         throttle: Délai en secondes entre requêtes (défaut: 1s)
-    
+
     Returns:
         Dict avec métadonnées: {url, start_time, hippodrome, partants_count, error?}
     """
@@ -124,23 +127,15 @@ def fetch_course_details(course_url: str, throttle: float = 1.0) -> dict[str, An
             'hippodrome': hippodrome,
             'partants_count': partants_count if partants_count > 0 else None,
             'html_size': len(resp.text),
-            'status': 'ok'
+            'status': 'ok',
         }
 
     except requests.RequestException as e:
         logger.error(f"Request error for {course_url}: {e}")
-        return {
-            'url': course_url,
-            'error': str(e),
-            'status': 'error'
-        }
+        return {'url': course_url, 'error': str(e), 'status': 'error'}
     except Exception as e:
         logger.error(f"Unexpected error for {course_url}: {e}")
-        return {
-            'url': course_url,
-            'error': str(e),
-            'status': 'error'
-        }
+        return {'url': course_url, 'error': str(e), 'status': 'error'}
 
 
 if __name__ == "__main__":

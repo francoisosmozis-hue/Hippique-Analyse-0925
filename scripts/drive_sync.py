@@ -103,11 +103,7 @@ def _ensure_drive_imports() -> None:
     """Ensure Google Drive helpers are imported lazily."""
 
     global _DRIVE_BUILD, _MEDIA_FILE_UPLOAD, _MEDIA_DOWNLOAD
-    if (
-        _DRIVE_BUILD is not None
-        and _MEDIA_FILE_UPLOAD is not None
-        and _MEDIA_DOWNLOAD is not None
-    ):
+    if _DRIVE_BUILD is not None and _MEDIA_FILE_UPLOAD is not None and _MEDIA_DOWNLOAD is not None:
         return
 
     try:  # pragma: no cover - executed when googleapiclient is available
@@ -115,9 +111,7 @@ def _ensure_drive_imports() -> None:
         from googleapiclient.http import MediaFileUpload as _MediaFileUpload
         from googleapiclient.http import MediaIoBaseDownload as _MediaIoBaseDownload
     except ImportError as exc:  # pragma: no cover - handled in tests via patching
-        raise RuntimeError(
-            "googleapiclient is required for Google Drive synchronisation"
-        ) from exc
+        raise RuntimeError("googleapiclient is required for Google Drive synchronisation") from exc
 
     _DRIVE_BUILD = drive_build
     _MEDIA_FILE_UPLOAD = _MediaFileUpload
@@ -142,14 +136,10 @@ def _load_credentials(credentials_json: str | None = None):
             info = base64.b64decode(encoded).decode()
     if info:
         data = json.loads(info)
-        return service_account.Credentials.from_service_account_info(
-            data, scopes=SCOPES
-        )
+        return service_account.Credentials.from_service_account_info(data, scopes=SCOPES)
     key_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
     if key_path:
-        return service_account.Credentials.from_service_account_file(
-            key_path, scopes=SCOPES
-        )
+        return service_account.Credentials.from_service_account_file(key_path, scopes=SCOPES)
     return None
 
 
@@ -460,9 +450,7 @@ def push_tree(
 
 
 def main() -> int | None:
-    parser = argparse.ArgumentParser(
-        description="Upload/download files to Google Cloud Storage"
-    )
+    parser = argparse.ArgumentParser(description="Upload/download files to Google Cloud Storage")
     parser.add_argument("--bucket", default=os.environ.get(BUCKET_ENV))
     parser.add_argument("--project", default=os.environ.get(PROJECT_ENV))
     parser.add_argument("--prefix")
@@ -537,9 +525,7 @@ def main() -> int | None:
         action="store_true",
         help="N'exécuter que les actions locales (aucun appel GCS)",
     )
-    parser.add_argument(
-        "--arrivee", help="Arrivée officielle pour la mise à jour post-course"
-    )
+    parser.add_argument("--arrivee", help="Arrivée officielle pour la mise à jour post-course")
     parser.add_argument(
         "--tickets",
         help="Tickets JSON à enrichir avec le ROI observé",
@@ -567,12 +553,7 @@ def main() -> int | None:
 
     drive_requested = bool(
         not args.local_only
-        and (
-            args.excel_file_id
-            or args.upload_result
-            or args.upload_line
-            or args.upload_file
-        )
+        and (args.excel_file_id or args.upload_result or args.upload_line or args.upload_file)
     )
 
     drive_service = None
@@ -587,20 +568,14 @@ def main() -> int | None:
         else:
             credentials_arg = args.drive_credentials or args.credentials_json
             try:
-                drive_service = _build_drive_service(
-                    credentials_arg, subject=args.drive_subject
-                )
-            except (
-                Exception
-            ) as exc:  # pragma: no cover - logged for operator visibility
+                drive_service = _build_drive_service(credentials_arg, subject=args.drive_subject)
+            except Exception as exc:  # pragma: no cover - logged for operator visibility
                 print(f"[drive_sync] Drive sync désactivée: {exc}")
                 drive_service = None
             else:
                 if args.excel_file_id:
                     try:
-                        drive_download_file(
-                            drive_service, args.excel_file_id, excel_path
-                        )
+                        drive_download_file(drive_service, args.excel_file_id, excel_path)
                     except Exception as exc:  # pragma: no cover - best effort
                         print(
                             f"[drive_sync] Impossible de télécharger l'Excel Drive: {exc}",
@@ -658,9 +633,7 @@ def main() -> int | None:
                     file=sys.stderr,
                 )
     elif args.upload_result or args.upload_line or args.upload_file:
-        msg = (
-            "[drive_sync] Upload Drive ignoré: --folder-id manquant pour les créations."
-        )
+        msg = "[drive_sync] Upload Drive ignoré: --folder-id manquant pour les créations."
         if dry_run:
             print("[drive_sync] --dry-run: " + msg.split(": ")[1])
         else:
@@ -672,13 +645,10 @@ def main() -> int | None:
             if dry_run and drive_requested:
                 if folder_id:
                     print(
-                        "[drive_sync] --dry-run: téléverserait arrivee.json dans "
-                        f"Drive {folder_id}"
+                        f"[drive_sync] --dry-run: téléverserait arrivee.json dans Drive {folder_id}"
                     )
                 else:
-                    print(
-                        "[drive_sync] --dry-run: arrivee.json ignoré faute de folder-id"
-                    )
+                    print("[drive_sync] --dry-run: arrivee.json ignoré faute de folder-id")
             elif drive_service and folder_id:
                 try:
                     drive_upload_file(drive_service, folder_id, arrivee_path)
@@ -697,9 +667,7 @@ def main() -> int | None:
                         f"Drive {folder_id}"
                     )
                 else:
-                    print(
-                        "[drive_sync] --dry-run: ligne_resultats.csv ignoré faute de folder-id"
-                    )
+                    print("[drive_sync] --dry-run: ligne_resultats.csv ignoré faute de folder-id")
             elif drive_service and folder_id:
                 try:
                     drive_upload_file(drive_service, folder_id, csv_line)
@@ -719,10 +687,7 @@ def main() -> int | None:
             continue
         if folder_id:
             if dry_run and drive_requested:
-                print(
-                    "[drive_sync] --dry-run: téléverserait "
-                    f"{extra_path} dans Drive {folder_id}"
-                )
+                print(f"[drive_sync] --dry-run: téléverserait {extra_path} dans Drive {folder_id}")
             elif drive_service:
                 try:
                     drive_upload_file(drive_service, folder_id, extra_path)
@@ -732,10 +697,7 @@ def main() -> int | None:
                         file=sys.stderr,
                     )
         elif dry_run:
-            print(
-                "[drive_sync] --dry-run: upload ignoré (folder-id manquant) pour "
-                f"{extra_path}"
-            )
+            print(f"[drive_sync] --dry-run: upload ignoré (folder-id manquant) pour {extra_path}")
         else:
             print(
                 f"[drive_sync] Upload ignoré (folder-id manquant): {extra_path}",
@@ -743,9 +705,7 @@ def main() -> int | None:
             )
 
     if args.local_only:
-        print(
-            "[drive_sync] --local-only → skipping Google Cloud Storage synchronisation."
-        )
+        print("[drive_sync] --local-only → skipping Google Cloud Storage synchronisation.")
         return 0
 
     if dry_run:
@@ -770,9 +730,7 @@ def main() -> int | None:
 
     if not is_gcs_enabled():
         reason = disabled_reason() or "USE_GCS"
-        print(
-            f"[drive_sync] {reason}=false → skipping Google Cloud Storage synchronisation."
-        )
+        print(f"[drive_sync] {reason}=false → skipping Google Cloud Storage synchronisation.")
         return 0
 
     try:

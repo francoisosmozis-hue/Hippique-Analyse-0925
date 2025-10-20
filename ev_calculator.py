@@ -133,9 +133,7 @@ def _prepare_legs_for_covariance(
     return tuple(legs)
 
 
-def _ticket_dependency_keys(
-    ticket: Mapping[str, Any], legs: Sequence[Any]
-) -> frozenset[str]:
+def _ticket_dependency_keys(ticket: Mapping[str, Any], legs: Sequence[Any]) -> frozenset[str]:
     """Return dependency identifiers extracted from ``ticket`` and ``legs``."""
 
     exposures: set[str] = set()
@@ -258,9 +256,7 @@ def _estimate_joint_probability(
     return max(independence, joint)
 
 
-def _covariance_from_joint(
-    info_i: dict[str, Any], info_j: dict[str, Any], joint: float
-) -> float:
+def _covariance_from_joint(info_i: dict[str, Any], info_j: dict[str, Any], joint: float) -> float:
     win_i = info_i["win_value"]
     loss_i = info_i["loss_value"]
     win_j = info_j["win_value"]
@@ -390,9 +386,7 @@ def optimize_stake_allocation(
 
     constraints = {"type": "ineq", "fun": lambda x: 1.0 - sum(x)}
     if minimize is not None:
-        res = minimize(
-            objective, x0, bounds=bounds, constraints=[constraints], method="SLSQP"
-        )
+        res = minimize(objective, x0, bounds=bounds, constraints=[constraints], method="SLSQP")
         fractions = x0 if not res.success else res.x
     else:
         # Fallback: naive grid search with 5 % granularity
@@ -549,13 +543,9 @@ def compute_ev_roi(
             legs_for_sim = legs_for_probability
             if legs_for_sim is not None:
                 if simulate_fn is None:
-                    raise ValueError(
-                        "simulate_fn must be provided when tickets include 'legs'"
-                    )
+                    raise ValueError("simulate_fn must be provided when tickets include 'legs'")
                 if cache_simulations:
-                    key: tuple[Any, ...] = tuple(
-                        _make_hashable(leg) for leg in legs_for_sim
-                    )
+                    key: tuple[Any, ...] = tuple(_make_hashable(leg) for leg in legs_for_sim)
                     p = cache.get(key)
                     if p is None:
                         p = simulate_fn(legs_for_sim)
@@ -616,9 +606,7 @@ def compute_ev_roi(
                 max_extra = d["max_stake"] - d["stake"]
                 if max_extra <= 0:
                     continue
-                allocation = (
-                    remaining * (d["kelly_stake"] / weight_sum) if weight_sum else 0.0
-                )
+                allocation = remaining * (d["kelly_stake"] / weight_sum) if weight_sum else 0.0
                 allocation = min(allocation, max_extra)
                 allocation = math.floor((allocation + 1e-12) / round_to) * round_to
                 d["stake"] += allocation
@@ -785,9 +773,7 @@ def compute_ev_roi(
             p = t["p"]
             odds = t["odds"]
             ev = stake_opt * (p * (odds - 1) - (1 - p))
-            variance = (
-                p * (stake_opt * (odds - 1)) ** 2 + (1 - p) * (-stake_opt) ** 2 - ev**2
-            )
+            variance = p * (stake_opt * (odds - 1)) ** 2 + (1 - p) * (-stake_opt) ** 2 - ev**2
             roi = ev / stake_opt if stake_opt else 0.0
             expected_payout = p * stake_opt * odds
             ticket_variance = max(variance, 0.0)
@@ -887,16 +873,12 @@ def compute_ev_roi(
             opt_variance = total_variance
             opt_variance_naive = baseline_variance_naive
             opt_covariance_adjustment = baseline_covariance_adjustment
-            opt_covariance_details = [
-                dict(detail) for detail in baseline_covariance_details
-            ]
+            opt_covariance_details = [dict(detail) for detail in baseline_covariance_details]
             opt_stake_sum = total_stake_normalized
             opt_combined_payout = combined_expected_payout
             opt_expected_payout = total_expected_payout
             optimized_metrics = baseline_metrics
-            optimized_stakes = [
-                metrics.get("stake", 0.0) for metrics in baseline_metrics
-            ]
+            optimized_stakes = [metrics.get("stake", 0.0) for metrics in baseline_metrics]
             for ticket, metrics in zip(tickets, baseline_metrics, strict=False):
                 ticket["optimized_stake"] = metrics.get("stake")
                 ticket["optimized_expected_payout"] = metrics.get("expected_payout")

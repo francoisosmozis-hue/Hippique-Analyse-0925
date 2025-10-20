@@ -1,4 +1,3 @@
-
 import pytest
 
 from ev_calculator import compute_ev_roi

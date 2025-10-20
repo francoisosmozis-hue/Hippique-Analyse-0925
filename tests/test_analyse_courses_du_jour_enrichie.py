@@ -41,9 +41,7 @@ def test_process_reunion_executes_pipeline(monkeypatch: pytest.MonkeyPatch, tmp_
 
     snapshot_calls: list[dict[str, Any]] = []
 
-    def fake_snapshot(
-        cid: str, ph: str, rc_dir: Path, *, course_url: str | None = None
-    ) -> Path:
+    def fake_snapshot(cid: str, ph: str, rc_dir: Path, *, course_url: str | None = None) -> Path:
         rc_dir.mkdir(parents=True, exist_ok=True)
         snapshot_calls.append(
             {
@@ -83,17 +81,14 @@ def test_process_reunion_executes_pipeline(monkeypatch: pytest.MonkeyPatch, tmp_
 
     assert [call["course_id"] for call in snapshot_calls] == ["123", "456"]
     assert [call["phase"] for call in snapshot_calls] == ["H5", "H5"]
-    assert [
-        call["course_url"]
-        for call in snapshot_calls
-    ] == [
+    assert [call["course_url"] for call in snapshot_calls] == [
         "https://www.zeturf.fr/fr/course/123",
         "https://www.zeturf.fr/fr/course/456",
     ]
-    assert [
-        call["rc_dir"].relative_to(tmp_path)
-        for call in snapshot_calls
-    ] == [Path("R2C1"), Path("R2C2")]
+    assert [call["rc_dir"].relative_to(tmp_path) for call in snapshot_calls] == [
+        Path("R2C1"),
+        Path("R2C2"),
+    ]
     assert [entry[0].relative_to(tmp_path) for entry in chain_calls] == [
         Path("R2C1"),
         Path("R2C2"),
@@ -102,7 +97,9 @@ def test_process_reunion_executes_pipeline(monkeypatch: pytest.MonkeyPatch, tmp_
 
 
 @pytest.mark.parametrize("phase, expect_pipeline", [("H30", False), ("H5", True)])
-def test_single_reunion(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, phase: str, expect_pipeline: bool) -> None:
+def test_single_reunion(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, phase: str, expect_pipeline: bool
+) -> None:
     html = """
     <html>
       <body>
@@ -119,9 +116,7 @@ def test_single_reunion(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, phase: 
 
     snaps: list[tuple[str, str, Path, str | None]] = []
 
-    def fake_snapshot(
-        cid: str, ph: str, rc_dir: Path, *, course_url: str | None = None
-    ) -> Path:
+    def fake_snapshot(cid: str, ph: str, rc_dir: Path, *, course_url: str | None = None) -> Path:
         suffix = "H-5" if ph.upper() == "H5" else "H-30"
         dest = rc_dir / f"snap_{cid}_{suffix}.json"
         dest.write_text("{}", encoding="utf-8")
@@ -143,9 +138,7 @@ def test_single_reunion(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, phase: 
         (rc_dir / f"{stem}_je.csv").write_text(
             "num,nom,j_rate,e_rate\n1,A,0.1,0.2\n", encoding="utf-8"
         )
-        (rc_dir / "chronos.csv").write_text(
-            "num,chrono\n1,1.0\n", encoding="utf-8"
-        )
+        (rc_dir / "chronos.csv").write_text("num,chrono\n1,1.0\n", encoding="utf-8")
         enrich_calls.append(rc_dir)
 
     monkeypatch.setattr(acde, "enrich_h5", fake_enrich)
@@ -153,7 +146,9 @@ def test_single_reunion(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, phase: 
     pipeline_calls: list[Path] = []
     monkeypatch.setattr(acde, "build_p_finale", lambda rc_dir, **kw: pipeline_calls.append(rc_dir))
     monkeypatch.setattr(acde, "run_pipeline", lambda rc_dir, **kw: pipeline_calls.append(rc_dir))
-    monkeypatch.setattr(acde, "build_prompt_from_meta", lambda rc_dir, **kw: pipeline_calls.append(rc_dir))
+    monkeypatch.setattr(
+        acde, "build_prompt_from_meta", lambda rc_dir, **kw: pipeline_calls.append(rc_dir)
+    )
 
     csv_calls: list[Path] = []
     monkeypatch.setattr(
@@ -210,9 +205,7 @@ def test_course_url_shortcuts_single_course(
 
     captured: dict[str, Any] = {}
 
-    def fake_snapshot(
-        cid: str, ph: str, rc_dir: Path, *, course_url: str | None = None
-    ) -> Path:
+    def fake_snapshot(cid: str, ph: str, rc_dir: Path, *, course_url: str | None = None) -> Path:
         captured.update(
             {
                 "course_id": cid,
@@ -310,9 +303,7 @@ def test_missing_enrich_outputs(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
 
     monkeypatch.setattr(acde.requests, "get", fake_get)
 
-    def fake_snapshot(
-        cid: str, ph: str, rc_dir: Path, *, course_url: str | None = None
-    ) -> Path:
+    def fake_snapshot(cid: str, ph: str, rc_dir: Path, *, course_url: str | None = None) -> Path:
         dest = rc_dir / "snap_H-5.json"
         payload = {"id_course": cid, "course_id": cid}
         dest.write_text(json.dumps(payload), encoding="utf-8")
@@ -328,14 +319,11 @@ def test_missing_enrich_outputs(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
                 payload = json.loads(snap_path.read_text(encoding="utf-8"))
             except json.JSONDecodeError:
                 payload = {}
-            course_id = str(
-                payload.get("id_course") or payload.get("course_id") or ""
-            )
+            course_id = str(payload.get("id_course") or payload.get("course_id") or "")
         minimal = {"course_id": course_id, "runners": [{"id": "1", "chrono": ""}]}
-        (rc_dir / "normalized_h5.json").write_text(
-            json.dumps(minimal), encoding="utf-8"
-        )
+        (rc_dir / "normalized_h5.json").write_text(json.dumps(minimal), encoding="utf-8")
         (rc_dir / "partants.json").write_text(json.dumps(minimal), encoding="utf-8")
+
     monkeypatch.setattr(acde, "enrich_h5", fake_enrich)
     monkeypatch.setattr(acde.time, "sleep", lambda delay: None)
     monkeypatch.setattr(acde, "build_p_finale", lambda *a, **k: None)
@@ -379,9 +367,7 @@ def test_missing_enrich_outputs(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
     assert marker.exists()
     chronos_path = rc_dir / "chronos.csv"
     assert chronos_path.exists()
-    fetch_stats = str(
-        Path(acde.__file__).resolve().with_name("scripts") / "fetch_je_stats.py"
-    )
+    fetch_stats = str(Path(acde.__file__).resolve().with_name("scripts") / "fetch_je_stats.py")
     assert calls == [
         [
             sys.executable,
@@ -405,9 +391,7 @@ def test_missing_enrich_outputs_recovers_after_fetch(
 
     monkeypatch.setattr(acde.requests, "get", lambda *a, **k: DummyResp(html))
 
-    def fake_snapshot(
-        cid: str, ph: str, rc_dir: Path, *, course_url: str | None = None
-    ) -> Path:
+    def fake_snapshot(cid: str, ph: str, rc_dir: Path, *, course_url: str | None = None) -> Path:
         dest = rc_dir / "snap_H-5.json"
         payload = {"id_course": cid, "course_id": cid}
         dest.write_text(json.dumps(payload), encoding="utf-8")
@@ -420,6 +404,7 @@ def test_missing_enrich_outputs_recovers_after_fetch(
         return True, {}, None
 
     monkeypatch.setattr(acde, "_run_h5_guard_phase", fake_guard)
+
     def fake_enrich(rc_dir: Path, **kw) -> None:
         snap_path = rc_dir / "snap_H-5.json"
         course_id = ""
@@ -428,13 +413,9 @@ def test_missing_enrich_outputs_recovers_after_fetch(
                 payload = json.loads(snap_path.read_text(encoding="utf-8"))
             except json.JSONDecodeError:
                 payload = {}
-            course_id = str(
-                payload.get("id_course") or payload.get("course_id") or ""
-            )
+            course_id = str(payload.get("id_course") or payload.get("course_id") or "")
         minimal = {"course_id": course_id, "runners": [{"id": "1", "chrono": "1.0"}]}
-        (rc_dir / "normalized_h5.json").write_text(
-            json.dumps(minimal), encoding="utf-8"
-        )
+        (rc_dir / "normalized_h5.json").write_text(json.dumps(minimal), encoding="utf-8")
         (rc_dir / "partants.json").write_text(json.dumps(minimal), encoding="utf-8")
 
     monkeypatch.setattr(acde, "enrich_h5", fake_enrich)
@@ -532,10 +513,7 @@ def test_export_per_horse_csv_missing_chronos(tmp_path: Path) -> None:
         acde.export_per_horse_csv(tmp_path)
 
 
-
-def test_h5_pipeline_produces_outputs(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_h5_pipeline_produces_outputs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     meeting_payload = {
         "meetings": [
             {
@@ -573,9 +551,7 @@ def test_h5_pipeline_produces_outputs(
             start=1,
         )
     ]
-    h5_runners = [
-        dict(runner, odds=runner["odds"] * 1.05) for runner in h30_runners
-    ]
+    h5_runners = [dict(runner, odds=runner["odds"] * 1.05) for runner in h30_runners]
 
     h30_payload = dict(base_meta)
     h30_payload["runners"] = h30_runners
@@ -609,10 +585,7 @@ def test_h5_pipeline_produces_outputs(
         return True, {}, None
 
     monkeypatch.setattr(acde, "_run_h5_guard_phase", fake_guard)
-    stats_map = {
-        str(idx): {"j_win": 20 + idx, "e_win": 15 + idx}
-        for idx in range(1, 7)
-    }
+    stats_map = {str(idx): {"j_win": 20 + idx, "e_win": 15 + idx} for idx in range(1, 7)}
     monkeypatch.setattr(acde, "collect_stats", lambda *args, **kwargs: (100.0, stats_map))
 
     argv = [
@@ -705,7 +678,6 @@ class TestSafeEnrichH5:
             enrich_calls.append({"rc_dir": rc_dir, "budget": budget, "kelly": kelly})
             # This fake does NOT create the expected CSV files.
             (rc_dir / "20251011T120000_R1C1_H-5.json").write_text("{}")
-
 
         monkeypatch.setattr(acde, "enrich_h5", fake_enrich_noop)
         monkeypatch.setattr(acde.time, "sleep", lambda d: None)

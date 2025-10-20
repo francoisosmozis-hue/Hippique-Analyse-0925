@@ -7,6 +7,7 @@ for bookkeeping such as a CSV summary line and the command required to
 update the tracking spreadsheet.  The number of paid positions can be
 controlled via the ``--places`` option (defaults to one winner).
 """
+
 from __future__ import annotations
 
 import argparse

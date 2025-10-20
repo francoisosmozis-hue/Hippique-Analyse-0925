@@ -43,7 +43,9 @@ def test_write_analysis_disables_exotics_without_stats(monkeypatch, tmp_path):
             "meta": {"market": {"overround": 1.10}},
         }
         (outdir / "p_finale.json").write_text(json.dumps(finale_payload), encoding="utf-8")
-        (outdir / "metrics.json").write_text(json.dumps({"tickets": {"total": 2}}), encoding="utf-8")
+        (outdir / "metrics.json").write_text(
+            json.dumps({"tickets": {"total": 2}}), encoding="utf-8"
+        )
         return {
             "outdir": str(outdir),
             "metrics": {"status": "ok", "tickets": {"total": 2, "sp": 1, "combo": 1}},

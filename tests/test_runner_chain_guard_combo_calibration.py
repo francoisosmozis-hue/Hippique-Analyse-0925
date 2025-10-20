@@ -7,9 +7,7 @@ def test_validate_exotics_requires_calibration(tmp_path, monkeypatch):
 
     monkeypatch.setattr(runner_chain, "evaluate_combo", fake_evaluate)
 
-    combos = [
-        [{"id": "CP1", "legs": ["1", "2"], "stake": 1.0, "p": 0.05, "odds": 12.0}]
-    ]
+    combos = [[{"id": "CP1", "legs": ["1", "2"], "stake": 1.0, "p": 0.05, "odds": 12.0}]]
 
     calibration_path = tmp_path / "missing_calibration.yaml"
 

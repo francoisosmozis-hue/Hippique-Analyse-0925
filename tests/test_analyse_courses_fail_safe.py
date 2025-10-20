@@ -325,9 +325,7 @@ def test_ensure_h5_artifacts_rebuilds_csv_from_stats(tmp_path, monkeypatch):
     chronos.write_text("num,chrono\n1,\n", encoding="utf-8")
 
     (rc_dir / "partants.json").write_text(
-        json.dumps(
-            {"id2name": {"1": "Bravo"}, "runners": [{"id": "1", "name": "Bravo"}]}
-        ),
+        json.dumps({"id2name": {"1": "Bravo"}, "runners": [{"id": "1", "name": "Bravo"}]}),
         encoding="utf-8",
     )
 
@@ -521,9 +519,7 @@ def test_recover_je_csv_from_stats_helper(tmp_path, monkeypatch):
     snap = _write_snapshot(rc_dir)
 
     (rc_dir / "partants.json").write_text(
-        json.dumps(
-            {"id2name": {"5": "Delta"}, "runners": [{"id": "5", "name": "Delta"}]}
-        ),
+        json.dumps({"id2name": {"5": "Delta"}, "runners": [{"id": "5", "name": "Delta"}]}),
         encoding="utf-8",
     )
 

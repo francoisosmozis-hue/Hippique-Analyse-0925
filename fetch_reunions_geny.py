@@ -70,9 +70,7 @@ def main() -> None:
     data = {"date": args.date, "reunions": []}
     for reunion in reunions:
         slug = _slugify(reunion["hippodrome"])
-        url_zeturf = (
-            f"https://www.zeturf.fr/fr/reunion/{args.date}/{reunion['label']}-{slug}"
-        )
+        url_zeturf = f"https://www.zeturf.fr/fr/reunion/{args.date}/{reunion['label']}-{slug}"
         data["reunions"].append(
             {
                 "label": reunion["label"],

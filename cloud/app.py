@@ -35,9 +35,7 @@ _JSON_HEADERS = {"Content-Type": "application/json"}
 _VALID_PHASES = {"H30", "H5"}
 
 
-def _json_response(
-    payload: Mapping[str, Any], status: int
-) -> tuple[str, int, dict[str, str]]:
+def _json_response(payload: Mapping[str, Any], status: int) -> tuple[str, int, dict[str, str]]:
     """Return a tuple compatible with the legacy Cloud Function contract."""
 
     return json.dumps(dict(payload), ensure_ascii=False), status, dict(_JSON_HEADERS)

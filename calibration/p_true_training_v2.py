@@ -35,9 +35,11 @@ from sklearn.metrics import brier_score_loss, log_loss
 
 # --- Définition du conteneur de résultat ---
 
+
 @dataclass(slots=True)
 class LGBMCalibrationResult:
     """Conteneur pour les résultats de l'entraînement du modèle LightGBM."""
+
     models: list[lgb.LGBMClassifier]
     features: list[str]
     n_samples: int
@@ -48,6 +50,7 @@ class LGBMCalibrationResult:
 
 
 # --- Fonction d'entraînement ---
+
 
 def train_lgbm_cv_model(
     dataset: pd.DataFrame,
@@ -148,6 +151,7 @@ def serialize_lgbm_models(result: LGBMCalibrationResult, path: Path) -> None:
 
 # --- Point d'entrée du script ---
 
+
 def main():
     """Fonction principale pour exécuter le pipeline d'entraînement."""
     parser = argparse.ArgumentParser(
@@ -168,7 +172,7 @@ def main():
     args = parser.parse_args()
 
     # 1. Assembler le jeu de données
-    print(f"Assemblage du jeu de données depuis : {args.data-dir}")
+    print(f"Assemblage du jeu de données depuis : {args.data - dir}")
     try:
         dataset = assemble_history_dataset(args.data_dir)
         print(f"-> {len(dataset)} échantillons trouvés.")

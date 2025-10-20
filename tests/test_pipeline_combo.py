@@ -240,9 +240,7 @@ def test_pipeline_allocates_combo_budget(tmp_path, monkeypatch):
             tickets.append(ticket)
         return tickets, {"notes": [], "flags": {"combo": True}}
 
-    monkeypatch.setattr(
-        tickets_builder, "validate_exotics_with_simwrapper", fake_validate
-    )
+    monkeypatch.setattr(tickets_builder, "validate_exotics_with_simwrapper", fake_validate)
 
     calls = []
 
@@ -274,9 +272,7 @@ def test_pipeline_allocates_combo_budget(tmp_path, monkeypatch):
 
     monkeypatch.setattr(pipeline_run, "compute_overround_cap", lambda *a, **k: 2.0)
     _patch_combo_eval(monkeypatch)
-    cleanup = _patch_simulation(
-        monkeypatch, simulate_fn=fake_simulate, gate_fn=fake_gate
-    )
+    cleanup = _patch_simulation(monkeypatch, simulate_fn=fake_simulate, gate_fn=fake_gate)
     try:
         outdir = _run_pipeline(tmp_path, inputs)
     finally:
@@ -284,18 +280,14 @@ def test_pipeline_allocates_combo_budget(tmp_path, monkeypatch):
 
     assert calls, "simulate_ev_batch should be called"
     final_call = calls[-1]
-    combo_types = [
-        t.get("type") for t in final_call if t.get("type") in {"CP", "TRIO", "ZE4"}
-    ]
+    combo_types = [t.get("type") for t in final_call if t.get("type") in {"CP", "TRIO", "ZE4"}]
     filtered = captured.get("result")
     if filtered:
         _, combo_filtered, notes = filtered
-        assert any(
-            t.get("type") == "CP" for t in combo_filtered
-        ), f"CP filtered unexpectedly: {combo_filtered}, notes={notes}"
-    combo_stakes = [
-        t["stake"] for t in final_call if t.get("type") in {"CP", "TRIO", "ZE4"}
-    ]
+        assert any(t.get("type") == "CP" for t in combo_filtered), (
+            f"CP filtered unexpectedly: {combo_filtered}, notes={notes}"
+        )
+    combo_stakes = [t["stake"] for t in final_call if t.get("type") in {"CP", "TRIO", "ZE4"}]
     assert len(combo_stakes) == 1, f"combo types={combo_types}, stakes={combo_stakes}"
     combo_budget = 5 * 0.4
     assert combo_stakes[0] == pytest.approx(combo_budget)
@@ -303,9 +295,7 @@ def test_pipeline_allocates_combo_budget(tmp_path, monkeypatch):
     data = json.loads((outdir / "p_finale.json").read_text(encoding="utf-8"))
     combo_ids = [t["id"] for t in data["tickets"] if t.get("type") in {"CP", "TRIO"}]
     assert combo_ids and {"cp-alpha", "trio-beta"}.issuperset(set(combo_ids))
-    assert data["ev"]["global"] == pytest.approx(
-        sum(t["stake"] for t in final_call) * 0.2
-    )
+    assert data["ev"]["global"] == pytest.approx(sum(t["stake"] for t in final_call) * 0.2)
     assert data["ev"]["variance"] == pytest.approx(1.2)
     assert data["ev"]["combined_expected_payout"] == pytest.approx(
         sum(t["stake"] for t in final_call) * 8.0
@@ -363,9 +353,7 @@ def test_pipeline_recomputes_after_combo_rejection(tmp_path, monkeypatch):
             tickets.append(ticket)
         return tickets, {"notes": [], "flags": {"combo": True}}
 
-    monkeypatch.setattr(
-        tickets_builder, "validate_exotics_with_simwrapper", fake_validate
-    )
+    monkeypatch.setattr(tickets_builder, "validate_exotics_with_simwrapper", fake_validate)
 
     calls = []
 
@@ -400,9 +388,7 @@ def test_pipeline_recomputes_after_combo_rejection(tmp_path, monkeypatch):
         }
 
     _patch_combo_eval(monkeypatch)
-    cleanup = _patch_simulation(
-        monkeypatch, simulate_fn=fake_simulate, gate_fn=fake_gate
-    )
+    cleanup = _patch_simulation(monkeypatch, simulate_fn=fake_simulate, gate_fn=fake_gate)
     try:
         outdir = _run_pipeline(tmp_path, inputs)
     finally:
@@ -553,9 +539,7 @@ def test_pipeline_uses_capped_stake_in_exports(tmp_path, monkeypatch):
     ):
         return {"sp": True, "combo": False, "reasons": {"sp": [], "combo": []}}
 
-    cleanup = _patch_simulation(
-        monkeypatch, simulate_fn=fake_simulate, gate_fn=fake_gate
-    )
+    cleanup = _patch_simulation(monkeypatch, simulate_fn=fake_simulate, gate_fn=fake_gate)
 
     try:
         outdir = _run_pipeline(tmp_path, inputs)
@@ -689,9 +673,7 @@ def test_pipeline_optimization_preserves_ev_and_budget(tmp_path, monkeypatch):
     ):
         return {"sp": True, "combo": True, "reasons": {"sp": [], "combo": []}}
 
-    cleanup = _patch_simulation(
-        monkeypatch, simulate_fn=fake_simulate, gate_fn=fake_gate
-    )
+    cleanup = _patch_simulation(monkeypatch, simulate_fn=fake_simulate, gate_fn=fake_gate)
 
     try:
         outdir = _run_pipeline(tmp_path, inputs)
@@ -811,9 +793,7 @@ def test_pipeline_respects_p_finale_override(tmp_path, monkeypatch):
     pipeline_run._load_simulate_ev.cache_clear()
     monkeypatch.setattr(simulate_ev, "allocate_dutching_sp", fake_allocate)
     monkeypatch.setattr(pipeline_run, "_ensure_place_odds", capture_ensure)
-    cleanup = _patch_simulation(
-        monkeypatch, simulate_fn=fake_simulate, gate_fn=fake_gate
-    )
+    cleanup = _patch_simulation(monkeypatch, simulate_fn=fake_simulate, gate_fn=fake_gate)
     try:
         outdir = _run_pipeline(tmp_path, inputs)
     finally:
@@ -851,17 +831,13 @@ def test_pipeline_respects_p_finale_override(tmp_path, monkeypatch):
     saved = json.loads((outdir / "p_finale.json").read_text(encoding="utf-8"))
     for cid, expected in p_true_override.items():
         assert saved["p_true"][cid] == pytest.approx(expected)
-    metrics_market = (
-        saved.get("meta", {}).get("exotics", {}).get("metrics", {}).get("market", {})
-    )
+    metrics_market = saved.get("meta", {}).get("exotics", {}).get("metrics", {}).get("market", {})
     assert metrics_market.get("slots_place") == pytest.approx(paid_places)
 
 
 def test_filter_combos_strict_handles_missing_metrics():
     class DummyWrapper:
-        def evaluate_combo(
-            self, combo, bankroll, calibration=None, allow_heuristic=False
-        ):
+        def evaluate_combo(self, combo, bankroll, calibration=None, allow_heuristic=False):
             return {
                 "status": "insufficient_data",
                 "ev_ratio": None,

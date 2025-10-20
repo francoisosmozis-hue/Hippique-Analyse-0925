@@ -11,6 +11,7 @@ The results CSV is expected to contain at least two columns:
 ``combination`` (identifier of the combiné) and ``win`` (1 if the
 combination succeeded, 0 otherwise).
 """
+
 from __future__ import annotations
 
 import argparse
@@ -131,9 +132,7 @@ def update_probabilities(
     if decay is None:
         decay = DEFAULT_DECAY
     decay = _normalise_decay(decay)
-    params: dict[str, dict[str, float]] = defaultdict(
-        lambda: {"alpha": 1.0, "beta": 1.0}
-    )
+    params: dict[str, dict[str, float]] = defaultdict(lambda: {"alpha": 1.0, "beta": 1.0})
     extras: dict[str, dict[str, object]] = defaultdict(dict)
     for key, val in existing.items():
         if key == METADATA_KEY:

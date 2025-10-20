@@ -51,6 +51,7 @@ def test_write_snapshot_success(tmp_path, monkeypatch, runner_payload):
                 {"id": "2", "name": "Beta", "odds": 3.0},
             ],
         }
+
     monkeypatch.setattr(ofz, "fetch_race_snapshot", fake_fetch)
 
     rc._write_snapshot(runner_payload, "H30", tmp_path)
@@ -71,6 +72,7 @@ def test_write_snapshot_success(tmp_path, monkeypatch, runner_payload):
 def test_write_snapshot_network_error(tmp_path, monkeypatch, runner_payload):
     def fake_fetch_fail(*args, **kwargs):
         raise requests.ConnectionError("boom")
+
     monkeypatch.setattr(ofz, "fetch_race_snapshot", fake_fetch_fail)
 
     rc._write_snapshot(runner_payload, "H30", tmp_path)
@@ -94,13 +96,14 @@ def test_cli_single_race_uses_course_url(tmp_path, monkeypatch):
             "course_id": "654321",
             "reunion": "R1",
             "course": "C2",
-            "start_time": "2024-01-01T12:00:00"
+            "start_time": "2024-01-01T12:00:00",
         }
     }
     snapshot_path.write_text(json.dumps(snapshot_data))
 
     # 2. Mock _trigger_phase to capture arguments
     captured_args = {}
+
     def fake_trigger_phase(payload, url=None, **kwargs):
         captured_args['payload'] = payload
         captured_args['url'] = url
@@ -110,7 +113,7 @@ def test_cli_single_race_uses_course_url(tmp_path, monkeypatch):
     # 3. Set sys.argv
     argv = [
         "runner_chain.py",
-        str(race_dir), # Use directory path as main argument
+        str(race_dir),  # Use directory path as main argument
         "--course-url",
         "https://example.test/r1c2",
     ]

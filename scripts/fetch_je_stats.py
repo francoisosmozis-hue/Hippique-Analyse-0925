@@ -176,12 +176,7 @@ def _extract_percentage_from_node(node: object) -> float | None:
         for key, value in node.items():
             lower = key.lower()
             if isinstance(value, (int, float)):
-                if (
-                    "vict" in lower
-                    or "win" in lower
-                    or "ratio" in lower
-                    or "taux" in lower
-                ):
+                if "vict" in lower or "win" in lower or "ratio" in lower or "taux" in lower:
                     parsed = _extract_percentage_from_node(value)
                     if parsed is not None:
                         return parsed
@@ -217,18 +212,13 @@ def extract_stats_from_json(html: str) -> list[RunnerStat]:
 
     for node in _iter_dicts(blob):
         keys = {k.lower() for k in node.keys()}
-        if not (
-            {"horse", "jockey"}.issubset(keys) or {"horse", "trainer"}.issubset(keys)
-        ):
+        if not ({"horse", "jockey"}.issubset(keys) or {"horse", "trainer"}.issubset(keys)):
             continue
 
         horse = node.get("horse") or {}
         if isinstance(horse, dict):
             name = (
-                horse.get("name")
-                or horse.get("nom")
-                or node.get("horseName")
-                or node.get("name")
+                horse.get("name") or horse.get("nom") or node.get("horseName") or node.get("name")
             )
             number = (
                 _clean_number(
@@ -244,11 +234,7 @@ def extract_stats_from_json(html: str) -> list[RunnerStat]:
             )
         else:
             name = node.get("name")
-            number = (
-                _clean_number(str(node.get("number") or node.get("num")))
-                if node
-                else None
-            )
+            number = _clean_number(str(node.get("number") or node.get("num"))) if node else None
 
         if not name:
             continue
@@ -411,9 +397,7 @@ def collect_stats(
 
 def main() -> None:  # pragma: no cover - CLI glue
     parser = argparse.ArgumentParser(description="Fetch jockey/coach stats from Geny")
-    parser.add_argument(
-        "--course-id", required=True, help="Geny course identifier (numeric)"
-    )
+    parser.add_argument("--course-id", required=True, help="Geny course identifier (numeric)")
     parser.add_argument("--h5", help="Path to the H-5 snapshot JSON for id mapping")
     parser.add_argument("--out", required=True, help="Destination JSON file")
     parser.add_argument("--url", help="Override Geny URL (for debugging)")
@@ -429,12 +413,8 @@ def main() -> None:  # pragma: no cover - CLI glue
 
     out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
-    LOGGER.info(
-        "Wrote %d entries to %s (coverage %.2f%%)", len(mapped), out_path, coverage
-    )
+    out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    LOGGER.info("Wrote %d entries to %s (coverage %.2f%%)", len(mapped), out_path, coverage)
 
 
 if __name__ == "__main__":  # pragma: no cover

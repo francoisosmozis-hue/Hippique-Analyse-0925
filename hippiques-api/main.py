@@ -34,8 +34,6 @@ def arrivee(race_id: str = Query(..., description="ID de course Geny")):
             text=True,
             timeout=35,
         ).strip()
-        return (
-            json.loads(out) if out.startswith("{") else {"race_id": race_id, "raw": out}
-        )
+        return json.loads(out) if out.startswith("{") else {"race_id": race_id, "raw": out}
     except subprocess.CalledProcessError as e:
         raise HTTPException(status_code=500, detail=e.output or "script error")

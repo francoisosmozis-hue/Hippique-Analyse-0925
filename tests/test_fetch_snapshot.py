@@ -7,7 +7,6 @@ import pytest
 
 
 def test_fetch_race_snapshot_returns_list_of_partants(monkeypatch: Any) -> None:
-
     import online_fetch_zeturf as ofz
 
     fake_payload = {
@@ -53,12 +52,8 @@ def test_fetch_race_snapshot_returns_list_of_partants(monkeypatch: Any) -> None:
             return "<html></html>"
 
         monkeypatch.setattr(ofz._impl, "parse_course_page", fake_parse, raising=False)
-        monkeypatch.setattr(
-            ofz._impl, "normalize_snapshot", fake_normalize, raising=False
-        )
-        monkeypatch.setattr(
-            ofz._impl, "fetch_race_snapshot", failing_impl_fetch, raising=False
-        )
+        monkeypatch.setattr(ofz._impl, "normalize_snapshot", fake_normalize, raising=False)
+        monkeypatch.setattr(ofz._impl, "fetch_race_snapshot", failing_impl_fetch, raising=False)
         monkeypatch.setattr(ofz, "_http_get", fake_http_get)
 
         snap = ofz.fetch_race_snapshot_full(

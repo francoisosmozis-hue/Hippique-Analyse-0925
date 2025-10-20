@@ -56,9 +56,7 @@ def test_ensure_place_odds_preserves_existing_quote() -> None:
 def test_build_market_uses_synthetic_place_odds() -> None:
     """Synthetic odds should feed into the place overround calculation."""
 
-    runners = [
-        {"id": str(idx), "name": f"Runner {idx}", "p": 0.75} for idx in range(1, 5)
-    ]
+    runners = [{"id": str(idx), "name": f"Runner {idx}", "p": 0.75} for idx in range(1, 5)]
 
     sanitized = _ensure_place_odds(runners)
     assert all(entry.get("odds_place_source") == "synthetic" for entry in sanitized)

@@ -140,6 +140,7 @@ def _derive_rc_parts(label: str) -> tuple[str, str]:
         return r_part, f"C{c_part}"
     return text or "", ""
 
+
 def _gather_tracking_base(rc_dir: Path) -> dict[str, Any]:
     payloads: list[dict[str, Any]] = []
     for name in ("p_finale.json", "partants.json", "normalized_h5.json"):
@@ -202,6 +203,7 @@ def _gather_tracking_base(rc_dir: Path) -> dict[str, Any]:
     }
     return base
 
+
 def _log_tracking_missing(
     rc_dir: Path,
     *,
@@ -254,6 +256,7 @@ def _extract_id2name(payload: Any) -> dict[str, str]:
             mapping[str(cid)] = "" if name is None else str(name)
     return mapping
 
+
 def _extract_stats_mapping(stats_payload: Any) -> dict[str, dict[str, Any]]:
     """Normalise the stats payload into a ``dict[id] -> stats`` mapping."""
 
@@ -265,9 +268,8 @@ def _extract_stats_mapping(stats_payload: Any) -> dict[str, dict[str, Any]]:
             mapping[str(key)] = value
     return mapping
 
-def _write_je_csv_file(
-    path: Path, *, id2name: dict[str, str], stats_payload: Any
-) -> None:
+
+def _write_je_csv_file(path: Path, *, id2name: dict[str, str], stats_payload: Any) -> None:
     """Materialise the ``*_je.csv`` companion using the provided mappings."""
 
     stats_mapping = _extract_stats_mapping(stats_payload)
@@ -288,11 +290,13 @@ def _write_je_csv_file(
                 ]
             )
 
+
 def _norm_float(value: Any) -> float | None:
     try:
         return float(str(value).replace(",", "."))
     except Exception:  # pragma: no cover - defensive
         return None
+
 
 def _filter_sp_and_cp_by_odds(payload: dict[str, Any]) -> None:
     tickets = payload.get("tickets", []) or []
@@ -343,11 +347,7 @@ def _filter_sp_and_cp_by_odds(payload: dict[str, Any]) -> None:
                     mh = None
                     if isinstance(horses, list):
                         mh = next(
-                            (
-                                h
-                                for h in horses
-                                if isinstance(h, dict) and str(h.get("num")) == num
-                            ),
+                            (h for h in horses if isinstance(h, dict) and str(h.get("num")) == num),
                             None,
                         )
                     if mh and mh.get("cote") is not None:
@@ -385,11 +385,7 @@ def _filter_sp_and_cp_by_odds(payload: dict[str, Any]) -> None:
                     mh = None
                     if isinstance(horses, list):
                         mh = next(
-                            (
-                                h
-                                for h in horses
-                                if isinstance(h, dict) and str(h.get("num")) == num
-                            ),
+                            (h for h in horses if isinstance(h, dict) and str(h.get("num")) == num),
                             None,
                         )
                     if mh and mh.get("cote") is not None:
@@ -534,15 +530,11 @@ def enrich_h5(rc_dir: Path, *, budget: float, kelly: float) -> None:
     stats_path = rc_dir / "stats_je.json"
     course_id = str(partants_payload.get("course_id") or "").strip()
     if not course_id:
-        raise ValueError(
-            "Impossible de déterminer l'identifiant course pour les stats J/E"
-        )
+        raise ValueError("Impossible de déterminer l'identifiant course pour les stats J/E")
     snap_stem = h5_raw_path.stem
     je_path = rc_dir / f"{snap_stem}_je.csv"
     try:
-        coverage, mapped = collect_stats(
-            course_id, h5_path=rc_dir / "normalized_h5.json"
-        )
+        coverage, mapped = collect_stats(course_id, h5_path=rc_dir / "normalized_h5.json")
     except Exception:  # pragma: no cover - network or scraping issues
         logger.exception("collect_stats failed for course %s", course_id)
         stats_payload = {"coverage": 0, "ok": 0}
@@ -567,11 +559,13 @@ def enrich_h5(rc_dir: Path, *, budget: float, kelly: float) -> None:
         placeholder_rows = [["", "", 0]]
         _write_minimal_csv(chronos_path, placeholder_headers, placeholder_rows)
 
+
 def build_p_finale(rc_dir: Path, *, budget: float, kelly: float) -> None:
     """Run the ticket allocation pipeline and persist ``p_finale.json``."""
 
     rc_dir = Path(rc_dir)
     _run_single_pipeline(rc_dir, budget=budget)
+
 
 def run_pipeline(rc_dir: Path, *, budget: float, kelly: float) -> None:
     """Execute the analysis pipeline for ``rc_dir`` or its subdirectories."""
@@ -585,8 +579,7 @@ def run_pipeline(rc_dir: Path, *, budget: float, kelly: float) -> None:
         return
 
     inputs_available = any(
-        rc_dir.joinpath(name).exists()
-        for name in ("h5.json", "partants.json", "stats_je.json")
+        rc_dir.joinpath(name).exists() for name in ("h5.json", "partants.json", "stats_je.json")
     )
     if inputs_available:
         _run_single_pipeline(rc_dir, budget=budget)
@@ -601,6 +594,7 @@ def run_pipeline(rc_dir: Path, *, budget: float, kelly: float) -> None:
         ran_any = True
     if not ran_any:
         raise FileNotFoundError(f"Aucune donnée pipeline détectée dans {rc_dir}")
+
 
 def build_prompt_from_meta(rc_dir: Path, *, budget: float, kelly: float) -> None:
     """Generate a human-readable prompt from ``p_finale.json`` metadata."""
@@ -630,11 +624,7 @@ def build_prompt_from_meta(rc_dir: Path, *, budget: float, kelly: float) -> None
         roi = ev.get("roi_global")
         prompt_lines.append(
             "EV globale : "
-            + (
-                f"{float(global_ev):.2f}"
-                if isinstance(global_ev, (int, float))
-                else "n/a"
-            )
+            + (f"{float(global_ev):.2f}" if isinstance(global_ev, (int, float)) else "n/a")
             + " | ROI estimé : "
             + (f"{float(roi):.2f}" if isinstance(roi, (int, float)) else "n/a")
         )
@@ -680,12 +670,14 @@ def build_prompt_from_meta(rc_dir: Path, *, budget: float, kelly: float) -> None
         encoding="utf-8",
     )
 
+
 def _is_number(value: Any) -> bool:
     try:
         float(value)
     except (TypeError, ValueError):
         return False
     return True
+
 
 def _write_chronos_csv(path: Path, runners: Iterable[Any]) -> None:
     """Persist a chronos CSV placeholder using runner identifiers."""
@@ -702,6 +694,7 @@ def _write_chronos_csv(path: Path, runners: Iterable[Any]) -> None:
                 continue
             chrono = runner.get("chrono") or runner.get("time") or ""
             writer.writerow([cid, chrono])
+
 
 def _run_single_pipeline(rc_dir: Path, *, budget: float) -> None:
     print(f"[_run_single_pipeline] called for {rc_dir}")
@@ -791,6 +784,7 @@ def _run_single_pipeline(rc_dir: Path, *, budget: float) -> None:
         encoding="utf-8",
     )
 
+
 def _find_je_csv(rc_dir: Path) -> Path | None:
     """Return the JE CSV produced during enrichment when available."""
 
@@ -804,6 +798,7 @@ def _find_je_csv(rc_dir: Path) -> Path | None:
             return candidate
     return None
 
+
 def _is_combo_ticket(ticket: Mapping[str, Any]) -> bool:
     """Return ``True`` when ``ticket`` refers to an exotic combination."""
 
@@ -813,6 +808,7 @@ def _is_combo_ticket(ticket: Mapping[str, Any]) -> bool:
     if ticket.get("legs"):
         return True
     return ticket_type not in {"SP", "SIMPLE", "SIMPLE_PLACE", "PLACE"}
+
 
 def _evaluate_combo_guard(
     ticket: Mapping[str, Any],
@@ -837,6 +833,7 @@ def _evaluate_combo_guard(
             "payout_expected": 0.0,
             "notes": [f"evaluation_error:{exc}"],
         }
+
 
 def _run_h5_guard_phase(
     rc_dir: Path,
@@ -866,8 +863,7 @@ def _run_h5_guard_phase(
             meta = {
                 k: v
                 for k, v in base.items()
-                if k
-                in {"reunion", "course", "hippodrome", "date", "discipline", "partants"}
+                if k in {"reunion", "course", "hippodrome", "date", "discipline", "partants"}
             }
         meta.setdefault("rc", rc_dir.name)
     else:
@@ -958,9 +954,7 @@ def _run_h5_guard_phase(
             "cap": overround_cap,
         }
     overround_ok = (
-        overround_value is None
-        or overround_cap is None
-        or overround_value <= overround_cap + 1e-9
+        overround_value is None or overround_cap is None or overround_value <= overround_cap + 1e-9
     )
 
     combo_tickets = [ticket for ticket in tickets if _is_combo_ticket(ticket)]
@@ -1084,6 +1078,7 @@ def _run_h5_guard_phase(
     logger.info("[H-5][guards] course %s validated", rc_dir.name)
     return True, analysis_payload, None
 
+
 def _upload_artifacts(rc_dir: Path, *, gcs_prefix: str | None) -> None:
     """Upload ``rc_dir`` contents to Google Cloud Storage."""
 
@@ -1101,12 +1096,11 @@ def _upload_artifacts(rc_dir: Path, *, gcs_prefix: str | None) -> None:
         if gcs_build_remote_path:
             prefix = gcs_build_remote_path(gcs_prefix, rc_dir.name)
         else:  # pragma: no cover - best effort fallback
-            prefix = "/".join(
-                p for p in ((gcs_prefix or "").rstrip("/"), rc_dir.name) if p
-            )
+            prefix = "/".join(p for p in ((gcs_prefix or "").rstrip("/"), rc_dir.name) if p)
         push_tree(rc_dir, folder_id=prefix)
     except Exception as exc:  # pragma: no cover - best effort
         print(f"[WARN] Failed to upload {rc_dir}: {exc}")
+
 
 def _snap_prefix(rc_dir: Path) -> str | None:
     """Return the stem of the most recent H-5 snapshot if available."""
@@ -1129,6 +1123,7 @@ def _snap_prefix(rc_dir: Path) -> str | None:
 _SCRIPTS_DIR = Path(__file__).resolve().with_name("scripts")
 _FETCH_JE_STATS_SCRIPT = _SCRIPTS_DIR.joinpath("fetch_je_stats.py")
 _FETCH_JE_CHRONO_SCRIPT = _SCRIPTS_DIR.joinpath("fetch_je_chrono.py")
+
 
 def _check_enrich_outputs(
     rc_dir: Path,
@@ -1161,8 +1156,7 @@ def _check_enrich_outputs(
         message = ", ".join(missing)
         if attempt == 0:
             print(
-                "[WARN] fichiers manquants après enrich_h5 (nouvelle tentative) : "
-                + message,
+                "[WARN] fichiers manquants après enrich_h5 (nouvelle tentative) : " + message,
                 file=sys.stderr,
             )
             if retry_cb is not None:
@@ -1178,8 +1172,7 @@ def _check_enrich_outputs(
             continue
 
         print(
-            "[ERROR] fichiers manquants après enrich_h5 malgré la nouvelle tentative : "
-            + message,
+            "[ERROR] fichiers manquants après enrich_h5 malgré la nouvelle tentative : " + message,
             file=sys.stderr,
         )
         return {
@@ -1191,11 +1184,14 @@ def _check_enrich_outputs(
 
     return None
 
+
 def _missing_requires_stats(missing: Iterable[str]) -> bool:
     return any(str(name).endswith("_je.csv") for name in missing)
 
+
 def _missing_requires_chronos(missing: Iterable[str]) -> bool:
     return any(str(name) == "chronos.csv" for name in missing)
+
 
 def _run_fetch_script(script_path: Path, rc_dir: Path) -> bool:
     """Invoke an auxiliary fetch script and report whether it succeeded."""
@@ -1298,6 +1294,7 @@ def _run_fetch_script(script_path: Path, rc_dir: Path) -> bool:
 
     return True
 
+
 def _recover_je_csv_from_stats(
     rc_dir: Path, *, retry_cb: Callable[[], None] | None = None
 ) -> tuple[bool, bool, bool]:
@@ -1331,6 +1328,7 @@ def _recover_je_csv_from_stats(
         return True, True, True
 
     return True, False, True
+
 
 def _rebuild_je_csv_from_stats(rc_dir: Path) -> bool:
     """Attempt to rebuild ``*_je.csv`` using freshly fetched stats."""
@@ -1374,9 +1372,7 @@ def _rebuild_je_csv_from_stats(rc_dir: Path) -> bool:
         return False
 
     try:
-        _write_je_csv_file(
-            rc_dir / f"{snap}_je.csv", id2name=id2name, stats_payload=stats_payload
-        )
+        _write_je_csv_file(rc_dir / f"{snap}_je.csv", id2name=id2name, stats_payload=stats_payload)
     except OSError as exc:
         print(
             f"[WARN] Échec d'écriture du CSV J/E pour {rc_dir.name}: {exc}",
@@ -1385,6 +1381,7 @@ def _rebuild_je_csv_from_stats(rc_dir: Path) -> bool:
         return False
 
     return True
+
 
 def _regenerate_chronos_csv(rc_dir: Path) -> bool:
     """Attempt to rebuild ``chronos.csv`` from locally available runner data."""
@@ -1462,6 +1459,7 @@ def _regenerate_chronos_csv(rc_dir: Path) -> bool:
     )
     return False
 
+
 def _mark_course_unplayable(rc_dir: Path, missing: Iterable[str]) -> dict[str, Any]:
     """Write the abstention marker and emit the canonical abstain log.
 
@@ -1510,6 +1508,7 @@ def _mark_course_unplayable(rc_dir: Path, missing: Iterable[str]) -> dict[str, A
     )
 
     return details
+
 
 def _ensure_h5_artifacts(
     rc_dir: Path,
@@ -1582,9 +1581,7 @@ def _ensure_h5_artifacts(
             stats_retry_invoked,
         ) = _recover_je_csv_from_stats(rc_dir, retry_cb=retry_cb)
         retry_invoked = retry_invoked or stats_retry_invoked
-        retried = (
-            retried or stats_fetch_success or stats_recovered or stats_retry_invoked
-        )
+        retried = retried or stats_fetch_success or stats_recovered or stats_retry_invoked
         if stats_retry_invoked and not stats_recovered:
             if _attempt_stats_rebuild(allow_without_fetch=True):
                 return None
@@ -1662,6 +1659,7 @@ def _ensure_h5_artifacts(
     )
     return outcome
 
+
 def safe_enrich_h5(
     rc_dir: Path,
     *,
@@ -1726,6 +1724,7 @@ def safe_enrich_h5(
         return False, outcome
     return True, None
 
+
 def _execute_h5_chain(
     rc_dir: Path, *, budget: float, kelly: float
 ) -> tuple[bool, dict[str, Any] | None]:
@@ -1747,14 +1746,13 @@ def _execute_h5_chain(
     try:
         _write_json_file(rc_dir / "analysis_H5.json", analysis_payload)
     except Exception as exc:  # pragma: no cover - defensive logging
-        logger.warning(
-            "[H-5] unable to persist analysis_H5.json for %s: %s", rc_dir, exc
-        )
+        logger.warning("[H-5] unable to persist analysis_H5.json for %s: %s", rc_dir, exc)
     if not guard_ok:
         return False, guard_outcome
     run_pipeline(rc_dir, budget=budget, kelly=kelly)
     build_prompt_from_meta(rc_dir, budget=budget, kelly=kelly)
     return True, None
+
 
 def export_per_horse_csv(rc_dir: Path) -> Path:
     """Export a per-horse report aggregating probabilities and J/E stats."""
@@ -1806,6 +1804,7 @@ def export_per_horse_csv(rc_dir: Path) -> Path:
 
 _DISCOVER_SCRIPT = Path(__file__).resolve().with_name("discover_geny_today.py")
 
+
 def _load_geny_today_payload() -> dict[str, Any]:
     """Return the JSON payload produced by :mod:`discover_geny_today`.
 
@@ -1815,6 +1814,7 @@ def _load_geny_today_payload() -> dict[str, Any]:
 
     raw = subprocess.check_output([sys.executable, str(_DISCOVER_SCRIPT)], text=True)
     return json.loads(raw)
+
 
 def _normalise_rc_label(label: str | int, prefix: str) -> str:
     """Normalise ``label`` to the canonical ``R``/``C`` format.
@@ -1839,6 +1839,7 @@ def _normalise_rc_label(label: str | int, prefix: str) -> str:
         raise ValueError(f"Identifiant {prefix} invalide: {label!r}")
     return f"{prefix}{number}"
 
+
 def _normalise_phase(value: str) -> str:
     """Return a canonical phase string (``H30`` or ``H5``)."""
 
@@ -1847,6 +1848,7 @@ def _normalise_phase(value: str) -> str:
         raise ValueError(f"Phase inconnue: {value!r} (attendu H30 ou H5)")
     return cleaned
 
+
 def _phase_argument(value: str) -> str:
     """Argument parser wrapper that normalises ``value`` to ``H30``/``H5``."""
 
@@ -1854,6 +1856,7 @@ def _phase_argument(value: str) -> str:
         return _normalise_phase(value)
     except ValueError as exc:  # pragma: no cover - handled by argparse
         raise argparse.ArgumentTypeError(str(exc)) from exc
+
 
 def _resolve_course_id(reunion: str, course: str) -> str:
     """Return the Geny course identifier matching ``reunion``/``course``."""
@@ -1877,6 +1880,7 @@ def _resolve_course_id(reunion: str, course: str) -> str:
                 break
             return str(course_id)
     raise ValueError(f"Course {reunion}{course} introuvable via discover_geny_today")
+
 
 def _process_single_course(
     reunion: str,
@@ -1929,6 +1933,7 @@ def _process_single_course(
 
 _COURSE_URL_PATTERN = re.compile(r"/(?:course|race)/(\d+)", re.IGNORECASE)
 
+
 def _extract_labels_from_text(text: str) -> tuple[str, str]:
     """Return ``(reunion, course)`` labels parsed from ``text``."""
 
@@ -1941,6 +1946,7 @@ def _extract_labels_from_text(text: str) -> tuple[str, str]:
     r_label = r_match.group(0).upper() if r_match else "R?"
     c_label = c_match.group(0).upper() if c_match else "C?"
     return r_label, c_label
+
 
 def _process_reunion(
     url: str,
@@ -2020,15 +2026,12 @@ def _process_reunion(
         if gcs_prefix is not None:
             _upload_artifacts(rc_dir, gcs_prefix=gcs_prefix)
 
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="Analyse courses du jour enrichie")
-    ap.add_argument(
-        "--data-dir", default="data", help="Répertoire racine pour les sorties"
-    )
+    ap.add_argument("--data-dir", default="data", help="Répertoire racine pour les sorties")
     ap.add_argument("--budget", type=float, default=100.0, help="Budget à utiliser")
-    ap.add_argument(
-        "--kelly", type=float, default=1.0, help="Fraction de Kelly à appliquer"
-    )
+    ap.add_argument("--kelly", type=float, default=1.0, help="Fraction de Kelly à appliquer")
     ap.add_argument(
         "--from-geny-today",
         action="store_true",
@@ -2158,9 +2161,7 @@ def main() -> None:
                     continue
                 write_snapshot_from_geny(course_id, "H30", rc_dir)
                 write_snapshot_from_geny(course_id, "H5", rc_dir)
-                success, decision = safe_enrich_h5(
-                    rc_dir, budget=args.budget, kelly=args.kelly
-                )
+                success, decision = safe_enrich_h5(rc_dir, budget=args.budget, kelly=args.kelly)
                 if success:
                     build_p_finale(rc_dir, budget=args.budget, kelly=args.kelly)
                     run_pipeline(rc_dir, budget=args.budget, kelly=args.kelly)

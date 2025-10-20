@@ -1,5 +1,6 @@
 # scripts/snapshot_enricher.py
 """Shared utility to enrich data from a snapshot."""
+
 from __future__ import annotations
 
 import csv
@@ -153,9 +154,7 @@ def _extract_value(
     return ""
 
 
-def _write_csv(
-    path: Path, rows: Iterable[dict[str, str]], columns: Iterable[str]
-) -> None:
+def _write_csv(path: Path, rows: Iterable[dict[str, str]], columns: Iterable[str]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     header = list(columns)
     with path.open("w", newline="", encoding="utf-8") as handle:

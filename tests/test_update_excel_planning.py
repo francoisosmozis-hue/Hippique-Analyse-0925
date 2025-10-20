@@ -8,13 +8,8 @@ from scripts import update_excel_planning as planner
 
 
 def _read_row(ws, row_idx: int) -> dict[str, object]:
-    header_map = {
-        cell.value: idx for idx, cell in enumerate(ws[1], start=1) if cell.value
-    }
-    return {
-        header: ws.cell(row=row_idx, column=col).value
-        for header, col in header_map.items()
-    }
+    header_map = {cell.value: idx for idx, cell in enumerate(ws[1], start=1) if cell.value}
+    return {header: ws.cell(row=row_idx, column=col).value for header, col in header_map.items()}
 
 
 def test_h30_populates_planning_sheet(tmp_path: Path) -> None:
@@ -31,9 +26,7 @@ def test_h30_populates_planning_sheet(tmp_path: Path) -> None:
         },
         "runners": [{"id": 1}, {"id": 2}, {"id": 3}],
     }
-    (meeting_dir / "snapshot_H-30.json").write_text(
-        json.dumps(payload), encoding="utf-8"
-    )
+    (meeting_dir / "snapshot_H-30.json").write_text(json.dumps(payload), encoding="utf-8")
 
     excel_path = tmp_path / "planning.xlsx"
     planner.main(
@@ -72,9 +65,7 @@ def test_h5_updates_status_and_tickets(tmp_path: Path) -> None:
         },
         "runners": [{"id": 1}, {"id": 2}],
     }
-    (meeting_dir / "snapshot.json").write_text(
-        json.dumps(meeting_payload), encoding="utf-8"
-    )
+    (meeting_dir / "snapshot.json").write_text(json.dumps(meeting_payload), encoding="utf-8")
     excel_path = tmp_path / "planning.xlsx"
     planner.main(
         [
@@ -110,9 +101,7 @@ def test_h5_updates_status_and_tickets(tmp_path: Path) -> None:
             }
         ],
     }
-    (rc_dir / "analysis_H5_R1C1.json").write_text(
-        json.dumps(analysis), encoding="utf-8"
-    )
+    (rc_dir / "analysis_H5_R1C1.json").write_text(json.dumps(analysis), encoding="utf-8")
 
     planner.main(
         [
@@ -150,9 +139,7 @@ def test_h5_abstention_uses_reason(tmp_path: Path) -> None:
         },
         "runners": [{"id": 1}],
     }
-    (meeting_dir / "snapshot.json").write_text(
-        json.dumps(base_payload), encoding="utf-8"
-    )
+    (meeting_dir / "snapshot.json").write_text(json.dumps(base_payload), encoding="utf-8")
     planner.main(
         [
             "--phase",
@@ -212,9 +199,7 @@ def test_h5_preserves_existing_metadata_when_missing(tmp_path: Path) -> None:
         },
         "runners": [{"id": 1}, {"id": 2}],
     }
-    (meeting_dir / "snapshot.json").write_text(
-        json.dumps(base_payload), encoding="utf-8"
-    )
+    (meeting_dir / "snapshot.json").write_text(json.dumps(base_payload), encoding="utf-8")
 
     excel_path = tmp_path / "planning.xlsx"
     planner.main(
@@ -239,9 +224,7 @@ def test_h5_preserves_existing_metadata_when_missing(tmp_path: Path) -> None:
         "abstain": True,
         "abstain_reason": "Champ trop ouvert",
     }
-    (analysis_dir / "analysis_H5.json").write_text(
-        json.dumps(minimal_h5), encoding="utf-8"
-    )
+    (analysis_dir / "analysis_H5.json").write_text(json.dumps(minimal_h5), encoding="utf-8")
 
     planner.main(
         [
@@ -277,9 +260,7 @@ def test_h5_converts_timezone_when_tz_env_set(
         },
         "runners": [{"id": 1}, {"id": 2}],
     }
-    (meeting_dir / "snapshot.json").write_text(
-        json.dumps(base_payload), encoding="utf-8"
-    )
+    (meeting_dir / "snapshot.json").write_text(json.dumps(base_payload), encoding="utf-8")
 
     excel_path = tmp_path / "planning.xlsx"
     planner.main(
@@ -307,9 +288,7 @@ def test_h5_converts_timezone_when_tz_env_set(
         },
         "abstain": False,
     }
-    (rc_dir / "analysis_H5.json").write_text(
-        json.dumps(analysis_payload), encoding="utf-8"
-    )
+    (rc_dir / "analysis_H5.json").write_text(json.dumps(analysis_payload), encoding="utf-8")
 
     planner.main(
         [
@@ -365,9 +344,7 @@ def test_custom_status_h5_flag(tmp_path: Path) -> None:
         },
         "tickets": [],
     }
-    (analysis_dir / "analysis.json").write_text(
-        json.dumps(analysis_payload), encoding="utf-8"
-    )
+    (analysis_dir / "analysis.json").write_text(json.dumps(analysis_payload), encoding="utf-8")
 
     planner.main(
         [
@@ -426,9 +403,7 @@ def test_custom_status_h30_and_h5(tmp_path: Path) -> None:
         "abstain": False,
         "tickets": [],
     }
-    (analysis_dir / "analysis_H5.json").write_text(
-        json.dumps(analysis_payload), encoding="utf-8"
-    )
+    (analysis_dir / "analysis_H5.json").write_text(json.dumps(analysis_payload), encoding="utf-8")
 
     planner.main(
         [
@@ -478,9 +453,7 @@ def test_h30_preserves_existing_comment(tmp_path: Path) -> None:
 
     wb = load_workbook(excel_path)
     ws = wb["Planning"]
-    header_map = {
-        cell.value: idx for idx, cell in enumerate(ws[1], start=1) if cell.value
-    }
+    header_map = {cell.value: idx for idx, cell in enumerate(ws[1], start=1) if cell.value}
     ws.cell(row=2, column=header_map["Commentaires"]).value = "Note à conserver"
     wb.save(excel_path)
     wb.close()
@@ -669,9 +642,7 @@ def test_h5_compact_ticket_summary(tmp_path: Path) -> None:
             },
         ],
     }
-    (analysis_dir / "analysis_H5.json").write_text(
-        json.dumps(analysis_payload), encoding="utf-8"
-    )
+    (analysis_dir / "analysis_H5.json").write_text(json.dumps(analysis_payload), encoding="utf-8")
 
     planner.main(
         [
@@ -723,9 +694,7 @@ def test_format_time_handles_textual_hours(value: str, expected: str) -> None:
     assert planner._format_time(value) == expected
 
 
-def test_cli_alias_and_dash_phase(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
+def test_cli_alias_and_dash_phase(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     """The CLI should accept ``--in`` and dashed phase labels while printing a summary."""
 
     meeting_dir = tmp_path / "meeting"
@@ -741,9 +710,7 @@ def test_cli_alias_and_dash_phase(
         },
         "runners": [{"id": 1}, {"id": 2}, {"id": 3}, {"id": 4}],
     }
-    (meeting_dir / "snapshot.json").write_text(
-        json.dumps(meeting_payload), encoding="utf-8"
-    )
+    (meeting_dir / "snapshot.json").write_text(json.dumps(meeting_payload), encoding="utf-8")
 
     excel_path = tmp_path / "planning.xlsx"
 
@@ -783,9 +750,7 @@ def test_cli_alias_and_dash_phase(
         "abstain": False,
         "roi": 0.4,
     }
-    (analysis_dir / "analysis_H5.json").write_text(
-        json.dumps(analysis_payload), encoding="utf-8"
-    )
+    (analysis_dir / "analysis_H5.json").write_text(json.dumps(analysis_payload), encoding="utf-8")
 
     planner.main(
         [

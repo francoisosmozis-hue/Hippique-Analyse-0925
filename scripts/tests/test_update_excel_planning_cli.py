@@ -106,9 +106,7 @@ def test_update_excel_h5_updates_existing_row(tmp_path):
             },
         ],
     }
-    (analysis_dir / "analysis_H5.json").write_text(
-        json.dumps(analysis_payload), encoding="utf-8"
-    )
+    (analysis_dir / "analysis_H5.json").write_text(json.dumps(analysis_payload), encoding="utf-8")
 
     updater.main(
         [
@@ -127,7 +125,5 @@ def test_update_excel_h5_updates_existing_row(tmp_path):
 
     assert ws.cell(row=2, column=headers["Statut H-5"]).value == "Analysé"
     assert ws.cell(row=2, column=headers["Jouable H-5"]).value == "Oui"
-    assert (
-        ws.cell(row=2, column=headers["Tickets H-5"]).value == "SP:3-5@2 | CPL:1-3@1.8"
-    )
+    assert ws.cell(row=2, column=headers["Tickets H-5"]).value == "SP:3-5@2 | CPL:1-3@1.8"
     assert ws.cell(row=2, column=headers["Commentaires"]).value == "ROI estimé 35%"

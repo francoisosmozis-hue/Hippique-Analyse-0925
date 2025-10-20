@@ -12,6 +12,7 @@ python backtest.py \
     --data-dir /home/francoisosmozis/Hippique-Analyse-0925/data \
     --budget 100
 """
+
 from __future__ import annotations
 
 import argparse
@@ -29,9 +30,7 @@ sys.path.append(str(project_root))
 
 def parse_arguments() -> argparse.Namespace:
     """Parse les arguments de la ligne de commande."""
-    parser = argparse.ArgumentParser(
-        description="Backtest de la stratégie de paris hippiques."
-    )
+    parser = argparse.ArgumentParser(description="Backtest de la stratégie de paris hippiques.")
     parser.add_argument(
         "--start-date",
         required=True,
@@ -68,9 +67,7 @@ def get_race_results(race_dir: Path) -> dict[str, Any] | None:
         return None
 
 
-def calculate_pnl(
-    tickets: list[dict[str, Any]], results: dict[str, Any]
-) -> tuple[float, float]:
+def calculate_pnl(tickets: list[dict[str, Any]], results: dict[str, Any]) -> tuple[float, float]:
     """
     Calcule le Profit & Loss (P&L) pour une liste de tickets.
 
@@ -135,9 +132,7 @@ def calculate_pnl(
                 # La clé du rapport peut être "H1-H2" ou "H2-H1"
                 rapport_key1 = f"{horse1_num}-{horse2_num}"
                 rapport_key2 = f"{horse2_num}-{horse1_num}"
-                rapport_val = rapports_cp.get(rapport_key1) or rapports_cp.get(
-                    rapport_key2
-                )
+                rapport_val = rapports_cp.get(rapport_key1) or rapports_cp.get(rapport_key2)
 
                 if rapport_val:
                     pnl += (stake * float(rapport_val)) - stake
@@ -185,9 +180,7 @@ def main():
         day_wagered = 0.0
         races_processed = 0
 
-        race_dirs = sorted(
-            [d for d in day_dir.iterdir() if d.is_dir() and d.name.startswith("R")]
-        )
+        race_dirs = sorted([d for d in day_dir.iterdir() if d.is_dir() and d.name.startswith("R")])
 
         for race_dir in race_dirs:
             # Étape 1: Exécuter l'orchestrateur pour générer p_finale.json

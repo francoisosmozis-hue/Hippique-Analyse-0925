@@ -82,7 +82,9 @@ class RunResponse(BaseModel):
     uploaded: list[str] | None = None
 
 
-async def ensure_authenticated(request: Request, settings: Settings = Depends(get_settings)) -> None:
+async def ensure_authenticated(
+    request: Request, settings: Settings = Depends(get_settings)
+) -> None:
     """Validate the request authentication if required."""
 
     if not settings.require_auth:
@@ -99,7 +101,9 @@ async def ensure_authenticated(request: Request, settings: Settings = Depends(ge
         )
     except Exception as exc:  # pragma: no cover - dependent on env
         LOGGER.warning("auth_failed", extra={"error": str(exc)})
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid token") from exc
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid token"
+        ) from exc
 
 
 @app.middleware("http")
@@ -143,7 +147,9 @@ async def schedule_endpoint(request: ScheduleRequest, http_request: Request) -> 
                 )
             )
             continue
-        course_time = combine_local_datetime(plan_date, entry["time_local"], tz_name=settings.timezone)
+        course_time = combine_local_datetime(
+            plan_date, entry["time_local"], tz_name=settings.timezone
+        )
         offsets = [("H30", minutes(30)), ("H5", minutes(5))]
         for phase, delta in offsets:
             run_time = course_time - delta
