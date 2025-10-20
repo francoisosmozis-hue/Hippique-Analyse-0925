@@ -14,9 +14,7 @@ import datetime as dt
 import json
 import logging
 import os
-import re
 import sys
-import random
 from pathlib import Path
 from typing import Any, Dict, List, Mapping
 
@@ -365,6 +363,35 @@ def _write_analysis(
     
     global_roi = total_ev / total_stake if total_stake > 0 else 0.0
 
+    from validator_ev import combos_allowed
+
+    expected_payout_total = bets_df["Gain brut (€)"].sum()
+
+    # User constraints for "exotic" bets (applied to the whole SP portfolio)
+    # EV >= +40% (ROI >= 0.40) and Payout > 10€
+    if not combos_allowed(
+        ev_basket=global_roi, expected_payout=expected_payout_total, min_ev=0.40, min_payout=10.0
+    ):
+        payload = {
+            "race_id": race_id,
+            "status": "aborted",
+            "reasons": ["exotic_policy_validation_failed", "ev_or_payout_too_low"],
+            "ev": {"global": total_ev, "roi": global_roi},
+            "validation_meta": {
+                "ev_basket": global_roi,
+                "expected_payout": expected_payout_total,
+                "min_ev_threshold": 0.40,
+                "min_payout_threshold": 10.0,
+            },
+        }
+        _write_json_file(analysis_path, payload)
+        if USE_GCS and upload_file:
+            try:
+                upload_file(analysis_path)
+            except EnvironmentError as exc:
+                logger.warning("Skipping cloud upload for %s: %s", analysis_path, exc)
+        return
+
     tickets_list = bets_df.to_dict(orient="records")
 
     final_tickets, _, validation_meta = enforce_ror_threshold(
@@ -491,7 +518,7 @@ def main() -> None:
     parser.add_argument("--analysis-dir", default="data/analyses")
     parser.add_argument("--budget", type=float, default=5.0)
     parser.add_argument("--ev-min", type=float, default=0.35)
-    parser.add_argument("--roi-min", type=float, default=0.25)
+    parser.add_argument("--roi-min", type=float, default=0.20)
     parser.add_argument("--pastille-rule", default="", help="Unused placeholder")
     parser.add_argument("--gpi-config", default="", help="Path to GPI config (unused)")
     parser.add_argument(

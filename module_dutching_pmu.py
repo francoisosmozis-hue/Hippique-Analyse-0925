@@ -77,7 +77,7 @@ def dutching_kelly_fractional(
 
     # Fraction Kelly directe par cheval (déjà capée)
     f_k = []
-    for p, o in zip(probs, odds, strict=False):
+    for p, o in zip(probs, odds, strict=True):
         p = _safe_prob(float(p))
         o = float(o)
         f_k.append(
@@ -115,9 +115,9 @@ def dutching_kelly_fractional(
     shares = [st / sum_alloc if sum_alloc else 0 for st in stakes]
 
     # Calculs gains/EV
-    gains = [st * o for st, o in zip(stakes, odds, strict=False)]
+    gains = [st * o for st, o in zip(stakes, odds, strict=True)]
     evs = []
-    for st, o, p in zip(stakes, odds, probs, strict=False):
+    for st, o, p in zip(stakes, odds, probs, strict=True):
         p = _safe_prob(float(p))
         gain_net = st * (o - 1.0)
         ev = p * gain_net - (1.0 - p) * st

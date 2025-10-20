@@ -4,6 +4,7 @@ import logging
 from pathlib import Path
 
 import pytest
+import pandas as pd
 
 from scripts import runner_chain
 
@@ -17,6 +18,118 @@ def _build_payload(phase: str) -> runner_chain.RunnerPayload:
         start_time=dt.datetime(2023, 9, 25, 15, 30),
         budget=5.0,
     )
+
+def test_write_analysis_exotic_policy_validation(tmp_path, monkeypatch):
+    """Tests the exotic policy validation logic added to _write_analysis."""
+    race_id = "R1C1"
+    analysis_dir = tmp_path / "analysis"
+    race_dir = analysis_dir / race_id
+    race_dir.mkdir(parents=True)
+    (race_dir / "snapshot_H5.json").write_text(json.dumps({
+        "payload": {
+            "runners": [{"num": "1", "odds": 2.0}, {"num": "2", "odds": 3.0}]
+        }
+    }))
+    (race_dir / "je_stats.csv").touch()
+    (race_dir / "chronos.csv").touch()
+
+    # --- Scenario 1: Fails due to low ROI (< 0.40) ---
+    bets_df_low_roi = pd.DataFrame({
+        "Cheval": ["1", "2"],
+        "Cote": [2.0, 3.0],
+        "p": [0.6, 0.4],
+        "Stake (€)": [2.5, 2.5],
+        "Gain brut (€)": [5.0, 7.5],  # Total payout = 12.5 > 10
+        "EV (€)": [0.5, 0.5],          # Total EV = 1.0, Stake = 5.0, ROI = 0.20 < 0.40
+    })
+    
+    monkeypatch.setattr(
+        runner_chain, 
+        "dutching_kelly_fractional", 
+        lambda **kwargs: bets_df_low_roi
+    )
+
+    runner_chain._write_analysis(
+        race_id=race_id,
+        base=analysis_dir,
+        budget=5.0,
+        ev_min=0.0,
+        roi_min=0.20,
+        mode="test",
+        calibration=tmp_path / "cal.yaml",
+        calibration_available=False,
+    )
+
+    analysis_path_low_roi = race_dir / "analysis.json"
+    assert analysis_path_low_roi.exists()
+    result_low_roi = json.loads(analysis_path_low_roi.read_text())
+    assert result_low_roi["status"] == "aborted"
+    assert "exotic_policy_validation_failed" in result_low_roi["reasons"]
+
+    # --- Scenario 2: Fails due to low payout (< 10) ---
+    bets_df_low_payout = pd.DataFrame({
+        "Cheval": ["1", "2"],
+        "Cote": [2.0, 3.0],
+        "p": [0.6, 0.4],
+        "Stake (€)": [1.0, 1.0],
+        "Gain brut (€)": [2.0, 3.0], # Total payout = 5.0 < 10
+        "EV (€)": [0.8, 0.8],         # Total EV = 1.6, Stake = 2.0, ROI = 0.80 > 0.40
+    })
+
+    monkeypatch.setattr(
+        runner_chain, 
+        "dutching_kelly_fractional", 
+        lambda **kwargs: bets_df_low_payout
+    )
+
+    runner_chain._write_analysis(
+        race_id=race_id,
+        base=analysis_dir,
+        budget=5.0,
+        ev_min=0.0,
+        roi_min=0.20,
+        mode="test",
+        calibration=tmp_path / "cal.yaml",
+        calibration_available=False,
+    )
+
+    analysis_path_low_payout = race_dir / "analysis.json"
+    assert analysis_path_low_payout.exists()
+    result_low_payout = json.loads(analysis_path_low_payout.read_text())
+    assert result_low_payout["status"] == "aborted"
+    assert "exotic_policy_validation_failed" in result_low_payout["reasons"]
+
+    # --- Scenario 3: Passes ---
+    bets_df_pass = pd.DataFrame({
+        "Cheval": ["1", "2"],
+        "Cote": [3.0, 4.0],
+        "p": [0.5, 0.4],
+        "Stake (€)": [2.5, 2.5],
+        "Gain brut (€)": [7.5, 10.0], # Total payout = 17.5 > 10
+        "EV (€)": [1.25, 1.5],       # Total EV = 2.75, Stake = 5.0, ROI = 0.55 > 0.40
+    })
+
+    monkeypatch.setattr(
+        runner_chain, 
+        "dutching_kelly_fractional", 
+        lambda **kwargs: bets_df_pass
+    )
+
+    runner_chain._write_analysis(
+        race_id=race_id,
+        base=analysis_dir,
+        budget=5.0,
+        ev_min=0.0,
+        roi_min=0.20,
+        mode="test",
+        calibration=tmp_path / "cal.yaml",
+        calibration_available=False,
+    )
+
+    analysis_path_pass = race_dir / "analysis.json"
+    assert analysis_path_pass.exists()
+    result_pass = json.loads(analysis_path_pass.read_text())
+    assert result_pass["status"] == "ok"
 
 
 def test_estimate_sp_ev_filters_missing_place_odds(caplog: pytest.LogCaptureFixture) -> None:
