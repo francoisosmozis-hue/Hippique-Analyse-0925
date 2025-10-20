@@ -14,6 +14,12 @@ pytest.importorskip("google.cloud.storage")
 from scripts import drive_sync
 
 
+@pytest.fixture(autouse=True)
+def mock_google_auth():
+    with patch("google.auth.default", return_value=(None, None)) as m:
+        yield m
+
+
 def test_upload_file_uses_bucket_env(tmp_path, monkeypatch):
     path = tmp_path / "example.txt"
     path.write_text("data", encoding="utf-8")
