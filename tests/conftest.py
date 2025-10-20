@@ -18,3 +18,11 @@ def _configure_rounding_step() -> None:
             os.environ.pop("ROUND_TO_SP", None)
         else:
             os.environ["ROUND_TO_SP"] = original
+
+
+from unittest import mock
+
+@pytest.fixture(autouse=True)
+def mock_google_auth():
+    with mock.patch("google.auth.default", return_value=(None, None)) as m:
+        yield m
