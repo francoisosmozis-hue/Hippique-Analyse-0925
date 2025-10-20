@@ -32,7 +32,7 @@ from scripts import online_fetch_zeturf as ofz
 from scripts.gcs_utils import disabled_reason, is_gcs_enabled
 
 # CORRECTION: Imports depuis scripts/ au lieu de la racine
-from simulate_ev import simulate_ev_batch
+from simulate_ev import simulate_ev_batch, gate_ev
 from simulate_wrapper import PAYOUT_CALIBRATION_PATH
 from validator_ev import ValidationError, validate_ev
 
@@ -155,6 +155,21 @@ def _load_sources_config() -> Dict[str, Any]:
     default_path = os.getenv("RUNNER_SOURCES_FILE") or os.getenv("SOURCES_FILE")
     path = Path(default_path) if default_path else Path("config/sources.yml")
     if not path.is_file():
+        return {}
+
+    with path.open("r", encoding="utf-8") as fh:
+        data = yaml.safe_load(fh) or {}
+    if isinstance(data, dict):
+        return data
+    return {}
+
+
+def _load_gpi_config() -> Dict[str, Any]:
+    """Load GPI configuration from disk."""
+    default_path = os.getenv("GPI_CONFIG_FILE") or "config/gpi.yml"
+    path = Path(default_path)
+    if not path.is_file():
+        logger.warning("GPI config file not found at %s. Using empty config.", path)
         return {}
 
     with path.open("r", encoding="utf-8") as fh:
@@ -358,20 +373,46 @@ def _write_analysis(
         horse_labels=horse_labels,
     )
 
-    total_ev = bets_df["EV (€)"].sum()
-    total_stake = bets_df["Stake (€)"].sum()
-    
-    global_roi = total_ev / total_stake if total_stake > 0 else 0.0
+    gpi_config = _load_gpi_config()
+
+    ev_sp = bets_df["EV (€)"].sum()
+    stake_sp = bets_df["Stake (€)"].sum()
+    roi_sp = ev_sp / stake_sp if stake_sp > 0 else 0.0
+
+    gate_results = gate_ev(
+        cfg=gpi_config,
+        ev_sp=ev_sp,
+        roi_sp=roi_sp,
+        ev_global=ev_sp, 
+        roi_global=roi_sp,
+        min_payout_combos=0,
+    )
+
+    if not gate_results["sp"]:
+        payload = {
+            "race_id": race_id,
+            "status": "aborted",
+            "reasons": ["sp_policy_validation_failed"] + gate_results["reasons"]["sp"],
+            "ev": {"global": ev_sp, "roi": roi_sp},
+            "validation_meta": gate_results,
+        }
+        _write_json_file(analysis_path, payload)
+        if USE_GCS and upload_file:
+            try:
+                upload_file(analysis_path)
+            except EnvironmentError as exc:
+                logger.warning("Skipping cloud upload for %s: %s", analysis_path, exc)
+        return
+
+    total_ev = ev_sp
+    total_stake = stake_sp
+    global_roi = roi_sp
 
     from validator_ev import combos_allowed
 
     expected_payout_total = bets_df["Gain brut (€)"].sum()
 
-    # User constraints for "exotic" bets (applied to the whole SP portfolio)
-    # EV >= +40% (ROI >= 0.40) and Payout > 10€
-    if not combos_allowed(
-        ev_basket=global_roi, expected_payout=expected_payout_total, min_ev=0.40, min_payout=10.0
-    ):
+    if not combos_allowed(ev_basket=global_roi, expected_payout=expected_payout_total, min_ev=0.40, min_payout=10.0):
         payload = {
             "race_id": race_id,
             "status": "aborted",
@@ -395,7 +436,7 @@ def _write_analysis(
     tickets_list = bets_df.to_dict(orient="records")
 
     final_tickets, _, validation_meta = enforce_ror_threshold(
-        cfg={},
+        cfg={**gpi_config},
         runners=runners_for_threshold,
         combo_tickets=tickets_list,
         bankroll=budget,

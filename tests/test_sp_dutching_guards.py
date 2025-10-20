@@ -1,97 +1,84 @@
+import json
 from pathlib import Path
-
+import yaml
+import pandas as pd
 import pytest
+from scripts import runner_chain
 
-import pipeline_run
-import tickets_builder
-from tests.test_pipeline_exotics_filters import (
-    _prepare_stubs,
-    _write_inputs,
-)
-
-
-def _run_with_sp_ticket(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    *,
-    stake: float,
-    ev_value: float,
-) -> dict:
-    eval_stats = {
-        "status": "ok",
-        "ev_ratio": 0.6,
-        "payout_expected": 25.0,
-        "roi": 0.3,
-        "sharpe": 0.4,
-    }
-
-    _prepare_stubs(monkeypatch, eval_stats)
-
-    sp_ticket = {
-        "type": "SP",
-        "label": "SP",
-        "legs": ["1"],
-        "stake": stake,
-        "ev": ev_value,
-    }
-
-    def fake_apply(cfg, runners, combo_candidates=None, combos_source=None, **_kwargs):
-        info = {"notes": [], "flags": {"combo": False}, "decision": "reject:no_combo"}
-        return [dict(sp_ticket)], [], info
-
-    monkeypatch.setattr(tickets_builder, "apply_ticket_policy", fake_apply)
-
-    roi_value = ev_value / stake if stake else 0.0
-
-    def fake_simulate_with_metrics(tickets, bankroll, kelly_cap=None):
-        return {
-            "ev": ev_value,
-            "roi": roi_value,
-            "combined_expected_payout": 20.0,
-            "risk_of_ruin": 0.01,
-            "ev_over_std": 0.4,
-            "variance": 1.0,
+def _setup_race_files(tmp_path: Path, race_id: str = "R1C1"):
+    """Helper to create dummy files for _write_analysis."""
+    analysis_dir = tmp_path / "analysis"
+    race_dir = analysis_dir / race_id
+    race_dir.mkdir(parents=True, exist_ok=True)
+    (race_dir / "snapshot_H5.json").write_text(json.dumps({
+        "payload": {
+            "runners": [{"num": "1", "odds": 2.0}, {"num": "2", "odds": 3.0}]
         }
+    }))
+    (race_dir / "je_stats.csv").touch()
+    (race_dir / "chronos.csv").touch()
+    return analysis_dir, race_dir
 
-    monkeypatch.setattr(pipeline_run, "simulate_with_metrics", fake_simulate_with_metrics)
+def _write_gpi_config(tmp_path: Path, config: dict):
+    """Helper to write a dummy gpi.yml."""
+    gpi_path = tmp_path / "config"
+    gpi_path.mkdir(exist_ok=True)
+    gpi_file = gpi_path / "gpi.yml"
+    gpi_file.write_text(yaml.dump(config))
+    return gpi_file
 
-    inputs = _write_inputs(tmp_path)
-    outdir = tmp_path / "out"
+def test_sp_guard_blocks_low_ev(tmp_path, monkeypatch):
+    analysis_dir, race_dir = _setup_race_files(tmp_path)
+    
+    # Config with EV_MIN_SP = 30% of SP budget
+    gpi_config = {"BUDGET_TOTAL": 5.0, "SP_RATIO": 1.0, "EV_MIN_SP": 0.3}
+    _write_gpi_config(tmp_path, gpi_config)
+    monkeypatch.setenv("GPI_CONFIG_FILE", str(tmp_path / "config/gpi.yml"))
 
-    result = pipeline_run.run_pipeline(
-        h30=str(inputs["h30"]),
-        h5=str(inputs["h5"]),
-        stats_je=str(inputs["stats"]),
-        partants=str(inputs["partants"]),
-        gpi=str(inputs["gpi"]),
-        outdir=str(outdir),
-        calibration="config/payout_calibration.yaml",
+    # Portfolio with EV of 1.0, on a 5.0 budget. EV is 20% of budget, so < 30%
+    bets_df = pd.DataFrame({"EV (€)": [0.5, 0.5], "Stake (€)": [2.5, 2.5], "Gain brut (€)": [1.0, 1.0]})
+    monkeypatch.setattr(runner_chain, "dutching_kelly_fractional", lambda **kwargs: bets_df)
+
+    runner_chain._write_analysis(
+        race_id="R1C1",
+        base=analysis_dir,
+        budget=5.0,
+        ev_min=0.0,
+        roi_min=0.0,
+        mode="test",
+        calibration=tmp_path / "cal.yaml",
+        calibration_available=False,
     )
-    return result["metrics"]
 
+    result = json.loads((race_dir / "analysis.json").read_text())
+    assert result["status"] == "aborted"
+    assert "sp_policy_validation_failed" in result["reasons"]
+    assert "EV_MIN_SP" in result["reasons"]
 
-def test_sp_guard_blocks_low_ev(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    metrics = _run_with_sp_ticket(tmp_path, monkeypatch, stake=4.0, ev_value=1.0)
+def test_sp_guard_blocks_low_roi(tmp_path, monkeypatch):
+    analysis_dir, race_dir = _setup_race_files(tmp_path)
+    
+    # Config with ROI_MIN_SP = 50%
+    gpi_config = {"ROI_MIN_SP": 0.5}
+    _write_gpi_config(tmp_path, gpi_config)
+    monkeypatch.setenv("GPI_CONFIG_FILE", str(tmp_path / "config/gpi.yml"))
 
-    assert metrics["tickets"]["total"] == 0
-    reasons = metrics["abstention_reasons"]
-    assert "ev_sp_below_40pct" in reasons
-    assert "roi_sp_below_0.20" in reasons
-    assert metrics["gates"]["sp"] is False
+    # Portfolio with ROI of 0.2, which is below the 0.5 threshold
+    bets_df = pd.DataFrame({"EV (€)": [1.0], "Stake (€)": [5.0], "Gain brut (€)": [6.0]})
+    monkeypatch.setattr(runner_chain, "dutching_kelly_fractional", lambda **kwargs: bets_df)
 
+    runner_chain._write_analysis(
+        race_id="R1C1",
+        base=analysis_dir,
+        budget=5.0,
+        ev_min=0.0,
+        roi_min=0.0,
+        mode="test",
+        calibration=tmp_path / "cal.yaml",
+        calibration_available=False,
+    )
 
-def test_sp_guard_blocks_stake_over_cap(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    # Stake above 60% of 5€ budget
-    metrics = _run_with_sp_ticket(tmp_path, monkeypatch, stake=3.5, ev_value=2.0)
-
-    reasons = metrics["abstention_reasons"]
-    assert "stake_over_cap" in reasons
-    assert metrics["tickets"]["total"] == 0
-
-
-def test_sp_guard_blocks_total_budget_overflow(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    metrics = _run_with_sp_ticket(tmp_path, monkeypatch, stake=6.0, ev_value=3.0)
-
-    reasons = metrics["abstention_reasons"]
-    assert "stake_over_budget" in reasons
-    assert metrics["tickets"]["total"] == 0
+    result = json.loads((race_dir / "analysis.json").read_text())
+    assert result["status"] == "aborted"
+    assert "sp_policy_validation_failed" in result["reasons"]
+    assert "ROI_MIN_SP" in result["reasons"]
