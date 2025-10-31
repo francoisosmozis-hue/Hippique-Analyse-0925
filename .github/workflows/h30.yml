@@ -1,0 +1,118 @@
+name: H-30 Planning (ROI artifacts)
+
+on:
+  workflow_dispatch:
+    inputs:
+      reunion_urls:
+        description: "Liste (multiligne) des URL de réunion H-30."
+        required: false
+        type: string
+  schedule:
+    - cron: "30 6 * * *"
+    - cron: "30 7 * * *"
+
+permissions:
+  contents: read
+
+env:
+  PYTHONUTF8: "1"
+  TZ: "Europe/Paris"
+  OUT_DIR: "out/h30"
+  EXCEL_PATH: "out/h30/planning.xlsx"
+
+concurrency:
+  group: h30-planning
+  cancel-in-progress: true
+
+jobs:
+  h30:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt') }}
+          restore-keys: ${{ runner.os }}-pip-
+          
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          [ -f requirements.txt ] && pip install -r requirements.txt
+          
+      - name: Build reunion list
+        id: targets
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${OUT_DIR}"
+          if [ -n "${{ inputs.reunion_urls }}" ]; then
+            echo "${{ inputs.reunion_urls }}" | sed '/^$/d' > "${OUT_DIR}/reunions.txt"
+          else
+            echo "Aucune réunion fournie, récupération via fetch_reunions_geny.py"
+            python fetch_reunions_geny.py --out "${OUT_DIR}/reunions.json"
+            python - <<'PY'
+import json, os, pathlib
+out_dir = pathlib.Path(os.environ["OUT_DIR"])
+urls = []
+with open(out_dir / "reunions.json", "r", encoding="utf-8") as fh:
+    data = json.load(fh)
+for item in data.get("reunions", []):
+    url = item.get("url_zeturf") or ""
+    if url:
+        urls.append(url)
+with open(out_dir / "reunions.txt", "w", encoding="utf-8") as handle:
+    for url in urls:
+        handle.write(url + "\n")
+print(f"Exported {len(urls)} reunion URL(s) to {out_dir / 'reunions.txt'}")
+PY
+          fi
+          if ! [ -s "${OUT_DIR}/reunions.txt" ]; then
+            echo "Aucune réunion disponible dans la liste générée." >&2
+            exit 78
+          fi
+          echo "list=${OUT_DIR}/reunions.txt" >> "$GITHUB_OUTPUT"
+          
+      - name: Run H-30 for each reunion
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r url; do
+            [ -z "$url" ] && continue
+            python analyse_courses_du_jour_enrichie.py \
+              --reunion-url "$url" \
+              --phase H30 \
+              --out-dir "${OUT_DIR}" || true
+          done < "${{ steps.targets.outputs.list }}"
+
+      - name: Export planning workbook
+        run: |
+          set -euo pipefail
+          mkdir -p "$(dirname "${EXCEL_PATH}")"
+          python update_excel_planning.py \
+            --phase H30 \
+            --input "${OUT_DIR}" \
+            --excel "${EXCEL_PATH}"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: h30-artifacts-${{ github.run_id }}
+          path: |
+            ${{ env.OUT_DIR }}/**/*.json
+            ${{ env.OUT_DIR }}/**/*.csv
+            ${{ env.EXCEL_PATH }}
+          if-no-files-found: warn
+      - name: Synchronise planning to Drive (optional)
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          dir=$(dirname "${EXCEL_PATH}")
+          if [ -d "$dir" ]; then
+            python scripts/drive_sync.py --push "$dir"
+          else
+            echo "Répertoire $dir introuvable, synchronisation ignorée."
+          fi

@@ -1,0 +1,64 @@
+name: Deploy Cloud Run
+on:
+  workflow_dispatch:
+    inputs:
+      service:
+        description: "Cloud Run service name"
+        required: true
+      region:
+        description: "GCP region (europe-west1...)"
+        required: true
+      project_id:
+        description: "GCP Project ID"
+        required: true
+      source_dir:
+        description: "Build context directory"
+        required: false
+        default: "."
+      public:
+        description: "Allow unauthenticated?"
+        required: false
+        default: "false"
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: deploy-cr-${{ inputs.service }}
+  cancel-in-progress: true
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: auth
+        name: Auth via WIF
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_WIF_SERVICE_ACCOUNT }}
+          token_format: access_token
+      - uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ inputs.project_id }}
+      - name: Configure Artifact Registry
+        shell: bash
+        run: gcloud auth configure-docker "${{ inputs.region }}-docker.pkg.dev" -q
+      - name: Build & Push (Cloud Build)
+        shell: bash
+        env:
+          REGION: ${{ inputs.region }}
+          PROJECT_ID: ${{ inputs.project_id }}
+          SERVICE: ${{ inputs.service }}
+        run: |
+          set -euo pipefail
+          IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/hippiq-repo/${SERVICE}:${GITHUB_SHA}"
+          gcloud builds submit "${{ inputs.source_dir }}" --tag "$IMAGE"
+          echo "IMAGE=$IMAGE" >> $GITHUB_ENV
+      - name: Deploy to Cloud Run
+        shell: bash
+        run: |
+          set -euo pipefail
+          FLAGS="--platform managed --region ${{ inputs.region }} --timeout 900 --memory 512Mi --max-instances 2"
+          if [ "${{ inputs.public }}" = "true" ]; then FLAGS="$FLAGS --allow-unauthenticated"; fi
+          gcloud run deploy "${{ inputs.service }}" --image "$IMAGE" $FLAGS
+          gcloud run services describe "${{ inputs.service }}" --region "${{ inputs.region }}" --format='value(status.url)'

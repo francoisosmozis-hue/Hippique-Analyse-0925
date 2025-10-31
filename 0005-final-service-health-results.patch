@@ -1,0 +1,56 @@
+From 5aa5aa5aa5aa5aa5aa5aa5aa5aa5aa5aa5aa5aaa Mon Sep 17 00:00:00 2001
+From: GPI-Orchestrator Bot <noreply@example.com>
+Date: Sun, 26 Oct 2025 13:20:00 +0100
+Subject: [PATCH] fix(service): add ts in /__health and set "<h1>Tickets du Jour</h1>" in /results
+
+---
+ src/service.py | 18 +++++++++++++-----
+ 1 file changed, 13 insertions(+), 5 deletions(-)
+
+diff --git a/src/service.py b/src/service.py
+index 8d8d8d8..9e9e9e9 100644
+--- a/src/service.py
++++ b/src/service.py
+@@ -1,6 +1,8 @@
+ from __future__ import annotations
+ import sys, pathlib, os, json, logging
+ from datetime import datetime
++from zoneinfo import ZoneInfo
++from typing import Optional, Literal
+ from fastapi import FastAPI, HTTPException, Response
+ from pydantic import BaseModel, Field
+ 
+@@ -40,12 +42,18 @@ app = FastAPI(title="Hippique Orchestrator GPI v5.1")
+ class RunReq(BaseModel):
+     reunion: Optional[str] = None
+     course: Optional[str] = None
+     phase: Literal["H30", "H5", "RESULT"]
+     budget: float = Field(default_factory=lambda: CFG.budget_per_race)
+     course_url: Optional[str] = None
+ 
+ @app.get("/__health")
+ def __health():
+-    return {"ok": True, "status": "running"}
++    """Health check attendu par les tests (ok/env_TZ/ts)."""
++    return {
++        "ok": True,
++        "env_TZ": os.environ.get("TZ", "Europe/Paris"),
++        "ts": datetime.now(ZoneInfo("Europe/Paris")).isoformat(timespec="seconds"),
++    }
+ 
+@@ -104,10 +112,10 @@ def get_results():
+     rows = []
+     if root.exists():
+         for f in root.glob("**/analysis_H5.json"):
+             with open(f) as fh:
+                 data = json.load(fh)
+             rows.append(f"<li>{f.name}: {len(data.get('tickets', []))} tickets</li>")
+-    html = "<html><body><h1>Results</h1><ul>" + "".join(rows) + "</ul></body></html>"
++    html = "<html><body><h1>Tickets du Jour</h1><ul>" + "".join(rows) + "</ul></body></html>"
+     return Response(content=html, media_type="text/html")
+ 
+ # --- Stub run_chain ---
+ def run_chain(*args, **kwargs):
+     log.info("Stub run_chain() called")
+-- 
+2.43.0

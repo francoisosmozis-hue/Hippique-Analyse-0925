@@ -1,0 +1,43 @@
+<<<<<<< HEAD
+# sources.txt - URLs des réunions hippiques du jour
+# Format: Une URL ZEturf par ligne
+# 
+# Instructions :
+# 1. Mettre à jour ce fichier chaque jour avec les réunions du jour
+# 2. Utiliser uniquement des URLs zeturf.fr valides
+# 3. Une URL = une réunion complète (toutes les courses)
+#
+# Exemple pour le 06/10/2025 :
+# https://www.zeturf.fr/fr/reunion/2025-10-06/paris-vincennes
+# https://www.zeturf.fr/fr/reunion/2025-10-06/chantilly
+# https://www.zeturf.fr/fr/reunion/2025-10-06/longchamp
+#
+# Format de l'URL : https://www.zeturf.fr/fr/reunion/YYYY-MM-DD/hippodrome
+#
+# ⚠️ IMPORTANT : 
+# - Ne pas laisser de lignes vides entre les URLs
+# - Ne pas mettre d'espaces avant/après les URLs
+# - Vérifier que la date dans l'URL correspond au jour d'exécution
+#
+# Hippodromes français courants :
+# - paris-vincennes (Trot)
+# - paris-longchamp (Plat)
+# - chantilly (Plat)
+# - deauville (Plat/Obstacle)
+# - compiegne (Plat/Obstacle)
+# - saint-cloud (Plat)
+# - maisons-laffitte (Plat)
+# - cagnes-sur-mer (Trot/Plat)
+# - bordeaux-le-bouscat (Plat/Obstacle)
+# - lyon-parilly (Trot/Plat)
+
+# 📅 URLs du jour (à mettre à jour quotidiennement)
+# Remplacez les exemples ci-dessous par les vraies réunions du jour :
+
+https://www.zeturf.fr/fr/reunion/2025-10-06/paris-vincennes
+https://www.zeturf.fr/fr/reunion/2025-10-06/chantilly
+=======
+https://www.zeturf.fr/fr/course/r1c1
+https://www.zeturf.fr/fr/course/r1c2
+# ajoute ici les URL de toutes les courses du jour
+>>>>>>> ef632c0 (feat: Refactor EV calculator and clean up git repository)

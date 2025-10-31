@@ -1,0 +1,76 @@
+# ev_calculator.py — version refactorisée
+from __future__ import annotations
+from typing import Dict, Any, List, Optional
+
+# --- Constantes pour la clarté et la maintenance ---
+
+# Probabilité minimale et par défaut pour un partant
+MIN_PROBABILITY = 0.0001
+DEFAULT_PROBABILITY = 0.1
+
+# Probabilité de succès minimale pour le calcul du gain
+MIN_PAYOUT_PROBABILITY = 0.01
+
+# Ratio de redistribution moyen aux joueurs
+PAYOUT_RATIO = 0.7  # 70% retour moyen
+
+# Coefficients correcteurs par type de pari
+TYPE_COEFFICIENTS = {
+    "SP_DUTCH": 1.05,
+    "COUPLE": 1.20,
+    "TRIO": 1.40,
+    "ZE4": 1.60,
+}
+DEFAULT_TYPE_COEFFICIENT = 1.0
+
+# Bornes pour la valeur de l'EV ratio final
+EV_RATIO_LOWER_CAP = -0.8
+EV_RATIO_UPPER_CAP = 2.5
+
+
+def compute_ev_roi(
+    combo_type: str,
+    legs_nums: List[str],
+    stake: float,
+    p_map: Dict[str, float],
+    nplace: int,
+) -> Dict[str, Any]:
+    """
+    Calcule une estimation simple de l'espérance de gain (EV) et du ROI
+    à partir des probabilités implicites et du type de pari.
+    """
+    # --- 1. Calcul de la probabilité de succès ---
+    p_success = 1.0
+    # Gérer le cas où legs_nums n'est pas une liste
+    if not isinstance(legs_nums, list):
+        legs_nums = []
+
+    for n in legs_nums:
+        prob = p_map.get(str(n), DEFAULT_PROBABILITY)
+        p_success *= max(MIN_PROBABILITY, min(1.0, prob))
+
+    # --- 2. Calcul de l'EV et du ROI ---
+    type_coef = TYPE_COEFFICIENTS.get(combo_type.upper(), DEFAULT_TYPE_COEFFICIENT)
+
+    # Éviter la division par zéro si p_success est trop faible
+    safe_p_success = max(MIN_PAYOUT_PROBABILITY, p_success)
+    
+    payout_expected = stake * (1 / safe_p_success) * PAYOUT_RATIO
+    ev_ratio = (p_success * payout_expected / stake - 1) * type_coef
+
+    # --- 3. Finalisation et formatage ---
+    # Capper l'EV dans une plage réaliste
+    final_ev_ratio = max(EV_RATIO_LOWER_CAP, min(EV_RATIO_UPPER_CAP, ev_ratio))
+    status = "ok" if final_ev_ratio >= 0 else "negative"
+
+    return {
+        "ev_ratio": round(final_ev_ratio, 3),
+        "payout_expected": round(payout_expected, 2),
+        "p_success": round(p_success, 4),
+        "status": status,
+        "details": {
+            "combo_type": combo_type,
+            "n_legs": len(legs_nums),
+            "nplace": nplace,
+        },
+    }

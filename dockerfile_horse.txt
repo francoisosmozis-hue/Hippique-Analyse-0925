@@ -1,0 +1,36 @@
+FROM python:3.11-slim
+
+# Installer dépendances système pour lxml + timezone
+RUN apt-get update && apt-get install -y \
+    libxml2 \
+    libxslt1.1 \
+    tzdata \
+    && rm -rf /var/lib/apt/lists/*
+
+# Définir timezone par défaut
+ENV TZ=Europe/Paris
+
+WORKDIR /app
+
+# Copier et installer dépendances Python
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copier le code source
+COPY src/ ./src/
+COPY gpi_modules/ ./gpi_modules/
+
+# Variables d'environnement
+ENV PORT=8080
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app
+
+# Créer répertoire de données
+RUN mkdir -p /tmp/horse_data
+
+# Healthcheck
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD python -c "import requests; requests.get('http://localhost:8080/healthz', timeout=5)"
+
+# Utiliser gunicorn avec uvicorn workers
+CMD exec gunicorn --config gunicorn.conf.py src.service:app

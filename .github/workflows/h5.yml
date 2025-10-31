@@ -1,0 +1,89 @@
+name: H-5 Analysis (ROI artifacts)
+
+on:
+  workflow_dispatch:
+    inputs:
+      course_url:
+        description: "URL course ZEturf (ex: https://www.zeturf.fr/fr/course/...)"
+        required: true
+        type: string
+  repository_dispatch:
+    types: [hminus5]
+  schedule:
+    - cron: "*/5 8-20 * * *"
+
+permissions:
+  contents: read
+
+env:
+  PYTHONUTF8: "1"
+  TZ: "Europe/Paris"
+  GPI_BUDGET: "5"
+  EV_MIN: "0.40"
+  ROI_SP_MIN: "0.20"
+  PAYOUT_MIN: "10"
+  OVERROUND_MAX: "1.30"
+  OUT_DIR: "out/h5"
+
+concurrency:
+  group: h5-${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  h5:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt') }}
+          restore-keys: ${{ runner.os }}-pip-
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          [ -f requirements.txt ] && pip install -r requirements.txt
+      - name: Resolve course URL
+        id: target
+        shell: bash
+        run: |
+          set -euo pipefail
+          course=""
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            course="${{ inputs.course_url }}"
+          elif [ "${{ github.event_name }}" = "repository_dispatch" ]; then
+            course="${{ github.event.client_payload.course_url || '' }}"
+          fi
+          if [ -z "$course" ]; then
+            echo "Aucune course fournie."
+            exit 78
+          fi
+          echo "course_url=$course" >> "$GITHUB_OUTPUT"
+      - name: Run H-5 pipeline (strict EV/ROI gates)
+        env: { COURSE_URL: ${{ steps.target.outputs.course_url }} }
+        run: |
+          set -euo pipefail
+          mkdir -p "${OUT_DIR}"
+          python analyse_courses_du_jour_enrichie.py \
+            --course-url "${COURSE_URL}" \
+            --phase H5 \
+            --budget "${GPI_BUDGET}" \
+            --ev-min "${EV_MIN}" \
+            --roi-sp-min "${ROI_SP_MIN}" \
+            --payout-min "${PAYOUT_MIN}" \
+            --overround-max "${OVERROUND_MAX}" \
+            --out-dir "${OUT_DIR}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: h5-artifacts-${{ github.run_id }}
+          path: |
+            ${{ env.OUT_DIR }}/**/*.json
+            ${{ env.OUT_DIR }}/**/*.csv
+            ${{ env.OUT_DIR }}/**/*.txt
+          if-no-files-found: warn
+      - name: Avertir en cas d'échec
+        if: failure()
+        run: |
+          echo "::error::Le workflow ${GITHUB_WORKFLOW} (run ${GITHUB_RUN_NUMBER}) a échoué."

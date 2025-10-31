@@ -1,0 +1,47 @@
+steps:
+# Install dependencies, check syntax, and run tests
+- name: 'python:3.11-slim'
+  id: Test
+  entrypoint: 'bash'
+  args:
+  - '-c'
+  - |
+    pip install -r requirements.txt
+    echo "--- Checking Python syntax ---"
+    python -m py_compile runner_chain.py pipeline_run.py src/service.py
+    echo "--- Running smoke tests ---"
+    pytest -q tests/test_smoke.py
+
+# Build the Docker image
+- name: 'gcr.io/cloud-builders/docker'
+  id: Build
+  args: ['build', '-t', '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_IMAGE}:${SHORT_SHA}', '.']
+
+# Push the Docker image to Artifact Registry
+- name: 'gcr.io/cloud-builders/docker'
+  id: Push
+  args: ['push', '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_IMAGE}:${SHORT_SHA}']
+
+# Deploy to Cloud Run
+- name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+  id: Deploy
+  entrypoint: gcloud
+  args:
+  - 'run'
+  - 'deploy'
+  - '${_SERVICE}'
+  - '--image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_IMAGE}:${SHORT_SHA}'
+  - '--region=${_REGION}'
+  - '--platform=managed'
+  - '--allow-unauthenticated'
+  - '--set-env-vars=TZ=Europe/Paris'
+  - '--quiet'
+
+images:
+- '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_IMAGE}:${SHORT_SHA}'
+
+substitutions:
+  _REGION: europe-west4
+  _SERVICE: hippique-orchestrator
+  _REPO: hippique-orchestrator
+  _IMAGE: hippique-orchestrator

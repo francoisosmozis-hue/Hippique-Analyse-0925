@@ -1,0 +1,131 @@
+name: Daily Planning (H-30 + Plan H-5)
+
+on:
+  workflow_dispatch:
+    inputs:
+      reunion_urls:
+        description: "Liste multiligne d'URL de réunions à planifier."
+        required: false
+        type: string
+  schedule:
+    - cron: "30 6 * * *"
+    - cron: "30 7 * * *"
+
+permissions:
+  contents: read
+
+env:
+  PYTHONUTF8: "1"
+  TZ: "Europe/Paris"
+  OUT_DIR: "out/planning"
+  PLAN_DIR: "~/.cache/analyse-hippique"
+
+concurrency:
+  group: daily-planning
+  cancel-in-progress: true
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest      
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt') }}
+          restore-keys: ${{ runner.os }}-pip-
+
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          [ -f requirements.txt ] && pip install -r requirements.txt
+      - name: Compute cache key (date)
+        id: key
+        run: echo "PLAN_KEY=$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
+      - name: Prepare OUT directories
+        run: |
+          mkdir -p "${OUT_DIR}"
+          mkdir -p "${PLAN_DIR}"
+      - name: Build reunion list
+        id: targets
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -n "${{ inputs.reunion_urls }}" ]; then
+            echo "${{ inputs.reunion_urls }}" | sed '/^$/d' > "${OUT_DIR}/reunions.txt"
+          else
+            echo "Aucune réunion fournie, récupération via fetch_reunions_geny.py"
+            python fetch_reunions_geny.py --out "${OUT_DIR}/reunions.json"
+            python - <<'PY'
+import json, os, pathlib
+out_dir = pathlib.Path(os.environ["OUT_DIR"])
+urls = []
+with open(out_dir / "reunions.json", "r", encoding="utf-8") as fh:
+    data = json.load(fh)
+for item in data.get("reunions", []):
+    url = item.get("url_zeturf") or ""
+    if url:
+        urls.append(url)
+with open(out_dir / "reunions.txt", "w", encoding="utf-8") as handle:
+    for url in urls:
+        handle.write(url + "\n")
+print(f"Exported {len(urls)} reunion URL(s) to {out_dir / 'reunions.txt'}")
+PY
+          fi
+          if ! [ -s "${OUT_DIR}/reunions.txt" ]; then
+            echo "Aucune réunion disponible dans la liste générée." >&2
+            exit 78
+          fi
+          echo "list=${OUT_DIR}/reunions.txt" >> "$GITHUB_OUTPUT"
+      - name: Run H-30 for each reunion (optional)
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${OUT_DIR}/h30"
+          while IFS= read -r url; do
+            [ -z "$url" ] && continue
+            python analyse_courses_du_jour_enrichie.py \
+              --reunion-url "$url" \
+              --phase H30 \
+              --out-dir "${OUT_DIR}/h30" || true
+          done < "${{ steps.targets.outputs.list }}"
+        - name: Build H-5 plan (courses + schedule)
+          run: |
+            python - <<'PY'
+  import datetime, glob, json, os
+  from pathlib import Path
+
+  plan_dir = Path(os.path.expanduser("~/.cache/analyse-hippique"))
+  plan_dir.mkdir(parents=True, exist_ok=True)
+  plan_path = plan_dir / "h5_targets.json"
+
+  def extract_courses(base="out/planning/h30"):
+      urls = set()
+      for filename in glob.glob(f"{base}/**/*.json", recursive=True):
+          try:
+              with open(filename, "r", encoding="utf-8") as fh:
+                  data = json.load(fh)
+          except Exception:
+              continue
+          if isinstance(data, dict):
+              for course in data.get("courses", []) or []:
+                  url = course.get("url") or course.get("course_url") or ""
+                  if "/course/" in url:
+                      urls.add(url)
+              for value in data.values():
+                  if isinstance(value, str) and "/course/" in value:
+                      urls.add(value)
+      return sorted(urls)
+
+  plan = [{"course_url": url, "scheduled": None} for url in extract_courses()]
+  payload = {"date": datetime.date.today().isoformat(), "targets": plan}
+  with open(plan_path, "w", encoding="utf-8") as fh:
+      json.dump(payload, fh, ensure_ascii=False, indent=2)
+  print(f"Wrote {plan_path}")
+  PY
+      - uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/analyse-hippique
+          key: h5-plan-${{ steps.key.outputs.PLAN_KEY }}

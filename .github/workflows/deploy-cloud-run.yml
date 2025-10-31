@@ -1,0 +1,55 @@
+name: Deploy Cloud Run (Europe/Paris)
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch: {}
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  REGION: europe-west4
+  SERVICE: hippique-orchestrator
+  IMAGE: europe-west4-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/hippiques/hippique-orchestrator:${{ github.sha }}
+
+jobs:
+  build-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          service_account_email: ${{ secrets.GCP_SA_EMAIL }}
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+          export_default_credentials: true
+
+      - name: Configure Artifact Registry
+        run: |
+          gcloud auth configure-docker europe-west4-docker.pkg.dev --quiet
+
+      - name: Build & Push image
+        run: |
+          docker build -t "$IMAGE" .
+          docker push "$IMAGE"
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy "$SERVICE" \
+            --image "$IMAGE" \
+            --region "$REGION" \
+            --platform managed \
+            --allow-unauthenticated \
+            --port 8080 \
+            --set-env-vars TZ=Europe/Paris \
+            --set-env-vars REQUIRE_AUTH=false
+
+      - name: Show service URL
+        run: |
+          gcloud run services describe "$SERVICE" --region "$REGION" --format='value(status.url)'

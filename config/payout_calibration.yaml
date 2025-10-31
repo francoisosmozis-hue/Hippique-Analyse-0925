@@ -1,0 +1,26 @@
+<<<<<<< HEAD
+metadata:
+  version: 1
+  generated_at: "2024-09-25"
+  notes: "Stub calibration for deterministic tests"
+TRIO:
+  base:
+    median: 18
+  hard:
+    median: 65
+COUPLE_PLACE:
+  base:
+    median: 12
+  hard:
+    median: 28
+ZE4:
+  base:
+    median: 40
+  hard:
+    median: 150
+=======
+# Dummy calibration file for testing purposes.
+# This file prevents the "Payout calibration file not found" warning
+# and allows exotic bets to be tested.
+version: 1.0
+>>>>>>> ef632c0 (feat: Refactor EV calculator and clean up git repository)

@@ -1,0 +1,3827 @@
+RÔLE: Senior Python + DevOps GCP + architecte API FastAPI.
+OBJECTIF: Audit ciblé pour maximiser fiabilité + ROI (EV/ROI guardrails GPI v5.1).
+CONTRAINTE TOKENS: Si le contexte est trop long, STOP et propose un plan de découpage.
+ATTENTES:
+1) LECTURE: comprends l’intention de chaque fichier, repère flux H-30/H-5/RESULT.
+2) BUGS/BLOQUEURS: erreurs import/typage/indent,  port 8080, paths, env vars, timezones.
+3) ROBUSTESSE: idempotence, logs, erreurs HTTP, timeouts web, retries, tests.
+4) ROI: calc EV/ROI, overround, Kelly fraction, plafonds 5€ course (cap 60%), seuils EV>=40% et payout>10€.
+5) ACTIONS CONCRÈTES: liste PATCHS (diff minimal), tests à rajouter, checks CI.
+FORMAT DE SORTIE:
+- Résumé exécutif (10 lignes max)
+- 🔴 Bloqueurs (liste)
+- 🟠 Risques
+- ✅ Patches proposés (diffs courts)
+- 🧪 Tests à ajouter
+- 🛠 Commandes (exactes) pour lancer local/Cloud Run
+- Limites/points à éclaircir
+
+---
+CONTEXTE CODE (tronqué si nécessaire):
+
+
+===== FICHIER: ./runner_chain.py =====
+     1	from pathlib import Path
+     2	import sys
+     3	import argparse
+     4	import json
+     5	import logging
+     6	import os
+     7	import subprocess
+     8	from typing import Dict, Any
+     9	from datetime import datetime
+    10	from zoneinfo import ZoneInfo
+    11	
+    12	# --- Project Root Setup ---
+    13	_PROJECT_ROOT = Path(__file__).resolve().parent
+    14	if str(_PROJECT_ROOT) not in sys.path:
+    15	    sys.path.insert(0, str(_PROJECT_ROOT))
+    16	
+    17	# Imports "souples" (ne font pas échouer l'import du module en cas d'absence)
+    18	try:
+    19	    from src.pipeline_run import run_pipeline  # chemin standard projet
+    20	except Exception:  # fallback minimal pour les tests
+    21	    def run_pipeline(**kwargs):
+    22	        return {"abstain": False, "tickets": [{"type": "SP_DUTCHING", "stake": 3.0}], "roi_global_est": 0.25, "paths": {}, "message": ""}
+    23	
+    24	try:
+    25	    from src.email_sender import send_email
+    26	except Exception:
+    27	    def send_email(*args, **kwargs):
+    28	        logging.getLogger(__name__).warning("email_sender indisponible (stub).")
+    29	
+    30	try:
+    31	    from modules.tickets_store import render_ticket_html
+    32	except Exception:
+    33	    def render_ticket_html(output, **kwargs):
+    34	        return "<html><body><h1>Tickets</h1></body></html>"
+    35	
+    36	try:
+    37	    from get_arrivee_geny import fetch_and_write_arrivals
+    38	except Exception:
+    39	    def fetch_and_write_arrivals(*args, **kwargs):
+    40	        logging.getLogger(__name__).warning("get_arrivee_geny indisponible (stub).")
+    41	
+    42	try:
+    43	    from update_excel_with_results import update_excel
+    44	except Exception:
+    45	    def update_excel(*args, **kwargs):
+    46	        logging.getLogger(__name__).warning("update_excel_with_results indisponible (stub).")
+    47	
+    48	# --- Logging ---
+    49	log_level = os.environ.get("LOG_LEVEL", "INFO").upper()
+    50	logging.basicConfig(
+    51	    level=log_level,
+    52	    format='{"timestamp": "%(asctime)s", "level": "%(levelname)s", "message": "%(message)s"}',
+    53	    datefmt='%Y-%m-%dT%H:%M:%S%z'
+    54	)
+    55	logger = logging.getLogger(__name__)
+    56	
+    57	def validate_snapshot_or_die(snapshot: dict, phase: str) -> None:
+    58	    import sys
+    59	    if not isinstance(snapshot, dict):
+    60	        print(f"[runner_chain] ERREUR: snapshot {phase} invalide (type {type(snapshot)})", file=sys.stderr)
+    61	        sys.exit(2)
+    62	    # ZEturf parser: runners=list, partants=int (pas une liste)
+    63	    runners = snapshot.get("runners")
+    64	    if not isinstance(runners, list) or len(runners) == 0:
+    65	        print(f"[runner_chain] ERREUR: snapshot {phase} vide ou sans 'runners'.", file=sys.stderr)
+    66	        sys.exit(2)
+    67	
+    68	def run_subprocess(cmd: list[str], timeout: int = 60) -> subprocess.CompletedProcess:
+    69	    """Wrapper robuste pour subprocess.run avec logs."""
+    70	    logger.info("Running: %s", " ".join(map(str, cmd)))
+    71	    return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, check=True)
+    72	
+    73	def run_chain(reunion: str, course: str, phase: str, budget: float, source: str = "zeturf") -> Dict[str, Any]:
+    74	    """
+    75	    Orchestration principale pour une course donnée.
+    76	    Conçue pour être appelée par le service FastAPI.
+    77	    """
+    78	    # --- Data Paths ---
+    79	    race_dir = _PROJECT_ROOT / "data" / f"{reunion}{course}"
+    80	    race_dir.mkdir(parents=True, exist_ok=True)
+    81	    snapshot_path = race_dir / f"snapshot_{phase}.json"
+    82	
+    83	    tracking_path = race_dir / "tracking.csv"
+    84	
+    85	    output: Dict[str, Any] = {}
+    86	
+    87	    if phase == "H30":
+    88	        logger.info("Phase H30: Fetch snapshot for %s%s from source %s", reunion, course, source)
+    89	        try:
+    90	            if source == "zeturf":
+    91	                script_path = _PROJECT_ROOT / "online_fetch_zeturf.py"
+    92	                cmd = [sys.executable, str(script_path),
+    93	                       "--reunion", reunion, "--course", course, "--output", str(snapshot_path)]
+    94	                run_subprocess(cmd)
+    95	            elif source == "boturfers":
+    96	                script_path = _PROJECT_ROOT / "src" / "online_fetch_boturfers.py"
+    97	                cmd = [sys.executable, str(script_path),
+    98	                       "--reunion", reunion, "--course", course, "--output", str(snapshot_path)]
+    99	                run_subprocess(cmd)
+   100	            else:
+   101	                raise ValueError(f"Source de données non reconnue: {source}")
+   102	
+   103	        except Exception as e:
+   104	            logger.warning("Snapshot fetch failed (continuing in stub mode): %s", e)
+   105	        output = {
+   106	            "abstain": True, "tickets": [], "roi_global_est": None,
+   107	            "paths": {"snapshot": str(snapshot_path), "analysis": None, "tracking": None},
+   108	            "message": f"H-30 snapshot created from {source}. No analysis performed."
+   109	        }
+   110	
+   111	    elif phase == "H5":
+   112	        logger.info("Phase H5: Enrich + pipeline for %s%s", reunion, course)
+   113	        je_stats_path  = race_dir / "je_stats.csv"
+   114	        je_chrono_path = race_dir / "je_chrono.csv"
+   115	        try:
+   116	            run_subprocess([sys.executable, str(_PROJECT_ROOT / "fetch_je_stats.py"),
+   117	                            "--output", str(je_stats_path), "--reunion", reunion, "--course", course])
+   118	            run_subprocess([
+   119	                sys.executable, str(_PROJECT_ROOT / "fetch_je_chrono.py"),
+   120	                "--output", str(je_chrono_path), "--reunion", reunion, "--course", course
+   121	            ])
+   122	        except Exception as e:
+   123	            msg = f"Abstaining: enrichment fetch failed: {e}"
+   124	            logger.error(msg)
+   125	            return {"abstain": True, "tickets": [], "roi_global_est": 0, "paths": {}, "message": msg}
+   126	
+   127	        if not je_stats_path.exists() or not je_chrono_path.exists():
+   128	            msg = "Abstaining: missing J/E or chrono data after fetch."
+   129	            logger.error(msg)
+   130	            output = {"abstain": True, "tickets": [], "roi_global_est": 0, "paths": {}, "message": msg}
+   131	        else:
+   132	            result = run_pipeline(reunion=reunion, course=course, phase=phase, budget=budget)
+   133	            output = result or {}
+   134	            output.setdefault("paths", {})["tracking"] = str(tracking_path)
+   135	
+   136	            # Notification email si tickets générés
+   137	            if not output.get("abstain") and output.get("tickets"):
+   138	                email_to = os.environ.get("EMAIL_TO")
+   139	                if email_to:
+   140	                    html_content = render_ticket_html(output, reunion=reunion, course=course, phase=phase, budget=budget)
+   141	                    subject = f"Tickets Hippiques pour {reunion}{course}"
+   142	                    send_email(subject, html_content, email_to)
+   143	                else:
+   144	                    logger.warning("EMAIL_TO not set. Skipping email notification.")
+   145	
+   146	    elif phase == "RESULT":
+   147	        logger.info("Phase RESULT: fetch/update results for %s%s", reunion, course)
+   148	        today_str = datetime.now(ZoneInfo("Europe/Paris")).strftime('%Y-%m-%d')
+   149	        planning_file = _PROJECT_ROOT / "data" / "planning" / f"{today_str}.json"
+   150	        arrivals_file = _PROJECT_ROOT / "data" / "results" / f"{today_str}_arrivees.json"
+   151	        excel_file = _PROJECT_ROOT / "modele_suivi_courses_hippiques.xlsx"
+   152	        p_finale_file = race_dir / "p_finale.json"
+   153	
+   154	        try:
+   155	            if planning_file.exists():
+   156	                fetch_and_write_arrivals(str(planning_file), str(arrivals_file))
+   157	            else:
+   158	                logger.warning("Planning file not found: %s", planning_file)
+   159	
+   160	            if arrivals_file.exists() and p_finale_file.exists():
+   161	                update_excel(excel_path_str=str(excel_file),
+   162	                             arrivee_path_str=str(arrivals_file),
+   163	                             tickets_path_str=str(p_finale_file))
+   164	            else:
+   165	                logger.warning("Arrivals or tickets file not found; skipping Excel update.")
+   166	
+   167	            output = {"abstain": True, "tickets": [], "roi_global_est": None, "paths": {}, "message": "Result phase completed."}
+   168	        except Exception as e:
+   169	            msg = f"Result processing failed: {e}"
+   170	            logger.error(msg, exc_info=True)
+   171	            output = {"abstain": True, "tickets": [], "roi_global_est": None, "paths": {}, "message": msg}
+   172	
+   173	    else:
+   174	        output = {"abstain": True, "tickets": [], "roi_global_est": None, "paths": {}, "message": "Unknown phase."}
+   175	
+   176	    return output
+   177	
+   178	def main():
+   179	    parser = argparse.ArgumentParser(description="Orchestration chain for hippique data processing.")
+   180	    parser.add_argument("--reunion", required=True, help="Reunion ID (e.g., R1)")
+   181	    parser.add_argument("--course", required=True, help="Course ID (e.g., C3)")
+   182	    parser.add_argument("--phase", required=True, choices=["H30", "H5", "RESULT"], help="Pipeline phase")
+   183	    parser.add_argument("--budget", type=float, default=5.0, help="Max budget for the race")
+   184	    parser.add_argument("--source", type=str, default="zeturf", choices=["zeturf", "boturfers"], help="Data source to use for scraping")
+   185	    args = parser.parse_args()
+   186	
+   187	    output = run_chain(reunion=args.reunion, course=args.course, phase=args.phase, budget=args.budget, source=args.source)
+   188	    print(json.dumps(output))
+   189	
+   190	if __name__ == "__main__":
+   191	    main()
+
+===== FICHIER: ./simulate_ev.py =====
+     1	"""Utilities for simple SP dutching and EV simulations."""
+     2	
+     3	from __future__ import annotations
+     4	
+     5	import math
+     6	from collections.abc import Sequence
+     7	from typing import Any
+     8	from ev_calculator import compute_ev_roi
+     9	from kelly import kelly_fraction
+    10	from simulate_wrapper import simulate_wrapper
+    11	
+    12	
+    13	def implied_prob(odds: float) -> float:
+    14	    """Return the implied probability from decimal odds."""
+    15	
+    16	    try:
+    17	        value = float(odds)
+    18	    except (TypeError, ValueError):
+    19	        return 0.0
+    20	    if value <= 1.0 or not math.isfinite(value):
+    21	        return 0.0
+    22	    return 1.0 / value
+    23	
+    24	
+    25	def normalize_overround(probs: dict[str, float]) -> dict[str, float]:
+    26	    """Normalise a probability dictionary to remove the bookmaker overround."""
+    27	
+    28	    cleaned: dict[str, float] = {}
+    29	    total = 0.0
+    30	    for key, value in probs.items():
+    31	        try:
+    32	            prob = float(value)
+    33	        except (TypeError, ValueError):
+    34	            prob = 0.0
+    35	        if not math.isfinite(prob) or prob < 0.0:
+    36	            prob = 0.0
+    37	        cleaned[key] = prob
+    38	        total += prob
+    39	    if total <= 0.0:
+    40	        return {key: 0.0 for key in cleaned}
+    41	    return {key: prob / total for key, prob in cleaned.items()}
+    42	
+    43	
+    44	def implied_probs(odds_list: Sequence[float]) -> list[float]:
+    45	    """Return normalised implied probabilities from decimal ``odds_list``."""
+    46	
+    47	    raw = {str(index): implied_prob(odds) for index, odds in enumerate(odds_list)}
+    48	    normalised = normalize_overround(raw)
+    49	    return [normalised[str(index)] for index in range(len(odds_list))]
+    50	
+    51	
+    52	def allocate_dutching_sp(
+    53	    cfg: dict[str, float], runners: list[dict[str, Any]]
+    54	) -> tuple[list[dict[str, Any]], float]:
+    55	    """Allocate SP dutching stakes according to a Kelly share with 60% cap.
+    56	
+    57	    When each ``runner`` provides an estimated win probability ``p``, those
+    58	    probabilities are used directly.  Otherwise, probabilities are inferred
+    59	    from decimal ``odds`` via :func:`implied_probs`.
+    60	    """
+    61	
+    62	    if not runners:
+    63	        return [], 0.0
+    64	
+    65	    odds: list[float] = []
+    66	    direct_probs: dict[str, float] = {}
+    67	    fallback_probs: dict[str, float] = {}
+    68	    ordered_keys: list[str] = []
+    69	
+    70	    for index, runner in enumerate(runners):
+    71	        key = str(runner.get("id", index))
+    72	        ordered_keys.append(key)
+    73	        try:
+    74	            odds_value = float(runner.get("odds", 0.0))
+    75	        except (TypeError, ValueError):
+    76	            odds_value = 0.0
+    77	        if not math.isfinite(odds_value) or odds_value <= 1.0:
+    78	            odds_value = 0.0
+    79	        odds.append(odds_value)
+    80	
+    81	        prob_primary = runner.get("p")
+    82	        if prob_primary is None:
+    83	            prob_primary = runner.get("p_true")
+    84	        prob_value: float | None
+    85	        try:
+    86	            prob_value = float(prob_primary) if prob_primary is not None else None
+    87	        except (TypeError, ValueError):
+    88	            prob_value = None
+    89	        if prob_value is not None and (
+    90	            not math.isfinite(prob_value) or prob_value <= 0.0 or prob_value >= 1.0
+    91	        ):
+    92	            prob_value = None
+    93	
+    94	        if prob_value is not None:
+    95	            direct_probs[key] = prob_value
+    96	            continue
+    97	
+    98	        fallback_source = runner.get("p_imp_h5", runner.get("p_imp"))
+    99	        try:
+   100	            fallback_value = float(fallback_source) if fallback_source is not None else None
+   101	        except (TypeError, ValueError):
+   102	            fallback_value = None
+   103	        if fallback_value is None or not math.isfinite(fallback_value) or fallback_value <= 0.0:
+   104	            fallback_value = implied_prob(odds_value) if odds_value > 0 else 0.0
+   105	        fallback_probs[key] = fallback_value
+   106	
+   107	    combined_probs: dict[str, float] = {}
+   108	    if direct_probs and not fallback_probs:
+   109	        total_direct = sum(direct_probs.values())
+   110	        if total_direct > 1.0:
+   111	            scale = 1.0 / total_direct
+   112	            combined_probs = {key: value * scale for key, value in direct_probs.items()}
+   113	        else:
+   114	            combined_probs = dict(direct_probs)
+   115	    elif not direct_probs and fallback_probs:
+   116	        combined_probs = normalize_overround(fallback_probs)
+   117	    else:
+   118	        combined_probs = dict(direct_probs)
+   119	        total_direct = sum(direct_probs.values())
+   120	        if total_direct >= 1.0 or not fallback_probs:
+   121	            for key in fallback_probs:
+   122	                combined_probs.setdefault(key, 0.0)
+   123	        else:
+   124	            remaining = max(0.0, 1.0 - total_direct)
+   125	            normalised_fallback = normalize_overround(fallback_probs)
+   126	            for key, value in normalised_fallback.items():
+   127	                combined_probs[key] = value * remaining
+   128	
+   129	    probs = [combined_probs.get(key, 0.0) for key in ordered_keys]
+   130	    budget = float(cfg.get("BUDGET_TOTAL", 0.0)) * float(cfg.get("SP_RATIO", 1.0))
+   131	    cap = float(cfg.get("MAX_VOL_PAR_CHEVAL", 0.60))
+   132	
+   133	    valid: list[tuple[dict[str, Any], float, float]] = []
+   134	    total_kelly = 0.0
+   135	    for runner, p, o in zip(runners, probs, odds, strict=False):
+   136	        if not (0.0 < p < 1.0) or o <= 1.0:
+   137	            continue
+   138	        k = kelly_fraction(p, o, lam=1.0, cap=1.0)
+   139	        total_kelly += k
+   140	        valid.append((runner, p, o))
+   141	    if not valid:
+   142	        return [], 0.0
+   143	    total_kelly = total_kelly or 1.0
+   144	    kelly_coef = float(cfg.get("KELLY_FRACTION", 0.5))
+   145	    raw_total = budget * kelly_coef
+   146	    step = float(cfg.get("ROUND_TO_SP", 0.10))
+   147	    min_stake = float(cfg.get("MIN_STAKE_SP", 0.1))
+   148	    rounding_enabled = step > 0
+   149	
+   150	    tickets: list[dict[str, Any]] = []
+   151	    ev_sp = 0.0
+   152	    for runner, p, o in valid:
+   153	        frac = kelly_fraction(p, o, lam=kelly_coef / total_kelly, cap=1.0)
+   154	        raw_stake = budget * frac
+   155	        cap_value = budget * cap
+   156	        raw_stake = min(raw_stake, cap_value)
+   157	        if rounding_enabled:
+   158	            stake = round(raw_stake / step) * step
+   159	            stake = min(stake, cap_value)
+   160	        else:
+   161	            stake = raw_stake
+   162	        if stake <= 0 or stake < min_stake:
+   163	            continue
+   164	        ev_ticket = stake * (p * (o - 1.0) - (1.0 - p))
+   165	        ticket = {
+   166	            "type": "SP",
+   167	            "id": runner.get("id"),
+   168	            "name": runner.get("name", runner.get("id")),
+   169	            "odds": o,
+   170	            "stake": stake,
+   171	            "p": p,
+   172	            "ev_ticket": ev_ticket,
+   173	        }
+   174	        tickets.append(ticket)
+   175	
+   176	    if tickets:
+   177	        total_stake = sum(t["stake"] for t in tickets)
+   178	        if rounding_enabled:
+   179	            diff = round((raw_total - total_stake) / step) * step
+   180	        else:
+   181	            diff = raw_total - total_stake
+   182	        if abs(diff) > 1e-9:
+   183	            best = max(tickets, key=lambda t: t["ev_ticket"])
+   184	            target_stake = best["stake"] + diff
+   185	            if rounding_enabled:
+   186	                target_stake = round(target_stake / step) * step
+   187	            new_stake = max(0.0, min(target_stake, budget * cap))
+   188	            if new_stake >= min_stake - 1e-9:
+   189	                best["stake"] = new_stake
+   190	                best["ev_ticket"] = new_stake * (
+   191	                    best["p"] * (best["odds"] - 1.0) - (1.0 - best["p"])
+   192	                )
+   193	            else:
+   194	                tickets.remove(best)
+   195	        ev_sp = sum(t["ev_ticket"] for t in tickets)
+   196	    else:
+   197	        ev_sp = 0.0
+   198	    return tickets, ev_sp
+   199	
+   200	
+   201	def gate_ev(
+   202	    cfg: dict[str, float],
+   203	    ev_sp: float,
+   204	    ev_global: float,
+   205	    roi_sp: float,
+   206	    roi_global: float,
+   207	    min_payout_combos: float,
+   208	    risk_of_ruin: float = 0.0,
+   209	    ev_over_std: float = 0.0,
+   210	    homogeneous_field: bool = False,
+   211	) -> dict[str, Any]:
+   212	    """Return activation flags and failure reasons for SP and combinés.
+   213	
+   214	    When ``homogeneous_field`` is true the SP EV threshold falls back to
+   215	    ``EV_MIN_SP_HOMOGENEOUS`` when provided in the configuration.
+   216	    """
+   217	
+   218	    reasons = {"sp": [], "combo": []}
+   219	
+   220	    sp_budget = float(cfg.get("BUDGET_TOTAL", 0.0)) * float(cfg.get("SP_RATIO", 1.0))
+   221	
+   222	    ev_min_sp_ratio = float(cfg.get("EV_MIN_SP", 0.0))
+   223	    if homogeneous_field:
+   224	        ev_min_sp_ratio = float(cfg.get("EV_MIN_SP_HOMOGENEOUS", ev_min_sp_ratio))
+   225	
+   226	    if ev_sp < ev_min_sp_ratio * sp_budget:
+   227	        reasons["sp"].append("EV_MIN_SP")
+   228	    if roi_sp < float(cfg.get("ROI_MIN_SP", 0.0)):
+   229	        reasons["sp"].append("ROI_MIN_SP")
+   230	
+   231	    if ev_global < float(cfg.get("EV_MIN_GLOBAL", 0.0)) * float(cfg.get("BUDGET_TOTAL", 0.0)):
+   232	        reasons["combo"].append("EV_MIN_GLOBAL")
+   233	    if roi_global < float(cfg.get("ROI_MIN_GLOBAL", 0.0)):
+   234	        reasons["combo"].append("ROI_MIN_GLOBAL")
+   235	    if min_payout_combos < float(cfg.get("MIN_PAYOUT_COMBOS", 0.0)):
+   236	        reasons["combo"].append("MIN_PAYOUT_COMBOS")
+   237	
+   238	    ror_max = float(cfg.get("ROR_MAX", 1.0))
+   239	    epsilon = 1e-9
+   240	    if risk_of_ruin > ror_max + epsilon:
+   241	        reasons["sp"].append("ROR_MAX")
+   242	        reasons["combo"].append("ROR_MAX")
+   243	
+   244	    sharpe_min = float(cfg.get("SHARPE_MIN", 0.0))
+   245	    if ev_over_std < sharpe_min:
+   246	        reasons["sp"].append("SHARPE_MIN")
+   247	        reasons["combo"].append("SHARPE_MIN")
+   248	
+   249	    sp_ok = not reasons["sp"]
+   250	    combo_ok = not reasons["combo"]
+   251	
+   252	    return {"sp": sp_ok, "combo": combo_ok, "reasons": reasons}
+   253	
+   254	
+   255	def simulate_ev_batch(
+   256	    tickets: list[dict[str, Any]],
+   257	    bankroll: float,
+   258	    *,
+   259	    kelly_cap: float | None = None,
+   260	    optimize: bool = False,
+   261	) -> dict[str, Any]:
+   262	    """Return EV/ROI statistics for ``tickets`` given a ``bankroll``.
+   263	
+   264	    This is a thin wrapper around :func:`compute_ev_roi` that also hooks into
+   265	    :func:`simulate_wrapper` to estimate probabilities of combined bets.
+   266	    """
+   267	    kwargs: dict[str, Any] = {}
+   268	    if kelly_cap is not None:
+   269	        kwargs["kelly_cap"] = kelly_cap
+   270	    if optimize:
+   271	        kwargs["optimize"] = True
+   272	    stats = compute_ev_roi(
+   273	        tickets,
+   274	        budget=bankroll,
+   275	        simulate_fn=simulate_wrapper,
+   276	        **kwargs,
+   277	    )
+   278	    stats.setdefault("sharpe", stats.get("ev_over_std", 0.0))
+   279	    if "calibrated_expected_payout" not in stats:
+   280	        stats["calibrated_expected_payout"] = sum(
+   281	            float(ticket.get("expected_payout", 0.0)) for ticket in tickets
+   282	        )
+   283	    return stats
+   284	
+   285	
+   286	# === COMPATIBILITÉ LEGACY (aliases & helpers attendus par d'anciens scripts) ===
+   287	# À coller tout en bas de simulate_ev.py, après simulate_ev_batch(...)
+   288	
+   289	from typing import Any, Dict, List
+   290	
+   291	def implied_probs_place_from_odds(runners: List[Dict[str, Any]]) -> Dict[str, float]:
+   292	    """
+   293	    Construit des probabilités 'place' implicites à partir des cotes.
+   294	    Cherche dans l'ordre: odds_place, cote_place, odds, cote.
+   295	    Normalise ensuite au nb de places (3 si >=8 partants, 2 si 4-7, sinon 1).
+   296	    """
+   297	    ids, px = [], []
+   298	    for r in runners:
+   299	        num = str(r.get("num") or r.get("id") or "")
+   300	        if not num:
+   301	            continue
+   302	        odds = None
+   303	        for k in ("odds_place", "cote_place", "odds", "cote"):
+   304	            v = r.get(k)
+   305	            if v is not None:
+   306	                try:
+   307	                    odds = float(str(v).replace(",", "."))
+   308	                    break
+   309	                except Exception:
+   310	                    pass
+   311	        if odds is None or odds <= 1.0:
+   312	            # fallback prudente si cote manquante: ~25% avant renormalisation
+   313	            odds = 4.0
+   314	        # borne 1%–90% avant renormalisation
+   315	        p = max(0.01, min(0.90, 1.0 / odds))
+   316	        ids.append(num)
+   317	        px.append(p)
+   318	
+   319	    if not ids:
+   320	        return {}
+   321	
+   322	    n = len(ids)
+   323	    places = 3 if n >= 8 else (2 if n >= 4 else 1)
+   324	    s = sum(px)
+   325	    scale = float(places) / s if s > 0 else 1.0
+   326	    return {i: max(0.005, min(0.90, p * scale)) for i, p in zip(ids, px)}
+   327	
+   328	
+   329	# -- Aliases historiques pour éviter les ImportError sur vieux scripts ---------
+   330	
+   331	# compute_ev était importé depuis simulate_ev; redirige vers compute_ev_roi
+   332	try:
+   333	    compute_ev  # type: ignore[name-defined]
+   334	except NameError:
+   335	    def compute_ev(*args, **kwargs):
+   336	        # Réutilise la fonction déjà importée en tête du fichier
+   337	        return compute_ev_roi(*args, **kwargs)
+   338	
+   339	# ev_sp anciennement attendu: renvoie tickets SP + EV du panier SP
+   340	try:
+   341	    ev_sp  # type: ignore[name-defined]
+   342	except NameError:
+   343	    def ev_sp(cfg: Dict[str, float], runners: List[Dict[str, Any]]):
+   344	        """
+   345	        Interface de compat:
+   346	        - input: cfg (budget/ratios) + runners
+   347	        - output: dict { 'tickets': [...], 'ev_sp': float }
+   348	        """
+   349	        tickets, ev = allocate_dutching_sp(cfg, runners)
+   350	        return {"tickets": tickets, "ev_sp": ev}
+   351	
+   352	# cp_ev et estimate_payout: stubs raisonnables si appelés par du legacy
+   353	try:
+   354	    cp_ev  # type: ignore[name-defined]
+   355	except NameError:
+   356	    def cp_ev(*args, **kwargs):
+   357	        # À remplacer par ton calcul réel si nécessaire
+   358	        return {"ev": 0.0, "roi": 0.0, "ok": False}
+   359	
+   360	try:
+   361	    estimate_payout  # type: ignore[name-defined]
+   362	except NameError:
+   363	    def estimate_payout(*args, **kwargs) -> float:
+   364	        # Valeur par défaut conservatrice; mets ta calibration réelle si dispo
+   365	        return 10.0
+   366	
+
+===== FICHIER: ./validator_ev.py =====
+     1	#!/usr/bin/env python3
+     2	# -*- coding: utf-8 -*-
+     3	
+     4	from __future__ import annotations
+     5	
+     6	import argparse
+     7	import json
+     8	import logging
+     9	import os
+    10	import sys
+    11	from collections.abc import Callable
+    12	from functools import partial
+    13	from pathlib import Path
+    14	from typing import Dict
+    15	
+    16	try:  # pragma: no cover - optional dependency
+    17	    import yaml
+    18	except Exception:  # pragma: no cover - yaml is optional for the CLI
+    19	    yaml = None  # type: ignore
+    20	
+    21	
+    22	class ValidationError(Exception):
+    23	    """Raised when EV metrics do not meet required thresholds."""
+    24	
+    25	
+    26	_LOG = logging.getLogger(__name__)
+    27	_MISSING = object()
+    28	
+    29	
+    30	def _log_ev_metrics(
+    31	    p_success: float | None,
+    32	    payout_expected: float | None,
+    33	    stake: float | None,
+    34	    ev_ratio: float | None,
+    35	) -> None:
+    36	    """Log the EV context associated with a validation run.
+    37	
+    38	    Parameters
+    39	    ----------
+    40	    p_success, payout_expected, stake, ev_ratio:
+    41	        Contextual metrics associated with the EV computation.  ``None`` values
+    42	        are logged verbatim so that missing data can be inspected downstream.
+    43	    """
+    44	
+    45	    payload = {
+    46	        "p_success": p_success,
+    47	        "payout_expected": payout_expected,
+    48	        "stake": stake,
+    49	        "EV_ratio": ev_ratio,
+    50	    }
+    51	    _LOG.info("[validate_ev] context %s", payload)
+    52	
+    53	
+    54	def summarise_validation(*validators: Callable[[], object]) -> dict[str, bool | str]:
+    55	    """Run validators and return a structured summary of the outcome.
+    56	
+    57	    Parameters
+    58	    ----------
+    59	    validators:
+    60	        Callables executing validation logic. They should raise an exception
+    61	        when the validation fails and return a truthy value otherwise.
+    62	
+    63	    Returns
+    64	    -------
+    65	    dict
+    66	        A dictionary with two keys:
+    67	        ``ok`` (bool) indicating whether all validators passed and
+    68	        ``reason`` (str) containing the first failure message or ``""``.
+    69	    """
+    70	
+    71	    for check in validators:
+    72	        try:
+    73	            check()
+    74	        except Exception as exc:
+    75	            return {"ok": False, "reason": str(exc)}
+    76	    return {"ok": True, "reason": ""}
+    77	
+    78	
+    79	def must_have(value, msg):
+    80	    """Raise ``RuntimeError`` if ``value`` is falsy."""
+    81	    if not value:
+    82	        raise RuntimeError(msg)
+    83	    return value
+    84	
+    85	
+    86	def validate_inputs(cfg, partants, odds, stats_je):
+    87	    """Validate raw inputs before any EV computation.
+    88	
+    89	    This simplified validator only checks a single odds snapshot.
+    90	
+    91	    Parameters
+    92	    ----------
+    93	    cfg : dict
+    94	        Configuration containing flags such as ``ALLOW_JE_NA``.
+    95	    partants : list[dict]
+    96	        List of runners with at least an ``id`` key.
+    97	    odds : dict
+    98	        Mapping ``id`` -> cote for the snapshot to analyse.
+    99	    stats_je : dict
+   100	        Dictionary containing at least a ``coverage`` percentage.
+   101	    """
+   102	
+   103	    allow_je_na = cfg.get("ALLOW_JE_NA", False)
+   104	    if not partants or len(partants) < 6:
+   105	        raise ValidationError("Nombre de partants insuffisant (min 6)")
+   106	
+   107	    if not odds:
+   108	        raise ValidationError("Cotes manquantes")
+   109	    for cid, cote in odds.items():
+   110	        if cote is None:
+   111	            raise ValidationError(f"Cote manquante pour {cid}")
+   112	
+   113	    if not allow_je_na:
+   114	        coverage = stats_je.get("coverage") if stats_je else None
+   115	        if coverage is None or float(coverage) < 80:
+   116	            raise ValidationError("Couverture J/E insuffisante (<80%)")
+   117	
+   118	    return True
+   119	
+   120	
+   121	def validate(h30: dict, h5: dict, allow_je_na: bool) -> bool:
+   122	    ids30 = [x["id"] for x in h30.get("runners", [])]
+   123	    ids05 = [x["id"] for x in h5.get("runners", [])]
+   124	    if set(ids30) != set(ids05):
+   125	        raise ValueError("Partants incohérents (H-30 vs H-5).")
+   126	    if not ids05:
+   127	        raise ValueError("Aucun partant.")
+   128	
+   129	    for snap, label in [(h30, "H-30"), (h5, "H-5")]:
+   130	        for r in snap.get("runners", []):
+   131	            if "odds" not in r or r["odds"] in (None, ""):
+   132	                raise ValueError(
+   133	                    f"Cotes manquantes {label} pour {r.get('name', r.get('id'))}."
+   134	                )
+   135	            try:
+   136	                if float(r["odds"]) <= 1.01:
+   137	                    raise ValueError(
+   138	                        f"Cote invalide {label} pour {r.get('name', r.get('id'))}: {r['odds']}"
+   139	                    )
+   140	            except Exception:
+   141	                raise ValueError(
+   142	                    f"Cote non numérique {label} pour {r.get('name', r.get('id'))}: {r.get('odds')}"
+   143	                )
+   144	    if not allow_je_na:
+   145	        for r in h5.get("runners", []):
+   146	            je = r.get("je_stats", {})
+   147	            if not je or ("j_win" not in je and "e_win" not in je):
+   148	                raise ValueError(f"Stats J/E manquantes: {r.get('name', r.get('id'))}")
+   149	    return True
+   150	
+   151	
+   152	def validate_ev(
+   153	    ev_sp: float,
+   154	    ev_global: float | None,
+   155	    need_combo: bool = True,
+   156	    *,
+   157	    p_success: float | None = _MISSING,
+   158	    payout_expected: float | None = _MISSING,
+   159	    stake: float | None = _MISSING,
+   160	    ev_ratio: float | None = _MISSING,
+   161	) -> bool | dict[str, str]:
+   162	    """Validate SP and combined EVs against environment thresholds.
+   163	
+   164	    Parameters
+   165	    ----------
+   166	    ev_sp:
+   167	        Expected value for simple bets.
+   168	    ev_global:
+   169	        Expected value for combined bets. Ignored when ``need_combo`` is
+   170	        ``False``.
+   171	    need_combo:
+   172	        When ``True`` both SP and combined EVs must satisfy their respective
+   173	        thresholds.
+   174	
+   175	    Other Parameters
+   176	    ----------------
+   177	    p_success, payout_expected, stake, ev_ratio:
+   178	        Optional contextual metrics associated with the EV computation. When
+   179	        provided they are logged and validated for completeness.
+   180	
+   181	    Returns
+   182	    -------
+   183	    bool or dict
+   184	        ``True`` if all required thresholds are met.  When contextual metrics
+   185	        are provided but missing the function returns a payload describing the
+   186	        ``invalid_input`` status instead of raising an exception.
+   187	
+   188	    Raises
+   189	    ------
+   190	    ValidationError
+   191	        If any required EV is below its threshold.
+   192	    """
+   193	
+   194	    metrics_supplied = any(
+   195	        value is not _MISSING for value in (p_success, payout_expected, stake, ev_ratio)
+   196	    )
+   197	    _log_ev_metrics(
+   198	        None if p_success is _MISSING else p_success,
+   199	        None if payout_expected is _MISSING else payout_expected,
+   200	        None if stake is _MISSING else stake,
+   201	        None if ev_ratio is _MISSING else ev_ratio,
+   202	    )
+   203	
+   204	    if metrics_supplied:
+   205	        if p_success in (_MISSING, None):
+   206	            return {
+   207	                "status": "invalid_input",
+   208	                "reason": "missing p_success",
+   209	            }
+   210	        if payout_expected in (_MISSING, None):
+   211	            return {
+   212	                "status": "invalid_input",
+   213	                "reason": "missing payout_expected",
+   214	            }
+   215	
+   216	    min_sp = float(os.getenv("EV_MIN_SP", 0.15))
+   217	    min_global = float(os.getenv("EV_MIN_GLOBAL", 0.35))
+   218	
+   219	    if ev_sp < min_sp:
+   220	        raise ValidationError("EV SP below threshold")
+   221	
+   222	    if need_combo:
+   223	        if ev_global is None or ev_global < min_global:
+   224	            raise ValidationError("EV global below threshold")
+   225	
+   226	    return True
+   227	
+   228	
+   229	def validate_policy(
+   230	    ev_global: float, roi_global: float, min_ev: float, min_roi: float
+   231	) -> bool:
+   232	    """Validate global EV and ROI against minimum thresholds."""
+   233	    if ev_global < min_ev:
+   234	        raise ValidationError("EV global below threshold")
+   235	    if roi_global < min_roi:
+   236	        raise ValidationError("ROI global below threshold")
+   237	    return True
+   238	
+   239	
+   240	def validate_budget(
+   241	    stakes: Dict[str, float], budget_cap: float, max_vol_per_horse: float
+   242	) -> bool:
+   243	    """Ensure total stake and per-horse stakes respect budget constraints."""
+   244	    total = sum(stakes.values())
+   245	    if total > budget_cap:
+   246	        raise ValidationError("Budget cap exceeded")
+   247	    per_horse_cap = budget_cap * max_vol_per_horse
+   248	    for horse, stake in stakes.items():
+   249	        if stake > per_horse_cap:
+   250	            raise ValidationError(f"Stake cap exceeded for {horse}")
+   251	    return True
+   252	
+   253	
+   254	def validate_combos(expected_payout: float, min_payout: float = 12.0) -> bool:
+   255	    """Validate that combined expected payout exceeds the minimum required.
+   256	
+   257	    Parameters
+   258	    ----------
+   259	    expected_payout:
+   260	        Expected payout from the combined tickets.
+   261	    min_payout:
+   262	        Minimum acceptable payout. Defaults to ``12.0`` (euros).
+   263	    """
+   264	    if expected_payout <= min_payout:
+   265	        raise ValidationError("expected payout for combined bets below threshold")
+   266	    return True
+   267	
+   268	
+   269	def combos_allowed(
+   270	    ev_basket: float,
+   271	    expected_payout: float,
+   272	    *,
+   273	    min_ev: float = 0.40,
+   274	    min_payout: float = 12.0,
+   275	) -> bool:
+   276	    """Return ``True`` when combinés satisfy EV and payout guardrails."""
+   277	
+   278	    try:
+   279	        ev_value = float(ev_basket)
+   280	    except (TypeError, ValueError):
+   281	        ev_value = 0.0
+   282	    try:
+   283	        payout_value = float(expected_payout)
+   284	    except (TypeError, ValueError):
+   285	        payout_value = 0.0
+   286	
+   287	    if ev_value < min_ev:
+   288	        return False
+   289	    if payout_value < min_payout:
+   290	        return False
+   291	    return True
+   292	
+   293	
+   294	# ---------------------------------------------------------------------------
+   295	# CLI helpers
+   296	# ---------------------------------------------------------------------------
+   297	
+   298	
+   299	_PARTANTS_CANDIDATES = (
+   300	    "partants.json",
+   301	    "partants_h5.json",
+   302	    "partants_H5.json",
+   303	)
+   304	
+   305	_STATS_CANDIDATES = (
+   306	    "stats_je.json",
+   307	    "je_stats.json",
+   308	    "stats.json",
+   309	)
+   310	
+   311	_ODDS_CANDIDATES = {
+   312	    "H5": (
+   313	        "odds_h5.json",
+   314	        "h5.json",
+   315	        "snapshot_H5.json",
+   316	        "snapshot_H-5.json",
+   317	    ),
+   318	    "H30": (
+   319	        "odds_h30.json",
+   320	        "h30.json",
+   321	        "snapshot_H30.json",
+   322	        "snapshot_H-30.json",
+   323	    ),
+   324	}
+   325	
+   326	_CONFIG_CANDIDATES = (
+   327	    "gpi.yml",
+   328	    "gpi.yaml",
+   329	    "config.yml",
+   330	    "config.yaml",
+   331	)
+   332	
+   333	
+   334	def _normalise_phase(phase: str | None) -> str:
+   335	    if not phase:
+   336	        return "H5"
+   337	    cleaned = phase.strip().upper().replace("-", "")
+   338	    if cleaned not in {"H5", "H30"}:
+   339	        raise ValueError(f"Phase inconnue: {phase!r} (attendu H5 ou H30)")
+   340	    return "H5" if cleaned == "H5" else "H30"
+   341	
+   342	
+   343	def _load_json_payload(path: Path) -> object:
+   344	    return json.loads(path.read_text(encoding="utf-8"))
+   345	
+   346	
+   347	def _find_first_existing(directory: Path, candidates: tuple[str, ...]) -> Path | None:
+   348	    for name in candidates:
+   349	        candidate = directory / name
+   350	        if candidate.exists():
+   351	            return candidate
+   352	    return None
+   353	
+   354	
+   355	def _load_partants(path: Path) -> list[dict]:
+   356	    payload = _load_json_payload(path)
+   357	    if isinstance(payload, list):
+   358	        return [p for p in payload if isinstance(p, dict)]
+   359	    if isinstance(payload, dict):
+   360	        runners = payload.get("runners")
+   361	        if isinstance(runners, list):
+   362	            return [p for p in runners if isinstance(p, dict)]
+   363	    raise ValueError(f"Format partants invalide dans {path}")
+   364	
+   365	
+   366	def _odds_from_runner(runner: dict) -> tuple[str | None, float | None]:
+   367	    cid = runner.get("id") or runner.get("ID") or runner.get("runner_id")
+   368	    num = runner.get("num") or runner.get("number") or runner.get("programmeNumber")
+   369	    odds = runner.get("odds") or runner.get("cote") or runner.get("rapport")
+   370	    if isinstance(odds, str):
+   371	        odds = odds.replace(",", ".")
+   372	    try:
+   373	        val = float(odds) if odds is not None else None
+   374	    except (TypeError, ValueError):
+   375	        val = None
+   376	    identifier: str | None = None
+   377	    if cid is not None:
+   378	        identifier = str(cid)
+   379	    elif num is not None:
+   380	        identifier = str(num)
+   381	    return identifier, val
+   382	
+   383	
+   384	def _load_odds(path: Path) -> dict[str, float]:
+   385	    payload = _load_json_payload(path)
+   386	    odds_map: dict[str, float] = {}
+   387	    if isinstance(payload, dict):
+   388	        runners = (
+   389	            payload.get("runners") if isinstance(payload.get("runners"), list) else None
+   390	        )
+   391	        if runners is not None:
+   392	            for runner in runners:
+   393	                if not isinstance(runner, dict):
+   394	                    continue
+   395	                identifier, value = _odds_from_runner(runner)
+   396	                if identifier is None or value is None:
+   397	                    continue
+   398	                odds_map[str(identifier)] = float(value)
+   399	        else:
+   400	            for key, value in payload.items():
+   401	                try:
+   402	                    odds_map[str(key)] = float(value)
+   403	                except (TypeError, ValueError):
+   404	                    continue
+   405	    elif isinstance(payload, list):
+   406	        for runner in payload:
+   407	            if not isinstance(runner, dict):
+   408	                continue
+   409	            identifier, value = _odds_from_runner(runner)
+   410	            if identifier is None or value is None:
+   411	                continue
+   412	            odds_map[str(identifier)] = float(value)
+   413	
+   414	    if not odds_map:
+   415	        raise ValueError(f"Impossible d'extraire les cotes depuis {path}")
+   416	    return odds_map
+   417	
+   418	
+   419	def _load_stats(path: Path) -> dict:
+   420	    payload = _load_json_payload(path)
+   421	    if isinstance(payload, dict):
+   422	        return payload
+   423	    raise ValueError(f"Format stats invalide dans {path}")
+   424	
+   425	
+   426	def _load_config(path: Path | None) -> dict:
+   427	    if path is None or not path.exists():
+   428	        return {}
+   429	    if path.suffix.lower() in {".yml", ".yaml"} and yaml is not None:
+   430	        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+   431	        return data or {}
+   432	    if path.suffix.lower() in {".json"}:
+   433	        payload = _load_json_payload(path)
+   434	        if isinstance(payload, dict):
+   435	            return payload
+   436	    return {}
+   437	
+   438	
+   439	def _resolve_rc_directory(
+   440	    artefacts_dir: str | None,
+   441	    base_dir: str | None,
+   442	    reunion: str | None,
+   443	    course: str | None,
+   444	) -> Path:
+   445	    if artefacts_dir:
+   446	        return Path(artefacts_dir)
+   447	    if reunion and course:
+   448	        root = Path(base_dir) if base_dir else Path("data")
+   449	        return root / f"{reunion}{course}"
+   450	    raise ValueError(
+   451	        "Impossible de déterminer le dossier artefacts (fournir --artefacts ou --reunion/--course)"
+   452	    )
+   453	
+   454	
+   455	def _discover_file(
+   456	    rc_dir: Path, candidates: tuple[str, ...], *, required: bool = True
+   457	) -> Path | None:
+   458	    path = _find_first_existing(rc_dir, candidates)
+   459	    if path is None and required:
+   460	        names = ", ".join(candidates)
+   461	        raise FileNotFoundError(f"Aucun fichier trouvé dans {rc_dir} parmi: {names}")
+   462	    return path
+   463	
+   464	
+   465	def _prepare_validation_inputs(
+   466	    args: argparse.Namespace,
+   467	) -> tuple[dict, list[dict], dict[str, float], dict]:
+   468	    phase = _normalise_phase(args.phase)
+   469	    rc_dir = _resolve_rc_directory(
+   470	        args.artefacts, args.base_dir, args.reunion, args.course
+   471	    )
+   472	
+   473	    partants_path = (
+   474	        Path(args.partants)
+   475	        if args.partants
+   476	        else _discover_file(rc_dir, _PARTANTS_CANDIDATES)
+   477	    )
+   478	    stats_path = (
+   479	        Path(args.stats_je)
+   480	        if args.stats_je
+   481	        else _discover_file(rc_dir, _STATS_CANDIDATES, required=False)
+   482	    )
+   483	    odds_candidates = _ODDS_CANDIDATES.get(phase, _ODDS_CANDIDATES["H5"])
+   484	    odds_path = (
+   485	        Path(args.odds) if args.odds else _discover_file(rc_dir, odds_candidates)
+   486	    )
+   487	    config_path: Path | None
+   488	    if args.config:
+   489	        config_path = Path(args.config)
+   490	    else:
+   491	        config_path = _discover_file(rc_dir, _CONFIG_CANDIDATES, required=False)
+   492	
+   493	    cfg = _load_config(config_path)
+   494	    if args.allow_je_na:
+   495	        cfg = dict(cfg)
+   496	        cfg["ALLOW_JE_NA"] = True
+   497	
+   498	    partants = _load_partants(partants_path)
+   499	    odds = _load_odds(odds_path)
+   500	    stats = _load_stats(stats_path) if stats_path else {}
+   501	    return cfg, partants, odds, stats
+   502	
+   503	
+   504	def _cli(argv: list[str] | None = None) -> int:
+   505	    parser = argparse.ArgumentParser(
+   506	        description="Valide les artefacts d'une course via validate_inputs.",
+   507	    )
+   508	    parser.add_argument("--artefacts", help="Dossier contenant les artefacts de course")
+   509	    parser.add_argument(
+   510	        "--base-dir", help="Dossier racine où trouver R?C?", default=None
+   511	    )
+   512	    parser.add_argument("--reunion", help="Identifiant réunion (ex: R1)")
+   513	    parser.add_argument("--course", help="Identifiant course (ex: C3)")
+   514	    parser.add_argument("--phase", help="Phase (H5 ou H30)", default="H5")
+   515	    parser.add_argument("--partants", help="Chemin explicite vers partants.json")
+   516	    parser.add_argument("--odds", help="Chemin explicite vers les cotes")
+   517	    parser.add_argument("--stats-je", help="Chemin explicite vers stats_je.json")
+   518	    parser.add_argument("--config", help="Chemin configuration GPI (YAML/JSON)")
+   519	    parser.add_argument(
+   520	        "--allow-je-na",
+   521	        action="store_true",
+   522	        help="Force ALLOW_JE_NA dans la configuration",
+   523	    )
+   524	
+   525	    try:
+   526	        cfg, partants, odds, stats = _prepare_validation_inputs(parser.parse_args(argv))
+   527	    except FileNotFoundError as exc:
+   528	        parser.error(str(exc))
+   529	    except ValueError as exc:
+   530	        parser.error(str(exc))
+   531	    except Exception as exc:  # pragma: no cover - defensive
+   532	        parser.error(f"Erreur inattendue: {exc}")
+   533	
+   534	    summary = summarise_validation(partial(validate_inputs, cfg, partants, odds, stats))
+   535	    print(json.dumps(summary, ensure_ascii=False))
+   536	    return 0 if summary.get("ok") else 1
+   537	
+   538	
+   539	def main(argv: list[str] | None = None) -> int:
+   540	    return _cli(argv)
+   541	
+   542	
+   543	if __name__ == "__main__":  # pragma: no cover - CLI entry point
+   544	    sys.exit(main())
+
+===== FICHIER: ./module_dutching_pmu.py =====
+     1	"""
+     2	module_dutching_pmu.py — GPI v5.1
+     3	---------------------------------
+     4	Allocation des mises en **Simple Placé** (ou assimilé) par **Kelly fractionné**,
+     5	avec **cap 60 %** par cheval et **budget total configurable** (par défaut 5 €).
+     6	Compatibilité pandas.
+     7	
+     8	Principes
+     9	- On maximise l'EV du **panier** sous contrainte de risque.
+    10	- Kelly "net odds" : f* = (b*p - (1-p))/b, b = (odds - 1).
+    11	- Fractionnement λ (par défaut 0.5) pour limiter la variance (risk control).
+    12	- Cap par cheval (par défaut 0.60) pour éviter la concentration.
+    13	- Arrondi à 0,10 € par défaut (compatibilité opérateurs).
+    14	- Si `probs` est absent, `prob_fallback` fournit p (défaut ≈ 1/odds).
+    15	
+    16	API principale
+    17	- dutching_kelly_fractional(odds, total_stake=5.0, probs=None,
+    18	                            prob_fallback=lambda o: 1/max(1.01,o),
+    19	                            lambda_kelly=0.5, cap_per_horse=0.60, round_to=0.1)
+    20	  → DataFrame: Cheval, Cote, p, f_kelly, Part (share), Stake (€), Gain brut (€), EV (€)
+    21	
+    22	- ev_panier(df): EV total du panier (en €)
+    23	
+    24	Notes
+    25	- Prévu pour des **cotes décimales** de type **placé**.
+    26	- Si vous passez des cotes gagnant, fournissez des `probs` adaptées (p_win).
+    27	"""
+    28	
+    29	from collections.abc import Callable, Sequence
+    30	
+    31	import pandas as pd
+    32	
+    33	from kelly import kelly_fraction
+    34	
+    35	
+    36	def _safe_prob(p: float) -> float:
+    37	    return max(0.01, min(0.90, float(p)))
+    38	
+    39	
+    40	def dutching_kelly_fractional(
+    41	    odds: Sequence[float],
+    42	    total_stake: float = 5.0,
+    43	    probs: Sequence[float] | None = None,
+    44	    prob_fallback: Callable[[float], float] = lambda o: 1 / max(1.01, float(o)),
+    45	    lambda_kelly: float = 0.5,
+    46	    cap_per_horse: float = 0.60,
+    47	    round_to: float = 0.10,
+    48	    horse_labels: Sequence[str] | None = None,
+    49	) -> pd.DataFrame:
+    50	    """
+    51	    Calcule une allocation Kelly fractionnée et capée.
+    52	    Args:
+    53	        odds: liste des cotes décimales (placé de préférence).
+    54	        total_stake: budget total à répartir (par défaut 5.0 €).
+    55	        probs: probabilités estimées (même ordre que `odds`). Si None, `prob_fallback` est utilisé.
+    56	        prob_fallback: fonction appliquée aux cotes pour obtenir p si `probs` est None
+    57	                       (défaut lambda o: 1/max(1.01,o)).
+    58	        lambda_kelly: fraction de Kelly (0<λ≤1), défaut 0.5.
+    59	        cap_per_horse: ratio max du Kelly par cheval (0..1), défaut 0.60.
+    60	        round_to: granularité d'arrondi des mises (€, 0.10 par défaut). Utilisez
+    61	            une valeur ≤ 0 pour désactiver l'arrondi et conserver les montants
+    62	            Kelly exacts.
+    63	        horse_labels: noms/identifiants à afficher (optionnel).
+    64	    Returns:
+    65	        DataFrame avec colonnes: Cheval, Cote, p, f_kelly, Part, Stake (€), Gain brut (€), EV (€).
+    66	        Lorsque l'arrondi est actif, les montants de mises et les EV/ROI sont
+    67	        calculés sur les valeurs arrondies. Avec `round_to <= 0`, aucune
+    68	        correction d'arrondi n'est appliquée et les EV/ROI reflètent les mises
+    69	        continues issues du Kelly fractionné.
+    70	    """
+    71	    if not odds or len(odds) == 0:
+    72	        raise ValueError("`odds` ne peut pas être vide.")
+    73	    n = len(odds)
+    74	    if probs is None:
+    75	        probs = [prob_fallback(float(o)) for o in odds]
+    76	    if horse_labels is None:
+    77	        horse_labels = [f"#{i + 1}" for i in range(n)]
+    78	
+    79	    # Fraction Kelly directe par cheval (déjà capée)
+    80	    f_k = []
+    81	    for p, o in zip(probs, odds, strict=True):
+    82	        p = _safe_prob(float(p))
+    83	        o = float(o)
+    84	        f_k.append(kelly_fraction(p, o, lam=float(lambda_kelly), cap=float(cap_per_horse)))
+    85	
+    86	    if sum(f_k) <= 0:
+    87	        stakes = [total_stake / n] * n
+    88	    else:
+    89	        stakes = [f * total_stake for f in f_k]
+    90	        total_alloc = sum(stakes)
+    91	        if total_alloc > total_stake:
+    92	            factor = total_stake / total_alloc
+    93	            stakes = [st * factor for st in stakes]
+    94	
+    95	    # Arrondir à la granularité (0.10 € par défaut)
+    96	    def _round_to(x: float, step: float) -> float:
+    97	        if step <= 0:
+    98	            return float(x)
+    99	        return round(x / step) * step
+   100	
+   101	    stakes = [_round_to(st, round_to) for st in stakes]
+   102	
+   103	    # Corriger l'écart d'arrondi uniquement si dépassement (et arrondi actif)
+   104	    if round_to > 0:
+   105	        diff = round(total_stake - sum(stakes), 2)
+   106	        if abs(diff) >= round_to / 2:
+   107	            try:
+   108	                idx = max(range(n), key=lambda i: f_k[i])
+   109	            except ValueError:
+   110	                idx = 0
+   111	            stakes[idx] = max(0.0, _round_to(stakes[idx] + diff, round_to))
+   112	
+   113	    sum_alloc = sum(stakes)
+   114	    shares = [st / sum_alloc if sum_alloc else 0 for st in stakes]
+   115	
+   116	    # Calculs gains/EV
+   117	    gains = [st * o for st, o in zip(stakes, odds, strict=True)]
+   118	    evs = []
+   119	    for st, o, p in zip(stakes, odds, probs, strict=True):
+   120	        p = _safe_prob(float(p))
+   121	        gain_net = st * (o - 1.0)
+   122	        ev = p * gain_net - (1.0 - p) * st
+   123	        evs.append(ev)
+   124	
+   125	    df = pd.DataFrame(
+   126	        {
+   127	            "Cheval": horse_labels,
+   128	            "Cote": [float(o) for o in odds],
+   129	            "p": [float(_safe_prob(p)) for p in probs],
+   130	            "f_kelly": f_k,
+   131	            "Part": shares,
+   132	            "Stake (€)": [round(st, 2) for st in stakes],
+   133	            "Gain brut (€)": [round(g, 2) for g in gains],
+   134	            "EV (€)": [round(e, 2) for e in evs],
+   135	        }
+   136	    )
+   137	    return df
+   138	
+   139	
+   140	def ev_panier(df: pd.DataFrame) -> float:
+   141	    """EV totale (en €) du panier SP."""
+   142	    if df.empty:
+   143	        return 0.0
+   144	    return float(df["EV (€)"].sum())
+   145	
+   146	
+   147	# ================== Dutching SP – Implémentation + Aliases Legacy ==================
+   148	from typing import List, Dict, Any, Tuple
+   149	
+   150	def _parse_odds_place(r: Dict[str, Any]) -> float:
+   151	    for k in ("odds_place", "cote_place", "odds", "cote"):
+   152	        v = r.get(k)
+   153	        if v is not None:
+   154	            try:
+   155	                return float(str(v).replace(",", "."))
+   156	            except Exception:
+   157	                pass
+   158	    return 4.0  # fallback prudente
+   159	
+   160	def _implied_probs_place_from_odds(runners: List[Dict[str, Any]]) -> Dict[str, float]:
+   161	    ids, px = [], []
+   162	    for r in runners:
+   163	        num = str(r.get("num") or r.get("id") or "").strip()
+   164	        if not num:
+   165	            continue
+   166	        o = _parse_odds_place(r)
+   167	        o = 1.01 if o <= 1.0 else o  # borne
+   168	        p = max(0.01, min(0.90, 1.0 / o))
+   169	        ids.append(num); px.append(p)
+   170	    if not ids:
+   171	        return {}
+   172	    n = len(ids)
+   173	    places = 3 if n >= 8 else (2 if n >= 4 else 1)
+   174	    s = sum(px)
+   175	    scale = float(places) / s if s > 0 else 1.0
+   176	    return {i: max(0.005, min(0.90, p * scale)) for i, p in zip(ids, px)}
+   177	
+   178	def _kelly_fraction(p: float, odds: float) -> float:
+   179	    """Kelly pour pari binaire avec cote décimale 'odds' (incluant la mise)."""
+   180	    b = max(1e-6, odds - 1.0)
+   181	    return max(0.0, (p * odds - 1.0) / b)
+   182	
+   183	def _round_to(x: float, step: float) -> float:
+   184	    return round(max(0.0, x) / step) * step
+   185	
+   186	def allocate_dutching_sp(cfg: Dict[str, float], runners: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], float]:
+   187	    """
+   188	    Dutching Simple Placé (GPI v5.1)
+   189	    Retourne (tickets, ev_panier) où:
+   190	      - tickets = [{num, mise, odds_place, p_place, kelly}]
+   191	      - ev_panier = EV par € misé (somme EV / somme mises)
+   192	    """
+   193	    if not runners:
+   194	        return [], 0.0
+   195	
+   196	    budget_total = float(cfg.get("BUDGET_TOTAL", 5.0))
+   197	    sp_ratio = float(cfg.get("SP_RATIO", 1.0))  # ex: 0.60 si mix
+   198	    budget_sp = max(0.0, min(budget_total, budget_total * sp_ratio))
+   199	
+   200	    kelly_frac_user = float(cfg.get("KELLY_FRACTION", 0.5))
+   201	    cap_vol = float(cfg.get("MAX_VOL_PAR_CHEVAL", 0.60))
+   202	    step = float(cfg.get("ROUND_TO_SP", 0.10))
+   203	    min_stake = float(cfg.get("MIN_STAKE_SP", 0.10))
+   204	
+   205	    # Probabilités implicites normalisées "place"
+   206	    p_map = _implied_probs_place_from_odds(runners)
+   207	
+   208	    # Candidats: odds 2.5–7.0, triés par valeur p*odds décroissante (proxy EV)
+   209	    cand = []
+   210	    for r in runners:
+   211	        num = str(r.get("num") or "").strip()
+   212	        if not num or num not in p_map:
+   213	            continue
+   214	        odds = _parse_odds_place(r)
+   215	        if odds < 2.5 or odds > 7.0:
+   216	            continue
+   217	        p = p_map[num]
+   218	        val = p * odds
+   219	        cand.append((num, odds, p, val, r))
+   220	    if not cand:
+   221	        # fallback: on prend 2 meilleurs par p*odds sans filtre de cote
+   222	        for r in runners:
+   223	            num = str(r.get("num") or "").strip()
+   224	            if not num or num not in p_map:
+   225	                continue
+   226	            odds = _parse_odds_place(r)
+   227	            p = p_map[num]
+   228	            val = p * odds
+   229	            cand.append((num, odds, p, val, r))
+   230	
+   231	    cand.sort(key=lambda t: t[3], reverse=True)
+   232	    cand = cand[:3]  # GPI v5.1 → 2–3 chevaux
+   233	
+   234	    # Kelly théorique puis Kelly effectif (fraction utilisateur + cap volatilité)
+   235	    stakes = []
+   236	    for (num, odds, p, _, r) in cand:
+   237	        k_theo = _kelly_fraction(p, odds)                # 0..1
+   238	        k_eff = min(cap_vol, k_theo * kelly_frac_user)   # cap 60% par cheval
+   239	        stakes.append((num, odds, p, k_eff, r))
+   240	
+   241	    # Normalisation au budget SP
+   242	    s_k = sum(max(1e-9, k) for _, _, _, k, _ in stakes)
+   243	    tickets: List[Dict[str, Any]] = []
+   244	    remaining = budget_sp
+   245	    for (num, odds, p, k, r) in stakes:
+   246	        raw = budget_sp * (k / s_k) if s_k > 0 else budget_sp / max(1, len(stakes))
+   247	        mise = _round_to(raw, step)
+   248	        if mise < min_stake:
+   249	            continue
+   250	        remaining -= mise
+   251	        tickets.append({
+   252	            "num": num,
+   253	            "mise": round(mise, 2),
+   254	            "odds_place": odds,
+   255	            "p_place": round(p, 4),
+   256	            "kelly": round(k, 4),
+   257	        })
+   258	
+   259	    # Si on a perdu trop à l'arrondi, réinjecte le reliquat sur le meilleur cheval
+   260	    if remaining >= min_stake and tickets:
+   261	        tickets[0]["mise"] = round(_round_to(tickets[0]["mise"] + remaining, step), 2)
+   262	        remaining = 0.0
+   263	
+   264	    total_stake = sum(t["mise"] for t in tickets)
+   265	    if total_stake <= 0:
+   266	        return [], 0.0
+   267	
+   268	    # EV par ticket: p*(odds-1) - (1-p)
+   269	    ev_sum = 0.0
+   270	    for t in tickets:
+   271	        p = float(t["p_place"]); odds = float(t["odds_place"])
+   272	        ev_per_euro = p * (odds - 1.0) - (1.0 - p)
+   273	        ev_sum += ev_per_euro * float(t["mise"])
+   274	
+   275	    ev_panier = ev_sum / total_stake  # EV par € misé
+   276	    return tickets, ev_panier
+   277	
+   278	# Aliases possibles si ton code legacy appelle d'autres noms
+   279	try:
+   280	    compute_dutching_sp  # existant ?
+   281	except NameError:
+   282	    def compute_dutching_sp(cfg, runners):
+   283	        return allocate_dutching_sp(cfg, runners)
+
+===== FICHIER: ./analyse_courses_du_jour_enrichie.py =====
+     1	#!/usr/bin/env python3
+     2	"""Pipeline helper for analysing today's horse races.
+     3	
+     4	This script optionally discovers all French meetings of the day from Geny and
+     5	runs a small pipeline on each course. The behaviour without the ``--from-geny-today``
+     6	flag is intentionally minimal in order to preserve the previous behaviour (if
+     7	any) of the script.
+     8	"""
+     9	
+    10	from __future__ import annotations
+    11	
+    12	import argparse
+    13	import csv
+    14	import json
+    15	import logging
+    16	import os
+    17	import re
+    18	import subprocess
+    19	import sys
+    20	import time
+    21	from collections.abc import Mapping
+    22	from datetime import datetime, timezone
+    23	from pathlib import Path
+    24	from typing import Any, Callable, Iterable
+    25	from urllib.parse import urljoin
+    26	
+    27	import requests
+    28	from bs4 import BeautifulSoup
+    29	
+    30	import pipeline_run
+    31	from logging_io import CSV_HEADER, append_csv_line
+    32	from scripts.analysis_utils import compute_overround_cap
+    33	from scripts.fetch_je_stats import collect_stats
+    34	from scripts.gcs_utils import disabled_reason, is_gcs_enabled
+    35	from scripts.online_fetch_zeturf import normalize_snapshot
+    36	from simulate_wrapper import PAYOUT_CALIBRATION_PATH, evaluate_combo
+    37	
+    38	# Tests may insert a lightweight stub of ``scripts.online_fetch_zeturf`` to avoid
+    39	# pulling heavy scraping dependencies.  Ensure the stub does not linger in
+    40	# ``sys.modules`` so that later imports retrieve the fully-featured module.
+    41	_fetch_module = sys.modules.get("scripts.online_fetch_zeturf")
+    42	if _fetch_module is not None and not hasattr(_fetch_module, "fetch_race_snapshot"):
+    43	    sys.modules.pop("scripts.online_fetch_zeturf", None)
+    44	
+    45	logger = logging.getLogger(__name__)
+    46	
+    47	
+    48	class MissingH30SnapshotError(RuntimeError):
+    49	    """Raised when the H-30 snapshot required for ``enrich_h5`` is missing."""
+    50	
+    51	    def __init__(self, message: str, *, rc_dir: Path | str | None = None) -> None:
+    52	        super().__init__(message)
+    53	        self.rc_dir = Path(rc_dir) if isinstance(rc_dir, (str, Path)) else None
+    54	
+    55	
+    56	USE_GCS = is_gcs_enabled()
+    57	
+    58	TRACKING_HEADER = CSV_HEADER + ["phase", "status", "reason"]
+    59	
+    60	try:  # pragma: no cover - optional dependency in tests
+    61	    from scripts.online_fetch_zeturf import write_snapshot_from_geny
+    62	except Exception:  # pragma: no cover - used when optional deps are missing
+    63	
+    64	    def write_snapshot_from_geny(*args: Any, **kwargs: Any) -> None:
+    65	        raise RuntimeError("write_snapshot_from_geny is unavailable")
+    66	
+    67	
+    68	if USE_GCS:
+    69	    try:  # pragma: no cover - optional dependency in tests
+    70	        from scripts.drive_sync import build_remote_path as gcs_build_remote_path
+    71	        from scripts.drive_sync import push_tree
+    72	    except Exception as exc:  # pragma: no cover - used when optional deps are missing
+    73	        print(
+    74	            f"[WARN] Synchronisation GCS indisponible ({exc}), bascule en mode local.",
+    75	            file=sys.stderr,
+    76	        )
+    77	        USE_GCS = False
+    78	    gcs_build_remote_path = None  # type: ignore[assignment]
+    79	    push_tree = None  # type: ignore[assignment]
+    80	else:  # pragma: no cover - Cloud sync explicitly disabled
+    81	    gcs_build_remote_path = None  # type: ignore[assignment]
+    82	    push_tree = None  # type: ignore[assignment]
+    83	
+    84	
+    85	# --- RÈGLES ANTI-COTES FAIBLES (SP min 4/1 ; CP somme > 6.0 déc) ---------------
+    86	MIN_SP_DEC_ODDS = 5.0  # 4/1 = 5.0
+    87	MIN_CP_SUM_DEC = 6.0  # (o1-1)+(o2-1) ≥ 4  <=> (o1+o2) ≥ 6.0
+    88	
+    89	
+    90	def _write_json_file(path: Path, payload: Any) -> None:
+    91	    path.parent.mkdir(parents=True, exist_ok=True)
+    92	    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    93	
+    94	
+    95	def _write_minimal_csv(
+    96	    path: Path, headers: Iterable[Any], rows: Iterable[Iterable[Any]] | None = None
+    97	) -> None:
+    98	    """Persist a tiny CSV artefact with the provided ``headers`` and ``rows``."""
+    99	
+   100	    path.parent.mkdir(parents=True, exist_ok=True)
+   101	    with path.open("w", newline="", encoding="utf-8") as fh:
+   102	        writer = csv.writer(fh)
+   103	        writer.writerow(list(headers))
+   104	        if rows:
+   105	            for row in rows:
+   106	                writer.writerow(list(row))
+   107	
+   108	
+   109	def _load_json_if_exists(path: Path) -> dict[str, Any] | None:
+   110	    try:
+   111	        data = json.loads(path.read_text(encoding="utf-8"))
+   112	    except (OSError, json.JSONDecodeError):
+   113	        return None
+   114	    return data if isinstance(data, dict) else None
+   115	
+   116	
+   117	def _coerce_int(value: Any) -> int | None:
+   118	    try:
+   119	        if isinstance(value, bool):
+   120	            return None
+   121	        if isinstance(value, (int, float)):
+   122	            return int(value)
+   123	        if isinstance(value, str):
+   124	            text = value.strip()
+   125	            match = re.search(r"\d+", text)
+   126	            if match:
+   127	                return int(match.group(0))
+   128	    except Exception:  # pragma: no cover - defensive
+   129	        return None
+   130	    return None
+   131	
+   132	
+   133	def _derive_rc_parts(label: str) -> tuple[str, str]:
+   134	    text = str(label or "").replace(" ", "").upper()
+   135	    match = re.match(r"^(R\d+)(C\d+)", text)
+   136	    if match:
+   137	        return match.group(1), match.group(2)
+   138	    if text.startswith("R") and "C" in text:
+   139	        r_part, c_part = text.split("C", 1)
+   140	        return r_part, f"C{c_part}"
+   141	    return text or "", ""
+   142	
+   143	
+   144	def _gather_tracking_base(rc_dir: Path) -> dict[str, Any]:
+   145	    payloads: list[dict[str, Any]] = []
+   146	    for name in ("p_finale.json", "partants.json", "normalized_h5.json"):
+   147	        data = _load_json_if_exists(rc_dir / name)
+   148	        if not data:
+   149	            continue
+   150	        payloads.append(data)
+   151	        meta = data.get("meta")
+   152	        if isinstance(meta, dict):
+   153	            payloads.append(meta)
+   154	
+   155	    def _first(*keys: str) -> Any:
+   156	        for mapping in payloads:
+   157	            for key in keys:
+   158	                value = mapping.get(key)
+   159	                if value not in (None, ""):
+   160	                    return value
+   161	        return None
+   162	
+   163	    rc_value = _first("rc") or rc_dir.name
+   164	    reunion, course = _derive_rc_parts(rc_value)
+   165	    hippo = _first("hippodrome", "meeting") or ""
+   166	    date = _first("date", "jour", "day") or ""
+   167	    discipline = _first("discipline", "type", "categorie", "category") or ""
+   168	    model = _first("model") or ""
+   169	
+   170	    partants_value = _first(
+   171	        "partants",
+   172	        "nb_participants",
+   173	        "nb_partants",
+   174	        "nombre_partants",
+   175	        "participants",
+   176	        "number_of_runners",
+   177	    )
+   178	    partants_count = _coerce_int(partants_value)
+   179	    if partants_count is None:
+   180	        for mapping in payloads:
+   181	            runners = mapping.get("runners")
+   182	            if isinstance(runners, list) and runners:
+   183	                partants_count = len(runners)
+   184	                break
+   185	
+   186	    base = {
+   187	        "reunion": reunion,
+   188	        "course": course,
+   189	        "hippodrome": hippo,
+   190	        "date": date,
+   191	        "discipline": discipline,
+   192	        "partants": partants_count or "",
+   193	        "nb_tickets": 0,
+   194	        "total_stake": 0,
+   195	        "total_optimized_stake": 0,
+   196	        "ev_sp": 0,
+   197	        "ev_global": 0,
+   198	        "roi_sp": 0,
+   199	        "roi_global": 0,
+   200	        "risk_of_ruin": 0,
+   201	        "clv_moyen": 0,
+   202	        "model": model,
+   203	    }
+   204	    return base
+   205	
+   206	
+   207	def _log_tracking_missing(
+   208	    rc_dir: Path,
+   209	    *,
+   210	    status: str,
+   211	    reason: str,
+   212	    phase: str,
+   213	    budget: float | None = None,
+   214	    ev: float | None = None,
+   215	    roi: float | None = None,
+   216	) -> None:
+   217	    base = _gather_tracking_base(rc_dir)
+   218	    if budget is not None and budget > 0:
+   219	        base["total_stake"] = f"{float(budget):.2f}"
+   220	        base["total_optimized_stake"] = f"{float(budget):.2f}"
+   221	    if ev is not None:
+   222	        base["ev_sp"] = base["ev_global"] = ev
+   223	    if roi is not None:
+   224	        base["roi_sp"] = base["roi_global"] = roi
+   225	    base["phase"] = phase
+   226	    base["status"] = status
+   227	    base["reason"] = reason
+   228	    append_csv_line(str(rc_dir / "tracking.csv"), base, header=TRACKING_HEADER)
+   229	
+   230	
+   231	def _extract_id2name(payload: Any) -> dict[str, str]:
+   232	    """Return an ``id -> name`` mapping from the provided payload."""
+   233	
+   234	    mapping: dict[str, str] = {}
+   235	    if not isinstance(payload, dict):
+   236	        return mapping
+   237	
+   238	    raw = payload.get("id2name")
+   239	    if isinstance(raw, dict) and raw:
+   240	        for cid, name in raw.items():
+   241	            if cid is None:
+   242	                continue
+   243	            mapping[str(cid)] = "" if name is None else str(name)
+   244	        if mapping:
+   245	            return mapping
+   246	
+   247	    runners = payload.get("runners")
+   248	    if isinstance(runners, list):
+   249	        for runner in runners:
+   250	            if not isinstance(runner, dict):
+   251	                continue
+   252	            cid = runner.get("id") or runner.get("num") or runner.get("number")
+   253	            if cid is None:
+   254	                continue
+   255	            name = runner.get("name") or runner.get("nom") or runner.get("label")
+   256	            mapping[str(cid)] = "" if name is None else str(name)
+   257	    return mapping
+   258	
+   259	
+   260	def _extract_stats_mapping(stats_payload: Any) -> dict[str, dict[str, Any]]:
+   261	    """Normalise the stats payload into a ``dict[id] -> stats`` mapping."""
+   262	
+   263	    mapping: dict[str, dict[str, Any]] = {}
+   264	    if isinstance(stats_payload, dict):
+   265	        for key, value in stats_payload.items():
+   266	            if not isinstance(value, dict):
+   267	                continue
+   268	            mapping[str(key)] = value
+   269	    return mapping
+   270	
+   271	
+   272	def _write_je_csv_file(path: Path, *, id2name: dict[str, str], stats_payload: Any) -> None:
+   273	    """Materialise the ``*_je.csv`` companion using the provided mappings."""
+   274	
+   275	    stats_mapping = _extract_stats_mapping(stats_payload)
+   276	    path.parent.mkdir(parents=True, exist_ok=True)
+   277	    with path.open("w", newline="", encoding="utf-8") as fh:
+   278	        writer = csv.writer(fh)
+   279	        writer.writerow(["num", "nom", "j_rate", "e_rate"])
+   280	        for cid, name in sorted(id2name.items(), key=lambda item: item[0]):
+   281	            stats = stats_mapping.get(cid, {})
+   282	            if not isinstance(stats, dict):
+   283	                stats = {}
+   284	            writer.writerow(
+   285	                [
+   286	                    cid,
+   287	                    name,
+   288	                    stats.get("j_win", ""),
+   289	                    stats.get("e_win", ""),
+   290	                ]
+   291	            )
+   292	
+   293	
+   294	def _norm_float(value: Any) -> float | None:
+   295	    try:
+   296	        return float(str(value).replace(",", "."))
+   297	    except Exception:  # pragma: no cover - defensive
+   298	        return None
+   299	
+   300	
+   301	def _filter_sp_and_cp_by_odds(payload: dict[str, Any]) -> None:
+   302	    tickets = payload.get("tickets", []) or []
+   303	    kept: list[dict[str, Any]] = []
+   304	
+   305	    def _append_note(message: str) -> None:
+   306	        notes = payload.get("notes")
+   307	        if isinstance(notes, list):
+   308	            notes.append(message)
+   309	        else:
+   310	            payload["notes"] = [message]
+   311	
+   312	    for ticket in tickets:
+   313	        if not isinstance(ticket, dict):
+   314	            kept.append(ticket)
+   315	            continue
+   316	
+   317	        typ = str(ticket.get("type") or "").upper()
+   318	        lab = str(ticket.get("label") or "").upper()
+   319	
+   320	        # 1) SP (toutes variantes de dutching place)
+   321	        if lab == "SP_DUTCHING_GPIv51" or typ in (
+   322	            "SP",
+   323	            "SIMPLE_PLACE_DUTCHING",
+   324	            "DUTCHING_SP",
+   325	            "PLACE_DUTCHING",
+   326	        ):
+   327	            legs = ticket.get("legs") or ticket.get("bets") or []
+   328	            if not isinstance(legs, list):
+   329	                if isinstance(legs, Iterable) and not isinstance(legs, (str, bytes)):
+   330	                    legs = list(legs)
+   331	                else:
+   332	                    legs = []
+   333	
+   334	            new_legs = []
+   335	            for leg in legs:
+   336	                if not isinstance(leg, dict):
+   337	                    continue
+   338	                odds = None
+   339	                for key in ("cote_place", "odds", "cote", "odd"):
+   340	                    if leg.get(key) is not None:
+   341	                        odds = _norm_float(leg.get(key))
+   342	                        break
+   343	                if odds is None:
+   344	                    market = payload.get("market") or {}
+   345	                    horses = market.get("horses") if isinstance(market, dict) else []
+   346	                    num = str(leg.get("num") or leg.get("horse") or "")
+   347	                    mh = None
+   348	                    if isinstance(horses, list):
+   349	                        mh = next(
+   350	                            (h for h in horses if isinstance(h, dict) and str(h.get("num")) == num),
+   351	                            None,
+   352	                        )
+   353	                    if mh and mh.get("cote") is not None:
+   354	                        odds = _norm_float(mh.get("cote"))
+   355	                if odds is not None and odds >= MIN_SP_DEC_ODDS:
+   356	                    new_legs.append(leg)
+   357	
+   358	            if new_legs:
+   359	                ticket_filtered = dict(ticket)
+   360	                ticket_filtered["legs"] = new_legs
+   361	                kept.append(ticket_filtered)
+   362	            else:
+   363	                _append_note("SP retiré: toutes les cotes < 4/1 (5.0 déc).")
+   364	            continue
+   365	
+   366	        # 2) COUPLÉ PLACÉ (ou libellés équivalents)
+   367	        if typ in ("COUPLE", "COUPLE_PLACE", "CP", "COUPLÉ PLACÉ", "COUPLE PLACÉ"):
+   368	            legs_raw = ticket.get("legs") or []
+   369	            legs = [leg for leg in legs_raw if isinstance(leg, dict)]
+   370	            if len(legs) != 2:
+   371	                kept.append(ticket)
+   372	                _append_note("Avertissement: CP non-binaire (≠2 jambes).")
+   373	                continue
+   374	            odds_list: list[float | None] = []
+   375	            for leg in legs:
+   376	                odds = None
+   377	                for key in ("cote_place", "odds", "cote", "odd"):
+   378	                    if leg.get(key) is not None:
+   379	                        odds = _norm_float(leg.get(key))
+   380	                        break
+   381	                if odds is None:
+   382	                    market = payload.get("market") or {}
+   383	                    horses = market.get("horses") if isinstance(market, dict) else []
+   384	                    num = str(leg.get("num") or leg.get("horse") or "")
+   385	                    mh = None
+   386	                    if isinstance(horses, list):
+   387	                        mh = next(
+   388	                            (h for h in horses if isinstance(h, dict) and str(h.get("num")) == num),
+   389	                            None,
+   390	                        )
+   391	                    if mh and mh.get("cote") is not None:
+   392	                        odds = _norm_float(mh.get("cote"))
+   393	                odds_list.append(odds)
+   394	            if all(o is not None for o in odds_list):
+   395	                assert len(odds_list) == 2  # for type checkers
+   396	                if (odds_list[0] + odds_list[1]) >= MIN_CP_SUM_DEC:
+   397	                    kept.append(ticket)
+   398	                else:
+   399	                    _append_note(
+   400	                        "CP retiré: somme des cotes décimales"
+   401	                        f" {odds_list[0]:.2f}+{odds_list[1]:.2f} < 6.00 (règle ≥ 4/1 cumulés)."
+   402	                    )
+   403	            else:
+   404	                _append_note("CP retiré: cotes manquantes (règle >4/1 non vérifiable).")
+   405	            continue
+   406	
+   407	        kept.append(ticket)
+   408	
+   409	    payload["tickets"] = kept
+   410	
+   411	
+   412	# ---------------------------------------------------------------------------
+   413	# Helper stubs - these functions are expected to be provided elsewhere in the
+   414	# larger project. They are defined here so the module can be imported and easily
+   415	# monkeypatched during tests.
+   416	# ---------------------------------------------------------------------------
+   417	
+   418	
+   419	def ensure_dir(path: Path) -> Path:
+   420	    """Create ``path`` if it does not exist and return it."""
+   421	    path.mkdir(parents=True, exist_ok=True)
+   422	    return path
+   423	
+   424	
+   425	def enrich_h5(rc_dir: Path, *, budget: float, kelly: float) -> None:
+   426	    """Prepare all artefacts required for the H-5 pipeline.
+   427	
+   428	    The function normalises the latest H-30/H-5 snapshots, extracts odds maps,
+   429	    fetches jockey/entraineur statistics and materialises CSV companions used
+   430	    by downstream tooling.  by downstream tooling.  The H-30 snapshot is a hard requirement; when it is
+   431	    absent the function abstains and signals the caller to mark the course as
+   432	    non playable.
+   433	    """
+   434	
+   435	    rc_dir = ensure_dir(Path(rc_dir))
+   436	
+   437	    def _latest_snapshot(tag: str) -> Path | None:
+   438	        pattern = f"*_{tag}.json"
+   439	        candidates = sorted(rc_dir.glob(pattern))
+   440	        if not candidates:
+   441	            return None
+   442	        # ``glob`` returns in alphabetical order which correlates with the
+   443	        # timestamp prefix we use for snapshots.  The most recent file is the
+   444	        # last one.
+   445	        return candidates[-1]
+   446	
+   447	    def _load_snapshot(path: Path) -> dict[str, Any]:
+   448	        try:
+   449	            return json.loads(path.read_text(encoding="utf-8"))
+   450	        except json.JSONDecodeError as exc:
+   451	            raise ValueError(f"Snapshot invalide: {path} ({exc})") from exc
+   452	
+   453	    def _normalise_snapshot(payload: dict[str, Any]) -> dict[str, Any]:
+   454	        normalised = normalize_snapshot(payload)
+   455	        # Preserve a few metadata fields expected by downstream consumers.
+   456	        for key in [
+   457	            "id_course",
+   458	            "course_id",
+   459	            "source",
+   460	            "rc",
+   461	            "r_label",
+   462	            "meeting",
+   463	            "reunion",
+   464	            "race",
+   465	        ]:
+   466	            value = payload.get(key)
+   467	            if value is not None and key not in normalised:
+   468	                normalised[key] = value
+   469	        return normalised
+   470	
+   471	    h5_raw_path = _latest_snapshot("H-5")
+   472	    if h5_raw_path is None:
+   473	        raise FileNotFoundError("Aucun snapshot H-5 trouvé pour l'analyse")
+   474	    h5_payload = _load_snapshot(h5_raw_path)
+   475	    h5_normalised = _normalise_snapshot(h5_payload)
+   476	
+   477	    h30_raw_path = _latest_snapshot("H-30")
+   478	    h30_payload: dict[str, Any]
+   479	    if h30_raw_path is not None:
+   480	        h30_payload = _load_snapshot(h30_raw_path)
+   481	        h30_normalised = _normalise_snapshot(h30_payload)
+   482	    else:
+   483	        label = rc_dir.name or str(rc_dir)
+   484	        message = f"Snapshot H-30 manquant dans {rc_dir}"
+   485	        logger.warning("[H-5] %s", message)
+   486	        print(f"[ABSTENTION] {message} – {label}", file=sys.stderr)
+   487	        raise MissingH30SnapshotError(message, rc_dir=rc_dir)
+   488	
+   489	    def _odds_map(snapshot: dict[str, Any]) -> dict[str, float]:
+   490	        odds = snapshot.get("odds")
+   491	        if isinstance(odds, dict):
+   492	            return {str(k): float(v) for k, v in odds.items() if _is_number(v)}
+   493	        runners = snapshot.get("runners")
+   494	        if isinstance(runners, list):
+   495	            mapping: dict[str, float] = {}
+   496	            for runner in runners:
+   497	                if not isinstance(runner, dict):
+   498	                    continue
+   499	                cid = runner.get("id")
+   500	                odds_val = runner.get("odds")
+   501	                if cid is None or not _is_number(odds_val):
+   502	                    continue
+   503	                mapping[str(cid)] = float(odds_val)
+   504	            return mapping
+   505	        return {}
+   506	
+   507	    odds_h5 = _odds_map(h5_normalised)
+   508	    odds_h30 = _odds_map(h30_normalised)
+   509	    if not odds_h30:
+   510	        odds_h30 = dict(odds_h5)
+   511	
+   512	    _write_json_file(rc_dir / "normalized_h5.json", h5_normalised)
+   513	    _write_json_file(rc_dir / "normalized_h30.json", h30_normalised)
+   514	    _write_json_file(rc_dir / "h5.json", odds_h5)
+   515	    _write_json_file(rc_dir / "h30.json", odds_h30)
+   516	
+   517	    partants_payload = {
+   518	        "rc": h5_normalised.get("rc") or rc_dir.name,
+   519	        "hippodrome": h5_normalised.get("hippodrome") or h5_payload.get("hippodrome"),
+   520	        "date": h5_normalised.get("date") or h5_payload.get("date"),
+   521	        "discipline": h5_normalised.get("discipline") or h5_payload.get("discipline"),
+   522	        "runners": h5_normalised.get("runners", []),
+   523	        "id2name": h5_normalised.get("id2name", {}),
+   524	        "course_id": h5_payload.get("id_course")
+   525	        or h5_payload.get("course_id")
+   526	        or h5_payload.get("id"),
+   527	    }
+   528	    _write_json_file(rc_dir / "partants.json", partants_payload)
+   529	
+   530	    stats_path = rc_dir / "stats_je.json"
+   531	    course_id = str(partants_payload.get("course_id") or "").strip()
+   532	    if not course_id:
+   533	        raise ValueError("Impossible de déterminer l'identifiant course pour les stats J/E")
+   534	    snap_stem = h5_raw_path.stem
+   535	    je_path = rc_dir / f"{snap_stem}_je.csv"
+   536	    try:
+   537	        coverage, mapped = collect_stats(course_id, h5_path=rc_dir / "normalized_h5.json")
+   538	    except Exception:  # pragma: no cover - network or scraping issues
+   539	        logger.exception("collect_stats failed for course %s", course_id)
+   540	        stats_payload = {"coverage": 0, "ok": 0}
+   541	        _write_json_file(stats_path, stats_payload)
+   542	        placeholder_headers = ["num", "nom", "j_rate", "e_rate", "ok"]
+   543	        placeholder_rows = [["", "", "", "", 0]]
+   544	        _write_minimal_csv(je_path, placeholder_headers, placeholder_rows)
+   545	    else:
+   546	        stats_payload = {"coverage": coverage}
+   547	        stats_payload.update(mapped)
+   548	        _write_json_file(stats_path, stats_payload)
+   549	
+   550	        id2name = _extract_id2name(partants_payload)
+   551	        _write_je_csv_file(je_path, id2name=id2name, stats_payload=mapped)
+   552	
+   553	    chronos_path = rc_dir / "chronos.csv"
+   554	    try:
+   555	        _write_chronos_csv(chronos_path, partants_payload.get("runners", []))
+   556	    except Exception:  # pragma: no cover - defensive
+   557	        logger.exception("Failed to materialise chronos CSV in %s", rc_dir)
+   558	        placeholder_headers = ["num", "chrono", "ok"]
+   559	        placeholder_rows = [["", "", 0]]
+   560	        _write_minimal_csv(chronos_path, placeholder_headers, placeholder_rows)
+   561	
+   562	
+   563	def build_p_finale(rc_dir: Path, *, budget: float, kelly: float) -> None:
+   564	    """Run the ticket allocation pipeline and persist ``p_finale.json``."""
+   565	
+   566	    rc_dir = Path(rc_dir)
+   567	    _run_single_pipeline(rc_dir, budget=budget)
+   568	
+   569	
+   570	def run_pipeline(rc_dir: Path, *, budget: float, kelly: float) -> None:
+   571	    """Execute the analysis pipeline for ``rc_dir`` or its subdirectories."""
+   572	
+   573	    rc_dir = Path(rc_dir)
+   574	
+   575	    # If ``rc_dir`` already holds a freshly generated ``p_finale.json`` we do
+   576	    # not run the pipeline again – this is the case when ``build_p_finale`` was
+   577	    # just invoked on the directory.
+   578	    if (rc_dir / "p_finale.json").exists():
+   579	        return
+   580	
+   581	    inputs_available = any(
+   582	        rc_dir.joinpath(name).exists() for name in ("h5.json", "partants.json", "stats_je.json")
+   583	    )
+   584	    if inputs_available:
+   585	        _run_single_pipeline(rc_dir, budget=budget)
+   586	        return
+   587	
+   588	    ran_any = False
+   589	    for subdir in sorted(p for p in rc_dir.iterdir() if p.is_dir()):
+   590	        try:
+   591	            build_p_finale(subdir, budget=budget, kelly=kelly)
+   592	        except FileNotFoundError:
+   593	            continue
+   594	        ran_any = True
+   595	    if not ran_any:
+   596	        raise FileNotFoundError(f"Aucune donnée pipeline détectée dans {rc_dir}")
+   597	
+   598	
+   599	def build_prompt_from_meta(rc_dir: Path, *, budget: float, kelly: float) -> None:
+   600	    """Generate a human-readable prompt from ``p_finale.json`` metadata."""
+   601	
+   602	    rc_dir = Path(rc_dir)
+   603	    p_finale_path = rc_dir / "p_finale.json"
+   604	    if not p_finale_path.exists():
+   605	        raise FileNotFoundError(f"p_finale.json introuvable dans {rc_dir}")
+   606	    data = json.loads(p_finale_path.read_text(encoding="utf-8"))
+   607	    meta = data.get("meta", {})
+   608	    ev = data.get("ev", {})
+   609	    tickets = data.get("tickets", [])
+   610	
+   611	    prompt_lines = [
+   612	        f"Course {meta.get('rc', rc_dir.name)} – {meta.get('hippodrome', '')}".strip(),
+   613	        f"Date : {meta.get('date', '')} | Discipline : {meta.get('discipline', '')}",
+   614	        f"Budget : {budget:.2f} € | Fraction de Kelly : {kelly:.2f}",
+   615	    ]
+   616	
+   617	    prompt_lines.append("Filtres GPI v5.1 (obligatoires) :")
+   618	    prompt_lines.append(
+   619	        "  - Interdiction SP < 4/1 (placé décimal < 5.0). Couplé Placé autorisé uniquement si cote1 + cote2 > 6.0 (équiv. somme > 4/1 cumulés)."
+   620	    )
+   621	
+   622	    if isinstance(ev, dict) and ev:
+   623	        global_ev = ev.get("global")
+   624	        roi = ev.get("roi_global")
+   625	        prompt_lines.append(
+   626	            "EV globale : "
+   627	            + (f"{float(global_ev):.2f}" if isinstance(global_ev, (int, float)) else "n/a")
+   628	            + " | ROI estimé : "
+   629	            + (f"{float(roi):.2f}" if isinstance(roi, (int, float)) else "n/a")
+   630	        )
+   631	
+   632	    def _format_ticket(ticket: dict[str, Any]) -> str:
+   633	        label = ticket.get("type") or ticket.get("id") or "Ticket"
+   634	        stake = ticket.get("stake")
+   635	        odds = ticket.get("odds")
+   636	        parts = [str(label)]
+   637	        if _is_number(stake):
+   638	            parts.append(f"mise {float(stake):.2f}€")
+   639	        if _is_number(odds):
+   640	            parts.append(f"cote {float(odds):.2f}")
+   641	        legs = ticket.get("legs") or ticket.get("selection")
+   642	        if isinstance(legs, Iterable) and not isinstance(legs, (str, bytes)):
+   643	            legs_fmt = ", ".join(str(leg) for leg in legs)
+   644	            if legs_fmt:
+   645	                parts.append(f"legs: {legs_fmt}")
+   646	        return " – ".join(parts)
+   647	
+   648	    if tickets:
+   649	        prompt_lines.append("Tickets proposés :")
+   650	        for ticket in tickets:
+   651	            if isinstance(ticket, dict):
+   652	                prompt_lines.append(f"  - {_format_ticket(ticket)}")
+   653	
+   654	    prompt_dir = rc_dir / "prompts"
+   655	    prompt_dir.mkdir(parents=True, exist_ok=True)
+   656	    prompt_text_path = prompt_dir / "prompt.txt"
+   657	    prompt_text_path.write_text("\n".join(prompt_lines) + "\n", encoding="utf-8")
+   658	
+   659	    prompt_payload = {
+   660	        "generated_at": datetime.now(timezone.utc).isoformat(),
+   661	        "budget": budget,
+   662	        "kelly_fraction": kelly,
+   663	        "meta": meta,
+   664	        "ev": ev,
+   665	        "tickets": tickets,
+   666	        "text_path": str(prompt_text_path),
+   667	    }
+   668	    (prompt_dir / "prompt.json").write_text(
+   669	        json.dumps(prompt_payload, ensure_ascii=False, indent=2),
+   670	        encoding="utf-8",
+   671	    )
+   672	
+   673	
+   674	def _is_number(value: Any) -> bool:
+   675	    try:
+   676	        float(value)
+   677	    except (TypeError, ValueError):
+   678	        return False
+   679	    return True
+   680	
+   681	
+   682	def _write_chronos_csv(path: Path, runners: Iterable[Any]) -> None:
+   683	    """Persist a chronos CSV placeholder using runner identifiers."""
+   684	
+   685	    path.parent.mkdir(parents=True, exist_ok=True)
+   686	    with path.open("w", newline="", encoding="utf-8") as fh:
+   687	        writer = csv.writer(fh)
+   688	        writer.writerow(["num", "chrono"])
+   689	        for runner in runners or []:
+   690	            if not isinstance(runner, dict):
+   691	                continue
+   692	            cid = runner.get("id") or runner.get("num") or runner.get("number")
+   693	            if cid is None:
+   694	                continue
+   695	            chrono = runner.get("chrono") or runner.get("time") or ""
+   696	            writer.writerow([cid, chrono])
+   697	
+   698	
+   699	def _run_single_pipeline(rc_dir: Path, *, budget: float) -> None:
+   700	    print(f"[_run_single_pipeline] called for {rc_dir}")
+   701	    """Execute :func:`pipeline_run.cmd_analyse` for ``rc_dir``."""
+   702	
+   703	    rc_dir = ensure_dir(rc_dir)
+   704	    required = {"h30.json", "h5.json", "partants.json", "stats_je.json"}
+   705	    missing = [name for name in required if not (rc_dir / name).exists()]
+   706	    if missing:
+   707	        raise FileNotFoundError(
+   708	            f"Fichiers manquants pour l'analyse dans {rc_dir}: {', '.join(missing)}"
+   709	        )
+   710	
+   711	    stats_payload = json.loads((rc_dir / "stats_je.json").read_text(encoding="utf-8"))
+   712	    allow_je_na = False
+   713	    if isinstance(stats_payload, dict):
+   714	        coverage = stats_payload.get("coverage")
+   715	        allow_je_na = isinstance(coverage, (int, float)) and coverage < 100
+   716	
+   717	    gpi_candidates = [
+   718	        rc_dir / "gpi.yml",
+   719	        rc_dir / "gpi.yaml",
+   720	        Path("config/gpi.yml"),
+   721	        Path("config/gpi.yaml"),
+   722	    ]
+   723	    gpi_path = next((path for path in gpi_candidates if path.exists()), None)
+   724	    if gpi_path is None:
+   725	        raise FileNotFoundError("Configuration GPI introuvable (gpi.yml)")
+   726	
+   727	    args = argparse.Namespace(
+   728	        h30=str(rc_dir / "h30.json"),
+   729	        h5=str(rc_dir / "h5.json"),
+   730	        stats_je=str(rc_dir / "stats_je.json"),
+   731	        partants=str(rc_dir / "partants.json"),
+   732	        gpi=str(gpi_path),
+   733	        outdir=str(rc_dir),
+   734	        diff=None,
+   735	        budget=float(budget),
+   736	        ev_global=None,
+   737	        roi_global=None,
+   738	        max_vol=None,
+   739	        min_payout=None,
+   740	        ev_min_exotic=None,
+   741	        payout_min_exotic=None,
+   742	        allow_heuristic=False,
+   743	        allow_je_na=allow_je_na,
+   744	        calibration=str(PAYOUT_CALIBRATION_PATH),
+   745	    )
+   746	    pipeline_run.cmd_analyse(args)
+   747	
+   748	    p_finale_path = rc_dir / "p_finale.json"
+   749	    try:
+   750	        payload = json.loads(p_finale_path.read_text(encoding="utf-8"))
+   751	    except FileNotFoundError:
+   752	        return
+   753	    except json.JSONDecodeError:  # pragma: no cover - defensive
+   754	        return
+   755	
+   756	    if not isinstance(payload, dict):
+   757	        return
+   758	
+   759	    meta = payload.get("meta") if isinstance(payload.get("meta"), dict) else {}
+   760	    existing_meta_notes: set[str] = set()
+   761	    if isinstance(meta, dict):
+   762	        bucket = meta.get("notes")
+   763	        if isinstance(bucket, list):
+   764	            existing_meta_notes = {str(note) for note in bucket}
+   765	
+   766	    _filter_sp_and_cp_by_odds(payload)
+   767	
+   768	    notes_bucket = payload.get("notes")
+   769	    if isinstance(notes_bucket, list) and notes_bucket:
+   770	        if not isinstance(meta, dict):
+   771	            meta = {}
+   772	            payload["meta"] = meta
+   773	        dest = meta.get("notes")
+   774	        if isinstance(dest, list):
+   775	            for note in notes_bucket:
+   776	                if note not in existing_meta_notes:
+   777	                    dest.append(note)
+   778	                    existing_meta_notes.add(note)
+   779	        else:
+   780	            meta["notes"] = list(dict.fromkeys(str(n) for n in notes_bucket))
+   781	
+   782	    p_finale_path.write_text(
+   783	        json.dumps(payload, ensure_ascii=False, indent=2),
+   784	        encoding="utf-8",
+   785	    )
+   786	
+   787	
+   788	def _find_je_csv(rc_dir: Path) -> Path | None:
+   789	    """Return the JE CSV produced during enrichment when available."""
+   790	
+   791	    snap = _snap_prefix(rc_dir)
+   792	    if snap:
+   793	        candidate = rc_dir / f"{snap}_je.csv"
+   794	        if candidate.exists():
+   795	            return candidate
+   796	    for candidate in rc_dir.glob("*je.csv"):
+   797	        if candidate.name.lower().endswith("je.csv") and candidate.is_file():
+   798	            return candidate
+   799	    return None
+   800	
+   801	
+   802	def _is_combo_ticket(ticket: Mapping[str, Any]) -> bool:
+   803	    """Return ``True`` when ``ticket`` refers to an exotic combination."""
+   804	
+   805	    ticket_type = str(ticket.get("type") or "").upper()
+   806	    if ticket_type.startswith("SP") or "SIMPLE" in ticket_type:
+   807	        return False
+   808	    if ticket.get("legs"):
+   809	        return True
+   810	    return ticket_type not in {"SP", "SIMPLE", "SIMPLE_PLACE", "PLACE"}
+   811	
+   812	
+   813	def _evaluate_combo_guard(
+   814	    ticket: Mapping[str, Any],
+   815	    *,
+   816	    bankroll: float,
+   817	) -> dict[str, Any]:
+   818	    """Evaluate ``ticket`` via :func:`simulate_wrapper.evaluate_combo`."""
+   819	
+   820	    try:
+   821	        return evaluate_combo(
+   822	            [dict(ticket)],
+   823	            bankroll,
+   824	            calibration=str(PAYOUT_CALIBRATION_PATH),
+   825	            allow_heuristic=False,
+   826	        )
+   827	    except Exception as exc:  # pragma: no cover - defensive guard
+   828	        logger.exception("Guard combo evaluation failed for %s", ticket.get("id"))
+   829	        return {
+   830	            "status": "error",
+   831	            "ev_ratio": 0.0,
+   832	            "roi": 0.0,
+   833	            "payout_expected": 0.0,
+   834	            "notes": [f"evaluation_error:{exc}"],
+   835	        }
+   836	
+   837	
+   838	def _run_h5_guard_phase(
+   839	    rc_dir: Path,
+   840	    *,
+   841	    budget: float,
+   842	    min_roi: float = 0.20,
+   843	) -> tuple[bool, dict[str, Any], dict[str, Any] | None]:
+   844	    """Evaluate post-enrichment guardrails returning analysis payload/outcome."""
+   845	
+   846	    rc_dir = Path(rc_dir)
+   847	    je_csv = _find_je_csv(rc_dir)
+   848	    chronos_path = rc_dir / "chronos.csv"
+   849	    p_finale_path = rc_dir / "p_finale.json"
+   850	    partants_path = rc_dir / "partants.json"
+   851	    h5_odds_path = rc_dir / "h5.json"
+   852	
+   853	    try:
+   854	        p_finale_payload = json.loads(p_finale_path.read_text(encoding="utf-8"))
+   855	    except (FileNotFoundError, json.JSONDecodeError):
+   856	        p_finale_payload = {}
+   857	
+   858	    meta_block = p_finale_payload.get("meta")
+   859	    meta: dict[str, Any] = dict(meta_block) if isinstance(meta_block, Mapping) else {}
+   860	    if not meta:
+   861	        base = _gather_tracking_base(rc_dir)
+   862	        if isinstance(base, dict):
+   863	            meta = {
+   864	                k: v
+   865	                for k, v in base.items()
+   866	                if k in {"reunion", "course", "hippodrome", "date", "discipline", "partants"}
+   867	            }
+   868	        meta.setdefault("rc", rc_dir.name)
+   869	    else:
+   870	        meta.setdefault("rc", meta.get("rc") or rc_dir.name)
+   871	
+   872	    tickets_block = p_finale_payload.get("tickets")
+   873	    tickets: list[dict[str, Any]] = []
+   874	    if isinstance(tickets_block, list):
+   875	        for ticket in tickets_block:
+   876	            if isinstance(ticket, Mapping):
+   877	                tickets.append({str(k): v for k, v in ticket.items()})
+   878	
+   879	    guards_context: dict[str, Any] = {}
+   880	
+   881	    data_missing: list[str] = []
+   882	    data_ok = True
+   883	    if je_csv is None:
+   884	        data_missing.append("je_csv")
+   885	        data_ok = False
+   886	    if not chronos_path.exists():
+   887	        data_missing.append("chronos")
+   888	        data_ok = False
+   889	
+   890	    calibration_ok = PAYOUT_CALIBRATION_PATH.exists()
+   891	    if not calibration_ok:
+   892	        guards_context["calibration"] = str(PAYOUT_CALIBRATION_PATH)
+   893	
+   894	    overround_value: float | None = None
+   895	    overround_cap: float | None = None
+   896	    if h5_odds_path.exists():
+   897	        try:
+   898	            odds_payload = json.loads(h5_odds_path.read_text(encoding="utf-8"))
+   899	        except json.JSONDecodeError:  # pragma: no cover - defensive
+   900	            odds_payload = {}
+   901	        if isinstance(odds_payload, Mapping):
+   902	            overround_value = pipeline_run._compute_market_overround(odds_payload)
+   903	
+   904	    partants_payload: Mapping[str, Any] = {}
+   905	    if partants_path.exists():
+   906	        try:
+   907	            partants_data = json.loads(partants_path.read_text(encoding="utf-8"))
+   908	        except json.JSONDecodeError:  # pragma: no cover - defensive
+   909	            partants_data = {}
+   910	        if isinstance(partants_data, Mapping):
+   911	            partants_payload = partants_data
+   912	
+   913	    discipline_hint = (
+   914	        meta.get("discipline")
+   915	        or partants_payload.get("discipline")
+   916	        or partants_payload.get("discipline_label")
+   917	        or partants_payload.get("type_course")
+   918	        or partants_payload.get("type")
+   919	        or partants_payload.get("categorie")
+   920	        or partants_payload.get("category")
+   921	    )
+   922	    course_label_hint = (
+   923	        partants_payload.get("course_label")
+   924	        or partants_payload.get("label")
+   925	        or partants_payload.get("name")
+   926	        or meta.get("course")
+   927	    )
+   928	    partants_hint: Any = (
+   929	        meta.get("partants")
+   930	        or partants_payload.get("partants")
+   931	        or partants_payload.get("nombre_partants")
+   932	        or partants_payload.get("nb_partants")
+   933	        or partants_payload.get("number_of_runners")
+   934	    )
+   935	    if partants_hint in (None, "", 0):
+   936	        runners_source = partants_payload.get("runners")
+   937	        if isinstance(runners_source, list) and runners_source:
+   938	            partants_hint = len(runners_source)
+   939	
+   940	    try:
+   941	        default_cap = float(os.getenv("MAX_COMBO_OVERROUND", "1.30"))
+   942	    except (TypeError, ValueError):  # pragma: no cover - defensive
+   943	        default_cap = 1.30
+   944	
+   945	    if overround_value is not None:
+   946	        overround_cap = compute_overround_cap(
+   947	            discipline_hint,
+   948	            partants_hint,
+   949	            default_cap=default_cap,
+   950	            course_label=course_label_hint,
+   951	        )
+   952	        guards_context["overround"] = {
+   953	            "value": overround_value,
+   954	            "cap": overround_cap,
+   955	        }
+   956	    overround_ok = (
+   957	        overround_value is None or overround_cap is None or overround_value <= overround_cap + 1e-9
+   958	    )
+   959	
+   960	    combo_tickets = [ticket for ticket in tickets if _is_combo_ticket(ticket)]
+   961	    combo_bankroll = sum(
+   962	        float(ticket.get("stake", 0.0))
+   963	        for ticket in combo_tickets
+   964	        if isinstance(ticket.get("stake"), (int, float))
+   965	    )
+   966	    if combo_bankroll <= 0:
+   967	        combo_bankroll = float(budget)
+   968	
+   969	    ev_ok = True
+   970	    combo_results: list[dict[str, Any]] = []
+   971	    for ticket in combo_tickets:
+   972	        result = _evaluate_combo_guard(ticket, bankroll=combo_bankroll)
+   973	        combo_results.append(
+   974	            {
+   975	                "id": ticket.get("id"),
+   976	                "type": ticket.get("type"),
+   977	                "status": result.get("status"),
+   978	                "ev_ratio": result.get("ev_ratio"),
+   979	                "roi": result.get("roi"),
+   980	                "payout_expected": result.get("payout_expected"),
+   981	                "notes": result.get("notes", []),
+   982	            }
+   983	        )
+   984	        if str(result.get("status", "")).lower() != "ok":
+   985	            ev_ok = False
+   986	    if combo_results:
+   987	        guards_context["combo_eval"] = combo_results
+   988	        result_by_id = {}
+   989	        for res in combo_results:
+   990	            ticket_id = str(res.get("id") or "")
+   991	            if ticket_id:
+   992	                result_by_id[ticket_id] = res
+   993	        for ticket in tickets:
+   994	            if not _is_combo_ticket(ticket):
+   995	                continue
+   996	            ticket_id = str(ticket.get("id") or "")
+   997	            if ticket_id and ticket_id in result_by_id:
+   998	                ticket["guard_eval"] = result_by_id[ticket_id]
+   999	
+  1000	    ev_block = p_finale_payload.get("ev")
+  1001	    roi_value: float | None = None
+  1002	    if isinstance(ev_block, Mapping):
+  1003	        roi_candidate = ev_block.get("roi_global")
+  1004	        try:
+  1005	            roi_value = float(roi_candidate)
+  1006	        except (TypeError, ValueError):
+  1007	            roi_value = None
+  1008	    guards_context["roi_global"] = roi_value
+  1009	    roi_ok = roi_value is not None and roi_value >= min_roi
+  1010	
+  1011	    existing_context = meta.get("guard_context")
+  1012	    if isinstance(existing_context, Mapping):
+  1013	        merged_context = {str(k): v for k, v in existing_context.items()}
+  1014	        merged_context.update(guards_context)
+  1015	        guards_context = merged_context
+  1016	    meta["guard_context"] = guards_context
+  1017	
+  1018	    guard_flags = {
+  1019	        "data_ok": data_ok,
+  1020	        "calibration_ok": calibration_ok,
+  1021	        "overround_ok": overround_ok,
+  1022	        "ev_ok": ev_ok,
+  1023	        "roi_ok": roi_ok,
+  1024	    }
+  1025	
+  1026	    analysis_payload = {
+  1027	        "meta": meta,
+  1028	        "guards": guard_flags,
+  1029	        "decision": "PLAY",
+  1030	        "tickets": tickets,
+  1031	    }
+  1032	
+  1033	    failure_reason: str | None = None
+  1034	    if not data_ok:
+  1035	        failure_reason = "data_missing"
+  1036	    elif not calibration_ok:
+  1037	        failure_reason = "calibration_missing"
+  1038	    elif not overround_ok:
+  1039	        failure_reason = "overround"
+  1040	    elif not ev_ok:
+  1041	        failure_reason = "combo_evaluation"
+  1042	    elif not roi_ok:
+  1043	        failure_reason = "roi_below_threshold"
+  1044	
+  1045	    if failure_reason:
+  1046	        analysis_payload["decision"] = "ABSTENTION"
+  1047	        if data_missing:
+  1048	            guards_context["missing"] = data_missing
+  1049	        outcome = {
+  1050	            "status": "no-bet",
+  1051	            "decision": "ABSTENTION",
+  1052	            "reason": failure_reason,
+  1053	            "jouable": False,
+  1054	            "analysis": {
+  1055	                "status": "NO_PLAY_GUARDRAIL",
+  1056	                "guards": guard_flags,
+  1057	                "decision": "ABSTENTION",
+  1058	            },
+  1059	            "details": {
+  1060	                "guards": guards_context,
+  1061	            },
+  1062	        }
+  1063	        if data_missing:
+  1064	            logger.warning(
+  1065	                "[H-5][guards] data missing for %s (reason=data_missing, missing=%s)",
+  1066	                rc_dir.name,
+  1067	                ",".join(data_missing),
+  1068	            )
+  1069	        else:
+  1070	            logger.warning(
+  1071	                "[H-5][guards] guard failure for %s (reason=%s)",
+  1072	                rc_dir.name,
+  1073	                failure_reason,
+  1074	            )
+  1075	        return False, analysis_payload, outcome
+  1076	
+  1077	    analysis_payload["decision"] = "PLAY"
+  1078	    logger.info("[H-5][guards] course %s validated", rc_dir.name)
+  1079	    return True, analysis_payload, None
+  1080	
+  1081	
+  1082	def _upload_artifacts(rc_dir: Path, *, gcs_prefix: str | None) -> None:
+  1083	    """Upload ``rc_dir`` contents to Google Cloud Storage."""
+  1084	
+  1085	    if gcs_prefix is None:
+  1086	        return
+  1087	    if not USE_GCS or not push_tree:
+  1088	        reason = disabled_reason()
+  1089	        if reason:
+  1090	            detail = f"{reason}=false"
+  1091	        else:
+  1092	            detail = f"USE_GCS={USE_GCS}"
+  1093	        print(f"[gcs] Upload ignoré pour {rc_dir} ({detail})", file=sys.stderr)
+  1094	        return
+  1095	    try:
+  1096	        if gcs_build_remote_path:
+  1097	            prefix = gcs_build_remote_path(gcs_prefix, rc_dir.name)
+  1098	        else:  # pragma: no cover - best effort fallback
+  1099	            prefix = "/".join(p for p in ((gcs_prefix or "").rstrip("/"), rc_dir.name) if p)
+  1100	        push_tree(rc_dir, folder_id=prefix)
+  1101	    except Exception as exc:  # pragma: no cover - best effort
+  1102	        print(f"[WARN] Failed to upload {rc_dir}: {exc}")
+  1103	
+  1104	
+  1105	def _snap_prefix(rc_dir: Path) -> str | None:
+  1106	    """Return the stem of the most recent H-5 snapshot if available."""
+  1107	
+  1108	    snapshots = list(rc_dir.glob("*_H-5.json"))
+  1109	    if not snapshots:
+  1110	        return None
+  1111	
+  1112	    def _key(path: Path) -> tuple[float, str]:
+  1113	        try:
+  1114	            mtime = path.stat().st_mtime
+  1115	        except OSError:
+  1116	            mtime = 0.0
+  1117	        return (mtime, path.name)
+  1118	
+  1119	    latest = max(snapshots, key=_key)
+  1120	    return latest.stem
+  1121	
+  1122	
+  1123	_SCRIPTS_DIR = Path(__file__).resolve().with_name("scripts")
+  1124	_FETCH_JE_STATS_SCRIPT = _SCRIPTS_DIR.joinpath("fetch_je_stats.py")
+  1125	_FETCH_JE_CHRONO_SCRIPT = _SCRIPTS_DIR.joinpath("fetch_je_chrono.py")
+  1126	
+  1127	
+  1128	def _check_enrich_outputs(
+  1129	    rc_dir: Path,
+  1130	    *,
+  1131	    retry_delay: float = 1.0,
+  1132	    retry_cb: Callable[[], None] | None = None,
+  1133	) -> dict[str, Any] | None:
+  1134	    """Ensure ``enrich_h5`` produced required CSV artefacts.
+  1135	
+  1136	    The check retries once after a short delay to accommodate slow I/O. When
+  1137	    the required files remain missing, a structured ``no-bet`` payload is
+  1138	    returned so that callers can gracefully skip the course instead of
+  1139	    terminating the whole pipeline.
+  1140	    """
+  1141	
+  1142	    for attempt in range(2):
+  1143	        snap = _snap_prefix(rc_dir)
+  1144	        je_csv = rc_dir / f"{snap}_je.csv" if snap else None
+  1145	        chronos_csv = rc_dir / "chronos.csv"
+  1146	
+  1147	        missing: list[str] = []
+  1148	        if not je_csv or not je_csv.exists():
+  1149	            missing.append(f"{snap}_je.csv" if snap else "*_je.csv")
+  1150	        if not chronos_csv.exists():
+  1151	            missing.append("chronos.csv")
+  1152	
+  1153	        if not missing:
+  1154	            return None
+  1155	
+  1156	        message = ", ".join(missing)
+  1157	        if attempt == 0:
+  1158	            print(
+  1159	                "[WARN] fichiers manquants après enrich_h5 (nouvelle tentative) : " + message,
+  1160	                file=sys.stderr,
+  1161	            )
+  1162	            if retry_cb is not None:
+  1163	                try:
+  1164	                    retry_cb()
+  1165	                except Exception as exc:  # pragma: no cover - defensive logging
+  1166	                    print(
+  1167	                        f"[WARN] relance enrich_h5 a échoué pour {rc_dir.name}: {exc}",
+  1168	                        file=sys.stderr,
+  1169	                    )
+  1170	            if retry_delay is not None:
+  1171	                time.sleep(max(0.0, retry_delay))
+  1172	            continue
+  1173	
+  1174	        print(
+  1175	            "[ERROR] fichiers manquants après enrich_h5 malgré la nouvelle tentative : " + message,
+  1176	            file=sys.stderr,
+  1177	        )
+  1178	        return {
+  1179	            "status": "no-bet",
+  1180	            "decision": "ABSTENTION",
+  1181	            "reason": "data-missing",
+  1182	            "details": {"missing": missing},
+  1183	        }
+  1184	
+  1185	    return None
+  1186	
+  1187	
+  1188	def _missing_requires_stats(missing: Iterable[str]) -> bool:
+  1189	    return any(str(name).endswith("_je.csv") for name in missing)
+  1190	
+  1191	
+  1192	def _missing_requires_chronos(missing: Iterable[str]) -> bool:
+  1193	    return any(str(name) == "chronos.csv" for name in missing)
+  1194	
+  1195	
+  1196	def _run_fetch_script(script_path: Path, rc_dir: Path) -> bool:
+  1197	    """Invoke an auxiliary fetch script and report whether it succeeded."""
+  1198	
+  1199	    cmd: list[str] = [sys.executable, str(script_path)]
+  1200	
+  1201	    if script_path.name == "fetch_je_stats.py":
+  1202	
+  1203	        def _extract_course_id(payload: dict[str, Any]) -> str | None:
+  1204	            for key in ("course_id", "id_course", "id"):
+  1205	                value = payload.get(key)
+  1206	                if value not in (None, ""):
+  1207	                    return str(value).strip()
+  1208	            meta = payload.get("meta")
+  1209	            if isinstance(meta, dict):
+  1210	                return _extract_course_id(meta)
+  1211	            return None
+  1212	
+  1213	        course_id: str | None = None
+  1214	        partants_path = rc_dir / "partants.json"
+  1215	        if partants_path.exists():
+  1216	            try:
+  1217	                payload = json.loads(partants_path.read_text(encoding="utf-8"))
+  1218	            except json.JSONDecodeError as exc:  # pragma: no cover - defensive
+  1219	                print(
+  1220	                    f"[WARN] partants.json invalide dans {rc_dir}: {exc}",
+  1221	                    file=sys.stderr,
+  1222	                )
+  1223	            else:
+  1224	                if isinstance(payload, dict):
+  1225	                    course_id = _extract_course_id(payload)
+  1226	
+  1227	        if not course_id:
+  1228	            candidates: list[Path] = []
+  1229	            normalized = rc_dir / "normalized_h5.json"
+  1230	            if normalized.exists():
+  1231	                candidates.append(normalized)
+  1232	            candidates.extend(sorted(rc_dir.glob("*_H-5.json")))
+  1233	            for candidate in candidates:
+  1234	                try:
+  1235	                    payload = json.loads(candidate.read_text(encoding="utf-8"))
+  1236	                except json.JSONDecodeError:
+  1237	                    continue
+  1238	                if isinstance(payload, dict):
+  1239	                    course_id = _extract_course_id(payload)
+  1240	                if course_id:
+  1241	                    break
+  1242	
+  1243	        if not course_id:
+  1244	            print(
+  1245	                f"[WARN] Impossible de déterminer l'identifiant course pour {rc_dir}",
+  1246	                file=sys.stderr,
+  1247	            )
+  1248	            return False
+  1249	
+  1250	        h5_json_path = rc_dir / "normalized_h5.json"
+  1251	        if not h5_json_path.exists():
+  1252	            fallback = sorted(rc_dir.glob("*_H-5.json"))
+  1253	            if fallback:
+  1254	                h5_json_path = fallback[-1]
+  1255	                print(
+  1256	                    f"[WARN] normalized_h5.json absent dans {rc_dir}, utilisation de {h5_json_path.name}",
+  1257	                    file=sys.stderr,
+  1258	                )
+  1259	            else:
+  1260	                print(
+  1261	                    f"[WARN] Aucun snapshot H-5 disponible pour {rc_dir}",
+  1262	                    file=sys.stderr,
+  1263	                )
+  1264	
+  1265	        stats_json_path = rc_dir / "stats_je.json"
+  1266	        cmd.extend(
+  1267	            [
+  1268	                "--course-id",
+  1269	                course_id,
+  1270	                "--h5",
+  1271	                str(h5_json_path),
+  1272	                "--out",
+  1273	                str(stats_json_path),
+  1274	            ]
+  1275	        )
+  1276	    else:
+  1277	        cmd.extend(["--course-dir", str(rc_dir)])
+  1278	
+  1279	    try:
+  1280	        result = subprocess.run(cmd, check=False)
+  1281	    except Exception as exc:  # pragma: no cover - defensive logging
+  1282	        print(
+  1283	            f"[WARN] Impossible d'exécuter {script_path.name} pour {rc_dir.name}: {exc}",
+  1284	            file=sys.stderr,
+  1285	        )
+  1286	        return False
+  1287	
+  1288	    if result.returncode != 0:
+  1289	        print(
+  1290	            f"[WARN] {script_path.name} a terminé avec le code {result.returncode} pour {rc_dir.name}",
+  1291	            file=sys.stderr,
+  1292	        )
+  1293	        return False
+  1294	
+  1295	    return True
+  1296	
+  1297	
+  1298	def _recover_je_csv_from_stats(
+  1299	    rc_dir: Path, *, retry_cb: Callable[[], None] | None = None
+  1300	) -> tuple[bool, bool, bool]:
+  1301	    """Fetch stats and rebuild the JE CSV if possible.
+  1302	
+  1303	    Returns a tuple ``(fetch_success, recovered, retry_invoked)`` so the caller
+  1304	    can decide whether to re-run post fetch checks and whether ``retry_cb`` was
+  1305	    already invoked inside the helper.
+  1306	    """
+  1307	
+  1308	    stats_fetch_success = _run_fetch_script(_FETCH_JE_STATS_SCRIPT, rc_dir)
+  1309	    if not stats_fetch_success:
+  1310	        return False, False, False
+  1311	
+  1312	    if _rebuild_je_csv_from_stats(rc_dir):
+  1313	        return True, True, False
+  1314	
+  1315	    if retry_cb is None:
+  1316	        return True, False, False
+  1317	
+  1318	    try:
+  1319	        retry_cb()
+  1320	    except Exception as exc:  # pragma: no cover - defensive logging
+  1321	        print(
+  1322	            f"[WARN] relance enrich_h5 a échoué pour {rc_dir.name}: {exc}",
+  1323	            file=sys.stderr,
+  1324	        )
+  1325	        return True, False, False
+  1326	
+  1327	    if _rebuild_je_csv_from_stats(rc_dir):
+  1328	        return True, True, True
+  1329	
+  1330	    return True, False, True
+  1331	
+  1332	
+  1333	def _rebuild_je_csv_from_stats(rc_dir: Path) -> bool:
+  1334	    """Attempt to rebuild ``*_je.csv`` using freshly fetched stats."""
+  1335	
+  1336	    snap = _snap_prefix(rc_dir)
+  1337	    if not snap:
+  1338	        print(
+  1339	            f"[WARN] Impossible de déterminer le snapshot H-5 pour {rc_dir.name}",
+  1340	            file=sys.stderr,
+  1341	        )
+  1342	        return False
+  1343	
+  1344	    stats_path = rc_dir / "stats_je.json"
+  1345	    try:
+  1346	        stats_payload = json.loads(stats_path.read_text(encoding="utf-8"))
+  1347	    except (OSError, json.JSONDecodeError) as exc:
+  1348	        print(
+  1349	            f"[WARN] stats_je.json introuvable ou invalide dans {rc_dir.name}: {exc}",
+  1350	            file=sys.stderr,
+  1351	        )
+  1352	        return False
+  1353	
+  1354	    id2name: dict[str, str] = {}
+  1355	    for candidate in [rc_dir / "partants.json", rc_dir / "normalized_h5.json"]:
+  1356	        if not candidate.exists():
+  1357	            continue
+  1358	        try:
+  1359	            payload = json.loads(candidate.read_text(encoding="utf-8"))
+  1360	        except (OSError, json.JSONDecodeError):
+  1361	            continue
+  1362	        mapping = _extract_id2name(payload)
+  1363	        if mapping:
+  1364	            id2name = mapping
+  1365	            break
+  1366	
+  1367	    if not id2name:
+  1368	        print(
+  1369	            f"[WARN] Impossible de reconstruire {snap}_je.csv pour {rc_dir.name}: id2name manquant",
+  1370	            file=sys.stderr,
+  1371	        )
+  1372	        return False
+  1373	
+  1374	    try:
+  1375	        _write_je_csv_file(rc_dir / f"{snap}_je.csv", id2name=id2name, stats_payload=stats_payload)
+  1376	    except OSError as exc:
+  1377	        print(
+  1378	            f"[WARN] Échec d'écriture du CSV J/E pour {rc_dir.name}: {exc}",
+  1379	            file=sys.stderr,
+  1380	        )
+  1381	        return False
+  1382	
+  1383	    return True
+  1384	
+  1385	
+  1386	def _regenerate_chronos_csv(rc_dir: Path) -> bool:
+  1387	    """Attempt to rebuild ``chronos.csv`` from locally available runner data."""
+  1388	
+  1389	    chronos_path = rc_dir / "chronos.csv"
+  1390	
+  1391	    def _load_payload(path: Path) -> dict[str, Any] | None:
+  1392	        try:
+  1393	            payload = json.loads(path.read_text(encoding="utf-8"))
+  1394	        except (OSError, json.JSONDecodeError):
+  1395	            return None
+  1396	        return payload if isinstance(payload, dict) else None
+  1397	
+  1398	    def _extract_runners(payload: dict[str, Any]) -> list[dict[str, Any]]:
+  1399	        def _clean(items: Any) -> list[dict[str, Any]]:
+  1400	            cleaned: list[dict[str, Any]] = []
+  1401	            if isinstance(items, list):
+  1402	                for runner in items:
+  1403	                    if not isinstance(runner, dict):
+  1404	                        continue
+  1405	                    if (
+  1406	                        runner.get("id") is None
+  1407	                        and runner.get("num") is None
+  1408	                        and runner.get("number") is None
+  1409	                    ):
+  1410	                        continue
+  1411	                    cleaned.append(runner)
+  1412	            return cleaned
+  1413	
+  1414	        for key in ("runners", "participants", "partants"):
+  1415	            if key in payload:
+  1416	                runners = _clean(payload.get(key))
+  1417	                if runners:
+  1418	                    return runners
+  1419	
+  1420	        for key in ("data", "course", "payload"):
+  1421	            nested = payload.get(key)
+  1422	            if isinstance(nested, dict):
+  1423	                runners = _extract_runners(nested)
+  1424	                if runners:
+  1425	                    return runners
+  1426	
+  1427	        return []
+  1428	
+  1429	    candidates: list[Path] = []
+  1430	    partants_path = rc_dir / "partants.json"
+  1431	    if partants_path.exists():
+  1432	        candidates.append(partants_path)
+  1433	
+  1434	    normalized_path = rc_dir / "normalized_h5.json"
+  1435	    if normalized_path.exists():
+  1436	        candidates.append(normalized_path)
+  1437	
+  1438	    candidates.extend(sorted(rc_dir.glob("*_H-5.json"), reverse=True))
+  1439	
+  1440	    for candidate in candidates:
+  1441	        payload = _load_payload(candidate)
+  1442	        if not payload:
+  1443	            continue
+  1444	        runners = _extract_runners(payload)
+  1445	        if not runners:
+  1446	            continue
+  1447	        try:
+  1448	            _write_chronos_csv(chronos_path, runners)
+  1449	        except Exception:  # pragma: no cover - defensive
+  1450	            logger.exception("Failed to materialise chronos CSV in %s", rc_dir)
+  1451	            placeholder_headers = ["num", "chrono", "ok"]
+  1452	            placeholder_rows = [["", "", 0]]
+  1453	            _write_minimal_csv(chronos_path, placeholder_headers, placeholder_rows)
+  1454	        return True
+  1455	
+  1456	    print(
+  1457	        f"[WARN] Impossible de régénérer chronos.csv pour {rc_dir.name}: données partants indisponibles",
+  1458	        file=sys.stderr,
+  1459	    )
+  1460	    return False
+  1461	
+  1462	
+  1463	def _mark_course_unplayable(rc_dir: Path, missing: Iterable[str]) -> dict[str, Any]:
+  1464	    """Write the abstention marker and emit the canonical abstain log.
+  1465	
+  1466	    Returns a mapping containing diagnostic information (marker path, message and
+  1467	    whether the file was written successfully) so callers can enrich their
+  1468	    ``decision.json`` payload with the same context.
+  1469	    """
+  1470	
+  1471	    marker = rc_dir / "UNPLAYABLE.txt"
+  1472	    marker_message = "non jouable: data JE/chronos manquante"
+  1473	    missing_items = [str(item) for item in missing if item]
+  1474	    if missing_items:
+  1475	        marker_message = f"{marker_message} ({', '.join(missing_items)})"
+  1476	
+  1477	    details: dict[str, Any] = {
+  1478	        "marker_path": str(marker),
+  1479	        "marker_message": marker_message,
+  1480	        "marker_written": False,
+  1481	    }
+  1482	
+  1483	    try:
+  1484	        marker.write_text(marker_message + "\n", encoding="utf-8")
+  1485	    except OSError as exc:  # pragma: no cover - filesystem issues are non fatal
+  1486	        print(
+  1487	            f"[WARN] impossible d'écrire {marker.name} dans {rc_dir.name}: {exc}",
+  1488	            file=sys.stderr,
+  1489	        )
+  1490	        logger.warning(
+  1491	            "[H-5] impossible d'écrire le marqueur %s pour %s: %s",
+  1492	            marker.name,
+  1493	            rc_dir,
+  1494	            exc,
+  1495	        )
+  1496	    else:
+  1497	        details["marker_written"] = True
+  1498	        logger.warning(
+  1499	            "[H-5] course marquée non jouable (rc=%s, raison=%s)",
+  1500	            rc_dir.name or "?",
+  1501	            marker_message,
+  1502	        )
+  1503	
+  1504	    label = rc_dir.name or "?"
+  1505	    print(
+  1506	        f"[ABSTAIN] Course non jouable (data manquante) – {label}",
+  1507	        file=sys.stderr,
+  1508	    )
+  1509	
+  1510	    return details
+  1511	
+  1512	
+  1513	def _ensure_h5_artifacts(
+  1514	    rc_dir: Path,
+  1515	    *,
+  1516	    retry_cb: Callable[[], None] | None = None,
+  1517	    budget: float | None = None,
+  1518	    phase: str = "H5",
+  1519	) -> dict[str, Any] | None:
+  1520	    """Ensure H-5 enrichment produced JE/chronos files or mark course unplayable."""
+  1521	
+  1522	    outcome = _check_enrich_outputs(rc_dir)
+  1523	    if outcome is None:
+  1524	        return None
+  1525	
+  1526	    missing = list(outcome.get("details", {}).get("missing", []))
+  1527	    retried = False
+  1528	    retry_invoked = False
+  1529	
+  1530	    stats_fetch_success = False
+  1531	    stats_recovered = False
+  1532	    stats_retry_invoked = False
+  1533	
+  1534	    def _refresh_missing_state() -> bool:
+  1535	        """Re-run the output check and update ``missing`` accordingly."""
+  1536	
+  1537	        nonlocal outcome, missing
+  1538	        outcome = _check_enrich_outputs(rc_dir, retry_delay=0.0)
+  1539	        if outcome is None:
+  1540	            missing = []
+  1541	            return True
+  1542	        missing = list(outcome.get("details", {}).get("missing", []))
+  1543	        return False
+  1544	
+  1545	    def _attempt_stats_rebuild(*, allow_without_fetch: bool = False) -> bool:
+  1546	        """Try rebuilding the JE CSV when stats data appears to be available."""
+  1547	
+  1548	        nonlocal stats_recovered
+  1549	        if not missing or not _missing_requires_stats(missing):
+  1550	            return False
+  1551	
+  1552	        if stats_recovered and not allow_without_fetch:
+  1553	            snap = _snap_prefix(rc_dir)
+  1554	            if snap and (rc_dir / f"{snap}_je.csv").exists():
+  1555	                return False
+  1556	
+  1557	        stats_ready = stats_fetch_success
+  1558	        if not stats_ready:
+  1559	            stats_path = rc_dir / "stats_je.json"
+  1560	            stats_ready = stats_path.exists()
+  1561	            if stats_ready and not allow_without_fetch:
+  1562	                # ``stats_fetch_success`` guards against rebuilding when the
+  1563	                # fetch script failed earlier.  When ``allow_without_fetch`` is
+  1564	                # False we keep that behaviour to avoid consuming stale files
+  1565	                # left behind by a previous run.
+  1566	                stats_ready = False
+  1567	
+  1568	        if not stats_ready:
+  1569	            return False
+  1570	
+  1571	        if _rebuild_je_csv_from_stats(rc_dir):
+  1572	            stats_recovered = True
+  1573	            if _refresh_missing_state():
+  1574	                return True
+  1575	        return False
+  1576	
+  1577	    if _missing_requires_stats(missing):
+  1578	        (
+  1579	            stats_fetch_success,
+  1580	            stats_recovered,
+  1581	            stats_retry_invoked,
+  1582	        ) = _recover_je_csv_from_stats(rc_dir, retry_cb=retry_cb)
+  1583	        retry_invoked = retry_invoked or stats_retry_invoked
+  1584	        retried = retried or stats_fetch_success or stats_recovered or stats_retry_invoked
+  1585	        if stats_retry_invoked and not stats_recovered:
+  1586	            if _attempt_stats_rebuild(allow_without_fetch=True):
+  1587	                return None
+  1588	    if _missing_requires_chronos(missing):
+  1589	        retried = True
+  1590	        success = False
+  1591	        if _FETCH_JE_CHRONO_SCRIPT.exists():
+  1592	            success = _run_fetch_script(_FETCH_JE_CHRONO_SCRIPT, rc_dir)
+  1593	        chronos_path = rc_dir / "chronos.csv"
+  1594	        if not success or not chronos_path.exists():
+  1595	            _regenerate_chronos_csv(rc_dir)
+  1596	
+  1597	    if retried:
+  1598	        if _refresh_missing_state():
+  1599	            return None
+  1600	        if _attempt_stats_rebuild():
+  1601	            return None
+  1602	
+  1603	    if missing and retry_cb is not None and not retry_invoked:
+  1604	        try:
+  1605	            retry_cb()
+  1606	        except MissingH30SnapshotError as exc:
+  1607	            existing_missing = list(outcome.get("details", {}).get("missing", []))
+  1608	            merged_missing = list(dict.fromkeys(str(item) for item in existing_missing))
+  1609	            if "snapshot-H30" not in merged_missing:
+  1610	                merged_missing.append("snapshot-H30")
+  1611	            marker_details = _mark_course_unplayable(rc_dir, merged_missing)
+  1612	            outcome["status"] = "no-bet"
+  1613	            outcome["decision"] = "ABSTENTION"
+  1614	            outcome["reason"] = "data-missing"
+  1615	            analysis_block = outcome.setdefault("analysis", {})
+  1616	            if isinstance(analysis_block, dict):
+  1617	                analysis_block["status"] = "NO_PLAY_DATA_MISSING"
+  1618	            details_block = outcome.setdefault("details", {})
+  1619	            if isinstance(details_block, dict):
+  1620	                details_block["missing"] = merged_missing
+  1621	                details_block.setdefault("phase", phase)
+  1622	                details_block["message"] = str(exc)
+  1623	                details_block.update(marker_details)
+  1624	            return outcome
+  1625	        except Exception as exc:  # pragma: no cover - defensive logging
+  1626	            print(
+  1627	                f"[WARN] relance enrich_h5 a échoué pour {rc_dir.name}: {exc}",
+  1628	                file=sys.stderr,
+  1629	            )
+  1630	        else:
+  1631	            if _refresh_missing_state():
+  1632	                return None
+  1633	            if _attempt_stats_rebuild(allow_without_fetch=True):
+  1634	                return None
+  1635	            missing = list(outcome.get("details", {}).get("missing", []))
+  1636	
+  1637	    marker_details = _mark_course_unplayable(rc_dir, missing)
+  1638	    status_label = "NO_PLAY_DATA_MISSING"
+  1639	    reason_label = "DATA_MISSING"
+  1640	    if not outcome.get("status"):
+  1641	        outcome["status"] = "no-bet"
+  1642	    if not outcome.get("reason"):
+  1643	        outcome["reason"] = "data-missing"
+  1644	    analysis_block = outcome.setdefault("analysis", {})
+  1645	    if isinstance(analysis_block, dict):
+  1646	        analysis_block["status"] = status_label
+  1647	    outcome_details = outcome.setdefault("details", {})
+  1648	    if isinstance(outcome_details, dict):
+  1649	        outcome_details.update(marker_details)
+  1650	        outcome_details.setdefault("phase", phase)
+  1651	        outcome_details.setdefault("reason", reason_label)
+  1652	        outcome_details.setdefault("status_label", status_label)
+  1653	    _log_tracking_missing(
+  1654	        rc_dir,
+  1655	        status=status_label,
+  1656	        reason=reason_label,
+  1657	        phase=phase,
+  1658	        budget=budget,
+  1659	    )
+  1660	    return outcome
+  1661	
+  1662	
+  1663	def safe_enrich_h5(
+  1664	    rc_dir: Path,
+  1665	    *,
+  1666	    budget: float,
+  1667	    kelly: float,
+  1668	) -> tuple[bool, dict[str, Any] | None]:
+  1669	    """Execute ``enrich_h5`` ensuring JE/chronos data or mark the course out."""
+  1670	
+  1671	    rc_dir = Path(rc_dir)
+  1672	    marker = rc_dir / "UNPLAYABLE.txt"
+  1673	    if marker.exists():
+  1674	        try:
+  1675	            marker_message = marker.read_text(encoding="utf-8").strip()
+  1676	        except OSError:  # pragma: no cover - file removed between exists/read
+  1677	            marker_message = ""
+  1678	        details = {"marker": marker_message or None}
+  1679	        logger.warning(
+  1680	            "[H-5] course déjà marquée non jouable (rc=%s, marker=%s)",
+  1681	            rc_dir.name or "?",
+  1682	            marker_message or "UNPLAYABLE",
+  1683	        )
+  1684	        print(
+  1685	            f"[ABSTAIN] Course déjà marquée non jouable – {rc_dir.name}",
+  1686	            file=sys.stderr,
+  1687	        )
+  1688	        return False, {
+  1689	            "status": "no-bet",
+  1690	            "decision": "ABSTENTION",
+  1691	            "reason": "unplayable-marker",
+  1692	            "details": details,
+  1693	        }
+  1694	
+  1695	    try:
+  1696	        enrich_h5(rc_dir, budget=budget, kelly=kelly)
+  1697	    except MissingH30SnapshotError as exc:
+  1698	        missing = ["snapshot-H30"]
+  1699	        marker_details = _mark_course_unplayable(rc_dir, missing)
+  1700	        details: dict[str, Any] = {
+  1701	            "missing": missing,
+  1702	            "phase": "H5",
+  1703	            "message": str(exc),
+  1704	        }
+  1705	        details.update(marker_details)
+  1706	        logger.warning(
+  1707	            "[H-5] course non jouable faute de snapshot H-30 (rc=%s)",
+  1708	            rc_dir.name or "?",
+  1709	        )
+  1710	        return False, {
+  1711	            "status": "no-bet",
+  1712	            "decision": "ABSTENTION",
+  1713	            "reason": "data-missing",
+  1714	            "analysis": {"status": "NO_PLAY_DATA_MISSING"},
+  1715	            "details": details,
+  1716	        }
+  1717	    outcome = _ensure_h5_artifacts(
+  1718	        rc_dir,
+  1719	        retry_cb=lambda d=rc_dir: enrich_h5(d, budget=budget, kelly=kelly),
+  1720	        budget=budget,
+  1721	        phase="H5",
+  1722	    )
+  1723	    if outcome is not None:
+  1724	        return False, outcome
+  1725	    return True, None
+  1726	
+  1727	
+  1728	def _execute_h5_chain(
+  1729	    rc_dir: Path, *, budget: float, kelly: float
+  1730	) -> tuple[bool, dict[str, Any] | None]:
+  1731	    """Run the full H-5 enrichment pipeline with fail-safe guards.
+  1732	
+  1733	    The helper executes ``safe_enrich_h5`` and, when successful, chains the
+  1734	    downstream p_finale, pipeline and prompt generation steps.
+  1735	    """
+  1736	
+  1737	    success, outcome = safe_enrich_h5(rc_dir, budget=budget, kelly=kelly)
+  1738	    if not success:
+  1739	        return False, outcome
+  1740	
+  1741	    build_p_finale(rc_dir, budget=budget, kelly=kelly)
+  1742	    guard_ok, analysis_payload, guard_outcome = _run_h5_guard_phase(
+  1743	        rc_dir,
+  1744	        budget=budget,
+  1745	    )
+  1746	    try:
+  1747	        _write_json_file(rc_dir / "analysis_H5.json", analysis_payload)
+  1748	    except Exception as exc:  # pragma: no cover - defensive logging
+  1749	        logger.warning("[H-5] unable to persist analysis_H5.json for %s: %s", rc_dir, exc)
+  1750	    if not guard_ok:
+  1751	        return False, guard_outcome
+  1752	    run_pipeline(rc_dir, budget=budget, kelly=kelly)
+  1753	    build_prompt_from_meta(rc_dir, budget=budget, kelly=kelly)
+  1754	    return True, None
+  1755	
+  1756	
+  1757	def export_per_horse_csv(rc_dir: Path) -> Path:
+  1758	    """Export a per-horse report aggregating probabilities and J/E stats."""
+  1759	
+  1760	    snap = _snap_prefix(rc_dir)
+  1761	    if snap is None:
+  1762	        raise FileNotFoundError("Snapshot H-5 introuvable dans rc_dir")
+  1763	    je_path = rc_dir / f"{snap}_je.csv"
+  1764	    chronos_path = rc_dir / "chronos.csv"
+  1765	    p_finale_path = rc_dir / "p_finale.json"
+  1766	
+  1767	    # Load data sources
+  1768	    data = json.loads(p_finale_path.read_text(encoding="utf-8"))
+  1769	    p_true = {str(k): float(v) for k, v in data.get("p_true", {}).items()}
+  1770	    id2name = data.get("meta", {}).get("id2name", {})
+  1771	
+  1772	    def _read_csv(path: Path) -> list[dict[str, str]]:
+  1773	        text = path.read_text(encoding="utf-8")
+  1774	        delim = ";" if ";" in text.splitlines()[0] else ","
+  1775	        return list(csv.DictReader(text.splitlines(), delimiter=delim))
+  1776	
+  1777	    je_rows = _read_csv(je_path)
+  1778	    chrono_rows = _read_csv(chronos_path)
+  1779	    chrono_ok = {
+  1780	        str(row.get("num") or row.get("id"))
+  1781	        for row in chrono_rows
+  1782	        if any(v.strip() for k, v in row.items() if k not in {"num", "id"} and v)
+  1783	    }
+  1784	
+  1785	    out_path = rc_dir / "per_horse_report.csv"
+  1786	    with out_path.open("w", newline="", encoding="utf-8") as fh:
+  1787	        writer = csv.writer(fh)
+  1788	        writer.writerow(["num", "nom", "p_finale", "j_rate", "e_rate", "chrono_ok"])
+  1789	        for row in je_rows:
+  1790	            num = str(row.get("num") or row.get("id") or "")
+  1791	            nom = row.get("nom") or row.get("name") or id2name.get(num, "")
+  1792	            writer.writerow(
+  1793	                [
+  1794	                    num,
+  1795	                    nom,
+  1796	                    p_true.get(num, ""),
+  1797	                    row.get("j_rate"),
+  1798	                    row.get("e_rate"),
+  1799	                    str(num in chrono_ok),
+  1800	                ]
+  1801	            )
+  1802	    return out_path
+  1803	
+  1804	
+  1805	_DISCOVER_SCRIPT = Path(__file__).resolve().with_name("discover_geny_today.py")
+  1806	
+  1807	
+  1808	def _load_geny_today_payload() -> dict[str, Any]:
+  1809	    """Return the JSON payload produced by :mod:`discover_geny_today`.
+  1810	
+  1811	    The helper centralises the subprocess invocation so that it can easily be
+  1812	    stubbed in tests.
+  1813	    """
+  1814	
+  1815	    raw = subprocess.check_output([sys.executable, str(_DISCOVER_SCRIPT)], text=True)
+  1816	    return json.loads(raw)
+  1817	
+  1818	
+  1819	def _normalise_rc_label(label: str | int, prefix: str) -> str:
+  1820	    """Normalise ``label`` to the canonical ``R``/``C`` format.
+  1821	
+  1822	    ``label`` may be provided without the leading prefix (``"1"``) or with a
+  1823	    lowercase variant (``"c3"``). The return value always matches ``R\d+`` or
+  1824	    ``C\d+`` with no leading zero. ``ValueError`` is raised when the label does
+  1825	    not describe a strictly positive integer.
+  1826	    """
+  1827	
+  1828	    text = str(label).strip().upper().replace(" ", "")
+  1829	    if not text:
+  1830	        raise ValueError(f"Identifiant {prefix} vide")
+  1831	    if text.startswith(prefix):
+  1832	        text = text[len(prefix) :]
+  1833	    elif text.startswith(prefix[0]):
+  1834	        text = text[1:]
+  1835	    if not text.isdigit():
+  1836	        raise ValueError(f"Identifiant {prefix} invalide: {label!r}")
+  1837	    number = int(text)
+  1838	    if number <= 0:
+  1839	        raise ValueError(f"Identifiant {prefix} invalide: {label!r}")
+  1840	    return f"{prefix}{number}"
+  1841	
+  1842	
+  1843	def _normalise_phase(value: str) -> str:
+  1844	    """Return a canonical phase string (``H30`` or ``H5``)."""
+  1845	
+  1846	    cleaned = value.strip().upper().replace("-", "").replace(" ", "")
+  1847	    if cleaned not in {"H30", "H5"}:
+  1848	        raise ValueError(f"Phase inconnue: {value!r} (attendu H30 ou H5)")
+  1849	    return cleaned
+  1850	
+  1851	
+  1852	def _phase_argument(value: str) -> str:
+  1853	    """Argument parser wrapper that normalises ``value`` to ``H30``/``H5``."""
+  1854	
+  1855	    try:
+  1856	        return _normalise_phase(value)
+  1857	    except ValueError as exc:  # pragma: no cover - handled by argparse
+  1858	        raise argparse.ArgumentTypeError(str(exc)) from exc
+  1859	
+  1860	
+  1861	def _resolve_course_id(reunion: str, course: str) -> str:
+  1862	    """Return the Geny course identifier matching ``reunion``/``course``."""
+  1863	
+  1864	    payload = _load_geny_today_payload()
+  1865	    reunion = reunion.upper()
+  1866	    course = course.upper()
+  1867	    for meeting in payload.get("meetings", []):
+  1868	        if str(meeting.get("r", "")).upper() != reunion:
+  1869	            continue
+  1870	        for course_info in meeting.get("courses", []):
+  1871	            label = str(course_info.get("c", "")).upper()
+  1872	            if label != course:
+  1873	                continue
+  1874	            course_id = (
+  1875	                course_info.get("id_course")
+  1876	                or course_info.get("course_id")
+  1877	                or course_info.get("id")
+  1878	            )
+  1879	            if course_id is None:
+  1880	                break
+  1881	            return str(course_id)
+  1882	    raise ValueError(f"Course {reunion}{course} introuvable via discover_geny_today")
+  1883	
+  1884	
+  1885	def _process_single_course(
+  1886	    reunion: str,
+  1887	    course: str,
+  1888	    phase: str,
+  1889	    data_dir: Path,
+  1890	    *,
+  1891	    budget: float,
+  1892	    kelly: float,
+  1893	    gcs_prefix: str | None,
+  1894	) -> dict[str, Any] | None:
+  1895	    """Fetch and analyse a specific course designated by ``reunion``/``course``."""
+  1896	
+  1897	    course_id = _resolve_course_id(reunion, course)
+  1898	    base_dir = ensure_dir(data_dir)
+  1899	    rc_dir = ensure_dir(base_dir / f"{reunion}{course}")
+  1900	    write_snapshot_from_geny(course_id, phase, rc_dir)
+  1901	    outcome: dict[str, Any] | None = None
+  1902	    pipeline_done = False
+  1903	    if phase.upper() == "H5":
+  1904	        pipeline_done, outcome = _execute_h5_chain(
+  1905	            rc_dir,
+  1906	            budget=budget,
+  1907	            kelly=kelly,
+  1908	        )
+  1909	        if pipeline_done:
+  1910	            csv_path = export_per_horse_csv(rc_dir)
+  1911	            print(f"[INFO] per-horse report écrit: {csv_path}")
+  1912	            outcome = None
+  1913	        elif outcome is not None:
+  1914	            _write_json_file(rc_dir / "decision.json", outcome)
+  1915	        else:  # pragma: no cover - defensive fallback
+  1916	            _write_json_file(
+  1917	                rc_dir / "decision.json",
+  1918	                {
+  1919	                    "status": "no-bet",
+  1920	                    "decision": "ABSTENTION",
+  1921	                    "reason": "pipeline-error",
+  1922	                },
+  1923	            )
+  1924	    if gcs_prefix is not None:
+  1925	        _upload_artifacts(rc_dir, gcs_prefix=gcs_prefix)
+  1926	    return outcome
+  1927	
+  1928	
+  1929	# ---------------------------------------------------------------------------
+  1930	# CLI entry point
+  1931	# ---------------------------------------------------------------------------
+  1932	
+  1933	
+  1934	_COURSE_URL_PATTERN = re.compile(r"/(?:course|race)/(\d+)", re.IGNORECASE)
+  1935	
+  1936	
+  1937	def _extract_labels_from_text(text: str) -> tuple[str, str]:
+  1938	    """Return ``(reunion, course)`` labels parsed from ``text``."""
+  1939	
+  1940	    rc_match = re.search(r"R\d+\s*C\d+", text, re.IGNORECASE)
+  1941	    if rc_match:
+  1942	        return _derive_rc_parts(rc_match.group(0))
+  1943	
+  1944	    r_match = re.search(r"R\d+", text, re.IGNORECASE)
+  1945	    c_match = re.search(r"C\d+", text, re.IGNORECASE)
+  1946	    r_label = r_match.group(0).upper() if r_match else "R?"
+  1947	    c_label = c_match.group(0).upper() if c_match else "C?"
+  1948	    return r_label, c_label
+  1949	
+  1950	
+  1951	def _process_reunion(
+  1952	    url: str,
+  1953	    phase: str,
+  1954	    data_dir: Path,
+  1955	    *,
+  1956	    budget: float,
+  1957	    kelly: float,
+  1958	    gcs_prefix: str | None,
+  1959	) -> None:
+  1960	    """Fetch ``url`` and run the pipeline for each course of the meeting."""
+  1961	
+  1962	    resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
+  1963	    resp.raise_for_status()
+  1964	    soup = BeautifulSoup(resp.text, "html.parser")
+  1965	    print("Soup object created")
+  1966	    races = soup.select('a[href*="/partants-pmu/"]')
+  1967	    print(f"Found {len(races)} races.")
+  1968	    text_blob = soup.get_text(" ", strip=True)
+  1969	    context_blob = f"{url} {text_blob}".strip()
+  1970	
+  1971	    courses: list[tuple[str, str, str, str]] = []
+  1972	    course_match = _COURSE_URL_PATTERN.search(url)
+  1973	    if course_match:
+  1974	        course_id = course_match.group(1)
+  1975	        r_label, c_label = _extract_labels_from_text(context_blob)
+  1976	        courses.append((r_label, c_label, course_id, url))
+  1977	    else:
+  1978	        r_label, _ = _extract_labels_from_text(context_blob)
+  1979	
+  1980	        for a in soup.find_all("a"):
+  1981	            text = a.get_text(strip=True)
+  1982	            c_match = re.search(r"(C\d+)", text, re.IGNORECASE)
+  1983	            href = a.get("href", "")
+  1984	            id_match = re.search(r"(\d+)(?:\.html)?$", href)
+  1985	            if c_match and id_match:
+  1986	                course_url = urljoin(url, href)
+  1987	                courses.append(
+  1988	                    (
+  1989	                        r_label,
+  1990	                        c_match.group(1).upper(),
+  1991	                        id_match.group(1),
+  1992	                        course_url,
+  1993	                    )
+  1994	                )
+  1995	
+  1996	        if not courses:
+  1997	            return
+  1998	
+  1999	    base_dir = ensure_dir(data_dir)
+  2000	    for r_label, c_label, course_id, course_url in courses:
+  2001	        rc_dir = ensure_dir(base_dir / f"{r_label}{c_label}")
+  2002	        write_snapshot_from_geny(course_id, phase, rc_dir)
+  2003	        outcome: dict[str, Any] | None = None
+  2004	        pipeline_done = False
+  2005	        if phase.upper() == "H5":
+  2006	            pipeline_done, outcome = _execute_h5_chain(
+  2007	                rc_dir,
+  2008	                budget=budget,
+  2009	                kelly=kelly,
+  2010	            )
+  2011	            if pipeline_done:
+  2012	                csv_path = export_per_horse_csv(rc_dir)
+  2013	                print(f"[INFO] per-horse report écrit: {csv_path}")
+  2014	                outcome = None
+  2015	            elif outcome is not None:
+  2016	                _write_json_file(rc_dir / "decision.json", outcome)
+  2017	            else:  # pragma: no cover - defensive fallback
+  2018	                _write_json_file(
+  2019	                    rc_dir / "decision.json",
+  2020	                    {
+  2021	                        "status": "no-bet",
+  2022	                        "decision": "ABSTENTION",
+  2023	                        "reason": "pipeline-error",
+  2024	                    },
+  2025	                )
+  2026	        if gcs_prefix is not None:
+  2027	            _upload_artifacts(rc_dir, gcs_prefix=gcs_prefix)
+  2028	
+  2029	
+  2030	def main() -> None:
+  2031	    ap = argparse.ArgumentParser(description="Analyse courses du jour enrichie")
+  2032	    ap.add_argument("--data-dir", default="data", help="Répertoire racine pour les sorties")
+  2033	    ap.add_argument("--budget", type=float, default=100.0, help="Budget à utiliser")
+  2034	    ap.add_argument("--kelly", type=float, default=1.0, help="Fraction de Kelly à appliquer")
+  2035	    ap.add_argument(
+  2036	        "--from-geny-today",
+  2037	        action="store_true",
+  2038	        help="Découvre toutes les réunions FR du jour via Geny et traite H30/H5",
+  2039	    )
+  2040	    ap.add_argument(
+  2041	        "--course-url",
+  2042	        "--reunion-url",
+  2043	        dest="course_url",
+  2044	        help="URL ZEturf d'une réunion ou d'une course",
+  2045	    )
+  2046	    ap.add_argument(
+  2047	        "--phase",
+  2048	        type=_phase_argument,
+  2049	        help="Fenêtre à traiter (H30 ou H5, avec ou sans tiret)",
+  2050	    )
+  2051	    ap.add_argument("--reunion", help="Identifiant de la réunion (ex: R1)")
+  2052	    ap.add_argument("--course", help="Identifiant de la course (ex: C3)")
+  2053	    ap.add_argument(
+  2054	        "--reunions-file",
+  2055	        help="Fichier JSON listant les réunions à traiter (mode batch)",
+  2056	    )
+  2057	    ap.add_argument(
+  2058	        "--upload-gcs",
+  2059	        action="store_true",
+  2060	        help="Upload des artefacts générés sur Google Cloud Storage",
+  2061	    )
+  2062	    ap.add_argument(
+  2063	        "--upload-drive",
+  2064	        action="store_true",
+  2065	        help=argparse.SUPPRESS,
+  2066	    )
+  2067	    ap.add_argument(
+  2068	        "--gcs-prefix",
+  2069	        help="Préfixe GCS racine pour les uploads",
+  2070	    )
+  2071	    ap.add_argument(
+  2072	        "--drive-folder-id",
+  2073	        dest="gcs_prefix",
+  2074	        help=argparse.SUPPRESS,
+  2075	    )
+  2076	    args = ap.parse_args()
+  2077	
+  2078	    gcs_prefix = None
+  2079	    if args.upload_gcs or args.upload_drive:
+  2080	        if args.gcs_prefix is not None:
+  2081	            gcs_prefix = args.gcs_prefix
+  2082	        else:
+  2083	            gcs_prefix = os.environ.get("GCS_PREFIX")
+  2084	        if gcs_prefix is None:
+  2085	            print("[WARN] gcs-prefix manquant, envoi vers GCS ignoré")
+  2086	
+  2087	    if args.reunions_file:
+  2088	        script = Path(__file__).resolve()
+  2089	        data = json.loads(Path(args.reunions_file).read_text(encoding="utf-8"))
+  2090	        for reunion in data.get("reunions", []):
+  2091	            url_zeturf = reunion.get("url_zeturf")
+  2092	            if not url_zeturf:
+  2093	                continue
+  2094	            for phase in ["H30", "H5"]:
+  2095	                cmd = [
+  2096	                    sys.executable,
+  2097	                    str(script),
+  2098	                    "--course-url",
+  2099	                    url_zeturf,
+  2100	                    "--phase",
+  2101	                    phase,
+  2102	                    "--data-dir",
+  2103	                    args.data_dir,
+  2104	                    "--budget",
+  2105	                    str(args.budget),
+  2106	                    "--kelly",
+  2107	                    str(args.kelly),
+  2108	                ]
+  2109	                if gcs_prefix is not None:
+  2110	                    cmd.append("--upload-gcs")
+  2111	                    cmd.extend(["--gcs-prefix", gcs_prefix])
+  2112	                subprocess.run(cmd, check=True)
+  2113	        return
+  2114	
+  2115	    if args.reunion or args.course:
+  2116	        if not (args.reunion and args.course and args.phase):
+  2117	            print(
+  2118	                "[ERROR] --reunion, --course et --phase doivent être utilisés ensemble",
+  2119	                file=sys.stderr,
+  2120	            )
+  2121	            raise SystemExit(2)
+  2122	        try:
+  2123	            reunion_label = _normalise_rc_label(args.reunion, "R")
+  2124	            course_label = _normalise_rc_label(args.course, "C")
+  2125	        except ValueError as exc:
+  2126	            print(f"[ERROR] {exc}", file=sys.stderr)
+  2127	            raise SystemExit(2)
+  2128	        _process_single_course(
+  2129	            reunion_label,
+  2130	            course_label,
+  2131	            args.phase,
+  2132	            Path(args.data_dir),
+  2133	            budget=args.budget,
+  2134	            kelly=args.kelly,
+  2135	            gcs_prefix=gcs_prefix,
+  2136	        )
+  2137	        return
+  2138	
+  2139	    if args.course_url and args.phase:
+  2140	        _process_reunion(
+  2141	            args.course_url,
+  2142	            args.phase,
+  2143	            Path(args.data_dir),
+  2144	            budget=args.budget,
+  2145	            kelly=args.kelly,
+  2146	            gcs_prefix=gcs_prefix,
+  2147	        )
+  2148	        return
+  2149	
+  2150	    if args.from_geny_today:
+  2151	        payload = _load_geny_today_payload()
+  2152	        meetings = payload.get("meetings", [])
+  2153	        base_dir = ensure_dir(Path(args.data_dir))
+  2154	        for meeting in meetings:
+  2155	            r_label = meeting.get("r", "")
+  2156	            for course in meeting.get("courses", []):
+  2157	                c_label = course.get("c", "")
+  2158	                rc_dir = ensure_dir(base_dir / f"{r_label}{c_label}")
+  2159	                course_id = course.get("id_course")
+  2160	                if not course_id:
+  2161	                    continue
+  2162	                write_snapshot_from_geny(course_id, "H30", rc_dir)
+  2163	                write_snapshot_from_geny(course_id, "H5", rc_dir)
+  2164	                success, decision = safe_enrich_h5(rc_dir, budget=args.budget, kelly=args.kelly)
+  2165	                if success:
+  2166	                    build_p_finale(rc_dir, budget=args.budget, kelly=args.kelly)
+  2167	                    run_pipeline(rc_dir, budget=args.budget, kelly=args.kelly)
+  2168	                    build_prompt_from_meta(rc_dir, budget=args.budget, kelly=args.kelly)
+  2169	                    csv_path = export_per_horse_csv(rc_dir)
+  2170	                    print(f"[INFO] per-horse report écrit: {csv_path}")
+  2171	                else:
+  2172	                    if decision is not None:
+  2173	                        _write_json_file(rc_dir / "decision.json", decision)
+  2174	                if gcs_prefix is not None:
+  2175	                    _upload_artifacts(rc_dir, gcs_prefix=gcs_prefix)
+  2176	        print("[DONE] from-geny-today pipeline terminé.")
+  2177	        return
+  2178	
+  2179	    # Fall back to original behaviour: simply run the pipeline on ``data_dir``
+  2180	    run_pipeline(Path(args.data_dir), budget=args.budget, kelly=args.kelly)
+  2181	    if gcs_prefix is not None:
+  2182	        _upload_artifacts(Path(args.data_dir), gcs_prefix=gcs_prefix)
+  2183	
+  2184	
+  2185	if __name__ == "__main__":  # pragma: no cover - CLI entry point
+  2186	    main()
+
+===== FICHIER: ./p_finale_export.py =====
+
+===== FICHIER: ./online_fetch_zeturf.py =====
+     1	"""
+     2	Module d'extraction avancée des données ZEturf
+     3	Version intégrée pour l'orchestrateur Cloud Run
+     4	"""
+     5	
+     6	import json
+     7	import logging
+     8	import re
+     9	from time import sleep
+    10	from typing import Any
+    11	
+    12	import requests
+    13	from bs4 import BeautifulSoup
+    14	
+    15	# Import central configuration
+    16	from src.config import config
+    17	
+    18	# Configuration du logging standard
+    19	# Note: This could be centralized in the main application entry point
+    20	logging.basicConfig(
+    21	    level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    22	)
+    23	logger = logging.getLogger(__name__)
+    24	
+    25	
+    26	def _extract_start_time(html_content: str, course_id: str = "") -> str | None:
+    27	    """
+    28	    Extrait l'heure de départ d'une course depuis le HTML ZEturf.
+    29	
+    30	    Args:
+    31	        html_content: HTML de la page course
+    32	        course_id: Identifiant R?C? de la course (optionnel)
+    33	
+    34	    Returns:
+    35	        Heure au format "HH:MM" ou None
+    36	    """
+    37	    try:
+    38	        soup = BeautifulSoup(html_content, 'html.parser')
+    39	
+    40	        # 1. Chercher dans JSON-LD (métadonnées structurées)
+    41	        for script in soup.find_all('script', type='application/ld+json'):
+    42	            try:
+    43	                data = json.loads(script.string)
+    44	                if isinstance(data, dict) and 'startDate' in data:
+    45	                    # Format ISO: "2025-10-17T14:30:00+02:00"
+    46	                    dt = data['startDate']
+    47	                    match = re.search(r'T(\d{2}):(\d{2})', dt)
+    48	                    if match:
+    49	                        time_str = f"{match.group(1)}:{match.group(2)}"
+    50	                        logger.info(f"Extracted time from JSON-LD: {time_str}")
+    51	                        return time_str
+    52	            except (json.JSONDecodeError, TypeError):
+    53	                continue
+    54	
+    55	        # 2. Chercher dans les balises <time>
+    56	        time_tags = soup.find_all('time')
+    57	        for tag in time_tags:
+    58	            text = tag.get_text(strip=True)
+    59	            # Formats: "14h30", "14:30", "2:30 PM"
+    60	            match = re.search(r'(\d{1,2})[h:](\d{2})', text)
+    61	            if match:
+    62	                time_str = f"{match.group(1).zfill(2)}:{match.group(2)}"
+    63	                logger.info(f"Extracted time from <time> tag: {time_str}")
+    64	                return time_str
+    65	
+    66	        # 3. Patterns textuels
+    67	        patterns = [
+    68	            r'Départ[^\d]*(\d{1,2})[h:](\d{2})',
+    69	            r'Heure[^\d]*(\d{1,2})[h:](\d{2})',
+    70	            r'départ[^\d]*(\d{1,2})[h:](\d{2})',
+    71	            r'(\d{1,2})[h:](\d{2})\s*(?:Départ|départ)?',
+    72	        ]
+    73	
+    74	        for pattern in patterns:
+    75	            match = re.search(pattern, html_content, re.IGNORECASE)
+    76	            if match:
+    77	                time_str = f"{match.group(1).zfill(2)}:{match.group(2)}"
+    78	                logger.info(f"Extracted time from pattern: {time_str}")
+    79	                return time_str
+    80	
+    81	        logger.warning(f"No time found for course {course_id}")
+    82	        return None
+    83	
+    84	    except Exception as e:
+    85	        logger.error(f"Error extracting time: {e}")
+    86	        return None
+    87	
+    88	
+    89	def fetch_course_details(course_url: str) -> dict[str, Any]:
+    90	    """
+    91	    Récupère les détails d'une course avec une politique de relance robuste.
+    92	    Utilise la configuration centrale de l'application.
+    93	
+    94	    Args:
+    95	        course_url: URL complète de la course ZEturf
+    96	
+    97	    Returns:
+    98	        Dict avec métadonnées: {url, start_time, hippodrome, partants_count, error?}
+    99	    """
+   100	    headers = {
+   101	        'User-Agent': config.user_agent,
+   102	        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9',
+   103	        'Accept-Language': 'fr-FR,fr;q=0.9',
+   104	    }
+   105	
+   106	    last_request_exception = None
+   107	    for attempt in range(config.max_retries):
+   108	        try:
+   109	            logger.info(f"Fetching course details: {course_url} (Attempt {attempt + 1}/{config.max_retries})")
+   110	            
+   111	            resp = requests.get(
+   112	                course_url, 
+   113	                headers=headers, 
+   114	                timeout=config.request_timeout
+   115	            )
+   116	            resp.raise_for_status()  # Lève une exception pour les status 4xx/5xx
+   117	
+   118	            # Si la requête réussit, on traite les données et on sort de la boucle
+   119	            try:
+   120	                soup = BeautifulSoup(resp.text, 'html.parser')
+   121	                course_id = course_url.split('/')[-1] if '/' in course_url else ""
+   122	                start_time = _extract_start_time(resp.text, course_id)
+   123	                
+   124	                hippodrome = None
+   125	                h1 = soup.find('h1')
+   126	                if h1:
+   127	                    hippodrome = h1.get_text(strip=True)
+   128	
+   129	                partants_count = len(soup.find_all('tr', class_=re.compile(r'partant|runner')))
+   130	
+   131	                return {
+   132	                    'url': course_url,
+   133	                    'start_time': start_time,
+   134	                    'hippodrome': hippodrome,
+   135	                    'partants_count': partants_count if partants_count > 0 else None,
+   136	                    'html_size': len(resp.text),
+   137	                    'status': 'ok',
+   138	                }
+   139	            except Exception as e:
+   140	                # Error during parsing, no need to retry
+   141	                logger.error(f"Parsing error for {course_url}: {e}")
+   142	                return {'url': course_url, 'error': f"Parsing error: {e}", 'status': 'error'}
+   143	
+   144	        except requests.RequestException as e:
+   145	            last_request_exception = e
+   146	            logger.warning(f"Request error for {course_url} on attempt {attempt + 1}: {e}")
+   147	            if attempt < config.max_retries - 1:
+   148	                # Attente exponentielle avant la prochaine tentative
+   149	                backoff_time = 1 * (2 ** attempt) # 1s, 2s, 4s...
+   150	                logger.info(f"Waiting {backoff_time}s before next retry...")
+   151	                sleep(backoff_time)
+   152	            continue # Passe à la tentative suivante
+   153	
+   154	    # Si toutes les tentatives ont échoué
+   155	    logger.error(f"All {config.max_retries} retries failed for {course_url}. Last error: {last_request_exception}")
+   156	    return {'url': course_url, 'error': str(last_request_exception), 'status': 'error'}
+   157	
+   158	
+   159	if __name__ == "__main__":
+   160	    # Test rapide
+   161	    test_url = "https://www.zeturf.fr/fr/course/2025-10-17/R1C1-prix-test"
+   162	    result = fetch_course_details(test_url)
+   163	    print(json.dumps(result, indent=2, ensure_ascii=False))
+   164	
+   165	
+   166	# --- Minimal local snapshot for tests / smoke runs --------------------------
+   167	def fetch_race_snapshot(reunion: str, course: str, phase: str = "H5") -> dict:
+   168	    """
+   169	    Charge un snapshot JSON pour R?/C? depuis ./data/<R?C?>/
+   170	    Priorité: snapshot_{phase}.json puis dernier *_H-5.json, puis *_H-30.json
+   171	    """
+   172	    import json
+   173	    from pathlib import Path
+   174	    tag = f"{reunion}{course}"
+   175	    base = Path("data") / tag
+   176	    candidates = []
+   177	    # Candidat direct
+   178	    candidates.append(base / f"snapshot_{phase}.json")
+   179	    # Fallbacks récents
+   180	    if base.exists():
+   181	        h5 = [p for p in base.glob(f"*_{tag}_H-5.json")]
+   182	        h30 = [p for p in base.glob(f"*_{tag}_H-30.json")]
+   183	        if h5:
+   184	            candidates.append(max(h5, key=lambda p: p.stat().st_mtime))
+   185	        if h30:
+   186	            candidates.append(max(h30, key=lambda p: p.stat().st_mtime))
+   187	    for p in candidates:
+   188	        if p and p.exists():
+   189	            return json.loads(p.read_text(encoding="utf-8"))
+   190	    raise RuntimeError(f"Aucun snapshot trouvé pour {tag} ({phase}). Génère-le d'abord via analyse_courses_du_jour_enrichie.py")
+
+===== FICHIER: ./fetch_je_stats.py =====
+     1	from pathlib import Path
+     2	import subprocess
+     3	import shlex
+     4	
+     5	def enrich_from_snapshot(snapshot_path: str, reunion: str = "", course: str = "") -> str:
+     6	    """
+     7	    Construit un CSV '..._je.csv' à partir du snapshot H-5 fourni.
+     8	    Retourne le chemin du CSV généré.
+     9	    """
+    10	    h5 = Path(snapshot_path)
+    11	    out = h5.parent / f"{h5.stem}_je.csv"
+    12	    cmd = f'python fetch_je_stats.py --h5 "{h5}" --out "{out}" --cache --ttl-seconds 86400'
+    13	    subprocess.run(shlex.split(cmd), check=True)
+    14	    return str(out)
+
+===== FICHIER: ./fetch_je_chrono.py =====
+     1	from pathlib import Path
+     2	import subprocess
+     3	import shlex
+     4	
+     5	def enrich_from_snapshot(snapshot_path: str, reunion: str = "", course: str = "") -> str:
+     6	    """
+     7	    Construit 'chronos.csv' à côté du snapshot H-5 fourni.
+     8	    Retourne le chemin du CSV généré.
+     9	    """
+    10	    h5 = Path(snapshot_path)
+    11	    out = h5.parent / "chronos.csv"
+    12	    cmd = f'python fetch_je_chrono.py --h5 "{h5}" --out "{out}"'
+    13	    subprocess.run(shlex.split(cmd), check=True)
+    14	    return str(out)

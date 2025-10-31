@@ -1,0 +1,87 @@
+name: Smoke & Deploy (Cloud Run)
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: "3.12"
+  REGION: ${{ vars.CLOUD_RUN_REGION || 'europe-west4' }}
+  SERVICE: ${{ vars.CLOUD_RUN_SERVICE || 'hippique-orchestrator' }}
+  PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  IMAGE: ${{ vars.ARTIFACT_REG_HOST || 'gcr.io' }}/${{ vars.GCP_PROJECT_ID }}/hippique-orchestrator:${{ github.sha }}
+
+jobs:
+  smoke-local:
+    name: Local smoke (Uvicorn)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install uvicorn fastapi pydantic "jq==1.6" || true
+
+      - name: Run local smoke
+        run: |
+          chmod +x scripts/smoke_api.sh
+          ./scripts/smoke_api.sh
+
+  build-deploy:
+    name: Build & Deploy Cloud Run
+    needs: smoke-local
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up gcloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      - uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Configure Artifact Registry / GCR
+        run: |
+          gcloud auth configure-docker --quiet
+          echo "PROJECT=${PROJECT_ID}"
+          echo "REGION=${REGION}"
+          echo "SERVICE=${SERVICE}"
+
+      - name: Build & Push image
+        run: |
+          docker build -t "${IMAGE}" .
+          docker push "${IMAGE}"
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy "${SERVICE}" \
+            --image "${IMAGE}" \
+            --platform managed \
+            --region "${REGION}" \
+            --allow-unauthenticated \
+            --set-env-vars=TZ=Europe/Paris \
+            --port=8080
+
+      - name: Get Cloud Run URL
+        id: url
+        run: |
+          URL=$(gcloud run services describe "${SERVICE}" --region "${REGION}" --format='value(status.url)')
+          echo "url=${URL}" >> "$GITHUB_OUTPUT"
+
+      - name: Smoke Cloud
+        run: |
+          chmod +x scripts/smoke_cloud.sh
+          BASE_URL="${{ steps.url.outputs.url }}" ./scripts/smoke_cloud.sh

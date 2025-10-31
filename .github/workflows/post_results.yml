@@ -1,0 +1,63 @@
+name: GPI v5.1 - Post Results
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {}
+permissions:
+  contents: read
+  id-token: write
+env:
+  TZ: Europe/Paris
+  PYTHONUNBUFFERED: "1"
+jobs:
+  results:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - name: Install deps
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+      - name: Fetch & update Excel
+        shell: bash
+        run: |
+          set -euo pipefail
+          python runner_chain.py --phase RESULT
+          ls -l data || true
+          ls -l excel || true
+      - name: Upload artifacts (always)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: post-results-${{ github.run_id }}
+          path: |
+            data/**
+            excel/*.xlsx
+          if-no-files-found: warn
+      - id: gcp-auth
+        name: Auth GCP via WIF (optional)
+        if: ${{ secrets.GCP_WIF_PROVIDER != '' && secrets.GCP_WIF_SERVICE_ACCOUNT != '' }}
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_WIF_SERVICE_ACCOUNT }}
+          token_format: access_token
+      - name: Upload to GCS (optional)
+        if: ${{ steps.gcp-auth.outcome == 'success' }}
+        shell: bash
+        env:
+          BUCKET: ${{ vars.GCS_BUCKET }}
+          PREFIX: ${{ vars.GCS_PREFIX || '' }}
+        run: |
+          set -euo pipefail
+          if [ -n "${BUCKET}" ]; then
+            gcloud storage cp -r data/** "gs://${BUCKET}/${PREFIX:-}/data/" || true
+            gcloud storage cp excel/*.xlsx "gs://${BUCKET}/${PREFIX:-}/excel/" || true
+          else
+            echo "GCS_BUCKET non défini, skip."
