@@ -93,6 +93,56 @@ except Exception:  # pragma: no cover - used when optional deps are missing
     def write_snapshot_from_geny(*args: Any, **kwargs: Any) -> None:
         raise RuntimeError("write_snapshot_from_geny is unavailable")
 
+try:
+    from src.online_fetch_boturfers import fetch_boturfers_programme, fetch_boturfers_race_details
+except ImportError:
+    def fetch_boturfers_programme(*args, **kwargs):
+        raise RuntimeError("Boturfers programme fetcher is unavailable")
+    def fetch_boturfers_race_details(*args, **kwargs):
+        raise RuntimeError("Boturfers race details fetcher is unavailable")
+
+def write_snapshot_from_boturfers(reunion: str, course: str, phase: str, rc_dir: Path) -> None:
+    """
+    Fetches race details from Boturfers and writes a snapshot.
+    """
+    logger.info(f"Fetching {reunion}{course} from Boturfers for phase {phase}")
+    
+    programme_url = "https://www.boturfers.fr/programme-pmu-du-jour"
+    programme_data = fetch_boturfers_programme(programme_url)
+
+    race_url = None
+    target_rc = f"{reunion}{course}".replace(" ", "")
+    if programme_data and programme_data.get("races"):
+        for race in programme_data["races"]:
+            if race.get("rc", "").replace(" ", "") == target_rc:
+                race_url = race.get("url")
+                break
+    
+    if not race_url:
+        logger.error(f"Course {target_rc} not found in Boturfers programme.")
+        return
+
+    race_details = fetch_boturfers_race_details(race_url)
+
+    if not race_details or "error" in race_details:
+        logger.error(f"Failed to fetch race details for {race_url}")
+        return
+
+    # Add metadata to the snapshot
+    race_details['reunion'] = reunion
+    race_details['course'] = course
+    race_details['rc'] = target_rc
+    
+    # Save the snapshot
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    filename = f"{timestamp}_{phase}.json"
+    output_path = rc_dir / filename
+    try:
+        _write_json_file(output_path, race_details)
+        logger.info(f"Snapshot for {target_rc} saved to {output_path}")
+    except IOError as e:
+        logger.error(f"Failed to write snapshot to {output_path}: {e}")
+
 
 if USE_GCS:
     try:  # pragma: no cover - optional dependency in tests
@@ -577,9 +627,23 @@ def enrich_h5(rc_dir: Path, *, budget: float, kelly: float) -> None:
     snap_stem = h5_raw_path.stem
     je_path = rc_dir / f"{snap_stem}_je.csv"
     try:
-        coverage, mapped = collect_stats(
-            course_id, h5_path=rc_dir / "normalized_h5.json"
+        # collect_stats retourne le chemin vers un fichier JSON qui contient les stats
+        stats_json_path_str = collect_stats(
+            h5=str(rc_dir / "normalized_h5.json"),
+            out=str(je_path)  # Le nom de base pour les fichiers de sortie
         )
+        stats_json_path = Path(stats_json_path_str)
+        if not stats_json_path.exists():
+            raise FileNotFoundError(f"collect_stats should have created {stats_json_path}")
+
+        # Lire le payload JSON
+        stats_result = json.loads(stats_json_path.read_text(encoding="utf-8"))
+        
+        coverage = stats_result.get("coverage", 0)
+        rows = stats_result.get("rows", [])
+        
+        mapped = {str(row.get("num")): row for row in rows}
+
     except Exception:  # pragma: no cover - network or scraping issues
         logger.exception("collect_stats failed for course %s", course_id)
         stats_payload = {"coverage": 0, "ok": 0}
@@ -588,10 +652,14 @@ def enrich_h5(rc_dir: Path, *, budget: float, kelly: float) -> None:
         placeholder_rows = [["", "", "", "", 0]]
         _write_minimal_csv(je_path, placeholder_headers, placeholder_rows)
     else:
-        stats_payload = {"coverage": coverage}
-        stats_payload.update(mapped)
+        # Le payload pour stats_je.json est maintenant plus simple
+        stats_payload = {
+            "coverage": coverage,
+            **mapped
+        }
         _write_json_file(stats_path, stats_payload)
 
+        # Assurer que le fichier CSV final est cohérent avec id2name
         id2name = _extract_id2name(partants_payload)
         _write_je_csv_file(je_path, id2name=id2name, stats_payload=mapped)
 
@@ -2082,6 +2150,7 @@ def _process_reunion(
     url: str,
     phase: str,
     data_dir: Path,
+    source: str,
     *,
     budget: float,
     kelly: float,
@@ -2111,9 +2180,9 @@ def _process_reunion(
 
         for a in soup.find_all("a"):
             text = a.get_text(strip=True)
-            c_match = re.search(r"(C\d+)", text, re.IGNORECASE)
+            c_match = re.search(r"(C\\d+)", text, re.IGNORECASE)
             href = a.get("href", "")
-            id_match = re.search(r"(\d+)(?:\.html)?$", href)
+            id_match = re.search(r"(\\d+)(?:\\.html)?$", href)
             if c_match and id_match:
                 course_url = urljoin(url, href)
                 courses.append(
@@ -2127,14 +2196,21 @@ def _process_reunion(
     for r_label, c_label, course_id, course_url in courses:
         rc_dir = ensure_dir(base_dir / f"{r_label}{c_label}")
 
-        # --- CORRECTED LOGIC ---
-        print(f"[INFO] Fetching real snapshot for {course_url}...")
-        fetcher = ZeturfFetcher()
-        snapshot = fetcher.fetch_race_snapshot(reunion_url=course_url, mode=phase)
-        snapshot_filename = f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{phase}.json"
-        fetcher.save_snapshot(snapshot, rc_dir / snapshot_filename)
-        print(f"[INFO] Saved real snapshot to {rc_dir / snapshot_filename}")
-        # --- END OF CORRECTION ---
+        # --- NEW DISPATCH LOGIC ---
+        if source == 'boturfers':
+            print(f"[INFO] Fetching Boturfers snapshot for {r_label}{c_label}...")
+            write_snapshot_from_boturfers(r_label, c_label, phase, rc_dir)
+        elif source == 'geny':
+            print(f"[INFO] Fetching Geny snapshot for {r_label}{c_label}...")
+            write_snapshot_from_geny(course_id, phase, rc_dir)
+        else: # Default to Zeturf
+            print(f"[INFO] Fetching Zeturf snapshot for {course_url}...")
+            fetcher = ZeturfFetcher()
+            snapshot = fetcher.fetch_race_snapshot(reunion_url=course_url, mode=phase)
+            snapshot_filename = f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{phase}.json"
+            fetcher.save_snapshot(snapshot, rc_dir / snapshot_filename)
+            print(f"[INFO] Saved Zeturf snapshot to {rc_dir / snapshot_filename}")
+        # --- END OF NEW LOGIC ---
 
         outcome: dict[str, Any] | None = None
         pipeline_done = False
@@ -2149,8 +2225,8 @@ def _process_reunion(
                 overround_max=overround_max
             )
             if pipeline_done:
-                csv_path = export_per_horse_csv(rc_dir)
-                print(f"[INFO] per-horse report écrit: {csv_path}")
+                # csv_path = export_per_horse_csv(rc_dir)
+                # print(f"[INFO] per-horse report écrit: {csv_path}")
                 outcome = None
             elif outcome is not None:
                 _write_json_file(rc_dir / "decision.json", outcome)
@@ -2208,10 +2284,15 @@ def main() -> None:
         help="Découvre toutes les réunions FR du jour via Geny et traite H30/H5",
     )
     ap.add_argument(
-        "--course-url",
         "--reunion-url",
         dest="course_url",
         help="URL ZEturf d'une réunion ou d'une course",
+    )
+    ap.add_argument(
+        "--source",
+        choices=["geny", "zeturf", "boturfers"],
+        default="geny",
+        help="Source de données à utiliser pour la récupération des courses."
     )
     ap.add_argument(
         "--phase",
@@ -2303,19 +2384,44 @@ def main() -> None:
         except ValueError as exc:
             print(f"[ERROR] {exc}", file=sys.stderr)
             raise SystemExit(2)
-        _process_single_course(
-            reunion_label,
-            course_label,
-            args.phase,
-            Path(args.data_dir),
-            budget=args.budget,
-            kelly=args.kelly,
-            gcs_prefix=gcs_prefix,
-            ev_min=args.ev_min,
-            roi_min=args.roi_min,
-            payout_min=args.payout_min,
-            overround_max=args.overround_max,
-        )
+
+        base_dir = ensure_dir(Path(args.data_dir))
+        rc_dir = ensure_dir(base_dir / f"{reunion_label}{course_label}")
+
+        # Call the appropriate snapshot writer based on the source
+        if args.source == 'boturfers':
+            write_snapshot_from_boturfers(reunion_label, course_label, args.phase, rc_dir)
+        elif args.source == 'geny':
+            course_id = _resolve_course_id(reunion_label, course_label)
+            write_snapshot_from_geny(course_id, args.phase, rc_dir)
+        elif args.source == 'zeturf' and args.course_url:
+            fetcher = ZeturfFetcher()
+            snapshot = fetcher.fetch_race_snapshot(reunion_url=args.course_url, mode=args.phase)
+            snapshot_filename = f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{args.phase}.json"
+            fetcher.save_snapshot(snapshot, rc_dir / snapshot_filename)
+        else:
+            print(f"[ERROR] Source '{args.source}' requires additional arguments or is not yet supported in this mode.", file=sys.stderr)
+            raise SystemExit(2)
+
+        # Common pipeline execution for H5
+        if args.phase.upper() == "H5":
+            pipeline_done, outcome = _execute_h5_chain(
+                rc_dir,
+                budget=args.budget,
+                kelly=args.kelly,
+                ev_min=args.ev_min,
+                roi_min=args.roi_min,
+                payout_min=args.payout_min,
+                overround_max=args.overround_max,
+            )
+            if pipeline_done:
+                csv_path = export_per_horse_csv(rc_dir)
+                print(f"[INFO] per-horse report écrit: {csv_path}")
+            elif outcome is not None:
+                _write_json_file(rc_dir / "decision.json", outcome)
+
+        if gcs_prefix is not None:
+            _upload_artifacts(rc_dir, gcs_prefix=gcs_prefix)
         return
 
     if args.course_url and args.phase:
@@ -2323,6 +2429,7 @@ def main() -> None:
             args.course_url,
             args.phase,
             Path(args.data_dir),
+            args.source,
             budget=args.budget,
             kelly=args.kelly,
             gcs_prefix=gcs_prefix,

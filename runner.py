@@ -95,6 +95,7 @@ def run_course(
         "--course-url", course_url,
         "--phase", phase_clean,
         "--data-dir", str(DATA_DIR),
+        "--source", "boturfers",
     ]
     
     rc, stdout, stderr = _run_subprocess(cmd_analyse, timeout=config.timeout_seconds)

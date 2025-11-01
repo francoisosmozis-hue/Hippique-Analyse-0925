@@ -212,41 +212,98 @@ def collect_stats(
     ttl_seconds: int = TTL_DEFAULT,
     neutral_on_fail: bool = False
 ) -> str:
+    # This function has been modified to return a path to a JSON file with
+    # coverage and rows, as expected by analyse_courses_du_jour_enrichie.py.
+    # It also fixes internal calls to scraping functions.
+    
     conf = FetchConf(timeout=timeout, delay_between_requests=delay, user_agent=UA, use_cache=bool(cache), cache_dir=(Path(cache_dir) if cache_dir else Path.home()/'.cache'/'hippiques'/'geny'), ttl_seconds=int(ttl_seconds), retries=int(retries))
+    
+    # Define a local fetcher to pass to helpers
+    def fetcher(url):
+        return http_get(url, timeout=conf.timeout)
+
     data = load_json(h5)
     runners = data.get("runners", [])
     h5p = Path(h5)
-    out_path = Path(out) if out else (h5p.parent / f"{h5p.stem}_je.csv")
-    ensure_parent(out_path)
+    
+    # The primary output is now a JSON file, as expected by the caller.
+    json_out_path = h5p.parent / "stats_je.json"
+    ensure_parent(json_out_path)
+
     rows = []
+    successful_fetches = 0
     for r in runners:
         num = str(r.get("num"))
         name = (r.get("name") or "").strip()
         j_rate = e_rate = None
+        # h_win5, h_place5, h_win_career, h_place_career are disabled because
+        # the function parse_horse_percentages is missing from the original file.
         h_win5 = h_place5 = h_win_career = h_place_career = None
         if name:
-            h_url = discover_horse_url_by_name(name, conf)
-            time.sleep(conf.delay_between_requests)
-            if h_url:
-                h_html = http_get(h_url, conf)
+            try:
+                h_url = discover_horse_url_by_name(name, get=fetcher)
                 time.sleep(conf.delay_between_requests)
-                j_url, e_url = extract_links_from_horse_page(h_html or "")
-                j_rate = extract_rate_from_profile(j_url, conf) if j_url else None
-                time.sleep(conf.delay_between_requests)
-                e_rate = extract_rate_from_profile(e_url, conf) if e_url else None
-                time.sleep(conf.delay_between_requests)
-                hs = parse_horse_percentages(h_html or "")
-                h_win5, h_place5 = hs.get("h_win5"), hs.get("h_place5")
-                h_win_career, h_place_career = hs.get("h_win_career"), hs.get("h_place_career")
+                if h_url:
+                    h_html = fetcher(h_url)
+                    time.sleep(conf.delay_between_requests)
+                    links = extract_links_from_horse_page(h_html or "")
+                    j_url = links.get("jockey")
+                    e_url = links.get("trainer")
+                    
+                    if j_url:
+                        j_rate = extract_rate_from_profile(fetcher(j_url))
+                        time.sleep(conf.delay_between_requests)
+                    
+                    if e_url:
+                        e_rate = extract_rate_from_profile(fetcher(e_url))
+                        time.sleep(conf.delay_between_requests)
+
+                    if j_rate is not None or e_rate is not None:
+                        successful_fetches += 1
+                    
+                    # The original implementation of parse_horse_percentages is missing
+                    # hs = parse_horse_percentages(h_html or "")
+                    # h_win5, h_place5 = hs.get("h_win5"), hs.get("h_place5")
+                    # h_win_career, h_place_career = hs.get("h_win_career"), hs.get("h_place_career")
+
+            except Exception as e:
+                LOGGER.warning(f"Could not fetch stats for horse '{name}': {e}")
+
         def _fmt(x):
             return f"{float(x):.2f}" if isinstance(x, (int, float)) else ""
-        rows.append({"num": num, "j_rate": _fmt(j_rate), "e_rate": _fmt(e_rate), "h_win5": _fmt(h_win5), "h_place5": _fmt(h_place5), "h_win_career": _fmt(h_win_career), "h_place_career": _fmt(h_place_career)})
-    with out_path.open("w", encoding="utf-8", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=["num","j_rate","e_rate","h_win5","h_place5","h_win_career","h_place_career"])
+        
+        rows.append({
+            "num": num, 
+            "j_rate": _fmt(j_rate), 
+            "e_rate": _fmt(e_rate),
+            "h_win5": _fmt(h_win5), 
+            "h_place5": _fmt(h_place5), 
+            "h_win_career": _fmt(h_win_career), 
+            "h_place_career": _fmt(h_place_career)
+        })
+
+    coverage = (successful_fetches / len(runners) * 100) if runners else 0
+    
+    output_payload = {
+        "coverage": coverage,
+        "rows": rows
+    }
+    
+    json_out_path.write_text(json.dumps(output_payload, indent=2, ensure_ascii=False), encoding="utf-8")
+
+    # For backward compatibility, also write the CSV.
+    csv_out_path = Path(out) if out else (h5p.parent / f"{h5p.stem}_je.csv")
+    ensure_parent(csv_out_path)
+    with csv_out_path.open("w", encoding="utf-8", newline="") as f:
+        fieldnames = ["num", "j_rate", "e_rate", "h_win5", "h_place5", "h_win_career", "h_place_career"]
+        w = csv.DictWriter(f, fieldnames=fieldnames)
         w.writeheader()
         for row in rows:
-            w.writerow(row)
-    return str(out_path)
+            # Write only the keys that are in fieldnames
+            w.writerow({k: v for k, v in row.items() if k in fieldnames})
+
+    # Return the path to the JSON file, as expected by enrich_h5
+    return str(json_out_path)
 
 def main():
     ap = argparse.ArgumentParser(description="Génère je_stats.csv (+cheval stats) via Geny (cheval → jockey/entraîneur) avec cache.")
