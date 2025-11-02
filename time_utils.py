@@ -8,7 +8,7 @@ import re
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from config import get_config
+from app_config import get_config
 
 config = get_config()
 TZ_PARIS = ZoneInfo(config.timezone)
