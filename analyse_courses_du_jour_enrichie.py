@@ -89,17 +89,14 @@ TRACKING_HEADER = CSV_HEADER + ["phase", "status", "reason"]
 try:  # pragma: no cover - optional dependency in tests
     from scripts.online_fetch_zeturf import write_snapshot_from_geny
 except Exception:  # pragma: no cover - used when optional deps are missing
-    
-    def write_snapshot_from_geny(*args: Any, **kwargs: Any) -> None:
-        raise RuntimeError("write_snapshot_from_geny is unavailable")
+    pass
+
 
 try:
     from src.online_fetch_boturfers import fetch_boturfers_programme, fetch_boturfers_race_details
 except ImportError:
-    def fetch_boturfers_programme(*args, **kwargs):
-        raise RuntimeError("Boturfers programme fetcher is unavailable")
-    def fetch_boturfers_race_details(*args, **kwargs):
-        raise RuntimeError("Boturfers race details fetcher is unavailable")
+    pass
+
 
 def write_snapshot_from_boturfers(reunion: str, course: str, phase: str, rc_dir: Path) -> None:
     """
@@ -368,8 +365,8 @@ def _write_je_csv_file(
                 [
                     cid,
                     name,
-                    stats.get("j_win", ""),
-                    stats.get("e_win", ""),
+                    stats.get("j_rate", ""),
+                    stats.get("e_rate", ""),
                 ]
             )
 

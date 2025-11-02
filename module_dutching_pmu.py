@@ -1,7 +1,3 @@
-<<<<<<< HEAD
-# -*- coding: utf-8 -*-
-=======
->>>>>>> ef632c0 (feat: Refactor EV calculator and clean up git repository)
 """
 module_dutching_pmu.py — GPI v5.1
 ---------------------------------
@@ -29,26 +25,13 @@ Notes
 - Prévu pour des **cotes décimales** de type **placé**.
 - Si vous passez des cotes gagnant, fournissez des `probs` adaptées (p_win).
 """
-<<<<<<< HEAD
-from typing import Callable, Optional, Sequence
-=======
 
 from collections.abc import Callable, Sequence
 
->>>>>>> ef632c0 (feat: Refactor EV calculator and clean up git repository)
 import pandas as pd
 
 from kelly import kelly_fraction
 
-<<<<<<< HEAD
-def _safe_prob(p: float) -> float:
-    return max(0.01, min(0.90, float(p)))
-
-def dutching_kelly_fractional(
-    odds: Sequence[float],
-    total_stake: float = 5.0,
-    probs: Optional[Sequence[float]] = None,
-=======
 
 def _safe_prob(p: float) -> float:
     return max(0.01, min(0.90, float(p)))
@@ -58,16 +41,11 @@ def dutching_kelly_fractional(
     odds: Sequence[float],
     total_stake: float = 5.0,
     probs: Sequence[float] | None = None,
->>>>>>> ef632c0 (feat: Refactor EV calculator and clean up git repository)
     prob_fallback: Callable[[float], float] = lambda o: 1 / max(1.01, float(o)),
     lambda_kelly: float = 0.5,
     cap_per_horse: float = 0.60,
     round_to: float = 0.10,
-<<<<<<< HEAD
-    horse_labels: Optional[Sequence[str]] = None,
-=======
     horse_labels: Sequence[str] | None = None,
->>>>>>> ef632c0 (feat: Refactor EV calculator and clean up git repository)
 ) -> pd.DataFrame:
     """
     Calcule une allocation Kelly fractionnée et capée.
@@ -96,19 +74,11 @@ def dutching_kelly_fractional(
     if probs is None:
         probs = [prob_fallback(float(o)) for o in odds]
     if horse_labels is None:
-<<<<<<< HEAD
-        horse_labels = [f"#{i+1}" for i in range(n)]
-
-    # Fraction Kelly directe par cheval (déjà capée)
-    f_k = []
-    for p, o in zip(probs, odds):
-=======
         horse_labels = [f"#{i + 1}" for i in range(n)]
 
     # Fraction Kelly directe par cheval (déjà capée)
     f_k = []
     for p, o in zip(probs, odds, strict=True):
->>>>>>> ef632c0 (feat: Refactor EV calculator and clean up git repository)
         p = _safe_prob(float(p))
         o = float(o)
         f_k.append(kelly_fraction(p, o, lam=float(lambda_kelly), cap=float(cap_per_horse)))
@@ -127,10 +97,7 @@ def dutching_kelly_fractional(
         if step <= 0:
             return float(x)
         return round(x / step) * step
-<<<<<<< HEAD
-=======
 
->>>>>>> ef632c0 (feat: Refactor EV calculator and clean up git repository)
     stakes = [_round_to(st, round_to) for st in stakes]
 
     # Corriger l'écart d'arrondi uniquement si dépassement (et arrondi actif)
@@ -144,40 +111,17 @@ def dutching_kelly_fractional(
             stakes[idx] = max(0.0, _round_to(stakes[idx] + diff, round_to))
 
     sum_alloc = sum(stakes)
-<<<<<<< HEAD
-    shares = [st/sum_alloc if sum_alloc else 0 for st in stakes]
-  
-    # Calculs gains/EV
-    gains = [st * o for st, o in zip(stakes, odds)]
-    evs = []
-    for st, o, p in zip(stakes, odds, probs):
-=======
     shares = [st / sum_alloc if sum_alloc else 0 for st in stakes]
 
     # Calculs gains/EV
     gains = [st * o for st, o in zip(stakes, odds, strict=True)]
     evs = []
     for st, o, p in zip(stakes, odds, probs, strict=True):
->>>>>>> ef632c0 (feat: Refactor EV calculator and clean up git repository)
         p = _safe_prob(float(p))
         gain_net = st * (o - 1.0)
         ev = p * gain_net - (1.0 - p) * st
         evs.append(ev)
 
-<<<<<<< HEAD
-    df = pd.DataFrame({
-        "Cheval": horse_labels,
-        "Cote": [float(o) for o in odds],
-        "p": [float(_safe_prob(p)) for p in probs],
-        "f_kelly": f_k,
-        "Part": shares,
-        "Stake (€)": [round(st,2) for st in stakes],
-        "Gain brut (€)": [round(g,2) for g in gains],
-        "EV (€)": [round(e,2) for e in evs],
-    })
-    return df
-
-=======
     df = pd.DataFrame(
         {
             "Cheval": horse_labels,
@@ -193,14 +137,11 @@ def dutching_kelly_fractional(
     return df
 
 
->>>>>>> ef632c0 (feat: Refactor EV calculator and clean up git repository)
 def ev_panier(df: pd.DataFrame) -> float:
     """EV totale (en €) du panier SP."""
     if df.empty:
         return 0.0
     return float(df["EV (€)"].sum())
-<<<<<<< HEAD
-=======
 
 
 # ================== Dutching SP – Implémentation + Aliases Legacy ==================
@@ -340,4 +281,3 @@ try:
 except NameError:
     def compute_dutching_sp(cfg, runners):
         return allocate_dutching_sp(cfg, runners)
->>>>>>> ef632c0 (feat: Refactor EV calculator and clean up git repository)

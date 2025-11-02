@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 """Helpers to materialise jockey/entraineur statistics from a snapshot."""
 
 from __future__ import annotations
@@ -333,19 +332,3 @@ def enrich_from_snapshot(snapshot_path: str, reunion: str = "", course: str = ""
 
 if __name__ == "__main__":
     main()
-=======
-from pathlib import Path
-import subprocess
-import shlex
-
-def enrich_from_snapshot(snapshot_path: str, reunion: str = "", course: str = "") -> str:
-    """
-    Construit un CSV '..._je.csv' à partir du snapshot H-5 fourni.
-    Retourne le chemin du CSV généré.
-    """
-    h5 = Path(snapshot_path)
-    out = h5.parent / f"{h5.stem}_je.csv"
-    cmd = f'python fetch_je_stats.py --h5 "{h5}" --out "{out}" --cache --ttl-seconds 86400'
-    subprocess.run(shlex.split(cmd), check=True)
-    return str(out)
->>>>>>> ef632c0 (feat: Refactor EV calculator and clean up git repository)

@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 """Helpers to materialise chronos artefacts from a snapshot."""
 
 from __future__ import annotations
@@ -178,28 +177,4 @@ def _write_csv(path: Path, rows: Iterable[dict[str, str]], columns: Iterable[str
         for row in rows:
             writer.writerow([row.get(column, "") for column in header])
 
-def enrich_from_snapshot(snapshot_path: str, reunion: str = "", course: str = "") -> str:
-    from pathlib import Path, subprocess, shlex
-=======
-from pathlib import Path
-import subprocess
-import shlex
-
-def enrich_from_snapshot(snapshot_path: str, reunion: str = "", course: str = "") -> str:
-    """
-    Construit 'chronos.csv' à côté du snapshot H-5 fourni.
-    Retourne le chemin du CSV généré.
-    """
->>>>>>> ef632c0 (feat: Refactor EV calculator and clean up git repository)
-    h5 = Path(snapshot_path)
-    out = h5.parent / "chronos.csv"
-    cmd = f'python fetch_je_chrono.py --h5 "{h5}" --out "{out}"'
-    subprocess.run(shlex.split(cmd), check=True)
-    return str(out)
-<<<<<<< HEAD
-
-
-
 __all__ = ["enrich_from_snapshot"]
-=======
->>>>>>> ef632c0 (feat: Refactor EV calculator and clean up git repository)

@@ -1,14 +1,4 @@
 """Utilities for simple SP dutching and EV simulations."""
-<<<<<<< HEAD
-from __future__ import annotations
-
-import math
-from typing import Any, Dict, List, Sequence
-
-from ev_calculator import compute_ev_roi
-from simulate_wrapper import simulate_wrapper
-from kelly import kelly_fraction
-=======
 
 from __future__ import annotations
 
@@ -18,7 +8,6 @@ from typing import Any
 from ev_calculator import compute_ev_roi
 from kelly import kelly_fraction
 from simulate_wrapper import simulate_wrapper
->>>>>>> ef632c0 (feat: Refactor EV calculator and clean up git repository)
 
 
 def implied_prob(odds: float) -> float:
@@ -33,17 +22,10 @@ def implied_prob(odds: float) -> float:
     return 1.0 / value
 
 
-<<<<<<< HEAD
-def normalize_overround(probs: Dict[str, float]) -> Dict[str, float]:
-    """Normalise a probability dictionary to remove the bookmaker overround."""
-
-    cleaned: Dict[str, float] = {}
-=======
 def normalize_overround(probs: dict[str, float]) -> dict[str, float]:
     """Normalise a probability dictionary to remove the bookmaker overround."""
 
     cleaned: dict[str, float] = {}
->>>>>>> ef632c0 (feat: Refactor EV calculator and clean up git repository)
     total = 0.0
     for key, value in probs.items():
         try:
@@ -59,11 +41,7 @@ def normalize_overround(probs: dict[str, float]) -> dict[str, float]:
     return {key: prob / total for key, prob in cleaned.items()}
 
 
-<<<<<<< HEAD
-def implied_probs(odds_list: Sequence[float]) -> List[float]:
-=======
 def implied_probs(odds_list: Sequence[float]) -> list[float]:
->>>>>>> ef632c0 (feat: Refactor EV calculator and clean up git repository)
     """Return normalised implied probabilities from decimal ``odds_list``."""
 
     raw = {str(index): implied_prob(odds) for index, odds in enumerate(odds_list)}
@@ -71,13 +49,9 @@ def implied_probs(odds_list: Sequence[float]) -> list[float]:
     return [normalised[str(index)] for index in range(len(odds_list))]
 
 
-<<<<<<< HEAD
-def allocate_dutching_sp(cfg: Dict[str, float], runners: List[Dict[str, Any]]) -> tuple[List[Dict[str, Any]], float]:
-=======
 def allocate_dutching_sp(
     cfg: dict[str, float], runners: list[dict[str, Any]]
 ) -> tuple[list[dict[str, Any]], float]:
->>>>>>> ef632c0 (feat: Refactor EV calculator and clean up git repository)
     """Allocate SP dutching stakes according to a Kelly share with 60% cap.
 
     When each ``runner`` provides an estimated win probability ``p``, those
@@ -88,17 +62,10 @@ def allocate_dutching_sp(
     if not runners:
         return [], 0.0
 
-<<<<<<< HEAD
-    odds: List[float] = []
-    direct_probs: Dict[str, float] = {}
-    fallback_probs: Dict[str, float] = {}
-    ordered_keys: List[str] = []
-=======
     odds: list[float] = []
     direct_probs: dict[str, float] = {}
     fallback_probs: dict[str, float] = {}
     ordered_keys: list[str] = []
->>>>>>> ef632c0 (feat: Refactor EV calculator and clean up git repository)
 
     for index, runner in enumerate(runners):
         key = str(runner.get("id", index))
@@ -119,13 +86,9 @@ def allocate_dutching_sp(
             prob_value = float(prob_primary) if prob_primary is not None else None
         except (TypeError, ValueError):
             prob_value = None
-<<<<<<< HEAD
-        if prob_value is not None and (not math.isfinite(prob_value) or prob_value <= 0.0 or prob_value >= 1.0):
-=======
         if prob_value is not None and (
             not math.isfinite(prob_value) or prob_value <= 0.0 or prob_value >= 1.0
         ):
->>>>>>> ef632c0 (feat: Refactor EV calculator and clean up git repository)
             prob_value = None
 
         if prob_value is not None:
@@ -141,11 +104,7 @@ def allocate_dutching_sp(
             fallback_value = implied_prob(odds_value) if odds_value > 0 else 0.0
         fallback_probs[key] = fallback_value
 
-<<<<<<< HEAD
-    combined_probs: Dict[str, float] = {}
-=======
     combined_probs: dict[str, float] = {}
->>>>>>> ef632c0 (feat: Refactor EV calculator and clean up git repository)
     if direct_probs and not fallback_probs:
         total_direct = sum(direct_probs.values())
         if total_direct > 1.0:
@@ -171,15 +130,9 @@ def allocate_dutching_sp(
     budget = float(cfg.get("BUDGET_TOTAL", 0.0)) * float(cfg.get("SP_RATIO", 1.0))
     cap = float(cfg.get("MAX_VOL_PAR_CHEVAL", 0.60))
 
-<<<<<<< HEAD
-    valid: List[tuple[Dict[str, Any], float, float]] = []
-    total_kelly = 0.0
-    for runner, p, o in zip(runners, probs, odds):
-=======
     valid: list[tuple[dict[str, Any], float, float]] = []
     total_kelly = 0.0
     for runner, p, o in zip(runners, probs, odds, strict=False):
->>>>>>> ef632c0 (feat: Refactor EV calculator and clean up git repository)
         if not (0.0 < p < 1.0) or o <= 1.0:
             continue
         k = kelly_fraction(p, o, lam=1.0, cap=1.0)
@@ -194,29 +147,16 @@ def allocate_dutching_sp(
     min_stake = float(cfg.get("MIN_STAKE_SP", 0.1))
     rounding_enabled = step > 0
 
-<<<<<<< HEAD
-    tickets: List[Dict[str, Any]] = []
-=======
     tickets: list[dict[str, Any]] = []
->>>>>>> ef632c0 (feat: Refactor EV calculator and clean up git repository)
     ev_sp = 0.0
     for runner, p, o in valid:
         frac = kelly_fraction(p, o, lam=kelly_coef / total_kelly, cap=1.0)
         raw_stake = budget * frac
         cap_value = budget * cap
-<<<<<<< HEAD
-        if raw_stake > cap_value:
-            raw_stake = cap_value
-        if rounding_enabled:
-            stake = round(raw_stake / step) * step
-            if stake > cap_value:
-                stake = cap_value
-=======
         raw_stake = min(raw_stake, cap_value)
         if rounding_enabled:
             stake = round(raw_stake / step) * step
             stake = min(stake, cap_value)
->>>>>>> ef632c0 (feat: Refactor EV calculator and clean up git repository)
         else:
             stake = raw_stake
         if stake <= 0 or stake < min_stake:
@@ -232,11 +172,7 @@ def allocate_dutching_sp(
             "ev_ticket": ev_ticket,
         }
         tickets.append(ticket)
-<<<<<<< HEAD
-        
-=======
 
->>>>>>> ef632c0 (feat: Refactor EV calculator and clean up git repository)
     if tickets:
         total_stake = sum(t["stake"] for t in tickets)
         if rounding_enabled:
@@ -263,11 +199,7 @@ def allocate_dutching_sp(
 
 
 def gate_ev(
-<<<<<<< HEAD
-    cfg: Dict[str, float],
-=======
     cfg: dict[str, float],
->>>>>>> ef632c0 (feat: Refactor EV calculator and clean up git repository)
     ev_sp: float,
     ev_global: float,
     roi_sp: float,
@@ -276,11 +208,7 @@ def gate_ev(
     risk_of_ruin: float = 0.0,
     ev_over_std: float = 0.0,
     homogeneous_field: bool = False,
-<<<<<<< HEAD
-) -> Dict[str, Any]:
-=======
 ) -> dict[str, Any]:
->>>>>>> ef632c0 (feat: Refactor EV calculator and clean up git repository)
     """Return activation flags and failure reasons for SP and combinés.
 
     When ``homogeneous_field`` is true the SP EV threshold falls back to
@@ -288,15 +216,9 @@ def gate_ev(
     """
 
     reasons = {"sp": [], "combo": []}
-<<<<<<< HEAD
-    
-    sp_budget = float(cfg.get("BUDGET_TOTAL", 0.0)) * float(cfg.get("SP_RATIO", 1.0))
-    
-=======
 
     sp_budget = float(cfg.get("BUDGET_TOTAL", 0.0)) * float(cfg.get("SP_RATIO", 1.0))
 
->>>>>>> ef632c0 (feat: Refactor EV calculator and clean up git repository)
     ev_min_sp_ratio = float(cfg.get("EV_MIN_SP", 0.0))
     if homogeneous_field:
         ev_min_sp_ratio = float(cfg.get("EV_MIN_SP_HOMOGENEOUS", ev_min_sp_ratio))
@@ -331,30 +253,18 @@ def gate_ev(
 
 
 def simulate_ev_batch(
-<<<<<<< HEAD
-    tickets: List[Dict[str, Any]],
-=======
     tickets: list[dict[str, Any]],
->>>>>>> ef632c0 (feat: Refactor EV calculator and clean up git repository)
     bankroll: float,
     *,
     kelly_cap: float | None = None,
     optimize: bool = False,
-<<<<<<< HEAD
-) -> Dict[str, Any]:
-=======
 ) -> dict[str, Any]:
->>>>>>> ef632c0 (feat: Refactor EV calculator and clean up git repository)
     """Return EV/ROI statistics for ``tickets`` given a ``bankroll``.
 
     This is a thin wrapper around :func:`compute_ev_roi` that also hooks into
     :func:`simulate_wrapper` to estimate probabilities of combined bets.
     """
-<<<<<<< HEAD
-    kwargs: Dict[str, Any] = {}
-=======
     kwargs: dict[str, Any] = {}
->>>>>>> ef632c0 (feat: Refactor EV calculator and clean up git repository)
     if kelly_cap is not None:
         kwargs["kelly_cap"] = kelly_cap
     if optimize:
@@ -371,8 +281,6 @@ def simulate_ev_batch(
             float(ticket.get("expected_payout", 0.0)) for ticket in tickets
         )
     return stats
-<<<<<<< HEAD
-=======
 
 
 # === COMPATIBILITÉ LEGACY (aliases & helpers attendus par d'anciens scripts) ===
@@ -455,5 +363,3 @@ except NameError:
     def estimate_payout(*args, **kwargs) -> float:
         # Valeur par défaut conservatrice; mets ta calibration réelle si dispo
         return 10.0
-
->>>>>>> ef632c0 (feat: Refactor EV calculator and clean up git repository)

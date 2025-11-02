@@ -18,14 +18,20 @@ from app_config import get_config
 from logging_utils import get_logger
 from src.pipeline_routes import router as pipeline_router
 
+print("DEBUG: Getting config...")
 config = get_config()
+print("DEBUG: Config loaded.")
+print("DEBUG: Getting logger...")
 logger = get_logger(__name__)
+print("DEBUG: Logger loaded.")
 
+print("DEBUG: Creating FastAPI app...")
 app = FastAPI(
     title="Hippique Orchestrator",
     description="Cloud Run service for automated horse racing analysis (GPI v5.1)",
     version="2.0.0",
 )
+print("DEBUG: FastAPI app created.")
 
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
@@ -61,7 +67,9 @@ async def verify_oidc_token(request: Request, call_next):
 async def health_check():
     return {"status": "healthy", "service": "hippique-orchestrator", "version": "2.0.0", "timestamp": datetime.utcnow().isoformat() + "Z"}
 
+print("DEBUG: Including router...")
 app.include_router(pipeline_router, prefix="/pipeline", tags=["pipeline"])
+print("DEBUG: Router included.")
 
 @app.on_event("startup")
 async def startup_event():

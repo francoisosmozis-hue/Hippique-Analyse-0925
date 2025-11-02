@@ -99,26 +99,6 @@ def calculate_trio_profit(ticket: Dict[str, Any], results: Dict[str, Any]) -> fl
     
     # Check if the three chosen horses are in the first three places
     if set(chosen_horses) == set(winning_horses[:3]):
-        combo_results = evaluate_combo([ticket], bankroll=ticket["stake"])
-        profit += combo_results.get("payout_expected", 0)
-        
-    return profit
-
-    total_profit = 0
-    for ticket in tickets:
-        if ticket["kind"] == "SP_DUTCHING":
-            total_profit += calculate_sp_profit(ticket, results)
-def calculate_trio_profit(ticket: Dict[str, Any], results: Dict[str, Any]) -> float:
-    """
-    Calcule le gain/perte pour un ticket Trio.
-    """
-    profit = -ticket["stake"]
-    winning_horses = results["arrivee"]
-    
-    chosen_horses = [leg["horse"] for leg in ticket["legs"]]
-    
-    # Check if the three chosen horses are in the first three places
-    if set(chosen_horses) == set(winning_horses[:3]):
         # The payout for a Trio bet is not straightforward to calculate from the odds.
         # For now, I will assume a fixed payout of 50 for a winning Trio ticket.
         # This is a limitation that I will address later.
@@ -126,6 +106,14 @@ def calculate_trio_profit(ticket: Dict[str, Any], results: Dict[str, Any]) -> fl
         
     return profit
 
+    # 3. Calculer les gains/pertes
+    with open(race_dir / "results.json", "r") as f:
+        results = json.load(f)
+
+    total_profit = 0
+    for ticket in tickets:
+        if ticket["kind"] == "SP_DUTCHING":
+            total_profit += calculate_sp_profit(ticket, results)
         elif ticket["kind"] == "CP":
             total_profit += calculate_cp_profit(ticket, results)
         elif ticket["kind"] == "TRIO":
