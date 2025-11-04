@@ -248,7 +248,7 @@ def analyse(body: AnalyseParams):
     # Construis la commande du script principal
     # NOTE: adapte les flags si ton script en attend d’autres (meeting, URL, phase, etc.)
     cmd = [
-        "python", "-u", "analyse_courses_du_jour_enrichie.py",
+        "python", "-u", "-m", "hippique_orchestrator.analyse_courses_du_jour_enrichie",
         "--phase", body.phase,
         "--data-dir", str(outputs_dir),
         "--budget", str(eff_default_budget),
@@ -264,12 +264,15 @@ def analyse(body: AnalyseParams):
 
     # Exécution du pipeline principal
     try:
+        # IMPORTANT : s'assurer que src/ est bien dans le PYTHONPATH du sous-processus
+        env["PYTHONPATH"] = env.get("PYTHONPATH", "")
+        env["PYTHONPATH"] = f"{Path(__file__).parent}:{env['PYTHONPATH']}".rstrip(":")
         proc = subprocess.run(
             cmd,
             env=env,
             capture_output=True,
             text=True,
-            cwd=str(Path(__file__).parent),
+            cwd=str(Path(__file__).parent.parent),  # racine du repo
             timeout=60 * 12,  # 12 min max pour être large
             check=False,
         )
@@ -297,7 +300,7 @@ def analyse(body: AnalyseParams):
     if body.run_export:
         try:
             export_cmd = [
-                "python", "-u", "p_finale_export.py",
+                "python", "-u", "-m", "hippique_orchestrator.p_finale_export",
                 "--outputs-dir", str(outputs_dir)
             ]
             proc2 = subprocess.run(
@@ -305,7 +308,7 @@ def analyse(body: AnalyseParams):
                 env=env,
                 capture_output=True,
                 text=True,
-                cwd=str(Path(__file__).parent),
+                cwd=str(Path(__file__).parent.parent),  # racine du repo
                 timeout=60 * 5,
                 check=False,
             )

@@ -46,8 +46,11 @@ def main() -> None:
     soup = BeautifulSoup(html_content, "html.parser")
 
     meetings: List[Dict[str, Any]] = []
-    for section in soup.select("div.bloc-reunion.reunion"):
-        title_el = section.select_one("h2.reunion-title")
+    meeting_elements = soup.select("li.prog-meeting-name")
+    race_elements = soup.select("div.timeline-container li.meeting")
+
+    for i, section in enumerate(meeting_elements):
+        title_el = section.select_one("a.meeting-name-link")
         if not title_el:
             continue
         
@@ -59,27 +62,28 @@ def main() -> None:
         if not r_match:
             continue
         r = r_match.group(0)
-        hippo = title[r_match.end():].strip().lstrip("- ")
+        hippo = section.select_one("span.nomReunion").get_text(strip=True)
         slug = _slugify(hippo)
 
         courses: List[Dict[str, Any]] = []
-        for row in section.select("table.table tr[id^='race_']"):
-            course_cell = row.select_one("td.race a")
-            if not course_cell:
-                continue
-            c = course_cell.get_text(strip=True)
+        if i < len(race_elements):
+            for row in race_elements[i].select("li.race"):
+                course_cell = row.select_one("a")
+                if not course_cell:
+                    continue
+                c = course_cell.get_text(strip=True)
 
-            race_id_match = re.search(r"race_(\d+)", row.get("id", ""))
-            course_obj: Dict[str, Any] = {"c": c}
-            if race_id_match:
-                course_obj["id_course"] = race_id_match.group(1)
-            
-            href = course_cell.get("href", "")
-            id_match = re.search(r"(\d+)$", href)
-            if id_match:
-                course_obj["id_course"] = id_match.group(1)
+                course_obj: Dict[str, Any] = {"c": c}
+                data_id = row.get("data-id")
+                if data_id:
+                    course_obj["id_course"] = data_id
+                
+                href = course_cell.get("href", "")
+                id_match = re.search(r"(\d+)$", href)
+                if id_match:
+                    course_obj["id_course"] = id_match.group(1)
 
-            courses.append(course_obj)
+                courses.append(course_obj)
 
         meetings.append({"r": r, "hippo": hippo, "slug": slug, "courses": courses})
 
