@@ -11,12 +11,10 @@ import re
 import unicodedata
 from datetime import datetime
 from typing import List, Dict, Any
+import subprocess
 
 import requests
 from bs4 import BeautifulSoup
-
-URL = "https://www.geny.com/reunions-courses-pmu/_daujourdhui"
-
 
 def _slugify(value: str) -> str:
     """Return a slug suitable for URLs from a human readable string."""
@@ -25,54 +23,62 @@ def _slugify(value: str) -> str:
     value = re.sub(r"[^a-z0-9]+", "-", value.lower())
     return value.strip("-")
 
-
-def _is_fr_meeting(hippo: str) -> bool:
-    """Determine whether a meeting takes place in France.
-
-    The hippo string often ends with a country code wrapped in parentheses
-    such as ``"Paris-Vincennes (FR)"``. If a country code is present and
-    differs from ``FR`` the meeting is considered foreign.
-    """
-
-    match = re.search(r"\(([A-Z]{2})\)$", hippo)
-    if match:
-        return match.group(1) == "FR"
-    return True
+def _is_fr_meeting(section: BeautifulSoup) -> bool:
+    """Determine whether a meeting takes place in France."""
+    flag_el = section.select_one("span.flag")
+    if flag_el:
+        return "flag-fr" in flag_el.get("class", [])
+    return True # Assume FR if no flag found
 
 
 def main() -> None:
     """Fetch the Geny page and print meetings as JSON."""
-    resp = requests.get(URL, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
-    resp.raise_for_status()
-    soup = BeautifulSoup(resp.text, "html.parser")
+    today = datetime.today().strftime("%d-%m-%Y")
+    url = f"https://www.genybet.fr/reunions/{today}"
+    
+    try:
+        result = subprocess.run(['curl', '-s', url], capture_output=True, text=True, check=True)
+        html_content = result.stdout
+    except subprocess.CalledProcessError as e:
+        print(f"Curl failed: {e.stderr}")
+        return
+
+    soup = BeautifulSoup(html_content, "html.parser")
 
     meetings: List[Dict[str, Any]] = []
-    for section in soup.select("section.reunion"):
-        title_el = section.select_one("h2")
+    for section in soup.select("div.bloc-reunion.reunion"):
+        title_el = section.select_one("h2.reunion-title")
         if not title_el:
             continue
+        
+        if not _is_fr_meeting(section):
+            continue
+
         title = title_el.get_text(strip=True)
         r_match = re.search(r"R\d+", title)
         if not r_match:
             continue
         r = r_match.group(0)
-        hippo = title[r_match.end():].strip()
-        if not _is_fr_meeting(hippo):
-            continue
+        hippo = title[r_match.end():].strip().lstrip("- ")
         slug = _slugify(hippo)
 
         courses: List[Dict[str, Any]] = []
-        for a in section.select("a"):
-            text = a.get_text(strip=True)
-            c_match = re.search(r"C\d+", text)
-            if not c_match:
+        for row in section.select("table.table tr[id^='race_']"):
+            course_cell = row.select_one("td.race a")
+            if not course_cell:
                 continue
-            c = c_match.group(0)
-            href = a.get("href", "")
-            id_match = re.search(r"(\d+)(?:\.html)?$", href)
+            c = course_cell.get_text(strip=True)
+
+            race_id_match = re.search(r"race_(\d+)", row.get("id", ""))
             course_obj: Dict[str, Any] = {"c": c}
+            if race_id_match:
+                course_obj["id_course"] = race_id_match.group(1)
+            
+            href = course_cell.get("href", "")
+            id_match = re.search(r"(\d+)$", href)
             if id_match:
                 course_obj["id_course"] = id_match.group(1)
+
             courses.append(course_obj)
 
         meetings.append({"r": r, "hippo": hippo, "slug": slug, "courses": courses})
