@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from app_config import get_config
+from config import get_config
 from logging_utils import get_logger
 
 logger = get_logger(__name__)
@@ -62,8 +62,6 @@ def run_course(
     course_url: str,
     phase: str,
     date: str,
-    source: str = "boturfers",
-    correlation_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Exécute l'analyse complète d'une course.
@@ -72,25 +70,19 @@ def run_course(
         course_url: URL ZEturf de la course
         phase: "H30" ou "H5"
         date: YYYY-MM-DD
-        source: Source de données (par défaut: "boturfers")
-        correlation_id: ID de corrélation pour le suivi
         
     Returns:
         {ok: bool, phase: str, returncode: int, stdout_tail: str, artifacts: [...]}
     """
     phase_clean = phase.upper().replace("-", "")
-    
-    # Use provided correlation_id or generate a new one
-    if not correlation_id:
-        correlation_id = f"run-{date.replace('-', '')}-{course_url.split('/')[-1]}-{phase_clean.lower()}"
+    correlation_id = f"run-{date.replace('-', '')}-{course_url.split('/')[-1]}-{phase_clean.lower()}"
     
     logger.info(
         f"Starting course analysis",
         correlation_id=correlation_id,
         course_url=course_url,
         phase=phase_clean,
-        date=date,
-        source=source,
+        date=date
     )
     
     artifacts = []
@@ -103,7 +95,7 @@ def run_course(
         "--course-url", course_url,
         "--phase", phase_clean,
         "--data-dir", str(DATA_DIR),
-        "--source", source,
+        "--source", "boturfers",
     ]
     
     rc, stdout, stderr = _run_subprocess(cmd_analyse, timeout=config.timeout_seconds)

@@ -87,7 +87,6 @@ def _apply_dutching(tickets: Iterable[Dict[str, Any]]) -> None:
         for t, w in zip(valid_tickets, weights):
             t["stake"] = total * w / weight_sum
 
-
 def _ticket_label(ticket: Mapping[str, Any], index: int) -> str:
     """Return a readable identifier for ``ticket`` when logging covariance."""
 

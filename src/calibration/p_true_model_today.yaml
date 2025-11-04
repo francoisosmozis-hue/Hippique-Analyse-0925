@@ -1,0 +1,27 @@
+version: 5
+features:
+- log_odds
+- n_runners
+- p_market_no_vig
+- j_rate
+- e_rate
+- je_total
+- drift
+intercept: -0.6892347101211207
+coefficients:
+  log_odds: -1.2207238371676865
+  n_runners: 0.07580254405628055
+  p_market_no_vig: 0.18491254243700933
+  j_rate: 0.0
+  e_rate: 0.0
+  je_total: 0.0
+  drift: 0.0
+metadata:
+  regularization: 1.0
+  n_train_samples: 396
+  n_test_samples: 0
+  train_brier_score: 0.06325038893219191
+  train_log_loss: 0.22471145925859762
+  test_brier_score: 0.0
+  test_log_loss: 0.0
+  fitted_at: '2025-10-15T21:04:14.520573Z'

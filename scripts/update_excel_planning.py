@@ -1,4 +1,5 @@
-"Utilities for synchronising the planning worksheet with pipeline outputs."
+<<<<<<< HEAD
+"""Utilities for synchronising the planning worksheet with pipeline outputs."""
 
 from __future__ import annotations
 
@@ -237,7 +238,7 @@ def _extract_common_meta(
         if match:
             course = f"C{int(match.group(1))}"
     partants = _first_non_empty(
-        *(
+        *_values(
             [
                 "partants",
                 "nb_partants",
@@ -273,7 +274,7 @@ def _extract_common_meta(
                 if partants not in (None, ""):
                     break
     start_time = _first_non_empty(
-        *(
+        *_values(
             [
                 "start_time",
                 "start",
@@ -695,4 +696,32 @@ def main(argv: Sequence[str] | None = None) -> None:
 
 
 if __name__ == "__main__":  # pragma: no cover
+=======
+#!/usr/bin/env python3
+import pandas as pd, argparse, glob, os
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--phase", required=True)
+    ap.add_argument("--in", dest="indir", required=True)
+    ap.add_argument("--excel", required=True)
+    args = ap.parse_args()
+
+    snapshots = glob.glob(os.path.join(args.indir, "*.json"))
+    rows = []
+    for snap in snapshots:
+        rows.append({"fichier": os.path.basename(snap), "phase": args.phase, "statut": "OK"})
+    df = pd.DataFrame(rows)
+
+    if os.path.exists(args.excel):
+        xls = pd.ExcelFile(args.excel)
+        with pd.ExcelWriter(args.excel, mode="a", if_sheet_exists="replace") as writer:
+            df.to_excel(writer, sheet_name="Planning", index=False)
+    else:
+        df.to_excel(args.excel, sheet_name="Planning", index=False)
+
+    print(f"✅ Planning mis à jour ({len(df)} lignes) -> {args.excel}")
+
+if __name__ == "__main__":
+>>>>>>> ef632c0 (feat: Refactor EV calculator and clean up git repository)
     main()

@@ -21,6 +21,7 @@ that downstream tooling can continue operating.
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import re

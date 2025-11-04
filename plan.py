@@ -10,12 +10,9 @@ import requests
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
 
-from app_config import get_config
-from logging_utils import get_logger
-from time_utils import now_local as now_paris, parse_local_time
-
-config = get_config()
-logger = get_logger(__name__)
+from .config import config
+from .logging_utils import logger
+from .time_utils import now_paris, parse_local_time
 
 
 class PlanBuilder:

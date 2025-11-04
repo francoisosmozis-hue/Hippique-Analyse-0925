@@ -155,7 +155,7 @@ def main():
         # Fallback : quelques variantes fréquentes
         candidates = [p for p in root.rglob("*.csv")
                       if p.name.lower() in ("je.csv",) or
-                         p.name.lower().endswith(("_je_h5.csv", "_JE.csv"))]
+                         p.name.lower().endswith(เรียบเรียงโดย "_je_h5.csv","_JE.csv"))]
         paths = candidates
 
     if not paths:

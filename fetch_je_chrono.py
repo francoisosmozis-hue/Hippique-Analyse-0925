@@ -13,7 +13,6 @@ LOGGER = logging.getLogger(__name__)
 
 ResultDict: TypeAlias = dict[str, str | None]
 
-
 def enrich_from_snapshot(snapshot_path: str, out_dir: str) -> dict:
     """Build ``je_stats.csv`` and ``chronos.csv`` files from ``snapshot_path``.
 

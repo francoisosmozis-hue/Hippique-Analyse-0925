@@ -1,92 +1,209 @@
-"""
-src/service.py - FastAPI Service Principal
-"""
+#!/usr/bin/env python3
+"""Service FastAPI - Version Debug"""
 
-from __future__ import annotations
+import os
+import sys
+from pathlib import Path
 
-import sys, pathlib
-ROOT = str(pathlib.Path(__file__).resolve().parents[1])
-if ROOT not in sys.path: sys.path.insert(0, ROOT)
+# Forcer le PYTHONPATH
+sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, '/app')
 
+print(f"[STARTUP] PYTHONPATH: {sys.path[:3]}", flush=True)
+print(f"[STARTUP] CWD: {os.getcwd()}", flush=True)
+
+from fastapi import FastAPI
+from pydantic import BaseModel
+from typing import Literal
 import uuid
-from datetime import datetime
 
-from fastapi import FastAPI, Request, Response, HTTPException, status
-from fastapi.responses import JSONResponse
+# Config
+try:
+    from src.config import config
+    print(f"[STARTUP] Config loaded: {config.project_id}", flush=True)
+except Exception as e:
+    print(f"[STARTUP] Config error: {e}", flush=True)
+    config = None
 
-from app_config import get_config
-from logging_utils import get_logger
-from src.pipeline_routes import router as pipeline_router
+try:
+    from src.logging_utils import get_logger
+    logger = get_logger(__name__)
+    print("[STARTUP] Logger loaded", flush=True)
+except Exception as e:
+    print(f"[STARTUP] Logger error: {e}", flush=True)
+    logger = None
 
-print("DEBUG: Getting config...")
-config = get_config()
-print("DEBUG: Config loaded.")
-print("DEBUG: Getting logger...")
-logger = get_logger(__name__)
-print("DEBUG: Logger loaded.")
-
-print("DEBUG: Creating FastAPI app...")
+# Create app FIRST
 app = FastAPI(
     title="Hippique Orchestrator",
-    description="Cloud Run service for automated horse racing analysis (GPI v5.1)",
     version="2.0.0",
+    description="Service d'orchestration hippique"
 )
-print("DEBUG: FastAPI app created.")
 
-@app.middleware("http")
-async def log_requests(request: Request, call_next):
-    correlation_id = request.headers.get("X-Correlation-ID", str(uuid.uuid4()))
-    logger.info(f"{request.method} {request.url.path}", correlation_id=correlation_id, method=request.method, path=request.url.path, client=request.client.host if request.client else "unknown")
-    request.state.correlation_id = correlation_id
-    try:
-        response = await call_next(request)
-        response.headers["X-Correlation-ID"] = correlation_id
-        return response
-    except Exception as e:
-        logger.error(f"Request failed: {e}", correlation_id=correlation_id, exc_info=e)
-        return JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, content={"error": "Internal server error", "correlation_id": correlation_id}, headers={"X-Correlation-ID": correlation_id})
+print(f"[STARTUP] FastAPI app created", flush=True)
 
-@app.middleware("http")
-async def verify_oidc_token(request: Request, call_next):
-    if request.url.path == "/healthz":
-        return await call_next(request)
-    if not config.require_auth:
-        return await call_next(request)
-    auth_header = request.headers.get("Authorization", "")
-    if not auth_header.startswith("Bearer "):
-        logger.warning("Missing or invalid Authorization header")
-        return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content={"error": "Missing or invalid Authorization header"})
-    token = auth_header[7:]
-    if not token or len(token) < 10:
-        logger.warning("Invalid OIDC token")
-        return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content={"error": "Invalid OIDC token"})
-    logger.debug("OIDC token validated")
-    return await call_next(request)
+
+# Models
+class ScheduleRequest(BaseModel):
+    date: str = "today"
+    mode: Literal["tasks", "scheduler"] = "tasks"
+
+
+class RunRequest(BaseModel):
+    course_url: str
+    phase: Literal["H-30", "H30", "H-5", "H5"]
+    date: str
+
+
+# Define ALL routes at module level (not inside functions)
+@app.get("/")
+def root():
+    """Root endpoint."""
+    return {"service": "hippique-orchestrator", "status": "running", "version": "2.0"}
+
 
 @app.get("/healthz")
-async def health_check():
-    return {"status": "healthy", "service": "hippique-orchestrator", "version": "2.0.0", "timestamp": datetime.utcnow().isoformat() + "Z"}
+@app.get("/health")
+def health():
+    """Health check."""
+    return {"status": "ok"}
 
-print("DEBUG: Including router...")
-app.include_router(pipeline_router, prefix="/pipeline", tags=["pipeline"])
-print("DEBUG: Router included.")
 
-@app.on_event("startup")
-async def startup_event():
-    logger.info("Service starting", version="2.0.0", project_id=config.project_id, region=config.region)
+@app.get("/ping")
+def ping():
+    """Simple ping."""
+    return {"ping": "pong"}
 
-@app.on_event("shutdown")
-async def shutdown_event():
-    logger.info("Service shutting down")
 
-@app.exception_handler(HTTPException)
-async def http_exception_handler(request: Request, exc: HTTPException):
-    correlation_id = getattr(request.state, "correlation_id", "unknown")
-    logger.warning(f"HTTP {exc.status_code}: {exc.detail}", correlation_id=correlation_id, status_code=exc.status_code)
-    return JSONResponse(status_code=exc.status_code, content={"error": exc.detail, "correlation_id": correlation_id})
+@app.get("/debug/info")
+def debug_info():
+    """System info."""
+    import sys
+    return {
+        "python": sys.version.split()[0],
+        "cwd": os.getcwd(),
+        "pythonpath": sys.path[:3],
+        "project": getattr(config, 'project_id', 'unknown') if config else 'no-config',
+    }
 
-@app.exception_handler(Exception)
-async def general_exception_handler(request: Request, exc: Exception):
-    correlation_id = getattr(request.state, "correlation_id", "unknown")
-    logger.error(f"Unhandled exception: {exc}", correlation_id=correlation_id, exc_info=exc)
-    return JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, content={"error": "Internal server error", "correlation_id": correlation_id})
+
+@app.get("/debug/parse")
+async def debug_parse(date: str = "2025-10-17"):
+    """Parse ZEturf."""
+    correlation_id = str(uuid.uuid4())
+    
+    try:
+        from src.plan import build_plan_async, ADVANCED_EXTRACTION
+        result = await build_plan_async(date)
+        
+        return {
+            "ok": True,
+            "date": date,
+            "count": len(result),
+            "advanced_extraction": ADVANCED_EXTRACTION,
+            "races": result[:3] if result else [],
+            "correlation_id": correlation_id
+        }
+    except Exception as e:
+        import traceback
+        return {
+            "ok": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()[:500],
+            "correlation_id": correlation_id
+        }
+
+
+@app.post("/schedule")
+async def schedule(request: ScheduleRequest):
+    """Schedule races."""
+    correlation_id = str(uuid.uuid4())
+    
+    try:
+        from src.plan import build_plan_async
+        from datetime import datetime
+        
+        date_str = request.date if request.date != "today" else datetime.now().strftime("%Y-%m-%d")
+        plan = await build_plan_async(date_str)
+        
+        if not plan:
+            return {"ok": False, "error": "No races found", "correlation_id": correlation_id}
+        
+        # Programmer les tâches Cloud Tasks
+        try:
+            from src.scheduler import schedule_all_races
+            
+            # URL du service pour les callbacks
+            service_url = "https://hippique-orchestrator-h3tdqmb7jq-ew.a.run.app"
+            
+            scheduled = schedule_all_races(
+                plan=plan,
+                mode=request.mode,
+                run_url=f"{service_url}/run"
+            )
+            
+            return {
+                "ok": True,
+                "date": date_str,
+                "courses_count": len(plan),
+                "tasks_created": scheduled.get("tasks_created", 0),
+                "plan": plan[:5],
+                "correlation_id": correlation_id
+            }
+        except Exception as sched_err:
+            logger.error(f"Scheduling error: {sched_err}")
+            return {
+                "ok": True,
+                "date": date_str,
+                "courses_count": len(plan),
+                "tasks_created": 0,
+                "error": str(sched_err)[:200],
+                "plan": plan[:5],
+                "correlation_id": correlation_id
+            }
+        
+    except Exception as e:
+        import traceback
+        return {
+            "ok": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()[:300],
+            "correlation_id": correlation_id
+        }
+
+
+@app.post("/run")
+async def run(request: RunRequest):
+    """Run analysis."""
+    return {
+        "ok": False,
+        "error": "Not implemented yet",
+        "course_url": request.course_url,
+        "phase": request.phase
+    }
+
+
+# Print routes on startup
+print(f"[STARTUP] Registered {len(app.routes)} routes:", flush=True)
+for route in app.routes:
+    if hasattr(route, 'path') and hasattr(route, 'methods'):
+        print(f"[STARTUP]   {list(route.methods)} {route.path}", flush=True)
+
+
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.getenv("PORT", "8080"))
+    print(f"[STARTUP] Starting uvicorn on port {port}", flush=True)
+    uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")
+
+# Force rebuild marker: v2.1.0
+
+# Build timestamp: 1760701009
+
+# Force rebuild marker: v2.1.0
+
+# Build timestamp: 1760701593
+# Force final rebuild 1760710651
+# Rebuild 1760711112
+# Fix scheduler call 1760711520
+# Fix scheduler call 1760717579

@@ -63,10 +63,6 @@ def calculate_sp_profit(ticket: Dict[str, Any], results: Dict[str, Any]) -> floa
             profit += leg["stake"] * leg["odds"]
     return profit
 
-    # 3. Calculer les gains/pertes
-    with open(race_dir / "results.json", "r") as f:
-        results = json.load(f)
-    
 def calculate_cp_profit(ticket: Dict[str, Any], results: Dict[str, Any]) -> float:
     """
     Calcule le gain/perte pour un ticket Couplé Placé (CP).

@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional
 from google.api_core import exceptions as gcp_exceptions
 from google.cloud import tasks_v2
 
-from app_config import get_config
+from config import get_config
 from logging_utils import get_logger
 from time_utils import compute_snapshot_time, format_rfc3339, is_past
 

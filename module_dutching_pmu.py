@@ -32,7 +32,6 @@ import pandas as pd
 
 from kelly import kelly_fraction
 
-
 def _safe_prob(p: float) -> float:
     return max(0.01, min(0.90, float(p)))
 
