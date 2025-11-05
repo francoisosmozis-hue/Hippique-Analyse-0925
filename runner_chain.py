@@ -29,11 +29,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from simulate_wrapper import PAYOUT_CALIBRATION_PATH, evaluate_combo
 
 try:
-    from scripts import online_fetch_zeturf as ofz
+    from online_fetch_zeturf import *
 except Exception:  # pragma: no cover - optional dependency
     ofz = None  # type: ignore[assignment]
 from src.drive_sync import disabled_reason, is_gcs_enabled
-from scripts import analysis_utils as _analysis_utils
+from analysis_utils import compute_overround_cap
 
 import pipeline_run
 
@@ -53,7 +53,7 @@ logger = logging.getLogger(__name__)
 USE_GCS = is_gcs_enabled()
 if USE_GCS:
     try:
-        from scripts.drive_sync import upload_file
+        from drive_sync import upload_file
     except Exception as exc:  # pragma: no cover - optional dependency guards
         logger.warning("Cloud storage sync unavailable, disabling uploads: %s", exc)
         upload_file = None  # type: ignore[assignment]

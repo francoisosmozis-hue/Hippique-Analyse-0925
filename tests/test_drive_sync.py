@@ -11,7 +11,7 @@ from openpyxl import load_workbook
 
 pytest.importorskip("google.cloud.storage")
 
-from scripts import drive_sync
+from src import drive_sync
 
 
 def test_upload_file_uses_bucket_env(tmp_path, monkeypatch):

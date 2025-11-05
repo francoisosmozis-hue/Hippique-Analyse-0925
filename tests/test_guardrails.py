@@ -4,7 +4,7 @@ from pathlib import Path
 
 import json
 
-from scripts.guardrails import evaluate_guardrail
+from src.guardrails import evaluate_guardrail
 
 
 def _write_json(tmp_path: Path, name: str, payload: dict) -> Path:

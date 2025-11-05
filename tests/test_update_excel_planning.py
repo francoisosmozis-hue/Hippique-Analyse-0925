@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 from openpyxl import load_workbook
 
-from scripts import update_excel_planning as planner
+from src import update_excel_planning as planner
 
 
 def _read_row(ws, row_idx: int) -> dict[str, object]:

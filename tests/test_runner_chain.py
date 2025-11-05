@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 import runner_chain
-from scripts import runner_chain as runner_script
+import runner_chain as runner_script
 
 
 def _build_payload(phase: str) -> runner_script.RunnerPayload:

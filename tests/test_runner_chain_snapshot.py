@@ -5,8 +5,8 @@ import sys
 import pytest
 import requests
 
-import scripts.runner_chain as rc
-from scripts import online_fetch_zeturf as ofz
+import runner_chain as rc
+from src import online_fetch_zeturf as ofz
 
 
 class DummyResponse:

@@ -1,7 +1,7 @@
 import datetime as dt
 import pathlib
 
-import scripts.runner_chain as rc
+import runner_chain as rc
 
 
 def test_upload_file_called_for_snapshot(tmp_path, monkeypatch):

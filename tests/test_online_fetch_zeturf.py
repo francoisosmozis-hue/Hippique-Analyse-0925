@@ -15,8 +15,8 @@ import pytest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-import scripts.online_fetch_zeturf as ofz
-import online_fetch_zeturf as cli
+from src import online_fetch_zeturf as ofz
+
 
 
 class DummyResp:

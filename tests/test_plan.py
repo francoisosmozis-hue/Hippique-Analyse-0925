@@ -9,7 +9,7 @@ from bs4 import BeautifulSoup
 import sys
 sys.path.insert(0, 'src')
 
-from plan import parse_zeturf_program, fill_times_from_geny, build_plan
+from src.plan import parse_zeturf_program, fill_times_from_geny, build_plan
 
 # Mock HTML fixtures
 ZETURF_HTML = """

@@ -32,10 +32,10 @@ from src.drive_sync import disabled_reason, is_gcs_enabled
 def normalize_snapshot(payload: Mapping[str, Any]) -> dict[str, Any]:
     """Placeholder function that returns the payload as is."""
     return dict(payload)
-from scripts.fetch_je_stats import collect_stats
+from fetch_je_stats import collect_stats
 
 import pipeline_run
-from scripts.analysis_utils import compute_overround_cap
+from analysis_utils import compute_overround_cap
 from simulate_wrapper import PAYOUT_CALIBRATION_PATH, evaluate_combo
 
 logger = logging.getLogger(__name__)
@@ -78,7 +78,7 @@ USE_GCS = is_gcs_enabled()
 TRACKING_HEADER = CSV_HEADER + ["phase", "status", "reason"]
 
 try:  # pragma: no cover - optional dependency in tests
-    from scripts.online_fetch_zeturf import write_snapshot_from_geny
+    from online_fetch_zeturf import write_snapshot_from_geny
 except Exception:  # pragma: no cover - used when optional deps are missing
     
     def write_snapshot_from_geny(*args: Any, **kwargs: Any) -> None:
@@ -137,7 +137,7 @@ def write_snapshot_from_boturfers(reunion: str, course: str, phase: str, rc_dir:
 
 if USE_GCS:
     try:  # pragma: no cover - optional dependency in tests
-        from scripts.drive_sync import (
+        from drive_sync import (
             build_remote_path as gcs_build_remote_path,
             push_tree,
         )

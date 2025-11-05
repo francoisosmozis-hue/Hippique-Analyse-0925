@@ -5,15 +5,15 @@ import math
 import pandas as pd
 import pytest
 
-from calibration import p_true_model
+from src.calibration import p_true_model
 from calibration.p_true_model import (
     compute_runner_features,
     get_model_metadata,
     load_p_true_model,
     predict_probability,
 )
-from calibration.p_true_training import (
-    assemble_history_dataset,
+from src.calibration.p_true_training import (
+    assemble_dataset_from_csv,
     serialize_model,
     train_logistic_model,
 )
