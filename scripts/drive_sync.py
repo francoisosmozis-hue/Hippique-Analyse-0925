@@ -1,1 +1,0 @@
-/home/francoisosmozis/work/Hippique-Analyse-0925-sweep/drive_sync.py

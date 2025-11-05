@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 #!/usr/bin/env python3
 
 import math
@@ -582,63 +581,4 @@ def test_variance_cap_triggers_failure() -> None:
 
     assert res["green"] is False
     assert f"variance above {0.01:.2f} * bankroll^2" in res["failure_reasons"]
-=======
-# tests/test_ev_calculator.py
-import sys
-import pathlib
-import pytest
 
-# Add project root to sys.path
-_PROJECT_ROOT = pathlib.Path(__file__).resolve().parent.parent
-if str(_PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(_PROJECT_ROOT))
-
-from ev_calculator import compute_ev_roi
-
-def test_compute_ev_roi_simple_case():
-    """Test a simple, successful EV & ROI calculation."""
-    result = compute_ev_roi(
-        combo_type="COUPLE",
-        legs_nums=["1", "2"],
-        stake=10.0,
-        p_map={"1": 0.5, "2": 0.4}, # p_success = 0.2
-        nplace=3
-    )
-
-    assert result["status"] == "negative"
-    assert result["p_success"] == 0.2
-    # payout_expected = 10 * (1 / 0.2) * 0.7 = 35.0
-    assert result["payout_expected"] == 35.0
-    # ev_ratio = (0.2 * 35.0 / 10.0 - 1) * 1.20 = (0.7 - 1) * 1.2 = -0.3 * 1.2 = -0.36
-    assert result["ev_ratio"] == -0.36 # It's negative, but the calculation is correct
-
-def test_compute_ev_roi_with_default_prob():
-    """Test when a probability is missing from the p_map."""
-    result = compute_ev_roi(
-        combo_type="TRIO",
-        legs_nums=["1", "3"], # "3" is missing from p_map
-        stake=10.0,
-        p_map={"1": 0.5}, # p_success = 0.5 * 0.1 (default) = 0.05
-        nplace=3
-    )
-    assert result["p_success"] == 0.05
-    # payout_expected = 10 * (1 / 0.05) * 0.7 = 140.0
-    assert result["payout_expected"] == 140.0
-    # ev_ratio = (0.05 * 140.0 / 10.0 - 1) * 1.40 = (0.7 - 1) * 1.4 = -0.42
-    assert result["ev_ratio"] == -0.42
-
-def test_compute_ev_roi_empty_legs():
-    """Test with empty legs, should not crash."""
-    result = compute_ev_roi(
-        combo_type="SP_DUTCH",
-        legs_nums=[],
-        stake=10.0,
-        p_map={"1": 0.5}, # p_success = 1.0 (initial value)
-        nplace=3
-    )
-    assert result["p_success"] == 1.0
-    # payout_expected = 10 * (1 / 1.0) * 0.7 = 7.0
-    assert result["payout_expected"] == 7.0
-    # ev_ratio = (1.0 * 7.0 / 10.0 - 1) * 1.05 = -0.3 * 1.05 = -0.315
-    assert result["ev_ratio"] == -0.315
->>>>>>> ef632c0 (feat: Refactor EV calculator and clean up git repository)

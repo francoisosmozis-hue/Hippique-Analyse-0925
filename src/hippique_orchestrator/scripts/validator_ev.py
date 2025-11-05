@@ -7,10 +7,7 @@ import argparse
 import json
 import logging
 import os
-<<<<<<< HEAD
 import re
-=======
->>>>>>> ef632c0 (feat: Refactor EV calculator and clean up git repository)
 import sys
 from collections.abc import Callable
 from functools import partial
@@ -31,7 +28,6 @@ _LOG = logging.getLogger(__name__)
 _MISSING = object()
 
 
-<<<<<<< HEAD
 def _load_cfg() -> dict:
     if yaml is None:
         raise RuntimeError("PyYAML required for config validation")
@@ -60,8 +56,6 @@ def _readme_has_roi_sp(target: float) -> bool:
     return value >= target
 
 
-=======
->>>>>>> ef632c0 (feat: Refactor EV calculator and clean up git repository)
 def _log_ev_metrics(
     p_success: float | None,
     payout_expected: float | None,
@@ -83,11 +77,7 @@ def _log_ev_metrics(
         "stake": stake,
         "EV_ratio": ev_ratio,
     }
-<<<<<<< HEAD
     _LOG.info("[validate_ev] context %s", payload)    
-=======
-    _LOG.info("[validate_ev] context %s", payload)
->>>>>>> ef632c0 (feat: Refactor EV calculator and clean up git repository)
 
 
 def summarise_validation(*validators: Callable[[], object]) -> dict[str, bool | str]:
@@ -152,13 +142,8 @@ def validate_inputs(cfg, partants, odds, stats_je):
     if not allow_je_na:
         coverage = stats_je.get("coverage") if stats_je else None
         if coverage is None or float(coverage) < 80:
-<<<<<<< HEAD
             raise ValidationError("Couverture J/E insuffisante (<80%)") 
     
-=======
-            raise ValidationError("Couverture J/E insuffisante (<80%)")
-
->>>>>>> ef632c0 (feat: Refactor EV calculator and clean up git repository)
     return True
 
 
@@ -189,13 +174,9 @@ def validate(h30: dict, h5: dict, allow_je_na: bool) -> bool:
         for r in h5.get("runners", []):
             je = r.get("je_stats", {})
             if not je or ("j_win" not in je and "e_win" not in je):
-<<<<<<< HEAD
                 raise ValueError(
                     f"Stats J/E manquantes: {r.get('name', r.get('id'))}"
                 )
-=======
-                raise ValueError(f"Stats J/E manquantes: {r.get('name', r.get('id'))}")
->>>>>>> ef632c0 (feat: Refactor EV calculator and clean up git repository)
     return True
 
 
@@ -210,11 +191,7 @@ def validate_ev(
     ev_ratio: float | None = _MISSING,
 ) -> bool | dict[str, str]:
     """Validate SP and combined EVs against environment thresholds.
-<<<<<<< HEAD
     
-=======
-
->>>>>>> ef632c0 (feat: Refactor EV calculator and clean up git repository)
     Parameters
     ----------
     ev_sp:
@@ -231,11 +208,7 @@ def validate_ev(
     p_success, payout_expected, stake, ev_ratio:
         Optional contextual metrics associated with the EV computation. When
         provided they are logged and validated for completeness.
-<<<<<<< HEAD
         
-=======
-
->>>>>>> ef632c0 (feat: Refactor EV calculator and clean up git repository)
     Returns
     -------
     bool or dict
@@ -270,11 +243,7 @@ def validate_ev(
                 "status": "invalid_input",
                 "reason": "missing payout_expected",
             }
-<<<<<<< HEAD
             
-=======
-
->>>>>>> ef632c0 (feat: Refactor EV calculator and clean up git repository)
     min_sp = float(os.getenv("EV_MIN_SP", 0.15))
     min_global = float(os.getenv("EV_MIN_GLOBAL", 0.35))
 
@@ -284,21 +253,11 @@ def validate_ev(
     if need_combo:
         if ev_global is None or ev_global < min_global:
             raise ValidationError("EV global below threshold")
-<<<<<<< HEAD
             
     return True
 
 
 def validate_policy(ev_global: float, roi_global: float, min_ev: float, min_roi: float) -> bool:
-=======
-
-    return True
-
-
-def validate_policy(
-    ev_global: float, roi_global: float, min_ev: float, min_roi: float
-) -> bool:
->>>>>>> ef632c0 (feat: Refactor EV calculator and clean up git repository)
     """Validate global EV and ROI against minimum thresholds."""
     if ev_global < min_ev:
         raise ValidationError("EV global below threshold")
@@ -307,13 +266,7 @@ def validate_policy(
     return True
 
 
-<<<<<<< HEAD
 def validate_budget(stakes: Dict[str, float], budget_cap: float, max_vol_per_horse: float) -> bool:
-=======
-def validate_budget(
-    stakes: Dict[str, float], budget_cap: float, max_vol_per_horse: float
-) -> bool:
->>>>>>> ef632c0 (feat: Refactor EV calculator and clean up git repository)
     """Ensure total stake and per-horse stakes respect budget constraints."""
     total = sum(stakes.values())
     if total > budget_cap:
@@ -459,13 +412,7 @@ def _load_odds(path: Path) -> dict[str, float]:
     payload = _load_json_payload(path)
     odds_map: dict[str, float] = {}
     if isinstance(payload, dict):
-<<<<<<< HEAD
         runners = payload.get("runners") if isinstance(payload.get("runners"), list) else None
-=======
-        runners = (
-            payload.get("runners") if isinstance(payload.get("runners"), list) else None
-        )
->>>>>>> ef632c0 (feat: Refactor EV calculator and clean up git repository)
         if runners is not None:
             for runner in runners:
                 if not isinstance(runner, dict):
@@ -525,21 +472,10 @@ def _resolve_rc_directory(
     if reunion and course:
         root = Path(base_dir) if base_dir else Path("data")
         return root / f"{reunion}{course}"
-<<<<<<< HEAD
     raise ValueError("Impossible de déterminer le dossier artefacts (fournir --artefacts ou --reunion/--course)")
 
 
 def _discover_file(rc_dir: Path, candidates: tuple[str, ...], *, required: bool = True) -> Path | None:
-=======
-    raise ValueError(
-        "Impossible de déterminer le dossier artefacts (fournir --artefacts ou --reunion/--course)"
-    )
-
-
-def _discover_file(
-    rc_dir: Path, candidates: tuple[str, ...], *, required: bool = True
-) -> Path | None:
->>>>>>> ef632c0 (feat: Refactor EV calculator and clean up git repository)
     path = _find_first_existing(rc_dir, candidates)
     if path is None and required:
         names = ", ".join(candidates)
@@ -547,7 +483,6 @@ def _discover_file(
     return path
 
 
-<<<<<<< HEAD
 def _prepare_validation_inputs(args: argparse.Namespace) -> tuple[dict, list[dict], dict[str, float], dict]:
     phase = _normalise_phase(args.phase)
     rc_dir = _resolve_rc_directory(args.artefacts, args.base_dir, args.reunion, args.course)
@@ -556,30 +491,6 @@ def _prepare_validation_inputs(args: argparse.Namespace) -> tuple[dict, list[dic
     stats_path = Path(args.stats_je) if args.stats_je else _discover_file(rc_dir, _STATS_CANDIDATES, required=False)
     odds_candidates = _ODDS_CANDIDATES.get(phase, _ODDS_CANDIDATES["H5"])
     odds_path = Path(args.odds) if args.odds else _discover_file(rc_dir, odds_candidates)
-=======
-def _prepare_validation_inputs(
-    args: argparse.Namespace,
-) -> tuple[dict, list[dict], dict[str, float], dict]:
-    phase = _normalise_phase(args.phase)
-    rc_dir = _resolve_rc_directory(
-        args.artefacts, args.base_dir, args.reunion, args.course
-    )
-
-    partants_path = (
-        Path(args.partants)
-        if args.partants
-        else _discover_file(rc_dir, _PARTANTS_CANDIDATES)
-    )
-    stats_path = (
-        Path(args.stats_je)
-        if args.stats_je
-        else _discover_file(rc_dir, _STATS_CANDIDATES, required=False)
-    )
-    odds_candidates = _ODDS_CANDIDATES.get(phase, _ODDS_CANDIDATES["H5"])
-    odds_path = (
-        Path(args.odds) if args.odds else _discover_file(rc_dir, odds_candidates)
-    )
->>>>>>> ef632c0 (feat: Refactor EV calculator and clean up git repository)
     config_path: Path | None
     if args.config:
         config_path = Path(args.config)
@@ -602,13 +513,7 @@ def _cli(argv: list[str] | None = None) -> int:
         description="Valide les artefacts d'une course via validate_inputs.",
     )
     parser.add_argument("--artefacts", help="Dossier contenant les artefacts de course")
-<<<<<<< HEAD
     parser.add_argument("--base-dir", help="Dossier racine où trouver R?C?", default=None)
-=======
-    parser.add_argument(
-        "--base-dir", help="Dossier racine où trouver R?C?", default=None
-    )
->>>>>>> ef632c0 (feat: Refactor EV calculator and clean up git repository)
     parser.add_argument("--reunion", help="Identifiant réunion (ex: R1)")
     parser.add_argument("--course", help="Identifiant course (ex: C3)")
     parser.add_argument("--phase", help="Phase (H5 ou H30)", default="H5")
@@ -622,7 +527,6 @@ def _cli(argv: list[str] | None = None) -> int:
         help="Force ALLOW_JE_NA dans la configuration",
     )
 
-<<<<<<< HEAD
     args = parser.parse_args(argv)
 
     cfg_global = {}
@@ -647,10 +551,6 @@ def _cli(argv: list[str] | None = None) -> int:
         
     try:
         cfg, partants, odds, stats = _prepare_validation_inputs(args)
-=======
-    try:
-        cfg, partants, odds, stats = _prepare_validation_inputs(parser.parse_args(argv))
->>>>>>> ef632c0 (feat: Refactor EV calculator and clean up git repository)
     except FileNotFoundError as exc:
         parser.error(str(exc))
     except ValueError as exc:

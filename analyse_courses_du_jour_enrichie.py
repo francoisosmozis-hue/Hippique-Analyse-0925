@@ -41,7 +41,7 @@ except (ImportError, SyntaxError) as _normalize_import_error:  # pragma: no cove
 
     normalize_snapshot = _raise_normalize_snapshot
 from scripts.fetch_je_stats import collect_stats
-from scripts.online_fetch_zeturf import ZeturfFetcher
+from scripts.online_fetch_zeturf import ZeturfFetcher, fetch_race_snapshot
 
 import pipeline_run
 from scripts.analysis_utils import compute_overround_cap
@@ -2395,10 +2395,11 @@ def main() -> None:
             course_id = _resolve_course_id(reunion_label, course_label)
             write_snapshot_from_geny(course_id, args.phase, rc_dir)
         elif args.source == 'zeturf' and args.course_url:
-            fetcher = ZeturfFetcher()
-            snapshot = fetcher.fetch_race_snapshot(reunion_url=args.course_url, mode=args.phase)
+            snapshot = fetch_race_snapshot(reunion=reunion_label, course=course_label, phase=args.phase, url=args.course_url)
             snapshot_filename = f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{args.phase}.json"
-            fetcher.save_snapshot(snapshot, rc_dir / snapshot_filename)
+            with open(rc_dir / snapshot_filename, 'w', encoding='utf-8') as f:
+                json.dump(snapshot, f, ensure_ascii=False, indent=2)
+            print(f"[INFO] Snapshot Zeturf sauvegardé: {rc_dir / snapshot_filename}")
         else:
             print(f"[ERROR] Source '{args.source}' requires additional arguments or is not yet supported in this mode.", file=sys.stderr)
             raise SystemExit(2)
