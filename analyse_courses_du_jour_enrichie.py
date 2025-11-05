@@ -29,19 +29,10 @@ from bs4 import BeautifulSoup
 
 from logging_io import append_csv_line, CSV_HEADER
 from scripts.gcs_utils import disabled_reason, is_gcs_enabled
-try:
-    from scripts.online_fetch_zeturf import normalize_snapshot
-except (ImportError, SyntaxError) as _normalize_import_error:  # pragma: no cover - fallback
-    def _raise_normalize_snapshot(payload: Mapping[str, Any]) -> dict[str, Any]:
-        """Placeholder lorsque :mod:`scripts.online_fetch_zeturf` est invalide."""
-
-        raise RuntimeError(
-            "normalize_snapshot indisponible (erreur d'import scripts.online_fetch_zeturf)"
-        ) from _normalize_import_error
-
-    normalize_snapshot = _raise_normalize_snapshot
+def normalize_snapshot(payload: Mapping[str, Any]) -> dict[str, Any]:
+    """Placeholder function that returns the payload as is."""
+    return dict(payload)
 from scripts.fetch_je_stats import collect_stats
-from scripts.online_fetch_zeturf import ZeturfFetcher, fetch_race_snapshot
 
 import pipeline_run
 from scripts.analysis_utils import compute_overround_cap
@@ -2203,13 +2194,6 @@ def _process_reunion(
         elif source == 'geny':
             print(f"[INFO] Fetching Geny snapshot for {r_label}{c_label}...")
             write_snapshot_from_geny(course_id, phase, rc_dir)
-        else: # Default to Zeturf
-            print(f"[INFO] Fetching Zeturf snapshot for {course_url}...")
-            fetcher = ZeturfFetcher()
-            snapshot = fetcher.fetch_race_snapshot(reunion_url=course_url, mode=phase)
-            snapshot_filename = f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{phase}.json"
-            fetcher.save_snapshot(snapshot, rc_dir / snapshot_filename)
-            print(f"[INFO] Saved Zeturf snapshot to {rc_dir / snapshot_filename}")
         # --- END OF NEW LOGIC ---
 
         outcome: dict[str, Any] | None = None
@@ -2290,8 +2274,8 @@ def main() -> None:
     )
     ap.add_argument(
         "--source",
-        choices=["geny", "zeturf", "boturfers"],
-        default="geny",
+        choices=["geny", "boturfers"],
+        default="boturfers",
         help="Source de données à utiliser pour la récupération des courses."
     )
     ap.add_argument(
@@ -2394,14 +2378,8 @@ def main() -> None:
         elif args.source == 'geny':
             course_id = _resolve_course_id(reunion_label, course_label)
             write_snapshot_from_geny(course_id, args.phase, rc_dir)
-        elif args.source == 'zeturf' and args.course_url:
-            snapshot = fetch_race_snapshot(reunion=reunion_label, course=course_label, phase=args.phase, url=args.course_url)
-            snapshot_filename = f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{args.phase}.json"
-            with open(rc_dir / snapshot_filename, 'w', encoding='utf-8') as f:
-                json.dump(snapshot, f, ensure_ascii=False, indent=2)
-            print(f"[INFO] Snapshot Zeturf sauvegardé: {rc_dir / snapshot_filename}")
         else:
-            print(f"[ERROR] Source '{args.source}' requires additional arguments or is not yet supported in this mode.", file=sys.stderr)
+            print(f"[ERROR] Source '{args.source}' is not yet supported in this mode.", file=sys.stderr)
             raise SystemExit(2)
 
         # Common pipeline execution for H5
