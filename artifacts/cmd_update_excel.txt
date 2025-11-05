@@ -1,0 +1,1 @@
+python update_excel_with_results.py --race 'R?C?' --excel modele_suivi_courses_hippiques.xlsx

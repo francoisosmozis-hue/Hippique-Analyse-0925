@@ -237,7 +237,7 @@ def _extract_common_meta(
         if match:
             course = f"C{int(match.group(1))}"
     partants = _first_non_empty(
-        *(
+        str(_values(
             [
                 "partants",
                 "nb_partants",
@@ -258,7 +258,7 @@ def _extract_common_meta(
                 "nombre_participants",
                 "participants_count",
             ],
-        )
+        ))
     )
     if partants in (None, ""):
         for source in sources:

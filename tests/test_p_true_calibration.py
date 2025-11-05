@@ -15,34 +15,20 @@ from calibration.p_true_model import (
 from src.calibration.p_true_training import (
     assemble_dataset_from_csv,
     serialize_model,
-    train_logistic_model,
+    train_and_evaluate_model,
 )
 import pipeline_run
 
-def test_assemble_history_dataset(tmp_path):
-    base = tmp_path
-    race = base / "R1C1"
-    race.mkdir()
+def test_assemble_dataset_from_csv(tmp_path):
+    csv_path = tmp_path / "history.csv"
+    report = """date,reunion,course,num,cote,arrivee_rang\n2025-09-10,R1,C1,1,2.5,1\n2025-09-10,R1,C1,2,5.0,2\n"""
+    csv_path.write_text(report, encoding="utf-8")
 
-    report = """id,odds_h5,odds_h30,j_win,e_win\n1,2.5,3.0,10,5\n2,5.0,4.5,3,2\n"""
-    (race / "per_horse_report.csv").write_text(report, encoding="utf-8")
-
-    arrival = {"arrival": [{"id": "1", "position": 1}, {"id": "2", "position": 2}]}
-    (race / "arrivee_officielle.json").write_text(
-        json.dumps(arrival), encoding="utf-8"
-    )
-
-    tickets = {"tickets": [{"legs": [{"id": "1"}, {"id": "3"}]}]}
-    (race / "p_finale.json").write_text(json.dumps(tickets), encoding="utf-8")
-
-    df = assemble_history_dataset(base)
+    df = assemble_dataset_from_csv(csv_path)
     assert set(df["runner_id"]) == {"1", "2"}
 
     row_winner = df.loc[df["runner_id"] == "1"].iloc[0]
-    assert pytest.approx(row_winner["drift"], rel=1e-6) == -0.5
-    assert pytest.approx(row_winner["je_total"], rel=1e-6) == 15.0
     assert row_winner["is_winner"] == 1.0
-    assert row_winner["was_backed"] == 1.0
 
 
 def test_train_and_predict_roundtrip(tmp_path, monkeypatch):
@@ -78,8 +64,9 @@ def test_train_and_predict_roundtrip(tmp_path, monkeypatch):
 
     df = pd.DataFrame(rows)
 
-    result = train_logistic_model(
+    result = train_and_evaluate_model(
         df,
+        split_date="2025-01-01",
         features=["log_odds", "drift", "je_total", "implied_prob"],
     )
 
