@@ -32,7 +32,7 @@ try:
     from scripts import online_fetch_zeturf as ofz
 except Exception:  # pragma: no cover - optional dependency
     ofz = None  # type: ignore[assignment]
-from scripts.gcs_utils import disabled_reason, is_gcs_enabled
+from src.drive_sync import disabled_reason, is_gcs_enabled
 from scripts import analysis_utils as _analysis_utils
 
 import pipeline_run

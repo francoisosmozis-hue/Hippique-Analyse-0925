@@ -28,7 +28,7 @@ import requests
 from bs4 import BeautifulSoup
 
 from logging_io import append_csv_line, CSV_HEADER
-from scripts.gcs_utils import disabled_reason, is_gcs_enabled
+from src.drive_sync import disabled_reason, is_gcs_enabled
 def normalize_snapshot(payload: Mapping[str, Any]) -> dict[str, Any]:
     """Placeholder function that returns the payload as is."""
     return dict(payload)
