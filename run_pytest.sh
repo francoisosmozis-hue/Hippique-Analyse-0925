@@ -6,7 +6,7 @@ cd "$(dirname "$0")"
 # 🔧 Initialise PYTHONPATH s'il est vide
 : "${PYTHONPATH:=}"
 
-export PYTHONPATH="$(pwd)/src:${PYTHONPATH}"
+export PYTHONPATH="$(pwd):$(pwd)/src:${PYTHONPATH}"
 echo "[DEBUG] PYTHONPATH=$PYTHONPATH"
 
 pytest "$@"

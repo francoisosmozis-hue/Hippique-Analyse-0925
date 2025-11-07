@@ -1,6 +1,7 @@
 """
 tests/test_plan.py - Unit tests for plan module
 """
+import json
 import pytest
 from unittest.mock import Mock, patch, MagicMock
 from datetime import datetime
@@ -54,6 +55,7 @@ async def test_build_plan_async(monkeypatch):
     """Test complete plan building"""
 
     def mock_call_discover_geny():
+        import json
         return json.loads(GENY_HTML)
 
     async def mock_fetch_start_time_async(session, course_url):

@@ -61,6 +61,7 @@ def main() -> None:
     arrivee_path = Path(args.arrivee)
     tickets_path = Path(args.tickets)
     tickets_data = _load_json(tickets_path)
+    meta = tickets_data.get("meta", {})
 
     if not arrivee_path.exists():
         outdir = Path(args.outdir or tickets_path.parent)

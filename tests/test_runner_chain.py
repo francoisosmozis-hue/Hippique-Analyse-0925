@@ -289,7 +289,6 @@ def test_trigger_phase_result_missing_arrivee(tmp_path: Path, caplog: pytest.Log
         roi_min=0.0,
         mode="result",
         calibration=tmp_path / "calibration.yaml",
-        calibration_available=False,
     )
 
     race_dir = tmp_path / "R1C2"
@@ -328,7 +327,6 @@ def test_trigger_phase_result_with_arrivee(tmp_path: Path, caplog: pytest.LogCap
         roi_min=0.0,
         mode="result",
         calibration=tmp_path / "calibration.yaml",
-        calibration_available=False,
     )
 
     cmd_path = race_dir / "cmd_update_excel.txt"

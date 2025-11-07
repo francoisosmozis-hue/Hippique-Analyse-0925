@@ -83,8 +83,8 @@ def test_train_and_predict_roundtrip(tmp_path, monkeypatch):
         "implied_prob",
     }
 
-    fav_features = compute_runner_features(2.2, 2.5, {"j_win": 15, "e_win": 15})
-    outsider_features = compute_runner_features(6.0, 5.0, {"j_win": 5, "e_win": 4})
+    fav_features = compute_runner_features(2.2, 2.5, {"j_win": 15, "e_win": 15}, n_runners=10)
+    outsider_features = compute_runner_features(6.0, 5.0, {"j_win": 5, "e_win": 4}, n_runners=10)
 
     p_fav = predict_probability(model, fav_features)
     p_outsider = predict_probability(model, outsider_features)

@@ -1,50 +1,34 @@
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Mapping, Optional, Sequence
+import threading
 
 import yaml
 
 MODEL_PATH = Path("calibration/p_true_model_v5.yaml")
+_EPSILON = 1e-9
+_MODEL_CACHE: tuple[Path, float, 'PTrueModel'] | None = None
+_MODEL_LOCK = threading.Lock()
 
 
+def _sigmoid(value: float) -> float:
+    if value >= 0:
+        z = math.exp(-value)
+        return 1.0 / (1.0 + z)
+    z = math.exp(value)
+    return z / (1.0 + z)
 
-def _yaml_load(path: str | Path) -> dict:
-    """Load YAML content from ``path`` using ``yaml.safe_load``."""
 
-    p = Path(path)
-    with p.open("r", encoding="utf-8") as fh:
-        return yaml.safe_load(fh) or {}
-        
-def compute_runner_features(
-    odds_h5: float,
-    odds_h30: float | None,
-    stats: Mapping[str, float] | None,
-    n_runners: int,
-) -> dict[str, float]:
-    """Return the feature mapping expected by the calibration model."""
+@dataclass(frozen=True)
+class PTrueModel:
+    """Calibrated logistic regression for p(true)."""
 
-    o5 = max(float(odds_h5 or 0.0), 0.0)
-    if not math.isfinite(o5) or o5 <= 1.0:
-        raise ValueError("odds_h5 must be > 1 and finite")
-
-    o30 = float(odds_h30) if odds_h30 not in (None, "") else o5
-    if not math.isfinite(o30) or o30 <= 1.0:
-        o30 = o5
-
-    stats = stats or {}
-    j_win = float(stats.get("j_win", 0.0))
-    e_win = float(stats.get("e_win", 0.0))
-    je_total = j_win + e_win
- 
-    return {
-        "log_odds": math.log(max(o5, 1.0 + _EPSILON)),
-        "drift": o5 - o30,
-        "je_total": je_total,
-        "implied_prob": 1.0 / o5,
-        "n_runners": float(n_runners),
-    }
+    features: Sequence[str]
+    intercept: float
+    coefficients: Mapping[str, float]
     metadata: dict
 
     def predict(self, features: Mapping[str, float]) -> float:
@@ -57,15 +41,14 @@ def compute_runner_features(
 
     def get_metadata(self) -> dict[str, Any]:
         """Return a shallow copy of the calibration metadata."""
-
         return get_model_metadata(self)
-        
-def _sigmoid(value: float) -> float:
-    if value >= 0:
-        z = math.exp(-value)
-        return 1.0 / (1.0 + z)
-    z = math.exp(value)
-    return z / (1.0 + z)
+
+
+def _yaml_load(path: str | Path) -> dict:
+    """Load YAML content from ``path`` using ``yaml.safe_load``."""
+    p = Path(path)
+    with p.open("r", encoding="utf-8") as fh:
+        return yaml.safe_load(fh) or {}
 
 
 def _ensure_probability(prob: float) -> float:
@@ -78,7 +61,6 @@ def _ensure_probability(prob: float) -> float:
 
 def load_p_true_model(path: Path | None = None) -> PTrueModel | None:
     """Return cached :class:`PTrueModel` when available on disk."""
-
     path = Path(path or MODEL_PATH)
 
     try:
@@ -121,7 +103,6 @@ def get_model_metadata(model: PTrueModel | None) -> dict[str, Any]:
     returned mapping to avoid leaking nested structures. When ``model`` is
     ``None`` or metadata is missing, an empty dictionary is returned.
     """
-
     if model is None:
         return {}
 
@@ -139,32 +120,6 @@ def get_model_metadata(model: PTrueModel | None) -> dict[str, Any]:
     return dict(sanitized)
 
 
-def compute_runner_features(
-    odds_h5: float,
-    odds_h30: float | None,
-    stats: Mapping[str, float] | None,
-) -> dict[str, float]:
-    """Return the feature mapping expected by the logistic regression."""
-
-    o5 = max(float(odds_h5 or 0.0), 0.0)
-    if not math.isfinite(o5) or o5 <= 1.0:
-        raise ValueError("odds_h5 must be > 1 and finite")
-
-    o30 = float(odds_h30) if odds_h30 not in (None, "") else o5
-    if not math.isfinite(o30) or o30 <= 1.0:
-        o30 = o5
-
-    stats = stats or {}
-    j_win = float(stats.get("j_win", 0.0))
-    e_win = float(stats.get("e_win", 0.0))
-    je_total = j_win + e_win
-
-    return {
-        "log_odds": math.log(max(o5, 1.0 + _EPSILON)),
-        "drift": o5 - o30,
-        "je_total": je_total,
-        "implied_prob": 1.0 / o5,
-    }
 
 
 def predict_probability(
@@ -172,6 +127,5 @@ def predict_probability(
     features: Mapping[str, float],
 ) -> float:
     """Return calibrated probability clipped to ``(0, 1)``."""
-
     prob = model.predict(features)
     return _ensure_probability(prob)

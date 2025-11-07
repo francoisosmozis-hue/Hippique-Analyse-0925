@@ -33,7 +33,7 @@ try:
 except Exception:  # pragma: no cover - optional dependency
     ofz = None  # type: ignore[assignment]
 from src.drive_sync import disabled_reason, is_gcs_enabled
-from analysis_utils import compute_overround_cap
+import analysis_utils as _analysis_utils
 
 import pipeline_run
 

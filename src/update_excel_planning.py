@@ -237,7 +237,7 @@ def _extract_common_meta(
         if match:
             course = f"C{int(match.group(1))}"
     partants = _first_non_empty(
-        str(_values(
+        *_values(
             [
                 "partants",
                 "nb_partants",
@@ -258,9 +258,13 @@ def _extract_common_meta(
                 "nombre_participants",
                 "participants_count",
             ],
-        ))
+        )
     )
-    if partants in (None, ""):
+    if isinstance(partants, str):
+        match = re.search(r"\d+", partants)
+        partants = int(match.group(0)) if match else partants
+
+    if partants in (None, "") or not isinstance(partants, int):
         for source in sources:
             meta = source.get("meta") if isinstance(source.get("meta"), Mapping) else None
             runners = None
@@ -270,10 +274,10 @@ def _extract_common_meta(
                 runners = source.get("runners")
             if isinstance(runners, Iterable) and not isinstance(runners, (str, bytes, Mapping)):
                 partants = sum(1 for _ in runners)
-                if partants not in (None, ""):
+                if partants is not None:
                     break
     start_time = _first_non_empty(
-        *(
+        *_values(
             [
                 "start_time",
                 "start",

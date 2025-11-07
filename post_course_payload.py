@@ -273,6 +273,7 @@ def build_payload(
         "ev_observees": observed,
     }
 
+    payload.update(observed)
     return payload
 
 
