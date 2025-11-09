@@ -453,7 +453,15 @@ def test_execute_h5_chain_skips_downstream_without_h30(tmp_path, monkeypatch):
     monkeypatch.setattr(acd, "run_pipeline", forbidden)
     monkeypatch.setattr(acd, "build_prompt_from_meta", forbidden)
 
-    success, outcome = acd._execute_h5_chain(rc_dir, budget=5.0, kelly=0.05)
+    success, outcome = acd._execute_h5_chain(
+        rc_dir,
+        budget=5.0,
+        kelly=0.05,
+        ev_min=0.1,
+        roi_min=0.1,
+        payout_min=10.0,
+        overround_max=1.3,
+    )
 
     assert success is False
     assert isinstance(outcome, dict)

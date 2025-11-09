@@ -1,57 +1,120 @@
+import json
 from pathlib import Path
+import datetime as dt
 
-import runner_chain
+import pytest
+import yaml
 
-
-_DEF_PARAMS = {
-    "budget": 100.0,
-    "overround_max": 1.30,
-    "ev_min_exotic": 0.4,
-    "payout_min_exotic": 15.0,
-    "ev_min_sp": 0.1,
-    "roi_min_global": 0.05,
-    "kelly_frac": 0.4,
-}
+from runner_chain import _write_analysis, RunnerPayload
 
 
-def _analyse(course_dir: Path, **overrides):
-    params = dict(_DEF_PARAMS)
-    params.update(overrides)
-    params.setdefault("calibration", str(course_dir / "calibration.yaml"))
-    return runner_chain._analyse_course(course_dir, **params)
+@pytest.fixture
+def course_setup(tmp_path: Path) -> tuple[Path, Path]:
+    """Crée une structure de répertoires et les fichiers obligatoires pour l'analyse."""
+    snap_dir = tmp_path / "snapshots"
+    analysis_dir = tmp_path / "analyses"
+    race_id = "R1C1"
+    
+    # Crée les répertoires de course
+    (snap_dir / race_id).mkdir(parents=True, exist_ok=True)
+    (analysis_dir / race_id).mkdir(parents=True, exist_ok=True)
+
+    # Crée les fichiers obligatoires vides mais valides
+    (snap_dir / race_id / "h30.json").write_text(json.dumps({"payload": {}}))
+    (snap_dir / race_id / "h5.json").write_text(json.dumps({"payload": {}}))
+    (snap_dir / race_id / "partants.json").write_text(json.dumps({"runners": []}))
+
+    # Crée un dummy gpi.yml
+    gpi_config = {"overround_bands": {"default_low_vol_max": 1.3}}
+    (analysis_dir / race_id / "gpi.yml").write_text(yaml.dump(gpi_config))
+
+    # Crée un dummy calibration.yaml
+    (tmp_path / "calibration.yaml").write_text(yaml.dump({}))
+
+    return snap_dir, analysis_dir
 
 
-def test_analyse_course_aborts_when_je_missing(tmp_path):
-    course_dir = tmp_path / "R1C1"
-    course_dir.mkdir()
-    (course_dir / "chronos.csv").write_text("num,chrono,ok\n1,1.0,1\n", encoding="utf-8")
+def test_analysis_disables_exotics_when_je_missing(course_setup, monkeypatch):
+    """Vérifie que l'analyse désactive les exotiques si je_stats.json est manquant."""
+    snap_dir, analysis_dir = course_setup
+    race_id = "R1C1"
+    race_dir = analysis_dir / race_id
 
-    payload = _analyse(course_dir)
+    # Fournir chronos.csv mais pas stats_je.json
+    (snap_dir / race_id / "chronos.csv").write_text("num,chrono,ok\n1,1.0,1\n")
 
-    assert payload["status"] == "aborted"
-    assert payload["tickets"] == []
-    assert payload["reasons"] == ["data_missing"]
+    # Simuler le pipeline pour éviter une exécution réelle complexe
+    def fake_run_pipeline(**kwargs):
+        return {"metrics": {"status": "ok"}, "outdir": kwargs.get("outdir")}
+    monkeypatch.setattr("runner_chain.pipeline_run.run_pipeline", fake_run_pipeline)
 
-    guards = payload["guards"]
-    assert guards["jouable"] is False
-    assert guards["reason"] == "data_missing"
-    assert "je_stats" in guards["missing"]
-
-
-def test_analyse_course_aborts_when_chronos_missing(tmp_path):
-    course_dir = tmp_path / "R1C2"
-    course_dir.mkdir()
-    (course_dir / "je_stats.csv").write_text(
-        "id,odds_place,p_place\n1,2.5,0.45\n", encoding="utf-8"
+    payload = RunnerPayload(
+        id_course="202401010101",
+        reunion="R1",
+        course="C1",
+        phase="H5",
+        start_time=dt.datetime.now(),
+        budget=5.0,
     )
 
-    payload = _analyse(course_dir)
+    _write_analysis(
+        payload,
+        snap_dir,
+        analysis_dir,
+        budget=5.0,
+        ev_min=0.1,
+        roi_min=0.1,
+        mode="hminus5",
+        calibration=Path(snap_dir.parent / "calibration.yaml"),
+    )
 
-    assert payload["status"] == "aborted"
-    assert payload["tickets"] == []
-    assert payload["reasons"] == ["data_missing"]
+    analysis_path = race_dir / "analysis.json"
+    assert analysis_path.exists()
+    analysis_data = json.loads(analysis_path.read_text())
 
-    guards = payload["guards"]
-    assert guards["jouable"] is False
-    assert guards["reason"] == "data_missing"
-    assert "chronos" in guards["missing"]
+    assert analysis_data["status"] == "ok"
+    assert analysis_data["exotics_disabled"] is True
+    assert "exotics disabled: stats_je missing" in analysis_data["notes"]
+
+
+def test_analysis_disables_exotics_when_chronos_missing(course_setup, monkeypatch):
+    """Vérifie que l'analyse désactive les exotiques si chronos.csv est manquant."""
+    snap_dir, analysis_dir = course_setup
+    race_id = "R1C1"
+    race_dir = analysis_dir / race_id
+
+    # Fournir stats_je.json mais pas chronos.csv
+    (snap_dir / race_id / "stats_je.json").write_text(json.dumps({}))
+
+    # Simuler le pipeline
+    def fake_run_pipeline(**kwargs):
+        return {"metrics": {"status": "ok"}, "outdir": kwargs.get("outdir")}
+    monkeypatch.setattr("runner_chain.pipeline_run.run_pipeline", fake_run_pipeline)
+
+    payload = RunnerPayload(
+        id_course="202401010101",
+        reunion="R1",
+        course="C1",
+        phase="H5",
+        start_time=dt.datetime.now(),
+        budget=5.0,
+    )
+
+    _write_analysis(
+        payload,
+        snap_dir,
+        analysis_dir,
+        budget=5.0,
+        ev_min=0.1,
+        roi_min=0.1,
+        mode="hminus5",
+        calibration=Path(snap_dir.parent / "calibration.yaml"),
+    )
+
+    analysis_path = race_dir / "analysis.json"
+    assert analysis_path.exists()
+    analysis_data = json.loads(analysis_path.read_text())
+
+    assert analysis_data["status"] == "ok"
+    assert analysis_data["exotics_disabled"] is True
+    assert "exotics disabled: chronos missing" in analysis_data["notes"]

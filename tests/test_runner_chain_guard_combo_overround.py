@@ -1,88 +1,62 @@
-import csv
 import json
 from pathlib import Path
 
 import pytest
 
-import runner_chain
-
-
-_DEF_PARAMS = {
-    "budget": 100.0,
-    "overround_max": 1.30,
-    "ev_min_exotic": 0.4,
-    "payout_min_exotic": 15.0,
-    "ev_min_sp": 0.0,
-    "roi_min_global": 0.05,
-    "kelly_frac": 0.4,
-}
-
-
-def _write_csv(path: Path, fieldnames: list[str], rows: list[dict[str, object]]) -> None:
-    with path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames)
-        writer.writeheader()
-        for row in rows:
-            writer.writerow({key: value for key, value in row.items()})
-
-
-def _analyse(course_dir: Path, **overrides):
-    params = dict(_DEF_PARAMS)
-    params.update(overrides)
-    params.setdefault("calibration", str(course_dir / "calibration.yaml"))
-    return runner_chain._analyse_course(course_dir, **params)
+from pipeline_run import run_pipeline
 
 
 @pytest.fixture
-def course_with_combo(tmp_path):
-    course_dir = tmp_path / "R1C4"
+def course_with_high_overround(tmp_path):
+    """Crée une configuration de course avec un overround élevé."""
+    course_dir = tmp_path / "R1C1"
     course_dir.mkdir()
+    partants_path = course_dir / "partants.json"
 
-    combo = [{"combo_id": "CP1", "combo_legs": ["1", "2"], "combo_odds": 18.0, "combo_p": 0.05}]
-    _write_csv(
-        course_dir / "je_stats.csv",
-        ["id", "odds_place", "p_place", "combo_json", "combo_overround"],
-        [
-            {
-                "id": "A",
-                "odds_place": "3.0",
-                "p_place": "0.30",
-                "combo_json": json.dumps(combo),
-                "combo_overround": "1.60",
-            },
-            {"id": "B", "odds_place": "4.0", "p_place": "0.25", "combo_json": "", "combo_overround": ""},
+    # Overround = 1/1.5 + 1/1.5 = 0.666... + 0.666... = 1.333... > 1.3
+    partants_data = {
+        "runners": [
+            {"num": "1", "odds": 1.5},
+            {"num": "2", "odds": 1.5},
         ],
-    )
-    _write_csv(
-        course_dir / "chronos.csv",
-        ["num", "chrono", "ok"],
-        [{"num": "1", "chrono": "1'13\"", "ok": "1"}],
-    )
+        "market": {
+            "discipline": "Trot",
+            "n_partants": 2,
+        },
+    }
+    partants_path.write_text(json.dumps(partants_data))
     return course_dir
 
 
-def test_analyse_course_flags_combo_overround(monkeypatch, course_with_combo):
-    def fake_sp_candidates(_rows):
-        return [
-            {"id": "A", "odds": 3.0, "odds_place": 3.0, "p": 0.3},
-            {"id": "B", "odds": 4.0, "odds_place": 4.0, "p": 0.25},
-        ]
+def test_pipeline_rejects_on_high_overround(course_with_high_overround):
+    """
+    Vérifie que le pipeline rejette la course si l'overround du marché
+    dépasse le seuil configuré.
+    """
+    outdir = course_with_high_overround / "out"
+    outdir.mkdir()
 
-    def fake_allocate(cfg, runners):
-        assert len(runners) == 2
-        return ([{"id": r["id"], "stake": 5.0} for r in runners], 20.0)
+    # Appeler le pipeline avec les chemins des fichiers de test
+    result = run_pipeline(
+        partants=str(course_with_high_overround / "partants.json"),
+        outdir=str(outdir),
+    )
 
-    def fake_simulate(tickets, bankroll, kelly_cap):
-        return {"ev": 5.0, "ev_ratio": 0.05, "roi": 0.10}
+    # Vérifier les métriques de sortie
+    metrics = result.get("metrics", {})
+    
+    # La raison de l'abstention doit être l'overround élevé
+    assert "overround_above_threshold" in metrics.get("abstention_reasons", [])
+    
+    # Le statut global doit être "abstain"
+    assert metrics.get("status") == "abstain"
 
-    monkeypatch.setattr(runner_chain, "_extract_sp_candidates", fake_sp_candidates)
-    monkeypatch.setattr(runner_chain, "allocate_dutching_sp", fake_allocate)
-    monkeypatch.setattr(runner_chain, "simulate_ev_batch", fake_simulate)
+    # La décision pour les combos doit refléter le rejet pour cause d'overround
+    combo_decision = metrics.get("combo", {}).get("decision")
+    assert combo_decision == "reject:overround_above_threshold"
 
-    payload = _analyse(course_with_combo)
-
-    assert "combo_overround_exceeded" in payload["reasons"]
-    assert payload["guards"]["combo_overround"] == pytest.approx(1.60)
-    assert payload["guards"]["jouable"] is True
-    assert payload["tickets"]
-    assert all(ticket.get("type") != "CP" for ticket in payload["tickets"])
+    # Vérifier que p_finale.json ne contient aucun ticket
+    p_finale_path = outdir / "p_finale.json"
+    assert p_finale_path.exists()
+    p_finale_data = json.loads(p_finale_path.read_text())
+    assert p_finale_data.get("tickets") == []

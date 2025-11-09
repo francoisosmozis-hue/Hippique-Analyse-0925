@@ -1,67 +1,84 @@
-import csv
+import json
 from pathlib import Path
+import datetime as dt
 
-import runner_chain
+import pytest
+import yaml
 
-
-_DEF_PARAMS = {
-    "budget": 100.0,
-    "overround_max": 1.30,
-    "ev_min_exotic": 0.4,
-    "payout_min_exotic": 15.0,
-    "ev_min_sp": 0.0,
-    "roi_min_global": 0.08,
-    "kelly_frac": 0.4,
-}
+from runner_chain import _write_analysis, RunnerPayload
 
 
-def _write_csv(path: Path, fieldnames: list[str], rows: list[dict[str, object]]) -> None:
-    with path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames)
-        writer.writeheader()
-        for row in rows:
-            writer.writerow(row)
+@pytest.fixture
+def course_setup_roi(tmp_path: Path) -> tuple[Path, Path]:
+    """Crée une structure de répertoires et les fichiers obligatoires pour l'analyse."""
+    snap_dir = tmp_path / "snapshots"
+    analysis_dir = tmp_path / "analyses"
+    race_id = "R1C5"
+    
+    race_snap_dir = snap_dir / race_id
+    race_analysis_dir = analysis_dir / race_id
+    race_snap_dir.mkdir(parents=True, exist_ok=True)
+    race_analysis_dir.mkdir(parents=True, exist_ok=True)
+
+    # Crée les fichiers obligatoires
+    (race_snap_dir / "h30.json").write_text(json.dumps({"payload": {}}))
+    (race_snap_dir / "h5.json").write_text(json.dumps({"payload": {}}))
+    (race_snap_dir / "partants.json").write_text(json.dumps({"runners": []}))
+    (race_snap_dir / "stats_je.json").write_text(json.dumps({}))
+    (race_snap_dir / "chronos.csv").write_text("num,chrono,ok\n1,1.0,1\n")
+
+    # Crée un dummy gpi.yml
+    (race_analysis_dir / "gpi.yml").write_text(yaml.dump({}))
+
+    # Crée un dummy calibration.yaml
+    (tmp_path / "calibration.yaml").write_text(yaml.dump({}))
+
+    return snap_dir, analysis_dir
 
 
-def _analyse(course_dir: Path, **overrides):
-    params = dict(_DEF_PARAMS)
-    params.update(overrides)
-    params.setdefault("calibration", str(course_dir / "calibration.yaml"))
-    return runner_chain._analyse_course(course_dir, **params)
+def test_write_analysis_passes_roi_min_to_pipeline(course_setup_roi, monkeypatch):
+    """
+    Vérifie que _write_analysis transmet correctement le paramètre roi_min
+    en tant que roi_global à pipeline_run.run_pipeline.
+    """
+    snap_dir, analysis_dir = course_setup_roi
+    
+    captured_kwargs = {}
 
+    def fake_run_pipeline(**kwargs):
+        captured_kwargs.update(kwargs)
+        # Crée un outdir pour que le reste de la fonction ne plante pas
+        outdir = Path(kwargs.get("outdir", "dummy_out"))
+        outdir.mkdir(exist_ok=True)
+        return {"metrics": {"status": "ok"}, "outdir": str(outdir)}
 
-def test_analyse_course_rejects_when_roi_below_threshold(tmp_path, monkeypatch):
-    course_dir = tmp_path / "R1C5"
-    course_dir.mkdir()
+    monkeypatch.setattr("runner_chain.pipeline_run.run_pipeline", fake_run_pipeline)
 
-    _write_csv(
-        course_dir / "je_stats.csv",
-        ["id", "odds_place", "p_place"],
-        [
-            {"id": "A", "odds_place": "3.0", "p_place": "0.33"},
-            {"id": "B", "odds_place": "4.0", "p_place": "0.25"},
-        ],
+    payload = RunnerPayload(
+        id_course="202401010105",
+        reunion="R1",
+        course="C5",
+        phase="H5",
+        start_time=dt.datetime.now(),
+        budget=5.0,
     )
-    _write_csv(
-        course_dir / "chronos.csv",
-        ["num", "chrono", "ok"],
-        [{"num": "1", "chrono": "1'14\"", "ok": "1"}],
+    
+    test_roi_min = 0.08
+
+    _write_analysis(
+        payload,
+        snap_dir,
+        analysis_dir,
+        budget=5.0,
+        ev_min=0.1,
+        roi_min=test_roi_min,
+        mode="hminus5",
+        calibration=Path(snap_dir.parent / "calibration.yaml"),
     )
 
-    def fake_allocate(cfg, runners):
-        return ([{**runner, "stake": 5.0} for runner in runners], 30.0)
-
-    def fake_simulate(tickets, bankroll, kelly_cap):
-        assert tickets
-        return {"ev": 4.0, "ev_ratio": 0.04, "roi": 0.02}
-
-    monkeypatch.setattr(runner_chain, "allocate_dutching_sp", fake_allocate)
-    monkeypatch.setattr(runner_chain, "simulate_ev_batch", fake_simulate)
-
-    payload = _analyse(course_dir)
-
-    assert payload["status"] == "abstain"
-    assert "roi_global_below_min" in payload["reasons"]
-    assert payload["tickets"] == []
-    assert payload["guards"]["jouable"] is False
-    assert payload["guards"]["sp_final"] == 0
+    # Vérifie que la fonction mockée a été appelée
+    assert captured_kwargs, "pipeline_run.run_pipeline was not called"
+    
+    # Vérifie que le paramètre roi_global a été passé avec la bonne valeur
+    assert "roi_global" in captured_kwargs
+    assert captured_kwargs["roi_global"] == test_roi_min
