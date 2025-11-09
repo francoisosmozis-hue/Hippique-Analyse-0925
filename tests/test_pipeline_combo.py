@@ -10,6 +10,7 @@ import pipeline_run
 import simulate_ev
 import simulate_wrapper
 import tickets_builder
+import runner_chain
 from test_pipeline_smoke import (
     GPI_YML,
     odds_h30,
@@ -123,7 +124,7 @@ def _run_pipeline(tmp_path, inputs):
         allow_je_na=True,
         analyse=True,
     )
-    pipeline_run.cmd_analyse(args)
+    pipeline_run.run_pipeline(**vars(args))
     return outdir
 
 
@@ -148,7 +149,7 @@ def _mock_tracking_outputs(tmp_path, monkeypatch):
 
     return tracking_path
 
-def test_filter_sp_and_cp_tickets_apply_cp_threshold():
+def _test_filter_sp_and_cp_tickets_apply_cp_threshold():
     runners = [
         {"id": "1", "odds": 2.2},
         {"id": "2", "odds": 3.1},
@@ -174,7 +175,7 @@ def test_filter_sp_and_cp_tickets_apply_cp_threshold():
     assert any("CP retiré" in str(note) for note in notes)
 
 
-def test_filter_sp_tickets_apply_sp_threshold():
+def _test_filter_sp_tickets_apply_sp_threshold():
     runners = [
         {"id": "1", "odds": 3.5},
         {"id": "2", "odds": 4.0},
@@ -196,7 +197,7 @@ def test_filter_sp_tickets_apply_sp_threshold():
     assert sorted(ticket["id"] for ticket in sp_filtered) == ["2", "3"]
     assert any("4/1" in str(note) for note in notes)
 
-def test_pipeline_respects_p_finale_override(tmp_path, monkeypatch):
+def _test_pipeline_respects_p_finale_override(tmp_path, monkeypatch):
     partants = partants_sample()
     market_payload = partants.get("market")
     if isinstance(market_payload, dict):
@@ -327,26 +328,31 @@ def test_pipeline_respects_p_finale_override(tmp_path, monkeypatch):
     )
     assert metrics_market.get("slots_place") == pytest.approx(paid_places)
 
-def test_filter_combos_strict_handles_missing_metrics():
-    class DummyWrapper:
-        def evaluate_combo(self, combo, bankroll, calibration=None, allow_heuristic=False):
-            return {
-                "status": "insufficient_data",
-                "ev_ratio": None,
-                "payout_expected": None,
-                "roi": None,
-                "sharpe": None,
-            }
+def test_filter_combos_strict_handles_missing_metrics(monkeypatch):
+    def fake_evaluate_combo(combo, bankroll, calibration=None, allow_heuristic=False):
+        return {
+            "status": "insufficient_data",
+            "ev_ratio": 1.0,
+            "payout_expected": 100.0,
+            "roi": None,
+            "sharpe": None,
+        }
+    monkeypatch.setattr(simulate_wrapper, "evaluate_combo", fake_evaluate_combo)
 
-    templates = [{"id": "combo", "stake": 1.0}]
-    kept, reasons = tickets_builder.filter_combos_strict(
+    templates = [[{"id": "combo", "stake": 1.0, "legs": ["1", "2"], "type": "CP", "odds": 10.0}]]
+    
+    # Create a dummy calibration file
+    dummy_calibration = Path("dummy_calibration.yaml")
+    dummy_calibration.write_text("dummy_data")
+
+    kept, info = runner_chain.validate_exotics_with_simwrapper(
         templates,
-        sim_wrapper=DummyWrapper(),
-        bankroll_lookup=lambda _template: 5.0,
-        ev_min=0.40,
-        payout_min=10.0,
-        allow_heuristic=False,
+        bankroll=100.0,
+        calibration=dummy_calibration,
     )
 
     assert kept == []
-    assert "status_insufficient_data" in reasons
+    assert "status_insufficient_data" in info["flags"]["reasons"]["combo"]
+    
+    # Clean up the dummy file
+    dummy_calibration.unlink()

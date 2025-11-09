@@ -50,6 +50,7 @@ def assemble_dataset_from_csv(csv_path: Path) -> pd.DataFrame:
     df["drift"] = 0.0
 
     # Rename columns for compatibility
+    df["num"] = df["num"].astype(str)
     df.rename(columns={"date": "race_date", "num": "runner_id", "cote": "odds_h5"}, inplace=True)
 
     return df

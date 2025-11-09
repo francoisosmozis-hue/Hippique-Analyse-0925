@@ -84,6 +84,13 @@ class BoturfersFetcher:
 
                     absolute_url = urljoin(self.race_url, relative_url)
 
+                    time_tag = row.select_one("td.hour")
+                    start_time = None
+                    if time_tag and time_tag.text.strip():
+                        time_match = re.search(r'(\d{1,2})[h:](\d{2})', time_tag.text.strip())
+                        if time_match:
+                            start_time = f"{time_match.group(1).zfill(2)}:{time_match.group(2)}"
+
                     runners_count_tag = row.select_one("td.nb")
                     runners_count = int(runners_count_tag.text.strip()) if runners_count_tag and runners_count_tag.text.strip().isdigit() else None
 
@@ -93,6 +100,7 @@ class BoturfersFetcher:
                         "name": race_name,
                         "url": absolute_url,
                         "runners_count": runners_count,
+                        "start_time": start_time,
                     })
                 except Exception as e:
                     logger.warning(f"Impossible d'analyser une ligne de course: {e}. Ligne ignorée.")

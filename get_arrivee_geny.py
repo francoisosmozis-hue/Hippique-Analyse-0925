@@ -400,6 +400,11 @@ def _extract_arrival_from_text(text: str) -> list[str]:
 def parse_arrival(html: str) -> list[str]:
     """Return arrival numbers extracted from ``html``."""
 
+    if "place;numero" in html:
+        all_numbers = re.findall(r"\d+", html)
+        if all_numbers:
+            return all_numbers
+
     numbers = _extract_arrival_from_json(html)
     if numbers:
         return numbers

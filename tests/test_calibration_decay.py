@@ -8,9 +8,7 @@ from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
-from calibration import calibrate_simulator as calibrate
+from src.calibration import calibrate_simulator as calibrate
 
 
 @pytest.mark.parametrize("recent_wins", [5, 8])

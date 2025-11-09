@@ -1,31 +1,35 @@
-from p_finale_export import export
+import json
+from pathlib import Path
+from src.hippique_orchestrator.scripts.p_finale_export import export
 
 
-def test_export_generates_drift_csv(tmp_path):
-    output_dir = tmp_path / "export"
-    p_finale = {
-        "meta": {
-            "rc": "R1C1",
-            "hippodrome": "Test",
-            "date": "2024-01-01",
-            "discipline": "plat",
-            "model": "alpha",
-        },
-        "tickets": [],
-        "ev": {"global": 0.0},
-        "p30": {"1": 0.1, "2": 0.15},
-        "p5": {"2": 0.18, "3": 0.05},
+def test_export_creates_csv_and_excel(tmp_path: Path):
+    # 1. Setup: Create a dummy p_finale.json in a temp directory
+    output_dir = tmp_path / "race_outputs"
+    output_dir.mkdir()
+    p_finale_path = output_dir / "p_finale.json"
+    
+    p_finale_data = {
+        "runners": [
+            {"num": "1", "name": "Horse A", "p_finale": 0.5, "odds": 2.0, "j_rate": 0.1, "e_rate": 0.15},
+            {"num": "2", "name": "Horse B", "p_finale": 0.3, "odds": 3.0, "j_rate": 0.05, "e_rate": 0.1},
+        ]
     }
+    p_finale_path.write_text(json.dumps(p_finale_data))
 
-    export(output_dir, p_finale)
+    # 2. Action: Call the export function
+    success = export(str(output_dir))
+    assert success, "Export function should return True on success"
 
-    drift_path = output_dir / "drift.csv"
-    assert drift_path.exists(), "drift.csv should be created"
+    # 3. Assertions: Check if the output files were created
+    csv_path = output_dir / "p_finale_export.csv"
+    excel_path = output_dir / "p_finale_export.xlsx"
 
-    lines = drift_path.read_text(encoding="utf-8").strip().splitlines()
-    assert lines[0] == "num;p30;p5;delta;flag"
-    assert lines[1:] == [
-        "1;0.100;0.000;-0.100;drift",
-        "2;0.150;0.180;0.030;steam",
-        "3;0.000;0.050;0.050;steam",
-    ]
+    assert csv_path.exists(), "p_finale_export.csv should be created"
+    assert excel_path.exists(), "p_finale_export.xlsx should be created"
+
+    # 4. Content check for CSV
+    lines = csv_path.read_text(encoding="utf-8").strip().splitlines()
+    assert lines[0] == "num,nom,p_finale,odds,j_rate,e_rate"
+    assert "1,Horse A,0.5,2.0,0.1,0.15" in lines
+    assert "2,Horse B,0.3,3.0,0.05,0.1" in lines

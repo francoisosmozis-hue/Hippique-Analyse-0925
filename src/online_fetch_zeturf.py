@@ -9,6 +9,7 @@ de course réelles scrapées depuis le site Zeturf.
 
 import logging
 import re
+import time
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urljoin
@@ -251,6 +252,9 @@ def fetch_race_snapshot(reunion: str, course: str, phase: str, url: str | None =
         
         return normalized_data
 
+    except (requests.ConnectionError, TimeoutException, WebDriverException) as e:
+        logger.error(f"Network/WebDriver error during scraping of {url}: {e}")
+        raise
     except Exception as e:
         logger.exception(f"Une erreur inattendue est survenue lors du scraping de {url}: {e}")
         return normalize_snapshot({})

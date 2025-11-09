@@ -79,6 +79,7 @@ def test_process_reunion_executes_pipeline(monkeypatch: pytest.MonkeyPatch, tmp_
         "https://www.zeturf.fr/fr/reunion/2024-09-25/R2-paris",
         "H5",
         tmp_path,
+        source="geny",
         budget=42.0,
         kelly=0.25,
         gcs_prefix=None,

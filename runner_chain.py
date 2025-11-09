@@ -23,15 +23,13 @@ from typing import Any, Dict, List, Mapping, MutableMapping
 
 import sys
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
 # CORRECTION: Imports depuis scripts/ au lieu de la racine
 from simulate_wrapper import PAYOUT_CALIBRATION_PATH, evaluate_combo
 
 try:
-    from online_fetch_zeturf import *
-except Exception:  # pragma: no cover - optional dependency
-    ofz = None  # type: ignore[assignment]
+    from src import online_fetch_zeturf as ofz
+except ImportError:
+    ofz = None
 from src.drive_sync import disabled_reason, is_gcs_enabled
 import analysis_utils as _analysis_utils
 
@@ -448,6 +446,7 @@ def validate_exotics_with_simwrapper(
             "type": legs[0].get("type", "combo"),
             "stake": stake_sum if stake_sum > 0 else float(len(legs)),
             "legs": legs,
+            "odds": template[0].get("odds"),
         }
 
         try:
@@ -874,11 +873,18 @@ def _write_snapshot(
         reason = "fetcher_unavailable"
         snapshot = None
     else:
+        url = course_url
+        if not url:
+            sources = _load_sources_config()
+            zeturf_url_template = sources.get("zeturf", {}).get("url")
+            if zeturf_url_template:
+                url = zeturf_url_template.format(course_id=payload.id_course)
         try:
             snapshot = ofz.fetch_race_snapshot(
                 payload.reunion,
                 payload.course,
                 window,
+                url=url,
             )
         except Exception as exc:
             reason = str(exc)
@@ -886,7 +892,9 @@ def _write_snapshot(
         else:
             reason = None
 
-    if reason:
+    if reason or not snapshot:
+        if not reason:
+            reason = "empty_snapshot"
         logger.error(
             "[runner] Snapshot fetch failed for %s (%s): %s", race_id, window, reason
         )

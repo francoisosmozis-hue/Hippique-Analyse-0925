@@ -148,6 +148,7 @@ def test_process_reunion_continues_after_failure(
         "https://www.zeturf.fr/fr/reunion/2024-09-25/R1-test",
         "H5",
         tmp_path,
+        source="geny",
         budget=100.0,
         kelly=1.0,
         gcs_prefix=None,

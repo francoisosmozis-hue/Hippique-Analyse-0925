@@ -262,7 +262,10 @@ def _extract_common_meta(
     )
     if isinstance(partants, str):
         match = re.search(r"\d+", partants)
-        partants = int(match.group(0)) if match else partants
+        if match:
+            partants = int(match.group(0))
+        else:
+            partants = None
 
     if partants in (None, "") or not isinstance(partants, int):
         for source in sources:

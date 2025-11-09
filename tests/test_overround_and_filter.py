@@ -1,5 +1,5 @@
 from runner_chain import should_cut_exotics
-from pipeline_run import _overround_from_odds_win
+from pipeline_run import _estimate_overround_win
 
 
 def test_overround_from_odds_win_simple():
@@ -9,7 +9,7 @@ def test_overround_from_odds_win_simple():
         {"num": 3, "odds_win": 5.0},
     ]
     # 1/2 + 1/4 + 1/5 = 0.95
-    assert abs(_overround_from_odds_win(runners) - 0.95) < 1e-9
+    assert abs(_estimate_overround_win(runners) - 0.95) < 1e-9
 
 
 def test_should_cut_exotics_threshold():

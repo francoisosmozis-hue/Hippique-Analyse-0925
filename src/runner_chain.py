@@ -236,11 +236,20 @@ def _write_snapshot(
     path = dest / f"snapshot_{window}.json"
 
     now = dt.datetime.now().isoformat()
+    
+    url = course_url
+    if not url:
+        sources = _load_sources_config()
+        zeturf_url_template = sources.get("zeturf", {}).get("url")
+        if zeturf_url_template:
+            url = zeturf_url_template.format(course_id=payload.id_course)
+
     try:
         snapshot = ofz.fetch_race_snapshot(
             payload.reunion,
             payload.course,
             window,
+            url=url,
         )
     except Exception as exc:
         reason = str(exc)

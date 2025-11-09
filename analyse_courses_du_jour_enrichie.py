@@ -37,8 +37,16 @@ from fetch_je_stats import collect_stats
 import pipeline_run
 from analysis_utils import compute_overround_cap
 from simulate_wrapper import PAYOUT_CALIBRATION_PATH, evaluate_combo
+from src.hippique_orchestrator.scripts import p_finale_export
 
 logger = logging.getLogger(__name__)
+
+
+def export_per_horse_csv(rc_dir: Path) -> Path:
+    """Wrapper for p_finale_export.export_p_finale_from_dir."""
+    p_finale_export.export_p_finale_from_dir(rc_dir)
+    return rc_dir / "p_finale_export.csv"
+
 
 
 def _env_float(name: str, default: float) -> float:

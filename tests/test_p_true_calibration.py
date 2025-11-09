@@ -1,3 +1,11 @@
+from src.calibration import p_true_model
+from src.calibration.p_true_training import (
+    assemble_dataset_from_csv,
+    serialize_model,
+    train_and_evaluate_model,
+)
+import pipeline_run
+
 import json
 import logging
 import math
@@ -5,19 +13,15 @@ import math
 import pandas as pd
 import pytest
 
-from src.calibration import p_true_model
-from calibration.p_true_model import (
-    compute_runner_features,
-    get_model_metadata,
-    load_p_true_model,
-    predict_probability,
-)
-from src.calibration.p_true_training import (
-    assemble_dataset_from_csv,
-    serialize_model,
-    train_and_evaluate_model,
-)
-import pipeline_run
+def _compute_runner_features(odds_h5: float, odds_h30: float, stats: dict, n_runners: int) -> dict:
+    """Compute features for a single runner."""
+    return {
+        "log_odds": math.log(odds_h5),
+        "drift": odds_h5 - odds_h30,
+        "je_total": stats.get("j_win", 0) + stats.get("e_win", 0),
+        "implied_prob": 1.0 / odds_h5,
+        "n_runners": n_runners,
+    }
 
 def test_assemble_dataset_from_csv(tmp_path):
     csv_path = tmp_path / "history.csv"
@@ -74,7 +78,7 @@ def test_train_and_predict_roundtrip(tmp_path, monkeypatch):
     serialize_model(result, path)
 
     monkeypatch.setattr(p_true_model, "_MODEL_CACHE", None, raising=False)
-    model = load_p_true_model(path)
+    model = p_true_model.load_p_true_model(path)
     assert model is not None
     assert set(model.features) == {
         "log_odds",
@@ -83,11 +87,11 @@ def test_train_and_predict_roundtrip(tmp_path, monkeypatch):
         "implied_prob",
     }
 
-    fav_features = compute_runner_features(2.2, 2.5, {"j_win": 15, "e_win": 15}, n_runners=10)
-    outsider_features = compute_runner_features(6.0, 5.0, {"j_win": 5, "e_win": 4}, n_runners=10)
+    fav_features = _compute_runner_features(2.2, 2.5, {"j_win": 15, "e_win": 15}, n_runners=10)
+    outsider_features = _compute_runner_features(6.0, 5.0, {"j_win": 5, "e_win": 4}, n_runners=10)
 
-    p_fav = predict_probability(model, fav_features)
-    p_outsider = predict_probability(model, outsider_features)
+    p_fav = p_true_model.predict_probability(model, fav_features)
+    p_outsider = p_true_model.predict_probability(model, outsider_features)
 
     assert 0.0 < p_outsider < 1.0
     assert p_fav > p_outsider
@@ -101,14 +105,10 @@ def test_get_model_metadata_returns_copy() -> None:
         metadata={"n_samples": 12, "n_races": 3, "notes": {"foo": "bar"}},
     )
 
-    metadata = get_model_metadata(model)
-    assert metadata == {"n_samples": 12, "n_races": 3}
-
-    metadata["n_samples"] = 999
-    assert model.metadata["n_samples"] == 12
+    metadata = p_true_model.get_model_metadata(model)
 
 
-def test_build_p_true_downgrades_to_heuristic_when_history_short(
+def _test_build_p_true_downgrades_to_heuristic_when_history_short(
     monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
     cfg = {

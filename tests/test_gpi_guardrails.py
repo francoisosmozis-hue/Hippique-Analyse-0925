@@ -72,9 +72,13 @@ def test_p_finale_export_preserves_scores_when_chrono_missing(tmp_path: Path) ->
     }
 
     outdir = tmp_path / "exports"
-    p_finale_export.export(outdir, p_finale)
+    outdir.mkdir()
+    p_finale_path = outdir / "p_finale.json"
+    p_finale_path.write_text(json.dumps(p_finale), encoding="utf-8")
 
-    saved = json.loads((outdir / "p_finale.json").read_text(encoding="utf-8"))
+    p_finale_export.export(outdir)
+
+    saved = json.loads(p_finale_path.read_text(encoding="utf-8"))
 
     assert saved["ev"]["scores"] == scores
     assert saved["ev"]["scores"][0]["ok_chrono"] == ""
