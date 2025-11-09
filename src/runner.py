@@ -23,9 +23,8 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from google.cloud import storage
-
 from src.config import Config
+from src.gcs import upload_artifacts
 from src.logging_utils import get_logger
 from modules.tickets_store import render_ticket_html, save_ticket_html
 
@@ -118,42 +117,25 @@ def _collect_artifacts(rc_dir: Path) -> List[str]:
     
     return sorted(artifacts)
 
-def _upload_artifacts_to_gcs(rc_dir: Path, artifacts: List[str]) -> None:
+def _collect_artifacts(rc_dir: Path) -> List[str]:
     """
-    Upload les artefacts vers GCS (si configuré).
+    Collecte tous les artefacts générés dans le répertoire de la course.
     
     Args:
         rc_dir: Répertoire data/R1C3/
-        artifacts: Liste de chemins d'artefacts
+        
+    Returns:
+        Liste de chemins relatifs
     """
-    if not config.gcs_bucket:
-        return
+    if not rc_dir.exists():
+        return []
     
-    try:
-        client = storage.Client()
-        bucket = client.bucket(config.gcs_bucket)
-        
-        for artifact_path in artifacts:
-            local_file = Path(artifact_path)
-            if not local_file.exists():
-                continue
-            
-            # GCS path: {prefix}/YYYY-MM-DD/R1C3/filename
-            gcs_path = f"{config.gcs_prefix}/{local_file.parent.name}/{local_file.name}"
-            
-            blob = bucket.blob(gcs_path)
-            blob.upload_from_filename(str(local_file))
-            
-            logger.debug(f"Uploaded {artifact_path} → gs://{config.gcs_bucket}/{gcs_path}")
-        
-        logger.info(f"Uploaded {len(artifacts)} artifacts to GCS")
+    artifacts = []
+    for file_path in rc_dir.rglob("*"):
+        if file_path.is_file():
+            artifacts.append(str(file_path.relative_to(Path.cwd())))
     
-    except Exception as e:
-        logger.error(f"Failed to upload artifacts to GCS: {e}", exc_info=e)
-
-# ============================================
-# Main Runner
-# ============================================
+    return sorted(artifacts)
 
 def run_course(
     course_url: str,
@@ -253,7 +235,7 @@ def run_course(
         
         # Upload GCS si configuré
         if config.gcs_bucket:
-            _upload_artifacts_to_gcs(rc_dir, artifacts)
+            upload_artifacts(rc_dir, artifacts)
         
         logger.info("H30 analysis complete", correlation_id=correlation_id)
         return {
@@ -408,7 +390,7 @@ def run_course(
     
     # Upload GCS si configuré
     if config.gcs_bucket:
-        _upload_artifacts_to_gcs(rc_dir, artifacts)
+        upload_artifacts(rc_dir, artifacts)
     
     logger.info(
         "H5 pipeline complete",

@@ -439,9 +439,12 @@ def risk_of_ruin(
         return 1.0
     if total_variance <= 0:
         return 0.0
-    if baseline_variance is not None and baseline_variance < 0:
-        baseline_variance = None
-    return math.exp(-2 * total_ev * bankroll / total_variance)
+    
+    variance = total_variance
+    if baseline_variance is not None:
+        variance = max(total_variance, baseline_variance)
+
+    return math.exp(-2 * total_ev * bankroll / variance)
 
 
 def compute_ev_roi(
@@ -975,4 +978,3 @@ def compute_ev_roi(
     return result
 
 
-__all__ = ["compute_ev_roi", "risk_of_ruin", "optimize_stake_allocation"]
