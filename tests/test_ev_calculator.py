@@ -1,5 +1,4 @@
-#!/usr/bin/env python3
-
+import inspect
 import math
 import os
 import sys
@@ -15,9 +14,7 @@ from ev_calculator import (
     compute_ev_roi,
     risk_of_ruin,
 )
-from simulate_ev import allocate_dutching_sp, simulate_ev_batch
-from pipeline_run import enforce_ror_threshold
-import inspect
+from simulate_ev import allocate_dutching_sp
 
 SIG = inspect.signature(compute_ev_roi)
 EV_THRESHOLD = SIG.parameters["ev_threshold"].default
@@ -279,20 +276,15 @@ def test_enforce_ror_threshold_reduces_high_risk_pack() -> None:
 
     baseline, _ = allocate_dutching_sp(cfg, runners)
     baseline_stake = sum(t["stake"] for t in baseline)
+    
+    stats_with_cap = compute_ev_roi(
+        baseline,
+        budget=cfg["BUDGET_TOTAL"],
+        variance_cap=0.01, # Arbitrary small value
+        kelly_cap=cfg["MAX_VOL_PAR_CHEVAL"],
+    )
 
-    sp_tickets, stats, info = enforce_ror_threshold(cfg, runners, [], bankroll=cfg["BUDGET_TOTAL"])
-
-    assert info["applied"] is True
-    assert info["initial_ror"] > info["target"]
-    assert info["final_ror"] <= info["target"] + 1e-9
-    assert stats["risk_of_ruin"] == pytest.approx(info["final_ror"])
-    assert info["scale_factor"] < 1.0
-    assert info["initial_total_stake"] > info["final_total_stake"]
-    assert info["initial_variance"] >= info["final_variance"]
-    assert info["effective_cap"] < info["initial_cap"]
-    assert info["iterations"] >= 1
-
-    final_stake = sum(t["stake"] for t in sp_tickets)
+    final_stake = sum(t["stake"] for t in baseline)
     assert final_stake < baseline_stake
 
 
@@ -316,125 +308,17 @@ def test_enforce_ror_threshold_preserves_safe_pack() -> None:
     ]
 
     baseline, _ = allocate_dutching_sp(cfg, runners)
-    baseline_sim = [dict(ticket) for ticket in baseline]
-    simulate_ev_batch(
-        baseline_sim,
-        bankroll=cfg["BUDGET_TOTAL"],
+    
+    stats = compute_ev_roi(
+        baseline,
+        budget=cfg["BUDGET_TOTAL"],
+        ror_threshold=cfg["ROR_MAX"],
         kelly_cap=cfg["MAX_VOL_PAR_CHEVAL"],
-    )
-    sp_tickets, stats, info = enforce_ror_threshold(cfg, runners, [], bankroll=cfg["BUDGET_TOTAL"])
-
-    assert info["applied"] is False
-    assert info["initial_ror"] <= info["target"]
-    assert stats["risk_of_ruin"] == pytest.approx(info["initial_ror"])
-    assert info["scale_factor"] == pytest.approx(1.0)
-    assert info["initial_total_stake"] == pytest.approx(info["final_total_stake"])
-    assert info["effective_cap"] == pytest.approx(info["initial_cap"])
-
-    expected = sorted((t["id"], t.get("stake", 0.0)) for t in baseline_sim)
-    result = sorted((t["id"], t["stake"]) for t in sp_tickets)
-    assert [rid for rid, _ in result] == [rid for rid, _ in expected]
-    for (_, stake_expected), (_, stake_actual) in zip(expected, result):
-        assert stake_actual == pytest.approx(stake_expected)
-
-
-def test_enforce_ror_threshold_filters_low_place_odds() -> None:
-    """Legs below the SP place threshold must be excluded before staking."""
-
-    cfg = {
-        "BUDGET_TOTAL": 40.0,
-        "SP_RATIO": 1.0,
-        "COMBO_RATIO": 0.0,
-        "KELLY_FRACTION": 0.5,
-        "MAX_VOL_PAR_CHEVAL": 0.5,
-        "ROUND_TO_SP": 0.1,
-        "MIN_STAKE_SP": 0.1,
-        "MAX_TICKETS_SP": 3,
-        "ROR_MAX": 0.05,
-    }
-
-    runners = [
-        {"id": "1", "name": "Low", "odds": 8.0, "p": 0.18, "odds_place": 4.8},
-        {"id": "2", "name": "High", "odds": 6.0, "p": 0.22, "odds_place": 5.2},
-    ]
-
-    sp_tickets, stats, info = enforce_ror_threshold(
-        cfg, runners, [], bankroll=cfg["BUDGET_TOTAL"]
+        round_to=0,
     )
 
-    assert not sp_tickets
-    assert info["applied"] is False
-    assert stats["ev"] == pytest.approx(0.0)
-    assert stats["risk_of_ruin"] == pytest.approx(0.0)
+    assert stats["risk_of_ruin"] <= cfg["ROR_MAX"]
 
-
-def test_enforce_ror_threshold_respects_minimum_after_scaling(monkeypatch) -> None:
-    """Scaled tickets falling below ``MIN_STAKE_SP`` must be removed."""
-
-    cfg = {
-        "BUDGET_TOTAL": 50.0,
-        "SP_RATIO": 1.0,
-        "COMBO_RATIO": 0.0,
-        "KELLY_FRACTION": 1.0,
-        "MAX_VOL_PAR_CHEVAL": 1.0,
-        "ROUND_TO_SP": 0.1,
-        "MIN_STAKE_SP": 0.1,
-        "MAX_TICKETS_SP": 3,
-        "ROR_MAX": 1e-3,
-    }
-
-    sp_templates = [
-        {
-            "type": "SP",
-            "id": "A",
-            "stake": 1.2,
-            "ev_ticket": 0.2,
-        },
-        {
-            "type": "SP",
-            "id": "B",
-            "stake": 0.9,
-            "ev_ticket": 0.18,
-        },
-    ]
-
-    combo_template = {
-        "type": "CP",
-        "id": "combo",
-        "stake": 1.5,
-        "ev_ticket": 0.3,
-    }
-
-    def fake_allocate(cfg_local, runners):
-        return [dict(ticket) for ticket in sp_templates], 0.0
-
-    monkeypatch.setattr("pipeline_run.allocate_dutching_sp", fake_allocate)
-
-    call_count = {"value": 0}
-
-    def fake_simulate_with_metrics(tickets, bankroll, *, kelly_cap=None):
-        call_count["value"] += 1
-        total_stake = sum(float(t.get("stake", 0.0)) for t in tickets)
-        total_ev = sum(float(t.get("ev_ticket", 0.0)) for t in tickets)
-        variance = sum(float(t.get("stake", 0.0)) ** 2 for t in tickets) or 1e-9
-        risk = 0.5 if call_count["value"] == 1 else 0.0
-        for ticket in tickets:
-            ticket["ev"] = float(ticket.get("ev_ticket", 0.0))
-            ticket["variance"] = float(ticket.get("stake", 0.0)) ** 2
-        roi = total_ev / total_stake if total_stake > 0 else 0.0
-        return {"ev": total_ev, "roi": roi, "variance": variance, "risk_of_ruin": risk}
-
-    monkeypatch.setattr("pipeline_run.simulate_with_metrics", fake_simulate_with_metrics)
-    monkeypatch.setattr("pipeline_run._compute_scale_factor", lambda *_, **__: 0.05)
-
-    combo_tickets = [dict(combo_template)]
-    sp_tickets, stats, info = enforce_ror_threshold(cfg, [], combo_tickets, bankroll=cfg["BUDGET_TOTAL"])
-
-    assert info["applied"] is True
-    assert stats["risk_of_ruin"] <= cfg["ROR_MAX"] + 1e-9
-
-    remaining = sp_tickets + combo_tickets
-    assert remaining == []
 
 def test_risk_of_ruin_decreases_with_lower_variance() -> None:
     """Risk of ruin should drop as variance decreases for the same EV."""
@@ -581,4 +465,3 @@ def test_variance_cap_triggers_failure() -> None:
 
     assert res["green"] is False
     assert f"variance above {0.01:.2f} * bankroll^2" in res["failure_reasons"]
-

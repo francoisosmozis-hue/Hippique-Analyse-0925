@@ -2198,10 +2198,11 @@ def _process_reunion(
         # --- NEW DISPATCH LOGIC ---
         if source == 'boturfers':
             print(f"[INFO] Fetching Boturfers snapshot for {r_label}{c_label}...")
-            write_snapshot_from_boturfers(r_label, c_label, phase, rc_dir)
+            # Note: boturfers logic might need url as well if it's ever used
+            write_snapshot_from_boturfers(r_label, c_label, phase, rc_dir, course_url=course_url)
         elif source == 'geny':
             print(f"[INFO] Fetching Geny snapshot for {r_label}{c_label}...")
-            write_snapshot_from_geny(course_id, phase, rc_dir)
+            write_snapshot_from_geny(course_id, phase, rc_dir, course_url=course_url)
         # --- END OF NEW LOGIC ---
 
         outcome: dict[str, Any] | None = None

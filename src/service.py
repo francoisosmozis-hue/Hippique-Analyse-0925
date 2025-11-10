@@ -66,7 +66,7 @@ def root():
 @app.get("/health")
 def health():
     """Health check."""
-    return {"status": "ok"}
+    return {"status": "ok", "app": "GPI v5.1"}
 
 
 @app.get("/ping")

@@ -8,9 +8,11 @@ de course réelles scrapées depuis le site Zeturf.
 """
 
 import logging
+import json
 import re
 import time
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urljoin
 
@@ -70,7 +72,7 @@ class ZeturfFetcher:
 
             # Étape 2: Attendre que la table des partants soit chargée
             WebDriverWait(driver, 20).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, "div.partants-table-wrapper"))
+                EC.presence_of_element_located((By.CSS_SELECTOR, "table.table-runners"))
             )
 
             self.soup = BeautifulSoup(driver.page_source, "lxml")
@@ -259,13 +261,50 @@ def fetch_race_snapshot(reunion: str, course: str, phase: str, url: str | None =
         logger.exception(f"Une erreur inattendue est survenue lors du scraping de {url}: {e}")
         return normalize_snapshot({})
 
+ 
 # --- Fonctions utilitaires potentiellement importées ailleurs ---
 
-def write_snapshot_from_geny(*args: Any, **kwargs: Any) -> None:
+def write_snapshot_from_geny(course_id: str, phase: str, rc_dir: Path, *, course_url: str | None = None) -> None:
     """
-    Placeholder pour une fonction qui pourrait être utilisée pour un autre scraper (Geny).
-    Actuellement non implémentée.
+    Fetches a race snapshot using the Geny/ZEturf course ID and writes it to a file.
+    This is a wrapper around the main fetch_race_snapshot logic.
     """
-    logger.warning("La fonction 'write_snapshot_from_geny' n'est pas implémentée.")
-    pass
+    rc_dir.mkdir(parents=True, exist_ok=True)
+    rc_label = rc_dir.name
+    
+    reunion, course = "R?", "C?"
+    match = re.match(r"^(R\d+)(C\d+)$", rc_label)
+    if match:
+        reunion, course = match.groups()
+
+    url = course_url
+    if not url:
+        # Fallback to old logic if no url is passed
+        logger.warning(f"No course_url provided for {rc_label}, constructing a URL with today's date.")
+        date_str = datetime.now().strftime('%Y-%m-%d')
+        url = f"https://www.zeturf.fr/fr/course/{date_str}/{rc_label}"
+
+    logger.info(f"Calling fetch_race_snapshot for {rc_label} (phase: {phase}) with URL: {url}")
+    
+    try:
+        snapshot = fetch_race_snapshot(
+            reunion=reunion,
+            course=course,
+            phase=phase,
+            url=url
+        )
+        snapshot.setdefault("course_id", course_id)
+        snapshot.setdefault("id_course", course_id)
+
+    except Exception as e:
+        logger.error(f"Failed to fetch snapshot for {rc_label}: {e}", exc_info=True)
+        snapshot = { "status": "error", "reason": str(e), "rc": rc_label, "phase": phase }
+
+    # Le nom du fichier doit correspondre au pattern attendu par enrich_h5: `*_H-5.json`
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    phase_tag = "H-5" if phase == "H5" else "H-30"
+    filename = f"{timestamp}_{phase_tag}.json"
+    output_path = rc_dir / filename
+    output_path.write_text(json.dumps(snapshot, ensure_ascii=False, indent=2), encoding="utf-8")
+    logger.info(f"Snapshot for {rc_label} written to {output_path}")
 
