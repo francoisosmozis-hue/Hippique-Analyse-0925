@@ -438,9 +438,12 @@ def risk_of_ruin(
         return 1.0
     if total_variance <= 0:
         return 0.0
-    if baseline_variance is not None and baseline_variance < 0:
-        baseline_variance = None
-    return math.exp(-2 * total_ev * bankroll / total_variance)
+    
+    effective_variance = total_variance
+    if baseline_variance is not None and baseline_variance > total_variance:
+        effective_variance = baseline_variance
+
+    return math.exp(-2 * total_ev * bankroll / effective_variance)
 
 
 def compute_ev_roi(
@@ -946,7 +949,8 @@ def compute_ev_roi(
         reasons.append("expected payout for combined bets ≤ 12€")
     if ror_threshold is not None and ruin_risk > ror_threshold:
         reasons.append(f"risk of ruin above {ror_threshold:.2%}")
-        green_flag = False
+    if variance_exceeded:
+        reasons.append(f"variance above {variance_cap:.2f} * bankroll^2")
 
     green_flag = not reasons
 

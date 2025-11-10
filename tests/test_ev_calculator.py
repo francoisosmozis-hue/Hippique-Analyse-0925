@@ -15,8 +15,8 @@ from ev_calculator import (
     compute_ev_roi,
     risk_of_ruin,
 )
-from pipeline_run import enforce_ror_threshold
 from simulate_ev import allocate_dutching_sp, simulate_ev_batch
+from pipeline_run import enforce_ror_threshold
 import inspect
 
 SIG = inspect.signature(compute_ev_roi)

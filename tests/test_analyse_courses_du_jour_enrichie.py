@@ -609,15 +609,22 @@ def test_h5_pipeline_produces_outputs(
 
     monkeypatch.setattr(acde, "write_snapshot_from_geny", fake_write_snapshot)
 
-    def fake_guard(rc_dir: Path, *, budget: float) -> tuple[bool, dict[str, Any], None]:
+    def fake_guard(rc_dir: Path, *, budget: float, min_roi: float) -> tuple[bool, dict[str, Any], None]:
         return True, {}, None
-
+    
     monkeypatch.setattr(acde, "_run_h5_guard_phase", fake_guard)
     stats_map = {
         str(idx): {"j_win": 20 + idx, "e_win": 15 + idx}
         for idx in range(1, 7)
     }
     monkeypatch.setattr(acde, "collect_stats", lambda *args, **kwargs: (100.0, stats_map))
+
+    def fake_build_prompt_from_meta(rc_dir: Path, **kw):
+        (rc_dir / "prompts").mkdir(exist_ok=True)
+        (rc_dir / "prompts" / "prompt.txt").touch()
+        
+    monkeypatch.setattr(acde, "build_prompt_from_meta", fake_build_prompt_from_meta)
+
 
     argv = [
         "analyse_courses_du_jour_enrichie.py",
@@ -627,6 +634,8 @@ def test_h5_pipeline_produces_outputs(
         "C1",
         "--phase",
         "H5",
+        "--source",
+        "geny",
         "--data-dir",
         str(tmp_path),
     ]

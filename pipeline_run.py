@@ -1168,7 +1168,7 @@ def _run_pipeline_from_inputs(**kwargs: Any) -> Dict[str, Any]:
 
     p_finale_payload = {
         "tickets": tickets_payload,
-        "meta": {"market": {"overround": overround_value}},
+        "meta": {"market": {"overround": overround_value}, "rc": partants_data.get("rc")},
     }
     (outdir_path / "p_finale.json").write_text(
         json.dumps(p_finale_payload, ensure_ascii=False, indent=2) + "\n",

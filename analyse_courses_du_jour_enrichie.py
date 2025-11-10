@@ -1572,7 +1572,7 @@ def _rebuild_je_csv_from_stats(rc_dir: Path) -> bool:
         return False
 
     try:
-        write_je_csv_file(
+        _write_je_csv_file(
             rc_dir / f"{snap}_je.csv", id2name=id2name, stats_payload=stats_payload
         )
     except OSError as exc:
