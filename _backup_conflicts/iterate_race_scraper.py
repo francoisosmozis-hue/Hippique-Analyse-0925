@@ -47,11 +47,8 @@ import asyncio
 import csv
 import json
 import re
-import sys
 import time
-from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
 
 from bs4 import BeautifulSoup  # type: ignore
 
@@ -63,7 +60,7 @@ except ImportError as exc:
     ) from exc
 
 
-def extract_state_from_html(html: str) -> Dict[str, any]:
+def extract_state_from_html(html: str) -> dict[str, any]:
     """
     ZEturf course and meeting pages embed their initial state in a
     `data-state` attribute on the <main> element.  This helper
@@ -83,7 +80,7 @@ def extract_state_from_html(html: str) -> Dict[str, any]:
     return data
 
 
-async def scrape_race_snapshot(page, url: str) -> Tuple[Dict[str, any], List[Dict[str, any]]]:
+async def scrape_race_snapshot(page, url: str) -> tuple[dict[str, any], list[dict[str, any]]]:
     """
     Navigate to a ZEturf race URL and return a tuple of meeting
     metadata and a list of runner dictionaries.  Each runner dict
@@ -127,7 +124,7 @@ async def scrape_race_snapshot(page, url: str) -> Tuple[Dict[str, any], List[Dic
     }
 
     # Extract runners
-    runners_list: List[Dict[str, any]] = []
+    runners_list: list[dict[str, any]] = []
     for runner in race.get("runners", []):
         rdict = {
             "num": str(runner.get("number")),
@@ -142,7 +139,7 @@ async def scrape_race_snapshot(page, url: str) -> Tuple[Dict[str, any], List[Dic
     return metadata, runners_list
 
 
-def _safe_float(value: Optional[str]) -> Optional[float]:
+def _safe_float(value: str | None) -> float | None:
     if value is None:
         return None
     # ZEturf odds may be expressed as fractional strings like "3/1"; convert to decimal
@@ -238,13 +235,13 @@ async def scrape_meeting(meeting_url: str, csv_path: Path, delay_between_snapsho
             r2_map = {r["num"]: r for r in runners2}
             # Placeholder: fetch J/E rates (requires separate scraper)
             je_rates = fetch_je_rates(meta1, runners1)
-            rows: List[List[str]] = []
+            rows: list[list[str]] = []
             for num, r1 in r1_map.items():
                 r2 = r2_map.get(num, {})
                 j_rate = je_rates.get(num, {}).get("j_rate")
                 e_rate = je_rates.get(num, {}).get("e_rate")
-                drift_win: Optional[float] = None
-                drift_place: Optional[float] = None
+                drift_win: float | None = None
+                drift_place: float | None = None
                 ow30 = r1.get("odds_win")
                 op30 = r1.get("odds_place")
                 ow5 = r2.get("odds_win")
@@ -283,15 +280,15 @@ async def scrape_meeting(meeting_url: str, csv_path: Path, delay_between_snapsho
         await browser.close()
 
 
-def fetch_je_rates(meta: Dict[str, any], runners: List[Dict[str, any]]) -> Dict[str, Dict[str, float]]:
+def fetch_je_rates(meta: dict[str, any], runners: list[dict[str, any]]) -> dict[str, dict[str, float]]:
     """
     Loads jockey and trainer statistics from previously provided JSON files
     and returns a mapping of runner number to their respective win rates.
     """
     try:
-        with open("jockey_stats_provided.json", "r", encoding="utf-8") as f:
+        with open("jockey_stats_provided.json", encoding="utf-8") as f:
             jockey_stats = json.load(f)
-        with open("trainer_stats_provided.json", "r", encoding="utf-8") as f:
+        with open("trainer_stats_provided.json", encoding="utf-8") as f:
             trainer_stats = json.load(f)
     except FileNotFoundError:
         print("[WARN] Statistics files not found. J/E rates will be empty.")
@@ -310,7 +307,7 @@ def fetch_je_rates(meta: Dict[str, any], runners: List[Dict[str, any]]) -> Dict[
         num = runner.get("num")
         if not num:
             continue
-        
+
         jockey_name = normalize_name(runner.get("jockey"))
         trainer_name = normalize_name(runner.get("trainer"))
 
@@ -381,13 +378,13 @@ def main() -> None:
                     with out_csv.open("w", newline="", encoding="utf-8") as f:
                         writer = csv.writer(f)
                         writer.writerow(header)
-                rows: List[List[str]] = []
+                rows: list[list[str]] = []
                 for num, r1 in r1_map.items():
                     r2 = r2_map.get(num, {})
                     j_rate = je_rates.get(num, {}).get("j_rate")
                     e_rate = je_rates.get(num, {}).get("e_rate")
-                    drift_win: Optional[float] = None
-                    drift_place: Optional[float] = None
+                    drift_win: float | None = None
+                    drift_place: float | None = None
                     ow30 = r1.get("odds_win")
                     op30 = r1.get("odds_place")
                     ow5 = r2.get("odds_win")

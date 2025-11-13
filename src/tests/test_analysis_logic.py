@@ -1,6 +1,6 @@
 # tests/test_analysis_logic.py
-import sys
 import pathlib
+import sys
 
 # Add project root to sys.path to allow importing from src
 _PROJECT_ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -11,6 +11,7 @@ if str(_PROJECT_ROOT) not in sys.path:
 # This is a private function, which is not ideal to test directly,
 # but it's a necessary first step for a safe refactoring.
 from src.rules import filter_tickets_by_odds
+
 
 def test_filter_sp_and_cp_by_odds():
     """

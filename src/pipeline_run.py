@@ -1,7 +1,10 @@
-import os, pathlib, logging
+import logging
+import os
+import pathlib
 
 # --- Ensure payout calibration is always available ---
-CALIB_PATH = pathlib.Path(__file__).resolve().parents[1] / "config" / "payout_calibration.yaml"
+PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[1]
+CALIB_PATH = _DEFAULT_PROJECT_ROOT / "config" / "payout_calibration.yaml"
 try:
     CALIB_PATH.parent.mkdir(parents=True, exist_ok=True)
     if not CALIB_PATH.exists():
@@ -19,25 +22,20 @@ except Exception as e:
 
 import argparse
 import json
-import os
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import yaml
 
-
 # --- Project Root Setup ---
-_PROJECT_ROOT = Path(__file__).resolve().parents[1]
-if str(_PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(_PROJECT_ROOT))
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 # --- Import core logic ---
-# Mock missing modules for testing or environments where they are not installed.
 try:
-    from src.overround import compute_overround_place, adaptive_cap
     from src.kelly import calculate_kelly_fraction
+    from src.overround import adaptive_cap, compute_overround_place
     from src.simulate_wrapper import evaluate_combo
 except ImportError:
     logging.warning("One or more core modules not found. Using mock implementations for [overround, kelly, simulate_wrapper].")
@@ -50,12 +48,12 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
-def load_gpi_config(config_path: Path) -> Dict[str, Any]:
+def load_gpi_config(config_path: Path) -> dict[str, Any]:
     """Loads the GPI YAML configuration."""
     if not config_path.exists():
         logger.error(f"GPI Config not found at {config_path}")
         raise FileNotFoundError(f"GPI Config not found at {config_path}")
-    with open(config_path, "r") as f:
+    with open(config_path) as f:
         return yaml.safe_load(f)
 
 
@@ -65,21 +63,26 @@ def run_pipeline(
     phase: str,
     budget: float = 5.0,
     allow_heuristic: bool = False,
-    _snapshot_for_test: Optional[Dict] = None,
-    calibration_path: Optional[str] = None,
-) -> Dict[str, Any]:
+    _snapshot_for_test: dict | None = None,
+    calibration_path: str | None = None,
+    root_dir: Path | None = None,
+) -> dict[str, Any]:
     """
     Main pipeline logic to decide on bets based on GPI v5.1 guardrails.
     """
+    if calibration_path is None:
+        raise ValueError("calibration_path cannot be None for this test")
+    project_root = root_dir if root_dir is not None else PROJECT_ROOT
+
     # --- Load GPI Config ---
-    gpi_config_path = _PROJECT_ROOT / "config" / "gpi_v52.yml"
+    gpi_config_path = project_root / "config" / "gpi_v52.yml"
     try:
         gpi_config = load_gpi_config(gpi_config_path)
     except FileNotFoundError:
         return {"abstain": True, "tickets": [], "roi_global_est": 0, "message": f"GPI Config not found: {gpi_config_path}", "paths": {}}
 
     # --- Data Loading ---
-    race_dir = _PROJECT_ROOT / "data" / f"{reunion}{course}"
+    race_dir = project_root / "data" / f"{reunion}{course}"
     snapshot_path = race_dir / f"snapshot_{phase}.json"
     abstain = False
     abstain_reason = ""
@@ -87,7 +90,7 @@ def run_pipeline(
     if _snapshot_for_test:
         snapshot = _snapshot_for_test
     elif snapshot_path.exists():
-        with open(snapshot_path, "r") as f:
+        with open(snapshot_path) as f:
             snapshot = json.load(f)
     else:
         return {"abstain": True, "tickets": [], "roi_global_est": 0, "message": f"Snapshot not found: {snapshot_path}", "paths": {}}
@@ -99,17 +102,17 @@ def run_pipeline(
     # --- GPI v5.1 Guardrails ---
     sp_tickets = []
     combo_tickets = []
-    
+
     # 1. Overround Guard & Calibration Check for Exotics
     overround_place = snapshot.get("market", {}).get("overround_place", compute_overround_place(runners))
-    
+
     calibration_available = calibration_path and Path(calibration_path).exists()
     allow_exotics = overround_place <= gpi_config["overround_max_exotics"]
 
     if not calibration_available:
-        logger.warning("Payout calibration file not found at %s. Disabling exotic bets.", calibration_path)
-        allow_exotics = False
-    
+        logger.warning("Payout calibration file not found at %s. Abstaining.", calibration_path)
+        return {"metrics": {"status": "insufficient_data", "reason": "missing_calibration"}, "tickets": []}
+
     if overround_place > gpi_config["overround_max_exotics"]:
         logger.warning(f'''Overround is high ({overround_place:.2f} > {gpi_config["overround_max_exotics"]}). Disabling exotic bets.''')
         allow_exotics = False
@@ -122,7 +125,7 @@ def run_pipeline(
     for r in runners:
         if not all(k in r for k in ["p_place", "cote", "volatility"]):
             continue
-        
+
         roi_sp = (r["p_place"] * r["cote"]) - 1
         if odds_min <= r["cote"] <= odds_max and roi_sp >= gpi_config["roi_min_sp"]:
             volatility_cap = adaptive_cap(r["p_place"], r.get("volatility", 0.5), base_cap=gpi_config["max_vol_per_horse"])
@@ -133,14 +136,14 @@ def run_pipeline(
     if len(sp_candidates) >= sp_dutching_config["legs_min"]:
         sp_candidates.sort(key=lambda r: r['roi_sp'], reverse=True)
         dutch_horses = sp_candidates[:min(len(sp_candidates), sp_dutching_config["legs_max"])]
-        
+
         total_prob = sum(r["p_place"] for r in dutch_horses)
         if total_prob > 0:
             sp_budget = min(budget, gpi_config["budget_cap_eur"]) * 0.6 # TODO: make 0.6 configurable
             stakes = {}
             raw_kelly_stakes = {}
             total_kelly_fraction = 0
-            
+
             for r in dutch_horses:
                 stake_fraction = calculate_kelly_fraction(r["cote"], r["p_place"], fraction=sp_dutching_config["kelly_frac"])
                 if stake_fraction > 0:
@@ -166,7 +169,7 @@ def run_pipeline(
         remaining_budget = min(budget, gpi_config["budget_cap_eur"]) - sum(t['stake'] for t in sp_tickets)
         if remaining_budget > 0.5:
             combo_selection = [r["num"] for r in sorted(runners, key=lambda x: x.get('p_place', 0), reverse=True)[:4]]
-            
+
             combo_ticket = {
                 "type": "TRIO", # TODO: Make configurable from gpi_config["tickets"]["exotics"]["allowed"]
                 "legs": combo_selection,
@@ -197,7 +200,7 @@ def run_pipeline(
     # 4. Global ROI & Abstention Guard
     all_tickets = sp_tickets + combo_tickets
     total_stake = sum(t["stake"] for t in all_tickets)
-    
+
     if total_stake > 0:
         weighted_rois = [(t["roi_est"] * t["stake"]) for t in all_tickets]
         roi_global_est = sum(weighted_rois) / total_stake
@@ -212,7 +215,7 @@ def run_pipeline(
             abstain_reason = f'''Global ROI ({roi_global_est:.2%}) is below the +{gpi_config["roi_min_sp"]:.0%} threshold.'''
         all_tickets = []
         roi_global_est = 0 # Reset ROI if abstaining
-    
+
     # 5. Budget & Ticket Cap (Final check)
     if len(all_tickets) > gpi_config["tickets_max"]:
         all_tickets = (sp_tickets[:1] + combo_tickets[:1]) # Keep max 1 of each type
@@ -222,7 +225,7 @@ def run_pipeline(
         scale = budget / final_stake
         for t in all_tickets:
             t["stake"] = round(t["stake"] * scale, 2)
-    
+
     # --- Result ---
     analysis_path = race_dir / f"analysis_{phase}.json"
     result = {
@@ -235,7 +238,7 @@ def run_pipeline(
             "analysis": str(analysis_path)
         }
     }
-    
+
     analysis_path.parent.mkdir(parents=True, exist_ok=True)
     with open(analysis_path, "w") as f:
         json.dump(result, f, indent=2)
@@ -279,11 +282,8 @@ if __name__ == "__main__":
 
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-    # GPI config is loaded inside run_pipeline, budget can be passed as override
-    gpi_config_path = _PROJECT_ROOT / "config" / "gpi_v52.yml"
+    gpi_config_path = PROJECT_ROOT / "config" / "gpi_v52.yml"
     config = load_gpi_config(gpi_config_path)
-    
-    # Use budget from args if provided, otherwise from config, otherwise default.
     budget = args.budget if args.budget is not None else config.get("budget_cap_eur", 5.0)
 
     output = run_pipeline(
@@ -293,4 +293,3 @@ if __name__ == "__main__":
         budget=budget,
     )
     print(json.dumps(output, indent=2))
-

@@ -13,15 +13,13 @@ import argparse
 import datetime as dt
 import json
 import logging
+import math
 import os
 import re
 import shutil
+from collections.abc import Iterable, Mapping, MutableMapping, Sequence
 from pathlib import Path
-import math
-from collections.abc import Iterable, Sequence
-from typing import Any, Dict, List, Mapping, MutableMapping
-
-import sys
+from typing import Any
 
 # CORRECTION: Imports depuis scripts/ au lieu de la racine
 from simulate_wrapper import PAYOUT_CALIBRATION_PATH, evaluate_combo
@@ -30,21 +28,21 @@ try:
     from src import online_fetch_zeturf as ofz
 except ImportError:
     ofz = None
-from src.drive_sync import disabled_reason, is_gcs_enabled
-import analysis_utils as _analysis_utils
-
-import pipeline_run
-
+import yaml
 from pydantic import (
     AliasChoices,
     BaseModel,
     ConfigDict,
-    ValidationError as PydanticValidationError,
     Field,
     field_validator,
 )
+from pydantic import (
+    ValidationError as PydanticValidationError,
+)
 
-import yaml
+import analysis_utils as _analysis_utils
+import pipeline_run
+from src.drive_sync import disabled_reason, is_gcs_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -743,7 +741,7 @@ def _coerce_payload(data: Mapping[str, Any], *, context: str) -> RunnerPayload:
         raise PayloadValidationError(f"{context}: {formatted}") from exc
 
 
-def _load_planning(path: Path) -> List[Dict[str, Any]]:
+def _load_planning(path: Path) -> list[dict[str, Any]]:
     """Return planning entries from ``path``.
 
     The planning file is expected to be a JSON array of objects containing at
@@ -757,7 +755,7 @@ def _load_planning(path: Path) -> List[Dict[str, Any]]:
     return [d for d in data if isinstance(d, dict)]
 
 
-def _load_sources_config() -> Dict[str, Any]:
+def _load_sources_config() -> dict[str, Any]:
     """Load snapshot source configuration from disk."""
 
     default_path = os.getenv("RUNNER_SOURCES_FILE") or os.getenv("SOURCES_FILE")
@@ -814,8 +812,8 @@ def _write_excel_update_command(
     )
     cmd = (
         f"python update_excel_with_results.py "
-        f'--excel "{excel}" ' 
-        f'--arrivee "{arrivee_path}" ' 
+        f'--excel "{excel}" '
+        f'--arrivee "{arrivee_path}" '
         f'--tickets "{tickets_path}"\n'
     )
     _write_text_file(race_dir / "cmd_update_excel.txt", cmd)
@@ -936,7 +934,7 @@ def _write_snapshot(
     if USE_GCS and upload_file:
         try:
             upload_file(path)
-        except EnvironmentError as exc:
+        except OSError as exc:
             logger.warning("Skipping cloud upload for %s: %s", path, exc)
     else:
         reason = disabled_reason()
@@ -1066,7 +1064,7 @@ def _write_analysis(
             analysis_summary["exotics_disabled"] = True
         _write_json_file(race_dir / "analysis.json", analysis_summary)
         return
-        
+
     outdir_path = Path(result.get("outdir") or "")
     budget_value = float(budget) if budget and float(budget) > 0 else 5.0
     enforced_tickets: list[Mapping[str, Any]] | None = None
@@ -1165,7 +1163,7 @@ def _write_analysis(
         for name in ("analysis.json", "metrics.json", "metrics.csv"):
             try:
                 upload_file(race_dir / name)
-            except EnvironmentError as exc:
+            except OSError as exc:
                 logger.warning("Skipping cloud upload for %s: %s", race_dir / name, exc)
     else:
         reason = disabled_reason()
@@ -1280,12 +1278,12 @@ def main():
         help="Répertoire de sortie prioritaire (fallback vers $OUTPUT_DIR puis --analysis-dir)",
     )
     args = parser.parse_args()
-    
+
     snap_dir = Path(args.snap_dir)
     analysis_root = args.output or os.getenv("OUTPUT_DIR") or args.analysis_dir
     analysis_dir = Path(analysis_root)
     calibration_path = Path(args.calibration).expanduser()
-    
+
     if args.planning:
         for name in (
             "course_id",

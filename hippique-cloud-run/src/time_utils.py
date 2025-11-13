@@ -1,6 +1,5 @@
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
-from typing import Tuple
 
 
 def parse_local_time(date_str: str, time_str: str, tz_name: str = "Europe/Paris") -> datetime:
@@ -9,7 +8,7 @@ def parse_local_time(date_str: str, time_str: str, tz_name: str = "Europe/Paris"
     return dt_naive.replace(tzinfo=ZoneInfo(tz_name))
 
 
-def compute_snapshot_times(race_time_local: datetime) -> Tuple[datetime, datetime]:
+def compute_snapshot_times(race_time_local: datetime) -> tuple[datetime, datetime]:
     """Calcule H-30 et H-5 depuis heure course (Europe/Paris)."""
     h30 = race_time_local - timedelta(minutes=30)
     h5 = race_time_local - timedelta(minutes=5)

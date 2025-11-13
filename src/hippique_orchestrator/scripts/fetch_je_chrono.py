@@ -5,9 +5,9 @@ from __future__ import annotations
 import csv
 import json
 import logging
+from collections.abc import Iterable, Mapping
 from pathlib import Path
-from typing import Any, Iterable, Mapping, TypeAlias
-
+from typing import Any, TypeAlias
 
 LOGGER = logging.getLogger(__name__)
 
@@ -31,7 +31,7 @@ def enrich_from_snapshot(snapshot_path: str, out_dir: str) -> dict:
         paths to the generated files (as strings) or ``None`` when the artefact
         could not be produced.
     """
-    
+
     result: ResultDict = {"je_stats": None, "chronos": None}
 
     snapshot_file = Path(snapshot_path)

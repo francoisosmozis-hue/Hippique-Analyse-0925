@@ -608,7 +608,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     parser.add_argument("--planning", required=True, help="Path to planning JSON file")
     parser.add_argument("--out", required=True, help="Destination JSON file for arrivals")
     args = parser.parse_args(argv)
-    
+
     try:
         fetch_and_write_arrivals(args.planning, args.out)
     except FileNotFoundError as e:

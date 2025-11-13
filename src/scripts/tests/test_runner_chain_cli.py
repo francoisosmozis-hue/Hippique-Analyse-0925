@@ -164,7 +164,7 @@ def test_planning_mode_remains_functional(tmp_path, monkeypatch, runner_chain_mo
         }
     ]
     planning_path.write_text(json.dumps(planning_payload), encoding="utf-8")
-    
+
     class FixedDateTime(dt.datetime):
         @classmethod
         def now(cls, tz=None):  # type: ignore[override]

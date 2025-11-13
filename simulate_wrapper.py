@@ -19,11 +19,11 @@ import math
 import os
 import re
 from collections import OrderedDict
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Tuple
-import yaml
+from typing import Any
 
+import yaml
 
 logger = logging.getLogger(__name__)
 
@@ -60,11 +60,11 @@ PAYOUT_CALIBRATION_PATH = _default_payout_calibration_path()
 # unbounded growth when many unique combinations are requested.
 MAX_CACHE_SIZE = 500
 
-_calibration_cache: OrderedDict[str, Dict[str, Any]] = OrderedDict()
+_calibration_cache: OrderedDict[str, dict[str, Any]] = OrderedDict()
 _calibration_mtime: float = 0.0
-_calibration_metadata: Dict[str, Any] = {}
+_calibration_metadata: dict[str, Any] = {}
 
-_correlation_settings: Dict[str, Dict[str, Any]] = {}
+_correlation_settings: dict[str, dict[str, Any]] = {}
 _correlation_mtime: float = 0.0
 
 _EPSILON = 1e-6
@@ -74,7 +74,7 @@ _EPSILON = 1e-6
 # correlation data loaded from :data:`PAYOUT_CALIBRATION_PATH`.
 CORRELATION_PENALTY: float = 0.85
 
-_CORRELATION_ALIAS: Dict[str, Tuple[str, ...]] = {
+_CORRELATION_ALIAS: dict[str, tuple[str, ...]] = {
     "course_id": ("meeting_course", "default"),
     "rc": ("meeting_course", "default"),
     "meeting_race": ("meeting_course", "default"),
@@ -136,7 +136,7 @@ def _combo_key(legs: Sequence[Any]) -> str:
 
 class _RequirementsList(list):
     """Custom list exposing common calibration filenames as virtual members."""
-    
+
     _DEFAULT_HINTS = (
         str(Path("config/payout_calibration.yaml")),
         str(Path("calibration/payout_calibration.yaml")),
@@ -185,7 +185,7 @@ def _normalise_meeting(value: str | None) -> str | None:
     if not meeting.startswith("R") and meeting[0].isdigit():
         meeting = f"R{meeting}"
     return meeting
-    
+
 
 def _normalise_race(value: str | None) -> str | None:
     if value is None:
@@ -198,10 +198,10 @@ def _normalise_race(value: str | None) -> str | None:
     return race
 
 
-def _extract_leg_context(leg: Any) -> Dict[str, set[str]]:
+def _extract_leg_context(leg: Any) -> dict[str, set[str]]:
     """Return meeting/course identifiers advertised on ``leg``."""
 
-    context: Dict[str, set[str]] = {
+    context: dict[str, set[str]] = {
         "meeting": set(),
         "race": set(),
         "rc": set(),
@@ -294,15 +294,15 @@ def _identifier_priority(identifier: tuple[str, str]) -> int:
     return priority.get(identifier[0], 100)
 
 
-def _find_correlation_groups(legs: Sequence[Any]) -> List[Dict[str, Any]]:
+def _find_correlation_groups(legs: Sequence[Any]) -> list[dict[str, Any]]:
     """Return correlated leg groups detected in ``legs``."""
 
-    grouped: Dict[tuple[str, str], List[int]] = {}
+    grouped: dict[tuple[str, str], list[int]] = {}
     for idx, leg in enumerate(legs):
         for identifier in _leg_source_identifiers(leg):
             grouped.setdefault(identifier, []).append(idx)
 
-    consolidated: Dict[tuple[int, ...], tuple[str, str]] = {}
+    consolidated: dict[tuple[int, ...], tuple[str, str]] = {}
     for identifier, indexes in grouped.items():
         unique = tuple(sorted(set(indexes)))
         if len(unique) < 2:
@@ -313,7 +313,7 @@ def _find_correlation_groups(legs: Sequence[Any]) -> List[Dict[str, Any]]:
         ):
             consolidated[unique] = identifier
 
-    groups: List[Dict[str, Any]] = []
+    groups: list[dict[str, Any]] = []
     for indexes, identifier in consolidated.items():
         groups.append({"identifier": identifier, "indexes": list(indexes)})
     return groups
@@ -342,12 +342,12 @@ def _load_correlation_settings() -> None:
         data = yaml.safe_load(fh) or {}
 
     section = data.get("correlations") if isinstance(data, Mapping) else None
-    parsed: Dict[str, Dict[str, Any]] = {}
+    parsed: dict[str, dict[str, Any]] = {}
     if isinstance(section, Mapping):
         for name, payload in section.items():
             if not isinstance(payload, Mapping):
                 continue
-            entry: Dict[str, Any] = {}
+            entry: dict[str, Any] = {}
             penalty = payload.get("penalty")
             if penalty is not None:
                 try:
@@ -375,7 +375,7 @@ def _load_correlation_settings() -> None:
     _correlation_mtime = mtime
 
 
-def _resolve_correlation_settings(kind: str) -> Dict[str, Any]:
+def _resolve_correlation_settings(kind: str) -> dict[str, Any]:
     """Return correlation settings for the provided ``kind``."""
 
     _load_correlation_settings()
@@ -464,7 +464,7 @@ def _estimate_group_probability(
     return adjusted, method, float(penalty)
 
 
-def _extract_leg_probability(leg: Any) -> Tuple[float, str, str, Dict[str, Any]]:
+def _extract_leg_probability(leg: Any) -> tuple[float, str, str, dict[str, Any]]:
     """Return ``(probability, source, identifier, extras)`` for ``leg``."""
 
     identifier = _leg_identifier(leg)
@@ -477,7 +477,7 @@ def _extract_leg_probability(leg: Any) -> Tuple[float, str, str, Dict[str, Any]]
         prob = _coerce_probability(leg.get("p_true"))
         if prob is not None:
             return prob, "leg_p_true", identifier, {}
-            
+
     entry = _calibration_cache.get(identifier)
     if entry:
         prob = _coerce_probability(entry.get("p"))
@@ -541,7 +541,7 @@ def _load_calibration() -> None:
             _calibration_metadata.update(metadata)
         else:
             _calibration_metadata.clear()
-        parsed: OrderedDict[str, Dict[str, Any]] = OrderedDict()
+        parsed: OrderedDict[str, dict[str, Any]] = OrderedDict()
         for k, v in data.items():
             if k.startswith("__"):
                 continue
@@ -558,7 +558,7 @@ def _load_calibration() -> None:
             source = "calibration_combo" if "|" in key else "calibration_leg"
             weight = float(v.get("weight", alpha + beta))
             updated_at = v.get("updated_at")
-            details_entry: Dict[str, Any] = {"weight": weight}
+            details_entry: dict[str, Any] = {"weight": weight}
             if updated_at:
                 details_entry["updated_at"] = updated_at
             decay_val = _calibration_metadata.get("decay")
@@ -616,9 +616,9 @@ def simulate_wrapper(legs: Iterable[object]) -> float:
         return float(prob)
 
     prob = 1.0
-    sources: List[str] = []
-    details: Dict[str, Dict[str, Any]] = {}
-    leg_probabilities: List[float] = []
+    sources: list[str] = []
+    details: dict[str, dict[str, Any]] = {}
+    leg_probabilities: list[float] = []
     for leg in legs_list:
         leg_prob, source, identifier, extras = _extract_leg_probability(leg)
         leg_probabilities.append(leg_prob)
@@ -634,7 +634,7 @@ def simulate_wrapper(legs: Iterable[object]) -> float:
         details[identifier] = detail_entry
 
     groups = _find_correlation_groups(legs_list)
-    correlation_details: List[Dict[str, Any]] = []
+    correlation_details: list[dict[str, Any]] = []
     for group in groups:
         indexes = group["indexes"]
         base_group_prob = math.prod(leg_probabilities[i] for i in indexes)
@@ -704,12 +704,12 @@ def _combo_sources(legs: Iterable[Any]) -> set[str]:
 
 
 def evaluate_combo(
-    tickets: List[Dict[str, Any]],
+    tickets: list[dict[str, Any]],
     bankroll: float,
     *,
     calibration: str | os.PathLike[str] | None = None,
     allow_heuristic: bool = False,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Return EV ratio and expected payout for combined ``tickets``.
 
     Parameters
@@ -742,13 +742,13 @@ def evaluate_combo(
             "mandatory for combo evaluation."
         )
         allow_heuristic = False
-        
+
     if calibration is None:
         env_calib = os.getenv("CALIB_PATH")
         calib_path = Path(env_calib) if env_calib else PAYOUT_CALIBRATION_PATH
     else:
         calib_path = Path(calibration)
-    notes: List[str] = []
+    notes: list[str] = []
     requirements: _RequirementsList = _RequirementsList()
     try:
         calibration_used = calib_path.is_file()
@@ -781,7 +781,7 @@ def evaluate_combo(
         round_to=0.0,
     )
 
-    combo_notes: List[str] = []
+    combo_notes: list[str] = []
     for ticket in tickets:
         legs = ticket.get("legs")
         if not legs:

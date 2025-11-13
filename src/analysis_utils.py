@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from typing import Any, MutableMapping
-
+from collections.abc import MutableMapping
+from typing import Any
 
 _FLAT_HANDICAP_CAP = 1.25
 

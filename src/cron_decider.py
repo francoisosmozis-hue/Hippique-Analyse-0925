@@ -14,8 +14,9 @@ import json
 import os
 import subprocess
 import sys
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Dict, Iterable
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -34,7 +35,7 @@ WINDOWS = {
 }
 
 
-def _load_meetings(path: Path) -> Iterable[Dict[str, Any]]:
+def _load_meetings(path: Path) -> Iterable[dict[str, Any]]:
     """Load meetings data from ``path``.
 
     The function is tolerant to various JSON shapes and returns an iterable

@@ -1,5 +1,5 @@
-from runner_chain import should_cut_exotics
 from pipeline_run import _overround_from_odds_win
+from runner_chain import should_cut_exotics
 
 
 def test_overround_from_odds_win_simple():

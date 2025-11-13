@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-import sys, json, argparse, pathlib
+import argparse
+import json
+import pathlib
+import sys
+
 
 def main():
     ap = argparse.ArgumentParser()
@@ -18,7 +22,7 @@ def main():
     # Importe les helpers depuis src/
     sys.path.append("src")
     try:
-        from online_fetch_zeturf import _fetch_html_playwright, _extract_course_numbers_from_html
+        from online_fetch_zeturf import _extract_course_numbers_from_html, _fetch_html_playwright
     except Exception as e:
         print(f"[ERROR] Impossible d'importer les helpers Playwright depuis src/: {e}", file=sys.stderr)
         return 3

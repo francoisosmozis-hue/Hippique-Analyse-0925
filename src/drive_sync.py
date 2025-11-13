@@ -1,6 +1,6 @@
 import logging
-from typing import Optional, Dict, Any
 import os
+from typing import Any
 
 try:
     from pydantic import BaseModel
@@ -12,9 +12,9 @@ log = logging.getLogger(__name__)
 class _PostCoursePayload(BaseModel):  # local, évite import externe
     reunion: str
     course: str
-    notes: Optional[str] = None
+    notes: str | None = None
 
-def run_post_course_sync(reunion: str, course: str, drive_folder_id: Optional[str] = None) -> Dict[str, Any]:
+def run_post_course_sync(reunion: str, course: str, drive_folder_id: str | None = None) -> dict[str, Any]:
     """
     Chaîne post-course :
       1) lire le JSON d'arrivée attendu (si présent)

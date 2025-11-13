@@ -15,8 +15,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import runner_chain
 import p_finale_export
+import runner_chain
 
 
 def test_validate_exotics_missing_calibration_flags_insufficient_data(

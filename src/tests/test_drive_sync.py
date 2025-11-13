@@ -196,7 +196,7 @@ def test_main_skips_when_credentials_missing(monkeypatch, capsys, tmp_path):
             str(excel_path),
         ],
     )
-    
+
     result = drive_sync.main()
 
     captured = capsys.readouterr()
@@ -272,7 +272,7 @@ def test_main_local_only_runs_local_artifacts(tmp_path, monkeypatch, capsys):
     assert excel_path.exists()
     workbook = load_workbook(excel_path)
     assert "ROI Observé" in workbook.sheetnames
-    
+
 
 def test_build_service_env(monkeypatch):
     creds_data = {"type": "service_account"}

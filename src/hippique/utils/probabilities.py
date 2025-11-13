@@ -1,7 +1,7 @@
 """Probability utilities for ROI-first workflow."""
 from __future__ import annotations
 
-from typing import Iterable, List
+from collections.abc import Iterable
 
 
 def implied_prob_from_odds(odds: float) -> float:
@@ -11,7 +11,7 @@ def implied_prob_from_odds(odds: float) -> float:
     return 1.0 / odds
 
 
-def no_vig_probs(odds_list: Iterable[float]) -> List[float]:
+def no_vig_probs(odds_list: Iterable[float]) -> list[float]:
     """Convert decimal odds into fair probabilities (remove the bookmaker vig).
 
     The method is the industry standard: invert each odds to get the implied

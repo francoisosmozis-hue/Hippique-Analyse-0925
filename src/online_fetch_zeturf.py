@@ -1,5 +1,4 @@
 
-# -*- coding: utf-8 -*-
 """
 online_fetch_zeturf.py - Module de scraping fonctionnel pour Zeturf.
 
@@ -7,23 +6,22 @@ Ce module remplace la version bouchonnée de test pour fournir des données
 de course réelles scrapées depuis le site Zeturf.
 """
 
-import logging
 import json
+import logging
 import re
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
-from urllib.parse import urljoin
+from typing import Any
 
 import requests
-from bs4 import BeautifulSoup, Tag
+from bs4 import BeautifulSoup
 from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.common.by import By
 from selenium.common.exceptions import TimeoutException, WebDriverException
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.ui import WebDriverWait
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +39,7 @@ class ZeturfFetcher:
         if not race_url:
             raise ValueError("L'URL de la course ne peut pas être vide.")
         self.race_url = race_url
-        self.soup: Optional[BeautifulSoup] = None
+        self.soup: BeautifulSoup | None = None
 
     def _fetch_html(self) -> bool:
         """Télécharge le contenu HTML de la page de la course en utilisant Selenium pour gérer le JavaScript et les bannières de cookies."""
@@ -94,7 +92,7 @@ class ZeturfFetcher:
             if driver:
                 driver.quit()
 
-    def _parse_race_metadata(self) -> Dict[str, Any]:
+    def _parse_race_metadata(self) -> dict[str, Any]:
         """Analyse les métadonnées de la course (discipline, heure, etc.)."""
         if not self.soup:
             return {}
@@ -107,7 +105,7 @@ class ZeturfFetcher:
                 rc_match = re.search(r"(R\d+C\d+)", title_text)
                 if rc_match:
                     metadata["rc"] = rc_match.group(1)
-                
+
                 hippo_tag = header.select_one("span.hippodrome")
                 if hippo_tag:
                     metadata["hippodrome"] = hippo_tag.text.replace("-", "").strip()
@@ -126,7 +124,7 @@ class ZeturfFetcher:
 
         return metadata
 
-    def _parse_runners_and_odds(self) -> List[Dict[str, Any]]:
+    def _parse_runners_and_odds(self) -> list[dict[str, Any]]:
         """Analyse la table des partants et le JSON embarqué pour les cotes."""
         if not self.soup:
             return []
@@ -170,7 +168,7 @@ class ZeturfFetcher:
 
                 if not num or not nom:
                     continue
-                
+
                 runners.append({
                     "num": num,
                     "nom": nom,
@@ -179,10 +177,10 @@ class ZeturfFetcher:
             except Exception as e:
                 logger.warning(f"Impossible d'analyser une ligne de partant: {e}. Ligne ignorée.")
                 continue
-        
+
         return runners
 
-    def get_snapshot(self) -> Dict[str, Any]:
+    def get_snapshot(self) -> dict[str, Any]:
         """Orchestre le scraping et retourne un snapshot complet de la course."""
         if not self._fetch_html():
             return {"error": "Failed to fetch HTML"}
@@ -201,7 +199,7 @@ class ZeturfFetcher:
             "runners": runners,
         }
 
-def normalize_snapshot(payload: Dict[str, Any]) -> Dict[str, Any]:
+def normalize_snapshot(payload: dict[str, Any]) -> dict[str, Any]:
     """
     Normalise le snapshot brut scrapé en un format standardisé attendu
     par le reste de l'application.
@@ -210,7 +208,7 @@ def normalize_snapshot(payload: Dict[str, Any]) -> Dict[str, Any]:
         return {}
 
     runners = payload.get("runners", [])
-    
+
     # Création des mappings id -> nom et id -> cote
     id2name = {str(r["num"]): r["nom"] for r in runners if "num" in r and "nom" in r}
     odds = {str(r["num"]): r["cote"] for r in runners if "num" in r and "cote" in r and r["cote"] is not None}
@@ -231,7 +229,7 @@ def fetch_race_snapshot(reunion: str, course: str, phase: str, url: str | None =
     Prend une URL de course Zeturf et retourne un snapshot de données normalisé.
     """
     logger.info(f"Début du scraping Zeturf pour {reunion}{course} (Phase: {phase}) sur l'URL: {url}")
-    
+
     if not url:
         logger.error("Aucune URL fournie pour le scraping Zeturf.")
         # Retourne une structure vide pour ne pas faire planter la chaîne
@@ -240,7 +238,7 @@ def fetch_race_snapshot(reunion: str, course: str, phase: str, url: str | None =
     try:
         fetcher = ZeturfFetcher(race_url=url)
         raw_snapshot = fetcher.get_snapshot()
-        
+
         if "error" in raw_snapshot or not raw_snapshot.get("runners"):
             logger.error(f"Le scraping a échoué ou n'a retourné aucun partant pour {url}.")
             return normalize_snapshot({})
@@ -251,7 +249,7 @@ def fetch_race_snapshot(reunion: str, course: str, phase: str, url: str | None =
 
         normalized_data = normalize_snapshot(raw_snapshot)
         logger.info(f"Scraping réussi pour {reunion}{course}. {len(normalized_data.get('runners',[]))} partants trouvés.")
-        
+
         return normalized_data
 
     except (requests.ConnectionError, TimeoutException, WebDriverException) as e:
@@ -261,7 +259,7 @@ def fetch_race_snapshot(reunion: str, course: str, phase: str, url: str | None =
         logger.exception(f"Une erreur inattendue est survenue lors du scraping de {url}: {e}")
         return normalize_snapshot({})
 
- 
+
 # --- Fonctions utilitaires potentiellement importées ailleurs ---
 
 def write_snapshot_from_geny(course_id: str, phase: str, rc_dir: Path, *, course_url: str | None = None) -> None:
@@ -271,7 +269,7 @@ def write_snapshot_from_geny(course_id: str, phase: str, rc_dir: Path, *, course
     """
     rc_dir.mkdir(parents=True, exist_ok=True)
     rc_label = rc_dir.name
-    
+
     reunion, course = "R?", "C?"
     match = re.match(r"^(R\d+)(C\d+)$", rc_label)
     if match:
@@ -285,7 +283,7 @@ def write_snapshot_from_geny(course_id: str, phase: str, rc_dir: Path, *, course
         url = f"https://www.zeturf.fr/fr/course/{date_str}/{rc_label}"
 
     logger.info(f"Calling fetch_race_snapshot for {rc_label} (phase: {phase}) with URL: {url}")
-    
+
     try:
         snapshot = fetch_race_snapshot(
             reunion=reunion,

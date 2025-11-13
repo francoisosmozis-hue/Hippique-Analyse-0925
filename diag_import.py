@@ -7,15 +7,14 @@ print("--- Début du test d'importation ---")
 try:
     # Ajout des chemins nécessaires pour simuler l'environnement
     sys.path.insert(0, str(Path(__file__).parent))
-    
+
     print(f"PYTHONPATH (début): {sys.path[:3]}")
     print("Tentative d'importation de 'src.service'...")
-    
-    import src.service
-    
+
+
     print("--- Importation de 'src.service' réussie ! ---")
-    
-except Exception as e:
+
+except Exception:
     print("--- ERREUR D'IMPORTATION ---")
     traceback.print_exc()
     print("----------------------------")

@@ -8,13 +8,13 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 import unicodedata
 from datetime import datetime
-from typing import List, Dict, Any
-import subprocess
+from typing import Any
 
-import requests
 from bs4 import BeautifulSoup
+
 
 def _slugify(value: str) -> str:
     """Return a slug suitable for URLs from a human readable string."""
@@ -35,7 +35,7 @@ def main() -> None:
     """Fetch the Geny page and print meetings as JSON."""
     today = datetime.today().strftime("%d-%m-%Y")
     url = f"https://www.genybet.fr/reunions/{today}"
-    
+
     try:
         result = subprocess.run(['curl', '-s', url], capture_output=True, text=True, check=True)
         html_content = result.stdout
@@ -45,7 +45,7 @@ def main() -> None:
 
     soup = BeautifulSoup(html_content, "html.parser")
 
-    meetings: List[Dict[str, Any]] = []
+    meetings: list[dict[str, Any]] = []
     meeting_elements = soup.select("li.prog-meeting-name")
     race_elements = soup.select("div.timeline-container li.meeting")
 
@@ -53,7 +53,7 @@ def main() -> None:
         title_el = section.select_one("a.meeting-name-link")
         if not title_el:
             continue
-        
+
         if not _is_fr_meeting(section):
             continue
 
@@ -65,7 +65,7 @@ def main() -> None:
         hippo = section.select_one("span.nomReunion").get_text(strip=True)
         slug = _slugify(hippo)
 
-        courses: List[Dict[str, Any]] = []
+        courses: list[dict[str, Any]] = []
         if i < len(race_elements):
             for row in race_elements[i].select("li.race"):
                 course_cell = row.select_one("a")
@@ -73,15 +73,15 @@ def main() -> None:
                     continue
                 c = course_cell.get_text(strip=True)
 
-                course_obj: Dict[str, Any] = {"c": c}
+                course_obj: dict[str, Any] = {"c": c}
                 data_id = row.get("data-id")
                 if data_id:
                     course_obj["id_course"] = data_id
-                
-                href = course_cell.get("href", "")
-                id_match = re.search(r"(\d+)$", href)
-                if id_match:
-                    course_obj["id_course"] = id_match.group(1)
+                else:
+                    href = course_cell.get("href", "")
+                    id_match = re.search(r"(\d+)$", href)
+                    if id_match:
+                        course_obj["id_course"] = id_match.group(1)
 
                 courses.append(course_obj)
 

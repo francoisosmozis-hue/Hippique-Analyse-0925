@@ -1,12 +1,12 @@
-from pathlib import Path
-import sys
 import argparse
 import json
 import logging
 import os
 import subprocess
-from typing import Dict, Any
+import sys
 from datetime import datetime
+from pathlib import Path
+from typing import Any
 from zoneinfo import ZoneInfo
 
 # --- Project Root Setup ---
@@ -70,7 +70,7 @@ def run_subprocess(cmd: list[str], timeout: int = 60) -> subprocess.CompletedPro
     logger.info("Running: %s", " ".join(map(str, cmd)))
     return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, check=True)
 
-def run_chain(reunion: str, course: str, phase: str, budget: float, source: str = "zeturf") -> Dict[str, Any]:
+def run_chain(reunion: str, course: str, phase: str, budget: float, source: str = "zeturf") -> dict[str, Any]:
     """
     Orchestration principale pour une course donnée.
     Conçue pour être appelée par le service FastAPI.
@@ -82,7 +82,7 @@ def run_chain(reunion: str, course: str, phase: str, budget: float, source: str 
 
     tracking_path = race_dir / "tracking.csv"
 
-    output: Dict[str, Any] = {}
+    output: dict[str, Any] = {}
 
     if phase == "H30":
         logger.info("Phase H30: Fetch snapshot for %s%s from source %s", reunion, course, source)

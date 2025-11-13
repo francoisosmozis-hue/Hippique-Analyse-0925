@@ -43,7 +43,7 @@ def test_post_course_flow(tmp_path: Path):
         "--outdir",
         str(tmp_path),
     ]
-    res = subprocess.run(cmd, capture_output=True, text=True)
+    res = subprocess.run(cmd, check=False, capture_output=True, text=True)
     assert res.returncode == 0, res.stderr
 
     data = json.loads(tickets_path.read_text(encoding="utf-8"))
@@ -82,7 +82,7 @@ def test_post_course_flow(tmp_path: Path):
     assert float(row_cols[idx_roi_ticket]) == pytest.approx(1.5)
     assert float(row_cols[idx_brier_total]) == pytest.approx(0.53)
     assert float(row_cols[idx_brier_moyen]) == pytest.approx(0.265)
-    
+
     cmd_txt = (tmp_path / "cmd_update_excel.txt").read_text(encoding="utf-8")
     assert "update_excel_with_results.py" in cmd_txt
 
@@ -105,7 +105,7 @@ def test_post_course_flow_multi_places(tmp_path: Path):
         "--places",
         "3",
     ]
-    res = subprocess.run(cmd, capture_output=True, text=True)
+    res = subprocess.run(cmd, check=False, capture_output=True, text=True)
     assert res.returncode == 0, res.stderr
 
     data = json.loads(tickets_path.read_text(encoding="utf-8"))
@@ -138,7 +138,7 @@ def test_post_course_missing_arrivee(tmp_path: Path):
         "--outdir",
         str(tmp_path),
     ]
-    res = subprocess.run(cmd, capture_output=True, text=True)
+    res = subprocess.run(cmd, check=False, capture_output=True, text=True)
     assert res.returncode == 0, res.stderr
     assert "Arrivee file not found" in res.stdout
 

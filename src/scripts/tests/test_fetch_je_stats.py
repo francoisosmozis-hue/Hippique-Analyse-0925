@@ -1,6 +1,5 @@
 import pytest
 from bs4 import BeautifulSoup
-
 from scripts.fetch_je_stats import (
     RunnerIndex,
     RunnerStat,

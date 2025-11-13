@@ -1,5 +1,9 @@
 from __future__ import annotations
-import os, json, shutil
+
+import json
+import os
+import shutil
+
 
 def enrich_from_snapshot(snapshot_json: str, out_dir: str, phase: str = "H5", **kwargs):
     """

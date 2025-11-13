@@ -94,7 +94,7 @@ def test_compute_overround_cap_context_reports_reason() -> None:
 def test_compute_overround_cap_other_disciplines() -> None:
     cap = runner_chain.compute_overround_cap("Trot Attelé", 12)
     assert cap == pytest.approx(1.30)
-    
+
 
 def test_compute_overround_cap_detects_handicap_from_course_label() -> None:
     cap = runner_chain.compute_overround_cap(
@@ -123,7 +123,7 @@ def test_filter_exotics_by_overround_applies_flat_cap() -> None:
 
 def test_compute_overround_cap_handles_accents() -> None:
     cap = runner_chain.compute_overround_cap("Handicap de Plât", "14 partants")
-    assert cap == pytest.approx(1.25) 
+    assert cap == pytest.approx(1.25)
 
 
 def test_validate_exotics_with_simwrapper_filters_and_alert(monkeypatch):
@@ -364,7 +364,7 @@ def test_export_tracking_csv_line(tmp_path):
     assert header[-1] == 'ALERTE_VALUE'
     assert {'prob_implicite_panier', 'ev_simulee_post_arrondi', 'roi_simule', 'roi_reel', 'sharpe', 'drift_sign'} <= set(header)
     assert {'nb_tickets', 'expected_gross_return_eur'} <= set(header)
-    values = dict(zip(header, lines[1].split(';')))
+    values = dict(zip(header, lines[1].split(';'), strict=False))
     assert values['ALERTE_VALUE'] == 'ALERTE_VALUE'
     assert values['nb_tickets'] == '2'
     assert float(values['expected_gross_return_eur']) == pytest.approx(3.6)

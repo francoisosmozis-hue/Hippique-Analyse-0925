@@ -1,13 +1,13 @@
 import os
+
 from fastapi.testclient import TestClient
 
 # TZ cohérent
 os.environ["TZ"] = "Europe/Paris"
 
 # Imports app & modules (le sys.path vers src est géré par tests/conftest.py)
+from src import plan
 from src.service import app
-import src.plan as plan
-import src.pipeline_run as pipeline_run
 
 client = TestClient(app)
 

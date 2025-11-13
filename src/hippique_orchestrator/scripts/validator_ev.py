@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 
 from __future__ import annotations
 
@@ -12,7 +11,6 @@ import sys
 from collections.abc import Callable
 from functools import partial
 from pathlib import Path
-from typing import Dict
 
 try:  # pragma: no cover - optional dependency
     import yaml
@@ -77,7 +75,7 @@ def _log_ev_metrics(
         "stake": stake,
         "EV_ratio": ev_ratio,
     }
-    _LOG.info("[validate_ev] context %s", payload)    
+    _LOG.info("[validate_ev] context %s", payload)
 
 
 def summarise_validation(*validators: Callable[[], object]) -> dict[str, bool | str]:
@@ -142,8 +140,8 @@ def validate_inputs(cfg, partants, odds, stats_je):
     if not allow_je_na:
         coverage = stats_je.get("coverage") if stats_je else None
         if coverage is None or float(coverage) < 80:
-            raise ValidationError("Couverture J/E insuffisante (<80%)") 
-    
+            raise ValidationError("Couverture J/E insuffisante (<80%)")
+
     return True
 
 
@@ -191,7 +189,7 @@ def validate_ev(
     ev_ratio: float | None = _MISSING,
 ) -> bool | dict[str, str]:
     """Validate SP and combined EVs against environment thresholds.
-    
+
     Parameters
     ----------
     ev_sp:
@@ -208,7 +206,7 @@ def validate_ev(
     p_success, payout_expected, stake, ev_ratio:
         Optional contextual metrics associated with the EV computation. When
         provided they are logged and validated for completeness.
-        
+
     Returns
     -------
     bool or dict
@@ -243,7 +241,7 @@ def validate_ev(
                 "status": "invalid_input",
                 "reason": "missing payout_expected",
             }
-            
+
     min_sp = float(os.getenv("EV_MIN_SP", 0.15))
     min_global = float(os.getenv("EV_MIN_GLOBAL", 0.35))
 
@@ -253,7 +251,7 @@ def validate_ev(
     if need_combo:
         if ev_global is None or ev_global < min_global:
             raise ValidationError("EV global below threshold")
-            
+
     return True
 
 
@@ -266,7 +264,7 @@ def validate_policy(ev_global: float, roi_global: float, min_ev: float, min_roi:
     return True
 
 
-def validate_budget(stakes: Dict[str, float], budget_cap: float, max_vol_per_horse: float) -> bool:
+def validate_budget(stakes: dict[str, float], budget_cap: float, max_vol_per_horse: float) -> bool:
     """Ensure total stake and per-horse stakes respect budget constraints."""
     total = sum(stakes.values())
     if total > budget_cap:
@@ -548,7 +546,7 @@ def _cli(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 2
-        
+
     try:
         cfg, partants, odds, stats = _prepare_validation_inputs(args)
     except FileNotFoundError as exc:

@@ -1,11 +1,11 @@
+import datetime as dt
 import json
 from pathlib import Path
-import datetime as dt
 
 import pytest
 import yaml
 
-from runner_chain import _write_analysis, RunnerPayload
+from runner_chain import RunnerPayload, _write_analysis
 
 
 @pytest.fixture
@@ -17,7 +17,7 @@ def course_setup_single_candidate(tmp_path: Path) -> tuple[Path, Path]:
     snap_dir = tmp_path / "snapshots"
     analysis_dir = tmp_path / "analyses"
     race_id = "R1C3"
-    
+
     race_snap_dir = snap_dir / race_id
     race_analysis_dir = analysis_dir / race_id
     race_snap_dir.mkdir(parents=True, exist_ok=True)
@@ -33,7 +33,7 @@ def course_setup_single_candidate(tmp_path: Path) -> tuple[Path, Path]:
     }
     h30_snapshot = {"payload": {"runners": partants_data["runners"]}}
     h5_snapshot = {"payload": {"runners": partants_data["runners"]}}
-    
+
     (race_snap_dir / "h30.json").write_text(json.dumps(h30_snapshot))
     (race_snap_dir / "h5.json").write_text(json.dumps(h5_snapshot))
     (race_snap_dir / "partants.json").write_text(json.dumps(partants_data))
@@ -88,14 +88,14 @@ def test_analysis_produces_no_tickets_with_single_sp_candidate(course_setup_sing
     p_finale_path = race_dir / "out" / "p_finale.json"
     assert p_finale_path.exists()
     p_finale_data = json.loads(p_finale_path.read_text())
-    
+
     assert p_finale_data.get("tickets") == []
 
     # Le rapport d'analyse doit également refléter l'absence de tickets
     analysis_path = race_dir / "analysis.json"
     assert analysis_path.exists()
     analysis_data = json.loads(analysis_path.read_text())
-    
+
     metrics = analysis_data.get("metrics", {})
     assert metrics.get("tickets", {}).get("total") == 0
     assert metrics.get("tickets", {}).get("sp") == 0

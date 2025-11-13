@@ -1,11 +1,11 @@
-# -*- coding: utf-8 -*-
 """Module pour les règles métier et les filtres.
 
 Contient les règles de validation spécifiques au projet, comme le filtrage
 des tickets basé sur les cotes.
 """
 
-from typing import Any, Iterable
+from collections.abc import Iterable
+from typing import Any
 
 # --- RÈGLES ANTI-COTES FAIBLES (SP min 4/1 ; CP somme > 6.0 déc) ---------------
 MIN_SP_DEC_ODDS = 5.0  # 4/1 = 5.0

@@ -10,10 +10,10 @@ import logging
 import re
 import time
 import unicodedata
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Callable, Iterable, Mapping, Optional, TypeAlias
 from urllib.parse import quote_plus, urljoin
 
 import requests
@@ -84,7 +84,7 @@ def discover_horse_url_by_name(
     fetch = get or http_get
     query = quote_plus(name.strip())
     search_url = f"{GENY_BASE_URL}/recherche?query={query}"
-    
+
     # END DEBUGGING CODE
 
     try:
@@ -201,22 +201,22 @@ def parse_horse_percentages(horse_name: str, *, get: Callable[[str], str] | None
 
 def collect_stats(
     h5: str,
-    out: Optional[str] = None,
+    out: str | None = None,
     *,
     timeout: float = TIMEOUT,
     delay: float = DELAY,
     retries: int = RETRIES,
     cache: bool = False,
-    cache_dir: Optional[str] = None,
+    cache_dir: str | None = None,
     ttl_seconds: int = TTL_DEFAULT,
     neutral_on_fail: bool = False
 ) -> str:
     # This function has been modified to return a path to a JSON file with
     # coverage and rows, as expected by analyse_courses_du_jour_enrichie.py.
     # It also fixes internal calls to scraping functions.
-    
+
     conf = FetchConf(timeout=timeout, delay_between_requests=delay, user_agent=UA, use_cache=bool(cache), cache_dir=(Path(cache_dir) if cache_dir else Path.home()/'.cache'/'hippiques'/'geny'), ttl_seconds=int(ttl_seconds), retries=int(retries))
-    
+
     # Define a local fetcher to pass to helpers
     def fetcher(url):
         return http_get(url, timeout=conf.timeout)
@@ -224,7 +224,7 @@ def collect_stats(
     data = load_json(h5)
     runners = data.get("runners", [])
     h5p = Path(h5)
-    
+
     # The primary output is now a JSON file, as expected by the caller.
     json_out_path = h5p.parent / "stats_je.json"
     ensure_parent(json_out_path)
@@ -248,18 +248,18 @@ def collect_stats(
                     links = extract_links_from_horse_page(h_html or "")
                     j_url = links.get("jockey")
                     e_url = links.get("trainer")
-                    
+
                     if j_url:
                         j_rate = extract_rate_from_profile(fetcher(j_url))
                         time.sleep(conf.delay_between_requests)
-                    
+
                     if e_url:
                         e_rate = extract_rate_from_profile(fetcher(e_url))
                         time.sleep(conf.delay_between_requests)
 
                     if j_rate is not None or e_rate is not None:
                         successful_fetches += 1
-                    
+
                     # The original implementation of parse_horse_percentages is missing
                     # hs = parse_horse_percentages(h_html or "")
                     # h_win5, h_place5 = hs.get("h_win5"), hs.get("h_place5")
@@ -270,24 +270,24 @@ def collect_stats(
 
         def _fmt(x):
             return f"{float(x):.2f}" if isinstance(x, (int, float)) else ""
-        
+
         rows.append({
-            "num": num, 
-            "j_rate": _fmt(j_rate), 
+            "num": num,
+            "j_rate": _fmt(j_rate),
             "e_rate": _fmt(e_rate),
-            "h_win5": _fmt(h_win5), 
-            "h_place5": _fmt(h_place5), 
-            "h_win_career": _fmt(h_win_career), 
+            "h_win5": _fmt(h_win5),
+            "h_place5": _fmt(h_place5),
+            "h_win_career": _fmt(h_win_career),
             "h_place_career": _fmt(h_place_career)
         })
 
     coverage = (successful_fetches / len(runners) * 100) if runners else 0
-    
+
     output_payload = {
         "coverage": coverage,
         "rows": rows
     }
-    
+
     json_out_path.write_text(json.dumps(output_payload, indent=2, ensure_ascii=False), encoding="utf-8")
 
     # For backward compatibility, also write the CSV.
@@ -324,7 +324,8 @@ def enrich_from_snapshot(snapshot_path: str, reunion: str = "", course: str = ""
     from pathlib import Path
     h5 = Path(snapshot_path)
     out = h5.parent / f"{h5.stem}_je.csv"
-    import subprocess, shlex
+    import shlex
+    import subprocess
     cmd = f'python fetch_je_stats.py --h5 "{h5}" --out "{out}" --cache --ttl-seconds 86400'
     subprocess.run(shlex.split(cmd), check=True)
     return str(out)

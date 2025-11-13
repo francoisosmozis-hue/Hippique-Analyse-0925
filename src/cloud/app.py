@@ -18,8 +18,9 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 """Project root used as the working directory for subprocess calls."""
@@ -47,7 +48,7 @@ def _coerce_payload(obj: Any) -> Mapping[str, Any]:
     providing a ``get_json`` method.  Any unexpected type triggers ``TypeError``
     which is handled by :func:`run_hminus`.
     """
-    
+
     if isinstance(obj, Mapping):
         return obj
     if hasattr(obj, "get_json"):
@@ -88,7 +89,7 @@ def run_hminus(request: Any) -> tuple[str, int, dict[str, str]]:
     are reported as JSON responses consistent with the original Flask
     implementation.
     """
-    
+
     try:
         payload = _coerce_payload(request)
     except TypeError:

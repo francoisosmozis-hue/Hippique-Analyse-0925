@@ -176,6 +176,6 @@ def test_mark_course_unplayable_writes_marker(
     assert info["marker_path"].endswith("UNPLAYABLE.txt")
     assert info["marker_written"] is True
     assert "chronos.csv" in info["marker_message"]
-    
+
     captured = capsys.readouterr()
     assert "Course non jouable" in captured.err

@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 from collections.abc import Sequence
 from typing import Any
+
 from ev_calculator import compute_ev_roi
 from kelly import kelly_fraction
 from simulate_wrapper import simulate_wrapper
@@ -286,9 +287,8 @@ def simulate_ev_batch(
 # === COMPATIBILITÉ LEGACY (aliases & helpers attendus par d'anciens scripts) ===
 # À coller tout en bas de simulate_ev.py, après simulate_ev_batch(...)
 
-from typing import Any, Dict, List
 
-def implied_probs_place_from_odds(runners: List[Dict[str, Any]]) -> Dict[str, float]:
+def implied_probs_place_from_odds(runners: list[dict[str, Any]]) -> dict[str, float]:
     """
     Construit des probabilités 'place' implicites à partir des cotes.
     Cherche dans l'ordre: odds_place, cote_place, odds, cote.
@@ -323,7 +323,7 @@ def implied_probs_place_from_odds(runners: List[Dict[str, Any]]) -> Dict[str, fl
     places = 3 if n >= 8 else (2 if n >= 4 else 1)
     s = sum(px)
     scale = float(places) / s if s > 0 else 1.0
-    return {i: max(0.005, min(0.90, p * scale)) for i, p in zip(ids, px)}
+    return {i: max(0.005, min(0.90, p * scale)) for i, p in zip(ids, px, strict=False)}
 
 
 # -- Aliases historiques pour éviter les ImportError sur vieux scripts ---------
@@ -340,7 +340,7 @@ except NameError:
 try:
     ev_sp  # type: ignore[name-defined]
 except NameError:
-    def ev_sp(cfg: Dict[str, float], runners: List[Dict[str, Any]]):
+    def ev_sp(cfg: dict[str, float], runners: list[dict[str, Any]]):
         """
         Interface de compat:
         - input: cfg (budget/ratios) + runners

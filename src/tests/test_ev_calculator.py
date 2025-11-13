@@ -3,11 +3,13 @@
 import math
 import os
 import sys
-from typing import Any, List
+from typing import Any
 
 import pytest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+import inspect
 
 from ev_calculator import (
     _apply_dutching,
@@ -17,7 +19,6 @@ from ev_calculator import (
 )
 from pipeline_run import enforce_ror_threshold
 from simulate_ev import allocate_dutching_sp, simulate_ev_batch
-import inspect
 
 SIG = inspect.signature(compute_ev_roi)
 EV_THRESHOLD = SIG.parameters["ev_threshold"].default
@@ -39,13 +40,13 @@ def test_single_bet_ev_positive_and_negative() -> None:
 
 def test_dutching_group_equal_profit() -> None:
     """Dutching groups should normalise stakes for identical profit."""
-    tickets: List[dict[str, Any]] = [
+    tickets: list[dict[str, Any]] = [
         {"p": 0.55, "odds": 2.0, "stake": 100, "dutching": "A"},
         {"p": 0.55, "odds": 4.0, "stake": 50, "dutching": "A"},
     ]
     # Large budget so that Kelly capping does not interfere
     compute_ev_roi(tickets, budget=10_000, round_to=0)
-    
+
     total_stake = sum(t["stake"] for t in tickets)
     profit1 = tickets[0]["stake"] * (tickets[0]["odds"] - 1)
     profit2 = tickets[1]["stake"] * (tickets[1]["odds"] - 1)
@@ -56,9 +57,9 @@ def test_dutching_group_equal_profit() -> None:
 
 def test_combined_bet_with_simulator() -> None:
     """Combined bets rely on the provided simulation function for probability."""
-    called: List[List[Any]] = []
+    called: list[list[Any]] = []
 
-    def fake_simulator(legs: List[Any]) -> float:  # pragma: no cover - simple stub
+    def fake_simulator(legs: list[Any]) -> float:  # pragma: no cover - simple stub
         called.append(legs)
         assert legs == ["leg1", "leg2"]
         return 0.25
@@ -75,7 +76,7 @@ def test_simulate_fn_called_once_for_identical_legs() -> None:
     """Repeated combined bets with same legs should reuse cached probability."""
     call_count = 0
 
-    def fake_simulator(legs: List[Any]) -> float:  # pragma: no cover - simple stub
+    def fake_simulator(legs: list[Any]) -> float:  # pragma: no cover - simple stub
         nonlocal call_count
         call_count += 1
         return 0.3
@@ -334,7 +335,7 @@ def test_enforce_ror_threshold_preserves_safe_pack() -> None:
     expected = sorted((t["id"], t.get("stake", 0.0)) for t in baseline_sim)
     result = sorted((t["id"], t["stake"]) for t in sp_tickets)
     assert [rid for rid, _ in result] == [rid for rid, _ in expected]
-    for (_, stake_expected), (_, stake_actual) in zip(expected, result):
+    for (_, stake_expected), (_, stake_actual) in zip(expected, result, strict=False):
         assert stake_actual == pytest.approx(stake_expected)
 
 
@@ -558,7 +559,7 @@ def test_green_flag_true_when_thresholds_met() -> None:
     ],
 )
 def test_green_flag_failure_reasons(
-    tickets: List[dict[str, Any]], budget: float, expected_reasons: List[str]
+    tickets: list[dict[str, Any]], budget: float, expected_reasons: list[str]
 ) -> None:
     """Check that failing criteria produce the appropriate reasons."""
     res = compute_ev_roi(

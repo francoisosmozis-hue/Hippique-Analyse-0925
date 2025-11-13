@@ -1,10 +1,10 @@
 import datetime as dt
 import json
 import sys
-import yaml
 
 import pytest
 import requests
+import yaml
 
 import runner_chain as rc
 from src import online_fetch_zeturf as ofz

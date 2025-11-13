@@ -1,5 +1,4 @@
 import json
-from pathlib import Path
 
 import pytest
 
@@ -44,10 +43,10 @@ def test_pipeline_rejects_on_high_overround(course_with_high_overround):
 
     # Vérifier les métriques de sortie
     metrics = result.get("metrics", {})
-    
+
     # La raison de l'abstention doit être l'overround élevé
     assert "overround_above_threshold" in metrics.get("abstention_reasons", [])
-    
+
     # Le statut global doit être "abstain"
     assert metrics.get("status") == "abstain"
 

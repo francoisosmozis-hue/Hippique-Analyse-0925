@@ -1,7 +1,10 @@
+import datetime as dt
 import json
 import os
+import subprocess
 import sys
-import datetime as dt
+import types
+
 import pytest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -9,32 +12,35 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 import discover_geny_today as dgt
 
 
-class DummyResp:
-    def __init__(self, text: str, status_code: int = 200):
-        self.text = text
-        self.status_code = status_code
-
-    def raise_for_status(self) -> None:
-        if self.status_code >= 400:
-            err = dgt.requests.HTTPError(f"{self.status_code} error")
-            err.response = self
-            raise err
-
-
 def test_main_parses_geny_page(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
     html = """
-    <section class='reunion'>
-        <h2>R1 Paris-Vincennes (FR)</h2>
-        <a href='/course/123.html'>C1</a>
-        <a href='/course/456.html'>C2</a>
-    </section>
+    <ul>
+        <li class="prog-meeting-name">
+            <a class="meeting-name-link">R1 - Paris-Vincennes</a>
+            <span class="nomReunion">Paris-Vincennes</span>
+            <span class="flag flag-fr"></span>
+        </li>
+    </ul>
+    <div class="timeline-container">
+        <ul>
+            <li class="meeting">
+                <ul>
+                    <li class="race" data-id="123">
+                        <a href="/fr/programme-courses/R1/C1">C1</a>
+                    </li>
+                    <li class="race" data-id="456">
+                        <a href="/fr/programme-courses/R1/C2">C2</a>
+                    </li>
+                </ul>
+            </li>
+        </ul>
+    </div>
     """
 
-    def fake_get(url: str, headers: dict[str, str], **kwargs) -> DummyResp:
-        assert url == dgt.URL
-        return DummyResp(html)
+    def fake_run(*args, **kwargs):
+        return types.SimpleNamespace(stdout=html, stderr="", returncode=0)
 
-    monkeypatch.setattr(dgt.requests, "get", fake_get)
+    monkeypatch.setattr(subprocess, "run", fake_run)
 
     dgt.main()
     out = capsys.readouterr().out

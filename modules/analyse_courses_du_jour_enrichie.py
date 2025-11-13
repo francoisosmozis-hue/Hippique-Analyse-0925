@@ -18,20 +18,21 @@ import re
 import subprocess
 import sys
 import time
+from collections.abc import Callable, Iterable, Mapping
 from datetime import datetime, timezone
 from pathlib import Path
-from collections.abc import Mapping
-from typing import Any, Callable, Iterable
+from typing import Any
 from urllib.parse import urljoin
 
 import requests
 from bs4 import BeautifulSoup
 
 try:
-    from logging_io import append_csv_line, CSV_HEADER
+    from logging_io import CSV_HEADER, append_csv_line
 except ImportError:
-    from .logging_io import append_csv_line, CSV_HEADER
+    from .logging_io import CSV_HEADER, append_csv_line
 from scripts.gcs_utils import disabled_reason, is_gcs_enabled
+
 try:
     from scripts.online_fetch_zeturf import normalize_snapshot
 except (ImportError, SyntaxError) as _normalize_import_error:  # pragma: no cover - fallback
@@ -43,11 +44,11 @@ except (ImportError, SyntaxError) as _normalize_import_error:  # pragma: no cove
         ) from _normalize_import_error
 
     normalize_snapshot = _raise_normalize_snapshot
+from scripts.analysis_utils import compute_overround_cap
 from scripts.fetch_je_stats import collect_stats
 from scripts.online_fetch_zeturf import ZeturfFetcher
 
 import pipeline_run
-from scripts.analysis_utils import compute_overround_cap
 from simulate_wrapper import PAYOUT_CALIBRATION_PATH, evaluate_combo
 
 logger = logging.getLogger(__name__)
@@ -92,7 +93,7 @@ TRACKING_HEADER = CSV_HEADER + ["phase", "status", "reason"]
 try:  # pragma: no cover - optional dependency in tests
     from scripts.online_fetch_zeturf import write_snapshot_from_geny
 except Exception:  # pragma: no cover - used when optional deps are missing
-    
+
     def write_snapshot_from_geny(*args: Any, **kwargs: Any) -> None:
         raise RuntimeError("write_snapshot_from_geny is unavailable")
 
@@ -101,6 +102,8 @@ if USE_GCS:
     try:  # pragma: no cover - optional dependency in tests
         from scripts.drive_sync import (
             build_remote_path as gcs_build_remote_path,
+        )
+        from scripts.drive_sync import (
             push_tree,
         )
     except Exception as exc:  # pragma: no cover - used when optional deps are missing
@@ -651,7 +654,7 @@ def run_pipeline(
     overround_threshold = (
         OVERROUND_MAX_THRESHOLD if overround_max is None else float(overround_max)
     )
-    
+
     # If ``rc_dir`` already holds a freshly generated ``p_finale.json`` we do
     # not run the pipeline again – this is the case when ``build_p_finale`` was
     # just invoked on the directory.
@@ -865,7 +868,7 @@ def _run_single_pipeline(
             os.environ.pop("MAX_COMBO_OVERROUND", None)
         else:
             os.environ["MAX_COMBO_OVERROUND"] = previous_overround
-            
+
     p_finale_path = rc_dir / "p_finale.json"
     try:
         payload = json.loads(p_finale_path.read_text(encoding="utf-8"))
@@ -1462,7 +1465,7 @@ def _recover_je_csv_from_stats(
 
     if _rebuild_je_csv_from_stats(rc_dir):
         return True, True, True
-        
+
     return True, False, True
 
 
@@ -1682,7 +1685,7 @@ def _ensure_h5_artifacts(
 
     def _attempt_stats_rebuild(*, allow_without_fetch: bool = False) -> bool:
         """Try rebuilding the JE CSV when stats data appears to be available."""
-        
+
         nonlocal stats_recovered
         if not missing or not _missing_requires_stats(missing):
             return False
@@ -1711,7 +1714,7 @@ def _ensure_h5_artifacts(
             if _refresh_missing_state():
                 return True
         return False
-        
+
     if _missing_requires_stats(missing):
         (
             stats_fetch_success,
@@ -1733,13 +1736,13 @@ def _ensure_h5_artifacts(
         chronos_path = rc_dir / "chronos.csv"
         if not success or not chronos_path.exists():
             _regenerate_chronos_csv(rc_dir)
-            
+
     if retried:
         if _refresh_missing_state():
             return None
         if _attempt_stats_rebuild():
             return None
-            
+
     if missing and retry_cb is not None and not retry_invoked:
         try:
             retry_cb()
@@ -1831,7 +1834,7 @@ def safe_enrich_h5(
             "reason": "unplayable-marker",
             "details": details,
         }
-        
+
     try:
         enrich_h5(rc_dir, budget=budget, kelly=kelly)
     except MissingH30SnapshotError as exc:
@@ -1928,7 +1931,7 @@ def _load_geny_today_payload() -> dict[str, Any]:
                     }
                 ],
             }
-        ],  
+        ],
     }
 
 
@@ -1976,7 +1979,7 @@ def _normalise_phase(value: str) -> str:
 
 def _phase_argument(value: str) -> str:
     """Argument parser wrapper that normalises ``value`` to ``H30``/``H5``."""
-    
+
     try:
         return _normalise_phase(value)
     except ValueError as exc:  # pragma: no cover - handled by argparse
@@ -1985,7 +1988,7 @@ def _phase_argument(value: str) -> str:
 
 def _resolve_course_id(reunion: str, course: str) -> str:
     """Return the Geny course identifier matching ``reunion``/``course``."""
-    
+
     payload = _load_geny_today_payload()
     reunion = reunion.upper()
     course = course.upper()
@@ -2005,8 +2008,8 @@ def _resolve_course_id(reunion: str, course: str) -> str:
                 break
             return str(course_id)
     raise ValueError(f"Course {reunion}{course} introuvable via discover_geny_today")
-   
-   
+
+
 def _process_single_course(
     reunion: str,
     course: str,
@@ -2371,9 +2374,8 @@ def main() -> None:
                     build_prompt_from_meta(rc_dir, budget=args.budget, kelly=args.kelly)
                     csv_path = export_per_horse_csv(rc_dir)
                     print(f"[INFO] per-horse report écrit: {csv_path}")
-                else:
-                    if decision is not None:
-                        _write_json_file(rc_dir / "decision.json", decision)
+                elif decision is not None:
+                    _write_json_file(rc_dir / "decision.json", decision)
                 if gcs_prefix is not None:
                     _upload_artifacts(rc_dir, gcs_prefix=gcs_prefix)
         print("[DONE] from-geny-today pipeline terminé.")

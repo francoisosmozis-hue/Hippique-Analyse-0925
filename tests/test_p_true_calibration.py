@@ -1,17 +1,17 @@
+import logging
+import math
+
+import pandas as pd
+import pytest
+
+import pipeline_run
 from src.calibration import p_true_model
 from src.calibration.p_true_training import (
     assemble_dataset_from_csv,
     serialize_model,
     train_and_evaluate_model,
 )
-import pipeline_run
 
-import json
-import logging
-import math
-
-import pandas as pd
-import pytest
 
 def _compute_runner_features(odds_h5: float, odds_h30: float, stats: dict, n_runners: int) -> dict:
     """Compute features for a single runner."""
@@ -105,7 +105,7 @@ def test_get_model_metadata_returns_copy() -> None:
         metadata={"n_samples": 12, "n_races": 3, "notes": {"foo": "bar"}},
     )
 
-    metadata = p_true_model.get_model_metadata(model)
+    p_true_model.get_model_metadata(model)
 
 
 def _test_build_p_true_downgrades_to_heuristic_when_history_short(
@@ -137,4 +137,4 @@ def _test_build_p_true_downgrades_to_heuristic_when_history_short(
     assert result == heur_expected
     assert "Calibration p_true ignorée" in caplog.text
 
-    
+

@@ -12,10 +12,11 @@ sys.path.insert(0, '/app')
 print(f"[STARTUP] PYTHONPATH: {sys.path[:3]}", flush=True)
 print(f"[STARTUP] CWD: {os.getcwd()}", flush=True)
 
+import uuid
+from typing import Literal
+
 from fastapi import FastAPI
 from pydantic import BaseModel
-from typing import Literal
-import uuid
 
 # Config
 try:
@@ -40,7 +41,7 @@ app = FastAPI(
     description="Service d'orchestration hippique"
 )
 
-print(f"[STARTUP] FastAPI app created", flush=True)
+print("[STARTUP] FastAPI app created", flush=True)
 
 
 # Models
@@ -91,11 +92,11 @@ def debug_info():
 async def debug_parse(date: str = "2025-10-17"):
     """Parse ZEturf."""
     correlation_id = str(uuid.uuid4())
-    
+
     try:
-        from src.plan import build_plan_async, ADVANCED_EXTRACTION
+        from src.plan import ADVANCED_EXTRACTION, build_plan_async
         result = await build_plan_async(date)
-        
+
         return {
             "ok": True,
             "date": date,
@@ -118,30 +119,31 @@ async def debug_parse(date: str = "2025-10-17"):
 async def schedule(request: ScheduleRequest):
     """Schedule races."""
     correlation_id = str(uuid.uuid4())
-    
+
     try:
-        from src.plan import build_plan_async
         from datetime import datetime
-        
+
+        from src.plan import build_plan_async
+
         date_str = request.date if request.date != "today" else datetime.now().strftime("%Y-%m-%d")
         plan = await build_plan_async(date_str)
-        
+
         if not plan:
             return {"ok": False, "error": "No races found", "correlation_id": correlation_id}
-        
+
         # Programmer les tâches Cloud Tasks
         try:
             from src.scheduler import schedule_all_races
-            
+
             # URL du service pour les callbacks
             service_url = "https://hippique-orchestrator-h3tdqmb7jq-ew.a.run.app"
-            
+
             scheduled = schedule_all_races(
                 plan=plan,
                 mode=request.mode,
                 run_url=f"{service_url}/run"
             )
-            
+
             return {
                 "ok": True,
                 "date": date_str,
@@ -161,7 +163,7 @@ async def schedule(request: ScheduleRequest):
                 "plan": plan[:5],
                 "correlation_id": correlation_id
             }
-        
+
     except Exception as e:
         import traceback
         return {

@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+
 from src.hippique_orchestrator.scripts.p_finale_export import export
 
 
@@ -8,7 +9,7 @@ def test_export_creates_csv_and_excel(tmp_path: Path):
     output_dir = tmp_path / "race_outputs"
     output_dir.mkdir()
     p_finale_path = output_dir / "p_finale.json"
-    
+
     p_finale_data = {
         "runners": [
             {"num": "1", "name": "Horse A", "p_finale": 0.5, "odds": 2.0, "j_rate": 0.1, "e_rate": 0.15},

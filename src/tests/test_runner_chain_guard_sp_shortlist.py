@@ -3,7 +3,6 @@ from pathlib import Path
 
 import runner_chain
 
-
 _DEF_PARAMS = {
     "budget": 100.0,
     "overround_max": 1.30,

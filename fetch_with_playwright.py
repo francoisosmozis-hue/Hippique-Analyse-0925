@@ -1,17 +1,18 @@
 
 # pip install playwright
 # python -m playwright install chromium
-from playwright.sync_api import sync_playwright
-import json
-import time
 import argparse
+import json
 from pathlib import Path
+
+from playwright.sync_api import sync_playwright
+
 
 def get_course_json(page, url):
     page.goto(url, wait_until="domcontentloaded")
     # Attendre que les XHR peuplent la page (adapter le sélecteur si nécessaire)
     page.wait_for_timeout(3000) # Augmenté pour plus de robustesse
-    
+
     content = page.content()
     # Plan A: détecter un <script type="application/json"> ou un data-state
     data = None
@@ -29,7 +30,7 @@ def get_course_json(page, url):
     # Plan B: intercepter window.__INITIAL_STATE__
     if not data:
         data = page.evaluate("() => window.__INITIAL_STATE__ || null")
-        
+
     return data
 
 def snapshot_odds(course_url, tag, out_dir):
@@ -41,7 +42,7 @@ def snapshot_odds(course_url, tag, out_dir):
         browser = p.chromium.launch(headless=True)
         ctx = browser.new_context(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
         page = ctx.new_page()
-        
+
         try:
             data = get_course_json(page, course_url)
             if data:
@@ -61,7 +62,7 @@ def main():
     parser.add_argument("--tag", required=True, help="Tag pour le snapshot (ex: H-30, H-5)")
     parser.add_argument("--out-dir", required=True, help="Dossier de sortie pour le JSON")
     args = parser.parse_args()
-    
+
     snapshot_odds(args.course_url, args.tag, args.out_dir)
 
 if __name__ == "__main__":

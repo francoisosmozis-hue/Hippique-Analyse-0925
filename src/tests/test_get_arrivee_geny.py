@@ -6,8 +6,6 @@ from pathlib import Path
 from types import SimpleNamespace
 from xml.etree import ElementTree as ET
 
-import pytest
-
 if "bs4" not in sys.modules:
     # Provide a lightweight BeautifulSoup shim for environments where bs4 is unavailable.
     class _SoupNode:
@@ -26,10 +24,10 @@ if "bs4" not in sys.modules:
             matches = []
             for elem in self._element.iter():
                 if name and elem.tag != name:
-                    continue                
+                    continue
                 matches.append(_SoupNode(elem))
             return matches
-        
+
         def select(self, selector: str):
             parts = [part for part in selector.split() if part]
             nodes = [self]
@@ -89,7 +87,6 @@ from get_arrivee_geny import (  # noqa: E402
     PlanningEntry,
     fetch_arrival,
     load_planning,
-    main,
     parse_arrival,
 )
 
@@ -138,7 +135,7 @@ def test_parse_arrival_supports_multiple_formats() -> None:
     assert parse_arrival(csv_text, hint="csv") == ["1", "3", "2", "8", "3", "5"]
 
 
-    
+
 def test_fetch_arrival_prefers_local_sources(tmp_path: Path) -> None:
     offline = tmp_path / "R1C2.html"
     offline.write_text("<div>Arrivée officielle : 8 - 4 - 5</div>", encoding="utf-8")

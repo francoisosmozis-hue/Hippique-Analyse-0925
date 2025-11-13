@@ -2,7 +2,6 @@
 gunicorn.conf.py - Gunicorn Configuration for Cloud Run
 """
 
-import multiprocessing
 import os
 
 # Server socket

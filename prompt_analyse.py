@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 prompt_analyse.py — stub minimal
 Usage:
   python prompt_analyse.py --race "R1C3 Vincennes 2025-10-20 attelé 12" --budget 5 --out prompts/prompt_R1C3.txt
 Écrit un prompt GPI v5.1 simple dans --out.
 """
-import argparse, os
+import argparse
+import os
 from pathlib import Path
+
 
 def main():
     ap = argparse.ArgumentParser()

@@ -1,10 +1,8 @@
-# -*- coding: utf-8 -*-
 """Tests for start time extraction from Boturfers HTML fragments."""
 
 from __future__ import annotations
 
 import textwrap
-from unittest.mock import MagicMock
 
 import pytest
 from bs4 import BeautifulSoup

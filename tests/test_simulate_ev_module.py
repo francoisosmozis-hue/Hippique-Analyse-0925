@@ -6,14 +6,14 @@ import pytest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+from kelly import kelly_fraction
 from simulate_ev import (
-    implied_probs,
-    normalize_overround,    
     allocate_dutching_sp,
     gate_ev,
+    implied_probs,
+    normalize_overround,
     simulate_ev_batch,
 )
-from kelly import kelly_fraction
 
 
 def test_implied_probs_normalizes():
@@ -183,7 +183,7 @@ def test_gate_ev_thresholds():
     )
     assert res["sp"] and res["combo"]
     assert res["reasons"] == {"sp": [], "combo": []}
-    
+
     res = gate_ev(
         cfg,
         ev_sp=5.0,

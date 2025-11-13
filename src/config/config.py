@@ -1,8 +1,8 @@
 """Configuration module"""
 import os
 from dataclasses import dataclass
-from typing import Optional
 from zoneinfo import ZoneInfo
+
 
 @dataclass
 class Config:
@@ -13,10 +13,10 @@ class Config:
     queue_id: str
     service_account_email: str
     tz: ZoneInfo
-    gcs_bucket: Optional[str] = None
+    gcs_bucket: str | None = None
     require_auth: bool = True
     log_level: str = "INFO"
-    service_url: Optional[str] = None
+    service_url: str | None = None
     user_agent: str = "HippiqueOrchestrator/1.0"
     request_timeout: int = 10
     max_retries: int = 3
@@ -27,7 +27,7 @@ class Config:
     budget_per_race: float = 5.0
     gcs_prefix: str = "hippique"
     payout_calibration_path: str = "config/payout_calibration.yaml"
-    drive_folder_id: Optional[str] = None
+    drive_folder_id: str | None = None
 
     @classmethod
     def from_env(cls) -> "Config":

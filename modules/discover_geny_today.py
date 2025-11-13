@@ -10,7 +10,7 @@ import json
 import re
 import unicodedata
 from datetime import datetime
-from typing import List, Dict, Any
+from typing import Any
 
 import requests
 from bs4 import BeautifulSoup
@@ -46,7 +46,7 @@ def main() -> None:
     resp.raise_for_status()
     soup = BeautifulSoup(resp.text, "html.parser")
 
-    meetings: List[Dict[str, Any]] = []
+    meetings: list[dict[str, Any]] = []
     for section in soup.select("section.reunion"):
         title_el = section.select_one("h2")
         if not title_el:
@@ -61,7 +61,7 @@ def main() -> None:
             continue
         slug = _slugify(hippo)
 
-        courses: List[Dict[str, Any]] = []
+        courses: list[dict[str, Any]] = []
         for a in section.select("a"):
             text = a.get_text(strip=True)
             c_match = re.search(r"C\d+", text)
@@ -70,7 +70,7 @@ def main() -> None:
             c = c_match.group(0)
             href = a.get("href", "")
             id_match = re.search(r"(\d+)(?:\.html)?$", href)
-            course_obj: Dict[str, Any] = {"c": c}
+            course_obj: dict[str, Any] = {"c": c}
             if id_match:
                 course_obj["id_course"] = id_match.group(1)
             courses.append(course_obj)

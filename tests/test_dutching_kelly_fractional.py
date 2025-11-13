@@ -1,5 +1,6 @@
-from pathlib import Path
 import sys
+from pathlib import Path
+
 import pandas as pd
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
@@ -29,7 +30,7 @@ def test_remainder_allocated_to_max_fk():
     max_fk_idx = df["f_kelly"].idxmax()
     assert df.loc[max_fk_idx, "Stake (€)"] == df["Stake (€)"].max()
     assert df["Stake (€)"].sum() == 5.0
-    
+
 
 def test_shares_sum_to_one_after_rounding():
     odds = [2.0, 3.5, 4.0]
@@ -59,7 +60,7 @@ def test_round_to_zero_keeps_continuous_ev():
     assert df["Stake (€)"].tolist() == expected_stakes_rounded
 
     expected_evs = []
-    for st, o, p in zip(expected_stakes, odds, probs):
+    for st, o, p in zip(expected_stakes, odds, probs, strict=False):
         gain_net = st * (o - 1.0)
         expected_evs.append(round(p * gain_net - (1.0 - p) * st, 2))
 

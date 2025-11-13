@@ -1,23 +1,21 @@
 import argparse
 import json
-import sys
 from pathlib import Path
 
 import pytest
-
-import logging_io
-import pipeline_run
-import simulate_ev
-import simulate_wrapper
-import tickets_builder
-import runner_chain
 from test_pipeline_smoke import (
     GPI_YML,
-    odds_h30,
     odds_h5,
+    odds_h30,
     partants_sample,
     stats_sample,
 )
+
+import logging_io
+import pipeline_run
+import runner_chain
+import simulate_ev
+import simulate_wrapper
 
 
 def _with_exotics(partants: dict) -> dict:
@@ -42,7 +40,7 @@ def _patch_simulation(monkeypatch, *, simulate_fn=None, gate_fn=None):
         monkeypatch.setattr(simulate_ev, "gate_ev", gate_fn)
     pipeline_run._load_simulate_ev.cache_clear()
     return pipeline_run._load_simulate_ev.cache_clear
-    
+
 
 def _patch_combo_eval(monkeypatch, *, stats=None):
     default_stats = {
@@ -85,7 +83,7 @@ def _write_inputs(
     h5_path.write_text(json.dumps(odds_h5()), encoding="utf-8")
     stats_path.write_text(json.dumps(stats_sample()), encoding="utf-8")
     partants_path.write_text(json.dumps(partants), encoding="utf-8")
-        
+
     gpi_txt = (
         GPI_YML
         .replace("EV_MIN_GLOBAL: 0.35", "EV_MIN_GLOBAL: 0.0")
@@ -133,7 +131,7 @@ def _mock_tracking_outputs(tmp_path, monkeypatch):
 
     original_append_csv_line = logging_io.append_csv_line
     original_append_json = logging_io.append_json
-    
+
     def fake_append_csv_line(path, data, header=logging_io.CSV_HEADER):
         return original_append_csv_line(tracking_path, data, header=header)
 
@@ -340,7 +338,7 @@ def test_filter_combos_strict_handles_missing_metrics(monkeypatch):
     monkeypatch.setattr(simulate_wrapper, "evaluate_combo", fake_evaluate_combo)
 
     templates = [[{"id": "combo", "stake": 1.0, "legs": ["1", "2"], "type": "CP", "odds": 10.0}]]
-    
+
     # Create a dummy calibration file
     dummy_calibration = Path("dummy_calibration.yaml")
     dummy_calibration.write_text("dummy_data")
@@ -353,6 +351,6 @@ def test_filter_combos_strict_handles_missing_metrics(monkeypatch):
 
     assert kept == []
     assert "status_insufficient_data" in info["flags"]["reasons"]["combo"]
-    
+
     # Clean up the dummy file
     dummy_calibration.unlink()

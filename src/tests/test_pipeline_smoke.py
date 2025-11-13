@@ -1,19 +1,19 @@
 import argparse
 import json
+import os
 import subprocess
 import sys
-import os
 
-import yaml
 import pytest
+import yaml
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+import logging_io
 import pipeline_run
 import validator_ev
-import logging_io
-from simulate_ev import allocate_dutching_sp, gate_ev, simulate_ev_batch, implied_probs
 from pipeline_run import build_p_true, compute_drift_dict, load_yaml
+from simulate_ev import allocate_dutching_sp, gate_ev, implied_probs, simulate_ev_batch
 from simulate_wrapper import PAYOUT_CALIBRATION_PATH
 
 DEFAULT_CALIBRATION = str(PAYOUT_CALIBRATION_PATH)
@@ -226,7 +226,7 @@ def test_snapshot_cli(tmp_path):
         "--outdir",
         str(tmp_path),
     ]
-    res = subprocess.run(cmd, capture_output=True, text=True)
+    res = subprocess.run(cmd, check=False, capture_output=True, text=True)
     assert res.returncode == 0, res.stderr
 
     dest = tmp_path / "R1C1-h30.json"
@@ -283,7 +283,7 @@ def test_smoke_run(tmp_path):
         "0.60",
         "--allow-je-na",
     ]
-    res = subprocess.run(cmd, capture_output=True, text=True)
+    res = subprocess.run(cmd, check=False, capture_output=True, text=True)
     assert res.returncode == 0, res.stderr
 
     # artefacts
@@ -296,7 +296,7 @@ def test_smoke_run(tmp_path):
     drift_rows = drift_csv.read_text(encoding="utf-8").strip().splitlines()
     assert drift_rows
     assert drift_rows[0] == "num;p30;p5;delta;flag"
-    
+
     data = json.loads((outdir / "p_finale.json").read_text(encoding="utf-8"))
     assert data["meta"].get("validation") == {"ok": True, "reason": ""}
     assert data["meta"]["snapshots"] == "H30,H5"
@@ -345,7 +345,7 @@ def test_smoke_run(tmp_path):
     if stake_reduction.get("iterations") is not None:
         assert stake_reduction["iterations"] in (0,)
 
-    
+
     if tickets:
         stats_ev = simulate_ev_batch(tickets, bankroll=5)
     else:
@@ -457,8 +457,8 @@ def test_cmd_analyse_enriches_runners(tmp_path, monkeypatch: pytest.MonkeyPatch)
     ids = [str(runner["id"]) for runner in partants["runners"]]
     probs_h5 = implied_probs([h5[cid] for cid in ids])
     probs_h30 = implied_probs([h30[cid] for cid in ids])
-    expected_h5 = dict(zip(ids, probs_h5))
-    expected_h30 = dict(zip(ids, probs_h30))
+    expected_h5 = dict(zip(ids, probs_h5, strict=False))
+    expected_h30 = dict(zip(ids, probs_h30, strict=False))
 
     monkeypatch.setattr(
         "pipeline_run.build_p_true", lambda *a, **k: {cid: 1 / len(ids) for cid in ids}
@@ -490,7 +490,7 @@ def test_cmd_analyse_enriches_runners(tmp_path, monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setattr("pipeline_run.append_json", lambda *a, **k: None)
     monkeypatch.setattr(logging_io, "append_csv_line", lambda *a, **k: None)
     monkeypatch.setattr(logging_io, "append_json", lambda *a, **k: None)
-    
+
     args = argparse.Namespace(
         h30=str(h30_path),
         h5=str(h5_path),
@@ -653,7 +653,7 @@ def test_reallocate_combo_budget_to_sp(tmp_path):
         "0.60",
         "--allow-je-na",
     ]
-    res = subprocess.run(cmd, capture_output=True, text=True)
+    res = subprocess.run(cmd, check=False, capture_output=True, text=True)
     assert res.returncode == 0, res.stderr
     assert "Blocage combinés" in res.stdout
 
@@ -963,7 +963,7 @@ def test_drift_coef_sensitivity(monkeypatch):
     h5 = odds_h5()
     stats = stats_sample()
 
-    import calibration.p_true_model as p_true_model
+    from calibration import p_true_model
 
     pipeline_run._load_p_true_helpers.cache_clear()
     monkeypatch.setattr(p_true_model, "load_p_true_model", lambda: None)
@@ -1001,7 +1001,7 @@ def test_je_bonus_coef_sensitivity(monkeypatch):
     h5 = odds_h5()
     stats = {"1": {"j_win": 5, "e_win": 0}}
 
-    import calibration.p_true_model as p_true_model
+    from calibration import p_true_model
 
     pipeline_run._load_p_true_helpers.cache_clear()
     monkeypatch.setattr(p_true_model, "load_p_true_model", lambda: None)
@@ -1009,7 +1009,7 @@ def test_je_bonus_coef_sensitivity(monkeypatch):
 
     p_default = build_p_true({"JE_BONUS_COEF": 0.001}, partants, h5, h30, stats)
     p_no_bonus = build_p_true({"JE_BONUS_COEF": 0.0}, partants, h5, h30, stats)
-    
+
     assert p_default["1"] > p_no_bonus["1"]
     pipeline_run._load_p_true_helpers.cache_clear()
 

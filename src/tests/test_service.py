@@ -1,7 +1,11 @@
 
+import json
+import pathlib
+import shutil
+import sys
+
 import pytest
 from fastapi.testclient import TestClient
-import sys, pathlib, json, os, shutil
 
 # --- Add project root to sys.path ---
 _PROJECT_ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -65,7 +69,7 @@ def xtest_pipeline_run_success(mocker):
         json.dump(analysis_data, f)
 
     response = client.post("/pipeline/run?use_file_logic=true", json={"reunion": "R1", "course": "C2", "phase": "H5", "budget": 5.0})
-    
+
     assert response.status_code == 200
     response_json = response.json()
     assert response_json["status"] == "ok"

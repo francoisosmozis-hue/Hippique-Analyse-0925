@@ -18,17 +18,18 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Dict, Iterable, List
+from typing import Any
 
 import yaml
 
 from scripts import online_fetch_zeturf as ofz
 
 
-def _flatten(meetings: Iterable[Dict[str, Any]]) -> List[Dict[str, str]]:
+def _flatten(meetings: Iterable[dict[str, Any]]) -> list[dict[str, str]]:
     """Flatten raw meeting data into ``reunion``/``course``/``time`` records."""
-    entries: List[Dict[str, str]] = []
+    entries: list[dict[str, str]] = []
     for meeting in meetings:
         r_label = (
             meeting.get("label")
@@ -65,7 +66,7 @@ def main() -> None:
     parser.add_argument("--out", default="config/meetings.json", help="Destination JSON path")
     args = parser.parse_args()
 
-    with open(args.sources, "r", encoding="utf-8") as fh:
+    with open(args.sources, encoding="utf-8") as fh:
         cfg = yaml.safe_load(fh) or {}
     try:
         url = ofz.resolve_source_url(cfg, "planning")

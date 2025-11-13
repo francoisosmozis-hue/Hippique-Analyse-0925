@@ -2,19 +2,19 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from pathlib import Path
-from typing import Iterable
-
+import argparse
 import datetime as dt
 import math
+import sys
+from collections.abc import Iterable
+from dataclasses import dataclass
+from pathlib import Path
 
 import pandas as pd
+import yaml
+
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import brier_score_loss, log_loss
-import yaml
-import argparse
-
 
 _EPSILON = 1e-9
 _MIN_ODDS = 1.01
@@ -22,7 +22,7 @@ _MIN_ODDS = 1.01
 
 def assemble_dataset_from_csv(csv_path: Path) -> pd.DataFrame:
     """Return a dataframe from the flat CSV file."""
-    
+
     df = pd.read_csv(csv_path)
 
     # Drop rows with missing odds
@@ -39,10 +39,10 @@ def assemble_dataset_from_csv(csv_path: Path) -> pd.DataFrame:
     df["implied_prob"] = 1 / df["cote"]
     overround = df.groupby("race_id")["implied_prob"].transform("sum")
     df["p_market_no_vig"] = df["implied_prob"] / overround
-    
+
     df["n_runners"] = df.groupby("race_id")["num"].transform("count")
     df["log_odds"] = df["cote"].apply(lambda x: math.log(max(x, _MIN_ODDS + _EPSILON)))
-    
+
     # Placeholder for J/E stats and drift - to be populated with real data in future datasets
     df["j_rate"] = 0.0
     df["e_rate"] = 0.0
@@ -89,7 +89,7 @@ def train_and_evaluate_model(
     train_df = df
 
     if train_df.empty:
-        raise ValueError(f"no training data found")
+        raise ValueError("no training data found")
 
     feature_list = [str(f) for f in features]
     X_train = train_df[feature_list].to_numpy()
@@ -172,31 +172,31 @@ if __name__ == "__main__":
 
     if not args.csv_file.exists():
         print(f"ERREUR : Le fichier CSV '{args.csv_file}' n'a pas été trouvé.")
-        exit(1)
+        sys.exit(1)
 
     print(f"1. Assembling dataset from {args.csv_file}...")
     dataset = assemble_dataset_from_csv(args.csv_file)
     print(f"   Found {len(dataset)} total records.")
 
     split_date = "2025-09-15"
-    
+
     # Define the new feature set for the v5 model
     features_v5 = ["log_odds", "n_runners", "p_market_no_vig", "j_rate", "e_rate", "je_total", "drift"]
-    
+
     print(f"\n2. Training and evaluating model v5 with split date {split_date}...")
     print(f"   Features: {features_v5}")
-    
+
     try:
         result = train_and_evaluate_model(dataset, split_date=split_date, features=features_v5)
-        
+
         print(f"\n--- Evaluation on Test Set (>= {split_date}) ---")
         print(f"   Test samples: {result.n_test_samples}")
         print(f"   Brier Score: {result.test_brier_score:.4f}")
         print(f"   Log Loss: {result.test_log_loss:.4f}")
-        
+
         print(f"\n3. Serializing model to {args.output_model}...")
         serialize_model(result, args.output_model, version=5)
-        
+
         print("\nDone.")
     except ValueError as e:
         print(f"\nERREUR : {e}")

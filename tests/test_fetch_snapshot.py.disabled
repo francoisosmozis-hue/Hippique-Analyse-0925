@@ -3,8 +3,6 @@ import shutil
 from pathlib import Path
 from typing import Any
 
-import pytest
-
 
 def test_fetch_race_snapshot_returns_list_of_partants(monkeypatch: Any) -> None:
     import online_fetch_zeturf as ofz
@@ -125,7 +123,7 @@ def test_fetch_race_snapshot_accepts_course_url(monkeypatch: Any) -> None:
     monkeypatch.setattr(ofz._impl, "fetch_race_snapshot", lambda *a, **k: {})
 
 
-    snapshot = ofz.fetch_race_snapshot_full(
+    ofz.fetch_race_snapshot_full(
         "R1",
         "C1",
         phase="H30",
@@ -134,7 +132,7 @@ def test_fetch_race_snapshot_accepts_course_url(monkeypatch: Any) -> None:
     )
 
     assert "R1C1" in captured["url"]
-    
+
 
 def test_fetch_race_snapshot_handles_missing_rc_with_url(monkeypatch: Any) -> None:
     import online_fetch_zeturf as ofz
@@ -150,7 +148,7 @@ def test_fetch_race_snapshot_handles_missing_rc_with_url(monkeypatch: Any) -> No
     # Mock the lowest level extraction to ensure source_url is propagated
     monkeypatch.setattr(ofz, "_double_extract", lambda *a, **k: html_payload)
     monkeypatch.setattr(ofz._impl, "fetch_race_snapshot", lambda *a, **k: html_payload)
-    
+
     snapshot = ofz.fetch_race_snapshot_full(
         "R3",
         "C4",

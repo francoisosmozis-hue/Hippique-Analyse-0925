@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 
 from __future__ import annotations
 
@@ -11,7 +10,6 @@ import sys
 from collections.abc import Callable
 from functools import partial
 from pathlib import Path
-from typing import Dict
 
 try:  # pragma: no cover - optional dependency
     import yaml
@@ -238,7 +236,7 @@ def validate_policy(
 
 
 def validate_budget(
-    stakes: Dict[str, float], budget_cap: float, max_vol_per_horse: float
+    stakes: dict[str, float], budget_cap: float, max_vol_per_horse: float
 ) -> bool:
     """Ensure total stake and per-horse stakes respect budget constraints."""
     total = sum(stakes.values())

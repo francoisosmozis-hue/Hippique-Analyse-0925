@@ -4,8 +4,8 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable
 
 from hippique.analytics import compute_allocation_plan, load_analysis_reports
 

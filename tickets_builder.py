@@ -1,11 +1,10 @@
 import logging
 import os
 from collections.abc import Iterable, Mapping, Sequence
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
-from simulate_ev import allocate_dutching_sp
 from runner_chain import validate_exotics_with_simwrapper
-
+from simulate_ev import allocate_dutching_sp
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +42,7 @@ def _coerce_float(value: Any, default: float = 0.0) -> float:
 def _is_homogeneous_field(runners: Iterable[Mapping[str, Any]]) -> bool:
     """Return ``True`` when the top-4 implied probabilities are within 8 pts."""
 
-    implied: List[float] = []
+    implied: list[float] = []
     for runner in runners:
         odds = _coerce_float(
             runner.get("odds")
@@ -85,7 +84,7 @@ def allow_combo(
         Optional configuration mapping providing the thresholds used by the
         analysis pipeline.
     """
-    def _resolve(value: float | None, default: float, keys: Tuple[str, ...] = ()) -> float:
+    def _resolve(value: float | None, default: float, keys: tuple[str, ...] = ()) -> float:
         if value is not None:
             return float(value)
         if cfg is not None:
@@ -113,7 +112,7 @@ def allow_combo(
         return False
     return True
 
-def _normalise_legs(value: Any) -> List[str]:
+def _normalise_legs(value: Any) -> list[str]:
     if value is None:
         return []
     if isinstance(value, str):
@@ -159,8 +158,8 @@ def _format_race(value: Any) -> str | None:
     return text
 
 
-def _extract_course_context(*sources: Mapping[str, Any]) -> Dict[str, str]:
-    context: Dict[str, str] = {}
+def _extract_course_context(*sources: Mapping[str, Any]) -> dict[str, str]:
+    context: dict[str, str] = {}
     for source in sources:
         if not isinstance(source, Mapping):
             continue
@@ -195,20 +194,20 @@ def _extract_course_context(*sources: Mapping[str, Any]) -> Dict[str, str]:
 def _build_leg_details(
     leg_id: str,
     *sources: Mapping[str, Any],
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     details = {"id": leg_id}
     context = _extract_course_context(*sources)
     details.update(context)
     return details
 
 
-def _extract_combo_entries(source: Any) -> List[Tuple[str, Dict[str, Any]]]:
+def _extract_combo_entries(source: Any) -> list[tuple[str, dict[str, Any]]]:
     """Return ``(type, data)`` entries describing exotic combinations."""
 
     if not source:
         return []
 
-    entries: List[Tuple[str, Dict[str, Any]]] = []
+    entries: list[tuple[str, dict[str, Any]]] = []
     if isinstance(source, Mapping):
         # Common container keys mapping to nested structures (``exotics`` …)
         for key in ("exotics", "combinaisons", "combos"):
@@ -263,10 +262,10 @@ def _build_combo_candidates(
     combos_source: Any,
     *,
     course_context: Mapping[str, Any] | None = None,
-) -> List[List[Dict[str, Any]]]:
+) -> list[list[dict[str, Any]]]:
     """Normalise combo definitions from ``combos_source`` into candidates."""
 
-    candidates: List[List[Dict[str, Any]]] = []
+    candidates: list[list[dict[str, Any]]] = []
     for combo_type, raw in _extract_combo_entries(combos_source):
         legs = _normalise_legs(
             raw.get("legs")
@@ -294,7 +293,7 @@ def _build_combo_candidates(
             "odds": odds_val,
             "stake": stake_val,
         }
-        context_sources: List[Mapping[str, Any]] = []
+        context_sources: list[Mapping[str, Any]] = []
         if isinstance(raw, Mapping):
             context_sources.append(raw)
         if isinstance(course_context, Mapping):
@@ -315,8 +314,8 @@ def _build_combo_candidates(
 
 def apply_ticket_policy(
     cfg: Mapping[str, Any],
-    runners: Iterable[Dict[str, Any]],
-    combo_candidates: Iterable[List[Dict[str, Any]]] | None = None,
+    runners: Iterable[dict[str, Any]],
+    combo_candidates: Iterable[list[dict[str, Any]]] | None = None,
     *,
     combos_source: Any | None = None,
     ev_threshold: float | None = None,
@@ -324,7 +323,7 @@ def apply_ticket_policy(
     payout_threshold: float | None = None,
     allow_heuristic: bool | None = None,
     calibration: str | os.PathLike[str] | None = None,
-) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], Dict[str, Any]]:
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
     """Allocate SP tickets and normalised combo templates.
     Parameters
     ----------
@@ -372,7 +371,7 @@ def apply_ticket_policy(
             "ignoré car une calibration payout versionnée est obligatoire."
         )
     allow_heuristic = False
-    
+
     # --- SP tickets -----------------------------------------------------
     sp_tickets, _ = allocate_dutching_sp(cfg, runners_list)
     sp_tickets.sort(key=lambda t: t.get("ev_ticket", 0.0), reverse=True)
@@ -380,7 +379,7 @@ def apply_ticket_policy(
     sp_tickets = sp_tickets[:max_tickets]
 
     # --- Combo templates ------------------------------------------------
-    info: Dict[str, Any] = {"notes": [], "flags": {}}
+    info: dict[str, Any] = {"notes": [], "flags": {}}
     if bool(cfg.get("PAUSE_EXOTIQUES")):
         return sp_tickets, [], info
 
@@ -393,7 +392,7 @@ def apply_ticket_policy(
     else:
         combo_candidates = list(combo_candidates)
     if homogeneous_field and combo_candidates:
-        filtered_candidates: List[List[Dict[str, Any]]] = []
+        filtered_candidates: list[list[dict[str, Any]]] = []
         for candidate in combo_candidates:
             if not candidate:
                 continue
@@ -437,7 +436,7 @@ def apply_ticket_policy(
         if "no_calibration_yaml → exotiques désactivés" not in notes:
             notes.append("no_calibration_yaml → exotiques désactivés")
         return sp_tickets, [], info
-        
+
     validated, info = validate_exotics_with_simwrapper(
         combo_candidates,
         bankroll=combo_budget,
@@ -453,7 +452,7 @@ def apply_ticket_policy(
         return sp_tickets, [], info
 
     # Build a lookup to merge calibration metadata back into validated tickets.
-    lookup: Dict[Tuple[str, Tuple[str, ...]], Dict[str, Any]] = {}
+    lookup: dict[tuple[str, tuple[str, ...]], dict[str, Any]] = {}
     for candidate in combo_candidates:
         if not candidate:
             continue
@@ -478,7 +477,7 @@ def apply_ticket_policy(
         )
         lookup[key] = base
 
-    combo_tickets: List[Dict[str, Any]] = []
+    combo_tickets: list[dict[str, Any]] = []
     for ticket in validated:
         key = (
             str(ticket.get("type", "CP")),

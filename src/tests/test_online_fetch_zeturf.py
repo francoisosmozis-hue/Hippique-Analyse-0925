@@ -1,21 +1,23 @@
 #!/usr/bin/env python3
 
-import os
-import sys
 import builtins
 import datetime as dt
-from typing import Any, Mapping
-from pathlib import Path
-import json
 import importlib.util
+import json
 import logging
+import os
 import shutil
+import sys
+from collections.abc import Mapping
+from pathlib import Path
+from typing import Any
 
 import pytest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import scripts.online_fetch_zeturf as ofz
+
 import online_fetch_zeturf as cli
 
 
@@ -522,7 +524,7 @@ def test_lightweight_fetch_snapshot_remote(monkeypatch: pytest.MonkeyPatch) -> N
 
     def failing_impl_fetch(*_args: Any, **_kwargs: Any) -> Mapping[str, Any]:
         raise RuntimeError("impl failure")
-    
+
     monkeypatch.setattr(cli._impl, "parse_course_page", fake_parse, raising=False)
     monkeypatch.setattr(cli._impl, "normalize_snapshot", fake_normalize, raising=False)
     monkeypatch.setattr(cli._impl, "fetch_race_snapshot", failing_impl_fetch, raising=False)
@@ -540,7 +542,7 @@ def test_lightweight_fetch_snapshot_remote(monkeypatch: pytest.MonkeyPatch) -> N
     assert snapshot["meta"]["course"] == "C2"
     assert captured["snapshot"] == "H-5"
     assert captured["url"] == "https://www.zeturf.fr/fr/course/R1C2"
-    
+
 def test_lightweight_fetch_snapshot_use_cache(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """The cache flag should bypass the remote parser and load local files."""
 
@@ -551,7 +553,7 @@ def test_lightweight_fetch_snapshot_use_cache(monkeypatch: pytest.MonkeyPatch, t
     }
     cache_file = tmp_path / "snapshot.json"
     cache_file.write_text(json.dumps(payload), encoding="utf-8")
-    
+
     monkeypatch.setattr(cli, "_load_local_snapshot", lambda rc: cache_file)
     monkeypatch.setattr(
         cli._impl,
@@ -560,7 +562,7 @@ def test_lightweight_fetch_snapshot_use_cache(monkeypatch: pytest.MonkeyPatch, t
         raising=False,
     )
 
-    snapshot = cli.fetch_race_snapshot("R9", "C3", use_cache=True) 
+    snapshot = cli.fetch_race_snapshot("R9", "C3", use_cache=True)
 
     assert snapshot["runners"] == payload["runners"]
     assert snapshot["partants"] == 1
@@ -579,7 +581,7 @@ def test_lightweight_fetch_snapshot_cache_missing(monkeypatch: pytest.MonkeyPatc
 
     with pytest.raises(RuntimeError):
         cli.fetch_race_snapshot("R4", "C5", use_cache=True)
-        
+
 
 def test_fetch_from_geny_parser_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
     """The Geny parser should fallback to attribute/regex extraction."""
@@ -824,7 +826,7 @@ def test_make_diff(tmp_path: Path) -> None:
     h5_fp.write_text(json.dumps(h5), encoding="utf-8")
 
     out_fp = ofz.make_diff("R1C1", h30_fp, h5_fp, outdir=tmp_path)
-    with open(out_fp, "r", encoding="utf-8") as fh:
+    with open(out_fp, encoding="utf-8") as fh:
         data = json.load(fh)
 
     assert out_fp.name == "R1C1_diff_drift.json"

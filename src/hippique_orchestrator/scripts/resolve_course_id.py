@@ -6,10 +6,10 @@ import csv
 import datetime as dt
 import json
 import re
-from urllib.parse import parse_qs, urlparse
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Iterator, Optional
+from urllib.parse import parse_qs, urlparse
 
 try:  # Python 3.9+
     from zoneinfo import ZoneInfo
@@ -219,7 +219,7 @@ def resolve_course_context(
     return selected
 
 
-def main(argv: Optional[list[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     """CLI entry-point used by automation scripts."""
 
     parser = argparse.ArgumentParser(description="Resolve the course identifier to fetch")

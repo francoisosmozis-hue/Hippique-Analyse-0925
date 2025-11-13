@@ -18,24 +18,25 @@ import re
 import subprocess
 import sys
 import time
+from collections.abc import Callable, Iterable, Mapping
 from datetime import datetime, timezone
 from pathlib import Path
-from collections.abc import Mapping
-from typing import Any, Callable, Iterable
+from typing import Any
 from urllib.parse import urljoin
 
 import requests
 from bs4 import BeautifulSoup
 
-from logging_io import append_csv_line, CSV_HEADER
+from logging_io import CSV_HEADER, append_csv_line
 from src.drive_sync import disabled_reason, is_gcs_enabled
+
+
 def normalize_snapshot(payload: Mapping[str, Any]) -> dict[str, Any]:
     """Placeholder function that returns the payload as is."""
     return dict(payload)
-from fetch_je_stats import collect_stats
-
 import pipeline_run
 from analysis_utils import compute_overround_cap
+from fetch_je_stats import collect_stats
 from simulate_wrapper import PAYOUT_CALIBRATION_PATH, evaluate_combo
 from src.hippique_orchestrator.scripts import p_finale_export
 
@@ -88,7 +89,7 @@ TRACKING_HEADER = CSV_HEADER + ["phase", "status", "reason"]
 try:  # pragma: no cover - optional dependency in tests
     from online_fetch_zeturf import write_snapshot_from_geny
 except Exception:  # pragma: no cover - used when optional deps are missing
-    
+
     def write_snapshot_from_geny(*args: Any, **kwargs: Any) -> None:
         raise RuntimeError("write_snapshot_from_geny is unavailable")
 
@@ -105,7 +106,7 @@ def write_snapshot_from_boturfers(reunion: str, course: str, phase: str, rc_dir:
     Fetches race details from Boturfers and writes a snapshot.
     """
     logger.info(f"Fetching {reunion}{course} from Boturfers for phase {phase}")
-    
+
     programme_url = "https://www.boturfers.fr/programme-pmu-du-jour"
     programme_data = fetch_boturfers_programme(programme_url)
 
@@ -116,7 +117,7 @@ def write_snapshot_from_boturfers(reunion: str, course: str, phase: str, rc_dir:
             if race.get("rc", "").replace(" ", "") == target_rc:
                 race_url = race.get("url")
                 break
-    
+
     if not race_url:
         logger.error(f"Course {target_rc} not found in Boturfers programme.")
         return
@@ -131,7 +132,7 @@ def write_snapshot_from_boturfers(reunion: str, course: str, phase: str, rc_dir:
     race_details['reunion'] = reunion
     race_details['course'] = course
     race_details['rc'] = target_rc
-    
+
     # Save the snapshot
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     filename = f"{timestamp}_{phase}.json"
@@ -139,7 +140,7 @@ def write_snapshot_from_boturfers(reunion: str, course: str, phase: str, rc_dir:
     try:
         _write_json_file(output_path, race_details)
         logger.info(f"Snapshot for {target_rc} saved to {output_path}")
-    except IOError as e:
+    except OSError as e:
         logger.error(f"Failed to write snapshot to {output_path}: {e}")
 
 
@@ -147,6 +148,8 @@ if USE_GCS:
     try:  # pragma: no cover - optional dependency in tests
         from drive_sync import (
             build_remote_path as gcs_build_remote_path,
+        )
+        from drive_sync import (
             push_tree,
         )
     except Exception as exc:  # pragma: no cover - used when optional deps are missing
@@ -637,10 +640,10 @@ def enrich_h5(rc_dir: Path, *, budget: float, kelly: float) -> None:
 
         # Lire le payload JSON
         stats_result = json.loads(stats_json_path.read_text(encoding="utf-8"))
-        
+
         coverage = stats_result.get("coverage", 0)
         rows = stats_result.get("rows", [])
-        
+
         mapped = {str(row.get("num")): row for row in rows}
 
     except Exception:  # pragma: no cover - network or scraping issues
@@ -715,7 +718,7 @@ def run_pipeline(
     overround_threshold = (
         OVERROUND_MAX_THRESHOLD if overround_max is None else float(overround_max)
     )
-    
+
     # If ``rc_dir`` already holds a freshly generated ``p_finale.json`` we do
     # not run the pipeline again – this is the case when ``build_p_finale`` was
     # just invoked on the directory.
@@ -929,7 +932,7 @@ def _run_single_pipeline(
             os.environ.pop("MAX_COMBO_OVERROUND", None)
         else:
             os.environ["MAX_COMBO_OVERROUND"] = previous_overround
-            
+
     p_finale_path = rc_dir / "p_finale.json"
     try:
         payload = json.loads(p_finale_path.read_text(encoding="utf-8"))
@@ -1526,7 +1529,7 @@ def _recover_je_csv_from_stats(
 
     if _rebuild_je_csv_from_stats(rc_dir):
         return True, True, True
-        
+
     return True, False, True
 
 
@@ -1746,7 +1749,7 @@ def _ensure_h5_artifacts(
 
     def _attempt_stats_rebuild(*, allow_without_fetch: bool = False) -> bool:
         """Try rebuilding the JE CSV when stats data appears to be available."""
-        
+
         nonlocal stats_recovered
         if not missing or not _missing_requires_stats(missing):
             return False
@@ -1775,7 +1778,7 @@ def _ensure_h5_artifacts(
             if _refresh_missing_state():
                 return True
         return False
-        
+
     if _missing_requires_stats(missing):
         (
             stats_fetch_success,
@@ -1797,13 +1800,13 @@ def _ensure_h5_artifacts(
         chronos_path = rc_dir / "chronos.csv"
         if not success or not chronos_path.exists():
             _regenerate_chronos_csv(rc_dir)
-            
+
     if retried:
         if _refresh_missing_state():
             return None
         if _attempt_stats_rebuild():
             return None
-            
+
     if missing and retry_cb is not None and not retry_invoked:
         try:
             retry_cb()
@@ -1895,7 +1898,7 @@ def safe_enrich_h5(
             "reason": "unplayable-marker",
             "details": details,
         }
-        
+
     try:
         enrich_h5(rc_dir, budget=budget, kelly=kelly)
     except MissingH30SnapshotError as exc:
@@ -1992,7 +1995,7 @@ def _load_geny_today_payload() -> dict[str, Any]:
                     }
                 ],
             }
-        ],  
+        ],
     }
 
 
@@ -2040,7 +2043,7 @@ def _normalise_phase(value: str) -> str:
 
 def _phase_argument(value: str) -> str:
     """Argument parser wrapper that normalises ``value`` to ``H30``/``H5``."""
-    
+
     try:
         return _normalise_phase(value)
     except ValueError as exc:  # pragma: no cover - handled by argparse
@@ -2049,7 +2052,7 @@ def _phase_argument(value: str) -> str:
 
 def _resolve_course_id(reunion: str, course: str) -> str:
     """Return the Geny course identifier matching ``reunion``/``course``."""
-    
+
     payload = _load_geny_today_payload()
     reunion = reunion.upper()
     course = course.upper()
@@ -2069,8 +2072,8 @@ def _resolve_course_id(reunion: str, course: str) -> str:
                 break
             return str(course_id)
     raise ValueError(f"Course {reunion}{course} introuvable via discover_geny_today")
-   
-   
+
+
 def _process_single_course(
     reunion: str,
     course: str,
@@ -2145,8 +2148,22 @@ def _extract_labels_from_text(text: str) -> tuple[str, str]:
     return r_label, c_label
 
 
+def _discover_courses_from_reunion_page(soup: BeautifulSoup) -> list[dict[str, str]]:
+    """Discover courses from a reunion page."""
+    courses = []
+    for link in soup.find_all("a", href=re.compile(r"/fr/course/\d+")):
+        href = link["href"]
+        course_id_match = re.search(r"\d+", href)
+        if course_id_match:
+            course_id = course_id_match.group(0)
+            course_label_match = re.search(r"C\d+", link.get_text())
+            course_label = course_label_match.group(0) if course_label_match else ""
+            courses.append({"id": course_id, "label": course_label, "url": urljoin("https://www.zeturf.fr", href)})
+    return courses
+
+
 def _process_reunion(
-    url: str,
+    reunion_url: str,
     phase: str,
     data_dir: Path,
     source: str,
@@ -2161,78 +2178,59 @@ def _process_reunion(
 ) -> None:
     """Fetch ``url`` and run the pipeline for each course of the meeting."""
 
-    resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
-    resp.raise_for_status()
-    soup = BeautifulSoup(resp.text, "html.parser")
+    try:
+        resp = requests.get(reunion_url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
+        resp.raise_for_status()
+        soup = BeautifulSoup(resp.text, "html.parser")
+    except requests.RequestException as e:
+        logger.error("Failed to fetch reunion URL %s: %s", reunion_url, e)
+        return
 
-    text_blob = soup.get_text(" ", strip=True)
-    context_blob = f"{url} {text_blob}".strip()
+    courses = _discover_courses_from_reunion_page(soup)
 
-    courses: list[tuple[str, str, str, str]] = []
-    course_match = _COURSE_URL_PATTERN.search(url)
-    if course_match:
-        course_id = course_match.group(1)
-        r_label, c_label = _extract_labels_from_text(context_blob)
-        courses.append((r_label, c_label, course_id, url))
-    else:
-        r_label, _ = _extract_labels_from_text(context_blob)
+    reunion_label_match = re.search(r"R\d+", soup.get_text())
+    reunion_label = reunion_label_match.group(0) if reunion_label_match else "R?"
 
-        for a in soup.find_all("a"):
-            text = a.get_text(strip=True)
-            c_match = re.search(r"(C\\d+)", text, re.IGNORECASE)
-            href = a.get("href", "")
-            id_match = re.search(r"(\\d+)(?:\\.html)?$", href)
-            if c_match and id_match:
-                course_url = urljoin(url, href)
-                courses.append(
-                    (r_label, c_match.group(1).upper(), id_match.group(1), course_url)
-                )
+    for course in courses:
+        course_id = course["id"]
+        course_label = course["label"]
+        course_url = course["url"]
 
-        if not courses:
-            return
+        rc_dir = data_dir / f"{reunion_label}{course_label}"
+        logger.info("Processing %s%s...", reunion_label, course_label)
 
-    base_dir = ensure_dir(data_dir)
-    for r_label, c_label, course_id, course_url in courses:
-        rc_dir = ensure_dir(base_dir / f"{r_label}{c_label}")
+        if phase.upper() == "H30":
+            write_snapshot_from_geny(
+                course_id, phase, rc_dir, course_url=course_url
+            )
+            continue
 
-        # --- NEW DISPATCH LOGIC ---
-        if source == 'boturfers':
-            print(f"[INFO] Fetching Boturfers snapshot for {r_label}{c_label}...")
-            # Note: boturfers logic might need url as well if it's ever used
-            write_snapshot_from_boturfers(r_label, c_label, phase, rc_dir, course_url=course_url)
-        elif source == 'geny':
-            print(f"[INFO] Fetching Geny snapshot for {r_label}{c_label}...")
-            write_snapshot_from_geny(course_id, phase, rc_dir, course_url=course_url)
-        # --- END OF NEW LOGIC ---
+        if not rc_dir.exists() or not any(rc_dir.glob("*_H-30.json")):
+            logger.warning(
+                "H-30 snapshot missing for %s, attempting to fetch...", rc_dir.name
+            )
+            write_snapshot_from_geny(
+                course_id, "H30", rc_dir, course_url=course_url
+            )
 
-        outcome: dict[str, Any] | None = None
-        pipeline_done = False
+        write_snapshot_from_geny(
+            course_id, phase, rc_dir, course_url=course_url
+        )
+
         if phase.upper() == "H5":
-            pipeline_done, outcome = _execute_h5_chain(
+            success, outcome = _execute_h5_chain(
                 rc_dir,
                 budget=budget,
                 kelly=kelly,
                 ev_min=ev_min,
                 roi_min=roi_min,
                 payout_min=payout_min,
-                overround_max=overround_max
+                overround_max=overround_max,
             )
-            if pipeline_done:
-                # csv_path = export_per_horse_csv(rc_dir)
-                # print(f"[INFO] per-horse report écrit: {csv_path}")
-                outcome = None
-            elif outcome is not None:
+            if not success and outcome:
                 _write_json_file(rc_dir / "decision.json", outcome)
-            else:  # pragma: no cover - defensive fallback
-                _write_json_file(
-                    rc_dir / "decision.json",
-                    {
-                        "status": "no-bet",
-                        "decision": "ABSTENTION",
-                        "reason": "pipeline-error",
-                    },
-                )
-        if gcs_prefix is not None:
+
+        if gcs_prefix:
             _upload_artifacts(rc_dir, gcs_prefix=gcs_prefix)
 
 
@@ -2339,7 +2337,7 @@ def main() -> None:
                 cmd = [
                     sys.executable,
                     str(script),
-                    "--course-url",
+                    "--reunion-url",
                     url_zeturf,
                     "--phase",
                     phase,
@@ -2403,6 +2401,7 @@ def main() -> None:
                 overround_max=args.overround_max,
             )
             if pipeline_done:
+                build_prompt_from_meta(rc_dir, budget=args.budget, kelly=args.kelly)
                 csv_path = export_per_horse_csv(rc_dir)
                 print(f"[INFO] per-horse report écrit: {csv_path}")
             elif outcome is not None:
@@ -2463,9 +2462,8 @@ def main() -> None:
                     build_prompt_from_meta(rc_dir, budget=args.budget, kelly=args.kelly)
                     csv_path = export_per_horse_csv(rc_dir)
                     print(f"[INFO] per-horse report écrit: {csv_path}")
-                else:
-                    if decision is not None:
-                        _write_json_file(rc_dir / "decision.json", decision)
+                elif decision is not None:
+                    _write_json_file(rc_dir / "decision.json", decision)
                 if gcs_prefix is not None:
                     _upload_artifacts(rc_dir, gcs_prefix=gcs_prefix)
         print("[DONE] from-geny-today pipeline terminé.")

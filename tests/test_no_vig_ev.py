@@ -1,4 +1,4 @@
-from hippique.utils.probabilities import no_vig_probs, expected_value_simple
+from hippique.utils.probabilities import expected_value_simple, no_vig_probs
 
 
 def test_no_vig_sum_to_one():
@@ -15,10 +15,10 @@ def test_ev_drops_when_margin_higher():
 
     ev_low = sum(
         expected_value_simple(prob, odds, 1.0)
-        for prob, odds in zip(probs_low, odds_low_margin)
+        for prob, odds in zip(probs_low, odds_low_margin, strict=False)
     )
     ev_high = sum(
         expected_value_simple(prob, odds, 1.0)
-        for prob, odds in zip(probs_high, odds_high_margin)
+        for prob, odds in zip(probs_high, odds_high_margin, strict=False)
     )
     assert ev_high <= ev_low

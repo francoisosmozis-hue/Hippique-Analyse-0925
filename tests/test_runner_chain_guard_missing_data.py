@@ -1,11 +1,11 @@
+import datetime as dt
 import json
 from pathlib import Path
-import datetime as dt
 
 import pytest
 import yaml
 
-from runner_chain import _write_analysis, RunnerPayload
+from runner_chain import RunnerPayload, _write_analysis
 
 
 @pytest.fixture
@@ -14,7 +14,7 @@ def course_setup(tmp_path: Path) -> tuple[Path, Path]:
     snap_dir = tmp_path / "snapshots"
     analysis_dir = tmp_path / "analyses"
     race_id = "R1C1"
-    
+
     # Crée les répertoires de course
     (snap_dir / race_id).mkdir(parents=True, exist_ok=True)
     (analysis_dir / race_id).mkdir(parents=True, exist_ok=True)

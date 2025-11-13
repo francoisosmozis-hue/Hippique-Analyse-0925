@@ -45,16 +45,13 @@ def test_enrich_from_snapshot_builds_csvs(
 
     result = module.enrich_from_snapshot(str(snapshot), str(out_dir))
 
-    if isinstance(result, dict):
-        assert result.get("je_stats") is not None
+    assert isinstance(result, dict)
+    assert result.get("je_stats") is not None
+    assert Path(result["je_stats"]).exists()
+
+    if module is fetch_je_chrono:
         assert result.get("chronos") is not None
-        assert Path(result["je_stats"]).exists()
         assert Path(result["chronos"]).exists()
-    else:
-        assert result is not None
-        out_path = Path(result)
-        assert out_path.exists()
-        assert out_path.stat().st_size > 0
 
 
 @pytest.mark.parametrize("module", [fetch_je_stats, fetch_je_chrono])
@@ -67,16 +64,16 @@ def test_enrich_from_snapshot_handles_missing_fields(
 
     result = module.enrich_from_snapshot(str(snapshot), str(tmp_path / "out"))
 
-    if isinstance(result, dict):
-        assert result.get("je_stats") is not None
-    else:
-        assert result is not None
+    assert isinstance(result, dict)
+    assert result.get("je_stats") is not None
 
     je_rows = list(csv.reader(Path(result["je_stats"]).open(encoding="utf-8")))
     assert je_rows == [["num", "nom", "j_rate", "e_rate"], ["A", "", "", ""]]
 
-    chrono_rows = list(csv.reader(Path(result["chronos"]).open(encoding="utf-8")))
-    assert chrono_rows == [["num", "chrono"], ["A", ""]]
+    if module is fetch_je_chrono:
+        assert result.get("chronos") is not None
+        chrono_rows = list(csv.reader(Path(result["chronos"]).open(encoding="utf-8")))
+        assert chrono_rows == [["num", "chrono"], ["A", ""]]
 
     warnings = [message for message in caplog.messages if "missing" in message]
     assert warnings, "Expected warnings for missing fields"
@@ -85,7 +82,7 @@ def test_enrich_from_snapshot_handles_missing_fields(
 @pytest.mark.parametrize("module", [fetch_je_stats, fetch_je_chrono])
 def test_enrich_from_snapshot_missing_snapshot_returns_none(
     module: Any, tmp_path: Path, caplog: pytest.LogCaptureFixture
-) -> None:    
+) -> None:
     caplog.set_level("WARNING")
     missing = tmp_path / "absent.json"
 
@@ -102,12 +99,12 @@ def test_enrich_from_snapshot_invalid_json(
     caplog.set_level("WARNING")
     snapshot = tmp_path / "broken.json"
     snapshot.write_text("not-json", encoding="utf-8")
-    
+
     result = module.enrich_from_snapshot(str(snapshot), str(tmp_path / "out"))
 
     assert result == {"je_stats": None, "chronos": None}
     assert any("Unable to load" in message for message in caplog.messages)
-               
+
 def test_fetch_je_chrono_enrich_from_snapshot_builds_chronos_csv(tmp_path: Path) -> None:
     snapshot = tmp_path / "snapshot.json"
     snapshot.write_text(

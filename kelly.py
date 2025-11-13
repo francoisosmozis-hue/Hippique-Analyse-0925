@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import math
 
 __all__ = ["kelly_fraction", "kelly_stake"]
@@ -37,7 +38,7 @@ def kelly_fraction(p: float, odds: float, lam: float = 1.0, cap: float = 1.0) ->
         lam = 1.0
     if not (0.0 < cap <= 1.0):
         cap = 1.0
-        
+
     # Kelly pur pour cotes décimales : f* = (p*o - 1)/(o - 1)
     numerator = p * o - 1.0
     denom = o - 1.0
@@ -50,8 +51,7 @@ def kelly_fraction(p: float, odds: float, lam: float = 1.0, cap: float = 1.0) ->
 
     # Kelly fractionné + plafond
     f = f * lam
-    if f > cap:
-        f = cap
+    f = min(f, cap)
     # clamp final de sécurité
     if f < 0.0:
         f = 0.0

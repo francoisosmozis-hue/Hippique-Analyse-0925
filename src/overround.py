@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 overround.py — calculs overround (win/place) + cap adaptatif GPI v5.1
 """
 from __future__ import annotations
-from typing import Iterable, Optional
 
-def _clean_odds(x) -> Optional[float]:
+from collections.abc import Iterable
+
+
+def _clean_odds(x) -> float | None:
     if x is None:
         return None
     try:

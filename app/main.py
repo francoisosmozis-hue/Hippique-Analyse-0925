@@ -1,7 +1,9 @@
-import os, sys, subprocess, json
+import os
+import subprocess
+import sys
+
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from typing import Optional
 
 # ➜ Make the package "src" importable (src/...): add /app (parent of src) to sys.path
 ROOT_DIR = "/app"
@@ -34,7 +36,7 @@ def _exec(cmd, timeout=280):
 class RunBody(BaseModel):
     phase: str = "H5"
     budget: float = 5.0
-    extra_args: Optional[list[str]] = None
+    extra_args: list[str] | None = None
 
 @app.get("/healthz")
 def healthz():
@@ -67,7 +69,7 @@ def run_job(body: RunBody):
 def debug_cat(path: str):
     """Retourne les 40 premières lignes d'un fichier pour inspection."""
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             lines = f.readlines()[:40]
         return {"path": path, "content": "".join(lines)}
     except Exception as e:

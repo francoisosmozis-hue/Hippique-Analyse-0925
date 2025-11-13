@@ -6,24 +6,25 @@ from functools import partial
 from pathlib import Path
 
 import pytest
- 
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from validator_ev import (
     ValidationError,
     combos_allowed,
+    summarise_validation,
+    validate_combos,
     validate_ev,
     validate_inputs,
     validate_policy,
-    validate_combos,
-    summarise_validation,
 )
+
 
 def test_validate_ev_passes_with_defaults(monkeypatch):
     monkeypatch.delenv("EV_MIN_SP", raising=False)
     monkeypatch.delenv("EV_MIN_GLOBAL", raising=False)
     assert validate_ev(ev_sp=0.5, ev_global=0.5)
- 
+
 def test_validate_ev_sp_below_threshold(monkeypatch):
     monkeypatch.setenv("EV_MIN_SP", "0.2")
     with pytest.raises(ValidationError):
@@ -204,7 +205,7 @@ def test_validator_cli_returns_non_zero_on_failure(tmp_path):
 
     result = subprocess.run(
         [sys.executable, str(script), "--artefacts", str(artefacts_dir)],
-        capture_output=True,
+        check=False, capture_output=True,
         text=True,
     )
 

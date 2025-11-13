@@ -6,7 +6,6 @@ from pathlib import Path
 import pytest
 
 from hippique.analytics import (
-    Allocation,
     AllocationPlan,
     RaceMetrics,
     compute_allocation_plan,

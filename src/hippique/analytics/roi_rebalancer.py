@@ -12,11 +12,12 @@ conservative approximation in the absence of the full covariance matrix.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import json
 import math
+from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterable, List, Mapping, MutableMapping, Sequence
+from typing import Any
 
 _MIN_RISK = 1e-4
 
@@ -224,7 +225,7 @@ def compute_allocation_plan(
     allocations: list[Allocation] = []
     expected_return = 0.0
     aggregate_risk = 0.0
-    for race, score in zip(filtered, scores):
+    for race, score in zip(filtered, scores, strict=False):
         share = score / total_score
         stake = bankroll * share
         scaled_ev = race.ev_per_euro * stake

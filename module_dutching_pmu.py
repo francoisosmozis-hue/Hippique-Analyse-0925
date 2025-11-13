@@ -32,6 +32,7 @@ import pandas as pd
 
 from kelly import kelly_fraction
 
+
 def _safe_prob(p: float) -> float:
     return max(0.01, min(0.90, float(p)))
 
@@ -144,9 +145,10 @@ def ev_panier(df: pd.DataFrame) -> float:
 
 
 # ================== Dutching SP – Implémentation + Aliases Legacy ==================
-from typing import List, Dict, Any, Tuple
+from typing import Any
 
-def _parse_odds_place(r: Dict[str, Any]) -> float:
+
+def _parse_odds_place(r: dict[str, Any]) -> float:
     for k in ("odds_place", "cote_place", "odds", "cote"):
         v = r.get(k)
         if v is not None:
@@ -156,7 +158,7 @@ def _parse_odds_place(r: Dict[str, Any]) -> float:
                 pass
     return 4.0  # fallback prudente
 
-def _implied_probs_place_from_odds(runners: List[Dict[str, Any]]) -> Dict[str, float]:
+def _implied_probs_place_from_odds(runners: list[dict[str, Any]]) -> dict[str, float]:
     ids, px = [], []
     for r in runners:
         num = str(r.get("num") or r.get("id") or "").strip()
@@ -172,7 +174,7 @@ def _implied_probs_place_from_odds(runners: List[Dict[str, Any]]) -> Dict[str, f
     places = 3 if n >= 8 else (2 if n >= 4 else 1)
     s = sum(px)
     scale = float(places) / s if s > 0 else 1.0
-    return {i: max(0.005, min(0.90, p * scale)) for i, p in zip(ids, px)}
+    return {i: max(0.005, min(0.90, p * scale)) for i, p in zip(ids, px, strict=False)}
 
 def _kelly_fraction(p: float, odds: float) -> float:
     """Kelly pour pari binaire avec cote décimale 'odds' (incluant la mise)."""
@@ -182,7 +184,7 @@ def _kelly_fraction(p: float, odds: float) -> float:
 def _round_to(x: float, step: float) -> float:
     return round(max(0.0, x) / step) * step
 
-def allocate_dutching_sp(cfg: Dict[str, float], runners: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], float]:
+def allocate_dutching_sp(cfg: dict[str, float], runners: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], float]:
     """
     Dutching Simple Placé (GPI v5.1)
     Retourne (tickets, ev_panier) où:
@@ -239,7 +241,7 @@ def allocate_dutching_sp(cfg: Dict[str, float], runners: List[Dict[str, Any]]) -
 
     # Normalisation au budget SP
     s_k = sum(max(1e-9, k) for _, _, _, k, _ in stakes)
-    tickets: List[Dict[str, Any]] = []
+    tickets: list[dict[str, Any]] = []
     remaining = budget_sp
     for (num, odds, p, k, r) in stakes:
         raw = budget_sp * (k / s_k) if s_k > 0 else budget_sp / max(1, len(stakes))

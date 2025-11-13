@@ -1,7 +1,8 @@
+import datetime as dt
 import json
 import os
 import sys
-import datetime as dt
+
 import pytest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))

@@ -27,20 +27,20 @@ markers =
 # tests/conftest.py - Fixtures pytest
 # ============================================================================
 
-import pytest
-import os
-from datetime import datetime
-from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
-import tempfile
 
 # Imports depuis le projet
 import sys
+import tempfile
+from datetime import datetime
+from pathlib import Path
+from unittest.mock import MagicMock, Mock, patch
+
+import pytest
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.config import Config
 from src.logging_utils import setup_logger
-
 
 # ----------------------------------------------------------------------------
 # Fixtures de configuration
@@ -206,7 +206,7 @@ def mock_requests_session():
 def fixed_datetime():
     """Datetime fixe pour tests prévisibles"""
     fixed_dt = datetime(2025, 10, 16, 9, 0, 0)
-    
+
     with patch('src.time_utils.now_paris') as mock:
         mock.return_value = fixed_dt
         yield fixed_dt
@@ -231,7 +231,7 @@ def sample_gpi_output(temp_data_dir):
         "results.csv": "horse,odds,prediction\nCheval1,3.5,0.85",
         "report.xlsx": b"fake_excel_content"
     }
-    
+
     for filename, content in files.items():
         filepath = temp_data_dir / filename
         if isinstance(content, bytes):
@@ -241,7 +241,7 @@ def sample_gpi_output(temp_data_dir):
             filepath.write_text(json.dumps(content))
         else:
             filepath.write_text(content)
-    
+
     return temp_data_dir
 
 
@@ -253,8 +253,9 @@ def sample_gpi_output(temp_data_dir):
 def test_client():
     """Client de test FastAPI"""
     from fastapi.testclient import TestClient
+
     from src.service import app
-    
+
     # Désactiver l'authentification pour les tests
     with patch('src.service.config.REQUIRE_AUTH', False):
         client = TestClient(app)
@@ -318,10 +319,10 @@ def test_deduplicate_plan(sample_plan):
     '''Test de déduplication du plan'''
     # Ajouter un doublon
     plan_with_dup = sample_plan + [sample_plan[0]]
-    
+
     builder = PlanBuilder()
     unique_plan = builder._deduplicate_and_sort(plan_with_dup)
-    
+
     assert len(unique_plan) == len(sample_plan)
     assert_valid_plan(unique_plan)
 
@@ -329,11 +330,11 @@ def test_deduplicate_plan(sample_plan):
 def test_parse_zeturf_program(mock_requests_session, zeturf_html_sample):
     '''Test du parsing ZEturf'''
     mock_requests_session.get.return_value.text = zeturf_html_sample
-    
+
     builder = PlanBuilder()
     with patch('src.plan.requests.Session', return_value=mock_requests_session):
         plan = builder._parse_zeturf_program("2025-10-16")
-    
+
     assert len(plan) >= 3
     assert_valid_plan(plan)
 
@@ -343,7 +344,7 @@ def test_build_plan_real(test_config):
     '''Test d'intégration avec sources réelles (marqué slow)'''
     builder = PlanBuilder()
     plan = builder.build_plan("today")
-    
+
     # Peut échouer si pas de courses
     if plan:
         assert_valid_plan(plan)

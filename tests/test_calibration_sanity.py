@@ -1,74 +1,82 @@
+import json
 from pathlib import Path
 
 import pytest
 
 import pipeline_run
-from tests.test_pipeline_exotics_filters import (
-    DEFAULT_CALIBRATION,
-    _prepare_stubs,
-    _write_inputs,
+from tests.test_pipeline_smoke import (
+    GPI_YML,
+    partants_sample,
 )
 
 
 def test_pipeline_abstains_when_calibration_missing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    eval_stats = {
-        "status": "ok",
-        "ev_ratio": 0.55,
-        "payout_expected": 22.0,
-        "roi": 0.25,
-        "sharpe": 0.35,
-    }
+    """
+    Ensure the pipeline abstains if the calibration file is missing.
+    """
+    # Create the expected directory structure inside the temp path
+    race_dir = tmp_path / "data" / "R1C1"
+    race_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Create a minimal snapshot file that the pipeline needs to start
+    snapshot_content = {"runners": [{"num": "1", "p_place": 0.5, "cote": 3.0, "volatility": 0.5}]}
+    (race_dir / "snapshot_H5.json").write_text(json.dumps(snapshot_content))
 
-    _prepare_stubs(monkeypatch, eval_stats)
-    inputs = _write_inputs(tmp_path)
+    # Create the GPI config file where the pipeline will look for it
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    (config_dir / "gpi_v52.yml").write_text(GPI_YML)
 
-    outdir = tmp_path / "out"
+    # Call the real function with correct arguments, including root_dir
     result = pipeline_run.run_pipeline(
-        h30=str(inputs["h30"]),
-        h5=str(inputs["h5"]),
-        stats_je=str(inputs["stats"]),
-        partants=str(inputs["partants"]),
-        gpi=str(inputs["gpi"]),
-        outdir=str(outdir),
-        calibration=str(tmp_path / "missing_calibration.yaml"),
+        reunion="R1",
+        course="C1",
+        phase="H5",
+        budget=5.0,
+        calibration_path=str(tmp_path / "missing_calibration.yaml"), # This file does not exist
+        root_dir=tmp_path,
     )
 
-    metrics = result["metrics"]
-    assert metrics["status"] == "insufficient_data"
-    assert metrics["tickets"]["total"] == 0
-    assert "calibration_missing" in metrics["abstention_reasons"]
-    combo_meta = metrics.get("combo", {})
-    assert combo_meta.get("decision", "").startswith("reject")
-    assert "calibration_missing" in combo_meta.get("notes", [])
+    metrics = result.get("metrics", {})
+    assert metrics.get("status") == "insufficient_data"
+    assert metrics.get("reason") == "missing_calibration"
 
 
 def test_pipeline_accepts_valid_calibration(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    eval_stats = {
-        "status": "ok",
-        "ev_ratio": 0.6,
-        "payout_expected": 30.0,
-        "roi": 0.35,
-        "sharpe": 0.4,
-    }
+    """
+    Ensure the pipeline runs with a valid calibration file.
+    """
+    # Create the expected directory structure inside the temp path
+    race_dir = tmp_path / "data" / "R1C1"
+    race_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Use a more complete snapshot for this test
+    snapshot_content = partants_sample()
+    (race_dir / "snapshot_H5.json").write_text(json.dumps(snapshot_content))
 
-    _prepare_stubs(monkeypatch, eval_stats)
-    inputs = _write_inputs(tmp_path)
+    # Create the GPI config file
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    (config_dir / "gpi_v52.yml").write_text(GPI_YML)
 
-    outdir = tmp_path / "out"
+    # Create a valid calibration file
+    valid_calib_path = tmp_path / "calib.yaml"
+    valid_calib_path.write_text("version: 1")
+
+    # Call the real function with correct arguments
     result = pipeline_run.run_pipeline(
-        h30=str(inputs["h30"]),
-        h5=str(inputs["h5"]),
-        stats_je=str(inputs["stats"]),
-        partants=str(inputs["partants"]),
-        gpi=str(inputs["gpi"]),
-        outdir=str(outdir),
-        calibration=DEFAULT_CALIBRATION,
+        reunion="R1",
+        course="C1",
+        phase="H5",
+        budget=5.0,
+        calibration_path=str(valid_calib_path),
+        root_dir=tmp_path,
     )
-
-    metrics = result["metrics"]
-    assert metrics["status"] in {"ok", "abstain"}
-    assert "calibration_missing" not in metrics.get("abstention_reasons", [])
+    
+    # Check that the pipeline did not abstain for calibration reasons
+    assert result.get("metrics", {}).get("reason") != "missing_calibration"
+    assert result.get("abstain") is False

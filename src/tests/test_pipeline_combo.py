@@ -3,19 +3,19 @@ import sys
 from pathlib import Path
 
 import pytest
+from test_pipeline_smoke import (
+    GPI_YML,
+    odds_h5,
+    odds_h30,
+    partants_sample,
+    stats_sample,
+)
 
 import logging_io
 import pipeline_run
 import simulate_ev
 import simulate_wrapper
 import tickets_builder
-from test_pipeline_smoke import (
-    GPI_YML,
-    odds_h30,
-    odds_h5,
-    partants_sample,
-    stats_sample,    
-)
 
 
 def _with_exotics(partants: dict) -> dict:
@@ -40,7 +40,7 @@ def _patch_simulation(monkeypatch, *, simulate_fn=None, gate_fn=None):
         monkeypatch.setattr(simulate_ev, "gate_ev", gate_fn)
     pipeline_run._load_simulate_ev.cache_clear()
     return pipeline_run._load_simulate_ev.cache_clear
-    
+
 
 def _patch_combo_eval(monkeypatch, *, stats=None):
     default_stats = {
@@ -82,7 +82,7 @@ def _write_inputs(
     h5_path.write_text(json.dumps(odds_h5()), encoding="utf-8")
     stats_path.write_text(json.dumps(stats_sample()), encoding="utf-8")
     partants_path.write_text(json.dumps(partants), encoding="utf-8")
-        
+
     gpi_txt = (
         GPI_YML
         .replace("EV_MIN_GLOBAL: 0.35", "EV_MIN_GLOBAL: 0.0")
@@ -147,7 +147,7 @@ def _mock_tracking_outputs(tmp_path, monkeypatch):
 
     original_append_csv_line = logging_io.append_csv_line
     original_append_json = logging_io.append_json
-    
+
     def fake_append_csv_line(path, data, header=logging_io.CSV_HEADER):
         return original_append_csv_line(tracking_path, data, header=header)
 
@@ -240,7 +240,7 @@ def test_pipeline_allocates_combo_budget(tmp_path, monkeypatch):
             tickets.append(ticket)
         return tickets, {"notes": [], "flags": {"combo": True}}
 
-    monkeypatch.setattr(tickets_builder, "validate_exotics_with_simwrapper", fake_validate)    
+    monkeypatch.setattr(tickets_builder, "validate_exotics_with_simwrapper", fake_validate)
 
     calls = []
 
@@ -324,11 +324,11 @@ def test_pipeline_recomputes_after_combo_rejection(tmp_path, monkeypatch):
         return [dict(ticket) for ticket in tickets], 0.5
 
     monkeypatch.setattr(pipeline_run, "allocate_dutching_sp", fake_allocate)
-    
+
     def fake_validate(candidates, bankroll, **kwargs):
         if not candidates:
             return [], {"notes": [], "flags": {"combo": False}}
-            
+
         tickets = []
         for candidate in candidates:
             base = dict(candidate[0])
@@ -347,7 +347,7 @@ def test_pipeline_recomputes_after_combo_rejection(tmp_path, monkeypatch):
             tickets.append(ticket)
         return tickets, {"notes": [], "flags": {"combo": True}}
 
-    monkeypatch.setattr(tickets_builder, "validate_exotics_with_simwrapper", fake_validate)    
+    monkeypatch.setattr(tickets_builder, "validate_exotics_with_simwrapper", fake_validate)
 
     calls = []
 
@@ -544,15 +544,15 @@ def test_pipeline_uses_capped_stake_in_exports(tmp_path, monkeypatch):
     tracking_lines = tracking_path.read_text(encoding="utf-8").strip().splitlines()
     header = tracking_lines[0].split(";")
     values = tracking_lines[-1].split(";")
-    tracking = dict(zip(header, values))
+    tracking = dict(zip(header, values, strict=False))
     assert float(tracking["total_stake"]) == pytest.approx(capped["capped"])
-    
+
 def test_pipeline_optimization_preserves_ev_and_budget(tmp_path, monkeypatch):
     partants = partants_sample()
     inputs = _write_inputs(tmp_path, partants, combo_ratio=0.0)
 
     tracking_path = _mock_tracking_outputs(tmp_path, monkeypatch)
-    
+
     base_tickets = [
         {
             "type": "SP",
@@ -576,7 +576,7 @@ def test_pipeline_optimization_preserves_ev_and_budget(tmp_path, monkeypatch):
         lambda *args, **kwargs: ([dict(t) for t in base_tickets], [], None),
     )
     monkeypatch.setattr(pipeline_run, "allow_combo", lambda *args, **kwargs: False)
-    
+
     outdir = _run_pipeline(tmp_path, inputs)
 
     data = json.loads((outdir / "p_finale.json").read_text(encoding="utf-8"))
@@ -590,7 +590,7 @@ def test_pipeline_optimization_preserves_ev_and_budget(tmp_path, monkeypatch):
     tracking_lines = tracking_path.read_text(encoding="utf-8").strip().splitlines()
     header = tracking_lines[0].split(";")
     values = tracking_lines[-1].split(";")
-    tracking = dict(zip(header, values))
+    tracking = dict(zip(header, values, strict=False))
     assert float(tracking["total_optimized_stake"]) >= 0.0
 
     capped: dict[str, object] = {}
@@ -686,11 +686,11 @@ def test_pipeline_optimization_preserves_ev_and_budget(tmp_path, monkeypatch):
     tracking_lines = tracking_path.read_text(encoding="utf-8").strip().splitlines()
     header = tracking_lines[0].split(";")
     values = tracking_lines[-1].split(";")
-    tracking = dict(zip(header, values))
+    tracking = dict(zip(header, values, strict=False))
 
     assert float(tracking["total_stake"]) == pytest.approx(total_stake)
     assert float(tracking["roi_sp"]) == pytest.approx(data["ev"]["roi_sp"])
-    assert float(tracking["roi_global"]) == pytest.approx(data["ev"]["roi_global"])   
+    assert float(tracking["roi_global"]) == pytest.approx(data["ev"]["roi_global"])
 
 
 def test_pipeline_respects_p_finale_override(tmp_path, monkeypatch):

@@ -1,7 +1,7 @@
 import csv
 import json
+from collections.abc import Iterable, Mapping
 from pathlib import Path
-from typing import Iterable, Mapping
 
 # CSV header for the tracking file.
 CSV_HEADER = [

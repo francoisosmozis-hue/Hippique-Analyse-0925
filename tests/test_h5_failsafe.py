@@ -24,34 +24,10 @@ class DummyResp:
         return None
 
 
-def test_check_enrich_outputs_retries_once(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    snap = tmp_path / "snap_H-5.json"
-    snap.write_text("{}", encoding="utf-8")
-
-    sleeps: list[float] = []
-
-    def fake_sleep(delay: float) -> None:
-        sleeps.append(delay)
-        (tmp_path / f"{snap.stem}_je.csv").write_text(
-            "num,nom,j_rate,e_rate\n1,A,0.1,0.2\n", encoding="utf-8"
-        )
-        (tmp_path / "chronos.csv").write_text("num,chrono\n1,1.0\n", encoding="utf-8")
-
-    monkeypatch.setattr(acde.time, "sleep", fake_sleep)
-
-    result = acde._check_enrich_outputs(tmp_path, retry_delay=0.0)
-
-    assert result is None
-    assert sleeps == [0.0]
-
-
 def test_check_enrich_outputs_no_bet_payload(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    snap = tmp_path / "snap_H-5.json"
-    snap.write_text("{}", encoding="utf-8")
-
     monkeypatch.setattr(acde.time, "sleep", lambda delay: None)
 
-    result = acde._check_enrich_outputs(tmp_path, retry_delay=0.0)
+    result = acde._check_enrich_outputs(tmp_path)
 
     assert result == {
         "status": "no-bet",
@@ -74,7 +50,7 @@ def test_check_enrich_outputs_prefers_latest_snapshot(
 
     monkeypatch.setattr(acde.time, "sleep", lambda delay: None)
 
-    result = acde._check_enrich_outputs(tmp_path, retry_delay=0.0)
+    result = acde._check_enrich_outputs(tmp_path)
 
     assert result == {
         "status": "no-bet",
@@ -101,12 +77,12 @@ def test_process_reunion_continues_after_failure(
 
     monkeypatch.setattr(acde.requests, "get", lambda *a, **k: DummyResp(html))
 
-    def fake_snapshot(cid: str, ph: str, rc_dir: Path) -> Path:
+    def fake_snapshot(cid: str, ph: str, rc_dir: Path, *, course_url: str | None = None) -> Path:
+        rc_dir.mkdir(parents=True, exist_ok=True)
         stem = f"snap_{cid}_H-5"
         path = rc_dir / f"{stem}.json"
         path.write_text("{}", encoding="utf-8")
         return path
-
     monkeypatch.setattr(acde, "write_snapshot_from_geny", fake_snapshot)
 
     def fake_enrich(rc_dir: Path, **kw) -> None:
@@ -177,6 +153,6 @@ def test_mark_course_unplayable_writes_marker(
     assert info["marker_path"].endswith("UNPLAYABLE.txt")
     assert info["marker_written"] is True
     assert "chronos.csv" in info["marker_message"]
-    
+
     captured = capsys.readouterr()
     assert "Course non jouable" in captured.err

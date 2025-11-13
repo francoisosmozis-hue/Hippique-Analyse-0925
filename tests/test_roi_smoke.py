@@ -46,7 +46,7 @@ def _market_from_sample(h30: list[dict], h5: list[dict]) -> dict:
         "expected_payout_combo": 20.0,
     }
 
-    
+
 def _overround(odds: list[float]) -> float:
     return sum(1.0 / float(odd) for odd in odds)
 
@@ -54,7 +54,7 @@ def _overround(odds: list[float]) -> float:
 def test_roi_smoke_guardrails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, _ci_sample_loaded):
     monkeypatch.chdir(tmp_path)
     h30, h5 = _ci_sample_loaded
-    market = _market_from_sample(h30, h5)
+    market = _market_from_sample(h30["runners"], h5["runners"])
     meta = {"discipline": "trot", "n_partants": len(market["sp_odds"]), "race_id": "R1C1"}
 
     result = build_tickets(market, budget=5.0, meta=meta)

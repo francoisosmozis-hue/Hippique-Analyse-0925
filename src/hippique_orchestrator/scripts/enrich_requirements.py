@@ -5,8 +5,8 @@ from __future__ import annotations
 
 import argparse
 import re
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_REQUIREMENTS_PATH = PROJECT_ROOT / "requirements.txt"

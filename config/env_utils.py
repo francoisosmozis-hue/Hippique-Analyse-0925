@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Callable, Sequence, TypeVar
+from collections.abc import Callable, Sequence
+from typing import TypeVar
 
 T = TypeVar("T")
 
@@ -43,7 +44,7 @@ def get_env(
     aliases:
         Optional iterable of alternative environment variable names.
     """
-    
+
     raw_value: str | None = None
     source = name
     for candidate in _iter_candidates(name, aliases):
@@ -59,7 +60,7 @@ def get_env(
             raise RuntimeError(f"Missing required environment variable '{name}'")
         logger.warning("Environment variable %s not set; using default %r", name, default)
         return default  # type: ignore[return-value]
-        
+
     try:
         value = cast(raw_value)
     except Exception as exc:  # pragma: no cover - defensive
@@ -69,7 +70,7 @@ def get_env(
 
     if source != name:
         logger.info("Environment variable %s=%r used as alias for %s", source, value, name)
-        
+
     if default is not None and value != default:
         logger.info("Environment variable %s=%r overrides default %r", source, value, default)
     return value

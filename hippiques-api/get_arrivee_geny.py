@@ -29,10 +29,10 @@ import datetime as dt
 import importlib.util
 import json
 import sys
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from types import ModuleType
-from typing import Any, Callable, Sequence
-
+from typing import Any
 
 SCRAPER_MODULE_NAME = "_hippique_arrivee_scraper"
 
@@ -86,7 +86,7 @@ def build_payload(race_id: str) -> dict[str, object]:
             "error": f"{exc.__class__.__name__}: {exc}",
         }
         return payload
-        
+
     numbers_list = [str(num) for num in numbers]
     if numbers_list:
         status = "OK"

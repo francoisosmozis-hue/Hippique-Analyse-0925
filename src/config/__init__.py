@@ -1,2 +1,2 @@
 """Configuration utilities package."""
-from .config import config, Config
+from .config import Config, config

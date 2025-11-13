@@ -1,15 +1,16 @@
 
-import pandas as pd
 import json
+
+import pandas as pd
 
 # Load the main dataset
 df = pd.read_csv("fr_2025_sept_partants_cotes_arrivees.csv")
 
 # Load the jockey and trainer stats
-with open("jockey_stats_provided.json", "r", encoding="utf-8") as f:
+with open("jockey_stats_provided.json", encoding="utf-8") as f:
     jockey_stats = json.load(f)
 
-with open("trainer_stats_provided.json", "r", encoding="utf-8") as f:
+with open("trainer_stats_provided.json", encoding="utf-8") as f:
     trainer_stats = json.load(f)
 
 # Prepare columns

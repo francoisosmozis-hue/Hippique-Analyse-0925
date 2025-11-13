@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 pipeline_run.py — GPI v5.1 (cap 5 €)
 Chaîne de décision complète (EV + budget + Kelly cap 60 %) intégrée.
@@ -32,23 +31,25 @@ import math
 import re
 import statistics as stats
 import sys
-import logging_io
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import asdict, dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple, Union
+from typing import Any
+
+import logging_io
 
 try:  # pragma: no cover - optional dependency
     import yaml
 except Exception:  # pragma: no cover - yaml may be unavailable in slim envs
     yaml = None  # type: ignore
 
-from hippique.utils.probabilities import expected_value_simple, no_vig_probs
 from hippique.utils.dutching import (
     diversify_guard,
     equal_profit_stakes,
     require_mid_odds,
 )
+from hippique.utils.probabilities import expected_value_simple, no_vig_probs
 
 # ===================== Imports optionnels (helpers du dépôt) =====================
 try:
@@ -130,10 +131,10 @@ def _summarize_optimization(*_args: object, **_kwargs: object) -> None:
 def compute_drift_dict(
     h30: Mapping[str, float] | None,
     h5: Mapping[str, float] | None,
-) -> Dict[str, float]:
+) -> dict[str, float]:
     """Compute relative drift between H-30 and H-5 odds for each runner."""
 
-    drift: Dict[str, float] = {}
+    drift: dict[str, float] = {}
     if not h30 or not h5:
         return drift
     for runner_id, odds_30 in h30.items():
@@ -168,10 +169,10 @@ def enforce_ror_threshold(
     return max(min_kelly, base_kelly * 0.66)
 
 
-def build_p_true(win_odds: Iterable[float]) -> Dict[int, float]:
+def build_p_true(win_odds: Iterable[float]) -> dict[int, float]:
     """Derive a naive no-vig probability distribution from win odds."""
 
-    normalized: Dict[int, float] = {}
+    normalized: dict[int, float] = {}
     inv_odds: list[float] = []
     for value in win_odds or []:
         try:
@@ -281,7 +282,7 @@ def _load_simulate_ev():
 def _build_market(
     runners: Sequence[Mapping[str, Any]],
     slots_hint: Any | None = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Return market metrics including win/place overround when possible."""
 
     runners_seq = list(runners or [])
@@ -305,7 +306,7 @@ def _build_market(
     overround_win = _estimate_overround_win(runners_seq) if coverage_ok else None
     overround_place = _estimate_overround_place(runners_seq)
 
-    market: Dict[str, Any] = {
+    market: dict[str, Any] = {
         "runner_count_total": total,
         "runner_count_with_win_odds": len(win_odds),
         "win_coverage_ratio": round(coverage_ratio, 4) if total else 0.0,
@@ -322,47 +323,47 @@ def _build_market(
         market.setdefault("overround", overround_place)
 
     return market
-    
+
 # =============================== Structures de données ==========================
 @dataclass
 class Horse:
     num: str
-    name: Optional[str]
-    odds_h30: Optional[float]
-    odds_h5: Optional[float]
-    p_impl_h30: Optional[float]
-    p_impl_h5: Optional[float]
-    p_score: Optional[float]  # prob mix/blend finale (après normalisation)
-    drift: Optional[float]    # variation de cote (h5 - h30)
-    ecurie: Optional[str] = None
-    driver: Optional[str] = None
-    chrono_last: Optional[float] = None
+    name: str | None
+    odds_h30: float | None
+    odds_h5: float | None
+    p_impl_h30: float | None
+    p_impl_h5: float | None
+    p_score: float | None  # prob mix/blend finale (après normalisation)
+    drift: float | None    # variation de cote (h5 - h30)
+    ecurie: str | None = None
+    driver: str | None = None
+    chrono_last: float | None = None
 
 @dataclass
 class Ticket:
     kind: str  # 'SP_DUTCHING' | 'CP' | 'TRIO' | 'ZE4'
-    legs: List[Dict[str, Any]]
+    legs: list[dict[str, Any]]
     stake: float
-    exp_value: Optional[float]
-    exp_payout: Optional[float]
+    exp_value: float | None
+    exp_payout: float | None
 
 @dataclass
 class Report:
     course_dir: str
     n_partants: int
-    overround_h30: Optional[float]
-    overround_h5: Optional[float]
-    favorite: Optional[str]
-    tickets: List[Ticket]
+    overround_h30: float | None
+    overround_h5: float | None
+    favorite: str | None
+    tickets: list[Ticket]
     budget_total: float
     budget_sp: float
     budget_combo: float
-    abstention: Optional[str] = None
+    abstention: str | None = None
 
 # =============================== Utilitaires ====================================
 
 
-def _load_gpi_cfg(path: Path | str = "config/gpi.yml") -> Dict[str, Any]:
+def _load_gpi_cfg(path: Path | str = "config/gpi.yml") -> dict[str, Any]:
     if yaml is None:
         return {}
     config_path = Path(path)
@@ -375,7 +376,7 @@ def _load_gpi_cfg(path: Path | str = "config/gpi.yml") -> Dict[str, Any]:
     return data
 
 
-_GPI_CFG: Dict[str, Any] = _load_gpi_cfg()
+_GPI_CFG: dict[str, Any] = _load_gpi_cfg()
 
 
 ARTIFACTS_DIR = Path("artifacts")
@@ -384,7 +385,7 @@ PER_HORSE_REPORT_PATH = ARTIFACTS_DIR / "per_horse_report.csv"
 CMD_UPDATE_EXCEL_PATH = ARTIFACTS_DIR / "cmd_update_excel.txt"
 
 
-def _cfg_section(name: str) -> Dict[str, Any]:
+def _cfg_section(name: str) -> dict[str, Any]:
     section = _GPI_CFG.get(name, {}) if isinstance(_GPI_CFG, dict) else {}
     return section if isinstance(section, dict) else {}
 
@@ -410,7 +411,7 @@ SP_MIN_ODDS = 2.5
 SP_MAX_ODDS = 7.0
 
 
-def _overround(odds_list: List[float]) -> float:
+def _overround(odds_list: list[float]) -> float:
     return sum(1.0 / float(o) for o in odds_list if o)
 
 
@@ -440,7 +441,7 @@ def _kelly_fraction_guard(ror_daily: float) -> float:
     return max(min_fraction, base * 0.66)
 
 
-def _estimate_ror_daily(returns: List[float], bankroll: float) -> float:
+def _estimate_ror_daily(returns: list[float], bankroll: float) -> float:
     if not returns or bankroll <= 0:
         return 0.0
     try:
@@ -451,7 +452,7 @@ def _estimate_ror_daily(returns: List[float], bankroll: float) -> float:
     return 0.01 if math.sqrt(variance) > threshold else 0.0
 
 
-def _clv_median_ok(clv_series: List[float], gate: float) -> bool:
+def _clv_median_ok(clv_series: list[float], gate: float) -> bool:
     if not clv_series:
         return False
     try:
@@ -472,8 +473,8 @@ def _extract_float(meta: Mapping[str, Any], keys: Sequence[str], default: float 
     return default
 
 
-def _per_horse_rows_from_market(sp_odds: Sequence[float], sp_meta: Sequence[Mapping[str, Any]]) -> List[Dict[str, Any]]:
-    rows: List[Dict[str, Any]] = []
+def _per_horse_rows_from_market(sp_odds: Sequence[float], sp_meta: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
     if not sp_odds:
         return rows
     probs = list(no_vig_probs(list(sp_odds))) if sp_odds else []
@@ -492,8 +493,8 @@ def _per_horse_rows_from_market(sp_odds: Sequence[float], sp_meta: Sequence[Mapp
     return rows
 
 
-def _per_horse_rows_from_horses(horses: Sequence[Horse]) -> List[Dict[str, Any]]:
-    rows: List[Dict[str, Any]] = []
+def _per_horse_rows_from_horses(horses: Sequence[Horse]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
     if not horses:
         return rows
     odds = []
@@ -501,7 +502,7 @@ def _per_horse_rows_from_horses(horses: Sequence[Horse]) -> List[Dict[str, Any]]
         odds_value = horse.odds_h5 or horse.odds_h30
         odds.append(float(odds_value) if odds_value else None)
     probs, _ = _implied_probs_from_odds(odds)
-    for horse, prob, odds_value in zip(horses, probs, odds):
+    for horse, prob, odds_value in zip(horses, probs, odds, strict=False):
         rows.append(
             {
                 "num": horse.num,
@@ -552,10 +553,10 @@ def _write_artifacts(
 
 
 def build_tickets_roi_first(
-    market: Dict[str, Any],
+    market: dict[str, Any],
     budget: float,
-    meta: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
+    meta: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """ROI-first ticket constructor used by the fast-path tooling.
 
     Parameters
@@ -594,7 +595,7 @@ def build_tickets_roi_first(
     if sp_odds_raw:
         overround_cap = _pick_overround_cap(discipline, n_partants)
         overround_value = _overround(sp_odds_raw)
-        
+
     clv_cfg = _cfg_section("clv")
     clv_series = list(market.get("clv_rolling") or meta.get("clv_rolling") or [])
     allow_exotics = _clv_median_ok(
@@ -607,10 +608,10 @@ def build_tickets_roi_first(
     ror_daily = _estimate_ror_daily(todays_returns, bankroll)
     kelly_fraction = _kelly_fraction_guard(ror_daily)
 
-    tickets: List[Dict[str, Any]] = []
-    abstention: Optional[str] = None
-    
-    sp_meta = market.get("sp_meta") or []    
+    tickets: list[dict[str, Any]] = []
+    abstention: str | None = None
+
+    sp_meta = market.get("sp_meta") or []
     per_horse_rows = _per_horse_rows_from_market(sp_odds_raw, sp_meta)
 
     if sp_odds_raw and overround_cap is not None and overround_value is not None:
@@ -641,7 +642,7 @@ def build_tickets_roi_first(
                     probs = list(no_vig_probs(sp_odds_raw))
                 evs = [
                     expected_value_simple(prob, odds, stake)
-                    for prob, odds, stake in zip(probs, sp_odds_raw, stakes)
+                    for prob, odds, stake in zip(probs, sp_odds_raw, stakes, strict=False)
                 ]
                 ev_sp = float(sum(evs))
 
@@ -651,7 +652,7 @@ def build_tickets_roi_first(
                     abstention = "EV_SP_TOO_LOW"
                 else:
                     legs_payload = []
-                    for meta_leg, odds, stake, prob, ev_leg in zip(sp_meta, sp_odds_raw, stakes, probs, evs):
+                    for meta_leg, odds, stake, prob, ev_leg in zip(sp_meta, sp_odds_raw, stakes, probs, evs, strict=False):
                         leg_payload = dict(meta_leg)
                         leg_payload.update(
                             {
@@ -671,7 +672,7 @@ def build_tickets_roi_first(
                             "stake": round(sum(stakes), 2),
                             "ev": ev_sp,
                         }
-                    )       
+                    )
 
     ev_cfg = _cfg_section("ev")
     min_combo_payout = float(ev_cfg.get("min_expected_payout_combo", 0.0))
@@ -701,15 +702,15 @@ def build_tickets_roi_first(
         "kelly_fraction": kelly_fraction,
     }
     _write_artifacts(metrics_payload, per_horse_rows, str(meta.get("race_id", "R?C?")))
-    
+
     return {"tickets": tickets, "abstention": None}
-    
-def _load_latest(path: Path, pattern: str) -> Optional[Path]:
+
+def _load_latest(path: Path, pattern: str) -> Path | None:
     files = sorted(path.glob(pattern), key=lambda p: p.stat().st_mtime)
     return files[-1] if files else None
 
 
-def _safe_float(x: Any) -> Optional[float]:
+def _safe_float(x: Any) -> float | None:
     if x is None:
         return None
     try:
@@ -718,12 +719,12 @@ def _safe_float(x: Any) -> Optional[float]:
         return None
 
 
-def _read_snapshot_json(p: Path) -> Dict[str, Any]:
+def _read_snapshot_json(p: Path) -> dict[str, Any]:
     with p.open("r", encoding="utf-8", errors="replace") as f:
         return json.load(f)
 
 
-def _collect_runners(snapshot: Dict[str, Any]) -> List[Dict[str, Any]]:
+def _collect_runners(snapshot: dict[str, Any]) -> list[dict[str, Any]]:
     # Tente plusieurs clés communes aux snapshots du dépôt
     for key in ("runners", "participants", "partants", "horses"):
         if isinstance(snapshot.get(key), list):
@@ -732,7 +733,7 @@ def _collect_runners(snapshot: Dict[str, Any]) -> List[Dict[str, Any]]:
     return []
 
 
-def _extract_odds(rec: Dict[str, Any]) -> Optional[float]:
+def _extract_odds(rec: dict[str, Any]) -> float | None:
     for k in ("odds", "cote", "odds_sp", "odds_place", "cote_place"):
         v = _safe_float(rec.get(k))
         if v is not None and v > 0:
@@ -740,7 +741,7 @@ def _extract_odds(rec: Dict[str, Any]) -> Optional[float]:
     return None
 
 
-def _implied_probs_from_odds(odds: List[Optional[float]]) -> Tuple[List[Optional[float]], Optional[float]]:
+def _implied_probs_from_odds(odds: list[float | None]) -> tuple[list[float | None], float | None]:
     """Retourne (probs_normalisées, overround)
     - ignore None
     - si aucune cote valide, renvoie ([None…], None)
@@ -759,7 +760,7 @@ def _implied_probs_from_odds(odds: List[Optional[float]]) -> Tuple[List[Optional
     return probs, s
 
 
-def _blend(a: Optional[float], b: Optional[float], w_b: float = 0.6) -> Optional[float]:
+def _blend(a: float | None, b: float | None, w_b: float = 0.6) -> float | None:
     if a is None and b is None:
         return None
     if a is None:
@@ -771,7 +772,7 @@ def _blend(a: Optional[float], b: Optional[float], w_b: float = 0.6) -> Optional
 
 # ========================= Chargement course & features =========================
 
-def load_course(course_dir: str) -> Tuple[List[Horse], Dict[str, Any]]:
+def load_course(course_dir: str) -> tuple[list[Horse], dict[str, Any]]:
     d = Path(course_dir)
     if not d.exists():
         raise FileNotFoundError(f"Dossier inexistant: {course_dir}")
@@ -786,8 +787,8 @@ def load_course(course_dir: str) -> Tuple[List[Horse], Dict[str, Any]]:
     run_h5  = _collect_runners(snap_h5)
 
     # Map par dossard
-    idx30: Dict[str, Dict[str, Any]] = {str(r.get("num") or r.get("horse") or r.get("dossard") or r.get("id")): r for r in run_h30}
-    idx5:  Dict[str, Dict[str, Any]] = {str(r.get("num") or r.get("horse") or r.get("dossard") or r.get("id")): r for r in run_h5}
+    idx30: dict[str, dict[str, Any]] = {str(r.get("num") or r.get("horse") or r.get("dossard") or r.get("id")): r for r in run_h30}
+    idx5:  dict[str, dict[str, Any]] = {str(r.get("num") or r.get("horse") or r.get("dossard") or r.get("id")): r for r in run_h5}
     all_nums = sorted(set(idx30.keys()) | set(idx5.keys()), key=lambda x: (len(x), x))
 
     # Cotes & probs
@@ -800,7 +801,7 @@ def load_course(course_dir: str) -> Tuple[List[Horse], Dict[str, Any]]:
     probs30, over30 = _implied_probs_from_odds(odds30)
     probs5, over5 = _implied_probs_from_odds(odds5)
 
-    horses: List[Horse] = []
+    horses: list[Horse] = []
     for i, num in enumerate(all_nums):
         rec5 = idx5.get(num, {})
         rec30 = idx30.get(num, {})
@@ -873,7 +874,7 @@ def load_course(course_dir: str) -> Tuple[List[Horse], Dict[str, Any]]:
 
 # =============================== Sélection SP ===================================
 
-def _select_sp_candidates(horses: List[Horse]) -> List[Horse]:
+def _select_sp_candidates(horses: list[Horse]) -> list[Horse]:
     """Filtre SP (2.5–7.0) et priorité aux meilleurs p_score.
     Inclut au moins un cheval de cote moyenne (4–7) si possible (règle 18/07).
     """
@@ -895,7 +896,7 @@ def _kelly_fraction(p: float, b: float) -> float:
     return max(0.0, (b * p - q) / max(b, 1e-9))
 
 
-def _allocate_kelly_capped(stakes_total: float, picks: List[Horse], fraction: float = 0.5) -> List[float]:
+def _allocate_kelly_capped(stakes_total: float, picks: list[Horse], fraction: float = 0.5) -> list[float]:
     """Répartition Kelly fractionné avec cap à 60% par cheval, normalisée pour somme=stakes_total."""
     if not picks:
         return []
@@ -917,7 +918,7 @@ def _allocate_kelly_capped(stakes_total: float, picks: List[Horse], fraction: fl
 
 # =============================== EV des combinés ================================
 
-def _simulate_cp_ev(legs: List[Horse]) -> Tuple[Optional[float], Optional[float]]:
+def _simulate_cp_ev(legs: list[Horse]) -> tuple[float | None, float | None]:
     if simulate_couple_place_ev is not None:
         try:
             ev, payout = simulate_couple_place_ev([
@@ -936,7 +937,7 @@ def _simulate_cp_ev(legs: List[Horse]) -> Tuple[Optional[float], Optional[float]
     return ev, exp_payout
 
 
-def _simulate_trio_ev(legs: List[Horse]) -> Tuple[Optional[float], Optional[float]]:
+def _simulate_trio_ev(legs: list[Horse]) -> tuple[float | None, float | None]:
     if simulate_trio_ev is not None:
         try:
             ev, payout = simulate_trio_ev([
@@ -957,12 +958,12 @@ def _simulate_trio_ev(legs: List[Horse]) -> Tuple[Optional[float], Optional[floa
 # =============================== Construction tickets ===========================
 
 def _build_tickets_from_horses(
-    horses: List[Horse],
+    horses: list[Horse],
     budget: float = BUDGET_DEFAULT,
-    meta: Optional[Dict[str, Any]] = None,
-) -> List[Ticket]:
-    tickets: List[Ticket] = []
-    
+    meta: dict[str, Any] | None = None,
+) -> list[Ticket]:
+    tickets: list[Ticket] = []
+
     # Ticket 1 — SP Dutching
     budget_sp = round(budget * RATIO_SP, 2)
     sp_candidates = _select_sp_candidates(horses)
@@ -982,7 +983,7 @@ def _build_tickets_from_horses(
             allocs = _allocate_kelly_capped(budget_sp, sp_candidates, 0.5)
 
         legs = []
-        for h, stake in zip(sp_candidates, allocs):
+        for h, stake in zip(sp_candidates, allocs, strict=False):
             legs.append({"horse": h.num, "odds": h.odds_h5, "p": h.p_score, "stake": round(stake, 2)})
         tickets.append(Ticket(kind="SP_DUTCHING", legs=legs, stake=round(sum(allocs), 2), exp_value=None, exp_payout=None))
 
@@ -998,7 +999,7 @@ def _build_tickets_from_horses(
         cp_legs = ranked[:2]
         trio_legs = ranked[:3]
 
-        best_combo: Optional[Ticket] = None
+        best_combo: Ticket | None = None
 
         # CP
         if len(cp_legs) == 2:
@@ -1045,14 +1046,14 @@ def _build_tickets_from_horses(
         _per_horse_rows_from_horses(horses),
         str((meta or {}).get("race_id", (meta or {}).get("course_dir", "R?C?"))),
     )
-    
+
     return tickets
 
 
 def build_tickets(
-    payload: Union[Dict[str, Any], List[Horse]],
+    payload: dict[str, Any] | list[Horse],
     budget: float = BUDGET_DEFAULT,
-    meta: Optional[Dict[str, Any]] = None,
+    meta: dict[str, Any] | None = None,
 ):
     """Dispatch helper supporting both market dicts and horse lists."""
 
@@ -1063,12 +1064,12 @@ def build_tickets(
             return _build_tickets_from_horses(payload, budget, meta)
         raise TypeError("Expected Horse instances in list payload")
     raise TypeError("Unsupported payload type for build_tickets")
-    
+
 # =============================== Pipeline principal =============================
 
-def _run_pipeline_course_dir(course_dir: str, budget: float = BUDGET_DEFAULT) -> Dict[str, Any]:
+def _run_pipeline_course_dir(course_dir: str, budget: float = BUDGET_DEFAULT) -> dict[str, Any]:
     horses, meta = load_course(course_dir)
-    
+
     # Favori par p_score
     favorite = None
     if horses:
@@ -1116,7 +1117,7 @@ def _run_pipeline_course_dir(course_dir: str, budget: float = BUDGET_DEFAULT) ->
     }
     return out
 
-def _run_pipeline_from_inputs(**kwargs: Any) -> Dict[str, Any]:
+def _run_pipeline_from_inputs(**kwargs: Any) -> dict[str, Any]:
     """Lightweight pipeline used in unit tests with explicit input paths."""
 
     partants_path = kwargs.get("partants")
@@ -1124,7 +1125,7 @@ def _run_pipeline_from_inputs(**kwargs: Any) -> Dict[str, Any]:
     outdir_path = Path(outdir) if outdir else Path(partants_path or ".").parent / "out"
     outdir_path.mkdir(parents=True, exist_ok=True)
 
-    partants_data: Dict[str, Any] = {}
+    partants_data: dict[str, Any] = {}
     if partants_path:
         try:
             partants_data = json.loads(Path(partants_path).read_text(encoding="utf-8"))
@@ -1138,13 +1139,13 @@ def _run_pipeline_from_inputs(**kwargs: Any) -> Dict[str, Any]:
     overround_value = market_metrics.get("overround")
 
     cap = compute_overround_cap()
-    metrics: Dict[str, Any] = {
+    metrics: dict[str, Any] = {
         "status": "ok",
         "overround": overround_value,
         "tickets": {"total": 0, "sp": 0, "combo": 0},
     }
     abstention_reasons: list[str] = []
-    combo_meta: Dict[str, Any] = {"decision": "skip", "notes": []}
+    combo_meta: dict[str, Any] = {"decision": "skip", "notes": []}
 
     if (overround_value is not None) and (cap is not None) and (overround_value > cap):
         metrics["status"] = "abstain"
@@ -1178,7 +1179,7 @@ def _run_pipeline_from_inputs(**kwargs: Any) -> Dict[str, Any]:
     return {"metrics": metrics, "outdir": str(outdir_path)}
 
 
-def run_pipeline(*args: Any, **kwargs: Any) -> Dict[str, Any]:
+def run_pipeline(*args: Any, **kwargs: Any) -> dict[str, Any]:
     """Dispatch between course_dir and explicit-path execution modes."""
 
     if args and not kwargs:
@@ -1190,7 +1191,7 @@ def run_pipeline(*args: Any, **kwargs: Any) -> Dict[str, Any]:
 
 # =================================== CLI ========================================
 
-def _guess_course_dir(args: argparse.Namespace) -> Optional[str]:
+def _guess_course_dir(args: argparse.Namespace) -> str | None:
     if args.dir:
         return args.dir
     # Petits helpers si on passe R/C/date
@@ -1204,7 +1205,7 @@ def _guess_course_dir(args: argparse.Namespace) -> Optional[str]:
     return None
 
 
-def main(argv: Optional[List[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="GPI v5.1 pipeline runner")
     parser.add_argument("--dir", help="Dossier de la course (ex: data/R1C2)")
     parser.add_argument("--reunion", help="R?, ex: R1")

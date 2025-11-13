@@ -134,7 +134,7 @@ def test_safe_enrich_h5_recovers_after_stats_fetch(tmp_path, monkeypatch):
             je_csv.unlink()
 
     fetch_calls = {"stats": 0, "chrono": 0}
-    
+
     def fake_fetch(script_path: Path, course_dir: Path) -> bool:
         assert course_dir == rc_dir
         if script_path == acd._FETCH_JE_STATS_SCRIPT:
@@ -221,13 +221,13 @@ def test_safe_enrich_h5_retries_when_rebuild_impossible(tmp_path, monkeypatch):
     assert success is True
     assert outcome is None
     assert calls["enrich"] == 2, "enrich_h5 should be retried when rebuild fails"
-    
+
 
 def test_filter_cp_accepts_threshold_sum():
     """Couplé placé odds summing to the threshold should be preserved."""
 
     import analyse_courses_du_jour_enrichie as acd
-    
+
     ticket = {
         "type": "COUPLE_PLACE",
         "legs": [{"cote": "3.0"}, {"cote": "3.0"}],

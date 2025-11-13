@@ -1,10 +1,13 @@
 # modules/tickets_store.py
 from __future__ import annotations
-import os, json, datetime
-from pathlib import Path
-from typing import Dict, Any, Optional
-from jinja2 import Template
+
+import datetime
+import json
+import os
+from typing import Any
+
 from google.cloud import storage
+from jinja2 import Template
 
 TICKETS_BUCKET = os.environ.get("TICKETS_BUCKET")
 TICKETS_PREFIX = os.environ.get("TICKETS_PREFIX", "tickets")
@@ -76,7 +79,7 @@ def _blob_path(date_str: str, rxcy: str) -> str:
 def _index_path() -> str:
     return f"{TICKETS_PREFIX}/index.html"
 
-def render_ticket_html(payload: Dict[str, Any], *, reunion: str, course: str, phase: str, budget: float) -> str:
+def render_ticket_html(payload: dict[str, Any], *, reunion: str, course: str, phase: str, budget: float) -> str:
     date_str = datetime.datetime.now().strftime("%Y-%m-%d")
     ev = payload.get("ev") or payload.get("ev_global")
     roi = payload.get("roi") or payload.get("roi_estime")
@@ -97,7 +100,7 @@ def save_ticket_html(html: str, *, date_str: str, rxcy: str) -> None:
     blob.content_type = "text/html; charset=utf-8"
     blob.upload_from_string(html, content_type=blob.content_type)
 
-def build_and_save_ticket(payload: Dict[str, Any], *, reunion: str, course: str, phase: str, budget: float) -> str:
+def build_and_save_ticket(payload: dict[str, Any], *, reunion: str, course: str, phase: str, budget: float) -> str:
     date_str = datetime.datetime.now().strftime("%Y-%m-%d")
     rxcy = f"{reunion}{course}"
     html = render_ticket_html(payload, reunion=reunion, course=course, phase=phase, budget=budget)

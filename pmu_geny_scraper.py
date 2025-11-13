@@ -64,12 +64,11 @@ import csv
 import datetime as dt
 import json
 import sys
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional
 
 import requests
-
 
 BASE_URL = "https://offline.turfinfo.api.pmu.fr/rest/client/7"
 
@@ -85,12 +84,12 @@ class Participant:
     discipline: str
     num: str
     cheval: str
-    jockey: Optional[str]
-    entraineur: Optional[str]
-    rapport_direct: Optional[float]
-    rapport_reference: Optional[float]
+    jockey: str | None
+    entraineur: str | None
+    rapport_direct: float | None
+    rapport_reference: float | None
 
-    def to_row(self) -> List[str]:
+    def to_row(self) -> list[str]:
         """Convertit le participant en liste pour écriture CSV."""
         return [
             self.date,
@@ -107,7 +106,7 @@ class Participant:
         ]
 
 
-def fetch_program(date_str: str) -> Dict[str, any]:
+def fetch_program(date_str: str) -> dict[str, any]:
     """
     Récupère le programme des réunions pour une date donnée.
 
@@ -130,7 +129,7 @@ def fetch_program(date_str: str) -> Dict[str, any]:
         raise RuntimeError(f"Réponse JSON invalide pour {url}") from exc
 
 
-def fetch_participants(date_str: str, reunion: str, course: str) -> Dict[str, any]:
+def fetch_participants(date_str: str, reunion: str, course: str) -> dict[str, any]:
     """
     Récupère la liste des partants pour une course spécifique.
 
@@ -163,7 +162,7 @@ def parse_participants(
     course: str,
     hippodrome: str,
     discipline: str,
-    data: Dict[str, any],
+    data: dict[str, any],
 ) -> Iterable[Participant]:
     """
     Transforme un JSON de participants en objets Participant.
@@ -269,7 +268,7 @@ def write_csv(path: Path, participants: Iterable[Participant]) -> None:
             writer.writerow(p.to_row())
 
 
-def main(argv: Optional[List[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Scrape les courses PMU pour une date donnée.")
     parser.add_argument(
         "--date",
@@ -310,7 +309,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         print(f"Aucune réunion trouvée pour la date {date_str}")
         return 1
 
-    all_participants: List[Participant] = []
+    all_participants: list[Participant] = []
     for reu in reunions:
         reu_num = str(reu.get("numReunion"))
         if reunion_filter and reu_num != str(reunion_filter):

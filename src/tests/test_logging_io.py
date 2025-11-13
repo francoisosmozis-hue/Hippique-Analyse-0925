@@ -1,4 +1,5 @@
-from logging_io import append_csv_line, CSV_HEADER
+from logging_io import CSV_HEADER, append_csv_line
+
 
 def test_csv_header_and_columns(tmp_path):
     path = tmp_path / "log.csv"

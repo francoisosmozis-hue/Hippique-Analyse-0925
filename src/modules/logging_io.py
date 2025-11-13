@@ -1,8 +1,9 @@
 from __future__ import annotations
+
 import csv
 import os
+from collections.abc import Iterable
 from datetime import datetime
-from typing import Dict, Iterable
 
 # En-tête standard pour le tracking GPI v5.1 (adapté à ton pipeline)
 CSV_HEADER: Iterable[str] = [
@@ -28,7 +29,7 @@ def _ensure_parent_dir(path: str) -> None:
     if d and not os.path.exists(d):
         os.makedirs(d, exist_ok=True)
 
-def append_csv_line(csv_path: str, row: Dict[str, object]) -> None:
+def append_csv_line(csv_path: str, row: dict[str, object]) -> None:
     """
     Ajoute une ligne dans le CSV de suivi en garantissant:
     - création auto du dossier parent

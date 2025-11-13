@@ -1,16 +1,17 @@
 from __future__ import annotations
 
 import math
+import threading
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Mapping, Optional, Sequence
-import threading
+from typing import Any
 
 import yaml
 
 MODEL_PATH = Path("calibration/p_true_model_v5.yaml")
 _EPSILON = 1e-9
-_MODEL_CACHE: tuple[Path, float, 'PTrueModel'] | None = None
+_MODEL_CACHE: tuple[Path, float, PTrueModel] | None = None
 _MODEL_LOCK = threading.Lock()
 
 

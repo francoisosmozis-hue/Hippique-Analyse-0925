@@ -1,10 +1,10 @@
 """Dutching helpers used by the ROI-first staking policy."""
 from __future__ import annotations
 
-from typing import Dict, Iterable, List
+from collections.abc import Iterable
 
 
-def equal_profit_stakes(odds_list: Iterable[float], total_stake: float) -> List[float]:
+def equal_profit_stakes(odds_list: Iterable[float], total_stake: float) -> list[float]:
     """Return equal-profit stakes for the provided decimal odds."""
 
     inv_sum = sum(1.0 / float(o) for o in odds_list)
@@ -13,7 +13,7 @@ def equal_profit_stakes(odds_list: Iterable[float], total_stake: float) -> List[
     return [(total_stake / float(o)) / inv_sum for o in odds_list]
 
 
-def diversify_guard(horses_meta: Iterable[Dict]) -> bool:
+def diversify_guard(horses_meta: Iterable[dict]) -> bool:
     """Return ``False`` when multiple legs are overly correlated.
 
     The heuristic is deliberately simple: if at least two legs share the same
@@ -22,7 +22,7 @@ def diversify_guard(horses_meta: Iterable[Dict]) -> bool:
     the metadata is incomplete the guard is lenient and allows the ticket.
     """
 
-    seen: dict[tuple[str | None, str | None], Dict] = {}
+    seen: dict[tuple[str | None, str | None], dict] = {}
     for horse in horses_meta:
         key = (horse.get("ecurie"), horse.get("driver"))
         if not any(key):
@@ -40,7 +40,7 @@ def diversify_guard(horses_meta: Iterable[Dict]) -> bool:
     return True
 
 
-def require_mid_odds(horses_meta: Iterable[Dict]) -> bool:
+def require_mid_odds(horses_meta: Iterable[dict]) -> bool:
     """Ensure at least one leg offers a mid-range odds (between 4.0 and 7.0)."""
 
     for horse in horses_meta:

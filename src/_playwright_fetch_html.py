@@ -1,5 +1,8 @@
+import sys
+import time
+
 from playwright.sync_api import sync_playwright
-import sys, time
+
 
 def fetch(url: str, wait_ms: int = 1200) -> str:
     with sync_playwright() as p:

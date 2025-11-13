@@ -1,5 +1,9 @@
-import requests, pandas as pd, time
-from datetime import date, timedelta
+import time
+from datetime import date
+
+import pandas as pd
+import requests
+
 
 def get_json(url):
     r = requests.get(url, timeout=20)
@@ -34,7 +38,7 @@ for dstr, d_iso in iter_dates_today():
             except Exception:
                 rap = {}
 
-            
+
             # map arrivée: numeroPMU -> rang
             ordre = []
             if isinstance(rap, list):
@@ -45,7 +49,7 @@ for dstr, d_iso in iter_dates_today():
                             combinaison = rapports[0].get("combinaison", "")
                             ordre = combinaison.split("-")
                         break
-            
+
             rang = {}
             for i, elt in enumerate(ordre, 1):
                 num = elt
@@ -62,7 +66,7 @@ for dstr, d_iso in iter_dates_today():
                 nom = (p.get("nom") or p.get("nomCheval") or p.get("cheval", {}).get("nom") or "").strip()
                 jockey = (p.get("driver") or p.get("jockey") or p.get("nomJockey") or p.get("nomDriver") or "").strip()
                 entraineur = (p.get("entraineur") or p.get("trainer") or "").strip()
-                
+
                 # CORRECTED LOGIC
                 cote = (p.get("dernierRapportDirect") or {}).get("rapport")
 

@@ -46,7 +46,7 @@ def _market_from_sample(h30: list[dict], h5: list[dict]) -> dict:
         "expected_payout_combo": 20.0,
     }
 
-    
+
 def _overround(odds: list[float]) -> float:
     return sum(1.0 / float(odd) for odd in odds)
 

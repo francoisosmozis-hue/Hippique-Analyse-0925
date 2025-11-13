@@ -2,7 +2,6 @@
 Configuration Gunicorn pour Cloud Run
 """
 import os
-import multiprocessing
 
 # Bind sur le port fourni par Cloud Run (défaut 8080)
 port = os.getenv("PORT", "8080")

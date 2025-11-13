@@ -15,31 +15,31 @@ import json
 import logging
 import os
 import re
-from pathlib import Path
-from typing import Any, Dict, List, Mapping
-
 import sys
+from collections.abc import Mapping
+from pathlib import Path
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 # CORRECTION: Imports depuis scripts/ au lieu de la racine
-from hippique_orchestrator.scripts.simulate_ev import simulate_ev_batch
-from hippique_orchestrator.scripts.simulate_wrapper import PAYOUT_CALIBRATION_PATH
-from hippique_orchestrator.scripts.validator_ev import ValidationError, validate_ev
-
-from hippique_orchestrator.scripts import online_fetch_zeturf as ofz
-from hippique_orchestrator.scripts.gcs_utils import disabled_reason, is_gcs_enabled
-
+import yaml
 from pydantic import (
     AliasChoices,
     BaseModel,
     ConfigDict,
-    ValidationError as PydanticValidationError,
     Field,
     field_validator,
 )
+from pydantic import (
+    ValidationError as PydanticValidationError,
+)
 
-import yaml
+from hippique_orchestrator.scripts import online_fetch_zeturf as ofz
+from hippique_orchestrator.scripts.gcs_utils import disabled_reason, is_gcs_enabled
+from hippique_orchestrator.scripts.simulate_ev import simulate_ev_batch
+from hippique_orchestrator.scripts.simulate_wrapper import PAYOUT_CALIBRATION_PATH
+from hippique_orchestrator.scripts.validator_ev import ValidationError, validate_ev
 
 logger = logging.getLogger(__name__)
 
@@ -138,7 +138,7 @@ def _coerce_payload(data: Mapping[str, Any], *, context: str) -> RunnerPayload:
         raise PayloadValidationError(f"{context}: {formatted}") from exc
 
 
-def _load_planning(path: Path) -> List[Dict[str, Any]]:
+def _load_planning(path: Path) -> list[dict[str, Any]]:
     """Return planning entries from ``path``.
 
     The planning file is expected to be a JSON array of objects containing at
@@ -152,7 +152,7 @@ def _load_planning(path: Path) -> List[Dict[str, Any]]:
     return [d for d in data if isinstance(d, dict)]
 
 
-def _load_sources_config() -> Dict[str, Any]:
+def _load_sources_config() -> dict[str, Any]:
     """Load snapshot source configuration from disk."""
 
     default_path = os.getenv("RUNNER_SOURCES_FILE") or os.getenv("SOURCES_FILE")
@@ -269,7 +269,7 @@ def _write_snapshot(
     if USE_GCS and upload_file:
         try:
             upload_file(path)
-        except EnvironmentError as exc:
+        except OSError as exc:
             logger.warning("Skipping cloud upload for %s: %s", path, exc)
     else:
         reason = disabled_reason()
@@ -287,7 +287,7 @@ def _write_analysis(
     mode: str,
     calibration: Path,
     calibration_available: bool,
-) -> None:    
+) -> None:
     """Compute a dummy EV/ROI analysis and write it to disk.
 
     When the payout calibration file is missing the combo generation is skipped
@@ -318,7 +318,7 @@ def _write_analysis(
         if USE_GCS and upload_file:
             try:
                 upload_file(path)
-            except EnvironmentError as exc:
+            except OSError as exc:
                 logger.warning("Skipping cloud upload for %s: %s", path, exc)
         else:
             reason = disabled_reason()
@@ -342,10 +342,10 @@ def _write_analysis(
     }
     with path.open("w", encoding="utf-8") as fh:
         json.dump(payload, fh, ensure_ascii=False, indent=2)
-    if USE_GCS and upload_file:    
+    if USE_GCS and upload_file:
         try:
             upload_file(path)
-        except EnvironmentError as exc:
+        except OSError as exc:
             logger.warning("Skipping cloud upload for %s: %s", path, exc)
     else:
         reason = disabled_reason()
@@ -459,13 +459,13 @@ def main() -> None:
         help="Répertoire de sortie prioritaire (fallback vers $OUTPUT_DIR puis --analysis-dir)",
     )
     args = parser.parse_args()
-    
+
     snap_dir = Path(args.snap_dir)
     analysis_root = args.output or os.getenv("OUTPUT_DIR") or args.analysis_dir
     analysis_dir = Path(analysis_root)
     calibration_path = Path(args.calibration).expanduser()
     calibration_exists = calibration_path.exists()
-    
+
     if args.planning:
         for name in ("course_id", "reunion", "course", "phase", "start_time", "course_url"):
             if getattr(args, name):
@@ -598,11 +598,11 @@ def main() -> None:
             calibration=calibration_path,
             calibration_available=calibration_exists,
             course_url=args.course_url,
-        ) 
+        )
     except PayloadValidationError as exc:
         logger.error("[runner] %s", exc)
         raise SystemExit(1) from exc
-          
+
 
 if __name__ == "__main__":
     main()

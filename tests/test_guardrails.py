@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 import json
+from pathlib import Path
 
 from src.guardrails import evaluate_guardrail
 

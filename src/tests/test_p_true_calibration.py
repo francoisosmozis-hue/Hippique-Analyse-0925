@@ -5,6 +5,7 @@ import math
 import pandas as pd
 import pytest
 
+import pipeline_run
 from calibration import p_true_model
 from calibration.p_true_model import (
     compute_runner_features,
@@ -17,7 +18,7 @@ from calibration.p_true_training import (
     serialize_model,
     train_logistic_model,
 )
-import pipeline_run
+
 
 def test_assemble_history_dataset(tmp_path):
     base = tmp_path
@@ -150,4 +151,4 @@ def test_build_p_true_downgrades_to_heuristic_when_history_short(
     assert result == heur_expected
     assert "Calibration p_true ignorée" in caplog.text
 
-    
+

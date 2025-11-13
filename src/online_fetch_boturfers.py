@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 online_fetch_boturfers.py - Module de scraping pour Boturfers.fr.
 
@@ -12,11 +11,11 @@ import logging
 import re
 import sys
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
 from urllib.parse import urljoin
 
 import requests
-from bs4 import BeautifulSoup, Tag
+from bs4 import BeautifulSoup
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +32,7 @@ class BoturfersFetcher:
         if not race_url:
             raise ValueError("L'URL de la course ne peut pas être vide.")
         self.race_url = race_url
-        self.soup: Optional[BeautifulSoup] = None
+        self.soup: BeautifulSoup | None = None
 
     def _fetch_html(self) -> bool:
         """Télécharge le contenu HTML de la page."""
@@ -46,16 +45,16 @@ class BoturfersFetcher:
             logger.error(f"Erreur lors du téléchargement de {self.race_url}: {e}")
             return False
 
-    def _parse_programme(self) -> List[Dict[str, Any]]:
+    def _parse_programme(self) -> list[dict[str, Any]]:
         """Analyse la page du programme pour extraire la liste de toutes les courses."""
         if not self.soup:
             return []
-        
+
         races = []
-        
+
         # Les réunions sont dans des divs avec l'ID r1, r2, etc.
         reunion_tabs = self.soup.select("div.tab-content div.tab-pane[id^='r']")
-        
+
         for reunion_tab in reunion_tabs:
             reunion_title_tag = reunion_tab.select_one("h3.reu-title")
             reunion_id_match = re.search(r"^(R\d+)", reunion_title_tag.text.strip()) if reunion_title_tag else None
@@ -75,10 +74,10 @@ class BoturfersFetcher:
                     name_tag = row.select_one("td.crs a.link")
                     if not name_tag:
                         continue
-                    
+
                     race_name = name_tag.text.strip()
                     relative_url = name_tag.get("href")
-                    
+
                     if not relative_url:
                         continue
 
@@ -105,16 +104,16 @@ class BoturfersFetcher:
                 except Exception as e:
                     logger.warning(f"Impossible d'analyser une ligne de course: {e}. Ligne ignorée.")
                     continue
-        
+
         return races
 
-    def _parse_race_runners(self) -> List[Dict[str, Any]]:
+    def _parse_race_runners(self) -> list[dict[str, Any]]:
         """Analyse la page d'une course pour extraire les données des partants."""
         if not self.soup:
             return []
 
         runners = []
-        
+
         # Parser la table HTML des partants
         runners_table = self.soup.select_one("div#partants table.data")
         if not runners_table:
@@ -126,7 +125,7 @@ class BoturfersFetcher:
                 num_tag = row.select_one("th.num")
                 if not num_tag or "NP" in num_tag.text.upper(): # Ignore les non-partants
                     continue
-                
+
                 # Nettoyer le numéro pour ne garder que le chiffre
                 num_match = re.search(r'\d+', num_tag.text)
                 num = num_match.group(0) if num_match else None
@@ -137,7 +136,7 @@ class BoturfersFetcher:
                 if not name_tag:
                     continue
                 name = name_tag.text.strip()
-                
+
                 jockey_tag = row.select_one("td.tl > div.size-s > a.link")
                 jockey = jockey_tag.text.strip() if jockey_tag else None
 
@@ -152,10 +151,10 @@ class BoturfersFetcher:
                 })
             except Exception as e:
                 logger.warning(f"Impossible d'analyser une ligne de partant: {e}. Ligne ignorée.")
-        
+
         return runners
 
-    def get_snapshot(self) -> Dict[str, Any]:
+    def get_snapshot(self) -> dict[str, Any]:
         """Orchestre le scraping du programme et retourne la liste des courses."""
         if not self._fetch_html():
             return {"error": "Failed to fetch HTML"}
@@ -173,7 +172,7 @@ class BoturfersFetcher:
             "races": races,
         }
 
-    def get_race_snapshot(self) -> Dict[str, Any]:
+    def get_race_snapshot(self) -> dict[str, Any]:
         """Orchestre le scraping d'une course et retourne les partants."""
         if not self._fetch_html():
             return {"error": "Failed to fetch HTML"}
@@ -192,13 +191,13 @@ class BoturfersFetcher:
             "runners": runners,
         }
 
-def normalize_snapshot(payload: Dict[str, Any]) -> Dict[str, Any]:
+def normalize_snapshot(payload: dict[str, Any]) -> dict[str, Any]:
     """
     Normalise le snapshot brut du programme. Pour l'instant, retourne les données brutes.
     """
     if not payload or (not payload.get("races") and not payload.get("runners")):
         return {}
-    
+
     return payload
 
 def fetch_boturfers_programme(url: str, *args, **kwargs) -> dict:
@@ -206,7 +205,7 @@ def fetch_boturfers_programme(url: str, *args, **kwargs) -> dict:
     Fonction principale pour scraper le programme des courses sur Boturfers.
     """
     logger.info(f"Début du scraping du programme Boturfers pour l'URL: {url}")
-    
+
     if not url:
         logger.error("Aucune URL fournie pour le scraping Boturfers.")
         return normalize_snapshot({})
@@ -214,14 +213,14 @@ def fetch_boturfers_programme(url: str, *args, **kwargs) -> dict:
     try:
         fetcher = BoturfersFetcher(race_url=url)
         raw_snapshot = fetcher.get_snapshot()
-        
+
         if "error" in raw_snapshot or not raw_snapshot.get("races"):
             logger.error(f"Le scraping du programme a échoué ou n'a retourné aucune course pour {url}.")
             return normalize_snapshot({})
 
         normalized_data = normalize_snapshot(raw_snapshot)
         logger.info(f"Scraping du programme Boturfers réussi pour {url}. {len(normalized_data.get('races',[]))} courses trouvées.")
-        
+
         return normalized_data
 
     except Exception as e:
@@ -233,7 +232,7 @@ def fetch_boturfers_race_details(url: str, *args, **kwargs) -> dict:
     Fonction principale pour scraper les détails d'une course sur Boturfers.
     """
     logger.info(f"Début du scraping des détails de course pour l'URL: {url}")
-    
+
     if not url:
         logger.error("Aucune URL fournie pour le scraping des détails de course.")
         return {}
@@ -241,7 +240,7 @@ def fetch_boturfers_race_details(url: str, *args, **kwargs) -> dict:
     try:
         fetcher = BoturfersFetcher(race_url=url)
         raw_snapshot = fetcher.get_race_snapshot()
-        
+
         if "error" in raw_snapshot or not raw_snapshot.get("runners"):
             logger.error(f"Le scraping des détails a échoué pour {url}.")
             return {}
@@ -249,7 +248,7 @@ def fetch_boturfers_race_details(url: str, *args, **kwargs) -> dict:
         # La normalisation pour les détails de la course pourrait être différente
         # Pour l'instant, on retourne les données brutes.
         logger.info(f"Scraping des détails réussi pour {url}. {len(raw_snapshot.get('runners',[]))} partants trouvés.")
-        
+
         return raw_snapshot
 
     except Exception as e:
@@ -277,7 +276,7 @@ def main():
             if race.get("rc", "").replace(" ", "") == target_rc.replace(" ", ""):
                 race_url = race.get("url")
                 break
-    
+
     if not race_url:
         logger.error(f"Course {target_rc} introuvable sur le programme de Boturfers.")
         sys.exit(1)
@@ -294,7 +293,7 @@ def main():
         with open(args.output, 'w', encoding='utf-8') as f:
             json.dump(race_details, f, ensure_ascii=False, indent=2)
         logger.info(f"Snapshot pour {target_rc} sauvegardé dans {args.output}")
-    except IOError as e:
+    except OSError as e:
         logger.error(f"Impossible d'écrire le fichier de sortie {args.output}: {e}")
         sys.exit(1)
 

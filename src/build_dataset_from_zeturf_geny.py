@@ -1,6 +1,6 @@
 import argparse
-import subprocess
 import shlex
+import subprocess
 from pathlib import Path
 
 THIS = Path(__file__).resolve().parent
@@ -21,10 +21,10 @@ def main():
 
     # Appeler le scraper Playwright directement
     playwright_script = THIS / "fetch_with_playwright.py"
-    
+
     # H-30
     run(f'python "{playwright_script}" --course-url "{args.course_url}" --tag H-30 --out-dir "{out_dir}"')
-    
+
     # H-5
     run(f'python "{playwright_script}" --course-url "{args.course_url}" --tag H-5 --out-dir "{out_dir}"')
 

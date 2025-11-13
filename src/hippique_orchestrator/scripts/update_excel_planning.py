@@ -7,9 +7,10 @@ import datetime as dt
 import json
 import os
 import re
+from collections.abc import Iterable, Mapping, Sequence
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, Sequence, Tuple
+from typing import Any
 
 from openpyxl import Workbook, load_workbook
 from openpyxl.worksheet.worksheet import Worksheet
@@ -83,7 +84,7 @@ def _prepare_sheet(wb: Workbook, title: str) -> Worksheet:
 
 
 def _ensure_headers(ws: Worksheet, headers: Sequence[str]) -> Mapping[str, int]:
-    header_map: Dict[str, int] = {}
+    header_map: dict[str, int] = {}
     blank_sheet = (
         ws.max_row <= 1
         and ws.max_column == 1
@@ -120,7 +121,7 @@ def _format_time(value: Any) -> str | None:
     text = str(value).strip()
     if not text:
         return None
-    text = text.replace("\u202f", " ")   
+    text = text.replace("\u202f", " ")
     if len(text) == 4 and text.isdigit():
         return f"{text[:2]}:{text[2:]}"
     if len(text) >= 5 and text[2] == ":" and text[:2].isdigit():
@@ -150,7 +151,7 @@ def _format_time(value: Any) -> str | None:
         )
         if hour_only:
             hour = int(hour_only.group(1)) % 24
-            return f"{hour:02d}:00"        
+            return f"{hour:02d}:00"
         return text
     if parsed.tzinfo is not None:
         target_tz = _env_timezone()
@@ -205,13 +206,13 @@ def _format_row_identifier(row: Mapping[str, Any]) -> str:
 
 def _extract_common_meta(
     payload: Mapping[str, Any], parents: Sequence[Mapping[str, Any]] | None = None
-) -> Dict[str, Any]:
-    sources: List[Mapping[str, Any]] = [payload]
+) -> dict[str, Any]:
+    sources: list[Mapping[str, Any]] = [payload]
     if parents:
         sources.extend(parent for parent in parents if isinstance(parent, Mapping))
 
-    def _values(meta_keys: Sequence[str], payload_keys: Sequence[str]) -> List[Any]:
-        candidates: List[Any] = []
+    def _values(meta_keys: Sequence[str], payload_keys: Sequence[str]) -> list[Any]:
+        candidates: list[Any] = []
         for source in sources:
             meta = source.get("meta") if isinstance(source.get("meta"), Mapping) else None
             if isinstance(meta, Mapping):
@@ -370,11 +371,11 @@ def _course_like(obj: Mapping[str, Any]) -> bool:
 
 def _extract_course_payloads(
     payload: Mapping[str, Any]
-) -> List[Tuple[Mapping[str, Any], Tuple[Mapping[str, Any], ...]]]:
-    results: List[Tuple[Mapping[str, Any], Tuple[Mapping[str, Any], ...]]] = []
+) -> list[tuple[Mapping[str, Any], tuple[Mapping[str, Any], ...]]]:
+    results: list[tuple[Mapping[str, Any], tuple[Mapping[str, Any], ...]]] = []
     visited: set[int] = set()
 
-    def _walk(value: Any, parents: Tuple[Mapping[str, Any], ...]) -> None:
+    def _walk(value: Any, parents: tuple[Mapping[str, Any], ...]) -> None:
         if isinstance(value, Mapping):
             obj_id = id(value)
             if obj_id in visited:
@@ -395,7 +396,7 @@ def _extract_course_payloads(
 
     # Deduplicate potential duplicates by object identity while preserving order
     seen_ids: set[int] = set()
-    unique_results: List[Tuple[Mapping[str, Any], Tuple[Mapping[str, Any], ...]]] = []
+    unique_results: list[tuple[Mapping[str, Any], tuple[Mapping[str, Any], ...]]] = []
     for course_payload, parents in results:
         obj_id = id(course_payload)
         if obj_id in seen_ids:
@@ -437,7 +438,7 @@ def _normalise_ticket_label(label: Any) -> str:
     return text
 
 
-def _consume_selection(values: Any, horses: List[str]) -> None:
+def _consume_selection(values: Any, horses: list[str]) -> None:
     if values in (None, ""):
         return
     if isinstance(values, Mapping):
@@ -461,7 +462,7 @@ def _consume_selection(values: Any, horses: List[str]) -> None:
 def _summarise_tickets(tickets: Any) -> str:
     if not isinstance(tickets, Iterable) or isinstance(tickets, (str, bytes, bytearray)):
         return ""
-    summaries: List[str] = []
+    summaries: list[str] = []
     for ticket in tickets:
         if not isinstance(ticket, Mapping):
             continue
@@ -472,7 +473,7 @@ def _summarise_tickets(tickets: Any) -> str:
             ticket.get("id"),
         )
         legs = ticket.get("legs")
-        horses: List[str] = []
+        horses: list[str] = []
         if isinstance(legs, Iterable) and not isinstance(legs, (str, bytes)):
             for leg in legs:
                 if isinstance(leg, Mapping):
@@ -491,7 +492,7 @@ def _summarise_tickets(tickets: Any) -> str:
             base = normalised_label
         if horses_joined:
             base = f"{base}:{horses_joined}" if base else horses_joined
-        parts: List[str] = []
+        parts: list[str] = []
         if base:
             parts.append(base)
         if odds not in (None, ""):
@@ -554,15 +555,15 @@ def _comment_h5(payload: Mapping[str, Any]) -> str:
     return reason or ""
 
 
-def _collect_h30_entries(source: Path, status: str) -> List[Dict[str, Any]]:
-    entries: List[Dict[str, Any]] = []
+def _collect_h30_entries(source: Path, status: str) -> list[dict[str, Any]]:
+    entries: list[dict[str, Any]] = []
     if source.is_file():
         payloads = [(source, _load_json(source))]
     elif source.is_dir():
         payloads = [(path, _load_json(path)) for path in sorted(source.rglob("*.json"))]
     else:
         raise FileNotFoundError(source)
-    for path, payload in payloads:
+    for _path, payload in payloads:
         if not isinstance(payload, Mapping):
             continue
         courses = _extract_course_payloads(payload)
@@ -583,7 +584,7 @@ def _collect_h30_entries(source: Path, status: str) -> List[Dict[str, Any]]:
             }
             entries.append(row)
             continue
-            
+
         for course_payload, parents in courses:
             meta = _extract_common_meta(course_payload, parents=parents)
             if not (meta.get("date") and meta.get("reunion") and meta.get("course")):
@@ -625,11 +626,11 @@ def _load_h5_payload(source: Path) -> Mapping[str, Any]:
     raise FileNotFoundError(source)
 
 
-def _prepare_h5_row(payload: Mapping[str, Any], status_label: str) -> Dict[str, Any]:
+def _prepare_h5_row(payload: Mapping[str, Any], status_label: str) -> dict[str, Any]:
     meta = _extract_common_meta(payload)
     tickets = payload.get("tickets") if isinstance(payload, Mapping) else None
     summary = _summarise_tickets(tickets)
-    row: Dict[str, Any] = {
+    row: dict[str, Any] = {
         "Date": meta.get("date"),
         "Réunion": meta.get("reunion"),
         "Course": meta.get("course"),

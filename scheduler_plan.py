@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 scheduler_plan.py — planifie les jobs journaliers (H30, H5, RESULT)
 """
-import datetime as dt, json, requests, os, time
+import datetime as dt
+import os
+
+import requests
 
 SERVICE_URL = os.getenv("SERVICE_URL") or "https://hippique-orchestrator-1084663881709.europe-west4.run.app"
 

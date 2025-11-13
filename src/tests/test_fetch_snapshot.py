@@ -144,7 +144,7 @@ def test_fetch_race_snapshot_accepts_course_url(monkeypatch: Any) -> None:
     assert snapshot["phase"] == "H30"
     assert captured["url"] == "https://example.com/course/mock"
     assert "course_url" not in captured["kwargs"]
-    
+
 
 def test_fetch_race_snapshot_handles_missing_rc_with_url(monkeypatch: Any) -> None:
     import online_fetch_zeturf as ofz

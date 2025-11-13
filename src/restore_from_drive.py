@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import argparse
 import os
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable
 
 from scripts.drive_sync import _build_service, build_remote_path, download_file
 
@@ -30,7 +30,7 @@ def download_day(date: str, dest: Path, *, service=None) -> None:
     srv = service or _build_service()
     bucket = os.environ.get(BUCKET_ENV)
     if not bucket:
-        raise EnvironmentError(f"{BUCKET_ENV} is not set")
+        raise OSError(f"{BUCKET_ENV} is not set")
     base_prefix = os.environ.get(PREFIX_ENV, "")
     dest.mkdir(parents=True, exist_ok=True)
     for prefix in ("snapshot_", "analysis"):

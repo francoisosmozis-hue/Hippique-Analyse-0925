@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Concatène tous les fichiers *_je.csv d'un répertoire (récursif),
 filtre par mois (YYYY-MM) et produit :
@@ -11,10 +10,11 @@ Usage :
 """
 import argparse
 import re
-from pathlib import Path
 from datetime import datetime
-import pandas as pd
+from pathlib import Path
+
 import numpy as np
+import pandas as pd
 
 STD_COLUMNS = [
     'date','reunion','course','hippodrome','discipline','cheval','num',
@@ -110,7 +110,6 @@ def load_and_filter(paths, month: str) -> pd.DataFrame:
 def summarize_month(all_df: pd.DataFrame):
     base = all_df.copy()
     # Aggregation by jockey/driver
-    j_cols = ['jockey']
     if base['jockey'].notna().any():
         j_sum = (
             base

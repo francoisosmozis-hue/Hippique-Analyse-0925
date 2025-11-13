@@ -143,7 +143,7 @@ def test_single_reunion(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, phase: 
         return True, {}, None
 
     monkeypatch.setattr(acde, "_run_h5_guard_phase", fake_guard)
-    
+
     enrich_calls: list[Path] = []
 
     def fake_enrich(rc_dir: Path, **kw) -> None:
@@ -170,7 +170,7 @@ def test_single_reunion(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, phase: 
     #     "export_per_horse_csv",
     #     lambda rc_dir: (csv_calls.append(rc_dir) or (rc_dir / "per_horse_report.csv")),
     # )
-    
+
     argv = [
         "analyse_courses_du_jour_enrichie.py",
         "--course-url",
@@ -338,7 +338,7 @@ def test_missing_enrich_outputs(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
             except json.JSONDecodeError:
                 payload = {}
             course_id = str(
-                (payload.get("id_course") or payload.get("course_id") or "")
+                payload.get("id_course") or payload.get("course_id") or ""
             )
         minimal = {"course_id": course_id, "runners": [{"id": "1", "chrono": ""}]}
         (rc_dir / "normalized_h5.json").write_text(
@@ -424,7 +424,7 @@ def test_missing_enrich_outputs_recovers_after_fetch(
 
     monkeypatch.setattr(acde, "write_snapshot_from_geny", fake_snapshot)
     monkeypatch.setattr(acde, "enrich_h5", lambda rc_dir, **kw: None)
-    
+
     def fake_guard(rc_dir: Path, *, budget: float) -> tuple[bool, dict[str, Any], None]:
         return True, {}, None
 
@@ -438,7 +438,7 @@ def test_missing_enrich_outputs_recovers_after_fetch(
             except json.JSONDecodeError:
                 payload = {}
             course_id = str(
-                (payload.get("id_course") or payload.get("course_id") or "")
+                payload.get("id_course") or payload.get("course_id") or ""
             )
         minimal = {"course_id": course_id, "runners": [{"id": "1", "chrono": "1.0"}]}
         (rc_dir / "normalized_h5.json").write_text(

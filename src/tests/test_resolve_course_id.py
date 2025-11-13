@@ -6,7 +6,6 @@ import datetime as dt
 from pathlib import Path
 
 import pytest
-
 from scripts.resolve_course_id import (
     CourseContextError,
     _iter_schedule_entries,

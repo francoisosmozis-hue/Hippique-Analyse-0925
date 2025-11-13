@@ -2,17 +2,18 @@
 # tests/test_time_utils.py - Tests pour time_utils
 # ============================================================================
 
-import pytest
-from datetime import datetime, timedelta
+from datetime import datetime
 from zoneinfo import ZoneInfo
 
+import pytest
+
 from src.time_utils import (
+    calculate_snapshots,
     now_paris,
     parse_local_time,
-    to_utc,
     to_paris,
     to_rfc3339,
-    calculate_snapshots
+    to_utc,
 )
 
 
@@ -27,7 +28,7 @@ def test_now_paris():
 def test_parse_local_time():
     """Test du parsing de date + heure"""
     result = parse_local_time("2025-10-16", "14:30")
-    
+
     assert result.year == 2025
     assert result.month == 10
     assert result.day == 16
@@ -42,7 +43,7 @@ def test_to_utc():
     # En été (DST), Paris = UTC+2
     summer_time = datetime(2025, 7, 15, 14, 30, tzinfo=ZoneInfo("Europe/Paris"))
     result = to_utc(summer_time)
-    
+
     assert result.tzinfo == ZoneInfo("UTC")
     # 14:30 CET = 12:30 UTC
     assert result.hour == 12
@@ -54,7 +55,7 @@ def test_to_paris():
     """Test conversion UTC -> Paris"""
     utc_time = datetime(2025, 10, 16, 12, 30, tzinfo=ZoneInfo("UTC"))
     result = to_paris(utc_time)
-    
+
     assert result.tzinfo == ZoneInfo("Europe/Paris")
     # En octobre (après DST), 12:30 UTC = 14:30 CET
     assert result.hour == 14
@@ -66,7 +67,7 @@ def test_to_rfc3339():
     """Test format RFC3339"""
     dt = datetime(2025, 10, 16, 14, 30, 0, tzinfo=ZoneInfo("Europe/Paris"))
     result = to_rfc3339(dt)
-    
+
     # Doit contenir l'offset
     assert "2025-10-16" in result
     assert "14:30:00" in result
@@ -78,11 +79,11 @@ def test_calculate_snapshots():
     """Test calcul H-30 et H-5"""
     race_time = datetime(2025, 10, 16, 15, 0, tzinfo=ZoneInfo("Europe/Paris"))
     h30, h5 = calculate_snapshots(race_time)
-    
+
     # H-30 = 14:30
     assert h30.hour == 14
     assert h30.minute == 30
-    
+
     # H-5 = 14:55
     assert h5.hour == 14
     assert h5.minute == 55
@@ -92,8 +93,9 @@ def test_calculate_snapshots():
 # tests/test_plan.py - Tests pour plan builder
 # ============================================================================
 
+from unittest.mock import MagicMock, Mock, patch
+
 import pytest
-from unittest.mock import Mock, patch, MagicMock
 from bs4 import BeautifulSoup
 
 from src.plan import PlanBuilder
@@ -131,15 +133,15 @@ def mock_geny_response():
 def test_parse_zeturf_program(mock_zeturf_response):
     """Test parsing ZEturf"""
     builder = PlanBuilder()
-    
+
     with patch.object(builder.session, 'get') as mock_get:
         mock_get.return_value = Mock(
             status_code=200,
             text=mock_zeturf_response
         )
-        
+
         result = builder._parse_zeturf_program("2025-10-16")
-    
+
     assert len(result) == 3
     assert result[0]["r_label"] == "R1"
     assert result[0]["c_label"] == "C1"
@@ -150,12 +152,12 @@ def test_parse_zeturf_program(mock_zeturf_response):
 def test_extract_meeting():
     """Test extraction du nom de l'hippodrome"""
     builder = PlanBuilder()
-    
+
     # Cas 1: depuis l'URL
     link = BeautifulSoup('<a href="/course/2025-10-16/R1C1-vincennes-trot">X</a>', 'html.parser').a
     href = "/course/2025-10-16/R1C1-vincennes-trot"
     result = builder._extract_meeting(link, href)
-    
+
     assert "vincennes" in result.lower()
 
 
@@ -163,15 +165,15 @@ def test_extract_meeting():
 def test_deduplicate_and_sort(sample_plan):
     """Test déduplication et tri"""
     builder = PlanBuilder()
-    
+
     # Ajouter un doublon
     plan_with_dup = sample_plan + [sample_plan[0].copy()]
-    
+
     result = builder._deduplicate_and_sort(plan_with_dup)
-    
+
     # Doit avoir supprimé le doublon
     assert len(result) == len(sample_plan)
-    
+
     # Doit être trié par heure
     times = [r["time_local"] for r in result if r["time_local"]]
     assert times == sorted(times)
@@ -181,15 +183,15 @@ def test_deduplicate_and_sort(sample_plan):
 def test_build_plan_empty_response():
     """Test avec réponse vide"""
     builder = PlanBuilder()
-    
+
     with patch.object(builder.session, 'get') as mock_get:
         mock_get.return_value = Mock(
             status_code=200,
             text="<html><body></body></html>"
         )
-        
+
         result = builder.build_plan("2025-10-16")
-    
+
     assert result == []
 
 
@@ -198,9 +200,6 @@ def test_build_plan_empty_response():
 # ============================================================================
 
 import pytest
-from unittest.mock import Mock, patch, MagicMock
-from datetime import datetime
-from zoneinfo import ZoneInfo
 
 from src.scheduler import TaskScheduler
 
@@ -210,12 +209,12 @@ def mock_scheduler():
     """TaskScheduler avec clients mockés"""
     with patch('src.scheduler.tasks_v2.CloudTasksClient'), \
          patch('src.scheduler.scheduler_v1.CloudSchedulerClient'):
-        
+
         scheduler = TaskScheduler()
         scheduler.tasks_client = MagicMock()
         scheduler.scheduler_client = MagicMock()
         scheduler.queue_path = "projects/test/locations/europe-west1/queues/test-queue"
-        
+
         return scheduler
 
 
@@ -224,14 +223,14 @@ def test_enqueue_run_task_success(mock_scheduler):
     """Test création d'une tâche réussie"""
     # Mock GET (tâche n'existe pas)
     mock_scheduler.tasks_client.get_task.side_effect = Exception("Not found")
-    
+
     # Mock CREATE
     mock_scheduler.tasks_client.create_task.return_value = Mock(
         name="projects/test/locations/europe-west1/queues/test-queue/tasks/run-20251016-r1c1-h30"
     )
-    
+
     when = datetime(2025, 10, 16, 14, 30, tzinfo=ZoneInfo("Europe/Paris"))
-    
+
     result = mock_scheduler.enqueue_run_task(
         run_url="http://example.com/run",
         course_url="http://course.com",
@@ -241,7 +240,7 @@ def test_enqueue_run_task_success(mock_scheduler):
         r_label="R1",
         c_label="C1"
     )
-    
+
     assert result is not None
     assert "run-20251016-r1c1-h30" in result
 
@@ -253,9 +252,9 @@ def test_enqueue_run_task_already_exists(mock_scheduler):
     mock_scheduler.tasks_client.get_task.return_value = Mock(
         name="existing-task"
     )
-    
+
     when = datetime(2025, 10, 16, 14, 30, tzinfo=ZoneInfo("Europe/Paris"))
-    
+
     result = mock_scheduler.enqueue_run_task(
         run_url="http://example.com/run",
         course_url="http://course.com",
@@ -265,10 +264,10 @@ def test_enqueue_run_task_already_exists(mock_scheduler):
         r_label="R1",
         c_label="C1"
     )
-    
+
     # Doit retourner le nom de la tâche existante
     assert result is not None
-    
+
     # Ne doit PAS appeler create_task
     mock_scheduler.tasks_client.create_task.assert_not_called()
 
@@ -278,12 +277,12 @@ def test_enqueue_task_name_format(mock_scheduler):
     """Test format du nom de tâche"""
     mock_scheduler.tasks_client.get_task.side_effect = Exception("Not found")
     mock_scheduler.tasks_client.create_task.return_value = Mock(name="task-name")
-    
+
     when = datetime(2025, 10, 16, 14, 30, tzinfo=ZoneInfo("Europe/Paris"))
-    
+
     # Test avec différentes phases
     for phase in ["H30", "H-30", "H5", "H-5"]:
-        result = mock_scheduler.enqueue_run_task(
+        mock_scheduler.enqueue_run_task(
             run_url="http://example.com/run",
             course_url="http://course.com",
             phase=phase,
@@ -292,11 +291,11 @@ def test_enqueue_task_name_format(mock_scheduler):
             r_label="R1",
             c_label="C1"
         )
-        
+
         # Vérifier l'appel avec le nom correct
         call_args = mock_scheduler.tasks_client.create_task.call_args
         task_name = call_args[1]["task"]["name"]
-        
+
         # Doit contenir h30 ou h5 (normalisé, sans tirets)
         assert "h30" in task_name or "h5" in task_name
         assert "-" in task_name  # Format kebab-case
@@ -307,10 +306,9 @@ def test_enqueue_task_name_format(mock_scheduler):
 # tests/test_runner.py - Tests pour GPIRunner
 # ============================================================================
 
-import pytest
-from unittest.mock import Mock, patch, call
-from pathlib import Path
 import subprocess
+
+import pytest
 
 from src.runner import GPIRunner
 
@@ -330,7 +328,7 @@ def test_normalize_phase(runner):
     assert runner._normalize_phase("H5") == "H5"
     assert runner._normalize_phase("H-5") == "H5"
     assert runner._normalize_phase("h-5") == "H5"
-    
+
     with pytest.raises(ValueError):
         runner._normalize_phase("invalid")
 
@@ -339,10 +337,10 @@ def test_normalize_phase(runner):
 def test_tail(runner):
     """Test fonction tail"""
     text = "\n".join([f"Line {i}" for i in range(100)])
-    
+
     result = runner._tail(text, 10)
     lines = result.split("\n")
-    
+
     assert len(lines) == 10
     assert lines[-1] == "Line 99"
     assert lines[0] == "Line 90"
@@ -352,9 +350,9 @@ def test_tail(runner):
 def test_collect_artifacts(runner, sample_gpi_output):
     """Test collection des artefacts"""
     runner.data_dir = sample_gpi_output
-    
+
     artifacts = runner._collect_artifacts("2025-10-16")
-    
+
     # Doit trouver les fichiers créés
     assert len(artifacts) > 0
     assert any("p_finale.json" in a for a in artifacts)
@@ -370,12 +368,12 @@ def test_run_subprocess_success(mock_run, runner):
         stdout="Output",
         stderr=""
     )
-    
+
     rc, stdout, stderr = runner._run_subprocess(
         ["python", "test.py"],
         env={"TEST": "value"}
     )
-    
+
     assert rc == 0
     assert stdout == "Output"
     assert stderr == ""
@@ -386,13 +384,13 @@ def test_run_subprocess_success(mock_run, runner):
 def test_run_subprocess_timeout(mock_run, runner):
     """Test timeout subprocess"""
     mock_run.side_effect = subprocess.TimeoutExpired("cmd", 10)
-    
+
     rc, stdout, stderr = runner._run_subprocess(
         ["python", "test.py"],
         env={},
         timeout=10
     )
-    
+
     assert rc == 124  # Code timeout
     assert "Timeout" in stderr
 
@@ -406,12 +404,12 @@ def test_run_subprocess_error(mock_run, runner):
         stdout="",
         stderr="Error occurred"
     )
-    
+
     rc, stdout, stderr = runner._run_subprocess(
         ["python", "test.py"],
         env={}
     )
-    
+
     assert rc == 1
     assert stderr == "Error occurred"
 
@@ -420,9 +418,10 @@ def test_run_subprocess_error(mock_run, runner):
 # tests/test_service.py - Tests pour API FastAPI
 # ============================================================================
 
+from unittest.mock import patch
+
 import pytest
 from fastapi.testclient import TestClient
-from unittest.mock import Mock, patch
 
 from src.service import app
 
@@ -439,7 +438,7 @@ def client():
 def test_healthz(client):
     """Test endpoint healthz"""
     response = client.get("/healthz")
-    
+
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "ok"
@@ -463,15 +462,15 @@ def test_schedule_endpoint_success(mock_enqueue, mock_build_plan, client):
             "reunion_url": "http://reunion.com"
         }
     ]
-    
+
     # Mock enqueue
     mock_enqueue.return_value = "task-name"
-    
+
     response = client.post("/schedule", json={
         "date": "2025-10-16",
         "mode": "tasks"
     })
-    
+
     assert response.status_code == 200
     data = response.json()
     assert data["ok"] is True
@@ -484,12 +483,12 @@ def test_schedule_endpoint_success(mock_enqueue, mock_build_plan, client):
 def test_schedule_endpoint_no_races(mock_build_plan, client):
     """Test /schedule sans courses"""
     mock_build_plan.return_value = []
-    
+
     response = client.post("/schedule", json={
         "date": "2025-10-16",
         "mode": "tasks"
     })
-    
+
     assert response.status_code == 404
     assert "No races found" in response.json()["detail"]
 
@@ -505,13 +504,13 @@ def test_run_endpoint_success(mock_run_course, client):
         "stderr_tail": "",
         "artifacts": ["file1.json"]
     }
-    
+
     response = client.post("/run", json={
         "course_url": "http://course.com",
         "phase": "H30",
         "date": "2025-10-16"
     })
-    
+
     assert response.status_code == 200
     data = response.json()
     assert data["ok"] is True
@@ -529,13 +528,13 @@ def test_run_endpoint_failure(mock_run_course, client):
         "stderr_tail": "Error",
         "artifacts": []
     }
-    
+
     response = client.post("/run", json={
         "course_url": "http://course.com",
         "phase": "H30",
         "date": "2025-10-16"
     })
-    
+
     assert response.status_code == 200  # Code 200 même si échec interne
     data = response.json()
     assert data["ok"] is False
@@ -547,8 +546,6 @@ def test_run_endpoint_failure(mock_run_course, client):
 # ============================================================================
 
 import pytest
-from datetime import datetime
-from zoneinfo import ZoneInfo
 
 
 @pytest.mark.integration
@@ -556,12 +553,12 @@ from zoneinfo import ZoneInfo
 def test_full_plan_build():
     """Test construction complète du plan (réel)"""
     from src.plan import PlanBuilder
-    
+
     builder = PlanBuilder()
-    
+
     # Date future pour éviter d'exécuter réellement
     plan = builder.build_plan("today")
-    
+
     # Peut être vide si pas de courses
     if plan:
         # Vérifier structure
@@ -578,15 +575,15 @@ def test_full_plan_build():
 @pytest.mark.requires_gcp
 def test_cloud_tasks_integration():
     """Test intégration Cloud Tasks (nécessite GCP)"""
-    from src.scheduler import TaskScheduler
     from src.config import config
-    
+    from src.scheduler import TaskScheduler
+
     # Skip si pas configuré
     if not config.PROJECT_ID or config.PROJECT_ID == "test-project":
         pytest.skip("GCP not configured")
-    
+
     scheduler = TaskScheduler()
-    
+
     # Tester que la queue existe
     try:
         # Note: nécessite credentials GCP
@@ -607,10 +604,10 @@ import pytest
 def test_empty_plan_deduplication():
     """Test déduplication sur plan vide"""
     from src.plan import PlanBuilder
-    
+
     builder = PlanBuilder()
     result = builder._deduplicate_and_sort([])
-    
+
     assert result == []
 
 
@@ -618,16 +615,16 @@ def test_empty_plan_deduplication():
 def test_plan_with_missing_times():
     """Test plan avec heures manquantes"""
     from src.plan import PlanBuilder
-    
+
     plan = [
         {"date": "2025-10-16", "r_label": "R1", "c_label": "C1", "time_local": "14:30"},
         {"date": "2025-10-16", "r_label": "R1", "c_label": "C2", "time_local": None},
         {"date": "2025-10-16", "r_label": "R2", "c_label": "C1", "time_local": "15:00"},
     ]
-    
+
     builder = PlanBuilder()
     result = builder._deduplicate_and_sort(plan)
-    
+
     # Les courses sans heure doivent être en fin
     assert result[-1]["time_local"] is None
 
@@ -636,15 +633,15 @@ def test_plan_with_missing_times():
 def test_task_name_special_characters():
     """Test nom de tâche avec caractères spéciaux"""
     from src.scheduler import TaskScheduler
-    
+
     # Les noms de tâche doivent être RFC-1035 compliant
     # (lowercase, alphanumeric, hyphens)
-    scheduler = TaskScheduler()
-    
+    TaskScheduler()
+
     # Test que le nom généré est valide
     # Note: la vraie validation se fait dans enqueue_run_task
-    task_id = f"run-20251016-r1c1-h30"
-    
+    task_id = "run-20251016-r1c1-h30"
+
     assert task_id.islower() or task_id.isdigit() or '-' in task_id
     assert not any(c in task_id for c in ['_', '.', '/', ' '])
 

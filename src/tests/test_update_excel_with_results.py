@@ -78,7 +78,7 @@ def test_update_excel_records_observed_roi(tmp_path: Path) -> None:
         "--tickets",
         str(tickets_path),
     ]
-    res = subprocess.run(cmd, capture_output=True, text=True)
+    res = subprocess.run(cmd, check=False, capture_output=True, text=True)
     assert res.returncode == 0, res.stderr
     lines = [line for line in res.stdout.splitlines() if line.startswith("Suivi:")]
     assert lines, res.stdout
@@ -86,7 +86,7 @@ def test_update_excel_records_observed_roi(tmp_path: Path) -> None:
     printed = json.loads(payload_line)
     assert printed["R/C"] == "R1C1"
     assert printed["ROI_reel"] == pytest.approx((10.0 - 3.0) / 3.0, rel=1e-6)
-    
+
     wb = load_workbook(excel_path)
     assert "Sheet" not in wb.sheetnames
 

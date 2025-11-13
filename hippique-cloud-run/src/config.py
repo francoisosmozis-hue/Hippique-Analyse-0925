@@ -1,6 +1,5 @@
 import os
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass
@@ -15,7 +14,7 @@ class Config:
     port: int = 8080
     timezone: str = "Europe/Paris"
     require_auth: bool = True
-    gcs_bucket: Optional[str] = None
+    gcs_bucket: str | None = None
     user_agent: str = "GPI-Hippique-Analyzer/5.1 (+compliance @example.com)"
     request_timeout: int = 30
     max_retries: int = 3

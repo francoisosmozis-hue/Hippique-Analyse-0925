@@ -1,0 +1,2727 @@
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index 10b76fe..bf25936 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -1,15 +1,47 @@
+-name: ci
++name: CI
++
+ on:
+-  push: { branches: ["**"] }
+-  pull_request: {}
++  push:
++    branches: [ main ]
++  pull_request:
++    branches: [ main ]
++
+ jobs:
+-  tests:
++  lint:
+     runs-on: ubuntu-latest
+     steps:
+-      - uses: actions/checkout@v4
+-      - uses: actions/setup-python@v5
++      - uses: actions/checkout@v3
++      - name: Set up Python
++        uses: actions/setup-python@v3
+         with:
+-          python-version: "3.11"
+-      - run: pip install -r requirements.txt || true
+-      - run: make lint
+-      - run: make test
++          python-version: '3.12'
++      - name: Install dependencies
++        run: |
++          python -m pip install --upgrade pip
++          pip install ruff
++      - name: Run linter
++        run: ruff check .
++
++  test:
++    runs-on: ubuntu-latest
++    steps:
++      - uses: actions/checkout@v3
++      - name: Set up Python
++        uses: actions/setup-python@v3
++        with:
++          python-version: '3.12'
++      - name: Install dependencies
++        run: |
++          python -m pip install --upgrade pip
++          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
++          if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
++      - name: Compile Python files
++        run: |
++          python -m py_compile -l .
++      - name: Run offline pipeline
++        run: |
++          mkdir -p data/R1C1/out
++          cp tests/fixtures/snapshot.json data/R1C1/h5.json
++          cp tests/fixtures/snapshot.json data/R1C1/h30.json
++          cp tests/fixtures/snapshot.json data/R1C1/partants.json
++          python pipeline_run.py --dir data/R1C1
+\ No newline at end of file
+diff --git a/analyse_courses_du_jour_enrichie.py b/analyse_courses_du_jour_enrichie.py
+index 2aca89d..b413c44 100644
+--- a/analyse_courses_du_jour_enrichie.py
++++ b/analyse_courses_du_jour_enrichie.py
+@@ -28,27 +28,28 @@ import requests
+ from bs4 import BeautifulSoup
+ 
+ from logging_io import append_csv_line, CSV_HEADER
+-from src.drive_sync import disabled_reason, is_gcs_enabled
+-def normalize_snapshot(payload: Mapping[str, Any]) -> dict[str, Any]:
+-    """Placeholder function that returns the payload as is."""
+-    return dict(payload)
++from scripts.gcs_utils import disabled_reason, is_gcs_enabled
++try:
++    from scripts.online_fetch_zeturf import normalize_snapshot
++except (ImportError, SyntaxError) as _normalize_import_error:  # pragma: no cover - fallback
++    def _raise_normalize_snapshot(payload: Mapping[str, Any]) -> dict[str, Any]:
++        """Placeholder lorsque :mod:`scripts.online_fetch_zeturf` est invalide."""
++
++        raise RuntimeError(
++            "normalize_snapshot indisponible (erreur d'import scripts.online_fetch_zeturf)"
++        ) from _normalize_import_error
++
++    normalize_snapshot = _raise_normalize_snapshot
+ from fetch_je_stats import collect_stats
++from scripts.online_fetch_zeturf import ZeturfFetcher
+ 
+ import pipeline_run
+-from analysis_utils import compute_overround_cap
++from scripts.analysis_utils import compute_overround_cap
+ from simulate_wrapper import PAYOUT_CALIBRATION_PATH, evaluate_combo
+-from src.hippique_orchestrator.scripts import p_finale_export
+ 
+ logger = logging.getLogger(__name__)
+ 
+ 
+-def export_per_horse_csv(rc_dir: Path) -> Path:
+-    """Wrapper for p_finale_export.export_p_finale_from_dir."""
+-    p_finale_export.export_p_finale_from_dir(rc_dir)
+-    return rc_dir / "p_finale_export.csv"
+-
+-
+-
+ def _env_float(name: str, default: float) -> float:
+     try:
+         return float(os.getenv(name, str(default)))
+@@ -69,7 +70,7 @@ if "MAX_COMBO_OVERROUND" not in os.environ:
+ # pulling heavy scraping dependencies.  Ensure the stub does not linger in
+ # ``sys.modules`` so that later imports retrieve the fully-featured module.
+ _fetch_module = sys.modules.get("scripts.online_fetch_zeturf")
+-if _fetch_module is not None and not hasattr(_fetch_module, "fetch_race_snapshot"):
++if _fetch_module is not None and False:
+     sys.modules.pop("scripts.online_fetch_zeturf", None)
+ 
+ 
+@@ -86,19 +87,16 @@ USE_GCS = is_gcs_enabled()
+ TRACKING_HEADER = CSV_HEADER + ["phase", "status", "reason"]
+ 
+ try:  # pragma: no cover - optional dependency in tests
+-    from online_fetch_zeturf import write_snapshot_from_geny
++    from scripts.online_fetch_zeturf import write_snapshot_from_geny
+ except Exception:  # pragma: no cover - used when optional deps are missing
+-    
+-    def write_snapshot_from_geny(*args: Any, **kwargs: Any) -> None:
+-        raise RuntimeError("write_snapshot_from_geny is unavailable")
++    pass
++
+ 
+ try:
+     from src.online_fetch_boturfers import fetch_boturfers_programme, fetch_boturfers_race_details
+ except ImportError:
+-    def fetch_boturfers_programme(*args, **kwargs):
+-        raise RuntimeError("Boturfers programme fetcher is unavailable")
+-    def fetch_boturfers_race_details(*args, **kwargs):
+-        raise RuntimeError("Boturfers race details fetcher is unavailable")
++    pass
++
+ 
+ def write_snapshot_from_boturfers(reunion: str, course: str, phase: str, rc_dir: Path) -> None:
+     """
+@@ -145,7 +143,7 @@ def write_snapshot_from_boturfers(reunion: str, course: str, phase: str, rc_dir:
+ 
+ if USE_GCS:
+     try:  # pragma: no cover - optional dependency in tests
+-        from drive_sync import (
++        from scripts.drive_sync import (
+             build_remote_path as gcs_build_remote_path,
+             push_tree,
+         )
+@@ -162,7 +160,7 @@ else:  # pragma: no cover - Cloud sync explicitly disabled
+     push_tree = None  # type: ignore[assignment]
+ 
+ 
+-# --- RÈGLES ANTI-COTES FAIBLES (SP min 4/1 ; CP somme > 6.0 déc) ---------------
++# --- RÈGLES ANTI-COTES FAIBLES (SP min 4/1 ; CP somme > 6.0 déc) --------------- 
+ MIN_SP_DEC_ODDS = 5.0  # 4/1 = 5.0
+ MIN_CP_SUM_DEC = 6.0  # (o1-1)+(o2-1) ≥ 4  <=> (o1+o2) ≥ 6.0
+ 
+@@ -171,7 +169,6 @@ def _write_json_file(path: Path, payload: Any) -> None:
+     path.parent.mkdir(parents=True, exist_ok=True)
+     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+ 
+-
+ def _write_minimal_csv(
+     path: Path, headers: Iterable[Any], rows: Iterable[Iterable[Any]] | None = None
+ ) -> None:
+@@ -185,7 +182,6 @@ def _write_minimal_csv(
+             for row in rows:
+                 writer.writerow(list(row))
+ 
+-
+ def _load_json_if_exists(path: Path) -> dict[str, Any] | None:
+     try:
+         data = json.loads(path.read_text(encoding="utf-8"))
+@@ -193,7 +189,6 @@ def _load_json_if_exists(path: Path) -> dict[str, Any] | None:
+         return None
+     return data if isinstance(data, dict) else None
+ 
+-
+ def _coerce_int(value: Any) -> int | None:
+     try:
+         if isinstance(value, bool):
+@@ -209,10 +204,9 @@ def _coerce_int(value: Any) -> int | None:
+         return None
+     return None
+ 
+-
+ def _derive_rc_parts(label: str) -> tuple[str, str]:
+     text = str(label or "").replace(" ", "").upper()
+-    match = re.match(r"^(R\d+)(C\d+)$", text)
++    match = re.match(r"^(R\d+)(C\d+)", text)
+     if match:
+         return match.group(1), match.group(2)
+     if text.startswith("R") and "C" in text:
+@@ -220,7 +214,6 @@ def _derive_rc_parts(label: str) -> tuple[str, str]:
+         return r_part, f"C{c_part}"
+     return text or "", ""
+ 
+-
+ def _gather_tracking_base(rc_dir: Path) -> dict[str, Any]:
+     payloads: list[dict[str, Any]] = []
+     for name in ("p_finale.json", "partants.json", "normalized_h5.json"):
+@@ -283,7 +276,6 @@ def _gather_tracking_base(rc_dir: Path) -> dict[str, Any]:
+     }
+     return base
+ 
+-
+ def _log_tracking_missing(
+     rc_dir: Path,
+     *,
+@@ -307,7 +299,6 @@ def _log_tracking_missing(
+     base["reason"] = reason
+     append_csv_line(str(rc_dir / "tracking.csv"), base, header=TRACKING_HEADER)
+ 
+-
+ def _extract_id2name(payload: Any) -> dict[str, str]:
+     """Return an ``id -> name`` mapping from the provided payload."""
+ 
+@@ -336,7 +327,6 @@ def _extract_id2name(payload: Any) -> dict[str, str]:
+             mapping[str(cid)] = "" if name is None else str(name)
+     return mapping
+ 
+-
+ def _extract_stats_mapping(stats_payload: Any) -> dict[str, dict[str, Any]]:
+     """Normalise the stats payload into a ``dict[id] -> stats`` mapping."""
+ 
+@@ -348,7 +338,6 @@ def _extract_stats_mapping(stats_payload: Any) -> dict[str, dict[str, Any]]:
+             mapping[str(key)] = value
+     return mapping
+ 
+-
+ def _write_je_csv_file(
+     path: Path, *, id2name: dict[str, str], stats_payload: Any
+ ) -> None:
+@@ -367,19 +356,17 @@ def _write_je_csv_file(
+                 [
+                     cid,
+                     name,
+-                    stats.get("j_win", ""),
+-                    stats.get("e_win", ""),
++                    stats.get("j_rate", ""),
++                    stats.get("e_rate", ""),
+                 ]
+             )
+ 
+-
+ def _norm_float(value: Any) -> float | None:
+     try:
+         return float(str(value).replace(",", "."))
+     except Exception:  # pragma: no cover - defensive
+         return None
+ 
+-
+ def _filter_sp_and_cp_by_odds(payload: dict[str, Any]) -> None:
+     tickets = payload.get("tickets", []) or []
+     kept: list[dict[str, Any]] = []
+@@ -511,7 +498,6 @@ def ensure_dir(path: Path) -> Path:
+     path.mkdir(parents=True, exist_ok=True)
+     return path
+ 
+-
+ def enrich_h5(rc_dir: Path, *, budget: float, kelly: float) -> None:
+     """Prepare all artefacts required for the H-5 pipeline.
+ 
+@@ -671,7 +657,6 @@ def enrich_h5(rc_dir: Path, *, budget: float, kelly: float) -> None:
+         placeholder_rows = [["", "", 0]]
+         _write_minimal_csv(chronos_path, placeholder_headers, placeholder_rows)
+ 
+-
+ def build_p_finale(
+     rc_dir: Path,
+     *,
+@@ -694,7 +679,6 @@ def build_p_finale(
+         overround_max=overround_max,
+     )
+ 
+-
+ def run_pipeline(
+     rc_dir: Path,
+     *,
+@@ -755,7 +739,6 @@ def run_pipeline(
+     if not ran_any:
+         raise FileNotFoundError(f"Aucune donnée pipeline détectée dans {rc_dir}")
+ 
+-
+ def build_prompt_from_meta(rc_dir: Path, *, budget: float, kelly: float) -> None:
+     """Generate a human-readable prompt from ``p_finale.json`` metadata."""
+ 
+@@ -834,7 +817,6 @@ def build_prompt_from_meta(rc_dir: Path, *, budget: float, kelly: float) -> None
+         encoding="utf-8",
+     )
+ 
+-
+ def _is_number(value: Any) -> bool:
+     try:
+         float(value)
+@@ -842,7 +824,6 @@ def _is_number(value: Any) -> bool:
+         return False
+     return True
+ 
+-
+ def _write_chronos_csv(path: Path, runners: Iterable[Any]) -> None:
+     """Persist a chronos CSV placeholder using runner identifiers."""
+ 
+@@ -859,7 +840,6 @@ def _write_chronos_csv(path: Path, runners: Iterable[Any]) -> None:
+             chrono = runner.get("chrono") or runner.get("time") or ""
+             writer.writerow([cid, chrono])
+ 
+-
+ def _run_single_pipeline(
+     rc_dir: Path,
+     *,
+@@ -969,7 +949,6 @@ def _run_single_pipeline(
+         encoding="utf-8",
+     )
+ 
+-
+ def _find_je_csv(rc_dir: Path) -> Path | None:
+     """Return the JE CSV produced during enrichment when available."""
+ 
+@@ -983,7 +962,6 @@ def _find_je_csv(rc_dir: Path) -> Path | None:
+             return candidate
+     return None
+ 
+-
+ def _is_combo_ticket(ticket: Mapping[str, Any]) -> bool:
+     """Return ``True`` when ``ticket`` refers to an exotic combination."""
+ 
+@@ -994,7 +972,6 @@ def _is_combo_ticket(ticket: Mapping[str, Any]) -> bool:
+         return True
+     return ticket_type not in {"SP", "SIMPLE", "SIMPLE_PLACE", "PLACE"}
+ 
+-
+ def _evaluate_combo_guard(
+     ticket: Mapping[str, Any],
+     *,
+@@ -1019,7 +996,6 @@ def _evaluate_combo_guard(
+             "notes": [f"evaluation_error:{exc}"],
+         }
+ 
+-
+ def _run_h5_guard_phase(
+     rc_dir: Path,
+     *,
+@@ -1274,7 +1250,6 @@ def _run_h5_guard_phase(
+     logger.info("[H-5][guards] course %s validated", rc_dir.name)
+     return True, analysis_payload, None
+ 
+-
+ def _upload_artifacts(rc_dir: Path, *, gcs_prefix: str | None) -> None:
+     """Upload ``rc_dir`` contents to Google Cloud Storage."""
+ 
+@@ -1299,7 +1274,6 @@ def _upload_artifacts(rc_dir: Path, *, gcs_prefix: str | None) -> None:
+     except Exception as exc:  # pragma: no cover - best effort
+         print(f"[WARN] Failed to upload {rc_dir}: {exc}")
+ 
+-
+ def _snap_prefix(rc_dir: Path) -> str | None:
+     """Return the stem of the most recent H-5 snapshot if available."""
+ 
+@@ -1384,22 +1358,19 @@ def _check_enrich_outputs(
+ 
+     return None
+ 
+-
+ def _missing_requires_stats(missing: Iterable[str]) -> bool:
+     return any(str(name).endswith("_je.csv") for name in missing)
+ 
+-
+ def _missing_requires_chronos(missing: Iterable[str]) -> bool:
+     return any(str(name) == "chronos.csv" for name in missing)
+ 
+-
+ def _run_fetch_script(script_path: Path, rc_dir: Path) -> bool:
+     """Invoke an auxiliary fetch script and report whether it succeeded."""
+ 
+     cmd: list[str] = [sys.executable, str(script_path)]
+ 
+     if script_path.name == "fetch_je_stats.py":
+-
++        
+         def _extract_course_id(payload: dict[str, Any]) -> str | None:
+             for key in ("course_id", "id_course", "id"):
+                 value = payload.get(key)
+@@ -1494,7 +1465,6 @@ def _run_fetch_script(script_path: Path, rc_dir: Path) -> bool:
+ 
+     return True
+ 
+-
+ def _recover_je_csv_from_stats(
+     rc_dir: Path, *, retry_cb: Callable[[], None] | None = None
+ ) -> tuple[bool, bool, bool]:
+@@ -1529,7 +1499,6 @@ def _recover_je_csv_from_stats(
+         
+     return True, False, True
+ 
+-
+ def _rebuild_je_csv_from_stats(rc_dir: Path) -> bool:
+     """Attempt to rebuild ``*_je.csv`` using freshly fetched stats."""
+ 
+@@ -1584,7 +1553,6 @@ def _rebuild_je_csv_from_stats(rc_dir: Path) -> bool:
+ 
+     return True
+ 
+-
+ def _regenerate_chronos_csv(rc_dir: Path) -> bool:
+     """Attempt to rebuild ``chronos.csv`` from locally available runner data."""
+ 
+@@ -1661,7 +1629,6 @@ def _regenerate_chronos_csv(rc_dir: Path) -> bool:
+     )
+     return False
+ 
+-
+ def _mark_course_unplayable(rc_dir: Path, missing: Iterable[str]) -> dict[str, Any]:
+     """Write the abstention marker and emit the canonical abstain log.
+ 
+@@ -1711,7 +1678,6 @@ def _mark_course_unplayable(rc_dir: Path, missing: Iterable[str]) -> dict[str, A
+ 
+     return details
+ 
+-
+ def _ensure_h5_artifacts(
+     rc_dir: Path,
+     *,
+@@ -1863,7 +1829,6 @@ def _ensure_h5_artifacts(
+     )
+     return outcome
+ 
+-
+ def safe_enrich_h5(
+     rc_dir: Path,
+     *,
+@@ -1928,7 +1893,6 @@ def safe_enrich_h5(
+         return False, outcome
+     return True, None
+ 
+-
+ def _execute_h5_chain(
+     rc_dir: Path,
+     *,
+@@ -2004,13 +1968,12 @@ def _normalize_label(label: object) -> str:
+ 
+     return str(label).strip().upper().replace(" ", "")
+ 
+-
+ def _normalise_rc_label(label: str | int, prefix: str) -> str:
+     """Normalise ``label`` to the canonical ``R``/``C`` format.
+ 
+     ``label`` may be provided without the leading prefix (``"1"``) or with a
+-    lowercase variant (``"c3"``). The return value always matches ``R\\d+`` or
+-    ``C\\d+`` with no leading zero. ``ValueError`` is raised when the label does
++    lowercase variant (``"c3"``). The return value always matches ``R\d+`` or
++    ``C\d+`` with no leading zero. ``ValueError`` is raised when the label does
+     not describe a strictly positive integer.
+     """
+ 
+@@ -2028,7 +1991,6 @@ def _normalise_rc_label(label: str | int, prefix: str) -> str:
+         raise ValueError(f"Identifiant {prefix} invalide: {label!r}")
+     return f"{prefix}{number}"
+ 
+-
+ def _normalise_phase(value: str) -> str:
+     """Return a canonical phase string (``H30`` or ``H5``)."""
+ 
+@@ -2037,7 +1999,6 @@ def _normalise_phase(value: str) -> str:
+         raise ValueError(f"Phase inconnue: {value!r} (attendu H30 ou H5)")
+     return cleaned
+ 
+-
+ def _phase_argument(value: str) -> str:
+     """Argument parser wrapper that normalises ``value`` to ``H30``/``H5``."""
+     
+@@ -2046,31 +2007,55 @@ def _phase_argument(value: str) -> str:
+     except ValueError as exc:  # pragma: no cover - handled by argparse
+         raise argparse.ArgumentTypeError(str(exc)) from exc
+ 
+-
+ def _resolve_course_id(reunion: str, course: str) -> str:
+-    """Return the Geny course identifier matching ``reunion``/``course``."""
+-    
++    """Retourne l'identifiant Geny de la course pour (R,C)."""
+     payload = _load_geny_today_payload()
+-    reunion = reunion.upper()
+-    course = course.upper()
++    r = str(reunion).upper()
++    c = str(course).upper()
+     for meeting in payload.get("meetings", []):
+-        if str(meeting.get("r", "")).upper() != reunion:
++        if str(meeting.get("r", "")).upper() != r:
+             continue
+         for course_info in meeting.get("courses", []):
+             label = str(course_info.get("c", "")).upper()
+-            if label != course:
+-                continue
+-            course_id = (
+-                course_info.get("id_course")
+-                or course_info.get("course_id")
+-                or course_info.get("id")
+-            )
+-            if course_id is None:
++            if label == c:
++                course_id = (
++                    course_info.get("id_course")
++                    or course_info.get("course_id")
++                    or course_info.get("id")
++                )
++                if course_id is not None:
++                    return str(course_id)
+                 break
+-            return str(course_id)
+     raise ValueError(f"Course {reunion}{course} introuvable via discover_geny_today")
+-   
+-   
++
++
++
++# ---- SHIM ZETURF (compat) ---------------------------------------------------
++import subprocess, shlex, re
++from pathlib import Path
++
++def _snapshot_label(phase: str) -> str:
++    u = (phase or "").upper().replace(" ", "")
++    if u in ("H5","H-5"): return "H-5"
++    if u in ("H30","H-30"): return "H-30"
++    raise ValueError(f"phase invalide: {phase}")
++
++def detect_rc_from_zeturf(url: str) -> str:
++    m = re.search(r"/course/\d{4}-\d{2}-\d{2}/(R\d+C\d+)-", url, re.I)
++    return m.group(1) if m else "R?C?"
++
++def fetch_snapshot_from_course(course_url: str, phase: str, out_dir: Path, prev_dir: Path | None) -> Path | None:
++    out_dir.mkdir(parents=True, exist_ok=True)
++    snap = _snapshot_label(phase)
++    prev_arg = f' --prev-json "{prev_dir}"' if prev_dir else ""
++    cmd = f'python online_fetch_zeturf.py --course-url "{course_url}" --snapshot {snap} --out "{out_dir}"{prev_arg}'
++    print(f"[RUN] {cmd}")
++    subprocess.run(shlex.split(cmd), check=True)
++    rc = detect_rc_from_zeturf(course_url)
++    cand = [p for p in out_dir.glob(f"*_{rc}_*.json")]
++    return max(cand, key=lambda p: p.stat().st_mtime) if cand else None
++# -----------------------------------------------------------------------------
++
+ def _process_single_course(
+     reunion: str,
+     course: str,
+@@ -2084,16 +2069,38 @@ def _process_single_course(
+     roi_min: float = ROI_SP_MIN_THRESHOLD,
+     payout_min: float = PAYOUT_MIN_THRESHOLD,
+     overround_max: float = OVERROUND_MAX_THRESHOLD,
++    source: str = "geny",
++    course_url: str | None = None,
+ ) -> dict[str, Any] | None:
+-    """Fetch and analyse a specific course designated by ``reunion``/``course``."""
+-
+-    course_id = _resolve_course_id(reunion, course)
++    """Récupère un snapshot pour (R,C) puis exécute la chaîne H-5 si demandé."""
++    reunion = _normalise_rc_label(reunion, "R")
++    course = _normalise_rc_label(course, "C")
+     base_dir = ensure_dir(data_dir)
+     rc_dir = ensure_dir(base_dir / f"{reunion}{course}")
+-    write_snapshot_from_geny(course_id, phase, rc_dir)
++
++    # --- Dispatch snapshot ---
++    if source == "boturfers":
++        print(f"[INFO] Fetching Boturfers snapshot for {reunion}{course}…")
++        write_snapshot_from_boturfers(reunion, course, phase, rc_dir)
++    elif source == "geny":
++        course_id = _resolve_course_id(reunion, course)
++        print(f"[INFO] Fetching Geny snapshot for {reunion}{course} (id={course_id})…")
++        write_snapshot_from_geny(course_id, phase, rc_dir)
++    else:
++        # zeturf
++        if not course_url:
++            raise ValueError("Zeturf: --course-url requis pour _process_single_course")
++        race_url = course_url.replace("/reunion/", "/course/")
++        print(f"[INFO] Fetching Zeturf snapshot for {race_url}…")
++        fetcher = ZeturfFetcher(race_url)
++        snapshot = fetch_snapshot_from_course(course_url=race_url, phase=phase, out_dir=base_dir, prev_dir=prev_dir)
++        from datetime import datetime
++        snap_name = f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{phase}.json"
++        fetcher.save_snapshot(snapshot, rc_dir / snap_name)
++    # --- Fin dispatch ---
++
+     outcome: dict[str, Any] | None = None
+-    pipeline_done = False
+-    if phase.upper() == "H5":
++    if phase.upper().replace("-", "") == "H5":
+         pipeline_done, outcome = _execute_h5_chain(
+             rc_dir,
+             budget=budget,
+@@ -2109,7 +2116,7 @@ def _process_single_course(
+             outcome = None
+         elif outcome is not None:
+             _write_json_file(rc_dir / "decision.json", outcome)
+-        else:  # pragma: no cover - defensive fallback
++        else:
+             _write_json_file(
+                 rc_dir / "decision.json",
+                 {
+@@ -2118,26 +2125,17 @@ def _process_single_course(
+                     "reason": "pipeline-error",
+                 },
+             )
++
+     if gcs_prefix is not None:
+         _upload_artifacts(rc_dir, gcs_prefix=gcs_prefix)
+-    return outcome
+-
+-
+-# ---------------------------------------------------------------------------
+-# CLI entry point
+-# ---------------------------------------------------------------------------
+-
+-
+-_COURSE_URL_PATTERN = re.compile(r"/(?:course|race)/(\d+)", re.IGNORECASE)
+-
+ 
++    return outcome
+ def _extract_labels_from_text(text: str) -> tuple[str, str]:
+-    """Return ``(reunion, course)`` labels parsed from ``text``."""
+-
++    """Extrait (R,C) depuis un blob de texte si possible."""
++    import re
+     rc_match = re.search(r"R\d+\s*C\d+", text, re.IGNORECASE)
+     if rc_match:
+         return _derive_rc_parts(rc_match.group(0))
+-
+     r_match = re.search(r"R\d+", text, re.IGNORECASE)
+     c_match = re.search(r"C\d+", text, re.IGNORECASE)
+     r_label = r_match.group(0).upper() if r_match else "R?"
+@@ -2159,175 +2157,107 @@ def _process_reunion(
+     payout_min: float = PAYOUT_MIN_THRESHOLD,
+     overround_max: float = OVERROUND_MAX_THRESHOLD,
+ ) -> None:
+-    """Fetch ``url`` and run the pipeline for each course of the meeting."""
++    """Analyse une réunion: détecte les courses et exécute le pipeline par course."""
++    import re
++    from urllib.parse import urljoin
++    import requests
++    from bs4 import BeautifulSoup
+ 
+-    resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
++    resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=20)
+     resp.raise_for_status()
+     soup = BeautifulSoup(resp.text, "html.parser")
+ 
+     text_blob = soup.get_text(" ", strip=True)
+-    context_blob = f"{url} {text_blob}".strip()
++    r_label, _ = _extract_labels_from_text(f"{url} {text_blob}")
+ 
+     courses: list[tuple[str, str, str, str]] = []
+-    course_match = _COURSE_URL_PATTERN.search(url)
+-    if course_match:
+-        course_id = course_match.group(1)
+-        r_label, c_label = _extract_labels_from_text(context_blob)
+-        courses.append((r_label, c_label, course_id, url))
+-    else:
+-        r_label, _ = _extract_labels_from_text(context_blob)
+-
+-        for a in soup.find_all("a"):
+-            text = a.get_text(strip=True)
+-            c_match = re.search(r"(C\\d+)", text, re.IGNORECASE)
+-            href = a.get("href", "")
+-            id_match = re.search(r"(\\d+)(?:\\.html)?$", href)
+-            if c_match and id_match:
+-                course_url = urljoin(url, href)
+-                courses.append(
+-                    (r_label, c_match.group(1).upper(), id_match.group(1), course_url)
+-                )
+-
+-        if not courses:
+-            return
++    for a in soup.find_all("a"):
++        text = a.get_text(strip=True)
++        href = a.get("href") or ""
++        c_m = re.search(r"(C\d+)", text, re.IGNORECASE)
++        id_m = re.search(r"/(?:course|race)/(\d+)", href, re.IGNORECASE)
++        if c_m and id_m:
++            c_label = c_m.group(1).upper()
++            course_url = urljoin(url, href)
++            courses.append((r_label, c_label, id_m.group(1), course_url))
++
++    if not courses:
++        print(f"[WARN] Aucune course détectée dans {url}")
++        return
+ 
+     base_dir = ensure_dir(data_dir)
+     for r_label, c_label, course_id, course_url in courses:
+         rc_dir = ensure_dir(base_dir / f"{r_label}{c_label}")
+ 
+-        # --- NEW DISPATCH LOGIC ---
+-        if source == 'boturfers':
+-            print(f"[INFO] Fetching Boturfers snapshot for {r_label}{c_label}...")
+-            # Note: boturfers logic might need url as well if it's ever used
+-            write_snapshot_from_boturfers(r_label, c_label, phase, rc_dir, course_url=course_url)
+-        elif source == 'geny':
+-            print(f"[INFO] Fetching Geny snapshot for {r_label}{c_label}...")
+-            write_snapshot_from_geny(course_id, phase, rc_dir, course_url=course_url)
+-        # --- END OF NEW LOGIC ---
+-
+-        outcome: dict[str, Any] | None = None
+-        pipeline_done = False
+-        if phase.upper() == "H5":
+-            pipeline_done, outcome = _execute_h5_chain(
+-                rc_dir,
+-                budget=budget,
+-                kelly=kelly,
+-                ev_min=ev_min,
+-                roi_min=roi_min,
+-                payout_min=payout_min,
+-                overround_max=overround_max
++        # --- Dispatch snapshot ---
++        if source == "boturfers":
++            print(f"[INFO] Fetching Boturfers snapshot for {r_label}{c_label}…")
++            write_snapshot_from_boturfers(r_label, c_label, phase, rc_dir)
++        elif source == "geny":
++            print(f"[INFO] Fetching Geny snapshot for {r_label}{c_label} (id={course_id})…")
++            write_snapshot_from_geny(course_id, phase, rc_dir)
++        else:
++            # zeturf
++            race_url = course_url.replace("/reunion/", "/course/")
++            print(f"[INFO] Fetching Zeturf snapshot for {race_url}…")
++            fetcher = ZeturfFetcher(race_url)
++            snapshot = fetch_snapshot_from_course(course_url=race_url, phase=phase, out_dir=base_dir, prev_dir=prev_dir)
++            from datetime import datetime
++            snap_name = f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{phase}.json"
++            fetcher.save_snapshot(snapshot, rc_dir / snap_name)
++        # --- Fin dispatch ---
++
++        pipeline_done, outcome = _execute_h5_chain(
++            rc_dir,
++            budget=budget,
++            kelly=kelly,
++            ev_min=ev_min,
++            roi_min=roi_min,
++            payout_min=payout_min,
++            overround_max=overround_max,
++        )
++        if pipeline_done:
++            csv_path = export_per_horse_csv(rc_dir)
++            print(f"[INFO] per-horse report écrit: {csv_path}")
++        elif outcome is not None:
++            _write_json_file(rc_dir / "decision.json", outcome)
++        else:
++            _write_json_file(
++                rc_dir / "decision.json",
++                {
++                    "status": "no-bet",
++                    "decision": "ABSTENTION",
++                    "reason": "pipeline-error",
++                },
+             )
+-            if pipeline_done:
+-                # csv_path = export_per_horse_csv(rc_dir)
+-                # print(f"[INFO] per-horse report écrit: {csv_path}")
+-                outcome = None
+-            elif outcome is not None:
+-                _write_json_file(rc_dir / "decision.json", outcome)
+-            else:  # pragma: no cover - defensive fallback
+-                _write_json_file(
+-                    rc_dir / "decision.json",
+-                    {
+-                        "status": "no-bet",
+-                        "decision": "ABSTENTION",
+-                        "reason": "pipeline-error",
+-                    },
+-                )
++
+         if gcs_prefix is not None:
+             _upload_artifacts(rc_dir, gcs_prefix=gcs_prefix)
+-
+-
+ def main() -> None:
+     ap = argparse.ArgumentParser(description="Analyse courses du jour enrichie")
+-    ap.add_argument(
+-        "--data-dir", default="data", help="Répertoire racine pour les sorties"
+-    )
+-    ap.add_argument(
+-        "--budget", type=float, default=GPI_BUDGET_DEFAULT, help="Budget à utiliser"
+-    )
+-    ap.add_argument(
+-        "--kelly", type=float, default=1.0, help="Fraction de Kelly à appliquer"
+-    )
+-    ap.add_argument(
+-        "--ev-min",
+-        type=float,
+-        default=EV_MIN_THRESHOLD,
+-        help="Seuil EV global minimal (ratio).",
+-    )
+-    ap.add_argument(
+-        "--roi-min",
+-        type=float,
+-        default=ROI_SP_MIN_THRESHOLD,
+-        help="ROI global minimal (ratio).",
+-    )
+-    ap.add_argument(
+-        "--payout-min",
+-        type=float,
+-        default=PAYOUT_MIN_THRESHOLD,
+-        help="Payout combinés minimal (euros).",
+-    )
+-    ap.add_argument(
+-        "--overround-max",
+-        type=float,
+-        default=OVERROUND_MAX_THRESHOLD,
+-        help="Overround place maximum autorisé.",
+-    )
+-    ap.add_argument(
+-        "--from-geny-today",
+-        action="store_true",
+-        help="Découvre toutes les réunions FR du jour via Geny et traite H30/H5",
+-    )
+-    ap.add_argument(
+-        "--reunion-url",
+-        dest="course_url",
+-        help="URL ZEturf d'une réunion ou d'une course",
+-    )
+-    ap.add_argument(
+-        "--source",
+-        choices=["geny", "boturfers"],
+-        default="boturfers",
+-        help="Source de données à utiliser pour la récupération des courses."
+-    )
+-    ap.add_argument(
+-        "--phase",
+-        type=_phase_argument,
+-        help="Fenêtre à traiter (H30 ou H5, avec ou sans tiret)",
+-    )
++    ap.add_argument("--data-dir", default="data", help="Répertoire racine pour les sorties")
++    ap.add_argument("--budget", type=float, default=GPI_BUDGET_DEFAULT, help="Budget à utiliser")
++    ap.add_argument("--kelly", type=float, default=1.0, help="Fraction de Kelly à appliquer")
++    ap.add_argument("--ev-min", type=float, default=EV_MIN_THRESHOLD, help="Seuil EV global minimal (ratio).")
++    ap.add_argument("--roi-min", type=float, default=ROI_SP_MIN_THRESHOLD, help="ROI global minimal (ratio).")
++    ap.add_argument("--payout-min", type=float, default=PAYOUT_MIN_THRESHOLD, help="Payout combinés minimal (euros).")
++    ap.add_argument("--overround-max", type=float, default=OVERROUND_MAX_THRESHOLD, help="Overround place maximum autorisé.")
++    ap.add_argument("--from-geny-today", action="store_true", help="Découvre toutes les réunions FR du jour via Geny et traite H30/H5")
++    ap.add_argument("--course-url", help="URL ZEturf d'une réunion ou d'une course")
++    ap.add_argument("--source", choices=["geny", "zeturf", "boturfers"], default="geny", help="Source de données (geny par défaut).")
++    ap.add_argument("--phase", type=_phase_argument, help="Fenêtre à traiter (H30 ou H5, avec ou sans tiret)")
+     ap.add_argument("--reunion", help="Identifiant de la réunion (ex: R1)")
+     ap.add_argument("--course", help="Identifiant de la course (ex: C3)")
+-    ap.add_argument(
+-        "--reunions-file",
+-        help="Fichier JSON listant les réunions à traiter (mode batch)",
+-    )
+-    ap.add_argument(
+-        "--upload-gcs",
+-        action="store_true",
+-        help="Upload des artefacts générés sur Google Cloud Storage",
+-    )
+-    ap.add_argument(
+-        "--upload-drive",
+-        action="store_true",
+-        help=argparse.SUPPRESS,
+-    )
+-    ap.add_argument(
+-        "--gcs-prefix",
+-        help="Préfixe GCS racine pour les uploads",
+-    )
+-    ap.add_argument(
+-        "--drive-folder-id",
+-        dest="gcs_prefix",
+-        help=argparse.SUPPRESS,
+-    )
++    ap.add_argument("--reunions-file", help="Fichier JSON listant des réunions à traiter (mode batch)")
++    ap.add_argument("--upload-gcs", action="store_true", help="Upload des artefacts sur GCS")
++    ap.add_argument("--gcs-prefix", help="Préfixe GCS racine pour les uploads")
+     args = ap.parse_args()
+ 
+-    gcs_prefix = None
+-    if args.upload_gcs or args.upload_drive:
+-        if args.gcs_prefix is not None:
+-            gcs_prefix = args.gcs_prefix
+-        else:
+-            gcs_prefix = os.environ.get("GCS_PREFIX")
+-        if gcs_prefix is None:
+-            print("[WARN] gcs-prefix manquant, envoi vers GCS ignoré")
++    gcs_prefix = args.gcs_prefix if args.upload_gcs and args.gcs_prefix else None
++    if args.upload_gcs and not gcs_prefix:
++        print("[WARN] gcs-prefix manquant, envoi vers GCS ignoré", file=sys.stderr)
+ 
++    # Mode batch via fichier de réunions
+     if args.reunions_file:
+         script = Path(__file__).resolve()
+         data = json.loads(Path(args.reunions_file).read_text(encoding="utf-8"))
+@@ -2337,81 +2267,48 @@ def main() -> None:
+                 continue
+             for phase in ["H30", "H5"]:
+                 cmd = [
+-                    sys.executable,
+-                    str(script),
+-                    "--course-url",
+-                    url_zeturf,
+-                    "--phase",
+-                    phase,
+-                    "--data-dir",
+-                    args.data_dir,
+-                    "--budget",
+-                    str(args.budget),
+-                    "--kelly",
+-                    str(args.kelly),
+-                    "--ev-min",
+-                    str(args.ev_min),
+-                    "--roi-min",
+-                    str(args.roi_min),
+-                    "--payout-min",
+-                    str(args.payout_min),
+-                    "--overround-max",
+-                    str(args.overround_max),
++                    sys.executable, str(script),
++                    "--course-url", url_zeturf,
++                    "--phase", phase,
++                    "--data-dir", args.data_dir,
++                    "--budget", str(args.budget),
++                    "--kelly", str(args.kelly),
++                    "--ev-min", str(args.ev_min),
++                    "--roi-min", str(args.roi_min),
++                    "--payout-min", str(args.payout_min),
++                    "--overround-max", str(args.overround_max),
++                    "--source", args.source
+                 ]
+-                if gcs_prefix is not None:
+-                    cmd.append("--upload-gcs")
+-                    cmd.extend(["--gcs-prefix", gcs_prefix])
++                if gcs_prefix:
++                    cmd += ["--upload-gcs", "--gcs-prefix", gcs_prefix]
+                 subprocess.run(cmd, check=True)
+         return
+ 
++    # Mode (R,C,phase) explicite
+     if args.reunion or args.course:
+         if not (args.reunion and args.course and args.phase):
+-            print(
+-                "[ERROR] --reunion, --course et --phase doivent être utilisés ensemble",
+-                file=sys.stderr,
+-            )
+-            raise SystemExit(2)
+-        try:
+-            reunion_label = _normalise_rc_label(args.reunion, "R")
+-            course_label = _normalise_rc_label(args.course, "C")
+-        except ValueError as exc:
+-            print(f"[ERROR] {exc}", file=sys.stderr)
++            print("[ERROR] --reunion, --course et --phase doivent être utilisés ensemble", file=sys.stderr)
+             raise SystemExit(2)
+-
+-        base_dir = ensure_dir(Path(args.data_dir))
+-        rc_dir = ensure_dir(base_dir / f"{reunion_label}{course_label}")
+-
+-        # Call the appropriate snapshot writer based on the source
+-        if args.source == 'boturfers':
+-            write_snapshot_from_boturfers(reunion_label, course_label, args.phase, rc_dir)
+-        elif args.source == 'geny':
+-            course_id = _resolve_course_id(reunion_label, course_label)
+-            write_snapshot_from_geny(course_id, args.phase, rc_dir)
+-        else:
+-            print(f"[ERROR] Source '{args.source}' is not yet supported in this mode.", file=sys.stderr)
+-            raise SystemExit(2)
+-
+-        # Common pipeline execution for H5
+-        if args.phase.upper() == "H5":
+-            pipeline_done, outcome = _execute_h5_chain(
+-                rc_dir,
+-                budget=args.budget,
+-                kelly=args.kelly,
+-                ev_min=args.ev_min,
+-                roi_min=args.roi_min,
+-                payout_min=args.payout_min,
+-                overround_max=args.overround_max,
+-            )
+-            if pipeline_done:
+-                csv_path = export_per_horse_csv(rc_dir)
+-                print(f"[INFO] per-horse report écrit: {csv_path}")
+-            elif outcome is not None:
+-                _write_json_file(rc_dir / "decision.json", outcome)
+-
+-        if gcs_prefix is not None:
+-            _upload_artifacts(rc_dir, gcs_prefix=gcs_prefix)
++        reunion_label = _normalise_rc_label(args.reunion, "R")
++        course_label = _normalise_rc_label(args.course, "C")
++        _process_single_course(
++            reunion_label,
++            course_label,
++            args.phase,
++            Path(args.data_dir),
++            budget=args.budget,
++            kelly=args.kelly,
++            gcs_prefix=gcs_prefix,
++            ev_min=args.ev_min,
++            roi_min=args.roi_min,
++            payout_min=args.payout_min,
++            overround_max=args.overround_max,
++            source=args.source,
++            course_url=args.course_url,
++        )
+         return
+ 
++    # Mode “URL de réunion/course” + phase
+     if args.course_url and args.phase:
+         _process_reunion(
+             args.course_url,
+@@ -2421,9 +2318,14 @@ def main() -> None:
+             budget=args.budget,
+             kelly=args.kelly,
+             gcs_prefix=gcs_prefix,
++            ev_min=args.ev_min,
++            roi_min=args.roi_min,
++            payout_min=args.payout_min,
++            overround_max=args.overround_max,
+         )
+         return
+ 
++    # Découverte via Geny (mockée ici)
+     if args.from_geny_today:
+         payload = _load_geny_today_payload()
+         meetings = payload.get("meetings", [])
+@@ -2432,15 +2334,13 @@ def main() -> None:
+             r_label = meeting.get("r", "")
+             for course in meeting.get("courses", []):
+                 c_label = course.get("c", "")
+-                rc_dir = ensure_dir(base_dir / f"{r_label}{c_label}")
+                 course_id = course.get("id_course")
+                 if not course_id:
+                     continue
++                rc_dir = ensure_dir(base_dir / f"{r_label}{c_label}")
+                 write_snapshot_from_geny(course_id, "H30", rc_dir)
+                 write_snapshot_from_geny(course_id, "H5", rc_dir)
+-                success, decision = safe_enrich_h5(
+-                    rc_dir, budget=args.budget, kelly=args.kelly
+-                )
++                success, decision = safe_enrich_h5(rc_dir, budget=args.budget, kelly=args.kelly)
+                 if success:
+                     build_p_finale(
+                         rc_dir,
+@@ -2466,12 +2366,12 @@ def main() -> None:
+                 else:
+                     if decision is not None:
+                         _write_json_file(rc_dir / "decision.json", decision)
+-                if gcs_prefix is not None:
++                if gcs_prefix:
+                     _upload_artifacts(rc_dir, gcs_prefix=gcs_prefix)
+         print("[DONE] from-geny-today pipeline terminé.")
+         return
+ 
+-    # Fall back to original behaviour: simply run the pipeline on ``data_dir``
++    # Fallback: exécute le pipeline sur data_dir (compat ancien comportement)
+     run_pipeline(
+         Path(args.data_dir),
+         budget=args.budget,
+@@ -2481,9 +2381,9 @@ def main() -> None:
+         payout_min=args.payout_min,
+         overround_max=args.overround_max,
+     )
+-    if gcs_prefix is not None:
++    if gcs_prefix:
+         _upload_artifacts(Path(args.data_dir), gcs_prefix=gcs_prefix)
+ 
+ 
+-if __name__ == "__main__":  # pragma: no cover - CLI entry point
+-    main()
++if __name__ == "__main__":  # pragma: no cover
++    main()
+\ No newline at end of file
+diff --git a/config.py b/config.py
+deleted file mode 100644
+index 62c82bb..0000000
+--- a/config.py
++++ /dev/null
+@@ -1,153 +0,0 @@
+-"""
+-src/config.py - Configuration centralisée du service
+-"""
+-
+-from __future__ import annotations
+-
+-import os
+-from dataclasses import dataclass
+-from typing import Optional
+-
+-from dotenv import load_dotenv
+-
+-# Charger .env si présent
+-load_dotenv()
+-
+-
+-@dataclass
+-class Config:
+-    """Configuration du service hippique-orchestrator."""
+-    
+-    # GCP
+-    project_id: str
+-    region: str
+-    service_name: str
+-    queue_id: str
+-    service_account_email: str
+-    
+-    # Timezone
+-    timezone: str = "Europe/Paris"
+-    
+-    # Storage
+-    gcs_bucket: Optional[str] = None
+-    gcs_prefix: str = "prod"
+-    
+-    # Sécurité
+-    require_auth: bool = True
+-    oidc_audience: Optional[str] = None
+-    
+-    # Application
+-    log_level: str = "INFO"
+-    max_retries: int = 3
+-    timeout_seconds: int = 600
+-    
+-    # Rate limiting
+-    requests_per_second: float = 1.0
+-    user_agent: str = "HippiqueAnalyzer/5.1 (+contact@yourdomain.com)"
+-    
+-    # GPI v5.1
+-    budget_total: float = 5.0
+-    sp_ratio: float = 0.6
+-    combo_ratio: float = 0.4
+-    ev_min_global: float = 0.40
+-    roi_min_global: float = 0.25
+-    
+-    # Modes
+-    mode: str = "tasks"  # "tasks" ou "scheduler"
+-    
+-    @classmethod
+-    def from_env(cls) -> Config:
+-        """Construit la configuration depuis les variables d'environnement."""
+-        
+-        # Obligatoires
+-        project_id = os.getenv("PROJECT_ID")
+-        if not project_id:
+-            raise ValueError("PROJECT_ID environment variable is required")
+-        
+-        region = os.getenv("REGION", "europe-west1")
+-        service_name = os.getenv("SERVICE_NAME", "hippique-orchestrator")
+-        queue_id = os.getenv("QUEUE_ID", "hippique-tasks")
+-        service_account_email = os.getenv("SERVICE_ACCOUNT_EMAIL")
+-        if not service_account_email:
+-            raise ValueError("SERVICE_ACCOUNT_EMAIL environment variable is required")
+-        
+-        # Optionnelles
+-        timezone = os.getenv("TZ", "Europe/Paris")
+-        gcs_bucket = os.getenv("GCS_BUCKET")
+-        gcs_prefix = os.getenv("GCS_PREFIX", "prod")
+-        
+-        require_auth = os.getenv("REQUIRE_AUTH", "true").lower() in ("true", "1", "yes")
+-        oidc_audience = os.getenv("OIDC_AUDIENCE")
+-        
+-        log_level = os.getenv("LOG_LEVEL", "INFO").upper()
+-        max_retries = int(os.getenv("MAX_RETRIES", "3"))
+-        timeout_seconds = int(os.getenv("TIMEOUT_SECONDS", "600"))
+-        
+-        requests_per_second = float(os.getenv("REQUESTS_PER_SECOND", "1.0"))
+-        user_agent = os.getenv(
+-            "USER_AGENT",
+-            "HippiqueAnalyzer/5.1 (+contact@yourdomain.com)"
+-        )
+-        
+-        budget_total = float(os.getenv("BUDGET_TOTAL", "5.0"))
+-        sp_ratio = float(os.getenv("SP_RATIO", "0.6"))
+-        combo_ratio = float(os.getenv("COMBO_RATIO", "0.4"))
+-        ev_min_global = float(os.getenv("EV_MIN_GLOBAL", "0.40"))
+-        roi_min_global = float(os.getenv("ROI_MIN_GLOBAL", "0.25"))
+-        
+-        mode = os.getenv("SCHEDULING_MODE", "tasks")
+-        
+-        return cls(
+-            project_id=project_id,
+-            region=region,
+-            service_name=service_name,
+-            queue_id=queue_id,
+-            service_account_email=service_account_email,
+-            timezone=timezone,
+-            gcs_bucket=gcs_bucket,
+-            gcs_prefix=gcs_prefix,
+-            require_auth=require_auth,
+-            oidc_audience=oidc_audience,
+-            log_level=log_level,
+-            max_retries=max_retries,
+-            timeout_seconds=timeout_seconds,
+-            requests_per_second=requests_per_second,
+-            user_agent=user_agent,
+-            budget_total=budget_total,
+-            sp_ratio=sp_ratio,
+-            combo_ratio=combo_ratio,
+-            ev_min_global=ev_min_global,
+-            roi_min_global=roi_min_global,
+-            mode=mode,
+-        )
+-    
+-    @property
+-    def cloud_run_url(self) -> str:
+-        """URL du service Cloud Run."""
+-        if self.oidc_audience:
+-            return self.oidc_audience
+-        return f"https://{self.service_name}-{self.project_id}.{self.region}.run.app"
+-    
+-    @property
+-    def queue_path(self) -> str:
+-        """Chemin complet de la queue Cloud Tasks."""
+-        return f"projects/{self.project_id}/locations/{self.region}/queues/{self.queue_id}"
+-
+-
+-# Singleton global
+-_config: Optional[Config] = None
+-
+-
+-def get_config() -> Config:
+-    """Retourne la configuration singleton."""
+-    global _config
+-    if _config is None:
+-        _config = Config.from_env()
+-    return _config
+-
+-
+-def reload_config() -> Config:
+-    """Force le rechargement de la configuration."""
+-    global _config
+-    _config = None
+-    return get_config()
+\ No newline at end of file
+diff --git a/config/payout_calibration.yaml b/config/payout_calibration.yaml
+index f434b5d..d4097ba 100644
+--- a/config/payout_calibration.yaml
++++ b/config/payout_calibration.yaml
+@@ -1,19 +1,6 @@
+-metadata:
+-  version: 1
+-  generated_at: "2024-09-25"
+-  notes: "Stub calibration for deterministic tests"
+-TRIO:
+-  base:
+-    median: 18
+-  hard:
+-    median: 65
+-COUPLE_PLACE:
+-  base:
+-    median: 12
+-  hard:
+-    median: 28
+-ZE4:
+-  base:
+-    median: 40
+-  hard:
+-    median: 150
+\ No newline at end of file
++# Stub de calibration des payouts
++default_payout_rate: 0.85
++payout_by_discipline:
++  ATTELE: 0.86
++  MONTE: 0.84
++  PLAT: 0.85
+diff --git a/dev_check.sh b/dev_check.sh
+index d9a85a3..58eb45a 100755
+--- a/dev_check.sh
++++ b/dev_check.sh
+@@ -10,7 +10,8 @@ UVICORN_PID=0
+ 
+ # URL de course ZEturf pour le test (exemple)
+ # R1C3 à Pau le 20/06/2024
+-DEFAULT_COURSE_URL="https://www.zeturf.fr/fr/course/2024-06-20/R1C3-pau-prix-de-la-federation-des-courses-du-sud-ouest"
++REUNION="R1"
++COURSE="C3"
+ OUTPUT_DIR="data/R1C3"
+ 
+ # --- Fonctions ---
+@@ -34,7 +35,7 @@ trap cleanup EXIT
+ echo "[INFO] Installation des dépendances depuis requirements.txt..."
+ pip install -r requirements.txt --quiet
+ echo "[INFO] Installation du projet en mode éditable..."
+-pip install -e . --quiet
++pip install --no-cache-dir --force-reinstall -e . --quiet
+ 
+ # --- Démarrage ---
+ echo "[INFO] Démarrage du serveur FastAPI en arrière-plan..."
+@@ -61,11 +62,11 @@ fi
+ 
+ # --- Exécution du Pipeline ---
+ echo "[INFO] Lancement de l'analyse pour la phase H30..."
+-PYTHONPATH=src python analyse_courses_du_jour_enrichie.py --phase H30 --reunion-url "$DEFAULT_COURSE_URL" --source geny --data-dir data
++PYTHONPATH=src python analyse_courses_du_jour_enrichie.py --phase H30 --reunion "$REUNION" --course "$COURSE" --source boturfers --data-dir data
+ 
+ echo "[INFO] Lancement de l'analyse pour la phase H5 avec un budget de 5€..."
+ # Note: analyse_courses_du_jour_enrichie.py est un wrapper qui finit par appeler runner_chain.py
+-PYTHONPATH=src python analyse_courses_du_jour_enrichie.py --phase H5 --budget 5 --reunion-url "$DEFAULT_COURSE_URL" --source geny --data-dir data
++PYTHONPATH=src python analyse_courses_du_jour_enrichie.py --phase H5 --budget 5 --reunion "$REUNION" --course "$COURSE" --source boturfers --data-dir data
+ 
+ # --- Vérification des Artefacts ---
+ echo "[INFO] Vérification des fichiers de sortie attendus dans $OUTPUT_DIR..."
+diff --git a/drive_sync.py b/drive_sync.py
+deleted file mode 100644
+index 6801bfa..0000000
+--- a/drive_sync.py
++++ /dev/null
+@@ -1,24 +0,0 @@
+-"""Convenience wrapper delegating to :mod:`scripts.drive_sync`.
+-
+-This module allows running ``python drive_sync.py`` from the repository root
+-while keeping the fully-featured implementation under ``scripts/``.
+-"""
+-
+-from __future__ import annotations
+-
+-import sys
+-
+-from scripts.drive_sync import main as _scripts_drive_sync_main
+-
+-
+-def main() -> int:
+-    """Entry point delegating to :func:`scripts.drive_sync.main`."""
+-
+-    result = _scripts_drive_sync_main()
+-    if result is None:
+-        return 0
+-    return int(result)
+-
+-
+-if __name__ == "__main__":  # pragma: no cover - CLI shim
+-    sys.exit(main())
+diff --git a/logging_untils.py b/logging_untils.py
+deleted file mode 100644
+index 715e6aa..0000000
+--- a/logging_untils.py
++++ /dev/null
+@@ -1,150 +0,0 @@
+-"""
+-src/logging_utils.py - Configuration des logs structurés pour Cloud Logging
+-"""
+-
+-import json
+-import logging
+-import sys
+-import traceback
+-from datetime import datetime
+-from typing import Any, Dict, Optional
+-
+-from config import get_config
+-
+-
+-class StructuredLogger(logging.Logger):
+-    """Logger qui émet des logs au format JSON structuré."""
+-    
+-    def _log_structured(
+-        self,
+-        level: int,
+-        msg: str,
+-        *,
+-        extra: Optional[Dict[str, Any]] = None,
+-        exc_info: Any = None,
+-        **kwargs: Any
+-    ) -> None:
+-        """Émet un log structuré JSON."""
+-        
+-        record = {
+-            "timestamp": datetime.utcnow().isoformat() + "Z",
+-            "severity": logging.getLevelName(level),
+-            "message": str(msg),
+-            "logger": self.name,
+-        }
+-        
+-        # Ajouter extra fields
+-        if extra:
+-            record.update(extra)
+-        
+-        # Ajouter kwargs
+-        for key, value in kwargs.items():
+-            if key not in record:
+-                record[key] = value
+-        
+-        # Ajouter exception info
+-        if exc_info:
+-            if isinstance(exc_info, BaseException):
+-                exc_info = (type(exc_info), exc_info, exc_info.__traceback__)
+-            elif exc_info is True:
+-                exc_info = sys.exc_info()
+-            
+-            if exc_info and exc_info[0] is not None:
+-                record["exception"] = {
+-                    "type": exc_info[0].__name__,
+-                    "message": str(exc_info[1]),
+-                    "stacktrace": "".join(traceback.format_exception(*exc_info)),
+-                }
+-        
+-        # Émettre le log JSON
+-        print(json.dumps(record, default=str), file=sys.stdout, flush=True)
+-    
+-    def debug(self, msg: str, *args: Any, **kwargs: Any) -> None:
+-        """Log DEBUG structuré."""
+-        if self.isEnabledFor(logging.DEBUG):
+-            self._log_structured(logging.DEBUG, msg % args if args else msg, **kwargs)
+-    
+-    def info(self, msg: str, *args: Any, **kwargs: Any) -> None:
+-        """Log INFO structuré."""
+-        if self.isEnabledFor(logging.INFO):
+-            self._log_structured(logging.INFO, msg % args if args else msg, **kwargs)
+-    
+-    def warning(self, msg: str, *args: Any, **kwargs: Any) -> None:
+-        """Log WARNING structuré."""
+-        if self.isEnabledFor(logging.WARNING):
+-            self._log_structured(logging.WARNING, msg % args if args else msg, **kwargs)
+-    
+-    def error(self, msg: str, *args: Any, exc_info: Any = None, **kwargs: Any) -> None:
+-        """Log ERROR structuré."""
+-        if self.isEnabledFor(logging.ERROR):
+-            self._log_structured(
+-                logging.ERROR,
+-                msg % args if args else msg,
+-                exc_info=exc_info,
+-                **kwargs
+-            )
+-    
+-    def critical(self, msg: str, *args: Any, exc_info: Any = None, **kwargs: Any) -> None:
+-        """Log CRITICAL structuré."""
+-        if self.isEnabledFor(logging.CRITICAL):
+-            self._log_structured(
+-                logging.CRITICAL,
+-                msg % args if args else msg,
+-                exc_info=exc_info,
+-                **kwargs
+-            )
+-
+-
+-def setup_logging() -> None:
+-    """Configure le logging global pour le service."""
+-    config = get_config()
+-    
+-    # Définir le niveau global
+-    level = getattr(logging, config.log_level, logging.INFO)
+-    
+-    # Remplacer la classe Logger par défaut
+-    logging.setLoggerClass(StructuredLogger)
+-    
+-    # Configurer le root logger
+-    root = logging.getLogger()
+-    root.setLevel(level)
+-    
+-    # Supprimer les handlers par défaut
+-    root.handlers.clear()
+-    
+-    # Ajouter un handler simple (print JSON)
+-    handler = logging.StreamHandler(sys.stdout)
+-    handler.setLevel(level)
+-    handler.setFormatter(logging.Formatter("%(message)s"))  # Pas de formatage supplémentaire
+-    root.addHandler(handler)
+-    
+-    # Réduire la verbosité des librairies tierces
+-    logging.getLogger("urllib3").setLevel(logging.WARNING)
+-    logging.getLogger("google").setLevel(logging.WARNING)
+-    logging.getLogger("googleapiclient").setLevel(logging.WARNING)
+-
+-
+-def get_logger(name: str) -> StructuredLogger:
+-    """Retourne un logger structuré pour le module donné."""
+-    return logging.getLogger(name)  # type: ignore
+-
+-
+-def log_request(
+-    method: str,
+-    path: str,
+-    status: int,
+-    duration_ms: float,
+-    correlation_id: Optional[str] = None,
+-    **extra: Any
+-) -> None:
+-    """Log une requête HTTP."""
+-    logger = get_logger("http")
+-    logger.info(
+-        f"{method} {path} {status}",
+-        method=method,
+-        path=path,
+-        status=status,
+-        duration_ms=round(duration_ms, 2),
+-        correlation_id=correlation_id,
+-        **extra
+-    )
+\ No newline at end of file
+diff --git a/online_fetch_zeturf.py b/online_fetch_zeturf.py
+index deb0c60..0e26d10 100644
+--- a/online_fetch_zeturf.py
++++ b/online_fetch_zeturf.py
+@@ -1,2 +1,269 @@
+-# Shim to redirect to the real implementation in src/
+-from src.online_fetch_zeturf import *
+\ No newline at end of file
++import asyncio
++import httpx
++from tenacity import retry, stop_after_attempt, wait_exponential
++from bs4 import BeautifulSoup, Tag
++import logging
++import re
++from datetime import datetime
++from typing import Any, Dict, List, Optional, Tuple
++from urllib.parse import urljoin
++import json
++from pydantic import ValidationError
++
++from src.schemas import RaceSnapshot, NormalizedRaceSnapshot, Runner
++
++
++logger = logging.getLogger(__name__)
++
++# Headers pour simuler un navigateur réel et éviter un blocage HTTP 403
++HTTP_HEADERS = {
++    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/107.0.0.0 Safari/537.36"
++}
++
++class ZeturfFetcherAsync:
++    """
++    Classe pour scraper les données d'une course spécifique sur Zeturf en asynchrone.
++    """
++
++    def __init__(self, race_url: str, client: httpx.AsyncClient):
++        if not race_url:
++            raise ValueError("L'URL de la course ne peut pas être vide.")
++        self.race_url = race_url
++        self.soup: Optional[BeautifulSoup] = None
++        self.client = client
++
++    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
++    async def _fetch_html(self) -> bool:
++        """Télécharge le contenu HTML de la page de la course en utilisant httpx."""
++        try:
++            response = await self.client.get(self.race_url, headers=HTTP_HEADERS, follow_redirects=True)
++            response.raise_for_status()
++            self.soup = BeautifulSoup(response.text, "lxml")
++            return True
++        except httpx.HTTPStatusError as e:
++            logger.error(f"Erreur HTTP {e.response.status_code} pour {self.race_url}")
++            # Ne pas réessayer sur les erreurs client (4xx)
++            if 400 <= e.response.status_code < 500:
++                raise
++            return False
++        except httpx.RequestError as e:
++            logger.error(f"Erreur de requête pour {self.race_url}: {e}")
++            return False
++        except Exception as e:
++            logger.error(f"Une erreur inattendue est survenue avec httpx pour {self.race_url}: {e}")
++            return False
++
++    def _parse_race_metadata(self) -> Dict[str, Any]:
++        """Analyse les métadonnées de la course (discipline, heure, etc.)."""
++        if not self.soup:
++            return {}
++
++        metadata = {}
++        try:
++            header = self.soup.select_one("div.course-infos-header")
++            if header:
++                title_text = header.get_text(separator=" ", strip=True)
++                rc_match = re.search(r"(R\d+C\d+)", title_text)
++                if rc_match:
++                    metadata["rc"] = rc_match.group(1)
++                
++                hippo_tag = header.select_one("span.hippodrome")
++                if hippo_tag:
++                    metadata["hippodrome"] = hippo_tag.text.replace("-", "").strip()
++
++            discipline_tag = self.soup.select_one("p.race-type")
++            if discipline_tag:
++                 metadata["discipline"] = discipline_tag.text.strip()
++
++        except Exception as e:
++            logger.warning(f"Impossible d'extraire les métadonnées: {e}")
++
++        if "rc" not in metadata:
++            rc_match = re.search(r"/(R\d+C\d+)-", self.race_url)
++            if rc_match:
++                metadata["rc"] = rc_match.group(1)
++
++        return metadata
++
++    def _parse_runners_and_odds(self) -> List[Dict[str, Any]]:
++        """Analyse la table des partants et le JSON embarqué pour les cotes."""
++        if not self.soup:
++            return []
++
++        odds_map = {}
++        try:
++            scripts = self.soup.find_all("script")
++            for script in scripts:
++                if script.string and "Course.init" in script.string:
++                    content = script.string
++                    json_match = re.search(r"Course\.init\((\{.*?\})\);", content, re.DOTALL)
++                    if json_match:
++                        course_data = json.loads(json_match.group(1))
++                        cotes_infos = course_data.get("cotesInfos", {})
++                        for num, data in cotes_infos.items():
++                            if isinstance(data, dict) and data.get("odds"):
++                                odds_map[num] = data["odds"].get("reference")
++                        break
++        except Exception as e:
++            logger.warning(f"Impossible d'extraire les cotes du JSON embarqué: {e}")
++
++        runners = []
++        # Stratégie finale : trouver la première table qui contient des partants
++        runners_table = None
++        for table in self.soup.find_all("table"):
++            if table.select_one("tr[data-runner]"):
++                runners_table = table
++                break
++
++        if not runners_table:
++            logger.warning("Aucune table avec des partants ('tr[data-runner]') n'a été trouvée.")
++            return []
++
++        for row in runners_table.select("tbody tr[data-runner]"):
++            try:
++                num_tag = row.select_one("td.numero span.partant")
++                num = num_tag.text.strip() if num_tag else None
++
++                nom_tag = row.select_one("td.cheval a.horse-name")
++                nom = nom_tag.text.strip() if nom_tag else None
++
++                if not num or not nom:
++                    continue
++                
++                runners.append({
++                    "num": num,
++                    "nom": nom,
++                    "cote": odds_map.get(num),
++                })
++            except Exception as e:
++                logger.warning(f"Impossible d'analyser une ligne de partant: {e}. Ligne ignorée.")
++                continue
++        
++        return runners
++
++    from src.schemas import RaceSnapshot, NormalizedRaceSnapshot, Runner
++from pydantic import ValidationError
++
++# ... (existing code)
++
++    async def get_snapshot(self) -> Dict[str, Any]:
++        """Orchestre le scraping et retourne un snapshot complet de la course."""
++        if not await self._fetch_html():
++            return {"error": "Failed to fetch HTML"}
++
++        metadata = self._parse_race_metadata()
++        runners_data = self._parse_runners_and_odds()
++
++        if not runners_data:
++            logger.error(f"Aucun partant n'a pu être extrait de {self.race_url}.")
++            return {"error": "No runners found"}
++
++        snapshot_data = {
++            "source": "zeturf",
++            "url": self.race_url,
++            "scraped_at": datetime.utcnow().isoformat(),
++            **metadata,
++            "runners": runners_data,
++        }
++
++        try:
++            RaceSnapshot.model_validate(snapshot_data)
++            return snapshot_data
++        except ValidationError as e:
++            logger.error(f"Validation du snapshot brut échouée pour {self.race_url}: {e}")
++            return {"error": "Snapshot validation failed"}
++
++def normalize_snapshot(payload: Dict[str, Any]) -> Dict[str, Any]:
++    """
++    Normalise le snapshot brut scrapé en un format standardisé attendu
++    par le reste de l'application.
++    """
++    if not payload or not payload.get("runners"):
++        return {}
++
++    runners = payload.get("runners", [])
++    
++    # Création des mappings id -> nom et id -> cote
++    id2name = {str(r["num"]): r["nom"] for r in runners if "num" in r and "nom" in r}
++    odds = {str(r["num"]): r["cote"] for r in runners if "num" in r and "cote" in r and r["cote"] is not None}
++
++    normalized_data = {
++        "rc": payload.get("rc"),
++        "hippodrome": payload.get("hippodrome"),
++        "discipline": payload.get("discipline"),
++        "date": payload.get("date", datetime.utcnow().strftime('%Y-%m-%d')),
++        "runners": runners,
++        "id2name": id2name,
++        "odds": odds,
++    }
++
++    try:
++        NormalizedRaceSnapshot.model_validate(normalized_data)
++        return normalized_data
++    except ValidationError as e:
++        logger.error(f"Validation du snapshot normalisé échouée: {e}")
++        return {}
++
++
++async def fetch_race_snapshot_async(reunion: str, course: str, phase: str, url: str | None = None, *_, **kwargs) -> dict:
++    """
++    Fonction principale qui remplace le mock.
++    Prend une URL de course Zeturf et retourne un snapshot de données normalisé.
++    """
++    import os
++    # Priorité : URL en paramètre, puis variable d'env, puis construction.
++    final_url = url or os.environ.get("COURSE_URL")
++
++    if not final_url:
++        date_str = datetime.now().strftime('%Y-%m-%d')
++        rc_id = f"{reunion}{course}"
++        final_url = f"https://www.zeturf.fr/fr/course/{date_str}/{rc_id}"
++        logger.warning(f"URL non fournie. Construction d'une URL par défaut : {final_url}")
++
++    logger.info(f"Début du scraping Zeturf pour {reunion}{course} (Phase: {phase}) sur l'URL: {final_url}")
++
++    try:
++        async with httpx.AsyncClient() as client:
++            fetcher = ZeturfFetcherAsync(race_url=final_url, client=client)
++            raw_snapshot = await fetcher.get_snapshot()
++        
++        if "error" in raw_snapshot or not raw_snapshot.get("runners"):
++            logger.error(f"Le scraping a échoué ou n'a retourné aucun partant pour {final_url}.")
++            return normalize_snapshot({})
++
++        # Ajout des informations manquantes si possible
++        raw_snapshot.setdefault("rc", f"{reunion}{course}")
++        raw_snapshot.setdefault("phase", phase)
++
++        normalized_data = normalize_snapshot(raw_snapshot)
++        logger.info(f"Scraping réussi pour {reunion}{course}. {len(normalized_data.get('runners',[]))} partants trouvés.")
++        
++        return normalized_data
++
++    except Exception as e:
++        logger.exception(f"Une erreur inattendue est survenue lors du scraping de {final_url}: {e}")
++        return normalize_snapshot({})
++
++async def fetch_races_concurrently(race_urls: List[str]) -> List[Dict[str, Any]]:
++    """
++    Scrape plusieurs URLs de courses en parallèle.
++    """
++    async with httpx.AsyncClient() as client:
++        tasks = []
++        for url in race_urls:
++            # Extraire R, C, phase de l'URL ou les passer en paramètre
++            match = re.search(r"/(\d{4}-\d{2}-\d{2})/(R\d+C\d+)", url)
++            if match:
++                date_str, rc = match.groups()
++                reunion, course = rc.split('C')
++                reunion = reunion.replace('R', 'R')
++                course = 'C' + course
++                phase = "H-X" # Placeholder
++                tasks.append(fetch_race_snapshot_async(reunion, course, phase, url=url))
++        
++        results = await asyncio.gather(*tasks, return_exceptions=True)
++        return results
++
++# Remplacer l'ancienne fonction synchrone
++def fetch_race_snapshot(reunion: str, course: str, phase: str, url: str | None = None, *_, **kwargs) -> dict:
++    return asyncio.run(fetch_race_snapshot_async(reunion, course, phase, url, *_, **kwargs))
+diff --git a/runner.py b/runner.py
+index cc9daad..b1bd2c6 100644
+--- a/runner.py
++++ b/runner.py
+@@ -11,11 +11,13 @@ import sys
+ from pathlib import Path
+ from typing import Any, Dict, List, Optional
+ 
+-from config import get_config
++from app_config import get_app_config
+ from logging_utils import get_logger
+ 
+ logger = get_logger(__name__)
+-config = get_config()
++def main():
++    """Point d'entrée principal."""
++    config = get_app_config()
+ 
+ # Chemins des modules GPI
+ MODULES_DIR = Path(__file__).parent.parent / "modules"
+diff --git a/runner_chain.py b/runner_chain.py
+index 8ca276c..f2e5681 100644
+--- a/runner_chain.py
++++ b/runner_chain.py
+@@ -27,10 +27,10 @@ import sys
+ from simulate_wrapper import PAYOUT_CALIBRATION_PATH, evaluate_combo
+ 
+ try:
+-    from src import online_fetch_zeturf as ofz
++    import online_fetch_zeturf as ofz
+ except ImportError:
+     ofz = None
+-from src.drive_sync import disabled_reason, is_gcs_enabled
++from src.gcs_utils import disabled_reason, is_gcs_enabled, upload_file
+ import analysis_utils as _analysis_utils
+ 
+ import pipeline_run
+@@ -48,17 +48,6 @@ import yaml
+ 
+ logger = logging.getLogger(__name__)
+ 
+-USE_GCS = is_gcs_enabled()
+-if USE_GCS:
+-    try:
+-        from drive_sync import upload_file
+-    except Exception as exc:  # pragma: no cover - optional dependency guards
+-        logger.warning("Cloud storage sync unavailable, disabling uploads: %s", exc)
+-        upload_file = None  # type: ignore[assignment]
+-        USE_GCS = False
+-else:  # pragma: no cover - simple fallback when Drive is disabled
+-    upload_file = None  # type: ignore[assignment]
+-
+ 
+ class PayloadValidationError(RuntimeError):
+     """Raised when the runner payload fails validation."""
+@@ -730,6 +719,9 @@ class RunnerPayload(BaseModel):
+         return f"{self.reunion}{self.course}"
+ 
+ 
++RunnerPayload.model_rebuild()
++
++
+ def _coerce_payload(data: Mapping[str, Any], *, context: str) -> RunnerPayload:
+     """Validate ``data`` against :class:`RunnerPayload` and normalise fields."""
+ 
+@@ -933,15 +925,7 @@ def _write_snapshot(
+         alias_path = dest / alias_name
+         with alias_path.open("w", encoding="utf-8") as fh:
+             json.dump(payload_out, fh, ensure_ascii=False, indent=2)
+-    if USE_GCS and upload_file:
+-        try:
+-            upload_file(path)
+-        except EnvironmentError as exc:
+-            logger.warning("Skipping cloud upload for %s: %s", path, exc)
+-    else:
+-        reason = disabled_reason()
+-        detail = f"{reason}=false" if reason else "USE_GCS disabled"
+-        logger.info("[gcs] Skipping upload for %s (%s)", path, detail)
++    upload_file(path)
+ 
+ 
+ def _write_analysis(
+@@ -1161,18 +1145,8 @@ def _write_analysis(
+             print(command_text)
+             logger.info("[runner] Commande Excel: %s", command_text)
+ 
+-    if USE_GCS and upload_file:
+-        for name in ("analysis.json", "metrics.json", "metrics.csv"):
+-            try:
+-                upload_file(race_dir / name)
+-            except EnvironmentError as exc:
+-                logger.warning("Skipping cloud upload for %s: %s", race_dir / name, exc)
+-    else:
+-        reason = disabled_reason()
+-        detail = f"{reason}=false" if reason else "USE_GCS disabled"
+-        logger.info(
+-            "[gcs] Skipping upload for %s (%s)", race_dir / "analysis.json", detail
+-        )
++    for name in ("analysis.json", "metrics.json", "metrics.csv"):
++        upload_file(race_dir / name)
+ 
+ 
+ def _trigger_phase(
+diff --git a/scheduler.py b/scheduler.py
+index 1e5cfbf..91bb6fd 100644
+--- a/scheduler.py
++++ b/scheduler.py
+@@ -13,12 +13,14 @@ from typing import Any, Dict, List, Optional
+ from google.api_core import exceptions as gcp_exceptions
+ from google.cloud import tasks_v2
+ 
+-from config import get_config
++from app_config import get_app_config
+ from logging_utils import get_logger
+ from time_utils import compute_snapshot_time, format_rfc3339, is_past
+ 
+ logger = get_logger(__name__)
+-config = get_config()
++def main():
++    """Point d'entrée principal."""
++    config = get_app_config()
+ 
+ 
+ def _sanitize_task_name(name: str) -> str:
+diff --git a/src/__init__.py b/src/__init__.py
+index 69fd622..24dfa77 100644
+--- a/src/__init__.py
++++ b/src/__init__.py
+@@ -1,6 +1,5 @@
+ from . import analysis_utils
+ from . import fetch_je_stats
+ from . import guardrails
+-from . import online_fetch_zeturf
+ from . import resolve_course_id
+ from . import update_excel_planning
+diff --git a/src/gcs.py b/src/gcs.py
+deleted file mode 100644
+index 03e9e10..0000000
+--- a/src/gcs.py
++++ /dev/null
+@@ -1,49 +0,0 @@
+-"""GCS utilities for uploading and downloading files."""
+-
+-from __future__ import annotations
+-
+-import os
+-from pathlib import Path
+-from typing import List
+-
+-from google.cloud import storage
+-
+-from src.config import Config
+-from src.logging_utils import get_logger
+-
+-logger = get_logger(__name__)
+-
+-
+-def upload_artifacts(rc_dir: Path, artifacts: List[str]) -> None:
+-    """
+-    Upload les artefacts vers GCS (si configuré).
+-    
+-    Args:
+-        rc_dir: Répertoire data/R1C3/
+-        artifacts: Liste de chemins d'artefacts
+-    """
+-    config = Config()
+-    if not config.gcs_bucket:
+-        return
+-    
+-    try:
+-        client = storage.Client()
+-        bucket = client.bucket(config.gcs_bucket)
+-        
+-        for artifact_path in artifacts:
+-            local_file = Path(artifact_path)
+-            if not local_file.exists():
+-                continue
+-            
+-            # GCS path: {prefix}/YYYY-MM-DD/R1C3/filename
+-            gcs_path = f"{config.gcs_prefix}/{local_file.parent.name}/{local_file.name}"
+-            
+-            blob = bucket.blob(gcs_path)
+-            blob.upload_from_filename(str(local_file))
+-            
+-            logger.debug(f"Uploaded {artifact_path} → gs://{config.gcs_bucket}/{gcs_path}")
+-        
+-        logger.info(f"Uploaded {len(artifacts)} artifacts to GCS")
+-    
+-    except Exception as e:
+-        logger.error(f"Failed to upload artifacts to GCS: {e}", exc_info=e)
+diff --git a/src/online_fetch_boturfers.py b/src/online_fetch_boturfers.py
+index b5fa7f3..0eaba14 100644
+--- a/src/online_fetch_boturfers.py
++++ b/src/online_fetch_boturfers.py
+@@ -7,6 +7,7 @@ depuis le site Boturfers.fr.
+ """
+ 
+ import argparse
++import base64
+ import json
+ import logging
+ import re
+@@ -48,6 +49,7 @@ class BoturfersFetcher:
+ 
+     def _parse_programme(self) -> List[Dict[str, Any]]:
+         """Analyse la page du programme pour extraire la liste de toutes les courses."""
++        print("--- _parse_programme called ---")
+         if not self.soup:
+             return []
+         
+@@ -58,8 +60,10 @@ class BoturfersFetcher:
+         
+         for reunion_tab in reunion_tabs:
+             reunion_title_tag = reunion_tab.select_one("h3.reu-title")
++            print(f"Reunion title tag: {reunion_title_tag.text.strip()}")
+             reunion_id_match = re.search(r"^(R\d+)", reunion_title_tag.text.strip()) if reunion_title_tag else None
+             reunion_id = reunion_id_match.group(1) if reunion_id_match else reunion_tab.get("id", "").upper()
++            print(f"Found reunion: {reunion_id}")
+ 
+             race_table = reunion_tab.select_one("table.table.data.prgm")
+             if not race_table:
+@@ -103,9 +107,10 @@ class BoturfersFetcher:
+                         "start_time": start_time,
+                     })
+                 except Exception as e:
+-                    logger.warning(f"Impossible d'analyser une ligne de course: {e}. Ligne ignorée.")
++                    print(f"Impossible d'analyser une ligne de course: {e}. Ligne ignorée.")
+                     continue
+         
++        print(f"Found {len(races)} races: {races}")
+         return races
+ 
+     def _parse_race_runners(self) -> List[Dict[str, Any]]:
+@@ -205,6 +210,7 @@ def fetch_boturfers_programme(url: str, *args, **kwargs) -> dict:
+     """
+     Fonction principale pour scraper le programme des courses sur Boturfers.
+     """
++    print("--- fetch_boturfers_programme called ---")
+     logger.info(f"Début du scraping du programme Boturfers pour l'URL: {url}")
+     
+     if not url:
+diff --git a/src/online_fetch_zeturf.py b/src/online_fetch_zeturf.py
+deleted file mode 100644
+index 7d45056..0000000
+--- a/src/online_fetch_zeturf.py
++++ /dev/null
+@@ -1,310 +0,0 @@
+-
+-# -*- coding: utf-8 -*-
+-"""
+-online_fetch_zeturf.py - Module de scraping fonctionnel pour Zeturf.
+-
+-Ce module remplace la version bouchonnée de test pour fournir des données
+-de course réelles scrapées depuis le site Zeturf.
+-"""
+-
+-import logging
+-import json
+-import re
+-import time
+-from datetime import datetime
+-from pathlib import Path
+-from typing import Any, Dict, List, Optional, Tuple
+-from urllib.parse import urljoin
+-
+-import requests
+-from bs4 import BeautifulSoup, Tag
+-from selenium import webdriver
+-from selenium.webdriver.chrome.options import Options
+-from selenium.webdriver.support.ui import WebDriverWait
+-from selenium.webdriver.support import expected_conditions as EC
+-from selenium.webdriver.common.by import By
+-from selenium.common.exceptions import TimeoutException, WebDriverException
+-
+-logger = logging.getLogger(__name__)
+-
+-# Headers pour simuler un navigateur réel et éviter un blocage HTTP 403
+-HTTP_HEADERS = {
+-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/107.0.0.0 Safari/537.36"
+-}
+-
+-class ZeturfFetcher:
+-    """
+-    Classe pour scraper les données d'une course spécifique sur Zeturf.
+-    """
+-
+-    def __init__(self, race_url: str):
+-        if not race_url:
+-            raise ValueError("L'URL de la course ne peut pas être vide.")
+-        self.race_url = race_url
+-        self.soup: Optional[BeautifulSoup] = None
+-
+-    def _fetch_html(self) -> bool:
+-        """Télécharge le contenu HTML de la page de la course en utilisant Selenium pour gérer le JavaScript et les bannières de cookies."""
+-        chrome_options = Options()
+-        chrome_options.add_argument("--headless")
+-        chrome_options.add_argument("--no-sandbox")
+-        chrome_options.add_argument("--disable-dev-shm-usage")
+-        chrome_options.add_argument(f"user-agent={HTTP_HEADERS['User-Agent']}")
+-
+-        driver = None
+-        try:
+-            driver = webdriver.Chrome(options=chrome_options)
+-            driver.get(self.race_url)
+-
+-            # Étape 1: Gérer la bannière de cookies
+-            try:
+-                cookie_button_id = "CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll"
+-                cookie_wait = WebDriverWait(driver, 10) # Attendre 10s max pour la bannière
+-                accept_button = cookie_wait.until(
+-                    EC.element_to_be_clickable((By.ID, cookie_button_id))
+-                )
+-                accept_button.click()
+-                logger.info("Bannière de cookies acceptée.")
+-            except TimeoutException:
+-                logger.warning("La bannière de cookies n'est pas apparue ou n'a pas été trouvée en 10s. Continuation...")
+-            except Exception as e:
+-                logger.warning(f"Impossible de cliquer sur le bouton des cookies: {e}. Continuation...")
+-
+-            # Étape 2: Attendre que la table des partants soit chargée
+-            WebDriverWait(driver, 20).until(
+-                EC.presence_of_element_located((By.CSS_SELECTOR, "table.table-runners"))
+-            )
+-
+-            self.soup = BeautifulSoup(driver.page_source, "lxml")
+-            return True
+-        except TimeoutException:
+-            logger.error(f"Timeout en attendant le conteneur des partants sur {self.race_url}")
+-            if driver:
+-                with open("debug_timeout_page.html", "w", encoding="utf-8") as f:
+-                    f.write(driver.page_source)
+-                logger.error("Le code source de la page au moment du timeout a été sauvegardé dans debug_timeout_page.html")
+-            return False
+-        except WebDriverException as e:
+-            logger.error(f"Erreur WebDriver: {e}. Assurez-vous que chromedriver est installé et dans le PATH.")
+-            return False
+-        except Exception as e:
+-            logger.error(f"Une erreur inattendue est survenue avec Selenium pour {self.race_url}: {e}")
+-            return False
+-        finally:
+-            if driver:
+-                driver.quit()
+-
+-    def _parse_race_metadata(self) -> Dict[str, Any]:
+-        """Analyse les métadonnées de la course (discipline, heure, etc.)."""
+-        if not self.soup:
+-            return {}
+-
+-        metadata = {}
+-        try:
+-            header = self.soup.select_one("div.course-infos-header")
+-            if header:
+-                title_text = header.get_text(separator=" ", strip=True)
+-                rc_match = re.search(r"(R\d+C\d+)", title_text)
+-                if rc_match:
+-                    metadata["rc"] = rc_match.group(1)
+-                
+-                hippo_tag = header.select_one("span.hippodrome")
+-                if hippo_tag:
+-                    metadata["hippodrome"] = hippo_tag.text.replace("-", "").strip()
+-
+-            discipline_tag = self.soup.select_one("p.race-type")
+-            if discipline_tag:
+-                 metadata["discipline"] = discipline_tag.text.strip()
+-
+-        except Exception as e:
+-            logger.warning(f"Impossible d'extraire les métadonnées: {e}")
+-
+-        if "rc" not in metadata:
+-            rc_match = re.search(r"/(R\d+C\d+)-", self.race_url)
+-            if rc_match:
+-                metadata["rc"] = rc_match.group(1)
+-
+-        return metadata
+-
+-    def _parse_runners_and_odds(self) -> List[Dict[str, Any]]:
+-        """Analyse la table des partants et le JSON embarqué pour les cotes."""
+-        if not self.soup:
+-            return []
+-
+-        odds_map = {}
+-        try:
+-            scripts = self.soup.find_all("script")
+-            for script in scripts:
+-                if script.string and "Course.init" in script.string:
+-                    content = script.string
+-                    json_match = re.search(r"Course\.init\((\{.*?\})\);", content, re.DOTALL)
+-                    if json_match:
+-                        course_data = json.loads(json_match.group(1))
+-                        cotes_infos = course_data.get("cotesInfos", {})
+-                        for num, data in cotes_infos.items():
+-                            if isinstance(data, dict) and data.get("odds"):
+-                                odds_map[num] = data["odds"].get("reference")
+-                        break
+-        except Exception as e:
+-            logger.warning(f"Impossible d'extraire les cotes du JSON embarqué: {e}")
+-
+-        runners = []
+-        # Stratégie finale : trouver la première table qui contient des partants
+-        runners_table = None
+-        for table in self.soup.find_all("table"):
+-            if table.select_one("tr[data-runner]"):
+-                runners_table = table
+-                break
+-
+-        if not runners_table:
+-            logger.warning("Aucune table avec des partants ('tr[data-runner]') n'a été trouvée.")
+-            return []
+-
+-        for row in runners_table.select("tbody tr[data-runner]"):
+-            try:
+-                num_tag = row.select_one("td.numero span.partant")
+-                num = num_tag.text.strip() if num_tag else None
+-
+-                nom_tag = row.select_one("td.cheval a.horse-name")
+-                nom = nom_tag.text.strip() if nom_tag else None
+-
+-                if not num or not nom:
+-                    continue
+-                
+-                runners.append({
+-                    "num": num,
+-                    "nom": nom,
+-                    "cote": odds_map.get(num),
+-                })
+-            except Exception as e:
+-                logger.warning(f"Impossible d'analyser une ligne de partant: {e}. Ligne ignorée.")
+-                continue
+-        
+-        return runners
+-
+-    def get_snapshot(self) -> Dict[str, Any]:
+-        """Orchestre le scraping et retourne un snapshot complet de la course."""
+-        if not self._fetch_html():
+-            return {"error": "Failed to fetch HTML"}
+-
+-        metadata = self._parse_race_metadata()
+-        runners = self._parse_runners_and_odds()
+-
+-        if not runners:
+-            logger.error(f"Aucun partant n'a pu être extrait de {self.race_url}.")
+-
+-        return {
+-            "source": "zeturf",
+-            "url": self.race_url,
+-            "scraped_at": datetime.utcnow().isoformat(),
+-            **metadata,
+-            "runners": runners,
+-        }
+-
+-def normalize_snapshot(payload: Dict[str, Any]) -> Dict[str, Any]:
+-    """
+-    Normalise le snapshot brut scrapé en un format standardisé attendu
+-    par le reste de l'application.
+-    """
+-    if not payload or not payload.get("runners"):
+-        return {}
+-
+-    runners = payload.get("runners", [])
+-    
+-    # Création des mappings id -> nom et id -> cote
+-    id2name = {str(r["num"]): r["nom"] for r in runners if "num" in r and "nom" in r}
+-    odds = {str(r["num"]): r["cote"] for r in runners if "num" in r and "cote" in r and r["cote"] is not None}
+-
+-    return {
+-        "rc": payload.get("rc"),
+-        "hippodrome": payload.get("hippodrome"),
+-        "discipline": payload.get("discipline"),
+-        "date": payload.get("date", datetime.utcnow().strftime('%Y-%m-%d')),
+-        "runners": runners,
+-        "id2name": id2name,
+-        "odds": odds,
+-    }
+-
+-def fetch_race_snapshot(reunion: str, course: str, phase: str, url: str | None = None, *_, **kwargs) -> dict:
+-    """
+-    Fonction principale qui remplace le mock.
+-    Prend une URL de course Zeturf et retourne un snapshot de données normalisé.
+-    """
+-    logger.info(f"Début du scraping Zeturf pour {reunion}{course} (Phase: {phase}) sur l'URL: {url}")
+-    
+-    if not url:
+-        logger.error("Aucune URL fournie pour le scraping Zeturf.")
+-        # Retourne une structure vide pour ne pas faire planter la chaîne
+-        return normalize_snapshot({})
+-
+-    try:
+-        fetcher = ZeturfFetcher(race_url=url)
+-        raw_snapshot = fetcher.get_snapshot()
+-        
+-        if "error" in raw_snapshot or not raw_snapshot.get("runners"):
+-            logger.error(f"Le scraping a échoué ou n'a retourné aucun partant pour {url}.")
+-            return normalize_snapshot({})
+-
+-        # Ajout des informations manquantes si possible
+-        raw_snapshot.setdefault("rc", f"{reunion}{course}")
+-        raw_snapshot.setdefault("phase", phase)
+-
+-        normalized_data = normalize_snapshot(raw_snapshot)
+-        logger.info(f"Scraping réussi pour {reunion}{course}. {len(normalized_data.get('runners',[]))} partants trouvés.")
+-        
+-        return normalized_data
+-
+-    except (requests.ConnectionError, TimeoutException, WebDriverException) as e:
+-        logger.error(f"Network/WebDriver error during scraping of {url}: {e}")
+-        raise
+-    except Exception as e:
+-        logger.exception(f"Une erreur inattendue est survenue lors du scraping de {url}: {e}")
+-        return normalize_snapshot({})
+-
+- 
+-# --- Fonctions utilitaires potentiellement importées ailleurs ---
+-
+-def write_snapshot_from_geny(course_id: str, phase: str, rc_dir: Path, *, course_url: str | None = None) -> None:
+-    """
+-    Fetches a race snapshot using the Geny/ZEturf course ID and writes it to a file.
+-    This is a wrapper around the main fetch_race_snapshot logic.
+-    """
+-    rc_dir.mkdir(parents=True, exist_ok=True)
+-    rc_label = rc_dir.name
+-    
+-    reunion, course = "R?", "C?"
+-    match = re.match(r"^(R\d+)(C\d+)$", rc_label)
+-    if match:
+-        reunion, course = match.groups()
+-
+-    url = course_url
+-    if not url:
+-        # Fallback to old logic if no url is passed
+-        logger.warning(f"No course_url provided for {rc_label}, constructing a URL with today's date.")
+-        date_str = datetime.now().strftime('%Y-%m-%d')
+-        url = f"https://www.zeturf.fr/fr/course/{date_str}/{rc_label}"
+-
+-    logger.info(f"Calling fetch_race_snapshot for {rc_label} (phase: {phase}) with URL: {url}")
+-    
+-    try:
+-        snapshot = fetch_race_snapshot(
+-            reunion=reunion,
+-            course=course,
+-            phase=phase,
+-            url=url
+-        )
+-        snapshot.setdefault("course_id", course_id)
+-        snapshot.setdefault("id_course", course_id)
+-
+-    except Exception as e:
+-        logger.error(f"Failed to fetch snapshot for {rc_label}: {e}", exc_info=True)
+-        snapshot = { "status": "error", "reason": str(e), "rc": rc_label, "phase": phase }
+-
+-    # Le nom du fichier doit correspondre au pattern attendu par enrich_h5: `*_H-5.json`
+-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+-    phase_tag = "H-5" if phase == "H5" else "H-30"
+-    filename = f"{timestamp}_{phase_tag}.json"
+-    output_path = rc_dir / filename
+-    output_path.write_text(json.dumps(snapshot, ensure_ascii=False, indent=2), encoding="utf-8")
+-    logger.info(f"Snapshot for {rc_label} written to {output_path}")
+-
+diff --git a/src/time_untils.py b/src/time_untils.py
+deleted file mode 100644
+index b10bfb8..0000000
+--- a/src/time_untils.py
++++ /dev/null
+@@ -1,147 +0,0 @@
+-"""
+-src/time_utils.py - Utilitaires timezone (Europe/Paris <-> UTC)
+-"""
+-
+-from __future__ import annotations
+-
+-import re
+-from datetime import datetime, timedelta
+-from zoneinfo import ZoneInfo
+-
+-from config import get_config
+-
+-config = get_config()
+-TZ_PARIS = ZoneInfo(config.timezone)
+-TZ_UTC = ZoneInfo("UTC")
+-
+-
+-def parse_local_time(time_str: str) -> datetime.time:
+-    """
+-    Parse une heure locale HH:MM.
+-    
+-    Args:
+-        time_str: "15:20", "09:05", etc.
+-        
+-    Returns:
+-        datetime.time object
+-    """
+-    match = re.match(r"^(\d{1,2}):(\d{2})$", time_str)
+-    if not match:
+-        raise ValueError(f"Invalid time format: {time_str}, expected HH:MM")
+-    
+-    hour, minute = match.groups()
+-    return datetime.strptime(f"{int(hour):02d}:{int(minute):02d}", "%H:%M").time()
+-
+-
+-def local_datetime_to_utc(local_dt: datetime) -> datetime:
+-    """
+-    Convertit un datetime Europe/Paris en UTC.
+-    
+-    Args:
+-        local_dt: datetime naïf ou avec tzinfo=Europe/Paris
+-        
+-    Returns:
+-        datetime UTC avec tzinfo=UTC
+-    """
+-    if local_dt.tzinfo is None:
+-        # Assume Europe/Paris si naïf
+-        local_dt = local_dt.replace(tzinfo=TZ_PARIS)
+-    elif local_dt.tzinfo != TZ_PARIS:
+-        # Convertir d'abord en Paris
+-        local_dt = local_dt.astimezone(TZ_PARIS)
+-    
+-    return local_dt.astimezone(TZ_UTC)
+-
+-
+-def utc_to_local_datetime(utc_dt: datetime) -> datetime:
+-    """
+-    Convertit un datetime UTC en Europe/Paris.
+-    
+-    Args:
+-        utc_dt: datetime naïf ou avec tzinfo=UTC
+-        
+-    Returns:
+-        datetime Europe/Paris avec tzinfo=Europe/Paris
+-    """
+-    if utc_dt.tzinfo is None:
+-        utc_dt = utc_dt.replace(tzinfo=TZ_UTC)
+-    elif utc_dt.tzinfo != TZ_UTC:
+-        utc_dt = utc_dt.astimezone(TZ_UTC)
+-    
+-    return utc_dt.astimezone(TZ_PARIS)
+-
+-
+-def compute_snapshot_time(
+-    date: str,
+-    race_time_local: str,
+-    offset_minutes: int
+-) -> tuple[datetime, datetime]:
+-    """
+-    Calcule l'heure de snapshot (Europe/Paris et UTC) pour une course.
+-    
+-    Args:
+-        date: YYYY-MM-DD
+-        race_time_local: HH:MM (Europe/Paris)
+-        offset_minutes: -30 pour H-30, -5 pour H-5
+-        
+-    Returns:
+-        (snapshot_local, snapshot_utc)
+-    """
+-    race_time = parse_local_time(race_time_local)
+-    race_dt = datetime.strptime(date, "%Y-%m-%d").replace(
+-        hour=race_time.hour,
+-        minute=race_time.minute,
+-        second=0,
+-        microsecond=0,
+-        tzinfo=TZ_PARIS
+-    )
+-    
+-    snapshot_local = race_dt + timedelta(minutes=offset_minutes)
+-    snapshot_utc = local_datetime_to_utc(snapshot_local)
+-    
+-    return snapshot_local, snapshot_utc
+-
+-
+-def format_rfc3339(dt: datetime) -> str:
+-    """
+-    Formate un datetime en RFC3339 pour Cloud Tasks.
+-    
+-    Args:
+-        dt: datetime avec tzinfo
+-        
+-    Returns:
+-        "2025-10-15T14:50:00Z" (UTC)
+-    """
+-    if dt.tzinfo is None:
+-        raise ValueError("datetime must have tzinfo")
+-    
+-    # Convertir en UTC
+-    dt_utc = dt.astimezone(TZ_UTC)
+-    return dt_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
+-
+-
+-def now_local() -> datetime:
+-    """Retourne l'heure actuelle en Europe/Paris."""
+-    return datetime.now(TZ_PARIS)
+-
+-
+-def now_utc() -> datetime:
+-    """Retourne l'heure actuelle en UTC."""
+-    return datetime.now(TZ_UTC)
+-
+-
+-def is_past(dt: datetime) -> bool:
+-    """Vérifie si un datetime est dans le passé."""
+-    if dt.tzinfo is None:
+-        raise ValueError("datetime must have tzinfo")
+-    
+-    return dt < now_utc()
+-
+-
+-def time_until(dt: datetime) -> timedelta:
+-    """Calcule le délai jusqu'à un datetime futur."""
+-    if dt.tzinfo is None:
+-        raise ValueError("datetime must have tzinfo")
+-    
+-    delta = dt - now_utc()
+-    return delta if delta.total_seconds() > 0 else timedelta(0)
+\ No newline at end of file
+diff --git a/src/time_utils.py b/src/time_utils.py
+index 467882b..b03fadc 100644
+--- a/src/time_utils.py
++++ b/src/time_utils.py
+@@ -1,92 +1,147 @@
+-"""
+-src/time_utils.py - Gestion Timezone Europe/Paris
+-
+-Conversions timezone et formatage RFC3339 pour Cloud Tasks.
+-"""
+-
+-from __future__ import annotations
+-
+-from datetime import datetime, timezone
+-from zoneinfo import ZoneInfo
+-
+-PARIS_TZ = ZoneInfo("Europe/Paris")
+-UTC_TZ = timezone.utc
+-
+-def convert_local_to_utc(dt_local: datetime) -> datetime:
+-    """
+-    Convertit un datetime Europe/Paris vers UTC.
+-    
+-    Args:
+-        dt_local: Datetime naive ou aware en Europe/Paris
+-        
+-    Returns:
+-        Datetime aware en UTC
+-        
+-    Example:
+-        >>> dt_paris = datetime(2025, 10, 16, 14, 30)  # 14:30 Paris
+-        >>> dt_utc = convert_local_to_utc(dt_paris)
+-        >>> dt_utc.hour  # 12 (heure d'été) ou 13 (heure d'hiver)
+-    """
+-    if dt_local.tzinfo is None:
+-        # Naive datetime, assume Europe/Paris
+-        dt_aware = dt_local.replace(tzinfo=PARIS_TZ)
+-    elif dt_local.tzinfo != PARIS_TZ:
+-        # Already aware but not Paris timezone, convert to Paris first
+-        dt_aware = dt_local.astimezone(PARIS_TZ)
+-    else:
+-        dt_aware = dt_local
+-    
+-    # Convert to UTC
+-    return dt_aware.astimezone(UTC_TZ)
+-
+-def convert_utc_to_local(dt_utc: datetime) -> datetime:
+-    """
+-    Convertit un datetime UTC vers Europe/Paris.
+-    
+-    Args:
+-        dt_utc: Datetime aware en UTC
+-        
+-    Returns:
+-        Datetime aware en Europe/Paris
+-    """
+-    if dt_utc.tzinfo is None:
+-        dt_utc = dt_utc.replace(tzinfo=UTC_TZ)
+-    
+-    return dt_utc.astimezone(PARIS_TZ)
+-
+-def format_rfc3339(dt: datetime) -> str:
+-    """
+-    Format datetime en RFC3339 pour Cloud Tasks.
+-    
+-    Args:
+-        dt: Datetime aware
+-        
+-    Returns:
+-        String RFC3339: "2025-10-16T12:30:00Z"
+-    """
+-    if dt.tzinfo is None:
+-        raise ValueError("Datetime must be timezone-aware")
+-    
+-    # Convert to UTC if not already
+-    dt_utc = dt.astimezone(UTC_TZ)
+-    
+-    return dt_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
+-
+-def parse_time_local(time_str: str, date_str: str) -> datetime:
+-    """
+-    Parse une heure locale (Europe/Paris) avec une date.
+-    
+-    Args:
+-        time_str: "HH:MM" (Europe/Paris)
+-        date_str: "YYYY-MM-DD"
+-        
+-    Returns:
+-        Datetime aware en Europe/Paris
+-        
+-    Example:
+-        >>> dt = parse_time_local("14:30", "2025-10-16")
+-        >>> dt.tzinfo == PARIS_TZ
+-        True
+-    """
+-    dt_naive = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M")
+-    return dt_naive.replace(tzinfo=PARIS_TZ)
+\ No newline at end of file
++"""
++src/time_utils.py - Utilitaires timezone (Europe/Paris <-> UTC)
++"""
++
++from __future__ import annotations
++
++import re
++from datetime import datetime, timedelta
++from zoneinfo import ZoneInfo
++
++from app_config import get_app_config
++
++config = get_app_config()
++TZ_PARIS = ZoneInfo(config.timezone)
++TZ_UTC = ZoneInfo("UTC")
++
++
++def parse_local_time(time_str: str) -> datetime.time:
++    """
++    Parse une heure locale HH:MM.
++    
++    Args:
++        time_str: "15:20", "09:05", etc.
++        
++    Returns:
++        datetime.time object
++    """
++    match = re.match(r"^(\d{1,2}):(\d{2})$", time_str)
++    if not match:
++        raise ValueError(f"Invalid time format: {time_str}, expected HH:MM")
++    
++    hour, minute = match.groups()
++    return datetime.strptime(f"{int(hour):02d}:{int(minute):02d}", "%H:%M").time()
++
++
++def local_datetime_to_utc(local_dt: datetime) -> datetime:
++    """
++    Convertit un datetime Europe/Paris en UTC.
++    
++    Args:
++        local_dt: datetime naïf ou avec tzinfo=Europe/Paris
++        
++    Returns:
++        datetime UTC avec tzinfo=UTC
++    """
++    if local_dt.tzinfo is None:
++        # Assume Europe/Paris si naïf
++        local_dt = local_dt.replace(tzinfo=TZ_PARIS)
++    elif local_dt.tzinfo != TZ_PARIS:
++        # Convertir d'abord en Paris
++        local_dt = local_dt.astimezone(TZ_PARIS)
++    
++    return local_dt.astimezone(TZ_UTC)
++
++
++def utc_to_local_datetime(utc_dt: datetime) -> datetime:
++    """
++    Convertit un datetime UTC en Europe/Paris.
++    
++    Args:
++        utc_dt: datetime naïf ou avec tzinfo=UTC
++        
++    Returns:
++        datetime Europe/Paris avec tzinfo=Europe/Paris
++    """
++    if utc_dt.tzinfo is None:
++        utc_dt = utc_dt.replace(tzinfo=TZ_UTC)
++    elif utc_dt.tzinfo != TZ_UTC:
++        utc_dt = utc_dt.astimezone(TZ_UTC)
++    
++    return utc_dt.astimezone(TZ_PARIS)
++
++
++def compute_snapshot_time(
++    date: str,
++    race_time_local: str,
++    offset_minutes: int
++) -> tuple[datetime, datetime]:
++    """
++    Calcule l'heure de snapshot (Europe/Paris et UTC) pour une course.
++    
++    Args:
++        date: YYYY-MM-DD
++        race_time_local: HH:MM (Europe/Paris)
++        offset_minutes: -30 pour H-30, -5 pour H-5
++        
++    Returns:
++        (snapshot_local, snapshot_utc)
++    """
++    race_time = parse_local_time(race_time_local)
++    race_dt = datetime.strptime(date, "%Y-%m-%d").replace(
++        hour=race_time.hour,
++        minute=race_time.minute,
++        second=0,
++        microsecond=0,
++        tzinfo=TZ_PARIS
++    )
++    
++    snapshot_local = race_dt + timedelta(minutes=offset_minutes)
++    snapshot_utc = local_datetime_to_utc(snapshot_local)
++    
++    return snapshot_local, snapshot_utc
++
++
++def format_rfc3339(dt: datetime) -> str:
++    """
++    Formate un datetime en RFC3339 pour Cloud Tasks.
++    
++    Args:
++        dt: datetime avec tzinfo
++        
++    Returns:
++        "2025-10-15T14:50:00Z" (UTC)
++    """
++    if dt.tzinfo is None:
++        raise ValueError("datetime must have tzinfo")
++    
++    # Convertir en UTC
++    dt_utc = dt.astimezone(TZ_UTC)
++    return dt_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
++
++
++def now_local() -> datetime:
++    """Retourne l'heure actuelle en Europe/Paris."""
++    return datetime.now(TZ_PARIS)
++
++
++def now_utc() -> datetime:
++    """Retourne l'heure actuelle en UTC."""
++    return datetime.now(TZ_UTC)
++
++
++def is_past(dt: datetime) -> bool:
++    """Vérifie si un datetime est dans le passé."""
++    if dt.tzinfo is None:
++        raise ValueError("datetime must have tzinfo")
++    
++    return dt < now_utc()
++
++
++def time_until(dt: datetime) -> timedelta:
++    """Calcule le délai jusqu'à un datetime futur."""
++    if dt.tzinfo is None:
++        raise ValueError("datetime must have tzinfo")
++    
++    delta = dt - now_utc()
++    return delta if delta.total_seconds() > 0 else timedelta(0)
+\ No newline at end of file
+diff --git a/time_utils.py b/time_utils.py
+index b10bfb8..4b558d4 100644
+--- a/time_utils.py
++++ b/time_utils.py
+@@ -8,7 +8,7 @@ import re
+ from datetime import datetime, timedelta
+ from zoneinfo import ZoneInfo
+ 
+-from config import get_config
++from app_config import get_app_config
+ 
+ config = get_config()
+ TZ_PARIS = ZoneInfo(config.timezone)
