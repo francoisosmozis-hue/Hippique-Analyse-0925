@@ -1347,7 +1347,7 @@ def _check_enrich_outputs(
 
         missing: list[str] = []
         if not je_csv or not je_csv.exists():
-            missing.append(f"{snap}_je.csv" if snap else "*_je.csv")
+            missing.append(f"{snap}_je.csv" if snap else "snap_H-5_je.csv")
         if not chronos_csv.exists():
             missing.append("chronos.csv")
 

@@ -35,14 +35,25 @@ def test_env_path_missing(monkeypatch, tmp_path):
 def test_env_path_present(monkeypatch, tmp_path):
     """Env var should be honoured when file exists."""
     calib = tmp_path / "custom_payout.yaml"
-    calib.write_text("{}", encoding="utf-8")
+    calib.write_text("correlations: {}", encoding="utf-8")
     monkeypatch.setenv("CALIB_PATH", str(calib))
+
+    prob_calib = tmp_path / "probabilities.yaml"
+    prob_calib.write_text(
+        """
+a|b:
+  p: 0.2
+"""
+    )
+    monkeypatch.setattr(sw, "CALIBRATION_PATH", prob_calib)
+    monkeypatch.setattr(sw, "_calibration_cache", OrderedDict())
+    monkeypatch.setattr(sw, "_calibration_mtime", 0.0)
+
     res = evaluate_combo(TICKETS, bankroll=10.0)
     assert res["status"] == "ok"
     assert res["notes"] == []
     assert res["requirements"] == []
     assert res["calibration_used"] is True
-    assert str(Path("payout_calibration.yaml")) in res["requirements"]
 
 
 def test_gates_when_calibration_missing(tmp_path, monkeypatch):
@@ -79,8 +90,20 @@ def test_override_missing_calibration(tmp_path, monkeypatch):
 
 def test_with_calibration(tmp_path, monkeypatch):
     calib = tmp_path / "payout_calibration.yaml"
-    calib.write_text("{}", encoding="utf-8")
+    calib.write_text("correlations: {}", encoding="utf-8")
     monkeypatch.delenv("CALIB_PATH", raising=False)
+
+    prob_calib = tmp_path / "probabilities.yaml"
+    prob_calib.write_text(
+        """
+a|b:
+  p: 0.2
+"""
+    )
+    monkeypatch.setattr(sw, "CALIBRATION_PATH", prob_calib)
+    monkeypatch.setattr(sw, "_calibration_cache", OrderedDict())
+    monkeypatch.setattr(sw, "_calibration_mtime", 0.0)
+
     res = evaluate_combo(TICKETS, bankroll=10.0, calibration=calib)
     assert res["status"] == "ok"
     assert res["ev_ratio"] > 0.0

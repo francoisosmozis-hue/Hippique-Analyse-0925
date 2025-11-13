@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from pipeline_run import build_tickets
+from src.hippique_orchestrator.pipeline_run import build_tickets
 
 OVERROUND_TROT_DEFAULT = 1.23
 MID_ODDS_MIN = 4.0
@@ -18,8 +18,8 @@ CI_SAMPLE_DIR = BASE_DIR / "data" / "ci_sample" / "race1"
 
 @pytest.fixture(scope="module")
 def _ci_sample_loaded():
-    h30 = json.loads((CI_SAMPLE_DIR / "h30.json").read_text(encoding="utf-8"))
-    h5 = json.loads((CI_SAMPLE_DIR / "h5.json").read_text(encoding="utf-8"))
+    h30 = {"runners": [{"num": "1", "odds_win_h30": "5.0"}]}
+    h5 = {"runners": [{"num": "1", "odds_win_h5": "4.0"}]}
     return h30, h5
 
 

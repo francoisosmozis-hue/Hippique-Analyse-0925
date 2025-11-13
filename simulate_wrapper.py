@@ -633,6 +633,13 @@ def simulate_wrapper(legs: Iterable[object]) -> float:
             detail_entry["context"] = context_clean
         details[identifier] = detail_entry
 
+    is_default_fallback = all(s == "default" for s in sources)
+    if is_default_fallback and len(legs_list) > 1:
+        # Beta-Binomial with uniform prior: P(n successes) = 1 / (n + 1)
+        prob = 1.0 / (len(legs_list) + 1.0)
+    else:
+        prob = math.prod(leg_probabilities)
+
     groups = _find_correlation_groups(legs_list)
     correlation_details: list[dict[str, Any]] = []
     for group in groups:

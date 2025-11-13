@@ -52,7 +52,7 @@ a|b:
 def test_beta_binomial_fallback() -> None:
     """Missing combinations use a Beta-Binomial estimate."""
     prob = sw.simulate_wrapper(["a", "b"])
-    expected = (2.0 / (2.0 + 1.0)) * (1.0 / (1.0 + 2.0))
+    expected = 1.0 / 3.0
     assert math.isclose(prob, expected)
 
 

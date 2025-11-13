@@ -69,6 +69,7 @@ def test_process_reunion_continues_after_failure(
     html = """
     <html>
       <body>
+        Reunion R1
         <a href="/fr/course/111">C1</a>
         <a href="/fr/course/222">C2</a>
       </body>

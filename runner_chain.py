@@ -494,17 +494,19 @@ def validate_exotics_with_simwrapper(
             )
             keep = False
 
-        if ev_ratio is None or ev_ratio < EXOTIC_BASE_EV:
-            reasons.append("ev_ratio_below_accept_threshold")
+        if ev_ratio is None or ev_ratio < ev_threshold:
+            reasons.append(
+                "ev_ratio_below_pipeline_threshold"
+                if ev_threshold > EXOTIC_BASE_EV
+                else "ev_ratio_below_accept_threshold"
+            )
             keep = False
-        if payout_expected is None or payout_expected < EXOTIC_BASE_PAYOUT:
-            reasons.append("payout_expected_below_accept_threshold")
-            keep = False
-        if ev_ratio is not None and ev_ratio < ev_threshold:
-            reasons.append("ev_ratio_below_pipeline_threshold")
-            keep = False
-        if payout_expected is not None and payout_expected < payout_threshold:
-            reasons.append("payout_below_pipeline_threshold")
+        if payout_expected is None or payout_expected < payout_threshold:
+            reasons.append(
+                "payout_below_pipeline_threshold"
+                if payout_threshold > EXOTIC_BASE_PAYOUT
+                else "payout_expected_below_accept_threshold"
+            )
             keep = False
         if sharpe_val is None or sharpe_val < sharpe_min:
             reasons.append("sharpe_below_threshold")
