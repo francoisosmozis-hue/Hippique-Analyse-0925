@@ -4,7 +4,7 @@ import pathlib
 
 # --- Ensure payout calibration is always available ---
 PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[1]
-CALIB_PATH = _DEFAULT_PROJECT_ROOT / "config" / "payout_calibration.yaml"
+CALIB_PATH = PROJECT_ROOT / "config" / "payout_calibration.yaml"
 try:
     CALIB_PATH.parent.mkdir(parents=True, exist_ok=True)
     if not CALIB_PATH.exists():
@@ -39,7 +39,7 @@ try:
     from src.simulate_wrapper import evaluate_combo
 except ImportError:
     logging.warning("One or more core modules not found. Using mock implementations for [overround, kelly, simulate_wrapper].")
-    def compute_overround_place(runners): return 1.20
+    
     def adaptive_cap(p_place, volatility, base_cap=0.6): return base_cap
     def calculate_kelly_fraction(odds, prob, fraction=1.0): return fraction * (odds * prob - 1) / (odds - 1)
     def evaluate_combo(**kwargs): return {"status": "insufficient_data", "message": "Simulation unavailable"}

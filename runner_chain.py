@@ -492,7 +492,9 @@ def validate_exotics_with_simwrapper(
             logger.warning(
                 "[COMBO] rejet statut=%s pour %s", status or "unknown", ticket_id
             )
-            keep = False
+            if reason not in reasons_accum:
+                reasons_accum.append(reason)
+            continue
 
         if ev_ratio is None or ev_ratio < ev_threshold:
             reasons.append(

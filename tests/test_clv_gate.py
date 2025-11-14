@@ -1,4 +1,4 @@
-from pipeline_run import _clv_median_ok
+from hippique_orchestrator.pipeline_run import _clv_median_ok
 
 
 def test_clv_gate():

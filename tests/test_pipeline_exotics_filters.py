@@ -13,7 +13,10 @@ from test_pipeline_smoke import (
 )
 
 import logging_io
+from hippique_orchestrator.pipeline_run import enforce_ror_threshold
+from analysis_utils import compute_overround_cap
 import pipeline_run
+from src.hippique_orchestrator.pipeline_run import _load_simulate_ev
 import simulate_ev
 import simulate_wrapper
 import tickets_builder
@@ -59,7 +62,7 @@ def _prepare_stubs(
     market_overround: float | None = None,
     compute_cap_stub: Callable[..., float] | None = None,
 ):
-    pipeline_run._load_simulate_ev.cache_clear()
+    _load_simulate_ev.cache_clear()
 
     def fake_allocate(cfg, runners):
         return [], {}
@@ -95,7 +98,7 @@ def _prepare_stubs(
     monkeypatch.setattr(simulate_ev, "implied_prob", fake_implied_prob)
     monkeypatch.setattr(simulate_ev, "implied_probs", fake_implied_probs)
     monkeypatch.setattr(simulate_ev, "simulate_ev_batch", fake_simulate_ev_batch)
-    pipeline_run._load_simulate_ev.cache_clear()
+    _load_simulate_ev.cache_clear()
 
     monkeypatch.setattr(
         tickets_builder,
@@ -112,8 +115,7 @@ def _prepare_stubs(
             return overround_cap
 
     monkeypatch.setattr(
-        pipeline_run,
-        "compute_overround_cap",
+        "pipeline_run.compute_overround_cap",
         compute_cap_stub,
     )
 
@@ -140,7 +142,7 @@ def _prepare_stubs(
         }
         return [], stats, {"applied": False}
 
-    monkeypatch.setattr(pipeline_run, "enforce_ror_threshold", fake_enforce)
+    monkeypatch.setattr(enforce_ror_threshold, fake_enforce)
 
     def fake_filter(sp_tickets, combo_tickets, *_args, **_kwargs):
         return list(sp_tickets), list(combo_tickets), []

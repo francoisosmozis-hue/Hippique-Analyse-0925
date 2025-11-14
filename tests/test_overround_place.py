@@ -3,7 +3,9 @@ from pathlib import Path
 
 import pytest
 
+from src.overround import compute_overround_place
 import pipeline_run
+from src.hippique_orchestrator.pipeline_run import _load_simulate_ev
 from tests.test_pipeline_exotics_filters import (
     _prepare_stubs,
     _write_inputs,
@@ -18,7 +20,7 @@ def test_estimate_overround_place_from_runners() -> None:
         {"odds_place": 3.5},
     ]
     expected = sum(1.0 / runner["odds_place"] for runner in runners)
-    value = pipeline_run._estimate_overround_place(runners)
+    value = compute_overround_place([r["odds_place"] for r in runners])
     assert value == pytest.approx(expected)
 
 

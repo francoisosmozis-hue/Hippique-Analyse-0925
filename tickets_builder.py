@@ -4,7 +4,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from typing import Any
 
 from runner_chain import validate_exotics_with_simwrapper
-from simulate_ev import allocate_dutching_sp
+from src.hippique_orchestrator.scripts.simulate_ev import allocate_dutching_sp
 
 logger = logging.getLogger(__name__)
 
