@@ -87,7 +87,6 @@ def _apply_dutching(tickets: Iterable[dict[str, Any]]) -> None:
         for t, w in zip(valid_tickets, weights, strict=False):
             t["stake"] = total * w / weight_sum
 
-
 def _ticket_label(ticket: Mapping[str, Any], index: int) -> str:
     """Return a readable identifier for ``ticket`` when logging covariance."""
 
@@ -440,11 +439,11 @@ def risk_of_ruin(
     if total_variance <= 0:
         return 0.0
 
-    variance = total_variance
-    if baseline_variance is not None:
-        variance = max(total_variance, baseline_variance)
+    effective_variance = total_variance
+    if baseline_variance is not None and baseline_variance > total_variance:
+        effective_variance = baseline_variance
 
-    return math.exp(-2 * total_ev * bankroll / variance)
+    return math.exp(-2 * total_ev * bankroll / effective_variance)
 
 
 def compute_ev_roi(
@@ -716,8 +715,10 @@ def compute_ev_roi(
         total_stake_normalized = budget
         total_expected_payout *= scale
 
+    variance_exceeded = False
     var_limit = variance_cap * budget**2 if variance_cap is not None else None
     if var_limit is not None and total_variance > var_limit:
+        variance_exceeded = True
         scale = math.sqrt(var_limit / total_variance)
         for t, metrics in zip(tickets, ticket_metrics, strict=False):
             t["stake"] *= scale
@@ -940,6 +941,8 @@ def compute_ev_roi(
         return result
 
     reasons = []
+    if variance_exceeded:
+        reasons.append(f"variance above {variance_cap:.2f} * bankroll^2")
     if ev_ratio < ev_threshold:
         reasons.append(f"EV ratio below {ev_threshold:.2f}")
     if roi_total < roi_threshold:
@@ -948,7 +951,6 @@ def compute_ev_roi(
         reasons.append("expected payout for combined bets ≤ 12€")
     if ror_threshold is not None and ruin_risk > ror_threshold:
         reasons.append(f"risk of ruin above {ror_threshold:.2%}")
-        green_flag = False
 
     green_flag = not reasons
 
@@ -976,3 +978,4 @@ def compute_ev_roi(
     return result
 
 
+__all__ = ["compute_ev_roi", "risk_of_ruin", "optimize_stake_allocation"]

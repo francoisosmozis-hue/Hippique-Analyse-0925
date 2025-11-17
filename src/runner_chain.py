@@ -34,19 +34,19 @@ from pydantic import (
 from pydantic import (
     ValidationError as PydanticValidationError,
 )
-from src.gcs_utils import disabled_reason, is_gcs_enabled
-from src.simulate_ev import simulate_ev_batch
-from src.simulate_wrapper import PAYOUT_CALIBRATION_PATH
-from src.validator_ev import ValidationError, validate_ev
+from gcs_utils import disabled_reason, is_gcs_enabled
+from simulate_ev import simulate_ev_batch
+from simulate_wrapper import PAYOUT_CALIBRATION_PATH
+from validator_ev import ValidationError, validate_ev
 
-from src import online_fetch_zeturf as ofz
+import online_fetch_zeturf as ofz
 
 logger = logging.getLogger(__name__)
 
 USE_GCS = is_gcs_enabled()
 if USE_GCS:
     try:
-        from src.drive_sync import upload_file
+        from drive_sync import upload_file
     except Exception as exc:  # pragma: no cover - optional dependency guards
         logger.warning("Cloud storage sync unavailable, disabling uploads: %s", exc)
         upload_file = None  # type: ignore[assignment]

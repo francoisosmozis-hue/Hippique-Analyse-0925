@@ -384,7 +384,7 @@ def build_plan(date: str) -> list[dict[str, Any]]:
     try:
         return asyncio.run(build_plan_async(date))
     except RuntimeError as e:
-        if "already running" in str(e).lower():
+        if "cannot run" in str(e).lower():
             logger.error("Cannot use build_plan() from within event loop. Use build_plan_async() instead.")
             raise RuntimeError("Use build_plan_async() in async context") from e
         raise

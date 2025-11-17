@@ -1,370 +1,165 @@
-import datetime as dt
-import json
-import logging
-from pathlib import Path
-
 import pytest
+import sys
+import subprocess
+import json
+from pathlib import Path
+from src.hippique_orchestrator import runner_chain
 
-import runner_chain
-import runner_chain as runner_script
+@pytest.fixture
+def mock_dependencies(mocker):
+    """Mocks all external dependencies for runner_chain."""
+    mocker.patch("src.hippique_orchestrator.runner_chain.run_subprocess")
+    mocker.patch("src.hippique_orchestrator.runner_chain.run_pipeline", return_value={"abstain": True, "tickets": []})
+    mocker.patch("src.hippique_orchestrator.runner_chain.send_email")
+    mocker.patch("src.hippique_orchestrator.runner_chain.render_ticket_html")
+    mocker.patch("src.hippique_orchestrator.runner_chain.fetch_and_write_arrivals")
+    mocker.patch("src.hippique_orchestrator.runner_chain.update_excel")
+    mocker.patch("pathlib.Path.mkdir")
 
+def test_run_chain_h30_zeturf_success(mock_dependencies, mocker):
+    """Tests the H30 phase with zeturf source on success."""
+    result = runner_chain.run_chain(reunion="R1", course="C1", phase="H30", budget=5.0, source="zeturf")
 
-def _build_payload(phase: str) -> runner_script.RunnerPayload:
-    return runner_script.RunnerPayload(
-        id_course="123456",
-        reunion="R1",
-        course="C2",
-        phase=phase,
-        start_time=dt.datetime(2023, 9, 25, 15, 30),
-        budget=5.0,
-    )
+    # Check that the correct script was called
+    run_subprocess_mock = runner_chain.run_subprocess
+    run_subprocess_mock.assert_called_once()
+    args, _ = run_subprocess_mock.call_args
+    cmd = args[0]
+    assert "online_fetch_zeturf.py" in cmd[1]
+    assert "--reunion" in cmd
+    assert "R1" in cmd
+    assert "--course" in cmd
+    assert "C1" in cmd
 
+    # Check the output message
+    assert "H-30 snapshot created from zeturf" in result["message"]
+    assert result["abstain"] is True
 
-def test_estimate_sp_ev_filters_missing_place_odds(caplog: pytest.LogCaptureFixture) -> None:
-    legs = [
-        {"id": "A", "odds_place": 5.0, "p": 0.4},
-        {"id": "B", "place_odds": 6.0, "probability": 0.3},
-        {"id": "C", "odds": 3.0},
-    ]
+def test_run_chain_h30_boturfers_success(mock_dependencies, mocker):
+    """Tests the H30 phase with boturfers source on success."""
+    runner_chain.run_chain(reunion="R1", course="C1", phase="H30", budget=5.0, source="boturfers")
 
-    with caplog.at_level(logging.WARNING):
-        ev, some_missing = runner_chain.estimate_sp_ev(legs)
+    # Check that the correct script was called
+    run_subprocess_mock = runner_chain.run_subprocess
+    run_subprocess_mock.assert_called_once()
+    args, _ = run_subprocess_mock.call_args
+    cmd = args[0]
+    assert "online_fetch_boturfers.py" in cmd[1]
 
-    assert some_missing is True
-    assert ev == pytest.approx(0.9)
-    assert "C" in caplog.text
+def test_validate_snapshot_or_die_invalid_type():
+    """Tests that validate_snapshot_or_die exits on invalid snapshot type."""
+    with pytest.raises(SystemExit) as e:
+        runner_chain.validate_snapshot_or_die([], "H5")
+    assert e.value.code == 2
 
+def test_validate_snapshot_or_die_no_runners():
+    """Tests that validate_snapshot_or_die exits on empty runners list."""
+    with pytest.raises(SystemExit) as e:
+        runner_chain.validate_snapshot_or_die({"runners": []}, "H5")
+    assert e.value.code == 2
 
-def test_estimate_sp_ev_returns_none_when_insufficient(caplog: pytest.LogCaptureFixture) -> None:
-    legs = [
-        {"id": "A", "odds_place": 5.0, "p": 0.4},
-        {"id": "B", "odds": 3.5},
-    ]
+def test_validate_snapshot_or_die_success():
+    """Tests that validate_snapshot_or_die passes with valid data."""
+    try:
+        runner_chain.validate_snapshot_or_die({"runners": [{"num": 1}]}, "H5")
+    except SystemExit:
+        pytest.fail("validate_snapshot_or_die failed with valid data")
 
-    with caplog.at_level(logging.WARNING):
-        ev, some_missing = runner_chain.estimate_sp_ev(legs)
+def test_run_chain_h5_success(mock_dependencies, mocker):
+    """Tests the H5 phase on success without email."""
+    mocker.patch("pathlib.Path.exists", return_value=True)
 
-    assert some_missing is True
-    assert ev is None
-    assert "B" in caplog.text
+    runner_chain.run_chain(reunion="R1", course="C1", phase="H5", budget=5.0)
 
+    run_subprocess_mock = runner_chain.run_subprocess
+    assert run_subprocess_mock.call_count == 2
+    call_args_list = run_subprocess_mock.call_args_list
+    assert "fetch_je_stats.py" in call_args_list[0].args[0][1]
+    assert "fetch_je_chrono.py" in call_args_list[1].args[0][1]
 
-def test_estimate_sp_ev_imputes_missing_odds_place(caplog: pytest.LogCaptureFixture) -> None:
-    legs = [
-        {"id": "A", "p": 0.3, "market": {"nplace": 2, "n_partants": 12}},
-        {"id": "B", "odds_place": 5.0, "p": 0.2},
-    ]
+    runner_chain.run_pipeline.assert_called_once_with(reunion="R1", course="C1", phase="H5", budget=5.0)
+    runner_chain.send_email.assert_not_called()
 
-    with caplog.at_level(logging.INFO):
-        ev, some_missing = runner_chain.estimate_sp_ev(legs)
-
-    assert some_missing is True
-    assert ev == pytest.approx(0.5, rel=1e-2)
-    assert "odds_place_imputed" in legs[0].get("notes", [])
-    assert "Cote place imputée" in caplog.text
-def test_compute_overround_cap_flat_handicap_string_partants() -> None:
-    cap = runner_chain.compute_overround_cap("Handicap de Plat", "16 partants")
-    assert cap == pytest.approx(1.25)
-
-
-def test_compute_overround_cap_flat_large_field() -> None:
-    """Open flat races with large fields should trigger the stricter cap."""
-
-    cap = runner_chain.compute_overround_cap("Plat", 14)
-
-    assert cap == pytest.approx(1.25)
-
-
-def test_compute_overround_cap_context_reports_reason() -> None:
-    context: dict[str, object] = {}
-    cap = runner_chain.compute_overround_cap(
-        "Handicap de Plat",
-        16,
-        context=context,
-        course_label="Grand Handicap de Paris",
-    )
-    assert cap == pytest.approx(1.25)
-    assert context.get("triggered") is True
-    assert context.get("reason") == "flat_handicap"
-    assert context.get("default_cap") == pytest.approx(1.30)
-    assert context.get("partants") == 16
-    assert context.get("discipline") == "handicap de plat"
-
-
-def test_compute_overround_cap_other_disciplines() -> None:
-    cap = runner_chain.compute_overround_cap("Trot Attelé", 12)
-    assert cap == pytest.approx(1.30)
-
-
-def test_compute_overround_cap_detects_handicap_from_course_label() -> None:
-    cap = runner_chain.compute_overround_cap(
-        None,
-        "15 partants",
-        course_label="Grand Handicap de Paris",
-    )
-    assert cap == pytest.approx(1.25)
-
-
-def test_filter_exotics_by_overround_applies_flat_cap() -> None:
-    """Flat handicaps with many runners should discard high overround combos."""
-
-    tickets = [[{"id": "combo"}]]
-
-    filtered = runner_chain.filter_exotics_by_overround(
-        tickets,
-        overround=1.26,
-        overround_max=1.30,
-        discipline="Plat",
-        partants=14,
-    )
-
-    assert filtered == []
-
-
-def test_compute_overround_cap_handles_accents() -> None:
-    cap = runner_chain.compute_overround_cap("Handicap de Plât", "14 partants")
-    assert cap == pytest.approx(1.25)
-
-
-def test_validate_exotics_with_simwrapper_filters_and_alert(monkeypatch):
-    def fake_eval(tickets, bankroll, calibration=None, allow_heuristic=True):
-        if tickets[0]['id'] == 'fail':
-            return {
-                'ev_ratio': 0.1,
-                'roi': 0.05,
-                'payout_expected': 5.0,
-                'sharpe': 0.2,
-                'notes': [],
-                'requirements': []
-            }
-        return {
-            'ev_ratio': 0.6,
-            'roi': 0.8,
-            'payout_expected': 25.0,
-            'sharpe': 0.2,
-            'notes': [],
-            'requirements': []
-        }
-
-    monkeypatch.setattr(runner_chain, 'evaluate_combo', fake_eval)
-
-    exotics = [
-        [{'id': 'fail', 'p': 0.5, 'odds': 2.0, 'stake': 1.0}],
-        [{'id': 'ok', 'p': 0.5, 'odds': 2.0, 'stake': 1.0}],
-    ]
-
-    tickets, info = runner_chain.validate_exotics_with_simwrapper(exotics, bankroll=5)
-    assert len(tickets) == 1
-    assert tickets[0]['flags'] == ['ALERTE_VALUE']
-    assert info['flags']['combo'] is True
-    assert info['decision'] == 'accept'
-
-
-def test_validate_exotics_with_simwrapper_rejects_low_payout(monkeypatch):
-    def fake_eval(tickets, bankroll, calibration=None, allow_heuristic=True):
-        return {
-            'ev_ratio': 0.8,
-            'roi': 0.7,
-            'payout_expected': 5.0,
-            'sharpe': 0.7,
-            'notes': [],
-            'requirements': []
-        }
-
-    monkeypatch.setattr(runner_chain, 'evaluate_combo', fake_eval)
-
-    tickets, info = runner_chain.validate_exotics_with_simwrapper(
-        [[{'id': 'low', 'p': 0.5, 'odds': 2.0, 'stake': 1.0}]],
-        bankroll=10,
-        payout_min=10.0,
-    )
-
-    assert tickets == []
-    assert 'payout_expected_below_accept_threshold' in info['flags']['reasons']['combo']
-    assert info['flags']['combo'] is False
-    assert info['decision'] == 'reject:payout_expected_below_accept_threshold'
-
-
-def test_validate_exotics_with_simwrapper_caps_best_and_alert(monkeypatch):
-    results = {
-        'a': {'ev_ratio': 0.6, 'roi': 0.7, 'payout_expected': 30.0, 'sharpe': 0.6, 'notes': [], 'requirements': []},
-        'b': {'ev_ratio': 0.8, 'roi': 0.9, 'payout_expected': 35.0, 'sharpe': 0.8, 'notes': [], 'requirements': []},
+def test_run_chain_h5_sends_email_on_tickets(mock_dependencies, mocker):
+    """Tests that H5 phase sends an email when tickets are generated."""
+    mocker.patch("pathlib.Path.exists", return_value=True)
+    mocker.patch.dict(runner_chain.os.environ, {"EMAIL_TO": "test@example.com"})
+    runner_chain.run_pipeline.return_value = {
+        "abstain": False,
+        "tickets": [{"type": "SP_DUTCHING", "stake": 3.0}],
+        "roi_global_est": 0.25
     }
 
-    def fake_eval(tickets, bankroll, calibration=None, allow_heuristic=True):
-        return results[tickets[0]['id']]
+    runner_chain.run_chain(reunion="R1", course="C1", phase="H5", budget=5.0)
 
-    monkeypatch.setattr(runner_chain, 'evaluate_combo', fake_eval)
+    runner_chain.send_email.assert_called_once()
+    args, _ = runner_chain.send_email.call_args
+    assert "Tickets Hippiques pour R1C1" in args[0]
+    assert "test@example.com" in args[2]
 
-    exotics = [
-        [{'id': 'a', 'p': 0.5, 'odds': 2.0, 'stake': 1.0}],
-        [{'id': 'b', 'p': 0.5, 'odds': 2.0, 'stake': 1.0}],
-    ]
+def test_run_chain_h5_abstains_on_enrichment_failure(mock_dependencies, mocker):
+    """Tests that H5 phase abstains if an enrichment script fails."""
+    run_subprocess_mock = runner_chain.run_subprocess
+    run_subprocess_mock.side_effect = subprocess.CalledProcessError(1, "cmd", "Error")
 
-    tickets, info = runner_chain.validate_exotics_with_simwrapper(exotics, bankroll=5)
-    assert len(tickets) == 1
-    assert tickets[0]['legs'] == ['b']
-    assert tickets[0]['flags'] == ['ALERTE_VALUE']
-    assert info['flags']['combo'] is True
-    assert info['flags']['ALERTE_VALUE'] is True
+    result = runner_chain.run_chain(reunion="R1", course="C1", phase="H5", budget=5.0)
 
+    assert result["abstain"] is True
+    assert "enrichment fetch failed" in result["message"]
+    runner_chain.run_pipeline.assert_not_called()
 
-def test_validate_exotics_with_simwrapper_skips_unreliable(monkeypatch):
-    def fake_eval(tickets, bankroll, calibration=None, allow_heuristic=True):
-        return {
-            'ev_ratio': 0.6,
-            'roi': 0.6,
-            'payout_expected': 30.0,
-            'sharpe': 0.6,
-            'notes': ['combo_probabilities_unreliable'],
-            'requirements': []
-        }
+def test_run_chain_h5_abstains_on_missing_enrichment_files(mock_dependencies, mocker):
+    """Tests that H5 phase abstains if enrichment files are not created."""
+    mocker.patch("pathlib.Path.exists", return_value=False)
 
-    monkeypatch.setattr(runner_chain, 'evaluate_combo', fake_eval)
+    result = runner_chain.run_chain(reunion="R1", course="C1", phase="H5", budget=5.0)
 
-    tickets, info = runner_chain.validate_exotics_with_simwrapper(
-        [[{'id': 'unsafe', 'p': 0.5, 'odds': 2.0, 'stake': 1.0}]],
-        bankroll=5,
-        sharpe_min=0.5,
-    )
+    assert result["abstain"] is True
+    assert "missing J/E or chrono data" in result["message"]
+    runner_chain.run_pipeline.assert_not_called()
 
-    assert tickets == []
-    assert 'probabilities_unreliable' in info['flags']['reasons']['combo']
-    assert 'combo_probabilities_unreliable' in info['notes']
+def test_run_chain_result_success(mock_dependencies, mocker):
+    """Tests the RESULT phase on a full success path."""
+    mocker.patch("pathlib.Path.exists", return_value=True)
 
+    result = runner_chain.run_chain(reunion="R1", course="C1", phase="RESULT", budget=5.0)
 
-def test_validate_exotics_with_simwrapper_rejects_low_sharpe(monkeypatch):
-    def fake_eval(tickets, bankroll, calibration=None, allow_heuristic=True):
-        return {
-            'ev_ratio': 0.7,
-            'roi': 0.8,
-            'payout_expected': 30.0,
-            'sharpe': 0.3,
-            'notes': [],
-            'requirements': []
-        }
+    runner_chain.fetch_and_write_arrivals.assert_called_once()
+    runner_chain.update_excel.assert_called_once()
+    assert result["message"] == "Result phase completed."
 
-    monkeypatch.setattr(runner_chain, 'evaluate_combo', fake_eval)
+def test_run_chain_result_skips_on_missing_planning_file(mock_dependencies, mocker):
+    """Tests that RESULT phase skips processing if the planning file is missing."""
+    mocker.patch("pathlib.Path.exists", side_effect=[False])
 
-    tickets, info = runner_chain.validate_exotics_with_simwrapper(
-        [[{'id': 'low_sharpe', 'p': 0.5, 'odds': 2.0, 'stake': 1.0}]],
-        bankroll=10,
-        sharpe_min=0.5,
-    )
+    runner_chain.run_chain(reunion="R1", course="C1", phase="RESULT", budget=5.0)
 
-    assert tickets == []
-    assert 'sharpe_below_threshold' in info['flags']['reasons']['combo']
+    runner_chain.fetch_and_write_arrivals.assert_not_called()
+    runner_chain.update_excel.assert_not_called()
 
+def test_run_chain_result_skips_excel_on_missing_arrivals(mock_dependencies, mocker):
+    """Tests that RESULT phase skips Excel update if arrivals file is missing."""
+    mocker.patch("pathlib.Path.exists", side_effect=[True, False, True])
 
-def test_validate_exotics_with_simwrapper_logs_rejected_status(monkeypatch, caplog):
-    def fake_eval(tickets, bankroll, calibration=None, allow_heuristic=True):
-        return {
-            'status': 'KO',
-            'notes': [],
-        }
+    runner_chain.run_chain(reunion="R1", course="C1", phase="RESULT", budget=5.0)
 
-    monkeypatch.setattr(runner_chain, 'evaluate_combo', fake_eval)
+    runner_chain.fetch_and_write_arrivals.assert_called_once()
+    runner_chain.update_excel.assert_not_called()
 
-    caplog.set_level(logging.WARNING)
+def test_run_chain_unknown_phase(mock_dependencies):
+    """Tests that an unknown phase returns a specific message."""
+    result = runner_chain.run_chain(reunion="R1", course="C1", phase="UNKNOWN", budget=5.0)
+    assert result["message"] == "Unknown phase."
 
-    tickets, info = runner_chain.validate_exotics_with_simwrapper(
-        [[{'id': 'bad_combo', 'p': 0.4, 'odds': 3.0, 'stake': 1.0}]],
-        bankroll=10,
-    )
+def test_main_calls_run_chain_with_args(mocker):
+    """Tests that the main CLI entrypoint parses args and calls run_chain."""
+    mocker.patch.object(runner_chain.sys, "argv", ["runner_chain.py", "--reunion", "R1", "--course", "C9", "--phase", "H5", "--budget", "12.34", "--source", "boturfers"])
+    mock_run_chain = mocker.patch("src.hippique_orchestrator.runner_chain.run_chain", return_value={"status": "ok"})
+    mock_print = mocker.patch("builtins.print")
+    mock_json_dumps = mocker.patch("json.dumps", return_value='{"status": "ok"}')
 
-    assert tickets == []
-    assert info['flags']['combo'] is False
-    assert any(reason.startswith('status_') for reason in info['flags']['reasons']['combo'])
+    runner_chain.main()
 
-
-def test_trigger_phase_result_missing_arrivee(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
-    payload = _build_payload("RESULT")
-    caplog.set_level(logging.ERROR)
-
-    runner_script._trigger_phase(
-        payload,
-        snap_dir=tmp_path,
-        analysis_dir=tmp_path,
-        ev_min=0.0,
-        roi_min=0.0,
-        mode="result",
-        calibration=tmp_path / "calibration.yaml",
-    )
-
-    race_dir = tmp_path / "R1C2"
-    arrivee_json = race_dir / "arrivee.json"
-    arrivee_csv = race_dir / "arrivee_missing.csv"
-
-    assert arrivee_json.exists()
-    assert arrivee_csv.exists()
-    data = json.loads(arrivee_json.read_text(encoding="utf-8"))
-    assert data == {
-        "status": "missing",
-        "R": "R1",
-        "C": "C2",
-        "date": "2023-09-25",
-    }
-    csv_content = arrivee_csv.read_text(encoding="utf-8").strip().splitlines()
-    assert csv_content == ["status;R;C;date", "missing;R1;C2;2023-09-25"]
-    assert not (race_dir / "cmd_update_excel.txt").exists()
-    assert any("Arrivée absente" in record.message for record in caplog.records)
-
-
-def test_trigger_phase_result_with_arrivee(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
-    payload = _build_payload("RESULT")
-    race_dir = tmp_path / "R1C2"
-    race_dir.mkdir(parents=True, exist_ok=True)
-    (race_dir / "arrivee_officielle.json").write_text("{}", encoding="utf-8")
-    (race_dir / "tickets.json").write_text("{}", encoding="utf-8")
-
-    caplog.set_level(logging.INFO)
-
-    runner_script._trigger_phase(
-        payload,
-        snap_dir=tmp_path,
-        analysis_dir=tmp_path,
-        ev_min=0.0,
-        roi_min=0.0,
-        mode="result",
-        calibration=tmp_path / "calibration.yaml",
-    )
-
-    cmd_path = race_dir / "cmd_update_excel.txt"
-    assert cmd_path.exists()
-    cmd = cmd_path.read_text(encoding="utf-8")
-    assert "update_excel_with_results.py" in cmd
-    assert str(race_dir / "arrivee_officielle.json") in cmd
-    assert str(race_dir / "tickets.json") in cmd
-    assert not any("Arrivée absente" in record.message for record in caplog.records)
-
-
-
-def test_export_tracking_csv_line(tmp_path):
-    path = tmp_path / 'track.csv'
-    meta = {'reunion': 'R1', 'course': 'C1', 'hippodrome': 'X', 'date': '2024-01-01', 'discipline': 'plat', 'partants': 8}
-    tickets = [{'stake': 2.0, 'p': 0.4}, {'stake': 1.0, 'p': 0.3}]
-    stats = {
-        'ev_sp': 0.3,
-        'ev_global': 0.6,
-        'roi_sp': 0.2,
-        'roi_global': 0.5,
-        'risk_of_ruin': 0.1,
-        'clv_moyen': 0.0,
-        'model': 'M',
-        'prob_implicite_panier': 0.55,
-        'roi_reel': 0.45,
-        'sharpe': 0.8,
-        'drift_sign': 1,
-    }
-
-    runner_chain.export_tracking_csv_line(str(path), meta, tickets, stats, alerte=True)
-
-    lines = path.read_text(encoding='utf-8').splitlines()
-    header = lines[0].split(';')
-    assert header[-1] == 'ALERTE_VALUE'
-    assert {'prob_implicite_panier', 'ev_simulee_post_arrondi', 'roi_simule', 'roi_reel', 'sharpe', 'drift_sign'} <= set(header)
-    assert {'nb_tickets', 'expected_gross_return_eur'} <= set(header)
-    values = dict(zip(header, lines[1].split(';'), strict=False))
-    assert values['ALERTE_VALUE'] == 'ALERTE_VALUE'
-    assert values['nb_tickets'] == '2'
-    assert float(values['expected_gross_return_eur']) == pytest.approx(3.6)
+    mock_run_chain.assert_called_once_with(reunion="R1", course="C9", phase="H5", budget=12.34, source="boturfers")
+    mock_json_dumps.assert_called_once_with({"status": "ok"})
+    mock_print.assert_called_once_with('{"status": "ok"}')

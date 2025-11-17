@@ -703,7 +703,7 @@ def build_tickets_roi_first(
     }
     _write_artifacts(metrics_payload, per_horse_rows, str(meta.get("race_id", "R?C?")))
 
-    return {"tickets": tickets, "abstention": None}
+    return {"tickets": tickets, "abstention": abstention}
 
 def _load_latest(path: Path, pattern: str) -> Path | None:
     files = sorted(path.glob(pattern), key=lambda p: p.stat().st_mtime)

@@ -1,3 +1,4 @@
+
 import json
 from pathlib import Path
 
@@ -10,6 +11,86 @@ from src import update_excel_planning as planner
 def _read_row(ws, row_idx: int) -> dict[str, object]:
     header_map = {cell.value: idx for idx, cell in enumerate(ws[1], start=1) if cell.value}
     return {header: ws.cell(row=row_idx, column=col).value for header, col in header_map.items()}
+
+
+def test_cli_invalid_phase_raises_error():
+    """Tests that the CLI exits if an invalid phase is provided."""
+    with pytest.raises(SystemExit):
+        planner.main(["--phase", "INVALID", "--input", "foo", "--excel", "bar"])
+
+
+@pytest.mark.parametrize(
+    "key, value, expected_key, expected_value",
+    [
+        ("nb_partants", 10, "partants", 10),
+        ("runners_count", "11 partants", "partants", 11),
+        ("start", "10h30", "start_time", "10:30"),
+        ("heure_depart", "11:00", "start_time", "11:00"),
+        ("specialite", "Steeple", "discipline", "Steeple"),
+        ("r", "R5", "reunion", "R5"),
+        ("c", "C6", "course", "C6"),
+    ],
+)
+def test_extract_common_meta_aliases(key, value, expected_key, expected_value):
+    """Tests that _extract_common_meta correctly uses aliased keys."""
+    payload = {key: value}
+    meta = planner._extract_common_meta(payload)
+    assert meta[expected_key] == expected_value
+
+    payload_nested = {"meta": {key: value}}
+    meta_nested = planner._extract_common_meta(payload_nested)
+    assert meta_nested[expected_key] == expected_value
+
+
+@pytest.mark.parametrize(
+    "tickets, expected_summary",
+    [
+        ([], ""),
+        ([{"type": "SG", "selections": ["1"], "odds": 4.5}], "SG:1@4.5"),
+        (
+            [
+                {"bet_type": "JUM", "horses": ["2", "4"], "rapport": 12.1},
+                {"type": "TRIO", "combination": "5-6-7"},
+            ],
+            "JUM:2-4@12.1 | TRIO:5-6-7",
+        ),
+        ([{"id": "WEIRD", "legs": [{"selections": "8/9"}]}], "WEIRD:8-9"),
+        ([{"type": "2S4", "numbers": "10,11,12"}], "2S4:10-11-12"),
+    ],
+)
+def test_summarise_tickets_formats(tickets, expected_summary):
+    """Tests that _summarise_tickets handles various ticket formats."""
+    summary = planner._summarise_tickets(tickets)
+    assert summary == expected_summary
+
+
+def test_h30_updates_existing_row(tmp_path: Path):
+    """Tests that running H30 phase again updates the existing row instead of creating a new one."""
+    excel_path = tmp_path / "planning.xlsx"
+    
+    dir1 = tmp_path / "dir1"
+    dir1.mkdir()
+    payload1 = {
+        "meta": {"date": "2024-11-17", "reunion": "R1", "course": "C1", "partants": 10}
+    }
+    (dir1 / "p1.json").write_text(json.dumps(payload1))
+    planner.main(["--phase", "H30", "--input", str(dir1), "--excel", str(excel_path)])
+
+    dir2 = tmp_path / "dir2"
+    dir2.mkdir()
+    payload2 = {
+        "meta": {"date": "2024-11-17", "reunion": "R1", "course": "C1", "partants": 12, "discipline": "Trot"}
+    }
+    (dir2 / "p2.json").write_text(json.dumps(payload2))
+    planner.main(["--phase", "H30", "--input", str(dir2), "--excel", str(excel_path), "--status-h30", "Mis à jour"])
+
+    wb = load_workbook(excel_path)
+    ws = wb["Planning"]
+    assert ws.max_row == 2
+    row = _read_row(ws, 2)
+    assert row["Partants"] == 12
+    assert row["Discipline"] == "Trot"
+    assert row["Statut H-30"] == "Mis à jour"
 
 
 def test_h30_populates_planning_sheet(tmp_path: Path) -> None:

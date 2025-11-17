@@ -32,14 +32,15 @@ import pytest
 BOTURFERS_HTML = """..."""  # Gardé pour référence, mais non utilisé
 
 @pytest.mark.asyncio
-async def test_schedule_to_run_flow(monkeypatch):
+async def test_schedule_to_run_flow(monkeypatch, mocker):
     # 1) Mock la fonction de construction du plan ASYNCHRONE
     mock_plan_result = [
         {
             "r_label": "R1",
             "c_label": "C1",
             "time_local": "14:30",
-            "course_url": "https://www.example.com/R1C1"
+            "course_url": "https://www.example.com/R1C1",
+            "date": "2025-10-26"
         }
     ]
 
@@ -47,6 +48,9 @@ async def test_schedule_to_run_flow(monkeypatch):
         return mock_plan_result
 
     monkeypatch.setattr(plan, "build_plan_async", mock_build_plan_async)
+
+    # Mock de l'infra GCP pour éviter l'erreur de credentials
+    mocker.patch("src.scheduler.get_tasks_client")
 
     # 2) /schedule
     resp = client.post("/schedule", json={})
@@ -68,4 +72,4 @@ async def test_schedule_to_run_flow(monkeypatch):
     r2 = client.post("/run", json=run_req)
     assert r2.status_code == 200, r2.text
     out = r2.json()
-    assert out["ok"] is False
+    assert out["ok"] is True

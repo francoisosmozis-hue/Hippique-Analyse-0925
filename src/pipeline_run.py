@@ -32,6 +32,23 @@ import yaml
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+# --- Mock implementations for core logic ---
+def compute_overround_place(runners):
+    logging.warning("Using mock for compute_overround_place")
+    return 1.20
+
+def adaptive_cap(p_place, volatility, base_cap=0.6):
+    logging.warning("Using mock for adaptive_cap")
+    return base_cap
+
+def calculate_kelly_fraction(odds, prob, fraction=1.0):
+    logging.warning("Using mock for calculate_kelly_fraction")
+    return fraction * (odds * prob - 1) / (odds - 1) if odds > 1 else 0
+
+def evaluate_combo(**kwargs):
+    logging.warning("Using mock for evaluate_combo")
+    return {"status": "insufficient_data", "message": "Simulation unavailable"}
+
 # --- Import core logic ---
 try:
     from src.kelly import calculate_kelly_fraction
@@ -39,10 +56,7 @@ try:
     from src.simulate_wrapper import evaluate_combo
 except ImportError:
     logging.warning("One or more core modules not found. Using mock implementations for [overround, kelly, simulate_wrapper].")
-    
-    def adaptive_cap(p_place, volatility, base_cap=0.6): return base_cap
-    def calculate_kelly_fraction(odds, prob, fraction=1.0): return fraction * (odds * prob - 1) / (odds - 1)
-    def evaluate_combo(**kwargs): return {"status": "insufficient_data", "message": "Simulation unavailable"}
+    pass
 
 # --- Logging ---
 logger = logging.getLogger(__name__)

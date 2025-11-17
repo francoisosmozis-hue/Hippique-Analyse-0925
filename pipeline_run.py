@@ -24,7 +24,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
 from analysis_utils import compute_overround_cap
 import yaml
@@ -47,6 +47,21 @@ except ImportError:
 
 # --- Logging ---
 logger = logging.getLogger(__name__)
+
+
+def _overround_from_odds_win(odds: Iterable[float | str | None]) -> float | None:
+    """Compute overround from win odds."""
+    total = 0.0
+    count = 0
+    for o in odds:
+        try:
+            value = float(str(o).replace(",", "."))
+        except (TypeError, ValueError):
+            continue
+        if value > 1.0:
+            total += 1.0 / value
+            count += 1
+    return total if count > 0 else None
 
 
 def load_gpi_config(config_path: Path) -> dict[str, Any]:

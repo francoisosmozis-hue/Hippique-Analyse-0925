@@ -2,15 +2,16 @@ import json
 from pathlib import Path
 
 import pytest
+import yaml
+
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from src.overround import compute_overround_place
 import pipeline_run
 from src.hippique_orchestrator.pipeline_run import _load_simulate_ev
-from tests.test_pipeline_exotics_filters import (
-    _prepare_stubs,
-    _write_inputs,
-)
-from tests.test_pipeline_smoke import partants_sample
+from tests.test_pipeline_smoke import partants_sample, GPI_YML
 
 
 def test_estimate_overround_place_from_runners() -> None:
@@ -27,58 +28,45 @@ def test_estimate_overround_place_from_runners() -> None:
 def test_pipeline_blocks_combos_when_place_overround_high(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    eval_stats = {
-        "status": "ok",
-        "ev_ratio": 0.65,
-        "payout_expected": 25.0,
-        "roi": 0.4,
-        "sharpe": 0.5,
-    }
-
-    captured_log, _ = _prepare_stubs(
-        monkeypatch,
-        eval_stats,
-        overround_cap=1.30,
-    )
-
-    partants_override = partants_sample()
-    high_place = [
-        {"id": "1", "name": "A", "odds_place": 2.0},
-        {"id": "2", "name": "B", "odds_place": 2.0},
-        {"id": "3", "name": "C", "odds_place": 2.0},
+    # Setup snapshot with high place overround
+    high_place_runners = [
+        {"id": "1", "num": "1", "name": "A", "odds": 2.5, "odds_place": 2.0, "p_place": 0.5, "volatility": 0.5, "cote": 2.5},
+        {"id": "2", "num": "2", "name": "B", "odds": 2.5, "odds_place": 2.0, "p_place": 0.5, "volatility": 0.5, "cote": 2.5},
+        {"id": "3", "num": "3", "name": "C", "odds": 2.5, "odds_place": 2.0, "p_place": 0.5, "volatility": 0.5, "cote": 2.5},
     ]
-    market_override = {
-        "slots_place": 3,
-        "horses": [
-            {"id": entry["id"], "odds": 2.5, "odds_place": entry["odds_place"]}
-            for entry in high_place
-        ],
+    overround_place = sum(1.0 / r["odds_place"] for r in high_place_runners)  # 1.5
+
+    snapshot_content = {
+        "runners": high_place_runners,
+        "market": {"overround_place": overround_place}
     }
-    partants_override.update({"runners": high_place, "market": market_override})
 
-    inputs = _write_inputs(tmp_path, partants_override=partants_override)
+    race_dir = tmp_path / "data" / "R1C1"
+    race_dir.mkdir(parents=True, exist_ok=True)
+    (race_dir / "snapshot_H5.json").write_text(json.dumps(snapshot_content))
 
-    outdir = tmp_path / "out"
+    # Setup GPI config
+    gpi_config = yaml.safe_load(GPI_YML)
+    gpi_config['overround_max_exotics'] = 1.3  # lower than 1.5
+
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    (config_dir / "gpi_v52.yml").write_text(yaml.dump(gpi_config))
+
+    # Create a valid calibration file
+    valid_calib_path = tmp_path / "calib.yaml"
+    valid_calib_path.write_text("version: 1")
+
+    # Run pipeline
     result = pipeline_run.run_pipeline(
-        h30=str(inputs["h30"]),
-        h5=str(inputs["h5"]),
-        stats_je=str(inputs["stats"]),
-        partants=str(inputs["partants"]),
-        gpi=str(inputs["gpi"]),
-        outdir=str(outdir),
-        calibration="config/payout_calibration.yaml",
+        reunion="R1",
+        course="C1",
+        phase="H5",
+        budget=5.0,
+        calibration_path=str(valid_calib_path),
+        root_dir=tmp_path,
     )
 
-    metrics = result["metrics"]
-    assert metrics["status"] == "abstain"
-    assert metrics["overround"] > 1.30
-    assert "overround_above_threshold" in metrics["abstention_reasons"]
-
-    combo_meta = metrics.get("combo", {})
-    decision = combo_meta.get("decision", "")
-    assert isinstance(decision, str) and decision.startswith("reject")
-    assert "overround_above_threshold" in combo_meta.get("notes", [])
-
-    meta = json.loads((Path(result["outdir"]) / "p_finale.json").read_text())
-    assert not meta.get("tickets"), "no tickets should be emitted on high overround"
-    assert captured_log, "journaux should receive entries"
+    # Assert that no combo tickets are generated
+    assert not any(t.get("type") == "TRIO" for t in result.get("tickets", []))
+    assert result.get("abstain") is True

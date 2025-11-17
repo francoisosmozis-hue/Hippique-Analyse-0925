@@ -863,9 +863,6 @@ def _run_single_pipeline(
     """Execute :func:`pipeline_run.cmd_analyse` for ``rc_dir``."""
 
     rc_dir = ensure_dir(rc_dir)
-    ev_threshold = EV_MIN_THRESHOLD if ev_min is None else float(ev_min)
-    roi_threshold = ROI_SP_MIN_THRESHOLD if roi_min is None else float(roi_min)
-    payout_threshold = PAYOUT_MIN_THRESHOLD if payout_min is None else float(payout_min)
     overround_threshold = (
         OVERROUND_MAX_THRESHOLD if overround_max is None else float(overround_max)
     )
@@ -876,45 +873,10 @@ def _run_single_pipeline(
             f"Fichiers manquants pour l'analyse dans {rc_dir}: {', '.join(missing)}"
         )
 
-    stats_payload = json.loads((rc_dir / "stats_je.json").read_text(encoding="utf-8"))
-    allow_je_na = False
-    if isinstance(stats_payload, dict):
-        coverage = stats_payload.get("coverage")
-        allow_je_na = isinstance(coverage, (int, float)) and coverage < 100
-
-    gpi_candidates = [
-        rc_dir / "gpi.yml",
-        rc_dir / "gpi.yaml",
-        Path("config/gpi.yml"),
-        Path("config/gpi.yaml"),
-    ]
-    gpi_path = next((path for path in gpi_candidates if path.exists()), None)
-    if gpi_path is None:
-        raise FileNotFoundError("Configuration GPI introuvable (gpi.yml)")
-
-    args = argparse.Namespace(
-        h30=str(rc_dir / "h30.json"),
-        h5=str(rc_dir / "h5.json"),
-        stats_je=str(rc_dir / "stats_je.json"),
-        partants=str(rc_dir / "partants.json"),
-        gpi=str(gpi_path),
-        outdir=str(rc_dir),
-        diff=None,
-        budget=float(budget),
-        ev_global=ev_threshold,
-        roi_global=roi_threshold,
-        max_vol=None,
-        min_payout=payout_threshold,
-        ev_min_exotic=None,
-        payout_min_exotic=None,
-        allow_heuristic=False,
-        allow_je_na=allow_je_na,
-        calibration=str(PAYOUT_CALIBRATION_PATH),
-    )
     previous_overround = os.environ.get("MAX_COMBO_OVERROUND")
     os.environ["MAX_COMBO_OVERROUND"] = f"{overround_threshold:.2f}"
     try:
-        pipeline_run.run_pipeline(**vars(args))
+        pipeline_run.run_pipeline(str(rc_dir), budget=float(budget))
     finally:
         if previous_overround is None:
             os.environ.pop("MAX_COMBO_OVERROUND", None)

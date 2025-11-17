@@ -10,7 +10,16 @@ if str(_PROJECT_ROOT) not in sys.path:
 
 # This is a private function, which is not ideal to test directly,
 # but it's a necessary first step for a safe refactoring.
-from src.rules import filter_tickets_by_odds
+from src.rules import _norm_float, filter_tickets_by_odds
+
+
+def test_norm_float():
+    """Tests the float normalization utility."""
+    assert _norm_float("3,5") == 3.5
+    assert _norm_float("4.0") == 4.0
+    assert _norm_float(5) == 5.0
+    assert _norm_float("invalid") is None
+    assert _norm_float(None) is None
 
 
 def test_filter_sp_and_cp_by_odds():
@@ -69,3 +78,32 @@ def test_filter_sp_and_cp_by_odds():
     assert len(notes) == 2
     assert any("SP retiré" in note for note in notes)
     assert any("CP retiré" in note for note in notes)
+
+
+def test_filter_by_odds_uses_market_fallback():
+    """
+    Tests that the filter can find odds in the main market object if not
+    present on the ticket leg itself.
+    """
+    payload = {
+        "market": {
+            "horses": [
+                {"num": "5", "cote": "6,0"} # Odds are here
+            ]
+        },
+        "tickets": [
+            {
+                "type": "SP",
+                "id": "SP_FALLBACK_OK",
+                "legs": [
+                    {"num": "5"} # But not here
+                ]
+            }
+        ]
+    }
+
+    filter_tickets_by_odds(payload)
+
+    kept_tickets = payload.get("tickets", [])
+    assert len(kept_tickets) == 1
+    assert kept_tickets[0].get("id") == "SP_FALLBACK_OK"

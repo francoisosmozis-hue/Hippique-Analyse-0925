@@ -130,7 +130,7 @@ def test_single_reunion(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, phase: 
     ) -> Path:
         rc_dir.mkdir(parents=True, exist_ok=True)
         suffix = "H-5" if ph.upper() == "H5" else "H-30"
-        dest = rc_dir / f"snap_{cid}_{suffix}.json"
+        dest = rc_dir / f"snap_{{cid}}_{suffix}.json"
         dest.write_text("{}", encoding="utf-8")
         snaps.append((cid, ph, rc_dir, course_url))
         return dest
@@ -698,3 +698,34 @@ def test_h5_pipeline_produces_outputs(
     assert (rc_dir / f"{Path(h5_filename).stem}_je.csv").exists()
     assert (rc_dir / "chronos.csv").exists()
     assert (rc_dir / "prompts" / "prompt.txt").exists()
+
+@pytest.mark.parametrize(
+    "label, expected_r, expected_c",
+    [
+        ("R1C1", "R1", "C1"),
+        ("R12C34", "R12", "C34"),
+        ("R3 C5", "R3", "C5"),
+                    ("invalid", "INVALID", ""),        ("", "", ""),
+    ]
+)
+def test_derive_rc_parts(label, expected_r, expected_c):
+    """Tests the _derive_rc_parts helper function."""
+    r, c = acde._derive_rc_parts(label)
+    assert r == expected_r
+    assert c == expected_c
+
+@pytest.mark.parametrize(
+    "value, expected",
+    [
+        (10, 10),
+        (12.7, 12),
+        ("15", 15),
+        (" 8 partants", 8),
+        (None, None),
+        (True, None),
+        ("N/A", None),
+    ]
+)
+def test_coerce_int(value, expected):
+    """Tests the _coerce_int helper function."""
+    assert acde._coerce_int(value) == expected

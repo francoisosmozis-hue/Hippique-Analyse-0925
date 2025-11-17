@@ -1,3 +1,7 @@
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+
 from hippique_orchestrator.pipeline_run import _clv_median_ok
 
 

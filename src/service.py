@@ -94,14 +94,13 @@ async def debug_parse(date: str = "2025-10-17"):
     correlation_id = str(uuid.uuid4())
 
     try:
-        from src.plan import ADVANCED_EXTRACTION, build_plan_async
+        from src.plan import build_plan_async
         result = await build_plan_async(date)
 
         return {
             "ok": True,
             "date": date,
             "count": len(result),
-            "advanced_extraction": ADVANCED_EXTRACTION,
             "races": result[:3] if result else [],
             "correlation_id": correlation_id
         }
@@ -138,30 +137,27 @@ async def schedule(request: ScheduleRequest):
             # URL du service pour les callbacks
             service_url = "https://hippique-orchestrator-h3tdqmb7jq-ew.a.run.app"
 
-            scheduled = schedule_all_races(
+            scheduled_summary = schedule_all_races(
                 plan=plan,
-                mode=request.mode,
-                run_url=f"{service_url}/run"
+                mode=request.mode
             )
+            tasks_created = sum(1 for r in scheduled_summary if r.get("ok"))
 
             return {
                 "ok": True,
                 "date": date_str,
                 "courses_count": len(plan),
-                "tasks_created": scheduled.get("tasks_created", 0),
+                "tasks_created": tasks_created,
                 "plan": plan[:5],
                 "correlation_id": correlation_id
             }
         except Exception as sched_err:
-            logger.error(f"Scheduling error: {sched_err}")
+            logger.error(f"Scheduling error: {sched_err}", exc_info=True)
             return {
-                "ok": True,
-                "date": date_str,
-                "courses_count": len(plan),
-                "tasks_created": 0,
-                "error": str(sched_err)[:200],
-                "plan": plan[:5],
-                "correlation_id": correlation_id
+                "ok": False,
+                "error": "An internal error occurred during task scheduling.",
+                "details": str(sched_err),
+                "correlation_id": correlation_id,
             }
 
     except Exception as e:
@@ -177,12 +173,37 @@ async def schedule(request: ScheduleRequest):
 @app.post("/run")
 async def run(request: RunRequest):
     """Run analysis."""
-    return {
-        "ok": False,
-        "error": "Not implemented yet",
-        "course_url": request.course_url,
-        "phase": request.phase
-    }
+    correlation_id = str(uuid.uuid4())
+    try:
+        import re
+        from src.pipeline_run import api_entrypoint, CALIB_PATH
+
+        # Extract R/C from URL, e.g., .../R1C1/...
+        match = re.search(r"R(\d+)C(\d+)", request.course_url, re.IGNORECASE)
+        if not match:
+            return {"ok": False, "error": "Could not parse R/C from course_url", "correlation_id": correlation_id}
+
+        reunion, course = f"R{match.group(1)}", f"C{match.group(2)}"
+
+        payload = {
+            "reunion": reunion,
+            "course": course,
+            "phase": request.phase,
+            "calibration_path": str(CALIB_PATH),
+        }
+        
+        result = api_entrypoint(payload)
+        return {"ok": True, "result": result, "correlation_id": correlation_id}
+
+    except Exception as e:
+        import traceback
+        logger.error(f"Run error: {e}")
+        return {
+            "ok": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()[:500],
+            "correlation_id": correlation_id
+        }
 
 
 # Print routes on startup

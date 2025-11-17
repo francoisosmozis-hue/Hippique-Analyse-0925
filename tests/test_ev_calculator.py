@@ -1,20 +1,16 @@
 import inspect
 import math
-import os
-import sys
 from typing import Any
 
 import pytest
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
-from ev_calculator import (
+from src.ev_calculator import (
     _apply_dutching,
     _kelly_fraction,
     compute_ev_roi,
     risk_of_ruin,
 )
-from simulate_ev import allocate_dutching_sp
+from src.simulate_ev import allocate_dutching_sp
 
 SIG = inspect.signature(compute_ev_roi)
 EV_THRESHOLD = SIG.parameters["ev_threshold"].default
@@ -461,7 +457,6 @@ def test_variance_cap_triggers_failure() -> None:
     """High variance should trigger a failure reason when capped."""
     tickets = [{"p": 0.5, "odds": 10.0, "stake": 20}]
 
-    res = compute_ev_roi(tickets, budget=100, variance_cap=0.01)
-
+    res = compute_ev_roi(tickets, budget=100, variance_cap=0.01, ev_threshold=0.0)
     assert res["green"] is False
     assert f"variance above {0.01:.2f} * bankroll^2" in res["failure_reasons"]
