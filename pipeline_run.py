@@ -144,7 +144,10 @@ def run_pipeline(
 
         roi_sp = (r["p_place"] * r["cote"]) - 1
         if odds_min <= r["cote"] <= odds_max and roi_sp >= gpi_config["roi_min_sp"]:
-            volatility_cap = adaptive_cap(r["p_place"], r.get("volatility", 0.5), base_cap=gpi_config["max_vol_per_horse"])
+            discipline_val = snapshot.get("discipline")
+            partants_val = len(runners)
+            logger.info(f"GPI config ID: {id(gpi_config)} before accessing max_vol_per_horse: {gpi_config}") # Add this line for debugging
+            volatility_cap = adaptive_cap(discipline_val, partants_val, base_cap=gpi_config["max_vol_per_horse"])
             if r.get("volatility", 0) <= volatility_cap:
                 r['roi_sp'] = roi_sp
                 sp_candidates.append(r)

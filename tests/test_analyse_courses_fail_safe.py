@@ -14,7 +14,7 @@ def _write_snapshot(rc_dir: Path) -> Path:
     """Create a minimal H-5 snapshot file and return its path."""
 
     rc_dir.mkdir(parents=True, exist_ok=True)
-    snap = rc_dir / "R1C1_H-5.json"
+    snap = rc_dir / "20250910T155000_R1C1_H5.json"
     if not snap.exists():
         snap.write_text("{}\n", encoding="utf-8")
     return snap

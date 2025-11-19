@@ -32,8 +32,8 @@ def compute_overround_place(place_odds: Iterable[float]) -> float:
             inv += 1.0 / v
     return inv
 
-def adaptive_cap(discipline: str, n_partants: int) -> float:
+def adaptive_cap(discipline: str, n_partants: int, base_cap: float = 1.30) -> float:
     d = (discipline or "").lower()
     if d.startswith("plat") and n_partants >= 14:
         return 1.25
-    return 1.30
+    return base_cap
