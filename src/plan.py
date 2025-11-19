@@ -36,7 +36,7 @@ logger = get_logger(__name__)
 
 # Chemins des modules existants
 MODULES_DIR = Path(__file__).parent.parent / "modules"
-DISCOVER_GENY = MODULES_DIR / "discover_geny_today.py"
+DISCOVER_GENY = Path(__file__).parent.parent / "discover_geny_today.py"
 
 # Headers HTTP
 DEFAULT_HEADERS = {
@@ -296,10 +296,11 @@ def _build_plan_structure(geny_data: dict[str, Any], date: str) -> list[dict[str
             seen.add(key)
 
             # Construire URLs ZEturf (format standard)
-            r_num = r_label[1:]  # "R1" → "1"
-            c_num = c_label[1:]  # "C3" → "3"
+            r_num = r_label[1:]
+            c_num = c_label[1:]
+            slug = meeting.get("slug", "")
 
-            course_url = f"https://www.zeturf.fr/fr/course/{date}/R{r_num}C{c_num}"
+            course_url = f"https://www.zeturf.fr/fr/course/{date}/R{r_num}C{c_num}-{slug}"
             reunion_url = f"https://www.zeturf.fr/fr/reunion/{date}/R{r_num}"
 
             plan.append({

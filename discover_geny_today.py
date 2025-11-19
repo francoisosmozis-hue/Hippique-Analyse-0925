@@ -47,7 +47,7 @@ def main() -> None:
 
     meetings: list[dict[str, Any]] = []
     meeting_elements = soup.select("li.prog-meeting-name")
-    race_elements = soup.select("div.timeline-container li.meeting")
+    race_elements = soup.select("div.meetings-container > ul.meetings-list > li.meeting")
 
     for i, section in enumerate(meeting_elements):
         title_el = section.select_one("a.meeting-name-link")
@@ -71,7 +71,7 @@ def main() -> None:
                 course_cell = row.select_one("a")
                 if not course_cell:
                     continue
-                c = course_cell.get_text(strip=True)
+                c = "C" + course_cell.get_text(strip=True)
 
                 course_obj: dict[str, Any] = {"c": c}
                 data_id = row.get("data-id")

@@ -18,6 +18,7 @@ class Config:
     log_level: str = "INFO"
     service_url: str | None = None
     user_agent: str = "HippiqueOrchestrator/1.0"
+    requests_per_second: float = 1.0
     request_timeout: int = 10
     max_retries: int = 3
     environment: str = "production"
@@ -45,6 +46,7 @@ class Config:
             log_level=os.getenv("LOG_LEVEL", "INFO"),
             service_url=os.getenv("SERVICE_URL"),
             user_agent=os.getenv("USER_AGENT", "HippiqueOrchestrator/1.0"),
+            requests_per_second=float(os.getenv("REQUESTS_PER_SECOND", "1.0")),
             request_timeout=int(os.getenv("REQUEST_TIMEOUT", "10")),
             max_retries=int(os.getenv("MAX_RETRIES", "3")),
             environment=os.getenv("ENVIRONMENT", "production"),
