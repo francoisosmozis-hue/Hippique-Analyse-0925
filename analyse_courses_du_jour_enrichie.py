@@ -13,6 +13,7 @@ import argparse
 import csv
 import json
 import logging
+import logging
 import os
 import re
 import subprocess
@@ -29,6 +30,8 @@ from bs4 import BeautifulSoup
 
 from logging_io import CSV_HEADER, append_csv_line
 from src.drive_sync import disabled_reason, is_gcs_enabled
+
+logging.basicConfig(level=logging.INFO)
 
 
 def normalize_snapshot(payload: Mapping[str, Any]) -> dict[str, Any]:
@@ -132,6 +135,16 @@ def write_snapshot_from_boturfers(reunion: str, course: str, phase: str, rc_dir:
     race_details['reunion'] = reunion
     race_details['course'] = course
     race_details['rc'] = target_rc
+    try:
+        course_id = _resolve_course_id(reunion, course)
+        print(f"DEBUG: course_id from Geny: {course_id}")
+        race_details['id_course'] = course_id
+    except ValueError:
+        logger.warning(f"Impossible de résoudre l'ID de la course pour {reunion}{course} via Geny.")
+        # Fallback to regex on URL if possible
+        match = re.search(r'/(\d+)-', race_url)
+        if match:
+            race_details['id_course'] = match.group(1)
 
     # Save the snapshot
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
@@ -526,10 +539,14 @@ def enrich_h5(rc_dir: Path, *, budget: float, kelly: float) -> None:
     """
 
     rc_dir = ensure_dir(Path(rc_dir))
+    logger.info(f"Enriching H5 for {rc_dir}")
 
     def _latest_snapshot(tag: str) -> Path | None:
-        pattern = f"*_{tag}.json"
+        """Find the latest snapshot for a given tag."""
+        pattern = f"[0-9]*_{tag}.json"
+        logger.info(f"Searching for snapshot with pattern: {rc_dir}/{pattern}")
         candidates = sorted(rc_dir.glob(pattern))
+        logger.info(f"Found candidates: {candidates}")
         if not candidates:
             return None
         # ``glob`` returns in alphabetical order which correlates with the
@@ -561,13 +578,13 @@ def enrich_h5(rc_dir: Path, *, budget: float, kelly: float) -> None:
                 normalised[key] = value
         return normalised
 
-    h5_raw_path = _latest_snapshot("H-5")
+    h5_raw_path = _latest_snapshot("H5")
     if h5_raw_path is None:
         raise FileNotFoundError("Aucun snapshot H-5 trouvé pour l'analyse")
     h5_payload = _load_snapshot(h5_raw_path)
     h5_normalised = _normalise_snapshot(h5_payload)
 
-    h30_raw_path = _latest_snapshot("H-30")
+    h30_raw_path = _latest_snapshot("H30")
     h30_payload: dict[str, Any]
     if h30_raw_path is not None:
         h30_payload = _load_snapshot(h30_raw_path)
@@ -1968,7 +1985,7 @@ def _load_geny_today_payload() -> dict[str, Any]:
                 "courses": [
                     {
                         "c": "C1",
-                        "id_course": "12345",  # A dummy ID is sufficient
+                        "id_course": "1085139",  # A dummy ID is sufficient
                     }
                 ],
             }
