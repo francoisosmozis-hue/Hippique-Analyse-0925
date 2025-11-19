@@ -137,7 +137,6 @@ def write_snapshot_from_boturfers(reunion: str, course: str, phase: str, rc_dir:
     race_details['rc'] = target_rc
     try:
         course_id = _resolve_course_id(reunion, course)
-        print(f"DEBUG: course_id from Geny: {course_id}")
         race_details['id_course'] = course_id
     except ValueError:
         logger.warning(f"Impossible de résoudre l'ID de la course pour {reunion}{course} via Geny.")
@@ -1300,7 +1299,7 @@ def _upload_artifacts(rc_dir: Path, *, gcs_prefix: str | None) -> None:
 def _snap_prefix(rc_dir: Path) -> str | None:
     """Return the stem of the most recent H-5 snapshot if available."""
 
-    snapshots = list(rc_dir.glob("*_H-5.json"))
+    snapshots = list(rc_dir.glob("[0-9]*_H5.json"))
     if not snapshots:
         return None
 
@@ -1315,7 +1314,7 @@ def _snap_prefix(rc_dir: Path) -> str | None:
     return latest.stem
 
 
-_SCRIPTS_DIR = Path(__file__).resolve().with_name("scripts")
+_SCRIPTS_DIR = Path(__file__).resolve().parent
 _FETCH_JE_STATS_SCRIPT = _SCRIPTS_DIR.joinpath("fetch_je_stats.py")
 _FETCH_JE_CHRONO_SCRIPT = _SCRIPTS_DIR.joinpath("fetch_je_chrono.py")
 
@@ -1459,15 +1458,19 @@ def _run_fetch_script(script_path: Path, rc_dir: Path) -> bool:
                     file=sys.stderr,
                 )
 
+        snap = _snap_prefix(rc_dir)
+        if not snap:
+            print(f"[WARN] Impossible de déterminer le préfixe du snapshot H-5 pour {rc_dir.name}", file=sys.stderr)
+            return False
+        
+        je_csv_path = rc_dir / f"{snap}_je.csv"
         stats_json_path = rc_dir / "stats_je.json"
         cmd.extend(
             [
-                "--course-id",
-                course_id,
                 "--h5",
                 str(h5_json_path),
                 "--out",
-                str(stats_json_path),
+                str(je_csv_path),
             ]
         )
     else:
