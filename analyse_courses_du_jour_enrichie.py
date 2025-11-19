@@ -875,58 +875,11 @@ def _run_single_pipeline(
     """Execute :func:`pipeline_run.run_pipeline` for ``rc_dir``."""
 
     rc_dir = ensure_dir(rc_dir)
-    required = {"h5.json", "h30.json", "partants.json"}
-    missing = [name for name in required if not (rc_dir / name).exists()]
-    if missing:
-        raise FileNotFoundError(
-            f"Fichiers manquants pour l'analyse dans {rc_dir}: {', '.join(missing)}"
-        )
-
-    partants_payload = _load_json_if_exists(rc_dir / "partants.json") or {}
-    runners = partants_payload.get("runners", [])
-    if not runners:
-        raise ValueError(f"No runners found in {rc_dir / 'partants.json'}")
-
-    h5_odds = _load_json_if_exists(rc_dir / "h5.json") or {}
-    h30_odds = _load_json_if_exists(rc_dir / "h30.json") or {}
-
-    # Build the snapshot for the new pipeline
-    snapshot_runners = []
-    for runner in runners:
-        num = str(runner.get("num") or runner.get("id"))
-        
-        # Get odds, default to h5 then h30
-        cote = h5_odds.get(num, h30_odds.get(num))
-        if cote is None:
-            continue
-
-        # Create fake p_place and volatility for the new pipeline to work
-        p_place = 1 / (cote + 1) if cote > 0 else 0
-        volatility = runner.get("volatility", 0.5) # Try to get it from runner, else default
-
-        new_runner = dict(runner)
-        new_runner['num'] = num
-        new_runner['cote'] = cote
-        new_runner['p_place'] = p_place
-        new_runner['volatility'] = volatility
-        snapshot_runners.append(new_runner)
-
     reunion, course = _derive_rc_parts(rc_dir.name)
-    snapshot = {
-        "reunion": reunion,
-        "course": course,
-        "runners": snapshot_runners,
-        "market": {
-            "overround_place": 1.25  # fake value, should be computed if possible
-        }
-    }
-    
-    snapshot_path = rc_dir / "snapshot_H5.json"
-    _write_json_file(snapshot_path, snapshot)
-
-    # Assuming the script runs from the project root.
     project_root = Path.cwd()
 
+    # The new pipeline handles data loading internally.
+    # We just need to provide the identifiers and configuration.
     result = pipeline_run.run_pipeline(
         reunion=reunion,
         course=course,
@@ -934,10 +887,11 @@ def _run_single_pipeline(
         budget=budget,
         calibration_path=str(PAYOUT_CALIBRATION_PATH),
         root_dir=project_root,
-        _snapshot_for_test=snapshot # Pass snapshot directly for testability
     )
 
     # Adapt the result to the old p_finale.json format for tests to pass
+    # This is a temporary measure to maintain compatibility with existing tests.
+    partants_payload = _load_json_if_exists(rc_dir / "partants.json") or {}
     p_finale_payload = {
         "meta": {
             "rc": rc_dir.name,
@@ -949,7 +903,9 @@ def _run_single_pipeline(
             "roi_global": result.get("roi_global_est")
         },
         "tickets": result.get("tickets"),
-        "p_true": {r['num']: r['p_place'] for r in snapshot_runners if 'num' in r and 'p_place' in r}
+        # The 'p_true' key might be needed for downstream processes like export_per_horse_csv
+        # We'll add a placeholder if it's not in the result.
+        "p_true": result.get("p_true", {})
     }
 
     _write_json_file(rc_dir / "p_finale.json", p_finale_payload)

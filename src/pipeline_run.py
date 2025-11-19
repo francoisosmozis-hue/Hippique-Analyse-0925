@@ -32,31 +32,11 @@ import yaml
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-# --- Mock implementations for core logic ---
-def compute_overround_place(runners):
-    logging.warning("Using mock for compute_overround_place")
-    return 1.20
-
-def adaptive_cap(p_place, volatility, base_cap=0.6):
-    logging.warning("Using mock for adaptive_cap")
-    return base_cap
-
-def calculate_kelly_fraction(odds, prob, fraction=1.0):
-    logging.warning("Using mock for calculate_kelly_fraction")
-    return fraction * (odds * prob - 1) / (odds - 1) if odds > 1 else 0
-
-def evaluate_combo(**kwargs):
-    logging.warning("Using mock for evaluate_combo")
-    return {"status": "insufficient_data", "message": "Simulation unavailable"}
-
 # --- Import core logic ---
-try:
-    from src.kelly import calculate_kelly_fraction
-    from src.overround import adaptive_cap, compute_overround_place
-    from src.simulate_wrapper import evaluate_combo
-except ImportError:
-    logging.warning("One or more core modules not found. Using mock implementations for [overround, kelly, simulate_wrapper].")
-    pass
+from .analysis_utils import compute_overround_cap
+from .kelly import kelly_fraction
+from .overround import compute_overround_place
+from .simulate_wrapper import evaluate_combo
 
 # --- Logging ---
 logger = logging.getLogger(__name__)
@@ -142,7 +122,7 @@ def run_pipeline(
 
         roi_sp = (r["p_place"] * r["cote"]) - 1
         if odds_min <= r["cote"] <= odds_max and roi_sp >= gpi_config["roi_min_sp"]:
-            volatility_cap = adaptive_cap(r["p_place"], r.get("volatility", 0.5), base_cap=gpi_config["max_vol_per_horse"])
+            volatility_cap = gpi_config["max_vol_per_horse"]
             if r.get("volatility", 0) <= volatility_cap:
                 r['roi_sp'] = roi_sp
                 sp_candidates.append(r)
@@ -159,7 +139,7 @@ def run_pipeline(
             total_kelly_fraction = 0
 
             for r in dutch_horses:
-                stake_fraction = calculate_kelly_fraction(r["cote"], r["p_place"], fraction=sp_dutching_config["kelly_frac"])
+                stake_fraction = kelly_fraction(p=r["p_place"], odds=r["cote"], lam=sp_dutching_config["kelly_frac"])
                 if stake_fraction > 0:
                     raw_kelly_stakes[r["num"]] = stake_fraction
                     total_kelly_fraction += stake_fraction
