@@ -115,7 +115,7 @@ class BoturfersFetcher:
         runners = []
 
         # Parser la table HTML des partants
-        runners_table = self.soup.select_one("div#partants table.data")
+        runners_table = self.soup.select_one("table.data")
         if not runners_table:
             logger.error("Tableau des partants introuvable.")
             return []
@@ -236,6 +236,11 @@ def fetch_boturfers_race_details(url: str, *args, **kwargs) -> dict:
     if not url:
         logger.error("Aucune URL fournie pour le scraping des détails de course.")
         return {}
+
+    # Ensure we are on the 'partant' page
+    if not url.endswith('/partant'):
+        url = url.rstrip('/') + '/partant'
+        logger.info(f"URL modifiée pour accéder aux partants : {url}")
 
     try:
         fetcher = BoturfersFetcher(race_url=url)
