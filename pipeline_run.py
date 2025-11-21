@@ -23,10 +23,10 @@ except Exception as e:
 import argparse
 import json
 import sys
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
-from analysis_utils import compute_overround_cap
 import yaml
 
 # --- Project Root Setup ---
@@ -35,15 +35,17 @@ if str(PROJECT_ROOT) not in sys.path:
 
 # --- Import core logic ---
 try:
-    from src.kelly import calculate_kelly_fraction
+    from kelly import calculate_kelly_fraction
     from src.overround import adaptive_cap, compute_overround_place
     from src.simulate_wrapper import evaluate_combo
+    from analysis_utils import compute_overround_cap
 except ImportError:
     logging.warning("One or more core modules not found. Using mock implementations for [overround, kelly, simulate_wrapper].")
     def compute_overround_place(runners): return 1.20
     def adaptive_cap(p_place, volatility, base_cap=0.6): return base_cap
     def calculate_kelly_fraction(odds, prob, fraction=1.0): return fraction * (odds * prob - 1) / (odds - 1)
     def evaluate_combo(**kwargs): return {"status": "insufficient_data", "message": "Simulation unavailable"}
+    def compute_overround_cap(*args, **kwargs): return 1.0 # Mock implementation
 
 # --- Logging ---
 logger = logging.getLogger(__name__)

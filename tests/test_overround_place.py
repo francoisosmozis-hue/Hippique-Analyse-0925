@@ -1,17 +1,15 @@
 import json
+import sys
 from pathlib import Path
 
 import pytest
 import yaml
 
-import sys
-from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from src.overround import compute_overround_place
 import pipeline_run
-from src.hippique_orchestrator.pipeline_run import _load_simulate_ev
-from tests.test_pipeline_smoke import partants_sample, GPI_YML
+from src.overround import compute_overround_place
+from tests.test_pipeline_smoke import GPI_YML
 
 
 def test_estimate_overround_place_from_runners() -> None:
@@ -47,7 +45,9 @@ def test_pipeline_blocks_combos_when_place_overround_high(
 
     # Setup GPI config
     gpi_config = yaml.safe_load(GPI_YML)
+    print(f"GPI config after safe_load: {gpi_config}") # Add this line for debugging
     gpi_config['overround_max_exotics'] = 1.3  # lower than 1.5
+    print(f"GPI config after setting overround_max_exotics: {gpi_config}") # Add this line for debugging
 
     config_dir = tmp_path / "config"
     config_dir.mkdir()

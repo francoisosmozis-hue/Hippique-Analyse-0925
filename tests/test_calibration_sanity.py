@@ -19,7 +19,7 @@ def test_pipeline_abstains_when_calibration_missing(
     # Create the expected directory structure inside the temp path
     race_dir = tmp_path / "data" / "R1C1"
     race_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # Create a minimal snapshot file that the pipeline needs to start
     snapshot_content = {"runners": [{"num": "1", "p_place": 0.5, "cote": 3.0, "volatility": 0.5}]}
     (race_dir / "snapshot_H5.json").write_text(json.dumps(snapshot_content))
@@ -53,7 +53,7 @@ def test_pipeline_accepts_valid_calibration(
     # Create the expected directory structure inside the temp path
     race_dir = tmp_path / "data" / "R1C1"
     race_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # Use a more complete snapshot for this test
     snapshot_content = partants_sample()
     (race_dir / "snapshot_H5.json").write_text(json.dumps(snapshot_content))
@@ -76,7 +76,7 @@ def test_pipeline_accepts_valid_calibration(
         calibration_path=str(valid_calib_path),
         root_dir=tmp_path,
     )
-    
+
     # Check that the pipeline did not abstain for calibration reasons
     assert result.get("metrics", {}).get("reason") != "missing_calibration"
     assert result.get("abstain") is False
