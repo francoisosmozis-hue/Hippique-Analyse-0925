@@ -20,11 +20,11 @@ from google.api_core import exceptions as gcp_exceptions
 from google.cloud import tasks_v2
 from google.protobuf import timestamp_pb2
 
-from app_config import get_app_config
+from app_config import get_config
 from src.logging_utils import get_logger
 from src.time_utils import convert_local_to_utc, format_rfc3339
 
-config = get_app_config() # Get the global config instance
+config = get_config() # Get the global config instance
 
 logger = get_logger(__name__)
 

@@ -6,12 +6,15 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+import logging
 
 from dotenv import load_dotenv
 
 # Charger .env si présent
 load_dotenv()
 
+
+logger = logging.getLogger(__name__)
 
 @dataclass
 class Config:
@@ -22,7 +25,7 @@ class Config:
     region: str
     service_name: str
     queue_id: str
-    service_account_email: str
+    service_account_email: str | None
 
     # Timezone
     timezone: str = "Europe/Paris"
@@ -66,9 +69,9 @@ class Config:
         region = os.getenv("REGION", "europe-west1")
         service_name = os.getenv("SERVICE_NAME", "hippique-orchestrator")
         queue_id = os.getenv("QUEUE_ID", "hippique-tasks")
-        service_account_email = os.getenv("SERVICE_ACCOUNT_EMAIL")
-        if not service_account_email:
-            raise ValueError("SERVICE_ACCOUNT_EMAIL environment variable is required")
+        service_account_email = os.getenv("SERVICE_ACCOUNT_EMAIL", None)
+        if service_account_email is None:
+            logger.warning("SERVICE_ACCOUNT_EMAIL environment variable is not set. GCS operations may fail.")
 
         # Optionnelles
         timezone = os.getenv("TZ", "Europe/Paris")
@@ -131,6 +134,10 @@ class Config:
     def queue_path(self) -> str:
         """Chemin complet de la queue Cloud Tasks."""
         return f"projects/{self.project_id}/locations/{self.region}/queues/{self.queue_id}"
+
+    @property
+    def is_gcs_configured(self) -> bool:
+        return self.gcs_bucket is not None and self.service_account_email is not None
 
 
 # Singleton global

@@ -102,29 +102,6 @@ def _call_discover_geny() -> dict[str, Any]:
 # Helpers - online_fetch_zeturf
 # ============================================
 
-def _import_extract_start_time():
-    """
-    Importe la fonction _extract_start_time depuis online_fetch_zeturf.py.
-
-    Réutilise le code existant au lieu de le dupliquer (correction bug #2).
-    """
-    try:
-        # Ajouter modules/ au path si nécessaire
-        if str(MODULES_DIR) not in sys.path:
-            sys.path.insert(0, str(MODULES_DIR))
-
-        # Import dynamique
-        import online_fetch_zeturf as ofz
-        return ofz._extract_start_time
-
-    except (ImportError, AttributeError) as e:
-        logger.warning(f"Could not import online_fetch_zeturf._extract_start_time: {e}")
-        logger.warning("Falling back to simplified extraction")
-        return None
-
-# Importer au module load
-_extract_start_time_func = _import_extract_start_time()
-
 def _extract_start_time_fallback(html: str) -> str | None:
     """
     Fallback simple si online_fetch_zeturf n'est pas disponible.
@@ -200,10 +177,7 @@ async def _fetch_start_time_async(
             html = await resp.text()
 
             # Utiliser fonction importée ou fallback
-            if _extract_start_time_func:
-                return _extract_start_time_func(html)
-            else:
-                return _extract_start_time_fallback(html)
+            return _extract_start_time_fallback(html)
 
     except asyncio.TimeoutError:
         logger.warning(f"Timeout fetching {course_url}")
@@ -300,7 +274,7 @@ def _build_plan_structure(geny_data: dict[str, Any], date: str) -> list[dict[str
             c_num = c_label[1:]
             slug = meeting.get("slug", "")
 
-            course_url = f"https://www.zeturf.fr/fr/course/{date}/R{r_num}C{c_num}-{slug}"
+            course_url = f"https://www.zeturf.fr/fr/course/{date}/R{r_num}C{c_num}{f'-{slug}' if slug else ''}"
             reunion_url = f"https://www.zeturf.fr/fr/reunion/{date}/R{r_num}"
 
             plan.append({
