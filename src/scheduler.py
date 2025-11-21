@@ -20,9 +20,11 @@ from google.api_core import exceptions as gcp_exceptions
 from google.cloud import tasks_v2
 from google.protobuf import timestamp_pb2
 
-from src.config import config
+from app_config import get_app_config
 from src.logging_utils import get_logger
 from src.time_utils import convert_local_to_utc, format_rfc3339
+
+config = get_app_config() # Get the global config instance
 
 logger = get_logger(__name__)
 
@@ -142,6 +144,7 @@ def enqueue_run_task(
     task_name_safe = _sanitize_task_name(task_name_short)
 
     # Full task path
+    logger.info(f"Cloud Tasks parent path components: project_id={config.project_id}, region={config.region}, queue_id={config.queue_id}")
     parent = f"projects/{config.project_id}/locations/{config.region}/queues/{config.queue_id}"
     task_path = f"{parent}/tasks/{task_name_safe}"
 
@@ -174,7 +177,7 @@ def enqueue_run_task(
         "name": task_path,
         "http_request": {
             "http_method": tasks_v2.HttpMethod.POST,
-            "url": f"{config.service_url}/run",
+            "url": f"{config.cloud_run_url}/run-analysis",
             "headers": {
                 "Content-Type": "application/json",
                 "X-Correlation-ID": correlation_id or "",
@@ -190,7 +193,7 @@ def enqueue_run_task(
     if config.require_auth:
         task["http_request"]["oidc_token"] = {
             "service_account_email": config.service_account_email,
-            "audience": config.service_url,
+            "audience": config.oidc_audience,
         }
 
     # Create task
