@@ -1,16 +1,52 @@
 import os
 import subprocess
 import sys
+import logging # Import logging
+import json # Import json
+import re # Import re
+import tempfile # Import tempfile
+from pathlib import Path # Import Path
+from typing import Any, Dict, List, Literal # Import List
+from urllib.parse import urlparse # Import urlparse
 
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from fastapi import FastAPI, HTTPException, status # Import status
+from pydantic import BaseModel, Field # Import Field
+
+# Import get_app_config
+from app_config import get_app_config, AppConfig # Assuming app_config.py is importable from here
+
+# =========================
+# Config via variables d'env (from main.py root)
+# =========================
+DEFAULT_BUDGET = float(os.getenv("BUDGET_TOTAL", os.getenv("DEFAULT_BUDGET", "5.0")))
+MIN_EV_SP = float(os.getenv("MIN_EV_SP", "0.20"))
+MIN_EV_COMBO = float(os.getenv("MIN_EV_COMBO", "0.40"))
+MAX_VOLAT_PER_HORSE = float(os.getenv("MAX_VOLAT_PER_HORSE", "0.60")))
+DATA_MODE = os.getenv("DATA_MODE", "web")  # "web" ou "local"
+
+APP_VERSION = "GPI v5.1"
+
+ALLOWED_COURSE_URL_DOMAINS: tuple[str, ...] = (
+    "zeturf.fr",
+    "geny.com",
+)
 
 # ➜ Make the package "src" importable (src/...): add /app (parent of src) to sys.path
 ROOT_DIR = "/app"
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
-app = FastAPI()
+app = FastAPI(title="Hippique Orchestrator", version=APP_VERSION) # Update title and add version
+
+# Initialize config globally to catch errors early
+try:
+    config: AppConfig = get_app_config()
+    logging.info("AppConfig loaded successfully.")
+except ValueError as e:
+    logging.error(f"Failed to load AppConfig: {e}")
+    # Re-raise the error to prevent the app from starting if config is critical
+    # Or handle it gracefully if the app can run without full config
+    raise
 
 def _find_script():
     # use your real orchestrator in /app/src/
@@ -38,39 +74,332 @@ class RunBody(BaseModel):
     budget: float = 5.0
     extra_args: list[str] | None = None
 
+# Models from src/service.py
+class ScheduleRequest(BaseModel):
+    date: str = "today"
+    mode: Literal["tasks", "scheduler"] = "tasks"
+
+
+class RunRequest(BaseModel):
+    course_url: str
+    phase: Literal["H-30", "H30", "H-5", "H5"]
+    date: str
+
+# =========================
+# Schémas d'entrée/sortie (from main.py root)
+# =========================
+class AnalyseParams(BaseModel):
+    # Paramètres clefs pour déclencher le pipeline
+    meeting: str | None = Field(
+        default=None,
+        description="Identifiant réunion/courses (si utilisé par tes scripts, ex: 'R1C3')."
+    )
+    reunion: str | None = Field(
+        default=None,
+        description="Identifiant de la réunion (ex: 'R1').",
+    )
+    course: str | None = Field(
+        default=None,
+        description="Identifiant de la course (ex: 'C3').",
+    )
+    course_url: str | None = Field(
+        default=None,
+        description="URL ZEturf/Geny pour scrap (si DATA_MODE='web')."
+    )
+    phase: Literal["H30", "H5"] = Field(
+        default="H5",
+        description="Phase d’analyse (H30 ou H5)."
+    )
+
+    # Overrides facultatifs
+    default_budget: float | None = Field(default=None, ge=0)
+    min_ev_sp: float | None = Field(default=None)
+    min_ev_combo: float | None = Field(default=None)
+    max_volat_per_horse: float | None = Field(default=None)
+    data_mode: Literal["web", "local"] | None = Field(default=None)
+
+    # Avancé : flags pour activer/désactiver certaines étapes
+    run_prompt: bool = Field(default=True, description="Générer le prompt final Lyra GPI v5.1")
+    run_export: bool = Field(default=True, description="Exporter p_finale et tickets")
+
+
+class AnalyseResult(BaseModel):
+    ok: bool
+    app: str
+    params: AnalyseParams
+    outputs_dir: str | None = None
+    p_finale_path: str | None = None
+    tickets: dict | None = None
+    logs: list[str] | None = None
+
+# =========================
+# Endpoints basiques (from main.py root)
+# =========================
+@app.get("/")
+def root():
+    return {
+        "ok": True,
+        "app": f"Hippique Analyse {APP_VERSION}",
+        "defaults": {
+            "DEFAULT_BUDGET": DEFAULT_BUDGET,
+            "MIN_EV_SP": MIN_EV_SP,
+            "MIN_EV_COMBO": MIN_EV_COMBO,
+            "MAX_VOLAT_PER_HORSE": MAX_VOLAT_PER_HORSE,
+            "DATA_MODE": DATA_MODE,
+        },
+    }
+
 @app.get("/healthz")
 def healthz():
     return {"ok": True, "version": "gpi-v5.1", "tz": os.getenv("TZ","Europe/Paris")}
 
-@app.get("/debug/ls")
-def debug_ls():
-    def ls(p):
-        try: return sorted(os.listdir(p))
-        except Exception as e: return str(e)
-    import sys as _sys
-    return {
-        "python_version": _sys.version,
-        "sys_path": _sys.path,
-        "/app": ls("/app"),
-        "/app/src": ls("/app/src"),
-    }
-
-@app.post("/run")
-def run_job(body: RunBody):
-    script = _find_script()
-    cmd = [sys.executable, script]
-    # start simple: pass only extra args until we confirm runner.py CLI
-    if body.extra_args:
-        cmd += list(body.extra_args)
-    out = _exec(cmd)
-    return {"ok": True, "cmd": cmd, "stdout_tail": out[-4000:]}
-
-@app.get("/debug/cat")
-def debug_cat(path: str):
-    """Retourne les 40 premières lignes d'un fichier pour inspection."""
+# =========================
+# Endpoint /analyse (from main.py root)
+# =========================
+def _read_json_if_exists(p: Path) -> dict | None:
     try:
-        with open(path, encoding="utf-8") as f:
-            lines = f.readlines()[:40]
-        return {"path": path, "content": "".join(lines)}
+        if p.exists() and p.is_file():
+            return json.loads(p.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    return None
+
+
+def _format_subprocess_failure(label: str, proc: subprocess.CompletedProcess) -> str:
+    """Format stdout/stderr from a subprocess failure for easier debugging."""
+    parts: list[str] = [f"{label} (code {proc.returncode})."]
+    if proc.stdout:
+        parts.append("STDOUT:")
+        parts.append(proc.stdout.strip())
+    if proc.stderr:
+        parts.append("STDERR:")
+        parts.append(proc.stderr.strip())
+
+    detail = "\n".join(parts)
+    max_len = 12_000
+    if len(detail) > max_len:
+        detail = detail[:max_len] + "\n… (truncated)"
+    return detail
+
+
+def _normalise_rc_component(value: str, prefix: str) -> str:
+    text = str(value).strip().upper().replace(" ", "")
+    if not text:
+        raise ValueError(f"Identifiant {prefix} vide")
+    if text.startswith(prefix):
+        text = text[len(prefix) :]
+    if not text.isdigit():
+        raise ValueError(f"Identifiant {prefix} invalide: {value!r}")
+    number = int(text)
+    if number <= 0:
+        raise ValueError(f"Identifiant {prefix} invalide: {value!r}")
+    return f"{prefix}{number}"
+
+
+def _split_meeting_label(value: str) -> tuple[str, str]:
+    cleaned = value.strip().upper().replace(" ", "").replace("-", "")
+    match = re.fullmatch(r"R(?P<reunion>\d+)C(?P<course>\d+)", cleaned)
+    if not match:
+        raise ValueError("Paramètre meeting doit suivre le format 'R<num>C<num>' (ex: 'R1C3').")
+    reunion = _normalise_rc_component(match.group("reunion"), "R")
+    course = _normalise_rc_component(match.group("course"), "C")
+    return reunion, course
+
+
+def _resolve_reunion_course(params: AnalyseParams) -> tuple[str | None, str | None]:
+    meeting_reunion: str | None = None
+    meeting_course: str | None = None
+    if params.meeting:
+        meeting_reunion, meeting_course = _split_meeting_label(params.meeting)
+
+    reunion = _normalise_rc_component(params.reunion, "R") if params.reunion else None
+    course = _normalise_rc_component(params.course, "C") if params.course else None
+
+    if meeting_reunion:
+        if reunion and reunion != meeting_reunion:
+            raise ValueError("Le champ meeting ne correspond pas à la réunion fournie.")
+        if course and course != meeting_course:
+            raise ValueError("Le champ meeting ne correspond pas à la course fournie.")
+        reunion = meeting_reunion
+        course = meeting_course
+
+    if (reunion is None) != (course is None):
+        raise ValueError("Fournir reunion et course ensemble (ou utiliser meeting).")
+
+    return reunion, course
+
+
+def _validate_course_url(raw_url: str) -> str:
+    url = raw_url.strip()
+    if not url:
+        raise ValueError("Le champ course_url ne peut pas être vide.")
+
+    parsed = urlparse(url)
+    scheme = (parsed.scheme or "").lower()
+    if scheme != "https":
+        raise ValueError("Le champ course_url doit utiliser https://.")
+
+    hostname = (parsed.hostname or "").lower()
+    if not hostname:
+        raise ValueError("Le champ course_url doit contenir un nom de domaine.")
+
+    if not any(
+        hostname == domain or hostname.endswith(f".{domain}")
+        for domain in ALLOWED_COURSE_URL_DOMAINS
+    ):
+        allowed = ", ".join(sorted(ALLOWED_COURSE_URL_DOMAINS))
+        raise ValueError(
+            f"Domaine {hostname!r} non autorisé pour course_url. Domaines autorisés: {allowed}."
+        )
+
+    return url
+
+
+@app.post("/analyse", response_model=AnalyseResult)
+def analyse(body: AnalyseParams):
+    """
+    Pilote ton pipeline:
+      - analyse_courses_du_jour_enrichie.py (référence GPI v5.1)
+      - p_finale_export.py (tickets / ROI)
+    Hypothèse: les scripts sont à la racine du conteneur.
+    """
+
+    # Résolution des paramètres effectifs (env -> overrides -> body)
+    eff_default_budget = body.default_budget if body.default_budget is not None else DEFAULT_BUDGET
+    eff_min_ev_sp = body.min_ev_sp if body.min_ev_sp is not None else MIN_EV_SP
+    eff_min_ev_combo = body.min_ev_combo if body.min_ev_combo is not None else MIN_EV_COMBO
+    eff_max_volat = body.max_volat_per_horse if body.max_volat_per_horse is not None else MAX_VOLAT_PER_HORSE
+    eff_data_mode = body.data_mode if body.data_mode is not None else DATA_MODE
+
+    # Dossier de sortie dédié à l’appel
+    outputs_dir = Path(tempfile.mkdtemp(prefix="hippique_"))
+    logs: list[str] = []
+
+    # Prépare l’environnement pour les scripts Python appelés
+    env = os.environ.copy()
+    env["BUDGET_TOTAL"] = str(eff_default_budget)
+    env["EV_MIN_SP"] = str(eff_min_ev_sp)
+    env["EV_MIN_GLOBAL"] = str(eff_min_ev_combo)
+    env["MAX_VOL_PAR_CHEVAL"] = str(eff_max_volat)
+    env["MAX_VOL_PER_HORSE"] = str(eff_max_volat)
+    env["DATA_MODE"] = eff_data_mode
+    env["OUTPUTS_DIR"] = str(outputs_dir)
+
+    try:
+        reunion_label, course_label = _resolve_reunion_course(body)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+    validated_course_url: str | None = None
+    if body.course_url:
+        try:
+            validated_course_url = _validate_course_url(body.course_url)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+        body = body.model_copy(update={"course_url": validated_course_url})
+
+    # Construis la commande du script principal
+    # NOTE: adapte les flags si ton script en attend d’autres (meeting, URL, phase, etc.)
+    cmd = [
+        "python", "-u", "analyse_courses_du_jour_enrichie.py",
+        "--phase", body.phase,
+        "--data-dir", str(outputs_dir),
+        "--budget", str(eff_default_budget),
+    ]
+    kelly_fraction = env.get("KELLY_FRACTION")
+    if kelly_fraction:
+        cmd += ["--kelly", str(kelly_fraction)]
+
+    if reunion_label and course_label:
+        cmd += ["--reunion", reunion_label, "--course", course_label]
+    if validated_course_url:
+        cmd += ["--reunion-url", validated_course_url]
+
+    # Exécution du pipeline principal
+    try:
+        proc = subprocess.run(
+            cmd,
+            env=env,
+            capture_output=True,
+            text=True,
+            cwd=str(Path(__file__).parent),
+            timeout=60 * 12,  # 12 min max pour être large
+            check=False,
+        )
+        if proc.stdout:
+            logs += [line for line in proc.stdout.splitlines() if line.strip()]
+        if proc.stderr:
+            logs += [
+                f"[stderr] {line}" for line in proc.stderr.splitlines() if line.strip()
+            ]
+
+        if proc.returncode != 0:
+            detail = _format_subprocess_failure(
+                "analyse_courses_du_jour_enrichie.py a échoué", proc
+            )
+            raise HTTPException(status_code=500, detail=detail)
+    except subprocess.TimeoutExpired:
+        raise HTTPException(status_code=504, detail="Timeout pipeline analyse (12 min).")
     except Exception as e:
-        return {"error": str(e)}
+        raise HTTPException(status_code=500, detail=f"Erreur lancement pipeline: {e}")
+
+    # Optionnel: exporter p_finale / tickets via p_finale_export.py
+    tickets = None
+    p_finale_path = None
+
+    if body.run_export:
+        try:
+            export_cmd = [
+                "python", "-u", "p_finale_export.py",
+                "--outputs-dir", str(outputs_dir)
+            ]
+            proc2 = subprocess.run(
+                export_cmd,
+                env=env,
+                capture_output=True,
+                text=True,
+                cwd=str(Path(__file__).parent),
+                timeout=60 * 5,
+                check=False,
+            )
+            if proc2.stdout:
+                logs += [line for line in proc2.stdout.splitlines() if line.strip()]
+            if proc2.stderr:
+                logs += [
+                    f"[stderr] {line}"
+                    for line in proc2.stderr.splitlines()
+                    if line.strip()
+                ]
+
+            if proc2.returncode != 0:
+                detail = _format_subprocess_failure(
+                    "p_finale_export.py a échoué", proc2
+                )
+                raise HTTPException(status_code=500, detail=detail)
+
+
+            # Convention: le script export crée p_finale.json et tickets.json dans outputs_dir
+            p_finale = _read_json_if_exists(outputs_dir / "p_finale.json")
+            tjson = _read_json_if_exists(outputs_dir / "tickets.json")
+            tickets = tjson if tjson else None
+            p_finale_path = str(outputs_dir / "p_finale.json") if p_finale else None
+
+        except subprocess.TimeoutExpired:
+            logs.append("[export] Timeout export (5 min).")
+        except Exception as e:
+            logs.append(f"[export] Erreur: {e}")
+
+    # Optionnel: génération du prompt GPI v5.1 (si ton script principal ne l’a pas déjà fait)
+    if body.run_prompt:
+        # Convention: le script principal ou l’export aura créé un prompt dans outputs_dir/prompts/
+        pass
+
+    return AnalyseResult(
+        ok=True,
+        app=f"Hippique Analyse {APP_VERSION}",
+        params=body,
+        outputs_dir=str(outputs_dir),
+        p_finale_path=p_finale_path,
+        tickets=tickets,
+        logs=logs[-200:],  # on renvoie la fin des logs (utile en debug)
+    )

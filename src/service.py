@@ -45,15 +45,7 @@ print("[STARTUP] FastAPI app created", flush=True)
 
 
 # Models
-class ScheduleRequest(BaseModel):
-    date: str = "today"
-    mode: Literal["tasks", "scheduler"] = "tasks"
 
-
-class RunRequest(BaseModel):
-    course_url: str
-    phase: Literal["H-30", "H30", "H-5", "H5"]
-    date: str
 
 
 # Define ALL routes at module level (not inside functions)
@@ -70,10 +62,7 @@ def health():
     return {"status": "ok", "app": "GPI v5.1"}
 
 
-@app.get("/ping")
-def ping():
-    """Simple ping."""
-    return {"ping": "pong"}
+
 
 
 @app.get("/debug/info")
