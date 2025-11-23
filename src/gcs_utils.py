@@ -7,7 +7,7 @@ from pathlib import Path
 
 from google.cloud import storage
 
-from app_config import get_app_config
+from src.app_config import get_config
 from logging_utils import get_logger
 
 logger = get_logger(__name__)
@@ -26,8 +26,7 @@ def _get_gcs_client():
     return _gcs_client
 
 def is_gcs_enabled() -> bool:
-    """Check if GCS is enabled in the config."""
-    config = get_app_config()
+    config = get_config()
     return bool(config.gcs_bucket)
 
 def disabled_reason() -> str | None:
@@ -43,7 +42,7 @@ def upload_file(local_path: str | os.PathLike[str]) -> None:
     if not is_gcs_enabled():
         return
 
-    config = get_app_config()
+    config = get_config()
     client = _get_gcs_client()
     if not client:
         return
@@ -57,19 +56,23 @@ def upload_file(local_path: str | os.PathLike[str]) -> None:
             return
 
         # GCS path: {prefix}/YYYY-MM-DD/R1C3/filename
-        # This logic is specific to the runner, so we might need to adjust it.
-        # For now, let's try to replicate the old logic.
-        # The path in runner_chain is `data/snapshots/R1C1/snapshot_H30.json`
+        # The path in runner_chain is typically `data/snapshots/R1C1/snapshot_H30.json`
+        # or `data/analyses/R1C1/analysis.json`
         # The desired GCS path is `prod/snapshots/R1C1/snapshot_H30.json`
+        # or `prod/analyses/R1C1/analysis.json`
 
         parts = local_file.parts
-        if "data" in parts:
-            # Find the index of 'data' and take everything after it
-            data_index = parts.index("data")
-            gcs_path_parts = parts[data_index + 1:]
-        else:
-            gcs_path_parts = parts
+        # Find the index of 'data' or 'snapshots' or 'analyses'
+        try:
+            start_index = parts.index("data") + 1
+        except ValueError:
+            try:
+                start_index = parts.index("snapshots")
+            except ValueError:
+                start_index = parts.index("analyses")
+        gcs_path_parts = parts[start_index:]
 
+        # Construct the GCS path using the configured prefix
         gcs_path = f"{config.gcs_prefix}/{'/'.join(gcs_path_parts)}"
 
         blob = bucket.blob(gcs_path)

@@ -4,7 +4,6 @@ tests/test_plan.py - Unit tests for plan module
 """
 import json
 import sys
-import asyncio
 
 import pytest
 
@@ -107,13 +106,13 @@ def test_build_plan_structure():
         ]
     }
     date = "2025-01-01"
-    
+
     # Directly test the internal function
     result_plan = plan._build_plan_structure(geny_data, date)
-    
+
     # Expect 2 unique races (R1C1, R1C2)
     assert len(result_plan) == 2
-    
+
     # Verify the structure of the first race
     race1 = result_plan[0]
     assert race1["r_label"] == "R1"

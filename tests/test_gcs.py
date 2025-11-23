@@ -1,3 +1,4 @@
+import importlib
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -26,8 +27,9 @@ def test_upload_artifacts_uses_bucket_env(tmp_path, monkeypatch):
     client_mock.bucket.return_value = bucket_mock
     bucket_mock.blob.return_value = blob_mock
 
-    with patch("src.gcs.Config", return_value=config_mock), \
+    with patch("src.config.Config", return_value=config_mock), \
          patch("google.cloud.storage.Client", return_value=client_mock) as storage_client_mock:
+        importlib.reload(gcs)
         # Act
         gcs.upload_artifacts(rc_dir, artifacts)
 

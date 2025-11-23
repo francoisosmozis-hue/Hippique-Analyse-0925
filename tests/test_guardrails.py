@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 import pytest
+
 from src import guardrails
 from src.guardrails import evaluate_guardrail
 
@@ -57,7 +58,7 @@ def test_extract_metric_returns_zero_when_missing():
 def test_append_env_writes_to_file(tmp_path: Path):
     """Tests that _append_env correctly writes and appends to a file."""
     env_file = tmp_path / "github.env"
-    
+
     guardrails._append_env([("KEY1", "VALUE1")], env_file)
     content1 = env_file.read_text()
     assert content1 == "KEY1=VALUE1\n"
@@ -71,7 +72,7 @@ def test_main_success_path(tmp_path: Path, mocker, capsys):
     """Tests the main function on a successful run (no abstention)."""
     analysis_file = _write_json(tmp_path, "analysis.json", {"ev": {"global": 0.5}, "roi_global": 0.5})
     env_file = tmp_path / "github.env"
-    
+
     mocker.patch("sys.argv", [
         "guardrails.py",
         "--analysis", str(analysis_file),
@@ -95,7 +96,7 @@ def test_main_abstention_path_creates_report(tmp_path: Path, mocker):
     """Tests that the main function creates a report on abstention."""
     analysis_file = _write_json(tmp_path, "analysis.json", {"ev_global": 0.1, "roi_global": 0.1})
     report_file = tmp_path / "report.json"
-    
+
     mocker.patch("sys.argv", [
         "guardrails.py",
         "--analysis", str(analysis_file),
@@ -122,6 +123,6 @@ def test_main_file_not_found(mocker):
         "--ev-min", "0.2",
         "--roi-min", "0.2",
     ])
-    
+
     with pytest.raises(SystemExit):
         guardrails.main()

@@ -45,48 +45,58 @@ def main() -> None:
 
     soup = BeautifulSoup(html_content, "html.parser")
 
-    meetings: list[dict[str, Any]] = []
-    meeting_elements = soup.select("li.prog-meeting-name")
-    race_elements = soup.select("div.meetings-container > ul.meetings-list > li.meeting")
+    meetings_map: dict[str, dict[str, Any]] = {}
+    r_counter = 1
 
-    for i, section in enumerate(meeting_elements):
-        title_el = section.select_one("a.meeting-name-link")
-        if not title_el:
-            continue
+    # Find the "prochaines courses" section
+    next_races_container = soup.find(id="next-races-container")
+    if not next_races_container:
+        print("No 'next-races-container' found.")
+        print(json.dumps({"date": datetime.today().strftime("%Y-%m-%d"), "meetings": []}, ensure_ascii=False, indent=2))
+        return
 
-        if not _is_fr_meeting(section):
+    # Iterate through each race row
+    for row in next_races_container.select("table tbody tr"):
+        # Extract meeting name (hippo)
+        hippo_el = row.select_one("th.race-name")
+        if not hippo_el:
             continue
-
-        title = title_el.get_text(strip=True)
-        r_match = re.search(r"R\d+", title)
-        if not r_match:
-            continue
-        r = r_match.group(0)
-        hippo = section.select_one("span.nomReunion").get_text(strip=True)
+        hippo = hippo_el.get_text(strip=True)
         slug = _slugify(hippo)
 
-        courses: list[dict[str, Any]] = []
-        if i < len(race_elements):
-            for row in race_elements[i].select("li.race"):
-                course_cell = row.select_one("a")
-                if not course_cell:
-                    continue
-                c = "C" + course_cell.get_text(strip=True)
+        # Extract course number (c)
+        c_el = row.select_one("td.race a")
+        if not c_el:
+            continue
+        c = c_el.get_text(strip=True) # e.g., "C1"
 
-                course_obj: dict[str, Any] = {"c": c}
-                data_id = row.get("data-id")
-                if data_id:
-                    course_obj["id_course"] = data_id
-                else:
-                    href = course_cell.get("href", "")
-                    id_match = re.search(r"(\d+)$", href)
-                    if id_match:
-                        course_obj["id_course"] = id_match.group(1)
+        # Extract course ID (id_course)
+        data_id = row.get("id") # e.g., "race_1617526"
+        id_course = data_id.replace("race_", "") if data_id else None
+        if not id_course:
+            # Fallback to href if id is not present or malformed
+            href = c_el.get("href", "")
+            id_match = re.search(r"(\d+)$", href)
+            if id_match:
+                id_course = id_match.group(1)
 
-                courses.append(course_obj)
+        if not id_course:
+            continue
 
-        meetings.append({"r": r, "hippo": hippo, "slug": slug, "courses": courses})
+        # Group by meeting
+        if hippo not in meetings_map:
+            meetings_map[hippo] = {
+                "r": f"R{r_counter}",
+                "hippo": hippo,
+                "slug": slug,
+                "courses": []
+            }
+            r_counter += 1
+        
+        meetings_map[hippo]["courses"].append({"c": c, "id_course": id_course})
 
+    meetings = list(meetings_map.values())
+    
     data = {
         "date": datetime.today().strftime("%Y-%m-%d"),
         "meetings": meetings,

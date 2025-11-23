@@ -34,25 +34,19 @@ from pydantic import (
 from pydantic import (
     ValidationError as PydanticValidationError,
 )
-from src.gcs_utils import disabled_reason, is_gcs_enabled
-from src.simulate_ev import simulate_ev_batch
-from simulate_wrapper import PAYOUT_CALIBRATION_PATH
-from validator_ev import ValidationError, validate_ev
 
 import online_fetch_zeturf as ofz
+from simulate_wrapper import PAYOUT_CALIBRATION_PATH, simulate_wrapper
+from src.ev_calculator import compute_ev_roi
+from src.gcs_utils import disabled_reason, is_gcs_enabled, upload_file, get_config, _get_gcs_client
 
 logger = logging.getLogger(__name__)
 
 USE_GCS = is_gcs_enabled()
+logger.info(f"USE_GCS is set to: {USE_GCS}")
 if USE_GCS:
-    try:
-        from src.drive_sync import upload_file
-    except Exception as exc:  # pragma: no cover - optional dependency guards
-        logger.warning("Cloud storage sync unavailable, disabling uploads: %s", exc)
-        upload_file = None  # type: ignore[assignment]
-        USE_GCS = False
-else:  # pragma: no cover - simple fallback when Drive is disabled
-    upload_file = None  # type: ignore[assignment]
+    config = get_config()
+    logger.info(f"GCS Bucket: {config.gcs_bucket}, GCS Prefix: {config.gcs_prefix}")
 
 
 class PayloadValidationError(RuntimeError):
@@ -144,9 +138,36 @@ def _load_planning(path: Path) -> list[dict[str, Any]]:
     The planning file is expected to be a JSON array of objects containing at
     least ``id`` and ``start`` (ISO timestamp) fields.  Entries missing these
     fields are ignored.
+    If GCS is enabled, it attempts to read the file from GCS.
     """
-    with path.open("r", encoding="utf-8") as fh:
-        data = json.load(fh) or []
+    if USE_GCS:
+        config = get_config()
+        gcs_bucket_name = config.gcs_bucket
+        gcs_prefix = config.gcs_prefix
+        
+        if not gcs_bucket_name:
+            logger.error("GCS_BUCKET is not configured, cannot load planning from GCS.")
+            raise ValueError("GCS_BUCKET is not configured.")
+
+        client = _get_gcs_client()
+        if not client:
+            logger.error("Failed to get GCS client, cannot load planning.")
+            return []
+        bucket = client.bucket(gcs_bucket_name)
+        # Construct GCS path: {prefix}/data/planning/YYYY-MM-DD.json
+        # The 'path' argument here is typically 'data/planning/YYYY-MM-DD.json'
+        gcs_blob_path = f"{gcs_prefix}/data/planning/{path}"
+        blob = bucket.blob(gcs_blob_path)
+
+        if not blob.exists():
+            logger.warning(f"Planning file not found in GCS: gs://{gcs_bucket_name}/{gcs_blob_path}")
+            return [] # Return empty list if planning file not found in GCS
+
+        data = json.loads(blob.download_as_text())
+    else:
+        with path.open("r", encoding="utf-8") as fh:
+            data = json.load(fh) or []
+            
     if not isinstance(data, list):
         raise ValueError("Planning file must contain a list")
     return [d for d in data if isinstance(d, dict)]
@@ -307,7 +328,7 @@ def _write_analysis(
     dest.mkdir(parents=True, exist_ok=True)
     print(f"[runner] Mode={mode} RC={race_id} → {dest}")
 
-    path = dest / "analysis.json"
+    path = dest / "analysis_H5.json"
     if not calibration_available:
         calibration_available = calibration.exists()
     if not calibration_available:
@@ -336,19 +357,30 @@ def _write_analysis(
         return
 
     tickets = [{"p": 0.5, "odds": 2.0, "stake": 1.0}]
-    stats = simulate_ev_batch(tickets, bankroll=budget)
-    try:
-        validate_ev(float(stats.get("ev", 0.0)), None, need_combo=False)
-    except ValidationError:
-        return
+    stats = compute_ev_roi(
+        tickets,
+        budget=budget,
+        simulate_fn=simulate_wrapper,
+        ev_threshold=ev_min,
+        roi_threshold=roi_min,
+    )
+
     payload = {
         "race_id": race_id,
-        "status": "ok",
+        "status": "ok" if stats.get("green") else "failed_validation",
         "ev": stats.get("ev"),
         "roi": stats.get("roi"),
         "green": stats.get("green"),
         "calibration": str(calibration),
+        "tickets": stats.get("ticket_metrics", []), # Include ticket_metrics
     }
+    if not stats.get("green"):
+        logger.warning(
+            "[runner] Analysis for %s failed validation: %s",
+            race_id,
+            stats.get("failure_reasons", "unknown reason"),
+        )
+        payload["notes"] = stats.get("failure_reasons", [])
     with path.open("w", encoding="utf-8") as fh:
         json.dump(payload, fh, ensure_ascii=False, indent=2)
     if USE_GCS and upload_file:

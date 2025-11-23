@@ -50,3 +50,4 @@ lightgbm>=4.0.0
 
 # Browser Simulation
 selenium==4.15.0
+httpx

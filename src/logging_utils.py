@@ -21,11 +21,12 @@ class StructuredLogger:
         self.logger = logging.getLogger(name)
 
         # Configure logger
-        if not self.logger.handlers:
-            handler = logging.StreamHandler(sys.stdout)
-            handler.setFormatter(logging.Formatter("%(message)s"))
-            self.logger.addHandler(handler)
-            self.logger.setLevel(logging.INFO)
+        if self.logger.hasHandlers():
+            self.logger.handlers.clear()
+        handler = logging.StreamHandler(sys.stderr)
+        handler.setFormatter(logging.Formatter("%(message)s"))
+        self.logger.addHandler(handler)
+        self.logger.setLevel(logging.DEBUG)
 
     def _log(
         self,
@@ -62,9 +63,7 @@ class StructuredLogger:
 
                 log_entry[k] = str(v)
 
-
-
-        print(json.dumps(log_entry), flush=True)
+        print(json.dumps(log_entry), file=sys.stderr, flush=True)
 
     def debug(self, message: str, **kwargs: Any) -> None:
         """Log DEBUG level"""

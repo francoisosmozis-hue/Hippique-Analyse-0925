@@ -29,6 +29,9 @@ access_log_format = '%(h)s %(l)s %(u)s %(t)s "%(r)s" %(s)s %(b)s "%(f)s" "%(a)s"
 # Process naming
 proc_name = "hippique-orchestrator"
 
+# Python path
+pythonpath = "/app"
+
 # Server mechanics
 daemon = False
 pidfile = None

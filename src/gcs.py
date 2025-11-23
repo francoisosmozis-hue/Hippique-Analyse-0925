@@ -1,5 +1,3 @@
-"""GCS utilities for uploading and downloading files."""
-
 from __future__ import annotations
 
 from pathlib import Path

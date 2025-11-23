@@ -1,6 +1,8 @@
 
 import pytest
+
 from src import analysis_utils
+
 
 @pytest.mark.parametrize(
     "value, expected",

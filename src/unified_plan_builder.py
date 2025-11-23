@@ -13,14 +13,17 @@ Usage:
 
 import re
 import time
+from datetime import datetime
 
 import requests
 from bs4 import BeautifulSoup
 
-from .config import config
-from .logging_utils import logger
-from .pmu_client import PMUClient
-from .time_utils import now_paris
+from config.config import config
+from logging_utils import get_logger
+from pmu_api_client import PMUClient
+from time_utils import PARIS_TZ
+
+logger = get_logger(__name__)
 
 
 class UnifiedPlanBuilder:
@@ -32,7 +35,7 @@ class UnifiedPlanBuilder:
         self.pmu_client = PMUClient()
         self.session = requests.Session()
         self.session.headers.update({
-            'User-Agent': config.USER_AGENT,
+            'User-Agent': config.user_agent,
             'Accept': 'text/html,application/xhtml+xml',
             'Accept-Language': 'fr-FR,fr;q=0.9',
         })
@@ -57,7 +60,7 @@ class UnifiedPlanBuilder:
             Liste de courses avec structure standardisée
         """
         if date_str == "today":
-            date_str = now_paris().strftime("%Y-%m-%d")
+            date_str = datetime.now(PARIS_TZ).strftime("%Y-%m-%d")
 
         if sources is None:
             # Ordre par défaut : PMU (JSON) > ZEturf (HTML) > Geny (HTML)
@@ -170,7 +173,7 @@ class UnifiedPlanBuilder:
             meeting = self._extract_meeting_from_slug(slug)
 
             # Chercher heure
-            time_local = self._extract_time_near_link(link)
+            time_local = self._extract_time_from_link_title(link)
 
             races.append({
                 "date": race_date,
@@ -208,28 +211,17 @@ class UnifiedPlanBuilder:
 
         return parts[0].title()
 
-    def _extract_time_near_link(self, link_element) -> str | None:
-        """Cherche l'heure autour du lien"""
-        parent = link_element.find_parent()
-        if not parent:
+    def _extract_time_from_link_title(self, link_element) -> str | None:
+        """Extrait l'heure depuis l'attribut 'title' du lien de la course."""
+        title = link_element.get('title')
+        if not title:
             return None
 
-        parent_text = parent.get_text()
-
-        patterns = [
-            r'(\d{1,2})h(\d{2})',
-            r'(\d{1,2}):(\d{2})',
-        ]
-
-        for pattern in patterns:
-            matches = re.finditer(pattern, parent_text, re.IGNORECASE)
-            for match in matches:
-                hour, minute = match.groups()
-                hour = int(hour)
-                minute = int(minute)
-
-                if 0 <= hour <= 23 and 0 <= minute <= 59:
-                    return f"{hour:02d}:{minute:02d}"
+        # Cherche un format comme "13h55" ou "14:32"
+        match = re.search(r'(\d{1,2})[h:](\d{2})', title)
+        if match:
+            hour, minute = match.groups()
+            return f"{int(hour):02d}:{int(minute):02d}"
 
         return None
 
@@ -373,7 +365,7 @@ class UnifiedPlanBuilder:
                 try:
                     h, m = r["time_local"].split(':')
                     return (0, int(h), int(m))
-                except:
+                except Exception:
                     pass
             return (1, 99, 99)
 
@@ -386,74 +378,18 @@ class UnifiedPlanBuilder:
 # ============================================================================
 
 if __name__ == "__main__":
-    """
-    Test du plan builder unifié
-    Usage: python -m src.plan_unified [date] [sources]
-
-    Examples:
-        python -m src.plan_unified
-        python -m src.plan_unified 2025-10-16
-        python -m src.plan_unified 2025-10-16 pmu,zeturf
-    """
     import sys
-
-    print("🐴 Test Plan Builder UNIFIÉ")
-    print("=" * 60)
+    import json
 
     # Arguments
     date_str = sys.argv[1] if len(sys.argv) > 1 else "today"
     sources_arg = sys.argv[2] if len(sys.argv) > 2 else None
-
     sources = sources_arg.split(',') if sources_arg else ["pmu", "zeturf", "geny"]
-
-    print(f"Date: {date_str}")
-    print(f"Sources (ordre): {sources}")
-    print()
 
     # Build
     builder = UnifiedPlanBuilder()
     plan = builder.build_plan(date_str, sources=sources)
 
-    print("-" * 60)
-    print("📊 Résultats")
-    print("-" * 60)
-    print(f"Source utilisée: {builder.last_source_used}")
-    print(f"Courses trouvées: {len(plan)}")
+    # Output JSON
+    print(json.dumps(plan, indent=2))
 
-    if not plan:
-        print("\n❌ Aucune course trouvée!")
-        print("\n💡 Causes possibles:")
-        print("  - Date invalide")
-        print("  - Pas de courses ce jour")
-        print("  - Toutes les sources ont échoué")
-        print("  - Throttling / IP bloquée")
-    else:
-        print("\n✅ Plan généré avec succès!\n")
-        print("📋 Échantillon (5 premières):")
-        print("-" * 60)
-
-        for i, race in enumerate(plan[:5], 1):
-            time_str = race.get("time_local", "??:??")
-            print(f"{i}. {race['r_label']}{race['c_label']} - "
-                  f"{race['meeting']} - {time_str}")
-            print(f"   URL: {race.get('course_url', 'N/A')}")
-
-            # Afficher données PMU si disponibles
-            if race.get('discipline'):
-                print(f"   {race['discipline']} - {race.get('distance')}m - "
-                      f"{race.get('partants')} partants")
-
-        if len(plan) > 5:
-            print(f"\n... et {len(plan) - 5} autres courses")
-
-        # Stats
-        with_time = sum(1 for r in plan if r.get("time_local"))
-        without_time = len(plan) - with_time
-
-        print("\n📈 Statistiques:")
-        print(f"  Avec heure: {with_time}")
-        print(f"  Sans heure: {without_time}")
-
-    print()
-    print("=" * 60)
-    print("✅ Test terminé")

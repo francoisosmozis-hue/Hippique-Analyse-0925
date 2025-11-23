@@ -6,7 +6,7 @@ import math
 from collections.abc import Sequence
 from typing import Any
 
-from ev_calculator import compute_ev_roi
+from src.ev_calculator import compute_ev_roi
 from kelly import kelly_fraction
 from simulate_wrapper import simulate_wrapper
 

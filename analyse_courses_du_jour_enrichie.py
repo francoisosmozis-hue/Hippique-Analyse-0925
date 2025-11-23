@@ -13,23 +13,17 @@ import argparse
 import csv
 import json
 import logging
-import logging
 import os
 import re
-import subprocess
 import sys
 import time
 from collections.abc import Callable, Iterable, Mapping
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-from urllib.parse import urljoin
-
-import requests
-from bs4 import BeautifulSoup
 
 from logging_io import CSV_HEADER, append_csv_line
-from src.drive_sync import disabled_reason, is_gcs_enabled
+from src.gcs_utils import disabled_reason, is_gcs_enabled
 
 logging.basicConfig(level=logging.INFO)
 
@@ -69,12 +63,7 @@ if "MAX_COMBO_OVERROUND" not in os.environ:
     os.environ["MAX_COMBO_OVERROUND"] = f"{OVERROUND_MAX_THRESHOLD:.2f}"
 
 
-# Tests may insert a lightweight stub of ``scripts.online_fetch_zeturf`` to avoid
-# pulling heavy scraping dependencies.  Ensure the stub does not linger in
-# ``sys.modules`` so that later imports retrieve the fully-featured module.
-_fetch_module = sys.modules.get("scripts.online_fetch_zeturf")
-if _fetch_module is not None and not hasattr(_fetch_module, "fetch_race_snapshot"):
-    sys.modules.pop("scripts.online_fetch_zeturf", None)
+
 
 
 class MissingH30SnapshotError(RuntimeError):
@@ -89,12 +78,8 @@ USE_GCS = is_gcs_enabled()
 
 TRACKING_HEADER = CSV_HEADER + ["phase", "status", "reason"]
 
-try:  # pragma: no cover - optional dependency in tests
-    from online_fetch_zeturf import write_snapshot_from_geny
-except Exception:  # pragma: no cover - used when optional deps are missing
-
-    def write_snapshot_from_geny(*args: Any, **kwargs: Any) -> None:
-        raise RuntimeError("write_snapshot_from_geny is unavailable")
+def write_snapshot_from_geny(*args: Any, **kwargs: Any) -> None:
+    raise RuntimeError("write_snapshot_from_geny est désactivé ; utilisez write_snapshot_from_boturfers à la place")
 
 try:
     from src.online_fetch_boturfers import fetch_boturfers_programme, fetch_boturfers_race_details
@@ -135,15 +120,13 @@ def write_snapshot_from_boturfers(reunion: str, course: str, phase: str, rc_dir:
     race_details['reunion'] = reunion
     race_details['course'] = course
     race_details['rc'] = target_rc
-    try:
-        course_id = _resolve_course_id(reunion, course)
-        race_details['id_course'] = course_id
-    except ValueError:
-        logger.warning(f"Impossible de résoudre l'ID de la course pour {reunion}{course} via Geny.")
-        # Fallback to regex on URL if possible
-        match = re.search(r'/(\d+)-', race_url)
-        if match:
-            race_details['id_course'] = match.group(1)
+    match = re.search(r'/(\d+)-', race_url)
+    if match:
+        race_details['id_course'] = match.group(1)
+    else:
+        # Fallback to using the rc as the course_id if no numerical ID is found
+        race_details['id_course'] = target_rc
+        logger.warning(f"Impossible de résoudre l'ID de la course pour {reunion}{course} via l'URL. Utilisation de {target_rc} comme ID.")
 
     # Save the snapshot
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
@@ -157,24 +140,17 @@ def write_snapshot_from_boturfers(reunion: str, course: str, phase: str, rc_dir:
 
 
 if USE_GCS:
-    try:  # pragma: no cover - optional dependency in tests
-        from drive_sync import (
-            build_remote_path as gcs_build_remote_path,
-        )
-        from drive_sync import (
-            push_tree,
-        )
-    except Exception as exc:  # pragma: no cover - used when optional deps are missing
+    try:
+        from src.gcs import upload_artifacts
+    except ImportError as exc:
         print(
             f"[WARN] Synchronisation GCS indisponible ({exc}), bascule en mode local.",
             file=sys.stderr,
         )
         USE_GCS = False
-    gcs_build_remote_path = None  # type: ignore[assignment]
-    push_tree = None  # type: ignore[assignment]
-else:  # pragma: no cover - Cloud sync explicitly disabled
-    gcs_build_remote_path = None  # type: ignore[assignment]
-    push_tree = None  # type: ignore[assignment]
+        upload_artifacts = None
+else:
+    upload_artifacts = None
 
 
 # --- RÈGLES ANTI-COTES FAIBLES (SP min 4/1 ; CP somme > 6.0 déc) ---------------
@@ -542,10 +518,12 @@ def enrich_h5(rc_dir: Path, *, budget: float, kelly: float) -> None:
 
     def _latest_snapshot(tag: str) -> Path | None:
         """Find the latest snapshot for a given tag."""
-        pattern = f"[0-9]*_{tag}.json"
+        pattern = f"*_{tag}.json"
         logger.info(f"Searching for snapshot with pattern: {rc_dir}/{pattern}")
         candidates = sorted(rc_dir.glob(pattern))
-        logger.info(f"Found candidates: {candidates}")
+        # Filter out analysis files
+        candidates = [c for c in candidates if not c.name.startswith("analysis_")]
+        logger.info(f"Found candidates (filtered): {candidates}")
         if not candidates:
             return None
         # ``glob`` returns in alphabetical order which correlates with the
@@ -1276,7 +1254,7 @@ def _upload_artifacts(rc_dir: Path, *, gcs_prefix: str | None) -> None:
 
     if gcs_prefix is None:
         return
-    if not USE_GCS or not push_tree:
+    if not USE_GCS or not upload_artifacts:
         reason = disabled_reason()
         if reason:
             detail = f"{reason}=false"
@@ -1285,13 +1263,8 @@ def _upload_artifacts(rc_dir: Path, *, gcs_prefix: str | None) -> None:
         print(f"[gcs] Upload ignoré pour {rc_dir} ({detail})", file=sys.stderr)
         return
     try:
-        if gcs_build_remote_path:
-            prefix = gcs_build_remote_path(gcs_prefix, rc_dir.name)
-        else:  # pragma: no cover - best effort fallback
-            prefix = "/".join(
-                p for p in ((gcs_prefix or "").rstrip("/"), rc_dir.name) if p
-            )
-        push_tree(rc_dir, folder_id=prefix)
+        artifacts = [str(p) for p in rc_dir.glob("**/*") if p.is_file()]
+        upload_artifacts(rc_dir, artifacts)
     except Exception as exc:  # pragma: no cover - best effort
         print(f"[WARN] Failed to upload {rc_dir}: {exc}")
 
@@ -1299,7 +1272,7 @@ def _upload_artifacts(rc_dir: Path, *, gcs_prefix: str | None) -> None:
 def _snap_prefix(rc_dir: Path) -> str | None:
     """Return the stem of the most recent H-5 snapshot if available."""
 
-    snapshots = list(rc_dir.glob("[0-9]*_H5.json"))
+    snapshots = list(rc_dir.glob("*_H5.json"))
     if not snapshots:
         return None
 
@@ -1314,9 +1287,7 @@ def _snap_prefix(rc_dir: Path) -> str | None:
     return latest.stem
 
 
-_SCRIPTS_DIR = Path(__file__).resolve().parent
-_FETCH_JE_STATS_SCRIPT = _SCRIPTS_DIR.joinpath("fetch_je_stats.py")
-_FETCH_JE_CHRONO_SCRIPT = _SCRIPTS_DIR.joinpath("fetch_je_chrono.py")
+
 
 
 def _check_enrich_outputs(
@@ -1389,145 +1360,10 @@ def _missing_requires_chronos(missing: Iterable[str]) -> bool:
     return any(str(name) == "chronos.csv" for name in missing)
 
 
-def _run_fetch_script(script_path: Path, rc_dir: Path) -> bool:
-    """Invoke an auxiliary fetch script and report whether it succeeded."""
-
-    cmd: list[str] = [sys.executable, str(script_path)]
-
-    if script_path.name == "fetch_je_stats.py":
-
-        def _extract_course_id(payload: dict[str, Any]) -> str | None:
-            for key in ("course_id", "id_course", "id"):
-                value = payload.get(key)
-                if value not in (None, ""):
-                    return str(value).strip()
-            meta = payload.get("meta")
-            if isinstance(meta, dict):
-                return _extract_course_id(meta)
-            return None
-
-        course_id: str | None = None
-        partants_path = rc_dir / "partants.json"
-        if partants_path.exists():
-            try:
-                payload = json.loads(partants_path.read_text(encoding="utf-8"))
-            except json.JSONDecodeError as exc:  # pragma: no cover - defensive
-                print(
-                    f"[WARN] partants.json invalide dans {rc_dir}: {exc}",
-                    file=sys.stderr,
-                )
-            else:
-                if isinstance(payload, dict):
-                    course_id = _extract_course_id(payload)
-
-        if not course_id:
-            candidates: list[Path] = []
-            normalized = rc_dir / "normalized_h5.json"
-            if normalized.exists():
-                candidates.append(normalized)
-            candidates.extend(sorted(rc_dir.glob("*_H-5.json")))
-            for candidate in candidates:
-                try:
-                    payload = json.loads(candidate.read_text(encoding="utf-8"))
-                except json.JSONDecodeError:
-                    continue
-                if isinstance(payload, dict):
-                    course_id = _extract_course_id(payload)
-                if course_id:
-                    break
-
-        if not course_id:
-            print(
-                f"[WARN] Impossible de déterminer l'identifiant course pour {rc_dir}",
-                file=sys.stderr,
-            )
-            return False
-
-        h5_json_path = rc_dir / "normalized_h5.json"
-        if not h5_json_path.exists():
-            fallback = sorted(rc_dir.glob("*_H-5.json"))
-            if fallback:
-                h5_json_path = fallback[-1]
-                print(
-                    f"[WARN] normalized_h5.json absent dans {rc_dir}, utilisation de {h5_json_path.name}",
-                    file=sys.stderr,
-                )
-            else:
-                print(
-                    f"[WARN] Aucun snapshot H-5 disponible pour {rc_dir}",
-                    file=sys.stderr,
-                )
-
-        snap = _snap_prefix(rc_dir)
-        if not snap:
-            print(f"[WARN] Impossible de déterminer le préfixe du snapshot H-5 pour {rc_dir.name}", file=sys.stderr)
-            return False
-        
-        je_csv_path = rc_dir / f"{snap}_je.csv"
-        stats_json_path = rc_dir / "stats_je.json"
-        cmd.extend(
-            [
-                "--h5",
-                str(h5_json_path),
-                "--out",
-                str(je_csv_path),
-            ]
-        )
-    else:
-        cmd.extend(["--course-dir", str(rc_dir)])
-
-    try:
-        result = subprocess.run(cmd, check=False)
-    except Exception as exc:  # pragma: no cover - defensive logging
-        print(
-            f"[WARN] Impossible d'exécuter {script_path.name} pour {rc_dir.name}: {exc}",
-            file=sys.stderr,
-        )
-        return False
-
-    if result.returncode != 0:
-        print(
-            f"[WARN] {script_path.name} a terminé avec le code {result.returncode} pour {rc_dir.name}",
-            file=sys.stderr,
-        )
-        return False
-
-    return True
 
 
-def _recover_je_csv_from_stats(
-    rc_dir: Path, *, retry_cb: Callable[[], None] | None = None
-) -> tuple[bool, bool, bool]:
-    """Fetch stats and rebuild the JE CSV if possible.
 
-    Returns a tuple ``(fetch_success, recovered, retry_invoked)`` so the caller
-    can decide whether to re-run post fetch checks and whether ``retry_cb`` was
-    already invoked inside the helper.
-    """
 
-    stats_fetch_success = _run_fetch_script(_FETCH_JE_STATS_SCRIPT, rc_dir)
-    if not stats_fetch_success:
-        return False, False, False
-
-    if _rebuild_je_csv_from_stats(rc_dir):
-        return True, True, False
-
-    if retry_cb is None:
-        return True, False, False
-
-    try:
-        retry_cb()
-    except Exception as exc:  # pragma: no cover - defensive logging
-        print(
-            f"[WARN] relance enrich_h5 a échoué pour {rc_dir.name}: {exc}",
-            file=sys.stderr,
-        )
-        return True, False, False
-
-    if _rebuild_je_csv_from_stats(rc_dir):
-        return True, True, True
-
-    return True, False, True
 
 
 def _rebuild_je_csv_from_stats(rc_dir: Path) -> bool:
@@ -1727,11 +1563,6 @@ def _ensure_h5_artifacts(
 
     missing = list(outcome.get("details", {}).get("missing", []))
     retried = False
-    retry_invoked = False
-
-    stats_fetch_success = False
-    stats_recovered = False
-    stats_retry_invoked = False
 
     def _refresh_missing_state() -> bool:
         """Re-run the output check and update ``missing`` accordingly."""
@@ -1744,67 +1575,17 @@ def _ensure_h5_artifacts(
         missing = list(outcome.get("details", {}).get("missing", []))
         return False
 
-    def _attempt_stats_rebuild(*, allow_without_fetch: bool = False) -> bool:
-        """Try rebuilding the JE CSV when stats data appears to be available."""
-
-        nonlocal stats_recovered
-        if not missing or not _missing_requires_stats(missing):
-            return False
-
-        if stats_recovered and not allow_without_fetch:
-            snap = _snap_prefix(rc_dir)
-            if snap and (rc_dir / f"{snap}_je.csv").exists():
-                return False
-
-        stats_ready = stats_fetch_success
-        if not stats_ready:
-            stats_path = rc_dir / "stats_je.json"
-            stats_ready = stats_path.exists()
-            if stats_ready and not allow_without_fetch:
-                # ``stats_fetch_success`` guards against rebuilding when the
-                # fetch script failed earlier.  When ``allow_without_fetch`` is
-                # False we keep that behaviour to avoid consuming stale files
-                # left behind by a previous run.
-                stats_ready = False
-
-        if not stats_ready:
-            return False
-
-        if _rebuild_je_csv_from_stats(rc_dir):
-            stats_recovered = True
-            if _refresh_missing_state():
-                return True
-        return False
-
     if _missing_requires_stats(missing):
-        (
-            stats_fetch_success,
-            stats_recovered,
-            stats_retry_invoked,
-        ) = _recover_je_csv_from_stats(rc_dir, retry_cb=retry_cb)
-        retry_invoked = retry_invoked or stats_retry_invoked
-        retried = (
-            retried or stats_fetch_success or stats_recovered or stats_retry_invoked
-        )
-        if stats_retry_invoked and not stats_recovered:
-            if _attempt_stats_rebuild(allow_without_fetch=True):
-                return None
+        retried = True
+        if _rebuild_je_csv_from_stats(rc_dir):
+            _refresh_missing_state()
+
     if _missing_requires_chronos(missing):
         retried = True
-        success = False
-        if _FETCH_JE_CHRONO_SCRIPT.exists():
-            success = _run_fetch_script(_FETCH_JE_CHRONO_SCRIPT, rc_dir)
-        chronos_path = rc_dir / "chronos.csv"
-        if not success or not chronos_path.exists():
-            _regenerate_chronos_csv(rc_dir)
+        _regenerate_chronos_csv(rc_dir)
+        _refresh_missing_state()
 
-    if retried:
-        if _refresh_missing_state():
-            return None
-        if _attempt_stats_rebuild():
-            return None
-
-    if missing and retry_cb is not None and not retry_invoked:
+    if missing and retry_cb is not None and not retried:
         try:
             retry_cb()
         except MissingH30SnapshotError as exc:
@@ -1832,11 +1613,7 @@ def _ensure_h5_artifacts(
                 file=sys.stderr,
             )
         else:
-            if _refresh_missing_state():
-                return None
-            if _attempt_stats_rebuild(allow_without_fetch=True):
-                return None
-            missing = list(outcome.get("details", {}).get("missing", []))
+            _refresh_missing_state()
 
     marker_details = _mark_course_unplayable(rc_dir, missing)
     status_label = "NO_PLAY_DATA_MISSING"
@@ -1966,34 +1743,7 @@ def _execute_h5_chain(
     return guard_ok, guard_outcome
 
 
-_DISCOVER_SCRIPT = Path(__file__).resolve().with_name("discover_geny_today.py")
 
-
-def _load_geny_today_payload() -> dict[str, Any]:
-    """Return the JSON payload produced by :mod:`discover_geny_today`.
-
-    The helper centralises the subprocess invocation so that it can easily be
-    stubbed in tests.
-    """
-    # NOTE: Patched by Gemini to return a mock payload for testing.
-    # The original implementation called a subprocess that depends on live data.
-    print("[INFO] Using mocked Geny payload to bypass live data dependency.")
-    return {
-        "date": "2025-10-11",
-        "meetings": [
-            {
-                "r": "R1",
-                "hippo": "CAEN",
-                "slug": "caen",
-                "courses": [
-                    {
-                        "c": "C1",
-                        "id_course": "1085139",  # A dummy ID is sufficient
-                    }
-                ],
-            }
-        ],
-    }
 
 
 def _normalize_label(label: object) -> str:
@@ -2047,28 +1797,7 @@ def _phase_argument(value: str) -> str:
         raise argparse.ArgumentTypeError(str(exc)) from exc
 
 
-def _resolve_course_id(reunion: str, course: str) -> str:
-    """Return the Geny course identifier matching ``reunion``/``course``."""
 
-    payload = _load_geny_today_payload()
-    reunion = reunion.upper()
-    course = course.upper()
-    for meeting in payload.get("meetings", []):
-        if str(meeting.get("r", "")).upper() != reunion:
-            continue
-        for course_info in meeting.get("courses", []):
-            label = str(course_info.get("c", "")).upper()
-            if label != course:
-                continue
-            course_id = (
-                course_info.get("id_course")
-                or course_info.get("course_id")
-                or course_info.get("id")
-            )
-            if course_id is None:
-                break
-            return str(course_id)
-    raise ValueError(f"Course {reunion}{course} introuvable via discover_geny_today")
 
 
 def _process_single_course(
@@ -2087,10 +1816,9 @@ def _process_single_course(
 ) -> dict[str, Any] | None:
     """Fetch and analyse a specific course designated by ``reunion``/``course``."""
 
-    course_id = _resolve_course_id(reunion, course)
     base_dir = ensure_dir(data_dir)
     rc_dir = ensure_dir(base_dir / f"{reunion}{course}")
-    write_snapshot_from_geny(course_id, phase, rc_dir)
+    write_snapshot_from_boturfers(reunion, course, phase, rc_dir)
     outcome: dict[str, Any] | None = None
     pipeline_done = False
     if phase.upper() == "H5":
@@ -2128,107 +1856,10 @@ def _process_single_course(
 # ---------------------------------------------------------------------------
 
 
-_COURSE_URL_PATTERN = re.compile(r"/(?:course|race)/(\d+)", re.IGNORECASE)
 
 
-def _extract_labels_from_text(text: str) -> tuple[str, str]:
-    """Return ``(reunion, course)`` labels parsed from ``text``."""
-
-    rc_match = re.search(r"R\d+\s*C\d+", text, re.IGNORECASE)
-    if rc_match:
-        return _derive_rc_parts(rc_match.group(0))
-
-    r_match = re.search(r"R\d+", text, re.IGNORECASE)
-    c_match = re.search(r"C\d+", text, re.IGNORECASE)
-    r_label = r_match.group(0).upper() if r_match else "R?"
-    c_label = c_match.group(0).upper() if c_match else "C?"
-    return r_label, c_label
 
 
-def _discover_courses_from_reunion_page(soup: BeautifulSoup) -> list[dict[str, str]]:
-    """Discover courses from a reunion page."""
-    courses = []
-    for link in soup.find_all("a", href=re.compile(r"/fr/course/\d+")):
-        href = link["href"]
-        course_id_match = re.search(r"\d+", href)
-        if course_id_match:
-            course_id = course_id_match.group(0)
-            course_label_match = re.search(r"C\d+", link.get_text())
-            course_label = course_label_match.group(0) if course_label_match else ""
-            courses.append({"id": course_id, "label": course_label, "url": urljoin("https://www.zeturf.fr", href)})
-    return courses
-
-
-def _process_reunion(
-    reunion_url: str,
-    phase: str,
-    data_dir: Path,
-    source: str,
-    *,
-    budget: float,
-    kelly: float,
-    gcs_prefix: str | None,
-    ev_min: float = EV_MIN_THRESHOLD,
-    roi_min: float = ROI_SP_MIN_THRESHOLD,
-    payout_min: float = PAYOUT_MIN_THRESHOLD,
-    overround_max: float = OVERROUND_MAX_THRESHOLD,
-) -> None:
-    """Fetch ``url`` and run the pipeline for each course of the meeting."""
-
-    try:
-        resp = requests.get(reunion_url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
-        resp.raise_for_status()
-        soup = BeautifulSoup(resp.text, "html.parser")
-    except requests.RequestException as e:
-        logger.error("Failed to fetch reunion URL %s: %s", reunion_url, e)
-        return
-
-    courses = _discover_courses_from_reunion_page(soup)
-
-    reunion_label_match = re.search(r"R\d+", soup.get_text())
-    reunion_label = reunion_label_match.group(0) if reunion_label_match else "R?"
-
-    for course in courses:
-        course_id = course["id"]
-        course_label = course["label"]
-        course_url = course["url"]
-
-        rc_dir = data_dir / f"{reunion_label}{course_label}"
-        logger.info("Processing %s%s...", reunion_label, course_label)
-
-        if phase.upper() == "H30":
-            write_snapshot_from_geny(
-                course_id, phase, rc_dir, course_url=course_url
-            )
-            continue
-
-        if not rc_dir.exists() or not any(rc_dir.glob("*_H-30.json")):
-            logger.warning(
-                "H-30 snapshot missing for %s, attempting to fetch...", rc_dir.name
-            )
-            write_snapshot_from_geny(
-                course_id, "H30", rc_dir, course_url=course_url
-            )
-
-        write_snapshot_from_geny(
-            course_id, phase, rc_dir, course_url=course_url
-        )
-
-        if phase.upper() == "H5":
-            success, outcome = _execute_h5_chain(
-                rc_dir,
-                budget=budget,
-                kelly=kelly,
-                ev_min=ev_min,
-                roi_min=roi_min,
-                payout_min=payout_min,
-                overround_max=overround_max,
-            )
-            if not success and outcome:
-                _write_json_file(rc_dir / "decision.json", outcome)
-
-        if gcs_prefix:
-            _upload_artifacts(rc_dir, gcs_prefix=gcs_prefix)
 
 
 def main() -> None:
@@ -2266,16 +1897,8 @@ def main() -> None:
         default=OVERROUND_MAX_THRESHOLD,
         help="Overround place maximum autorisé.",
     )
-    ap.add_argument(
-        "--from-geny-today",
-        action="store_true",
-        help="Découvre toutes les réunions FR du jour via Geny et traite H30/H5",
-    )
-    ap.add_argument(
-        "--reunion-url",
-        dest="course_url",
-        help="URL ZEturf d'une réunion ou d'une course",
-    )
+
+
     ap.add_argument(
         "--source",
         choices=["geny", "boturfers"],
@@ -2324,40 +1947,8 @@ def main() -> None:
             print("[WARN] gcs-prefix manquant, envoi vers GCS ignoré")
 
     if args.reunions_file:
-        script = Path(__file__).resolve()
-        data = json.loads(Path(args.reunions_file).read_text(encoding="utf-8"))
-        for reunion in data.get("reunions", []):
-            url_zeturf = reunion.get("url_zeturf")
-            if not url_zeturf:
-                continue
-            for phase in ["H30", "H5"]:
-                cmd = [
-                    sys.executable,
-                    str(script),
-                    "--reunion-url",
-                    url_zeturf,
-                    "--phase",
-                    phase,
-                    "--data-dir",
-                    args.data_dir,
-                    "--budget",
-                    str(args.budget),
-                    "--kelly",
-                    str(args.kelly),
-                    "--ev-min",
-                    str(args.ev_min),
-                    "--roi-min",
-                    str(args.roi_min),
-                    "--payout-min",
-                    str(args.payout_min),
-                    "--overround-max",
-                    str(args.overround_max),
-                ]
-                if gcs_prefix is not None:
-                    cmd.append("--upload-gcs")
-                    cmd.extend(["--gcs-prefix", gcs_prefix])
-                subprocess.run(cmd, check=True)
-        return
+        print("[ERROR] L'option --reunions-file n'est plus prise en charge. Veuillez utiliser --reunion et --course avec --source boturfers pour traiter les courses individuellement.", file=sys.stderr)
+        raise SystemExit(2)
 
     if args.reunion or args.course:
         if not (args.reunion and args.course and args.phase):
@@ -2379,9 +1970,6 @@ def main() -> None:
         # Call the appropriate snapshot writer based on the source
         if args.source == 'boturfers':
             write_snapshot_from_boturfers(reunion_label, course_label, args.phase, rc_dir)
-        elif args.source == 'geny':
-            course_id = _resolve_course_id(reunion_label, course_label)
-            write_snapshot_from_geny(course_id, args.phase, rc_dir)
         else:
             print(f"[ERROR] Source '{args.source}' is not yet supported in this mode.", file=sys.stderr)
             raise SystemExit(2)
@@ -2409,62 +1997,12 @@ def main() -> None:
         return
 
     if args.course_url and args.phase:
-        _process_reunion(
-            args.course_url,
-            args.phase,
-            Path(args.data_dir),
-            args.source,
-            budget=args.budget,
-            kelly=args.kelly,
-            gcs_prefix=gcs_prefix,
-        )
-        return
+        print("[ERROR] Le traitement par URL de réunion n'est plus pris en charge. Veuillez utiliser --reunion et --course avec --source boturfers.", file=sys.stderr)
+        raise SystemExit(2)
 
     if args.from_geny_today:
-        payload = _load_geny_today_payload()
-        meetings = payload.get("meetings", [])
-        base_dir = ensure_dir(Path(args.data_dir))
-        for meeting in meetings:
-            r_label = meeting.get("r", "")
-            for course in meeting.get("courses", []):
-                c_label = course.get("c", "")
-                rc_dir = ensure_dir(base_dir / f"{r_label}{c_label}")
-                course_id = course.get("id_course")
-                if not course_id:
-                    continue
-                write_snapshot_from_geny(course_id, "H30", rc_dir)
-                write_snapshot_from_geny(course_id, "H5", rc_dir)
-                success, decision = safe_enrich_h5(
-                    rc_dir, budget=args.budget, kelly=args.kelly
-                )
-                if success:
-                    build_p_finale(
-                        rc_dir,
-                        budget=args.budget,
-                        kelly=args.kelly,
-                        ev_min=args.ev_min,
-                        roi_min=args.roi_min,
-                        payout_min=args.payout_min,
-                        overround_max=args.overround_max,
-                    )
-                    run_pipeline(
-                        rc_dir,
-                        budget=args.budget,
-                        kelly=args.kelly,
-                        ev_min=args.ev_min,
-                        roi_min=args.roi_min,
-                        payout_min=args.payout_min,
-                        overround_max=args.overround_max,
-                    )
-                    build_prompt_from_meta(rc_dir, budget=args.budget, kelly=args.kelly)
-                    csv_path = export_per_horse_csv(rc_dir)
-                    print(f"[INFO] per-horse report écrit: {csv_path}")
-                elif decision is not None:
-                    _write_json_file(rc_dir / "decision.json", decision)
-                if gcs_prefix is not None:
-                    _upload_artifacts(rc_dir, gcs_prefix=gcs_prefix)
-        print("[DONE] from-geny-today pipeline terminé.")
-        return
+        print("[ERROR] L'option --from-geny-today n'est plus prise en charge. Veuillez utiliser --reunion et --course avec --source boturfers.", file=sys.stderr)
+        raise SystemExit(2)
 
     # Fall back to original behaviour: simply run the pipeline on ``data_dir``
     run_pipeline(

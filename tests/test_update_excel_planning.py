@@ -67,7 +67,7 @@ def test_summarise_tickets_formats(tickets, expected_summary):
 def test_h30_updates_existing_row(tmp_path: Path):
     """Tests that running H30 phase again updates the existing row instead of creating a new one."""
     excel_path = tmp_path / "planning.xlsx"
-    
+
     dir1 = tmp_path / "dir1"
     dir1.mkdir()
     payload1 = {

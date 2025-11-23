@@ -9,7 +9,6 @@ de course réelles scrapées depuis le site Zeturf.
 import json
 import logging
 import re
-import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -48,6 +47,7 @@ class ZeturfFetcher:
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
         chrome_options.add_argument(f"user-agent={HTTP_HEADERS['User-Agent']}")
+        chrome_options.add_argument("--user-data-dir=/tmp/selenium_user_data")
 
         driver = None
         try:
@@ -149,8 +149,12 @@ class ZeturfFetcher:
         runners = []
         # Stratégie finale : trouver la première table qui contient des partants
         runners_table = None
-        for table in self.soup.find_all("table"):
-            if table.select_one("tr[data-runner]"):
+        tables = self.soup.find_all("table")
+        logger.info(f"Found {len(tables)} tables.")
+        for i, table in enumerate(tables):
+            has_data_runner = table.select_one("tr[data-runner]")
+            logger.info(f"Table {i}: has_data_runner: {bool(has_data_runner)}")
+            if has_data_runner:
                 runners_table = table
                 break
 
@@ -158,7 +162,9 @@ class ZeturfFetcher:
             logger.warning("Aucune table avec des partants ('tr[data-runner]') n'a été trouvée.")
             return []
 
-        for row in runners_table.select("tbody tr[data-runner]"):
+        rows = runners_table.select("tbody tr[data-runner]")
+        logger.info(f"Found {len(rows)} rows in runners_table.")
+        for row in rows:
             try:
                 num_tag = row.select_one("td.numero span.partant")
                 num = num_tag.text.strip() if num_tag else None

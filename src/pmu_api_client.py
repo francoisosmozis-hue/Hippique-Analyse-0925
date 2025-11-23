@@ -16,8 +16,10 @@ from datetime import datetime
 
 import requests
 
-from .config import config
-from .logging_utils import logger
+from config.config import config
+from logging_utils import get_logger
+
+logger = get_logger(__name__)
 
 
 class PMUClient:
@@ -40,7 +42,7 @@ class PMUClient:
     def __init__(self):
         self.session = requests.Session()
         self.session.headers.update({
-            'User-Agent': config.USER_AGENT,
+            'User-Agent': config.user_agent,
             'Accept': 'application/json',
             'Accept-Language': 'fr-FR,fr;q=0.9'
         })

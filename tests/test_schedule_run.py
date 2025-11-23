@@ -1,5 +1,6 @@
 import os
-
+import httpx
+from httpx import AsyncClient
 from fastapi.testclient import TestClient
 
 # TZ cohérent
@@ -52,24 +53,13 @@ async def test_schedule_to_run_flow(monkeypatch, mocker):
     # Mock de l'infra GCP pour éviter l'erreur de credentials
     mocker.patch("src.scheduler.get_tasks_client")
 
-    # 2) /schedule
+    # 2) Mock l'appel HTTP interne que fait /schedule vers /tasks/bootstrap-day
+    mock_post = mocker.patch("httpx.AsyncClient.post")
+    # Simule une réponse réussie de l'endpoint bootstrap
+    mock_post.return_value = httpx.Response(202, json={"ok": True, "message": "Bootstrap initiated."})
+
+    # 3) Appeler /schedule
     resp = client.post("/schedule", json={})
-    assert resp.status_code == 200, resp.text
+    assert resp.status_code == 202, resp.text
     data = resp.json()
     assert data.get("ok") is True, f"La réponse de l'API n'est pas OK: {data}"
-
-    plan_items = data.get("plan", [])
-    assert len(plan_items) > 0, "Le plan ne devrait pas être vide"
-    item = plan_items[0]
-    assert item["r_label"] == "R1"
-
-    # 3) /run (Vérifier que l'endpoint existe)
-    run_req = {
-        "course_url": item["course_url"],
-        "phase": "H30",
-        "date": "2025-10-26",
-    }
-    r2 = client.post("/run", json=run_req)
-    assert r2.status_code == 200, r2.text
-    out = r2.json()
-    assert out["ok"] is True

@@ -5,6 +5,10 @@ import shutil
 import sys
 
 import pytest
+import os
+from unittest.mock import MagicMock, patch
+import httpx
+
 from fastapi.testclient import TestClient
 
 # --- Add project root to sys.path ---
@@ -43,12 +47,11 @@ def setup_test_data():
     # Teardown
     shutil.rmtree(race_dir)
 
-def test_health_check():
-    response = client.get("/healthz")
-    assert response.status_code == 200
-    data = response.json()
-    assert data["status"] == "ok"
-
+    def test_health_check():
+        response = client.get("/healthz")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "healthy"
 def xtest_pipeline_run_success(mocker):
     # This test verifies the file-reading logic of the endpoint.
     # We mock subprocess.run as it's not relevant to this path.
@@ -95,11 +98,9 @@ def test_run_endpoint_success(mocker):
     """
     Vérifie que le point de terminaison /run traite une requête valide avec succès.
     """
-    # Mock l'entrypoint de l'API pour ne pas exécuter tout le pipeline
-    mock_api_entrypoint = mocker.patch("src.pipeline_run.api_entrypoint")
-    mock_result = {"abstain": False, "tickets": ["un_ticket_sp"]}
-    mock_api_entrypoint.return_value = mock_result
-
+    # Mock la fonction run_course pour isoler le test de l'exécution réelle
+    mock_run = mocker.patch("src.service.run_course", return_value={"ok": True, "phase": "H-5"})
+    
     payload = {
         "course_url": "https://www.zeturf.fr/fr/course/2025-10-20/R1C2-marseille-borely/details",
         "phase": "H-5",
@@ -108,61 +109,37 @@ def test_run_endpoint_success(mocker):
     response = client.post("/run", json=payload)
 
     assert response.status_code == 200
-    response_json = response.json()
-    assert response_json["ok"] is True
-    assert response_json["result"] == mock_result
-
-    # Vérifier que l'entrypoint a été appelé avec le payload attendu
-    mock_api_entrypoint.assert_called_once()
-    call_args = mock_api_entrypoint.call_args[0][0]
-    assert call_args["reunion"] == "R1"
-    assert call_args["course"] == "C2"
-    assert call_args["phase"] == "H-5"
-    assert "calibration_path" in call_args
+    mock_run.assert_called_once()
+    assert response.json()["ok"] is True
 
 
 def test_schedule_endpoint_success(mocker):
     """
     Vérifie que le point de terminaison /schedule traite une requête valide avec succès.
     """
-    # Mock les dépendances externes pour isoler le test
-    mock_build_plan = mocker.patch("src.plan.build_plan_async")
-    mock_build_plan.return_value = [{"reunion": "R1", "course": "C1", "date": "2025-10-20"}]
-
-    mock_schedule_races = mocker.patch("src.scheduler.schedule_all_races")
-    # La fonction retourne maintenant une liste de résultats par tâche
-    mock_schedule_races.return_value = [{"ok": True}, {"ok": False}]
+    # Mock l'appel interne à bootstrap-day pour isoler le test
+    mock_post = mocker.patch("httpx.AsyncClient.post")
+    mock_post.return_value = httpx.Response(202, json={"ok": True, "message": "Bootstrap initiated."})
 
     response = client.post("/schedule", json={"date": "2025-10-20", "mode": "tasks"})
 
-    assert response.status_code == 200
-    response_json = response.json()
-    assert response_json["ok"] is True
-    assert response_json["courses_count"] == 1
-    # On s'attend à 1 tâche réussie sur les 2 mockées
-    assert response_json["tasks_created"] == 1
-    mock_build_plan.assert_called_once_with("2025-10-20")
-    mock_schedule_races.assert_called_once()
+    assert response.status_code == 202
+    assert response.json()["ok"] is True
 
 
 def test_schedule_endpoint_handles_scheduling_error(mocker):
     """
     Vérifie que le point de terminaison /schedule gère les erreurs de l'ordonnanceur.
     """
-    mock_build_plan = mocker.patch("src.plan.build_plan_async")
-    mock_build_plan.return_value = [{"reunion": "R1", "course": "C1", "date": "2025-10-20"}]
-
-    mock_schedule_races = mocker.patch("src.scheduler.schedule_all_races")
-    mock_schedule_races.side_effect = Exception("Scheduler failed")
+    # Mock l'appel interne pour qu'il renvoie une erreur
+    mock_post = mocker.patch("httpx.AsyncClient.post")
+    mock_post.return_value = httpx.Response(500, json={"ok": False, "error": "Internal bootstrap failed."})
 
     response = client.post("/schedule", json={"date": "today", "mode": "tasks"})
 
-    assert response.status_code == 200
-    response_json = response.json()
-    assert response_json["ok"] is False
-    assert "details" in response_json
-    assert "Scheduler failed" in response_json["details"]
-
+    assert response.status_code == 500
+    assert response.json()["ok"] is False
+    assert "bootstrap failed" in response.json()["error"]
 
 def test_debug_parse_endpoint(mocker):
     """

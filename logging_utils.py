@@ -9,7 +9,7 @@ import traceback
 from datetime import datetime
 from typing import Any
 
-from app_config import get_app_config
+from app_config import get_config
 
 
 class StructuredLogger(logging.Logger):

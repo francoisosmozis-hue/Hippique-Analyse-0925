@@ -1,8 +1,11 @@
-import pytest
-from pathlib import Path
-import json
 import csv
+import json
+from pathlib import Path
+
+import pytest
+
 from src import fetch_je_stats
+
 
 @pytest.fixture
 def horse_page_html():
@@ -54,7 +57,7 @@ def test_parse_percentage(text, expected):
 def test_extract_links_from_horse_page(horse_page_html):
     """Tests that jockey and trainer links are extracted from a horse page."""
     links = fetch_je_stats.extract_links_from_horse_page(horse_page_html)
-    
+
     assert "jockey" in links
     assert "trainer" in links
     assert links["jockey"] == "https://www.geny.com/jockeys/1234-j-doe.html"
@@ -68,9 +71,9 @@ def test_extract_rate_from_profile(profile_page_html):
 def test_discover_horse_url_by_name(mocker, search_page_html):
     """Tests that the correct horse URL is discovered from a search page."""
     mock_get = mocker.patch("src.fetch_je_stats.http_get", return_value=search_page_html)
-    
+
     url = fetch_je_stats.discover_horse_url_by_name("Bold Eagle")
-    
+
     assert url == "https://www.geny.com/cheval/222-bold-eagle.html"
     mock_get.assert_called_once()
 
@@ -82,7 +85,7 @@ def test_discover_horse_url_by_name_http_error(mocker):
 
 def test_parse_horse_percentages_success(mocker, search_page_html, horse_page_html, profile_page_html):
     """Tests the full orchestration of parsing percentages for a horse."""
-    
+
     def mock_fetcher(url):
         if "recherche" in url:
             return search_page_html
@@ -93,13 +96,13 @@ def test_parse_horse_percentages_success(mocker, search_page_html, horse_page_ht
         raise RuntimeError(f"Unexpected URL in mock_fetcher: {url}")
 
     j_rate, t_rate = fetch_je_stats.parse_horse_percentages("Bold Eagle", get=mock_fetcher)
-    
+
     assert j_rate == 15.0
     assert t_rate == 15.0
 
 def test_parse_horse_percentages_handles_failures(mocker):
     """Tests that parse_horse_percentages returns None for various failures."""
-    
+
     mocker.patch("src.fetch_je_stats.discover_horse_url_by_name", return_value=None)
     j_rate, t_rate = fetch_je_stats.parse_horse_percentages("Unknown Horse")
     assert j_rate is None
@@ -122,21 +125,21 @@ def test_collect_stats_integration(mocker, tmp_path, search_page_html, horse_pag
         if "cheval" in url: return horse_page_html
         if "jockey" in url or "entraineur" in url: return profile_page_html
         return ""
-    
+
     mocker.patch("src.fetch_je_stats.http_get", side_effect=mock_fetcher)
     mocker.patch("time.sleep")
 
     json_output_path_str = fetch_je_stats.collect_stats(h5=str(h5_path))
-    
+
     json_output_path = Path(json_output_path_str)
     stats_data = json.loads(json_output_path.read_text())
-    
+
     assert stats_data["coverage"] == 100.0
     rows = stats_data["rows"]
     assert len(rows) == 1
     assert rows[0]["j_rate"] == "15.00"
     assert rows[0]["e_rate"] == "15.00"
-    
+
     csv_output_path = tmp_path / "h5_snapshot_je.csv"
     assert csv_output_path.exists()
     with csv_output_path.open("r") as f:

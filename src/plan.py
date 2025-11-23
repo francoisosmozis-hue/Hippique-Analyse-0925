@@ -31,6 +31,7 @@ import aiohttp
 
 from src.config import config
 from src.logging_utils import get_logger
+from src.online_fetch_boturfers import fetch_boturfers_programme
 
 logger = get_logger(__name__)
 
@@ -38,17 +39,9 @@ logger = get_logger(__name__)
 MODULES_DIR = Path(__file__).parent.parent / "modules"
 DISCOVER_GENY = Path(__file__).parent.parent / "discover_geny_today.py"
 
-# Headers HTTP
-DEFAULT_HEADERS = {
-    "User-Agent": config.user_agent,
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "Accept-Language": "fr-FR,fr;q=0.9,en;q=0.8",
-    "Connection": "keep-alive",
-}
 
-# Rate limiter global (partagé entre toutes les tâches asyncio)
-_rate_limiter_lock = asyncio.Lock()
-_last_request_time = 0.0
+
+
 
 # ============================================
 # Helpers - discover_geny_today.py
@@ -98,29 +91,7 @@ def _call_discover_geny() -> dict[str, Any]:
         logger.error(f"Failed to call discover_geny_today.py: {e}", exc_info=e)
         return {"date": datetime.now().strftime("%Y-%m-%d"), "meetings": []}
 
-# ============================================
-# Helpers - online_fetch_zeturf
-# ============================================
 
-def _extract_start_time_fallback(html: str) -> str | None:
-    """
-    Fallback simple si online_fetch_zeturf n'est pas disponible.
-
-    Supporte uniquement les formats les plus courants.
-    """
-    patterns = [
-        r'(\d{1,2})[h:](\d{2})',
-        r'datetime="[^"]*T(\d{2}):(\d{2})',
-        r'"startDate"[^"]*"[^"]*T(\d{2}):(\d{2})',
-    ]
-
-    for pattern in patterns:
-        match = re.search(pattern, html)
-        if match:
-            h, m = match.groups()
-            return f"{int(h):02d}:{int(m):02d}"
-
-    return None
 
 # ============================================
 # Rate Limiter Global
@@ -151,90 +122,58 @@ async def _rate_limited_request():
 # Fetch Async
 # ============================================
 
-async def _fetch_start_time_async(
-    session: aiohttp.ClientSession,
-    course_url: str
-) -> str | None:
-    """
-    Fetch asynchrone de l'heure de départ depuis une page ZEturf.
 
-    Args:
-        session: Session aiohttp réutilisable
-        course_url: URL complète de la course
-
-    Returns:
-        "HH:MM" ou None
-    """
-    try:
-        # Rate limiting GLOBAL (partagé entre toutes les tâches)
-        await _rate_limited_request()
-
-        async with session.get(course_url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
-            if resp.status != 200:
-                logger.warning(f"HTTP {resp.status} for {course_url}")
-                return None
-
-            html = await resp.text()
-
-            # Utiliser fonction importée ou fallback
-            return _extract_start_time_fallback(html)
-
-    except asyncio.TimeoutError:
-        logger.warning(f"Timeout fetching {course_url}")
-        return None
-    except Exception as e:
-        logger.warning(f"Failed to fetch {course_url}: {e}")
-        return None
 
 async def _enrich_plan_with_times_async(plan: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """
-    Enrichit le plan avec les heures depuis ZEturf (parallélisé).
-
-    Correction bug #1: Asyncio + aiohttp pour passer de 40s → 8s.
+    Enrichit le plan avec les heures et les URLs depuis Boturfers.
 
     Args:
-        plan: Liste de courses sans time_local
+        plan: Liste de courses sans time_local et avec URLs ZEturf provisoires.
 
     Returns:
-        Liste enrichie avec time_local (courses sans heure sont filtrées)
+        Liste enrichie avec time_local et URLs Boturfers (courses sans heure sont filtrées).
     """
     if not plan:
+        logger.info("Plan from Geny is empty, skipping Boturfers enrichment.")
         return []
 
-    logger.info(f"Fetching start times for {len(plan)} races (parallel)")
+    logger.info("Fetching programme from Boturfers to enrich plan.")
 
-    # Créer session aiohttp avec headers
-    connector = aiohttp.TCPConnector(limit=10)  # Max 10 connexions simultanées
-    timeout = aiohttp.ClientTimeout(total=30)
+    boturfers_programme_url = "https://www.boturfers.fr/programme-pmu-du-jour"
+    boturfers_data = await asyncio.to_thread(fetch_boturfers_programme, boturfers_programme_url)
+    logger.info(f"Boturfers programme data received: {json.dumps(boturfers_data, indent=2)}")
 
-    async with aiohttp.ClientSession(
-        connector=connector,
-        timeout=timeout,
-        headers=DEFAULT_HEADERS
-    ) as session:
-        # Lancer toutes les requêtes en parallèle
-        tasks = [
-            _fetch_start_time_async(session, race["course_url"])
-            for race in plan
-        ]
+    if not boturfers_data or not boturfers_data.get("races"):
+        logger.warning("Failed to fetch Boturfers programme or it was empty.")
+        return []
 
-        times = await asyncio.gather(*tasks, return_exceptions=True)
+    # Créer un mapping rapide des courses Boturfers par "R_C"
+    boturfers_races_map = {}
+    for race in boturfers_data["races"]:
+        # Nettoyer le format "R1C1" pour correspondre à celui de Geny
+        rc_key = f"{race['reunion']}{race['rc'].split(race['reunion'])[1].strip()}"
+        boturfers_races_map[rc_key] = race
+    logger.info(f"Boturfers races map keys: {list(boturfers_races_map.keys())}")
 
-    # Associer les heures aux courses
     enriched = []
-    for race, time_result in zip(plan, times, strict=False):
-        if isinstance(time_result, Exception):
-            logger.warning(f"Error for {race['r_label']}{race['c_label']}: {time_result}")
-            continue
-
-        if time_result:
-            race["time_local"] = time_result
-            enriched.append(race)
-            logger.debug(f"{race['r_label']}{race['c_label']} at {time_result}")
+    for race_geny in plan:
+        geny_rc_key = f"{race_geny['r_label']}{race_geny['c_label']}"
+        logger.debug(f"Attempting to match Geny race {geny_rc_key}")
+        
+        if geny_rc_key in boturfers_races_map:
+            race_boturfers = boturfers_races_map[geny_rc_key]
+            if race_boturfers.get("start_time"):
+                race_geny["time_local"] = race_boturfers["start_time"]
+                race_geny["course_url"] = race_boturfers["url"] # Mettre à jour avec l'URL Boturfers
+                enriched.append(race_geny)
+                logger.debug(f"Enriched {geny_rc_key} with time {race_geny['time_local']} and URL {race_geny['course_url']} from Boturfers.")
+            else:
+                logger.warning(f"No start_time found for {geny_rc_key} in Boturfers data, skipping.")
         else:
-            logger.warning(f"No time found for {race['r_label']}{race['c_label']}, skipping")
+            logger.warning(f"No matching Boturfers race found for Geny race {geny_rc_key}, skipping.")
 
-    logger.info(f"Successfully enriched {len(enriched)}/{len(plan)} races")
+    logger.info(f"Successfully enriched {len(enriched)}/{len(plan)} races from Boturfers.")
     return enriched
 
 # ============================================
@@ -269,13 +208,9 @@ def _build_plan_structure(geny_data: dict[str, Any], date: str) -> list[dict[str
                 continue
             seen.add(key)
 
-            # Construire URLs ZEturf (format standard)
-            r_num = r_label[1:]
-            c_num = c_label[1:]
-            slug = meeting.get("slug", "")
-
-            course_url = f"https://www.zeturf.fr/fr/course/{date}/R{r_num}C{c_num}{f'-{slug}' if slug else ''}"
-            reunion_url = f"https://www.zeturf.fr/fr/reunion/{date}/R{r_num}"
+            # URLs will be populated by _enrich_plan_with_times_async from Boturfers
+            course_url = None
+            reunion_url = None
 
             plan.append({
                 "date": date,
@@ -296,9 +231,9 @@ def _build_plan_structure(geny_data: dict[str, Any], date: str) -> list[dict[str
 
 async def build_plan_async(date: str) -> list[dict[str, Any]]:
     """
-    Construit le plan complet du jour : Geny (R/C/ID) + ZEturf (heures).
+    Construit le plan complet du jour : Geny (R/C/ID) + Boturfers (heures et URLs).
 
-    ASYNC VERSION pour usage dans FastAPI (correction bug #4).
+    ASYNC VERSION pour usage dans FastAPI.
 
     Args:
         date: YYYY-MM-DD ou "today"
@@ -313,8 +248,8 @@ async def build_plan_async(date: str) -> list[dict[str, Any]]:
                 "course_id": "12346",
                 "meeting": "Paris-Vincennes (FR)",
                 "time_local": "14:30",
-                "course_url": "https://www.zeturf.fr/fr/course/2025-10-16/R1C3",
-                "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-10-16/R1"
+                "course_url": "https://www.boturfers.fr/course/...",
+                "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-10-16/R1" # ZEturf reunion URL still used for now
             },
             ...
         ]
@@ -326,6 +261,7 @@ async def build_plan_async(date: str) -> list[dict[str, Any]]:
 
     # 1. Obtenir la liste des courses depuis Geny (subprocess)
     geny_data = _call_discover_geny()
+    logger.info(f"Geny data received: {json.dumps(geny_data, indent=2)}")
 
     if not geny_data.get("meetings"):
         logger.warning("No meetings found from Geny")
@@ -334,13 +270,14 @@ async def build_plan_async(date: str) -> list[dict[str, Any]]:
     # 2. Construire le plan avec URLs ZEturf
     plan = _build_plan_structure(geny_data, date)
 
-    logger.info(f"Built {len(plan)} races from Geny")
+    logger.info(f"Built {len(plan)} races from Geny. Plan: {json.dumps(plan, indent=2)}")
 
-    # 3. Enrichir avec les heures depuis ZEturf (ASYNC + PARALLEL)
+    # 3. Enrichir avec les heures depuis Boturfers
     enriched_plan = await _enrich_plan_with_times_async(plan)
 
     # 4. Trier par heure
-    enriched_plan.sort(key=lambda x: x["time_local"])
+    if enriched_plan:
+        enriched_plan.sort(key=lambda x: x["time_local"])
 
     logger.info(f"Plan complete: {len(enriched_plan)} races with times")
     return enriched_plan

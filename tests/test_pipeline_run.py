@@ -4,7 +4,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-from src.pipeline_run import run_pipeline, api_entrypoint
+from src.pipeline_run import api_entrypoint, run_pipeline
+
 
 @pytest.fixture
 def course_with_high_overround(tmp_path: Path) -> Path:
@@ -24,7 +25,7 @@ def course_with_high_overround(tmp_path: Path) -> Path:
         },
     }
     snapshot_path.write_text(json.dumps(snapshot_data))
-    
+
     gpi_config = {
         "overround_max_exotics": 1.3,
         "roi_min_sp": 0.1,
@@ -183,7 +184,7 @@ def test_pipeline_generates_sp_dutching_ticket(course_for_calibration_test: Path
     assert result.get("abstain") is False
     assert result.get("message") == ""
     assert len(result["tickets"]) == 1
-    
+
     ticket = result["tickets"][0]
     assert ticket["type"] == "SP_DUTCHING"
     assert ticket["stake"] > 0
@@ -331,7 +332,7 @@ def test_pipeline_abstains_when_snapshot_missing(tmp_path: Path) -> None:
         "overround_max_exotics": 1.3,
         "roi_min_sp": 0.1,
     }))
-    
+
     # Créer un fichier de calibration valide
     valid_calib_path = tmp_path / "calib.yaml"
     valid_calib_path.write_text("version: 1")
@@ -362,7 +363,7 @@ def course_with_low_roi_candidate(tmp_path: Path) -> Path:
     race_dir = tmp_path / "data" / "R1C7"
     race_dir.mkdir(parents=True, exist_ok=True)
     snapshot_path = race_dir / "snapshot_H5.json"
-    
+
     # ROI = (0.3 * 3.5) - 1 = 0.05, which is > 0 but < 0.1
     snapshot_data = {
         "runners": [
@@ -418,7 +419,7 @@ def course_with_missing_runner_data(tmp_path: Path) -> Path:
     race_dir = tmp_path / "data" / "R1C8"
     race_dir.mkdir(parents=True, exist_ok=True)
     snapshot_path = race_dir / "snapshot_H5.json"
-    
+
     snapshot_data = {
         "runners": [
             {"num": "1", "cote": 4.0, "p_place": 0.4, "volatility": 0.1}, # Valid

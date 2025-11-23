@@ -1,45 +1,53 @@
 """
-src/service.py - FastAPI Service Principal
-
-Service Cloud Run orchestrant l'analyse hippique quotidienne.
-
-Endpoints:
-  POST /schedule - Génère le plan du jour et programme les analyses H-30/H-5
-  POST /run      - Exécute l'analyse d'une course (appelé par Cloud Tasks)
-  GET  /healthz  - Health check
-
-Sécurité: OIDC token validation si REQUIRE_AUTH=true
+src/service.py - FastAPI Service Principal (VERSION DE DÉBOGAGE)
 """
-
 from __future__ import annotations
-
-import json
-import traceback
-import uuid
+from fastapi import FastAPI, Request, status
 from datetime import datetime
-from typing import Any, Dict, Optional
-
-from fastapi import FastAPI, Request, Response, HTTPException, status
+import uuid
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles # Added import
+
+# Réactivation du logger
+from src.logging_utils import get_logger
+
+from src.app_config import get_config
+
+# Réactivation des modèles Pydantic
 from pydantic import BaseModel, Field
 
-from src.config import config
-from src.logging_utils import get_logger
+# Réactivation des imports pour /schedule
+import json
+import traceback
+from typing import Any, Dict, Optional
+from fastapi import Response, HTTPException
+
 from src.plan import build_plan_async
-from src.runner import run_course
 from src.scheduler import schedule_all_races
+
+# Réactivation de l'import pour /run
+from src.runner import run_course
+
+# Imports pour les endpoints de debug
+import os
+import sys
+
 
 # ============================================
 # Configuration
 # ============================================
 
 logger = get_logger(__name__)
+config = get_config()
 
 app = FastAPI(
-    title="Hippique Orchestrator",
-    description="Cloud Run service for automated horse racing analysis (GPI v5.1)",
-    version="2.0.0",
+    title="Hippique Orchestrator (Debug)",
+    description="Debug version",
+    version="debug",
 )
+
+# Mount static files for pronostics.html
+app.mount("/pronostics", StaticFiles(directory=".", html=True), name="pronostics") # Added static files mount
 
 # ============================================
 # Request/Response Models
@@ -77,7 +85,7 @@ class RunRequest(BaseModel):
     )
 
 # ============================================
-# Middleware - Request Logging
+# Middleware
 # ============================================
 
 @app.middleware("http")
@@ -115,65 +123,59 @@ async def log_requests(request: Request, call_next):
             headers={"X-Correlation-ID": correlation_id},
         )
 
-# ============================================
-# Middleware - OIDC Authentication
-# ============================================
-
-@app.middleware("http")
-async def verify_oidc_token(request: Request, call_next):
-    """
-    Verify OIDC token for authenticated endpoints.
+# @app.middleware("http")
+# async def verify_oidc_token(request: Request, call_next):
+#     """
+#     Verify OIDC token for authenticated endpoints.
     
-    Skips verification for:
-    - /healthz
-    - REQUIRE_AUTH=false
-    """
-    # Skip health check
-    if request.url.path == "/healthz":
-        return await call_next(request)
+#     Skips verification for:
+#     - /healthz
+#     - REQUIRE_AUTH=false
+#     """
+#     # Skip health check
+#     if request.url.path == "/health":
+#         return await call_next(request)
     
-    # Skip if auth not required
-    if not config.require_auth:
-        return await call_next(request)
+#     # Skip if auth not required
+#     if not config.require_auth:
+#         return await call_next(request)
     
-    # Verify Bearer token
-    auth_header = request.headers.get("Authorization", "")
-    if not auth_header.startswith("Bearer "):
-        logger.warning("Missing or invalid Authorization header")
-        return JSONResponse(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            content={"error": "Missing or invalid Authorization header"},
-        )
+#     # Verify Bearer token
+#     auth_header = request.headers.get("Authorization", "")
+#     if not auth_header.startswith("Bearer "):
+#         logger.warning("Missing or invalid Authorization header")
+#         return JSONResponse(
+#             status_code=status.HTTP_401_UNAUTHORIZED,
+#             content={"error": "Missing or invalid Authorization header"},
+#         )
     
-    token = auth_header[7:]  # Remove "Bearer " prefix
+#     token = auth_header[7:]  # Remove "Bearer " prefix
     
-    # Basic validation (in production, verify signature against Google's JWKS)
-    if not token or len(token) < 10:
-        logger.warning("Invalid OIDC token")
-        return JSONResponse(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            content={"error": "Invalid OIDC token"},
-        )
+#     # Basic validation (in production, verify signature against Google's JWKS)
+#     if not token or len(token) < 10:
+#         logger.warning("Invalid OIDC token")
+#         return JSONResponse(
+#             status_code=status.HTTP_401_UNAUTHORIZED,
+#             content={"error": "Invalid OIDC token"},
+#         )
     
-    # Token is valid, proceed
-    logger.debug("OIDC token validated")
-    return await call_next(request)
+#     # Token is valid, proceed
+#     logger.debug("OIDC token validated")
+#     return await call_next(request)
 
 # ============================================
 # Endpoints
 # ============================================
 
-@app.get("/healthz")
+@app.get("/health")
 async def health_check():
     """
     Health check endpoint.
-    
-    Returns 200 OK if service is running.
     """
     return {
         "status": "healthy",
-        "service": "hippique-orchestrator",
-        "version": "2.0.0",
+        "service": "hippique-orchestrator (debug-version)",
+        "version": "debug",
         "timestamp": datetime.utcnow().isoformat() + "Z",
     }
 
@@ -189,11 +191,11 @@ async def schedule_daily_plan(request: Request, body: ScheduleRequest):
     
     Args:
         body.date: "YYYY-MM-DD" or "today"
-        body.mode: "tasks" (default) or "scheduler" (fallback)
+        body.mode: "tasks" (default) or "scheduler" (Cloud Scheduler fallback)
     
     Returns:
         {
-          "ok": true,
+          "ok": True,
           "date": "2025-10-16",
           "total_races": 40,
           "scheduled_h30": 38,
@@ -309,7 +311,7 @@ async def run_race_analysis(request: Request, body: RunRequest):
     
     Returns:
         {
-          "ok": true,
+          "ok": True,
           "phase": "H5",
           "returncode": 0,
           "stdout_tail": "...",
@@ -399,7 +401,7 @@ async def startup_event():
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    """Log service shutdown"""
+    """Log service shutting down"""
     logger.info("Service shutting down")
 
 # ============================================
@@ -473,8 +475,8 @@ async def debug_parse(date: str = "2025-10-17"):
 async def debug_info():
     """Informations système"""
     import sys
-    from src.config import get_config
-    config = get_config()
+    # from src.config import get_config # Removed this line
+    # config = get_config() # Removed this line
     return {
         "python_version": sys.version,
         "cwd": os.getcwd(),

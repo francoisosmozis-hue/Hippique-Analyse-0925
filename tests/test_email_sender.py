@@ -1,7 +1,10 @@
 
-import pytest
 import smtplib
+
+import pytest
+
 from src import email_sender
+
 
 @pytest.fixture
 def mock_env(mocker):
@@ -28,17 +31,17 @@ def test_send_email_incomplete_config(mocker):
 def test_send_email_success(mock_env, mocker):
     """Tests a successful email sending flow."""
     mock_smtp = mocker.patch("smtplib.SMTP")
-    
+
     result = email_sender.send_email("Test Subject", "<h1>Hello</h1>", "to@test.com")
 
     assert result is True
     mock_smtp.assert_called_with("smtp.test.com", 587)
-    
+
     server_instance = mock_smtp.return_value.__enter__.return_value
     server_instance.starttls.assert_called_once()
     server_instance.login.assert_called_once_with("user", "password")
     server_instance.send_message.assert_called_once()
-    
+
     sent_msg = server_instance.send_message.call_args[0][0]
     assert sent_msg["Subject"] == "Test Subject"
     assert sent_msg["From"] == "from@test.com"

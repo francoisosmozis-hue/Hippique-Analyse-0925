@@ -1,6 +1,8 @@
 
 import pytest
+
 from src.kelly import kelly_fraction, kelly_stake
+
 
 @pytest.mark.parametrize(
     "p, odds, lam, cap, expected",

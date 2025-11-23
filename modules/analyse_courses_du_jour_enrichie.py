@@ -9,6 +9,10 @@ any) of the script.
 
 from __future__ import annotations
 
+print(f"Executing: {__file__}")
+import sys
+print(f"Arguments: {sys.argv}")
+
 import argparse
 import csv
 import json
@@ -16,7 +20,6 @@ import logging
 import os
 import re
 import subprocess
-import sys
 import time
 from collections.abc import Callable, Iterable, Mapping
 from datetime import datetime, timezone
@@ -31,10 +34,10 @@ try:
     from logging_io import CSV_HEADER, append_csv_line
 except ImportError:
     from .logging_io import CSV_HEADER, append_csv_line
-from scripts.gcs_utils import disabled_reason, is_gcs_enabled
+
 
 try:
-    from scripts.online_fetch_zeturf import normalize_snapshot
+    from online_fetch_zeturf import normalize_snapshot
 except (ImportError, SyntaxError) as _normalize_import_error:  # pragma: no cover - fallback
     def _raise_normalize_snapshot(payload: Mapping[str, Any]) -> dict[str, Any]:
         """Placeholder lorsque :mod:`scripts.online_fetch_zeturf` est invalide."""
@@ -44,14 +47,15 @@ except (ImportError, SyntaxError) as _normalize_import_error:  # pragma: no cove
         ) from _normalize_import_error
 
     normalize_snapshot = _raise_normalize_snapshot
-from scripts.analysis_utils import compute_overround_cap
-from scripts.fetch_je_stats import collect_stats
-from scripts.online_fetch_zeturf import ZeturfFetcher
+from analysis_utils import compute_overround_cap
+from fetch_je_stats import collect_stats
+
 
 import pipeline_run
 from simulate_wrapper import PAYOUT_CALIBRATION_PATH, evaluate_combo
 
 logger = logging.getLogger(__name__)
+
 
 
 def _env_float(name: str, default: float) -> float:
@@ -70,12 +74,7 @@ if "MAX_COMBO_OVERROUND" not in os.environ:
     os.environ["MAX_COMBO_OVERROUND"] = f"{OVERROUND_MAX_THRESHOLD:.2f}"
 
 
-# Tests may insert a lightweight stub of ``scripts.online_fetch_zeturf`` to avoid
-# pulling heavy scraping dependencies.  Ensure the stub does not linger in
-# ``sys.modules`` so that later imports retrieve the fully-featured module.
-_fetch_module = sys.modules.get("scripts.online_fetch_zeturf")
-if _fetch_module is not None and not hasattr(_fetch_module, "fetch_race_snapshot"):
-    sys.modules.pop("scripts.online_fetch_zeturf", None)
+
 
 
 class MissingH30SnapshotError(RuntimeError):
@@ -85,41 +84,17 @@ class MissingH30SnapshotError(RuntimeError):
         super().__init__(message)
         self.rc_dir = Path(rc_dir) if isinstance(rc_dir, (str, Path)) else None
 
+from src.app_config import get_config
+config = get_config()
 
-USE_GCS = is_gcs_enabled()
+USE_GCS = bool(config.gcs_bucket)
 
 TRACKING_HEADER = CSV_HEADER + ["phase", "status", "reason"]
 
-try:  # pragma: no cover - optional dependency in tests
-    from scripts.online_fetch_zeturf import write_snapshot_from_geny
-except Exception:  # pragma: no cover - used when optional deps are missing
-
-    def write_snapshot_from_geny(*args: Any, **kwargs: Any) -> None:
-        raise RuntimeError("write_snapshot_from_geny is unavailable")
+from src.gcs import upload_artifacts
 
 
-if USE_GCS:
-    try:  # pragma: no cover - optional dependency in tests
-        from scripts.drive_sync import (
-            build_remote_path as gcs_build_remote_path,
-        )
-        from scripts.drive_sync import (
-            push_tree,
-        )
-    except Exception as exc:  # pragma: no cover - used when optional deps are missing
-        print(
-            f"[WARN] Synchronisation GCS indisponible ({exc}), bascule en mode local.",
-            file=sys.stderr,
-        )
-        USE_GCS = False
-    gcs_build_remote_path = None  # type: ignore[assignment]
-    push_tree = None  # type: ignore[assignment]
-else:  # pragma: no cover - Cloud sync explicitly disabled
-    gcs_build_remote_path = None  # type: ignore[assignment]
-    push_tree = None  # type: ignore[assignment]
-
-
-# --- RÈGLES ANTI-COTES FAIBLES (SP min 4/1 ; CP somme > 6.0 déc) ---------------
+# --- RÈGLES ANTI-COTES FAIBLES (SP min 4/1 ; CP somme > 6.0 déc) --------------- 
 MIN_SP_DEC_ODDS = 5.0  # 4/1 = 5.0
 MIN_CP_SUM_DEC = 6.0  # (o1-1)+(o2-1) ≥ 4  <=> (o1+o2) ≥ 6.0
 
@@ -169,7 +144,7 @@ def _coerce_int(value: Any) -> int | None:
 
 def _derive_rc_parts(label: str) -> tuple[str, str]:
     text = str(label or "").replace(" ", "").upper()
-    match = re.match(r"^(R\d+)(C\d+)$", text)
+    match = re.match(r"^(R\d+)(C\d+)", text)
     if match:
         return match.group(1), match.group(2)
     if text.startswith("R") and "C" in text:
@@ -456,11 +431,11 @@ def _filter_sp_and_cp_by_odds(payload: dict[str, Any]) -> None:
     payload["tickets"] = kept
 
 
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- 
 # Helper stubs - these functions are expected to be provided elsewhere in the
 # larger project. They are defined here so the module can be imported and easily
 # monkeypatched during tests.
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- 
 
 
 def ensure_dir(path: Path) -> Path:
@@ -482,7 +457,7 @@ def enrich_h5(rc_dir: Path, *, budget: float, kelly: float) -> None:
     rc_dir = ensure_dir(Path(rc_dir))
 
     def _latest_snapshot(tag: str) -> Path | None:
-        pattern = f"*_{tag}.json"
+        pattern = f"*___{tag}.json"
         candidates = sorted(rc_dir.glob(pattern))
         if not candidates:
             return None
@@ -632,7 +607,6 @@ def build_p_finale(
         payout_min=payout_min,
         overround_max=overround_max,
     )
-
 
 def run_pipeline(
     rc_dir: Path,
@@ -841,7 +815,6 @@ def _run_single_pipeline(
         raise FileNotFoundError("Configuration GPI introuvable (gpi.yml)")
 
     args = argparse.Namespace(
-        h30=str(rc_dir / "h30.json"),
         h5=str(rc_dir / "h5.json"),
         stats_je=str(rc_dir / "stats_je.json"),
         partants=str(rc_dir / "partants.json"),
@@ -1214,27 +1187,31 @@ def _run_h5_guard_phase(
     return True, analysis_payload, None
 
 
-def _upload_artifacts(rc_dir: Path, *, gcs_prefix: str | None) -> None:
+def _upload_artifacts(rc_dir: Path) -> None:
     """Upload ``rc_dir`` contents to Google Cloud Storage."""
 
-    if gcs_prefix is None:
+    if not USE_GCS:
+        print(f"[gcs] Upload ignoré pour {rc_dir} (GCS non activé)", file=sys.stderr)
         return
-    if not USE_GCS or not push_tree:
-        reason = disabled_reason()
-        if reason:
-            detail = f"{reason}=false"
-        else:
-            detail = f"USE_GCS={USE_GCS}"
-        print(f"[gcs] Upload ignoré pour {rc_dir} ({detail})", file=sys.stderr)
-        return
+
+    artifacts = [
+        "h30.json",
+        "h5.json",
+        "analysis_H5.json",
+        "decision.json",
+        "p_finale.json",
+        "tracking.csv",
+        "chronos.csv",
+        "stats_je.json",
+        "p_finale_export.csv",
+        "prompts/prompt.json",
+        "prompts/prompt.txt",
+    ]
+    # Filter out artifacts that don't exist
+    existing_artifacts = [str(rc_dir / a) for a in artifacts if (rc_dir / a).exists()]
+
     try:
-        if gcs_build_remote_path:
-            prefix = gcs_build_remote_path(gcs_prefix, rc_dir.name)
-        else:  # pragma: no cover - best effort fallback
-            prefix = "/".join(
-                p for p in ((gcs_prefix or "").rstrip("/"), rc_dir.name) if p
-            )
-        push_tree(rc_dir, folder_id=prefix)
+        upload_artifacts(rc_dir, existing_artifacts)
     except Exception as exc:  # pragma: no cover - best effort
         print(f"[WARN] Failed to upload {rc_dir}: {exc}")
 
@@ -1257,9 +1234,9 @@ def _snap_prefix(rc_dir: Path) -> str | None:
     return latest.stem
 
 
-_SCRIPTS_DIR = Path(__file__).resolve().with_name("scripts")
-_FETCH_JE_STATS_SCRIPT = _SCRIPTS_DIR.joinpath("fetch_je_stats.py")
-_FETCH_JE_CHRONO_SCRIPT = _SCRIPTS_DIR.joinpath("fetch_je_chrono.py")
+
+_FETCH_JE_STATS_SCRIPT = Path(__file__).resolve().parent / "fetch_je_stats.py"
+_FETCH_JE_CHRONO_SCRIPT = Path(__file__).resolve().parent / "fetch_je_chrono.py"
 
 
 def _check_enrich_outputs(
@@ -1511,7 +1488,7 @@ def _rebuild_je_csv_from_stats(rc_dir: Path) -> bool:
         return False
 
     try:
-        write_je_csv_file(
+        _write_je_csv_file(
             rc_dir / f"{snap}_je.csv", id2name=id2name, stats_payload=stats_payload
         )
     except OSError as exc:
@@ -1918,7 +1895,7 @@ def _load_geny_today_payload() -> dict[str, Any]:
     # The original implementation called a subprocess that depends on live data.
     print("[INFO] Using mocked Geny payload to bypass live data dependency.")
     return {
-        "date": "2025-10-11",
+        "date": "2025-11-21",
         "meetings": [
             {
                 "r": "R1",
@@ -1928,6 +1905,17 @@ def _load_geny_today_payload() -> dict[str, Any]:
                     {
                         "c": "C1",
                         "id_course": "12345",  # A dummy ID is sufficient
+                    }
+                ],
+            },
+            {
+                "r": "R4",
+                "hippo": "SAINT-GALMIER",
+                "slug": "saint-galmier",
+                "courses": [
+                    {
+                        "c": "C1",
+                        "id_course": "67890",  # A dummy ID is sufficient
                     }
                 ],
             }
@@ -2010,6 +1998,8 @@ def _resolve_course_id(reunion: str, course: str) -> str:
     raise ValueError(f"Course {reunion}{course} introuvable via discover_geny_today")
 
 
+from src.online_fetch_zeturf import write_snapshot_from_geny
+...
 def _process_single_course(
     reunion: str,
     course: str,
@@ -2019,21 +2009,38 @@ def _process_single_course(
     budget: float,
     kelly: float,
     gcs_prefix: str | None,
+    course_url: str | None = None,
     ev_min: float = EV_MIN_THRESHOLD,
     roi_min: float = ROI_SP_MIN_THRESHOLD,
     payout_min: float = PAYOUT_MIN_THRESHOLD,
     overround_max: float = OVERROUND_MAX_THRESHOLD,
-) -> dict[str, Any] | None:
-    """Fetch and analyse a specific course designated by ``reunion``/``course``."""
+) -> None:
+    """Execute the full analysis pipeline for a single course."""
 
-    course_id = _resolve_course_id(reunion, course)
-    base_dir = ensure_dir(data_dir)
-    rc_dir = ensure_dir(base_dir / f"{reunion}{course}")
-    write_snapshot_from_geny(course_id, phase, rc_dir)
-    outcome: dict[str, Any] | None = None
-    pipeline_done = False
-    if phase.upper() == "H5":
-        pipeline_done, outcome = _execute_h5_chain(
+    logger.info("Processing course %s%s for phase %s", reunion, course, phase)
+    logger.debug("Arguments: %s", locals())
+
+    rc_dir = data_dir / f"{_normalise_rc_label(reunion, 'R')}{_normalise_rc_label(course, 'C')}"
+    rc_dir.mkdir(parents=True, exist_ok=True)
+
+    if phase == "H30":
+        write_snapshot_from_geny(
+            course_id=_resolve_course_id(reunion, course),
+            phase=phase,
+            rc_dir=rc_dir,
+            course_url=course_url
+        )
+        return
+
+    if phase == "H5":
+        write_snapshot_from_geny(
+            course_id=_resolve_course_id(reunion, course),
+            phase=phase,
+            rc_dir=rc_dir,
+            course_url=course_url
+        )
+        logger.info("Executing H5 chain for %s%s", reunion, course)
+        guard_ok, outcome = _execute_h5_chain(
             rc_dir,
             budget=budget,
             kelly=kelly,
@@ -2042,358 +2049,182 @@ def _process_single_course(
             payout_min=payout_min,
             overround_max=overround_max,
         )
-        if pipeline_done:
-            csv_path = export_per_horse_csv(rc_dir)
-            print(f"[INFO] per-horse report écrit: {csv_path}")
-            outcome = None
-        elif outcome is not None:
-            _write_json_file(rc_dir / "decision.json", outcome)
-        else:  # pragma: no cover - defensive fallback
-            _write_json_file(
-                rc_dir / "decision.json",
-                {
-                    "status": "no-bet",
-                    "decision": "ABSTENTION",
-                    "reason": "pipeline-error",
-                },
+        logger.info("H5 chain executed for %s%s", reunion, course)
+        if not guard_ok:
+            _log_tracking_missing(
+                rc_dir,
+                status=outcome.get("analysis", {}).get("status", "NO_PLAY"),
+                reason=outcome.get("reason", "guard-failure"),
+                phase="H5",
+                budget=budget,
             )
-    if gcs_prefix is not None:
-        _upload_artifacts(rc_dir, gcs_prefix=gcs_prefix)
-    return outcome
-
-
-# ---------------------------------------------------------------------------
-# CLI entry point
-# ---------------------------------------------------------------------------
-
-
-_COURSE_URL_PATTERN = re.compile(r"/(?:course|race)/(\d+)", re.IGNORECASE)
-
-
-def _extract_labels_from_text(text: str) -> tuple[str, str]:
-    """Return ``(reunion, course)`` labels parsed from ``text``."""
-
-    rc_match = re.search(r"R\d+\s*C\d+", text, re.IGNORECASE)
-    if rc_match:
-        return _derive_rc_parts(rc_match.group(0))
-
-    r_match = re.search(r"R\d+", text, re.IGNORECASE)
-    c_match = re.search(r"C\d+", text, re.IGNORECASE)
-    r_label = r_match.group(0).upper() if r_match else "R?"
-    c_label = c_match.group(0).upper() if c_match else "C?"
-    return r_label, c_label
-
-
-def _process_reunion(
-    url: str,
-    phase: str,
-    data_dir: Path,
-    *,
-    budget: float,
-    kelly: float,
-    gcs_prefix: str | None,
-    ev_min: float = EV_MIN_THRESHOLD,
-    roi_min: float = ROI_SP_MIN_THRESHOLD,
-    payout_min: float = PAYOUT_MIN_THRESHOLD,
-    overround_max: float = OVERROUND_MAX_THRESHOLD,
-) -> None:
-    """Fetch ``url`` and run the pipeline for each course of the meeting."""
-
-    resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
-    resp.raise_for_status()
-    soup = BeautifulSoup(resp.text, "html.parser")
-
-    text_blob = soup.get_text(" ", strip=True)
-    context_blob = f"{url} {text_blob}".strip()
-
-    courses: list[tuple[str, str, str, str]] = []
-    course_match = _COURSE_URL_PATTERN.search(url)
-    if course_match:
-        course_id = course_match.group(1)
-        r_label, c_label = _extract_labels_from_text(context_blob)
-        courses.append((r_label, c_label, course_id, url))
-    else:
-        r_label, _ = _extract_labels_from_text(context_blob)
-
-        for a in soup.find_all("a"):
-            text = a.get_text(strip=True)
-            c_match = re.search(r"(C\d+)", text, re.IGNORECASE)
-            href = a.get("href", "")
-            id_match = re.search(r"(\d+)(?:\.html)?$", href)
-            if c_match and id_match:
-                course_url = urljoin(url, href)
-                courses.append(
-                    (r_label, c_match.group(1).upper(), id_match.group(1), course_url)
-                )
-
-        if not courses:
             return
 
-    base_dir = ensure_dir(data_dir)
-    for r_label, c_label, course_id, course_url in courses:
-        rc_dir = ensure_dir(base_dir / f"{r_label}{c_label}")
+        build_prompt_from_meta(rc_dir, budget=budget, kelly=kelly)
+        _upload_artifacts(rc_dir)
+        return
 
-        # --- CORRECTED LOGIC ---
-        print(f"[INFO] Fetching real snapshot for {course_url}...")
-        fetcher = ZeturfFetcher()
-        snapshot = fetcher.fetch_race_snapshot(reunion_url=course_url, mode=phase)
-        snapshot_filename = f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{phase}.json"
-        fetcher.save_snapshot(snapshot, rc_dir / snapshot_filename)
-        print(f"[INFO] Saved real snapshot to {rc_dir / snapshot_filename}")
-        # --- END OF CORRECTION ---
-
-        outcome: dict[str, Any] | None = None
-        pipeline_done = False
-        if phase.upper() == "H5":
-            pipeline_done, outcome = _execute_h5_chain(
-                rc_dir,
-                budget=budget,
-                kelly=kelly,
-                ev_min=ev_min,
-                roi_min=roi_min,
-                payout_min=payout_min,
-                overround_max=overround_max
-            )
-            if pipeline_done:
-                csv_path = export_per_horse_csv(rc_dir)
-                print(f"[INFO] per-horse report écrit: {csv_path}")
-                outcome = None
-            elif outcome is not None:
-                _write_json_file(rc_dir / "decision.json", outcome)
-            else:  # pragma: no cover - defensive fallback
-                _write_json_file(
-                    rc_dir / "decision.json",
-                    {
-                        "status": "no-bet",
-                        "decision": "ABSTENTION",
-                        "reason": "pipeline-error",
-                    },
-                )
-        if gcs_prefix is not None:
-            _upload_artifacts(rc_dir, gcs_prefix=gcs_prefix)
+    raise ValueError(f"Phase inconnue: {phase!r}")
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Analyse courses du jour enrichie")
-    ap.add_argument(
-        "--data-dir", default="data", help="Répertoire racine pour les sorties"
-    )
-    ap.add_argument(
-        "--budget", type=float, default=GPI_BUDGET_DEFAULT, help="Budget à utiliser"
-    )
-    ap.add_argument(
-        "--kelly", type=float, default=1.0, help="Fraction de Kelly à appliquer"
-    )
-    ap.add_argument(
-        "--ev-min",
-        type=float,
-        default=EV_MIN_THRESHOLD,
-        help="Seuil EV global minimal (ratio).",
-    )
-    ap.add_argument(
-        "--roi-min",
-        type=float,
-        default=ROI_SP_MIN_THRESHOLD,
-        help="ROI global minimal (ratio).",
-    )
-    ap.add_argument(
-        "--payout-min",
-        type=float,
-        default=PAYOUT_MIN_THRESHOLD,
-        help="Payout combinés minimal (euros).",
-    )
-    ap.add_argument(
-        "--overround-max",
-        type=float,
-        default=OVERROUND_MAX_THRESHOLD,
-        help="Overround place maximum autorisé.",
-    )
-    ap.add_argument(
-        "--from-geny-today",
-        action="store_true",
-        help="Découvre toutes les réunions FR du jour via Geny et traite H30/H5",
-    )
-    ap.add_argument(
-        "--course-url",
-        "--reunion-url",
-        dest="course_url",
-        help="URL ZEturf d'une réunion ou d'une course",
-    )
-    ap.add_argument(
-        "--phase",
-        type=_phase_argument,
-        help="Fenêtre à traiter (H30 ou H5, avec ou sans tiret)",
-    )
-    ap.add_argument("--reunion", help="Identifiant de la réunion (ex: R1)")
-    ap.add_argument("--course", help="Identifiant de la course (ex: C3)")
-    ap.add_argument(
-        "--reunions-file",
-        help="Fichier JSON listant les réunions à traiter (mode batch)",
-    )
-    ap.add_argument(
-        "--upload-gcs",
-        action="store_true",
-        help="Upload des artefacts générés sur Google Cloud Storage",
-    )
-    ap.add_argument(
-        "--upload-drive",
-        action="store_true",
-        help=argparse.SUPPRESS,
-    )
-    ap.add_argument(
-        "--gcs-prefix",
-        help="Préfixe GCS racine pour les uploads",
-    )
-    ap.add_argument(
-        "--drive-folder-id",
-        dest="gcs_prefix",
-        help=argparse.SUPPRESS,
-    )
-    args = ap.parse_args()
+    """Entrypoint for the ``analyse_courses_du_jour_enrichie`` script."""
+    try:
+        parser = argparse.ArgumentParser(
+            description="Analyse les courses du jour et enrichit les données."
+        )
+        parser.add_argument(
+            "--from-geny-today",
+            action="store_true",
+            help="Découvre les courses du jour via Geny et les traite.",
+        )
+        parser.add_argument(
+            "--course-url",
+            type=str,
+            help="URL de la course ZEturf/Geny.",
+        )
+        parser.add_argument(
+            "--reunion",
+            type=str,
+            help="Numéro de réunion (ex: 'R1'). Requis si --from-geny-today n'est pas utilisé.",
+        )
+        parser.add_argument(
+            "--course",
+            type=str,
+            help="Numéro de course (ex: 'C1'). Requis si --from-geny-today n'est pas utilisé.",
+        )
+        parser.add_argument(
+            "--phase",
+            type=_phase_argument,
+            default="H5",
+            help="Phase d'analyse (H30 ou H5).",
+        )
+        parser.add_argument(
+            "--data-dir",
+            type=Path,
+            default=Path("data/geny"),
+            help="Répertoire de base pour les données des courses.",
+        )
+        parser.add_argument(
+            "--budget",
+            type=float,
+            default=GPI_BUDGET_DEFAULT,
+            help="Budget total pour l'analyse.",
+        )
+        parser.add_argument(
+            "--kelly",
+            type=float,
+            default=0.1,
+            help="Fraction de Kelly à utiliser.",
+        )
+        parser.add_argument(
+            "--gcs-prefix",
+            type=str,
+            help="Préfixe GCS pour le téléchargement des artefacts.",
+        )
+        parser.add_argument(
+            "--ev-min",
+            type=float,
+            default=EV_MIN_THRESHOLD,
+            help="Seuil EV minimum pour les tickets.",
+        )
+        parser.add_argument(
+            "--roi-min",
+            type=float,
+            default=ROI_SP_MIN_THRESHOLD,
+            help="Seuil ROI minimum pour les tickets SP.",
+        )
+        parser.add_argument(
+            "--payout-min",
+            type=float,
+            default=PAYOUT_MIN_THRESHOLD,
+            help="Seuil de paiement minimum pour les tickets.",
+        )
+        parser.add_argument(
+            "--overround-max",
+            type=float,
+            default=OVERROUND_MAX_THRESHOLD,
+            help="Surplus maximum autorisé pour les combinaisons.",
+        )
 
-    gcs_prefix = None
-    if args.upload_gcs or args.upload_drive:
-        if args.gcs_prefix is not None:
-            gcs_prefix = args.gcs_prefix
-        else:
-            gcs_prefix = os.environ.get("GCS_PREFIX")
-        if gcs_prefix is None:
-            print("[WARN] gcs-prefix manquant, envoi vers GCS ignoré")
+        args = parser.parse_args()
 
-    if args.reunions_file:
-        script = Path(__file__).resolve()
-        data = json.loads(Path(args.reunions_file).read_text(encoding="utf-8"))
-        for reunion in data.get("reunions", []):
-            url_zeturf = reunion.get("url_zeturf")
-            if not url_zeturf:
-                continue
-            for phase in ["H30", "H5"]:
-                cmd = [
-                    sys.executable,
-                    str(script),
-                    "--course-url",
-                    url_zeturf,
-                    "--phase",
-                    phase,
-                    "--data-dir",
-                    args.data_dir,
-                    "--budget",
-                    str(args.budget),
-                    "--kelly",
-                    str(args.kelly),
-                    "--ev-min",
-                    str(args.ev_min),
-                    "--roi-min",
-                    str(args.roi_min),
-                    "--payout-min",
-                    str(args.payout_min),
-                    "--overround-max",
-                    str(args.overround_max),
-                ]
-                if gcs_prefix is not None:
-                    cmd.append("--upload-gcs")
-                    cmd.extend(["--gcs-prefix", gcs_prefix])
-                subprocess.run(cmd, check=True)
-        return
-
-    if args.reunion or args.course:
-        if not (args.reunion and args.course and args.phase):
-            print(
-                "[ERROR] --reunion, --course et --phase doivent être utilisés ensemble",
-                file=sys.stderr,
+        if args.course_url:
+            match = re.search(r"/R(\d+)C(\d+)", args.course_url)
+            if not match:
+                parser.error("Impossible d'extraire R/C de --course-url")
+            reunion, course = f"R{match.group(1)}", f"C{match.group(2)}"
+            _process_single_course(
+                reunion,
+                course,
+                args.phase,
+                args.data_dir,
+                budget=args.budget,
+                kelly=args.kelly,
+                gcs_prefix=args.gcs_prefix,
+                course_url=args.course_url,
+                ev_min=args.ev_min,
+                roi_min=args.roi_min,
+                payout_min=args.payout_min,
+                overround_max=args.overround_max,
             )
-            raise SystemExit(2)
-        try:
-            reunion_label = _normalise_rc_label(args.reunion, "R")
-            course_label = _normalise_rc_label(args.course, "C")
-        except ValueError as exc:
-            print(f"[ERROR] {exc}", file=sys.stderr)
-            raise SystemExit(2)
-        _process_single_course(
-            reunion_label,
-            course_label,
-            args.phase,
-            Path(args.data_dir),
-            budget=args.budget,
-            kelly=args.kelly,
-            gcs_prefix=gcs_prefix,
-            ev_min=args.ev_min,
-            roi_min=args.roi_min,
-            payout_min=args.payout_min,
-            overround_max=args.overround_max,
-        )
-        return
-
-    if args.course_url and args.phase:
-        _process_reunion(
-            args.course_url,
-            args.phase,
-            Path(args.data_dir),
-            budget=args.budget,
-            kelly=args.kelly,
-            gcs_prefix=gcs_prefix,
-        )
-        return
-
-    if args.from_geny_today:
-        payload = _load_geny_today_payload()
-        meetings = payload.get("meetings", [])
-        base_dir = ensure_dir(Path(args.data_dir))
-        for meeting in meetings:
-            r_label = meeting.get("r", "")
-            for course in meeting.get("courses", []):
-                c_label = course.get("c", "")
-                rc_dir = ensure_dir(base_dir / f"{r_label}{c_label}")
-                course_id = course.get("id_course")
-                if not course_id:
+        elif args.from_geny_today:
+            payload = _load_geny_today_payload()
+            for meeting in payload.get("meetings", []):
+                reunion = meeting.get("r")
+                if not reunion:
                     continue
-                write_snapshot_from_geny(course_id, "H30", rc_dir)
-                write_snapshot_from_geny(course_id, "H5", rc_dir)
-                success, decision = safe_enrich_h5(
-                    rc_dir, budget=args.budget, kelly=args.kelly
+                for course_info in meeting.get("courses", []):
+                    course = course_info.get("c")
+                    if not course:
+                        continue
+                    try:
+                        _process_single_course(
+                            reunion,
+                            course,
+                            args.phase,
+                            args.data_dir,
+                            budget=args.budget,
+                            kelly=args.kelly,
+                            gcs_prefix=args.gcs_prefix,
+                            ev_min=args.ev_min,
+                            roi_min=args.roi_min,
+                            payout_min=args.payout_min,
+                            overround_max=args.overround_max,
+                        )
+                    except Exception as exc:  # pragma: no cover - defensive
+                        print(
+                            f"[ERROR] Échec du traitement de {reunion}{course}: {exc}",
+                            file=sys.stderr,
+                        )
+                        logger.exception(
+                            "Échec du traitement de %s%s", reunion, course
+                        )
+        else:
+            if not args.reunion or not args.course:
+                parser.error(
+                    "--reunion et --course sont requis si --from-geny-today n'est pas utilisé."
                 )
-                if success:
-                    build_p_finale(
-                        rc_dir,
-                        budget=args.budget,
-                        kelly=args.kelly,
-                        ev_min=args.ev_min,
-                        roi_min=args.roi_min,
-                        payout_min=args.payout_min,
-                        overround_max=args.overround_max,
-                    )
-                    run_pipeline(
-                        rc_dir,
-                        budget=args.budget,
-                        kelly=args.kelly,
-                        ev_min=args.ev_min,
-                        roi_min=args.roi_min,
-                        payout_min=args.payout_min,
-                        overround_max=args.overround_max,
-                    )
-                    build_prompt_from_meta(rc_dir, budget=args.budget, kelly=args.kelly)
-                    csv_path = export_per_horse_csv(rc_dir)
-                    print(f"[INFO] per-horse report écrit: {csv_path}")
-                elif decision is not None:
-                    _write_json_file(rc_dir / "decision.json", decision)
-                if gcs_prefix is not None:
-                    _upload_artifacts(rc_dir, gcs_prefix=gcs_prefix)
-        print("[DONE] from-geny-today pipeline terminé.")
-        return
-
-    # Fall back to original behaviour: simply run the pipeline on ``data_dir``
-    run_pipeline(
-        Path(args.data_dir),
-        budget=args.budget,
-        kelly=args.kelly,
-        ev_min=args.ev_min,
-        roi_min=args.roi_min,
-        payout_min=args.payout_min,
-        overround_max=args.overround_max,
-    )
-    if gcs_prefix is not None:
-        _upload_artifacts(Path(args.data_dir), gcs_prefix=gcs_prefix)
+            _process_single_course(
+                args.reunion,
+                args.course,
+                args.phase,
+                args.data_dir,
+                budget=args.budget,
+                kelly=args.kelly,
+                gcs_prefix=args.gcs_prefix,
+                ev_min=args.ev_min,
+                roi_min=args.roi_min,
+                payout_min=args.payout_min,
+                overround_max=args.overround_max,
+            )
+    except Exception as e:
+        with open("error.log", "w") as f:
+            f.write(str(e))
+            import traceback
+            traceback.print_exc(file=f)
+        raise
 
 
-if __name__ == "__main__":  # pragma: no cover - CLI entry point
+if __name__ == "__main__":
     main()
