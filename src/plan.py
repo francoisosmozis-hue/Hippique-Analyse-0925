@@ -261,7 +261,7 @@ async def build_plan_async(date: str) -> list[dict[str, Any]]:
 
     # 1. Obtenir la liste des courses depuis Geny (subprocess)
     geny_data = _call_discover_geny()
-    logger.info(f"Geny data received: {json.dumps(geny_data, indent=2)}")
+    logger.info(f"DEBUG: Geny data received: {json.dumps(geny_data, indent=2)}")
 
     if not geny_data.get("meetings"):
         logger.warning("No meetings found from Geny")
@@ -269,11 +269,12 @@ async def build_plan_async(date: str) -> list[dict[str, Any]]:
 
     # 2. Construire le plan avec URLs ZEturf
     plan = _build_plan_structure(geny_data, date)
+    logger.info(f"DEBUG: Plan structure built from Geny data: {json.dumps(plan, indent=2)}")
 
-    logger.info(f"Built {len(plan)} races from Geny. Plan: {json.dumps(plan, indent=2)}")
 
     # 3. Enrichir avec les heures depuis Boturfers
     enriched_plan = await _enrich_plan_with_times_async(plan)
+    logger.info(f"DEBUG: Enriched plan after Boturfers: {json.dumps(enriched_plan, indent=2)}")
 
     # 4. Trier par heure
     if enriched_plan:

@@ -2,11 +2,13 @@
 src/service.py - FastAPI Service Principal (VERSION DE DÉBOGAGE)
 """
 from __future__ import annotations
+import httpx
 from fastapi import FastAPI, Request, status
 from datetime import datetime
 import uuid
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles # Added import
+from pathlib import Path # Added import
 
 # Réactivation du logger
 from src.logging_utils import get_logger
@@ -24,6 +26,7 @@ from fastapi import Response, HTTPException
 
 from src.plan import build_plan_async
 from src.scheduler import schedule_all_races
+from src.api.tasks import router as tasks_router # Import the tasks router
 
 # Réactivation de l'import pour /run
 from src.runner import run_course
@@ -45,6 +48,8 @@ app = FastAPI(
     description="Debug version",
     version="debug",
 )
+
+app.include_router(tasks_router) # Include the tasks router
 
 # Mount static files for pronostics.html
 app.mount("/pronostics", StaticFiles(directory=".", html=True), name="pronostics") # Added static files mount
@@ -179,6 +184,79 @@ async def health_check():
         "timestamp": datetime.utcnow().isoformat() + "Z",
     }
 
+
+@app.get("/health/scraping", status_code=status.HTTP_200_OK, summary="Check Scraping Service Health")
+async def check_scraping_status(response: Response):
+    """
+    Checks if the scraping mechanism can successfully fetch data from the source.
+    This is a dedicated health check for the scraping part of the application.
+    """
+    try:
+        # This URL is based on the analysis of src/plan.py
+        SOURCE_URL = "https://www.boturfers.fr/programme-pmu-du-jour"
+        async with httpx.AsyncClient() as client:
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+            }
+            resp = await client.get(SOURCE_URL, headers=headers, timeout=10.0)
+            resp.raise_for_status()
+            if "<title>" not in resp.text:
+                raise ValueError("Scraping check failed: page title not found.")
+        return {"status": "ok", "message": "Scraping check successful."}
+    except Exception as e:
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+        return {"status": "error", "message": f"Scraping health check failed: {str(e)}"}
+
+@app.get("/api/pronostics")
+async def get_pronostics(request: Request, date: Optional[str] = None, analyses_base_dir: Path = Path("data/analyses")):
+    """
+    Endpoint to retrieve pronostics for a given date.
+    """
+    correlation_id = request.state.correlation_id
+    
+    if date is None or date == "today":
+        target_date = datetime.now().strftime("%Y-%m-%d")
+    else:
+        target_date = date
+
+    pronostics_data = []
+    total_races = 0
+    
+    # Assuming analysis files are stored in a 'data/analyses' directory
+    # and named like 'YYYY-MM-DD_R1C1_H5.json'
+    analyses_dir = Path("data/analyses")
+    
+    if analyses_dir.exists() and analyses_dir.is_dir():
+        for race_dir in analyses_dir.iterdir():
+            if race_dir.is_dir():
+                for analysis_file in race_dir.glob(f"{target_date}_*_H5.json"):
+                    try:
+                        with open(analysis_file, "r") as f:
+                            data = json.load(f)
+                            pronostics_data.append(data)
+                            total_races += 1
+                    except json.JSONDecodeError as e:
+                        logger.error(f"Error decoding JSON from {analysis_file}: {e}", correlation_id=correlation_id)
+                    except Exception as e:
+                        logger.error(f"Error reading {analysis_file}: {e}", correlation_id=correlation_id)
+
+    if not pronostics_data:
+        return {
+            "ok": False,
+            "total_races": 0,
+            "pronostics": [],
+            "message": f"No pronostics found for {target_date}",
+            "correlation_id": correlation_id,
+        }
+    
+    return {
+        "ok": True,
+        "total_races": total_races,
+        "pronostics": pronostics_data,
+        "message": f"Successfully retrieved pronostics for {target_date}",
+        "correlation_id": correlation_id,
+    }
+
 @app.post("/schedule")
 async def schedule_daily_plan(request: Request, body: ScheduleRequest):
     """
@@ -246,12 +324,15 @@ async def schedule_daily_plan(request: Request, body: ScheduleRequest):
         success_h30 = sum(1 for s in scheduled if s["phase"] == "H30" and s["ok"])
         success_h5 = sum(1 for s in scheduled if s["phase"] == "H5" and s["ok"])
         
+        all_tasks_ok = (success_h30 + success_h5) == len(scheduled)
+        
         logger.info(
             "Scheduling complete",
             correlation_id=correlation_id,
             total=len(plan),
             success_h30=success_h30,
             success_h5=success_h5,
+            all_tasks_ok=all_tasks_ok,
         )
         
         # Plan summary for response (first 5 races)
@@ -265,17 +346,20 @@ async def schedule_daily_plan(request: Request, body: ScheduleRequest):
             for p in plan[:5]
         ]
         
-        return {
-            "ok": True,
-            "date": body.date,
-            "total_races": len(plan),
-            "scheduled_h30": success_h30,
-            "scheduled_h5": success_h5,
-            "mode": body.mode,
-            "plan_summary": plan_summary,
-            "scheduled_details": scheduled,
-            "correlation_id": correlation_id,
-        }
+        return JSONResponse(
+            status_code=status.HTTP_202_ACCEPTED,
+            content={
+                "ok": all_tasks_ok,
+                "date": body.date,
+                "total_races": len(plan),
+                "scheduled_h30": success_h30,
+                "scheduled_h5": success_h5,
+                "mode": body.mode,
+                "plan_summary": plan_summary,
+                "scheduled_details": scheduled,
+                "correlation_id": correlation_id,
+            },
+        )
     
     except Exception as e:
         logger.error(
@@ -396,8 +480,9 @@ async def startup_event():
         version="2.0.0",
         project_id=config.project_id,
         region=config.region,
-        environment=config.environment,
     )
+    print(f"DEBUG: Type of config: {type(config)}")
+    print(f"DEBUG: Attributes of config: {dir(config)}")
 
 @app.on_event("shutdown")
 async def shutdown_event():
@@ -447,7 +532,7 @@ async def debug_parse(date: str = "2025-10-17"):
     """Debug endpoint pour tester le parser ZEturf"""
     correlation_id = str(uuid.uuid4())
     try:
-        from src.plan import build_plan_async, ADVANCED_EXTRACTION
+        from src.plan import build_plan_async
         
         logger.info(f"Debug parse for {date}", extra={"correlation_id": correlation_id})
         result = await build_plan_async(date)
@@ -456,7 +541,6 @@ async def debug_parse(date: str = "2025-10-17"):
             "ok": True,
             "date": date,
             "count": len(result),
-            "advanced_extraction": ADVANCED_EXTRACTION,
             "races": result[:3] if result else [],
             "correlation_id": correlation_id
         }
