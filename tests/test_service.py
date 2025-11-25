@@ -117,29 +117,63 @@ def test_schedule_endpoint_success(mocker):
     """
     Vérifie que le point de terminaison /schedule traite une requête valide avec succès.
     """
-    # Mock l'appel interne à bootstrap-day pour isoler le test
-    mock_post = mocker.patch("httpx.AsyncClient.post")
-    mock_post.return_value = httpx.Response(202, json={"ok": True, "message": "Bootstrap initiated."})
+    # Mock build_plan_async to return a valid plan
+    mock_build_plan = mocker.patch(
+        "src.service.build_plan_async",  # Correct: Patch where the function is imported/used
+        return_value=[
+            {"r_label": "R1", "c_label": "C1", "course_url": "url1", "time_local": "10:00", "date": "2025-10-20"},
+            {"r_label": "R1", "c_label": "C2", "course_url": "url2", "time_local": "11:00", "date": "2025-10-20"},
+        ]
+    )
+
+    # Mock schedule_all_races to simulate successful scheduling of all tasks
+    mocker.patch(
+        "src.service.schedule_all_races", # Changed from src.scheduler.schedule_all_races
+        return_value=[
+            {"race": "R1C1", "phase": "H30", "ok": True, "task_name": "task-r1c1-h30"},
+            {"race": "R1C1", "phase": "H5", "ok": True, "task_name": "task-r1c1-h5"},
+            {"race": "R1C2", "phase": "H30", "ok": True, "task_name": "task-r1c2-h30"},
+            {"race": "R1C2", "phase": "H5", "ok": True, "task_name": "task-r1c2-h5"},
+        ],
+    )
 
     response = client.post("/schedule", json={"date": "2025-10-20", "mode": "tasks"})
 
     assert response.status_code == 202
     assert response.json()["ok"] is True
+    assert response.json()["total_races"] == 2, "The number of races should match the mocked plan"
 
 
 def test_schedule_endpoint_handles_scheduling_error(mocker):
     """
     Vérifie que le point de terminaison /schedule gère les erreurs de l'ordonnanceur.
     """
-    # Mock l'appel interne pour qu'il renvoie une erreur
-    mock_post = mocker.patch("httpx.AsyncClient.post")
-    mock_post.return_value = httpx.Response(500, json={"ok": False, "error": "Internal bootstrap failed."})
+    # Mock build_plan_async to return a valid plan
+    mock_build_plan = mocker.patch(
+        "src.service.build_plan_async",  # Correct: Patch where the function is imported/used
+        return_value=[
+            {"r_label": "R1", "c_label": "C1", "course_url": "url1", "time_local": "10:00", "date": "2025-10-20"},
+            {"r_label": "R1", "c_label": "C2", "course_url": "url2", "time_local": "11:00", "date": "2025-10-20"},
+        ]
+    )
+
+    # Mock schedule_all_races to simulate a scheduling error for some tasks
+    mocker.patch(
+        "src.service.schedule_all_races", # Changed from src.scheduler.schedule_all_races
+        return_value=[
+            {"race": "R1C1", "phase": "H30", "ok": True, "task_name": "task-r1c1-h30"},
+            {"race": "R1C1", "phase": "H5", "ok": False, "task_name": "", "error": "Permission denied"},
+            {"race": "R1C2", "phase": "H30", "ok": True, "task_name": "task-r1c2-h30"},
+            {"race": "R1C2", "phase": "H5", "ok": False, "task_name": "", "error": "API disabled"},
+        ],
+    )
 
     response = client.post("/schedule", json={"date": "today", "mode": "tasks"})
 
-    assert response.status_code == 500
-    assert response.json()["ok"] is False
-    assert "bootstrap failed" in response.json()["error"]
+    assert response.status_code == 202
+    response_json = response.json()
+    assert response_json["ok"] is False
+    assert response_json["total_races"] == 2, "The number of races should match the mocked plan"
 
 def test_debug_parse_endpoint(mocker):
     """

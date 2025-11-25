@@ -49,10 +49,13 @@ app = FastAPI(
     version="debug",
 )
 
+# Définir le chemin absolu vers le répertoire statique
+STATIC_DIR = Path(__file__).parent / "static"
+
 app.include_router(tasks_router) # Include the tasks router
 
-# Mount static files for pronostics.html
-app.mount("/pronostics", StaticFiles(directory=".", html=True), name="pronostics") # Added static files mount
+# Mount static files
+app.mount("/pronostics", StaticFiles(directory=STATIC_DIR, html=True), name="pronostics")
 
 # ============================================
 # Request/Response Models

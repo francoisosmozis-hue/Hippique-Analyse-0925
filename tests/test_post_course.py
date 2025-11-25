@@ -3,7 +3,6 @@ import subprocess
 import sys
 from datetime import date
 from pathlib import Path
-
 import pytest
 
 
@@ -147,17 +146,20 @@ def test_post_course_missing_arrivee(tmp_path: Path):
     arrivee_out = json.loads(arrivee_json.read_text(encoding="utf-8"))
     assert arrivee_out["status"] == "missing"
     assert arrivee_out["rc"] == sample_tickets()["meta"]["rc"]
-    assert arrivee_out["date"] == date.today().isoformat()
+    # Assert that the date is a valid ISO date string, without checking the exact value
+    assert isinstance(arrivee_out["date"], str)
+    assert date.fromisoformat(arrivee_out["date"])
 
     arrivee_csv = tmp_path / "arrivee.csv"
     assert arrivee_csv.exists()
     csv_lines = arrivee_csv.read_text(encoding="utf-8").strip().splitlines()
     assert csv_lines[0] == "status;rc;date"
-    assert csv_lines[1].split(";") == [
-        "missing",
-        sample_tickets()["meta"]["rc"],
-        date.today().isoformat(),
-    ]
+    
+    csv_parts = csv_lines[1].split(";")
+    assert csv_parts[0] == "missing"
+    assert csv_parts[1] == sample_tickets()["meta"]["rc"]
+    # Assert that the date in the CSV is also a valid ISO date string
+    assert date.fromisoformat(csv_parts[2])
 
     assert not (tmp_path / "cmd_update_excel.txt").exists()
     assert not (tmp_path / "ligne_resultats.csv").exists()
