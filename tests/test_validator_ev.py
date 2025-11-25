@@ -9,7 +9,7 @@ import pytest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from validator_ev import (
+from hippique_orchestrator.validator_ev import (
     ValidationError,
     combos_allowed,
     summarise_validation,

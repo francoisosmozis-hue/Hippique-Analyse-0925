@@ -4,7 +4,7 @@ from pathlib import Path
 
 from google.cloud import storage
 
-from hippique_orchestrator.config import Config
+from src.config.config import config
 from hippique_orchestrator.logging_utils import get_logger
 
 logger = get_logger(__name__)

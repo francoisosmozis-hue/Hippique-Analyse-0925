@@ -1,60 +1,50 @@
 """
-src/service.py - FastAPI Service Principal (VERSION DE DÉBOGAGE)
+src/service.py - FastAPI Service Principal
+
+Service Cloud Run orchestrant l'analyse hippique quotidienne.
+
+Endpoints:
+  POST /schedule - Génère le plan du jour et programme les analyses H-30/H-5
+  POST /run      - Exécute l'analyse d'une course (appelé par Cloud Tasks)
+  GET  /healthz  - Health check
+
+Sécurité: OIDC token validation si REQUIRE_AUTH=true
 """
+
 from __future__ import annotations
-import httpx
-from fastapi import FastAPI, Request, status
-from datetime import datetime
-import uuid
-from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles # Added import
-from pathlib import Path # Added import
 
-# Réactivation du logger
-from .logging_utils import get_logger
-
-from .app_config import get_config
-
-# Réactivation des modèles Pydantic
-from pydantic import BaseModel, Field
-
-# Réactivation des imports pour /schedule
 import json
 import traceback
+import uuid
+from datetime import datetime
 from typing import Any, Dict, Optional
-from fastapi import Response, HTTPException
 
+from fastapi import FastAPI, Request, Response, HTTPException, status, Query
+from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles # Added
+from pydantic import BaseModel, Field
+
+from src.config.config import config # Added
+from .logging_utils import get_logger # Added
 from .plan import build_plan_async
 from .scheduler import schedule_all_races
-from .api.tasks import router as tasks_router # Import the tasks router
-
-# Réactivation de l'import pour /run
-from .runner import run_course
-
-# Imports pour les endpoints de debug
-import os
-import sys
-
+import os # Added
 
 # ============================================
 # Configuration
 # ============================================
 
 logger = get_logger(__name__)
-config = get_config()
+
+STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "static") # Added
 
 app = FastAPI(
-    title="Hippique Orchestrator (Debug)",
-    description="Debug version",
-    version="debug",
+    title="Hippique Orchestrator",
+    description="Cloud Run service for automated horse racing analysis (GPI v5.1)",
+    version="2.0.0",
 )
 
-# Définir le chemin absolu vers le répertoire statique
-STATIC_DIR = Path(__file__).parent / "static"
-
-app.include_router(tasks_router) # Include the tasks router
-
-# Mount static files
+# Mount static files for /pronostics
 app.mount("/pronostics", StaticFiles(directory=STATIC_DIR, html=True), name="pronostics")
 
 # ============================================
@@ -93,7 +83,7 @@ class RunRequest(BaseModel):
     )
 
 # ============================================
-# Middleware
+# Middleware - Request Logging
 # ============================================
 
 @app.middleware("http")
@@ -131,141 +121,66 @@ async def log_requests(request: Request, call_next):
             headers={"X-Correlation-ID": correlation_id},
         )
 
-# @app.middleware("http")
-# async def verify_oidc_token(request: Request, call_next):
-#     """
-#     Verify OIDC token for authenticated endpoints.
+# ============================================
+# Middleware - OIDC Authentication
+# ============================================
+
+@app.middleware("http")
+async def verify_oidc_token(request: Request, call_next):
+    """
+    Verify OIDC token for authenticated endpoints.
     
-#     Skips verification for:
-#     - /healthz
-#     - REQUIRE_AUTH=false
-#     """
-#     # Skip health check
-#     if request.url.path == "/health":
-#         return await call_next(request)
+    Skips verification for:
+    - /healthz
+    - REQUIRE_AUTH=false
+    """
+    # Skip health check
+    if request.url.path == "/healthz":
+        return await call_next(request)
     
-#     # Skip if auth not required
-#     if not config.require_auth:
-#         return await call_next(request)
+    # Skip if auth not required
+    if not config.require_auth:
+        return await call_next(request)
     
-#     # Verify Bearer token
-#     auth_header = request.headers.get("Authorization", "")
-#     if not auth_header.startswith("Bearer "):
-#         logger.warning("Missing or invalid Authorization header")
-#         return JSONResponse(
-#             status_code=status.HTTP_401_UNAUTHORIZED,
-#             content={"error": "Missing or invalid Authorization header"},
-#         )
+    # Verify Bearer token
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        logger.warning("Missing or invalid Authorization header")
+        return JSONResponse(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            content={"error": "Missing or invalid Authorization header"},
+        )
     
-#     token = auth_header[7:]  # Remove "Bearer " prefix
+    token = auth_header[7:]  # Remove "Bearer " prefix
     
-#     # Basic validation (in production, verify signature against Google's JWKS)
-#     if not token or len(token) < 10:
-#         logger.warning("Invalid OIDC token")
-#         return JSONResponse(
-#             status_code=status.HTTP_401_UNAUTHORIZED,
-#             content={"error": "Invalid OIDC token"},
-#         )
+    # Basic validation (in production, verify signature against Google's JWKS)
+    if not token or len(token) < 10:
+        logger.warning("Invalid OIDC token")
+        return JSONResponse(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            content={"error": "Invalid OIDC token"},
+        )
     
-#     # Token is valid, proceed
-#     logger.debug("OIDC token validated")
-#     return await call_next(request)
+    # Token is valid, proceed
+    logger.debug("OIDC token validated")
+    return await call_next(request)
 
 # ============================================
 # Endpoints
 # ============================================
 
-@app.get("/health")
+@app.get("/healthz")
 async def health_check():
     """
     Health check endpoint.
+    
+    Returns 200 OK if service is running.
     """
     return {
         "status": "healthy",
-        "service": "hippique-orchestrator (debug-version)",
-        "version": "debug",
+        "service": "hippique-orchestrator",
+        "version": "2.0.0",
         "timestamp": datetime.utcnow().isoformat() + "Z",
-    }
-
-
-@app.get("/health/scraping", status_code=status.HTTP_200_OK, summary="Check Scraping Service Health")
-async def check_scraping_status(response: Response):
-    """
-    Checks if the scraping mechanism can successfully fetch data from the source.
-    This is a dedicated health check for the scraping part of the application.
-    """
-    try:
-        # This URL is based on the analysis of src/plan.py
-        SOURCE_URL = "https://www.boturfers.fr/programme-pmu-du-jour"
-        async with httpx.AsyncClient() as client:
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-            }
-            resp = await client.get(SOURCE_URL, headers=headers, timeout=10.0)
-            resp.raise_for_status()
-            if "<title>" not in resp.text:
-                raise ValueError("Scraping check failed: page title not found.")
-        return {"status": "ok", "message": "Scraping check successful."}
-    except Exception as e:
-        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
-        return {"status": "error", "message": f"Scraping health check failed: {str(e)}"}
-
-@app.get("/api/pronostics")
-async def get_pronostics(request: Request, date: Optional[str] = None, analyses_base_dir: Path = Path("data/analyses")):
-    """
-    Endpoint to retrieve pronostics for a given date.
-    """
-    correlation_id = request.state.correlation_id
-    
-    if date is None or date == "today":
-        target_date = datetime.now().strftime("%Y-%m-%d")
-    else:
-        try:
-            # Validate date format
-            datetime.strptime(date, "%Y-%m-%d")
-            target_date = date
-        except ValueError:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Invalid date format. Please use YYYY-MM-DD.",
-            )
-
-    pronostics_data = []
-    total_races = 0
-    
-    # Assuming analysis files are stored in a 'data/analyses' directory
-    # and named like 'YYYY-MM-DD_R1C1_H5.json'
-    analyses_dir = Path("data/analyses")
-    
-    if analyses_dir.exists() and analyses_dir.is_dir():
-        for race_dir in analyses_dir.iterdir():
-            if race_dir.is_dir():
-                for analysis_file in race_dir.glob(f"{target_date}_*_H5.json"):
-                    try:
-                        with open(analysis_file, "r") as f:
-                            data = json.load(f)
-                            pronostics_data.append(data)
-                            total_races += 1
-                    except json.JSONDecodeError as e:
-                        logger.error(f"Error decoding JSON from {analysis_file}: {e}", correlation_id=correlation_id)
-                    except Exception as e:
-                        logger.error(f"Error reading {analysis_file}: {e}", correlation_id=correlation_id)
-
-    if not pronostics_data:
-        return {
-            "ok": False,
-            "total_races": 0,
-            "pronostics": [],
-            "message": f"No pronostics found for {target_date}",
-            "correlation_id": correlation_id,
-        }
-    
-    return {
-        "ok": True,
-        "total_races": total_races,
-        "pronostics": pronostics_data,
-        "message": f"Successfully retrieved pronostics for {target_date}",
-        "correlation_id": correlation_id,
     }
 
 @app.post("/schedule")
@@ -280,11 +195,11 @@ async def schedule_daily_plan(request: Request, body: ScheduleRequest):
     
     Args:
         body.date: "YYYY-MM-DD" or "today"
-        body.mode: "tasks" (default) or "scheduler" (Cloud Scheduler fallback)
+        body.mode: "tasks" (default) or "scheduler" (fallback)
     
     Returns:
         {
-          "ok": True,
+          "ok": true,
           "date": "2025-10-16",
           "total_races": 40,
           "scheduled_h30": 38,
@@ -324,26 +239,16 @@ async def schedule_daily_plan(request: Request, body: ScheduleRequest):
         )
         
         # 2. Schedule all races (H-30 + H-5)
-        if config.project_id == "local-project":
-            logger.info("Skipping Cloud Tasks scheduling in local environment.", correlation_id=correlation_id)
-            # Create a dummy response for local mode
-            scheduled = [
-                {"race": f"{p['r_label']}{p['c_label']}", "phase": phase, "ok": True, "task_name": "local-dummy", "race_time_local": p["time_local"]}
-                for p in plan for phase in ["H30", "H5"]
-            ]
-        else:
-            logger.info("Scheduling Cloud Tasks...", correlation_id=correlation_id)
-            scheduled = schedule_all_races(
-                plan=plan,
-                mode=body.mode,
-                correlation_id=correlation_id,
-            )
+        logger.info("Scheduling Cloud Tasks...", correlation_id=correlation_id)
+        scheduled = schedule_all_races(
+            plan=plan,
+            mode=body.mode,
+            correlation_id=correlation_id,
+        )
         
         # 3. Build response
         success_h30 = sum(1 for s in scheduled if s["phase"] == "H30" and s["ok"])
         success_h5 = sum(1 for s in scheduled if s["phase"] == "H5" and s["ok"])
-        
-        all_tasks_ok = (success_h30 + success_h5) == len(scheduled)
         
         logger.info(
             "Scheduling complete",
@@ -351,7 +256,212 @@ async def schedule_daily_plan(request: Request, body: ScheduleRequest):
             total=len(plan),
             success_h30=success_h30,
             success_h5=success_h5,
-            all_tasks_ok=all_tasks_ok,
+        )
+        
+        # Plan summary for response (first 5 races)
+        plan_summary = [
+            {
+                "race": f"{p['r_label']}{p['c_label']}",
+                "time": p["time_local"],
+                "meeting": p.get("meeting", ""),
+                "url": p["course_url"],
+            }
+            for p in plan[:5]
+        ]
+        
+        return {
+            "ok": True,
+            "date": body.date,
+            "total_races": len(plan),
+            "scheduled_h30": success_h30,
+            "scheduled_h5": success_h5,
+            "mode": body.mode,
+            "plan_summary": plan_summary,
+            "scheduled_details": scheduled,
+            "correlation_id": correlation_id,
+        }
+    
+    except Exception as e:
+        logger.error(
+            f"Schedule failed: {e}",
+            correlation_id=correlation_id,
+            exc_info=e,
+        )
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={
+                "ok": False,
+                "error": str(e),
+                "traceback": traceback.format_exc(),
+                "correlation_id": correlation_id,
+            },
+        )
+
+@app.post("/tasks/snapshot-9h")
+async def tasks_snapshot_9h(request: Request, body: ScheduleRequest):
+    """
+    Trigger snapshot for a given date at 9h.
+    """
+    correlation_id = request.state.correlation_id
+    logger.info(f"Snapshot 9h task received for date: {body.date}", correlation_id=correlation_id)
+    
+    try:
+        # Assuming write_snapshot_for_day is an async function or can be run in a thread pool
+        # For now, we'll just log and return accepted.
+        # In a real scenario, this would dispatch to a background worker or Cloud Task.
+        from hippique_orchestrator.api.tasks import write_snapshot_for_day
+        # This should ideally be awaited or run in a background task executor
+        # For testing purposes, we'll just call it directly or mock it.
+        write_snapshot_for_day(date_str=body.date, phase="H9", correlation_id=correlation_id)
+        
+        return JSONResponse(
+            status_code=status.HTTP_202_ACCEPTED,
+            content={
+                "ok": True,
+                "message": f"Snapshot 9h initiated in background for date: {body.date}",
+                "correlation_id": correlation_id,
+            },
+        )
+    except Exception as e:
+        logger.error(
+            f"Snapshot 9h task failed: {e}",
+            correlation_id=correlation_id,
+            exc_info=e,
+        )
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={
+                "ok": False,
+                "error": str(e),
+                "traceback": traceback.format_exc(),
+                "correlation_id": correlation_id,
+            },
+        )
+
+@app.post("/tasks/run-phase")
+async def tasks_run_phase(request: Request, body: RunRequest):
+    """
+    Execute analysis for one race (H-30 or H-5).
+    """
+    correlation_id = request.state.correlation_id
+    logger.info(
+        f"Run phase task received for course: {body.course_url}, phase: {body.phase}, date: {body.date}",
+        correlation_id=correlation_id,
+    )
+    
+    try:
+        from hippique_orchestrator.runner import run_course
+        result = run_course(
+            course_url=body.course_url,
+            phase=body.phase,
+            date=body.date,
+            correlation_id=correlation_id,
+        )
+        
+        return JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content={
+                "ok": result.get("ok", False),
+                "phase": result.get("phase"),
+                "artifacts": result.get("artifacts", []),
+                "correlation_id": correlation_id,
+            },
+        )
+    except Exception as e:
+        logger.error(
+            f"Run phase task failed: {e}",
+            correlation_id=correlation_id,
+            exc_info=e,
+        )
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={
+                "ok": False,
+                "error": str(e),
+                "traceback": traceback.format_exc(),
+                "correlation_id": correlation_id,
+            },
+        )
+
+@app.post("/tasks/bootstrap-day")
+async def tasks_bootstrap_day(request: Request, body: ScheduleRequest):
+    """
+    Generate daily plan and schedule H-30/H-5 analyses.
+    
+    Workflow:
+      1. Build plan from Geny + ZEturf (async parallel fetching)
+      2. Schedule ~80 Cloud Tasks (H-30 + H-5 per race)
+      3. Return summary
+    
+    Args:
+        body.date: "YYYY-MM-DD" or "today"
+        body.mode: "tasks" (default) or "scheduler" (Cloud Scheduler fallback)
+    
+    Returns:
+        {
+          "ok": true,
+          "date": "2025-10-16",
+          "total_races": 40,
+          "scheduled_h30": 38,
+          "scheduled_h5": 38,
+          "mode": "tasks",
+          "plan_summary": [...],
+          "correlation_id": "..."
+        }
+    """
+    correlation_id = request.state.correlation_id
+    
+    logger.info(
+        "Bootstrap day task received",
+        correlation_id=correlation_id,
+        date=body.date,
+        mode=body.mode,
+    )
+    
+    try:
+        # 1. Build plan asynchronously (parallel HTTP fetching)
+        logger.info("Building daily plan...", correlation_id=correlation_id)
+        plan = await build_plan_async(body.date)
+        
+        if not plan:
+            logger.warning("Empty plan generated", correlation_id=correlation_id)
+            return JSONResponse(
+                status_code=status.HTTP_202_ACCEPTED, # Still accepted, but no tasks scheduled
+                content={
+                    "ok": True, # Indicate that the request was processed successfully, even if no tasks were scheduled
+                    "message": "No races found for this date, no tasks scheduled",
+                    "date": body.date,
+                    "scheduled_tasks": 0,
+                    "correlation_id": correlation_id,
+                }
+            )
+        
+        logger.info(
+            f"Plan built: {len(plan)} races",
+            correlation_id=correlation_id,
+            total_races=len(plan),
+        )
+        
+        # 2. Schedule all races (H-30 + H-5)
+        logger.info("Scheduling Cloud Tasks...", correlation_id=correlation_id)
+        scheduled = schedule_all_races(
+            plan=plan,
+            mode=body.mode,
+            correlation_id=correlation_id,
+        )
+        
+        # 3. Build response
+        success_h30 = sum(1 for s in scheduled if s["phase"] == "H30" and s["ok"])
+        success_h5 = sum(1 for s in scheduled if s["phase"] == "H5" and s["ok"])
+        
+        total_scheduled = success_h30 + success_h5
+        
+        logger.info(
+            "Scheduling complete",
+            correlation_id=correlation_id,
+            total=total_scheduled,
+            success_h30=success_h30,
+            success_h5=success_h5,
         )
         
         # Plan summary for response (first 5 races)
@@ -368,11 +478,12 @@ async def schedule_daily_plan(request: Request, body: ScheduleRequest):
         return JSONResponse(
             status_code=status.HTTP_202_ACCEPTED,
             content={
-                "ok": all_tasks_ok,
+                "ok": True,
                 "date": body.date,
                 "total_races": len(plan),
                 "scheduled_h30": success_h30,
                 "scheduled_h5": success_h5,
+                "scheduled_tasks": total_scheduled,
                 "mode": body.mode,
                 "plan_summary": plan_summary,
                 "scheduled_details": scheduled,
@@ -382,7 +493,7 @@ async def schedule_daily_plan(request: Request, body: ScheduleRequest):
     
     except Exception as e:
         logger.error(
-            f"Schedule failed: {e}",
+            f"Bootstrap day task failed: {e}",
             correlation_id=correlation_id,
             exc_info=e,
         )
@@ -414,7 +525,7 @@ async def run_race_analysis(request: Request, body: RunRequest):
     
     Returns:
         {
-          "ok": True,
+          "ok": true,
           "phase": "H5",
           "returncode": 0,
           "stdout_tail": "...",
@@ -499,13 +610,12 @@ async def startup_event():
         version="2.0.0",
         project_id=config.project_id,
         region=config.region,
+        environment=config.environment,
     )
-    print(f"DEBUG: Type of config: {type(config)}")
-    print(f"DEBUG: Attributes of config: {dir(config)}")
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    """Log service shutting down"""
+    """Log service shutdown"""
     logger.info("Service shutting down")
 
 # ============================================
@@ -551,7 +661,7 @@ async def debug_parse(date: str = "2025-10-17"):
     """Debug endpoint pour tester le parser ZEturf"""
     correlation_id = str(uuid.uuid4())
     try:
-        from .plan import build_plan_async
+        from .plan import build_plan_async, ADVANCED_EXTRACTION
         
         logger.info(f"Debug parse for {date}", extra={"correlation_id": correlation_id})
         result = await build_plan_async(date)
@@ -560,6 +670,7 @@ async def debug_parse(date: str = "2025-10-17"):
             "ok": True,
             "date": date,
             "count": len(result),
+            "advanced_extraction": ADVANCED_EXTRACTION,
             "races": result[:3] if result else [],
             "correlation_id": correlation_id
         }
@@ -578,8 +689,8 @@ async def debug_parse(date: str = "2025-10-17"):
 async def debug_info():
     """Informations système"""
     import sys
-    # from src.config import get_config # Removed this line
-    # config = get_config() # Removed this line
+    from src.config import get_config
+    config = get_config()
     return {
         "python_version": sys.version,
         "cwd": os.getcwd(),
@@ -589,3 +700,101 @@ async def debug_info():
             "REGION": config.region,
         }
     }
+
+from pathlib import Path # Added
+
+# ============================================
+# Configuration
+# ============================================
+
+logger = get_logger(__name__)
+
+STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "static") # Added
+ANALYSES_DIR = Path("data/analyses") # Define analyses directory
+
+app = FastAPI(
+    title="Hippique Orchestrator",
+    description="Cloud Run service for automated horse racing analysis (GPI v5.1)",
+    version="2.0.0",
+)
+
+@app.get("/api/pronostics")
+async def get_pronostics(date: str = Query(..., description="Date in YYYY-MM-DD format", example="2025-10-16")):
+    """
+    Fetch pronostics data for a given date.
+    """
+    try:
+        # Validate date format
+        datetime.strptime(date, "%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Invalid date format. Please use YYYY-MM-DD."
+        )
+
+    correlation_id = str(uuid.uuid4())
+    logger.info(f"Fetching pronostics for date: {date}", correlation_id=correlation_id)
+
+    all_pronostics = []
+    total_races = 0
+
+    try:
+        # Iterate through subdirectories (e.g., R1C1) in the analyses directory
+        for race_dir in ANALYSES_DIR.iterdir():
+            if race_dir.is_dir():
+                # Look for analysis JSON files for the specified date
+                for analysis_file in race_dir.glob(f"{date}*_H5.json"):
+                    try:
+                        with open(analysis_file, "r") as f:
+                            analysis_data = json.load(f)
+                            all_pronostics.append(analysis_data)
+                            total_races += 1
+                    except json.JSONDecodeError:
+                        logger.warning(f"Malformed JSON in {analysis_file}", correlation_id=correlation_id)
+                    except Exception as e:
+                        logger.error(f"Error reading {analysis_file}: {e}", correlation_id=correlation_id)
+        
+        if all_pronostics:
+            return {
+                "ok": True,
+                "total_races": total_races,
+                "date": date,
+                "pronostics": all_pronostics,
+                "message": f"Found {total_races} pronostics for date: {date}",
+                "correlation_id": correlation_id,
+            }
+        else:
+            return {
+                "ok": False,
+                "total_races": 0,
+                "date": date,
+                "pronostics": [],
+                "message": f"No pronostics found for date: {date}",
+                "correlation_id": correlation_id,
+            }
+
+    except FileNotFoundError:
+        logger.info(f"Analyses directory not found: {ANALYSES_DIR}", correlation_id=correlation_id)
+        return {
+            "ok": False,
+            "total_races": 0,
+            "date": date,
+            "pronostics": [],
+            "message": f"No analyses directory found for date: {date}",
+            "correlation_id": correlation_id,
+        }
+    except Exception as e:
+        logger.error(
+            f"Error fetching pronostics for date {date}: {e}",
+            correlation_id=correlation_id,
+            exc_info=e,
+        )
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={
+                "ok": False,
+                "error": str(e),
+                "traceback": traceback.format_exc(),
+                "correlation_id": correlation_id,
+            },
+        )

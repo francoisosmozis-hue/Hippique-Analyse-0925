@@ -5,8 +5,8 @@ import pytest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from ev_calculator import compute_ev_roi
-from validator_ev import ValidationError, validate_budget
+from hippique_orchestrator.ev_calculator import compute_ev_roi
+from hippique_orchestrator.validator_ev import ValidationError, validate_budget
 
 
 def test_kelly_cap_limits_stakes():

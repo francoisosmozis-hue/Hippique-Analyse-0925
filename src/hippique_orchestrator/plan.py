@@ -29,7 +29,7 @@ from typing import Any
 
 import aiohttp
 
-from .config import config
+from src.config.config import config
 from .logging_utils import get_logger
 from hippique_orchestrator.online_fetch_boturfers import fetch_boturfers_programme
 

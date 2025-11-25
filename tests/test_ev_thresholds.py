@@ -5,7 +5,7 @@ import pytest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from validator_ev import ValidationError, validate_ev, validate_policy
+from hippique_orchestrator.validator_ev import ValidationError, validate_ev, validate_policy
 
 
 def test_ev_sp_below_default_threshold(monkeypatch):

@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 
 from hippique_orchestrator.app_config import get_config
 from hippique_orchestrator.logging_utils import get_logger
-from hippique_orchestrator.snapshot_manager import write_snapshot_for_day
+from snapshot_manager import write_snapshot_for_day
 from hippique_orchestrator.runner import run_course # For /tasks/run-phase
 from hippique_orchestrator.plan import build_plan_async # For /tasks/bootstrap-day
 from hippique_orchestrator.scheduler import enqueue_run_task # Use existing enqueue_run_task

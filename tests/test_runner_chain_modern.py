@@ -5,7 +5,7 @@ import datetime as dt
 import json
 from freezegun import freeze_time
 from pathlib import Path
-from validator_ev import ValidationError as ValidatorEvValidationError
+from hippique_orchestrator.validator_ev import ValidationError as ValidatorEvValidationError
 
 @pytest.fixture
 def mock_runner_dependencies(mocker):

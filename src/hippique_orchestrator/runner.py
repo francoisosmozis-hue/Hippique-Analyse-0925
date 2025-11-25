@@ -20,8 +20,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from .modules.tickets_store import render_ticket_html, save_ticket_html
-from .gcs import upload_artifacts
+from modules.tickets_store import render_ticket_html, save_ticket_html
+from gcs import upload_artifacts
 from .logging_utils import get_logger
 
 # from .config.config import config
