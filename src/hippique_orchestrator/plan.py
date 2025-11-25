@@ -29,9 +29,9 @@ from typing import Any
 
 import aiohttp
 
-from src.config import config
-from src.logging_utils import get_logger
-from src.online_fetch_boturfers import fetch_boturfers_programme
+from .config import config
+from .logging_utils import get_logger
+from hippique_orchestrator.online_fetch_boturfers import fetch_boturfers_programme
 
 logger = get_logger(__name__)
 
@@ -154,7 +154,6 @@ async def _enrich_plan_with_times_async(plan: list[dict[str, Any]]) -> list[dict
         # Nettoyer le format "R1C1" pour correspondre à celui de Geny
         rc_key = f"{race['reunion']}{race['rc'].split(race['reunion'])[1].strip()}"
         boturfers_races_map[rc_key] = race
-    logger.info(f"Boturfers races map keys: {list(boturfers_races_map.keys())}")
 
     enriched = []
     for race_geny in plan:

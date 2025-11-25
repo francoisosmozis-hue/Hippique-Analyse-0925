@@ -7,6 +7,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 import logging
+from datetime import timedelta
 
 from dotenv import load_dotenv
 
@@ -26,6 +27,8 @@ class Config:
     service_name: str
     queue_id: str
     service_account_email: str | None
+    h30_offset: timedelta
+    h5_offset: timedelta
 
     # Timezone
     timezone: str = "Europe/Paris"
@@ -56,6 +59,7 @@ class Config:
 
     # Modes
     mode: str = "tasks"  # "tasks" ou "scheduler"
+
 
     @classmethod
     def from_env(cls) -> Config:
@@ -98,6 +102,8 @@ class Config:
         roi_min_global = float(os.getenv("ROI_MIN_GLOBAL", "0.25"))
 
         mode = os.getenv("SCHEDULING_MODE", "tasks")
+        h30_offset=timedelta(minutes=int(os.getenv("H30_OFFSET_MINUTES", 30)))
+        h5_offset=timedelta(minutes=int(os.getenv("H5_OFFSET_MINUTES", 5)))
 
         return cls(
             project_id=project_id,
@@ -121,6 +127,8 @@ class Config:
             ev_min_global=ev_min_global,
             roi_min_global=roi_min_global,
             mode=mode,
+            h30_offset=h30_offset,
+            h5_offset=h5_offset,
         )
 
     @property

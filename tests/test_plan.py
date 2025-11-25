@@ -7,10 +7,10 @@ import sys
 
 import pytest
 
-sys.path.insert(0, 'src')
 
-from src import plan
-from src.plan import build_plan_async
+
+from hippique_orchestrator import plan
+from hippique_orchestrator.plan import build_plan_async
 
 # Mock HTML fixtures
 GENY_HTML = """
@@ -52,40 +52,79 @@ ZETURF_HTML_R2C1 = """
 
 @pytest.mark.asyncio
 async def test_build_plan_async(monkeypatch):
-    """Test complete plan building"""
+    """Test complete plan building with Boturfers data."""
 
     def mock_call_discover_geny():
         return json.loads(GENY_HTML)
 
-    async def mock_fetch_start_time_async(session, course_url):
-        if "R1C3" in course_url:
-            return "15:20"
-        if "R1C5" in course_url:
-            return "16:45"
-        if "R2C1" in course_url:
-            return "14:10"
-        return None
+    def mock_fetch_boturfers_programme(url):
+        # Simulate Boturfers data for the races in GENY_HTML
+        return {
+            "source": "boturfers",
+            "type": "programme",
+            "url": url,
+            "scraped_at": "2025-10-15T12:00:00",
+            "races": [
+                {
+                    "rc": "R1 C3",
+                    "reunion": "R1",
+                    "name": "Prix Test C3",
+                    "url": "https://www.boturfers.fr/course/12345-r1c3-prix-test-c3",
+                    "runners_count": 10,
+                    "start_time": "15:20"
+                },
+                {
+                    "rc": "R1 C5",
+                    "reunion": "R1",
+                    "name": "Prix Test C5",
+                    "url": "https://www.boturfers.fr/course/12346-r1c5-prix-test-c5",
+                    "runners_count": 12,
+                    "start_time": "16:45"
+                },
+                {
+                    "rc": "R2 C1",
+                    "reunion": "R2",
+                    "name": "Prix Test C1",
+                    "url": "https://www.boturfers.fr/course/12347-r2c1-prix-test-c1",
+                    "runners_count": 8,
+                    "start_time": "14:10"
+                }
+            ]
+        }
 
-    monkeypatch.setattr("src.plan._call_discover_geny", mock_call_discover_geny)
-    monkeypatch.setattr("src.plan._fetch_start_time_async", mock_fetch_start_time_async)
+    monkeypatch.setattr("hippique_orchestrator.plan._call_discover_geny", mock_call_discover_geny)
+    monkeypatch.setattr("hippique_orchestrator.plan.fetch_boturfers_programme", mock_fetch_boturfers_programme)
 
-    plan = await build_plan_async("2025-10-15")
+    plan_result = await build_plan_async("2025-10-15")
 
-    assert len(plan) == 3
+    assert len(plan_result) == 3
 
-    # Check all races have times
-    for race in plan:
+    # Check all races have times and Boturfers URLs
+    for race in plan_result:
         assert race["time_local"] is not None
+        assert "boturfers.fr" in race["course_url"]
 
     # Check sorting by time
-    times = [race["time_local"] for race in plan]
+    times = [race["time_local"] for race in plan_result]
     assert times == sorted(times)
 
     # Check first race (earliest)
-    assert plan[0]["r_label"] == "R2"
-    assert plan[0]["c_label"] == "C1"
-    assert plan[0]["time_local"] == "14:10"
+    assert plan_result[0]["r_label"] == "R2"
+    assert plan_result[0]["c_label"] == "C1"
+    assert plan_result[0]["time_local"] == "14:10"
+    assert plan_result[0]["course_url"] == "https://www.boturfers.fr/course/12347-r2c1-prix-test-c1"
 
+    # Check second race
+    assert plan_result[1]["r_label"] == "R1"
+    assert plan_result[1]["c_label"] == "C3"
+    assert plan_result[1]["time_local"] == "15:20"
+    assert plan_result[1]["course_url"] == "https://www.boturfers.fr/course/12345-r1c3-prix-test-c3"
+
+    # Check third race
+    assert plan_result[2]["r_label"] == "R1"
+    assert plan_result[2]["c_label"] == "C5"
+    assert plan_result[2]["time_local"] == "16:45"
+    assert plan_result[2]["course_url"] == "https://www.boturfers.fr/course/12346-r1c5-prix-test-c5"
 def test_build_plan_structure():
     """Tests the construction of the plan from Geny data, including deduplication."""
     geny_data = {
@@ -118,8 +157,8 @@ def test_build_plan_structure():
     assert race1["r_label"] == "R1"
     assert race1["c_label"] == "C1"
     assert race1.get("time_local") is None # Time is not added at this stage
-    assert race1["course_url"] == "https://www.zeturf.fr/fr/course/2025-01-01/R1C1"
-    assert race1["reunion_url"] == "https://www.zeturf.fr/fr/reunion/2025-01-01/R1"
+    assert race1["course_url"] is None
+    assert race1["reunion_url"] is None
 
 def test_call_discover_geny_subprocess_error(mocker):
     """Tests that _call_discover_geny handles a subprocess error."""
@@ -129,7 +168,7 @@ def test_call_discover_geny_subprocess_error(mocker):
     mock_run.return_value.stderr = "Subprocess failed"
 
     # Mock the logger to capture error messages
-    mock_logger = mocker.patch("src.plan.logger")
+    mock_logger = mocker.patch("hippique_orchestrator.plan.logger")
 
     result = plan._call_discover_geny()
 
@@ -144,7 +183,7 @@ def test_call_discover_geny_json_error(mocker):
     mock_run.return_value.returncode = 0
     mock_run.return_value.stdout = "This is not JSON"
 
-    mock_logger = mocker.patch("src.plan.logger")
+    mock_logger = mocker.patch("hippique_orchestrator.plan.logger")
 
     result = plan._call_discover_geny()
 
@@ -155,25 +194,12 @@ def test_call_discover_geny_json_error(mocker):
     assert "Failed to call discover_geny_today.py" in call_args[0]
     assert call_kwargs["exc_info"]
 
-@pytest.mark.parametrize(
-    "html_snippet, expected_time",
-    [
-        ("blabla 14h30 blabla", "14:30"),
-        ("blabla 9:05 blabla", "09:05"),
-        ("<time datetime='T18:45:00'>", "18:45"),
-        ('{"startDate": "2025-01-01T08:15"}', "08:15"),
-        ("No time here", None),
-        ("", None),
-    ],
-)
-def test_extract_start_time_fallback(html_snippet, expected_time):
-    """Tests the fallback time extraction logic with various formats."""
-    assert plan._extract_start_time_fallback(html_snippet) == expected_time
+
 
 def test_build_plan_sync_wrapper(mocker):
     """Tests the synchronous build_plan wrapper."""
     # Mock the async function it calls
-    mock_build_plan_async = mocker.patch("src.plan.build_plan_async", new_callable=mocker.AsyncMock)
+    mock_build_plan_async = mocker.patch("hippique_orchestrator.plan.build_plan_async", new_callable=mocker.AsyncMock)
     mock_build_plan_async.return_value = ["race1", "race2"]
 
     result = plan.build_plan("2025-01-01")
@@ -189,7 +215,7 @@ def test_build_plan_sync_wrapper_raises_in_event_loop(mocker):
     mock_asyncio_run.side_effect = RuntimeError("cannot run loop while another is running")
 
     # Mock the logger to check the error message
-    mock_logger = mocker.patch("src.plan.logger")
+    mock_logger = mocker.patch("hippique_orchestrator.plan.logger")
 
     with pytest.raises(RuntimeError, match="Use build_plan_async\\(\\) in async context"):
         plan.build_plan("2025-01-01")

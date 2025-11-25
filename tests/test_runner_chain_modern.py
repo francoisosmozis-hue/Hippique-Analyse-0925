@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import patch, mock_open, call
-from src import runner_chain
+from hippique_orchestrator import runner_chain
 import datetime as dt
 import json
 from freezegun import freeze_time

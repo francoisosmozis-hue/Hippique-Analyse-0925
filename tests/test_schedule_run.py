@@ -7,8 +7,8 @@ from fastapi.testclient import TestClient
 os.environ["TZ"] = "Europe/Paris"
 
 # Imports app & modules (le sys.path vers src est géré par tests/conftest.py)
-from src import plan
-from src.service import app
+from hippique_orchestrator import plan
+from hippique_orchestrator.service import app
 
 client = TestClient(app)
 
@@ -51,12 +51,16 @@ async def test_schedule_to_run_flow(monkeypatch, mocker):
     monkeypatch.setattr(plan, "build_plan_async", mock_build_plan_async)
 
     # Mock de l'infra GCP pour éviter l'erreur de credentials
-    mocker.patch("src.scheduler.get_tasks_client")
+    mocker.patch("hippique_orchestrator.scheduler.get_tasks_client")
 
-    # 2) Mock l'appel HTTP interne que fait /schedule vers /tasks/bootstrap-day
-    mock_post = mocker.patch("httpx.AsyncClient.post")
-    # Simule une réponse réussie de l'endpoint bootstrap
-    mock_post.return_value = httpx.Response(202, json={"ok": True, "message": "Bootstrap initiated."})
+    # Mock schedule_all_races to simulate successful scheduling
+    mocker.patch(
+        "hippique_orchestrator.scheduler.schedule_all_races",
+        return_value=[
+            {"race": "R1C1", "phase": "H30", "ok": True, "task_name": "task-r1c1-h30"},
+            {"race": "R1C1", "phase": "H5", "ok": True, "task_name": "task-r1c1-h5"},
+        ],
+    )
 
     # 3) Appeler /schedule
     resp = client.post("/schedule", json={})

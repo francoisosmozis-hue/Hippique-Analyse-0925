@@ -20,9 +20,9 @@ from google.api_core import exceptions as gcp_exceptions
 from google.cloud import tasks_v2
 from google.protobuf import timestamp_pb2
 
-from app_config import get_config
-from src.logging_utils import get_logger
-from src.time_utils import convert_local_to_utc, format_rfc3339
+from .app_config import get_config
+from .logging_utils import get_logger
+from .time_utils import convert_local_to_utc, format_rfc3339
 
 config = get_config() # Get the global config instance
 
@@ -162,7 +162,7 @@ def enqueue_run_task(
         # Task doesn't exist, proceed with creation
         pass
     except Exception as e:
-        logger.warning(f"Error checking task existence: {e}", exc_info=e)
+        logger.warning(f"Error checking task existence: {str(e)}", exc_info=e)
         # Continue anyway
 
     # Build HTTP request payload
@@ -177,7 +177,7 @@ def enqueue_run_task(
         "name": task_path,
         "http_request": {
             "http_method": tasks_v2.HttpMethod.POST,
-            "url": f"{config.cloud_run_url}/run-analysis",
+            "url": f"{config.cloud_run_url}/run",
             "headers": {
                 "Content-Type": "application/json",
                 "X-Correlation-ID": correlation_id or "",

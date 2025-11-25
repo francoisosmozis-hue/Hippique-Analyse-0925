@@ -21,11 +21,11 @@ try:  # pragma: no cover - SciPy is optional
 except ImportError:  # pragma: no cover - handled gracefully
     minimize = None  # type: ignore
 
-from kelly import kelly_fraction
+from .kelly import kelly_fraction
 
 # ``simulate_wrapper`` is an optional dependency kept for backward compatibility.
 try:  # pragma: no cover - optional dependency
-    from simulate_wrapper import simulate_wrapper  # type: ignore
+    from .simulate_wrapper import simulate_wrapper  # type: ignore
 except Exception:  # pragma: no cover - handled gracefully
     simulate_wrapper = None  # type: ignore
 

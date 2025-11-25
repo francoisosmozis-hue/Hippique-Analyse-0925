@@ -35,9 +35,9 @@ if str(PROJECT_ROOT) not in sys.path:
 
 # --- Import core logic ---
 try:
-    from kelly import calculate_kelly_fraction
+    from hippique_orchestrator.kelly import calculate_kelly_fraction
     from src.overround import adaptive_cap, compute_overround_place
-    from src.simulate_wrapper import evaluate_combo
+    from hippique_orchestrator.simulate_wrapper import evaluate_combo
     from analysis_utils import compute_overround_cap
 except ImportError:
     logging.warning("One or more core modules not found. Using mock implementations for [overround, kelly, simulate_wrapper].")

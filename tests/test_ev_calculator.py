@@ -4,13 +4,13 @@ from typing import Any
 
 import pytest
 
-from src.ev_calculator import (
+from hippique_orchestrator.ev_calculator import (
     _apply_dutching,
     _kelly_fraction,
     compute_ev_roi,
     risk_of_ruin,
 )
-from src.simulate_ev import allocate_dutching_sp
+from hippique_orchestrator.simulate_ev import allocate_dutching_sp
 
 SIG = inspect.signature(compute_ev_roi)
 EV_THRESHOLD = SIG.parameters["ev_threshold"].default

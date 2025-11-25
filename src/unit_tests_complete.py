@@ -98,7 +98,7 @@ from unittest.mock import MagicMock, Mock, patch
 import pytest
 from bs4 import BeautifulSoup
 
-from src.plan import PlanBuilder
+from hippique_orchestrator.plan import PlanBuilder
 
 
 @pytest.fixture
@@ -201,7 +201,7 @@ def test_build_plan_empty_response():
 
 import pytest
 
-from src.scheduler import TaskScheduler
+from hippique_orchestrator.scheduler import TaskScheduler
 
 
 @pytest.fixture
@@ -310,7 +310,7 @@ import subprocess
 
 import pytest
 
-from src.runner import GPIRunner
+from hippique_orchestrator.runner import GPIRunner
 
 
 @pytest.fixture
@@ -423,7 +423,7 @@ from unittest.mock import patch
 import pytest
 from fastapi.testclient import TestClient
 
-from src.service import app
+from hippique_orchestrator.service import app
 
 
 @pytest.fixture
@@ -552,7 +552,7 @@ import pytest
 @pytest.mark.slow
 def test_full_plan_build():
     """Test construction complète du plan (réel)"""
-    from src.plan import PlanBuilder
+    from hippique_orchestrator.plan import PlanBuilder
 
     builder = PlanBuilder()
 
@@ -575,8 +575,8 @@ def test_full_plan_build():
 @pytest.mark.requires_gcp
 def test_cloud_tasks_integration():
     """Test intégration Cloud Tasks (nécessite GCP)"""
-    from src.config import config
-    from src.scheduler import TaskScheduler
+    from hippique_orchestrator.config import config
+    from hippique_orchestrator.scheduler import TaskScheduler
 
     # Skip si pas configuré
     if not config.PROJECT_ID or config.PROJECT_ID == "test-project":
@@ -603,7 +603,7 @@ import pytest
 @pytest.mark.unit
 def test_empty_plan_deduplication():
     """Test déduplication sur plan vide"""
-    from src.plan import PlanBuilder
+    from hippique_orchestrator.plan import PlanBuilder
 
     builder = PlanBuilder()
     result = builder._deduplicate_and_sort([])
@@ -614,7 +614,7 @@ def test_empty_plan_deduplication():
 @pytest.mark.unit
 def test_plan_with_missing_times():
     """Test plan avec heures manquantes"""
-    from src.plan import PlanBuilder
+    from hippique_orchestrator.plan import PlanBuilder
 
     plan = [
         {"date": "2025-10-16", "r_label": "R1", "c_label": "C1", "time_local": "14:30"},
@@ -632,7 +632,7 @@ def test_plan_with_missing_times():
 @pytest.mark.unit
 def test_task_name_special_characters():
     """Test nom de tâche avec caractères spéciaux"""
-    from src.scheduler import TaskScheduler
+    from hippique_orchestrator.scheduler import TaskScheduler
 
     # Les noms de tâche doivent être RFC-1035 compliant
     # (lowercase, alphanumeric, hyphens)

@@ -1,9 +1,9 @@
 import os
 import sys
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from src.simulate_wrapper import PAYOUT_CALIBRATION_PATH
+
+from hippique_orchestrator.simulate_wrapper import PAYOUT_CALIBRATION_PATH
 
 DEFAULT_CALIBRATION = str(PAYOUT_CALIBRATION_PATH)
 

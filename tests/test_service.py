@@ -12,11 +12,9 @@ import httpx
 from fastapi.testclient import TestClient
 
 # --- Add project root to sys.path ---
-_PROJECT_ROOT = pathlib.Path(__file__).resolve().parent.parent
-if str(_PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(_PROJECT_ROOT))
 
-from src.service import app
+
+from hippique_orchestrator.service import app
 
 client = TestClient(app)
 
@@ -99,7 +97,7 @@ def test_run_endpoint_success(mocker):
     Vérifie que le point de terminaison /run traite une requête valide avec succès.
     """
     # Mock la fonction run_course pour isoler le test de l'exécution réelle
-    mock_run = mocker.patch("src.service.run_course", return_value={"ok": True, "phase": "H-5"})
+    mock_run = mocker.patch("hippique_orchestrator.service.run_course", return_value={"ok": True, "phase": "H-5"})
     
     payload = {
         "course_url": "https://www.zeturf.fr/fr/course/2025-10-20/R1C2-marseille-borely/details",
@@ -119,7 +117,7 @@ def test_schedule_endpoint_success(mocker):
     """
     # Mock build_plan_async to return a valid plan
     mock_build_plan = mocker.patch(
-        "src.service.build_plan_async",  # Correct: Patch where the function is imported/used
+        "hippique_orchestrator.service.build_plan_async",  # Correct: Patch where the function is imported/used
         return_value=[
             {"r_label": "R1", "c_label": "C1", "course_url": "url1", "time_local": "10:00", "date": "2025-10-20"},
             {"r_label": "R1", "c_label": "C2", "course_url": "url2", "time_local": "11:00", "date": "2025-10-20"},
@@ -128,7 +126,7 @@ def test_schedule_endpoint_success(mocker):
 
     # Mock schedule_all_races to simulate successful scheduling of all tasks
     mocker.patch(
-        "src.service.schedule_all_races", # Changed from src.scheduler.schedule_all_races
+        "hippique_orchestrator.service.schedule_all_races", # Changed from hippique_orchestrator.scheduler.schedule_all_races
         return_value=[
             {"race": "R1C1", "phase": "H30", "ok": True, "task_name": "task-r1c1-h30"},
             {"race": "R1C1", "phase": "H5", "ok": True, "task_name": "task-r1c1-h5"},
@@ -150,7 +148,7 @@ def test_schedule_endpoint_handles_scheduling_error(mocker):
     """
     # Mock build_plan_async to return a valid plan
     mock_build_plan = mocker.patch(
-        "src.service.build_plan_async",  # Correct: Patch where the function is imported/used
+        "hippique_orchestrator.service.build_plan_async",  # Correct: Patch where the function is imported/used
         return_value=[
             {"r_label": "R1", "c_label": "C1", "course_url": "url1", "time_local": "10:00", "date": "2025-10-20"},
             {"r_label": "R1", "c_label": "C2", "course_url": "url2", "time_local": "11:00", "date": "2025-10-20"},
@@ -159,7 +157,7 @@ def test_schedule_endpoint_handles_scheduling_error(mocker):
 
     # Mock schedule_all_races to simulate a scheduling error for some tasks
     mocker.patch(
-        "src.service.schedule_all_races", # Changed from src.scheduler.schedule_all_races
+        "hippique_orchestrator.service.schedule_all_races", # Changed from hippique_orchestrator.scheduler.schedule_all_races
         return_value=[
             {"race": "R1C1", "phase": "H30", "ok": True, "task_name": "task-r1c1-h30"},
             {"race": "R1C1", "phase": "H5", "ok": False, "task_name": "", "error": "Permission denied"},
@@ -179,7 +177,7 @@ def test_debug_parse_endpoint(mocker):
     """
     Vérifie que le point de terminaison /debug/parse fonctionne correctement.
     """
-    mock_build_plan = mocker.patch("src.plan.build_plan_async")
+    mock_build_plan = mocker.patch("hippique_orchestrator.plan.build_plan_async")
     mock_build_plan.return_value = [{"reunion": "R1", "course": "C1", "details": "Test Race"}]
 
     response = client.get("/debug/parse?date=2025-01-01")

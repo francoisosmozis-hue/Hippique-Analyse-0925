@@ -7,9 +7,9 @@ os.environ['TZ'] = 'Europe/Paris'
 os.environ['PROJECT_ID'] = 'analyse-hippique'
 os.environ['REGION'] = 'europe-west1'
 
-sys.path.insert(0, '.')
 
-from src.plan import build_plan
+
+from hippique_orchestrator.plan import build_plan
 
 
 def main():

@@ -5,8 +5,8 @@ import pytest
 import requests
 from bs4 import BeautifulSoup
 
-from src import online_fetch_boturfers
-from src.online_fetch_boturfers import BoturfersFetcher
+from hippique_orchestrator import online_fetch_boturfers
+from hippique_orchestrator.online_fetch_boturfers import BoturfersFetcher
 
 
 @pytest.fixture

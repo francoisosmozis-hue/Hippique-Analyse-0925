@@ -7,7 +7,7 @@ import re
 import aiohttp
 from bs4 import BeautifulSoup
 
-from src.logging_utils import get_logger
+from hippique_orchestrator.logging_utils import get_logger
 
 logger = get_logger(__name__)
 

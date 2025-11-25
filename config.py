@@ -8,10 +8,13 @@ import os
 from dataclasses import dataclass
 
 from dotenv import load_dotenv
+import logging
 
 # Charger .env si présent
 load_dotenv()
 
+
+logger = logging.getLogger(__name__)
 
 @dataclass
 class Config:
@@ -22,7 +25,7 @@ class Config:
     region: str
     service_name: str
     queue_id: str
-    service_account_email: str
+    service_account_email: str | None
 
     # Timezone
     timezone: str = "Europe/Paris"
@@ -67,8 +70,8 @@ class Config:
         service_name = os.getenv("SERVICE_NAME", "hippique-orchestrator")
         queue_id = os.getenv("QUEUE_ID", "hippique-tasks")
         service_account_email = os.getenv("SERVICE_ACCOUNT_EMAIL")
-        if not service_account_email:
-            raise ValueError("SERVICE_ACCOUNT_EMAIL environment variable is required")
+        if service_account_email is None:
+            logger.warning("SERVICE_ACCOUNT_EMAIL environment variable is not set. GCS operations may fail.")
 
         # Optionnelles
         timezone = os.getenv("TZ", "Europe/Paris")

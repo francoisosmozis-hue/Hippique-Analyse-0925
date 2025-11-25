@@ -6,9 +6,9 @@ outputs a JSON document describing the meetings and courses.
 
 from __future__ import annotations
 
+import httpx
 import json
 import re
-import subprocess
 import unicodedata
 from datetime import datetime
 from typing import Any
@@ -37,10 +37,14 @@ def main() -> None:
     url = f"https://www.genybet.fr/reunions/{today}"
 
     try:
-        result = subprocess.run(['curl', '-s', url], capture_output=True, text=True, check=True)
-        html_content = result.stdout
-    except subprocess.CalledProcessError as e:
-        print(f"Curl failed: {e.stderr}")
+        response = httpx.get(url, follow_redirects=True, timeout=10.0)
+        response.raise_for_status()  # Raise an exception for 4xx or 5xx status codes
+        html_content = response.text
+    except httpx.RequestError as e:
+        print(f"An error occurred while requesting {e.request.url!r}: {e}")
+        return
+    except httpx.HTTPStatusError as e:
+        print(f"Error response {e.response.status_code} while requesting {e.request.url!r}: {e}")
         return
 
     soup = BeautifulSoup(html_content, "html.parser")
@@ -65,7 +69,7 @@ def main() -> None:
         slug = _slugify(hippo)
 
         # Extract course number (c)
-        c_el = row.select_one("td.race a")
+        c_el = row.select_one("td a")
         if not c_el:
             continue
         c = c_el.get_text(strip=True) # e.g., "C1"
@@ -79,9 +83,6 @@ def main() -> None:
             id_match = re.search(r"(\d+)$", href)
             if id_match:
                 id_course = id_match.group(1)
-
-        if not id_course:
-            continue
 
         # Group by meeting
         if hippo not in meetings_map:
@@ -102,6 +103,7 @@ def main() -> None:
         "meetings": meetings,
     }
     print(json.dumps(data, ensure_ascii=False, indent=2))
+
 
 
 if __name__ == "__main__":

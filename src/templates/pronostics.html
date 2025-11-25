@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Pronostics Hippiques du {{ date }}</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 2em; background-color: #f4f4f9; color: #333; }
+        h1, h2 { color: #4a4a4a; }
+        .pronostics-container { display: flex; flex-direction: column; gap: 2em; }
+        .race-card { background-color: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 1.5em; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .race-header { border-bottom: 1px solid #eee; padding-bottom: 1em; margin-bottom: 1em; }
+        .race-header h2 { margin: 0; }
+        .race-meta { font-size: 0.9em; color: #666; }
+        table { border-collapse: collapse; width: 100%; margin-top: 1em; }
+        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+        th { background-color: #f2f2f2; font-weight: bold; }
+        tr:nth-child(even) { background-color: #f9f9f9; }
+        .no-pronostics { text-align: center; padding: 2em; background-color: #fff; border: 1px solid #ddd; border-radius: 8px; }
+    </style>
+</head>
+<body>
+    <h1>Pronostics du {{ date }}</h1>
+
+    <div class="pronostics-container">
+        {% if pronostics %}
+            {% for race in pronostics %}
+                <div class="race-card">
+                    <div class="race-header">
+                        <h2>{{ race.rc }} - {{ race.hippodrome }}</h2>
+                        <div class="race-meta">
+                            <span>Heure: {{ race.heure }}</span> | 
+                            <span>Discipline: {{ race.discipline }}</span> |
+                            <a href="{{ race.course_url }}" target="_blank">Voir la course</a>
+                        </div>
+                    </div>
+                    
+                    {% if race.tickets %}
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Type de Pari</th>
+                                    <th>Chevaux</th>
+                                    <th>Mise</th>
+                                    <th>Cote</th>
+                                    <th>EV</th>
+                                    <th>ROI</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for ticket in race.tickets %}
+                                    <tr>
+                                        <td>{{ ticket.bet_type }}</td>
+                                        <td>{{ ticket.runners | join(', ') }}</td>
+                                        <td>{{ "%.2f" | format(ticket.stake) }} €</td>
+                                        <td>{{ ticket.odds }}</td>
+                                        <td>{{ "%.2f" | format(ticket.ev) }}</td>
+                                        <td>{{ "%.1f" | format(ticket.roi * 100) }} %</td>
+                                    </tr>
+                                 {% endfor %}
+                            </tbody>
+                        </table>
+                    {% else %}
+                        <p>Aucun ticket généré pour cette course.</p>
+                    {% endif %}
+                    <div class="race-meta" style="text-align: right; margin-top: 1em;">
+                        Dernière mise à jour: {{ race.last_updated }}
+                    </div>
+                </div>
+            {% endfor %}
+        {% else %}
+            <div class="no-pronostics">
+                <p>Aucun pronostic validé (GPI OK) trouvé pour aujourd'hui.</p>
+            </div>
+        {% endif %}
+    </div>
+</body>
+</html>

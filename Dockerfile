@@ -8,6 +8,8 @@ FROM python:3.12-slim
 # Set the working directory in the container
 WORKDIR /app
 
+ENV PYTHONPATH=/app
+
 # Install system dependencies, including gnupg for key management
 RUN apt-get update && apt-get install -y wget gnupg ca-certificates tzdata curl
 
@@ -30,6 +32,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Create a non-root user to run the application
 RUN addgroup --system appuser && adduser --system --ingroup appuser appuser
 
+
+
 # Copy the rest of the application code
 COPY . .
 
@@ -47,4 +51,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD curl -f http://localhost:8080/health || exit 1
 
 # Run the application
-CMD exec gunicorn -w 4 -k uvicorn.workers.UvicornWorker -b 0.0.0.0:$PORT src.service:app
+CMD uvicorn src.service:app --host 0.0.0.0 --port $PORT --log-level info

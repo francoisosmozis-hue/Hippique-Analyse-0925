@@ -3,7 +3,7 @@ import os
 import pathlib
 
 # --- Ensure payout calibration is always available ---
-# PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[1]
+PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[1]
 # CALIB_PATH = PROJECT_ROOT / "config" / "payout_calibration.yaml"
 # try:
 #     CALIB_PATH.parent.mkdir(parents=True, exist_ok=True)

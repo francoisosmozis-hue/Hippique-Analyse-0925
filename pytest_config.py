@@ -40,7 +40,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.config import Config
-from src.logging_utils import setup_logger
+from hippique_orchestrator.logging_utils import setup_logger
 
 # ----------------------------------------------------------------------------
 # Fixtures de configuration
@@ -254,7 +254,7 @@ def test_client():
     """Client de test FastAPI"""
     from fastapi.testclient import TestClient
 
-    from src.service import app
+    from hippique_orchestrator.service import app
 
     # Désactiver l'authentification pour les tests
     with patch('src.service.config.REQUIRE_AUTH', False):
@@ -312,7 +312,7 @@ def pytest_configure(config):
 # ============================================================================
 """
 import pytest
-from src.plan import PlanBuilder
+from hippique_orchestrator.plan import PlanBuilder
 
 @pytest.mark.unit
 def test_deduplicate_plan(sample_plan):

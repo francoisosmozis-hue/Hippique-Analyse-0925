@@ -765,7 +765,7 @@ def evaluate_combo(
                 "requirements": requirements,
             }
 
-    from src.ev_calculator import compute_ev_roi
+    from .ev_calculator import compute_ev_roi
 
     stats = compute_ev_roi(
         [dict(t) for t in tickets],

@@ -84,7 +84,7 @@ class MissingH30SnapshotError(RuntimeError):
         super().__init__(message)
         self.rc_dir = Path(rc_dir) if isinstance(rc_dir, (str, Path)) else None
 
-from src.app_config import get_config
+from hippique_orchestrator.app_config import get_config
 config = get_config()
 
 USE_GCS = bool(config.gcs_bucket)

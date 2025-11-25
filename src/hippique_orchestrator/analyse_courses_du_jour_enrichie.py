@@ -85,7 +85,7 @@ except Exception:  # pragma: no cover - used when optional deps are missing
 
 
 try:
-    from src.online_fetch_boturfers import fetch_boturfers_programme, fetch_boturfers_race_details
+    from .online_fetch_boturfers import fetch_boturfers_programme, fetch_boturfers_race_details
 except ImportError:
     pass
 

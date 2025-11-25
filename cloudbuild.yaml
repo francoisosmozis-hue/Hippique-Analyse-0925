@@ -1,26 +1,31 @@
 steps:
 # Install dependencies, check syntax, and run tests
-- name: 'python:3.11-slim'
+- name: 'python:3.12-slim'
   id: Test
   entrypoint: 'bash'
   args:
   - '-c'
   - |
+    apt-get update && apt-get install -y curl
     pip install -r requirements.txt
+    pip install .
+    export PYTHONPATH=$$PYTHONPATH:/workspace
+    export PROJECT_ID=analyse-hippique
+    export CLOUD_TASKS_SA_EMAIL=test-sa@analyse-hippique.iam.gserviceaccount.com
     echo "--- Checking Python syntax ---"
     python -m py_compile runner_chain.py pipeline_run.py src/service.py
     echo "--- Running smoke tests ---"
-    pytest -q tests/test_smoke.py
+    pytest -q
 
 # Build the Docker image
 - name: 'gcr.io/cloud-builders/docker'
   id: Build
-  args: ['build', '-t', '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_IMAGE}:${SHORT_SHA}', '.']
+  args: ['build', '--no-cache', '-t', '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_IMAGE}:latest', '.']
 
 # Push the Docker image to Artifact Registry
 - name: 'gcr.io/cloud-builders/docker'
   id: Push
-  args: ['push', '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_IMAGE}:${SHORT_SHA}']
+  args: ['push', '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_IMAGE}:latest']
 
 # Deploy to Cloud Run
 - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
@@ -30,18 +35,20 @@ steps:
   - 'run'
   - 'deploy'
   - '${_SERVICE}'
-  - '--image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_IMAGE}:${SHORT_SHA}'
+  - '--image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_IMAGE}:latest'
   - '--region=${_REGION}'
   - '--platform=managed'
-  - '--allow-unauthenticated'
-  - '--set-env-vars=TZ=Europe/Paris'
+  - '--set-env-vars=TZ=Europe/Paris,PROJECT_ID=$PROJECT_ID,REGION=${_REGION},SERVICE_NAME=${_SERVICE},QUEUE_ID=hippique-tasks,SERVICE_ACCOUNT_EMAIL=${_SERVICE_ACCOUNT_EMAIL},GCS_BUCKET=${_SERVICE}-bucket,REQUIRE_AUTH=true,OIDC_AUDIENCE=${_CLOUD_RUN_URL}'
   - '--quiet'
 
 images:
-- '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_IMAGE}:${SHORT_SHA}'
+- '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_IMAGE}:latest'
 
 substitutions:
-  _REGION: europe-west4
+  _REGION: europe-west1
   _SERVICE: hippique-orchestrator
   _REPO: hippique-orchestrator
   _IMAGE: hippique-orchestrator
+  # L'URL sera mise à jour par le premier déploiement réussi.
+  _CLOUD_RUN_URL: 'https://hippique-orchestrator-h3tdqmb7jq-ew.a.run.app'
+  _SERVICE_ACCOUNT_EMAIL: 'your-service-account@your-project-id.iam.gserviceaccount.com' # REPLACE WITH ACTUAL SA EMAIL

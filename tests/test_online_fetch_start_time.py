@@ -7,7 +7,7 @@ import textwrap
 import pytest
 from bs4 import BeautifulSoup
 
-from src.online_fetch_boturfers import BoturfersFetcher
+from hippique_orchestrator.online_fetch_boturfers import BoturfersFetcher
 
 
 @pytest.mark.parametrize(

@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Any
 
 from logging_io import CSV_HEADER, append_csv_line
-from src.gcs_utils import disabled_reason, is_gcs_enabled
+from hippique_orchestrator.gcs_utils import disabled_reason, is_gcs_enabled
 
 logging.basicConfig(level=logging.INFO)
 
@@ -82,7 +82,7 @@ def write_snapshot_from_geny(*args: Any, **kwargs: Any) -> None:
     raise RuntimeError("write_snapshot_from_geny est désactivé ; utilisez write_snapshot_from_boturfers à la place")
 
 try:
-    from src.online_fetch_boturfers import fetch_boturfers_programme, fetch_boturfers_race_details
+    from hippique_orchestrator.online_fetch_boturfers import fetch_boturfers_programme, fetch_boturfers_race_details
 except ImportError:
     def fetch_boturfers_programme(*args, **kwargs):
         raise RuntimeError("Boturfers programme fetcher is unavailable")

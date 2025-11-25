@@ -11,9 +11,9 @@ from fastapi.staticfiles import StaticFiles # Added import
 from pathlib import Path # Added import
 
 # Réactivation du logger
-from src.logging_utils import get_logger
+from .logging_utils import get_logger
 
-from src.app_config import get_config
+from .app_config import get_config
 
 # Réactivation des modèles Pydantic
 from pydantic import BaseModel, Field
@@ -24,12 +24,12 @@ import traceback
 from typing import Any, Dict, Optional
 from fastapi import Response, HTTPException
 
-from src.plan import build_plan_async
-from src.scheduler import schedule_all_races
-from src.api.tasks import router as tasks_router # Import the tasks router
+from .plan import build_plan_async
+from .scheduler import schedule_all_races
+from .api.tasks import router as tasks_router # Import the tasks router
 
 # Réactivation de l'import pour /run
-from src.runner import run_course
+from .runner import run_course
 
 # Imports pour les endpoints de debug
 import os
@@ -220,7 +220,15 @@ async def get_pronostics(request: Request, date: Optional[str] = None, analyses_
     if date is None or date == "today":
         target_date = datetime.now().strftime("%Y-%m-%d")
     else:
-        target_date = date
+        try:
+            # Validate date format
+            datetime.strptime(date, "%Y-%m-%d")
+            target_date = date
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Invalid date format. Please use YYYY-MM-DD.",
+            )
 
     pronostics_data = []
     total_races = 0
@@ -316,12 +324,20 @@ async def schedule_daily_plan(request: Request, body: ScheduleRequest):
         )
         
         # 2. Schedule all races (H-30 + H-5)
-        logger.info("Scheduling Cloud Tasks...", correlation_id=correlation_id)
-        scheduled = schedule_all_races(
-            plan=plan,
-            mode=body.mode,
-            correlation_id=correlation_id,
-        )
+        if config.project_id == "local-project":
+            logger.info("Skipping Cloud Tasks scheduling in local environment.", correlation_id=correlation_id)
+            # Create a dummy response for local mode
+            scheduled = [
+                {"race": f"{p['r_label']}{p['c_label']}", "phase": phase, "ok": True, "task_name": "local-dummy", "race_time_local": p["time_local"]}
+                for p in plan for phase in ["H30", "H5"]
+            ]
+        else:
+            logger.info("Scheduling Cloud Tasks...", correlation_id=correlation_id)
+            scheduled = schedule_all_races(
+                plan=plan,
+                mode=body.mode,
+                correlation_id=correlation_id,
+            )
         
         # 3. Build response
         success_h30 = sum(1 for s in scheduled if s["phase"] == "H30" and s["ok"])
@@ -535,7 +551,7 @@ async def debug_parse(date: str = "2025-10-17"):
     """Debug endpoint pour tester le parser ZEturf"""
     correlation_id = str(uuid.uuid4())
     try:
-        from src.plan import build_plan_async
+        from .plan import build_plan_async
         
         logger.info(f"Debug parse for {date}", extra={"correlation_id": correlation_id})
         result = await build_plan_async(date)
