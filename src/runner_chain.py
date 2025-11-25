@@ -35,10 +35,10 @@ from pydantic import (
     ValidationError as PydanticValidationError,
 )
 
-import online_fetch_zeturf as ofz
-from gcs_utils import disabled_reason, is_gcs_enabled, upload_file
-from simulate_ev import simulate_ev_batch
-from simulate_wrapper import PAYOUT_CALIBRATION_PATH
+from src import online_fetch_zeturf as ofz
+from src.gcs_utils import disabled_reason, is_gcs_enabled, upload_file
+from src.simulate_ev import simulate_ev_batch
+from src.simulate_wrapper import PAYOUT_CALIBRATION_PATH
 from validator_ev import ValidationError, validate_ev
 
 logger = logging.getLogger(__name__)
@@ -162,7 +162,13 @@ def _load_sources_config() -> dict[str, Any]:
         return {}
 
     with path.open("r", encoding="utf-8") as fh:
-        data = yaml.safe_load(fh) or {}
+        try:
+            data = yaml.safe_load(fh) or {}
+        except yaml.YAMLError as exc:
+            logger.warning(
+                "[runner] Failed to load sources config from %s: %s", path, exc
+            )
+            return {}
     if isinstance(data, dict):
         return data
     return {}
@@ -207,8 +213,8 @@ def _write_excel_update_command(
     cmd = (
         f'python update_excel_with_results.py '
         f'--excel "{excel}" '
-        f'--arrivee "{arrivee_path}" '
-        f'--tickets "{tickets_path}"\n'
+        f'--arrivee "{arrivee_path.as_posix()}" '
+        f'--tickets "{tickets_path.as_posix()}"\n'
     )
     _write_text_file(race_dir / "cmd_update_excel.txt", cmd)
 

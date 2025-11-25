@@ -8,7 +8,7 @@ from pathlib import Path
 from google.cloud import storage
 
 from src.app_config import get_config
-from logging_utils import get_logger
+from src.logging_utils import get_logger
 
 logger = get_logger(__name__)
 

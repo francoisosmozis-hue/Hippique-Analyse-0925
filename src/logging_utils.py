@@ -52,17 +52,13 @@ class StructuredLogger:
         # Add custom fields
         for key, value in kwargs.items():
             if value is not None:
-                log_entry[key] = value
+                # Convert exception objects to string representation
+                if isinstance(value, Exception):
+                    log_entry[key] = str(value)
+                else:
+                    log_entry[key] = value
 
         # Print JSON line
-        # Sanitize exception objects
-
-        for k, v in list(log_entry.items()):
-
-            if hasattr(v, "__class__") and "Exception" in v.__class__.__name__:
-
-                log_entry[k] = str(v)
-
         print(json.dumps(log_entry), file=sys.stderr, flush=True)
 
     def debug(self, message: str, **kwargs: Any) -> None:
