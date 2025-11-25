@@ -1,8 +1,8 @@
 from collections import OrderedDict
 from pathlib import Path
 
-import simulate_wrapper as sw
-from simulate_wrapper import evaluate_combo
+from hippique_orchestrator import simulate_wrapper as sw
+from hippique_orchestrator.simulate_wrapper import evaluate_combo
 
 TICKETS = [{"legs": ["a", "b"], "odds": 10.0, "stake": 1.0}]
 

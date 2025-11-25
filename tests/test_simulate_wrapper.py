@@ -192,7 +192,7 @@ def test_correlation_penalty_reduces_probability_and_ev(
         entry = sw._calibration_cache[sw._combo_key(legs)]
         detail = entry.get("details") or {}
         corr_info = detail.get("__correlation__", [])
-        from ev_calculator import compute_ev_roi
+        from hippique_orchestrator.ev_calculator import compute_ev_roi
 
         ticket = {
             "odds": 4.0,

@@ -10,7 +10,7 @@ from hippique_orchestrator.validator_ev import ValidationError as ValidatorEvVal
 @pytest.fixture
 def mock_runner_dependencies(mocker):
     """Mocks all external dependencies for the modern runner_chain."""
-    mocker.patch.object(runner_chain.ofz, 'fetch_race_snapshot', return_value={"runners": []})
+    mocker.patch('hippique_orchestrator.online_fetch_boturfers.fetch_boturfers_race_details', return_value={"runners": []})
     mocker.patch.object(runner_chain, 'upload_file', return_value=None)
     mocker.patch.object(runner_chain, 'simulate_ev_batch', return_value={})
     mocker.patch.object(runner_chain, 'validate_ev', return_value=True)
@@ -63,12 +63,11 @@ def test_write_snapshot_handles_fetch_failure(mocker):
     Tests that _write_snapshot correctly handles an exception from the fetcher,
     writing a 'no-data' status file.
     """
-    mocker.patch('src.runner_chain.is_gcs_enabled', return_value=False)
+    mocker.patch('hippique_orchestrator.runner_chain.is_gcs_enabled', return_value=False)
     mocker.patch('pathlib.Path.mkdir')
     mocker.patch('pathlib.Path.open', mock_open())
-    mock_fetch = mocker.patch.object(runner_chain.ofz, 'fetch_race_snapshot')
-    mock_fetch.side_effect = Exception("Network Error")
-    
+    mock_fetch = mocker.patch('hippique_orchestrator.online_fetch_boturfers.fetch_boturfers_race_details')
+    mock_fetch.side_effect = Exception("Network Error")    
     mock_json_dump = mocker.patch('json.dump')
 
     payload = runner_chain.RunnerPayload(
@@ -93,7 +92,7 @@ def test_single_race_h30_writes_snapshot(mock_runner_dependencies, mocker):
     Tests that a single-race invocation for H30 phase correctly triggers
     the snapshot writing process.
     """
-    mocker.patch('src.runner_chain.is_gcs_enabled', return_value=False)
+    mocker.patch('hippique_orchestrator.runner_chain.is_gcs_enabled', return_value=False)
     start_time_str = dt.datetime.now().isoformat()
     argv = [
         'src/runner_chain.py',
@@ -105,7 +104,7 @@ def test_single_race_h30_writes_snapshot(mock_runner_dependencies, mocker):
         '--budget', '5.0'
     ]
     mocker.patch.object(runner_chain.sys, 'argv', argv)
-    mock_write_snapshot = mocker.patch('src.runner_chain._write_snapshot')
+    mock_write_snapshot = mocker.patch('hippique_orchestrator.runner_chain._write_snapshot')
     runner_chain.main()
     mock_write_snapshot.assert_called_once()
     payload, window, _ = mock_write_snapshot.call_args.args
@@ -119,7 +118,7 @@ def test_single_race_h5_writes_snapshot_and_analysis(mock_runner_dependencies, m
     Tests that a single-race invocation for H5 phase correctly triggers both
     snapshot and analysis writing processes.
     """
-    mocker.patch('src.runner_chain.is_gcs_enabled', return_value=False)
+    mocker.patch('hippique_orchestrator.runner_chain.is_gcs_enabled', return_value=False)
     start_time_str = dt.datetime.now().isoformat()
     argv = [
         'src/runner_chain.py',
@@ -131,8 +130,8 @@ def test_single_race_h5_writes_snapshot_and_analysis(mock_runner_dependencies, m
         '--budget', '7.5'
     ]
     mocker.patch.object(runner_chain.sys, 'argv', argv)
-    mock_write_snapshot = mocker.patch('src.runner_chain._write_snapshot')
-    mock_write_analysis = mocker.patch('src.runner_chain._write_analysis')
+    mock_write_snapshot = mocker.patch('hippique_orchestrator.runner_chain._write_snapshot')
+    mock_write_analysis = mocker.patch('hippique_orchestrator.runner_chain._write_analysis')
     runner_chain.main()
     mock_write_snapshot.assert_called_once()
     payload_snap, window_snap, _ = mock_write_snapshot.call_args.args
@@ -147,7 +146,7 @@ def test_h5_analysis_skips_if_calibration_missing(mock_runner_dependencies, mock
     Tests that H5 analysis writes an 'insufficient_data' status if the
     payout calibration file is missing.
     """
-    mocker.patch('src.runner_chain.is_gcs_enabled', return_value=False)
+    mocker.patch('hippique_orchestrator.runner_chain.is_gcs_enabled', return_value=False)
     start_time_str = dt.datetime.now().isoformat()
     argv = [
         'src/runner_chain.py',
@@ -174,8 +173,8 @@ def test_gcs_upload_is_called_when_enabled(mock_runner_dependencies, mocker):
     """
     Tests that upload_file is called for snapshot and analysis when GCS is enabled.
     """
-    mocker.patch('src.runner_chain.USE_GCS', True)
-    mock_upload = mocker.patch('src.runner_chain.upload_file')
+    mocker.patch('hippique_orchestrator.runner_chain.USE_GCS', True)
+    mock_upload = mocker.patch('hippique_orchestrator.runner_chain.upload_file')
     
     start_time_str = dt.datetime.now().isoformat()
     argv = [
@@ -202,7 +201,7 @@ def test_single_race_result_phase_writes_excel_command(mock_runner_dependencies,
     """
     Tests that the RESULT phase triggers the Excel update command writing.
     """
-    mocker.patch('src.runner_chain.is_gcs_enabled', return_value=False)
+    mocker.patch('hippique_orchestrator.runner_chain.is_gcs_enabled', return_value=False)
     start_time_str = dt.datetime.now().isoformat()
     argv = [
         'src/runner_chain.py',
@@ -215,7 +214,7 @@ def test_single_race_result_phase_writes_excel_command(mock_runner_dependencies,
     ]
     mocker.patch.object(runner_chain.sys, 'argv', argv)
     
-    mock_write_excel_cmd = mocker.patch('src.runner_chain._write_excel_update_command')
+    mock_write_excel_cmd = mocker.patch('hippique_orchestrator.runner_chain._write_excel_update_command')
     
     runner_chain.main()
 
@@ -228,7 +227,7 @@ def test_result_phase_handles_missing_arrivee(mock_runner_dependencies, mocker):
     Tests that the RESULT phase correctly handles a missing arrivee_officielle.json
     by writing a 'missing' status payload and a CSV.
     """
-    mocker.patch('src.runner_chain.is_gcs_enabled', return_value=False)
+    mocker.patch('hippique_orchestrator.runner_chain.is_gcs_enabled', return_value=False)
     start_time_str = dt.datetime.now().isoformat()
     argv = [
         'src/runner_chain.py',
@@ -289,10 +288,10 @@ def test_result_phase_handles_missing_arrivee(mock_runner_dependencies, mocker):
             return mock_real_path
 
     # Patch the Path object *within* the runner_chain module
-    mocker.patch('src.runner_chain.Path', side_effect=path_side_effect)
+    mocker.patch('hippique_orchestrator.runner_chain.Path', side_effect=path_side_effect)
     
-    mock_write_json_file = mocker.patch('src.runner_chain._write_json_file')
-    mock_write_text_file = mocker.patch('src.runner_chain._write_text_file')
+    mock_write_json_file = mocker.patch('hippique_orchestrator.runner_chain._write_json_file')
+    mock_write_text_file = mocker.patch('hippique_orchestrator.runner_chain._write_text_file')
 
     runner_chain.main()
 
@@ -317,8 +316,8 @@ def test_write_excel_update_command_generates_correct_command(mock_runner_depend
     Tests that _write_excel_update_command generates the correct command string
     and writes it to the specified file.
     """
-    mocker.patch('src.runner_chain.is_gcs_enabled', return_value=False)
-    mock_write_text_file = mocker.patch('src.runner_chain._write_text_file')
+    mocker.patch('hippique_orchestrator.runner_chain.is_gcs_enabled', return_value=False)
+    mock_write_text_file = mocker.patch('hippique_orchestrator.runner_chain._write_text_file')
 
     mock_race_dir = mocker.Mock(spec=Path)
     mock_race_dir.name = 'R1C1'
@@ -362,8 +361,8 @@ def test_write_excel_update_command_finds_tickets_file(mock_runner_dependencies,
     Tests that _write_excel_update_command correctly finds a tickets file
     when tickets_path is not provided.
     """
-    mocker.patch('src.runner_chain.is_gcs_enabled', return_value=False)
-    mock_write_text_file = mocker.patch('src.runner_chain._write_text_file')
+    mocker.patch('hippique_orchestrator.runner_chain.is_gcs_enabled', return_value=False)
+    mock_write_text_file = mocker.patch('hippique_orchestrator.runner_chain._write_text_file')
 
     # Mock Path objects for race_dir, arrivee_path, excel_path
     mock_race_dir = mocker.Mock(spec=Path)
@@ -423,9 +422,9 @@ def test_write_excel_update_command_skips_if_no_tickets_file(mock_runner_depende
     Tests that _write_excel_update_command skips writing the command
     if no tickets file is found.
     """
-    mocker.patch('src.runner_chain.is_gcs_enabled', return_value=False)
-    mock_write_text_file = mocker.patch('src.runner_chain._write_text_file')
-    mock_logger_warning = mocker.patch('src.runner_chain.logger.warning')
+    mocker.patch('hippique_orchestrator.runner_chain.is_gcs_enabled', return_value=False)
+    mock_write_text_file = mocker.patch('hippique_orchestrator.runner_chain._write_text_file')
+    mock_logger_warning = mocker.patch('hippique_orchestrator.runner_chain.logger.warning')
 
     # Mock Path objects for race_dir, arrivee_path, excel_path
     mock_race_dir = mocker.Mock(spec=Path)
@@ -501,7 +500,7 @@ def test_planning_mode_triggers_correct_phase(mock_runner_dependencies, mocker):
     Tests that planning mode correctly identifies and triggers the right phase
     based on the time window.
     """
-    mocker.patch('src.runner_chain.is_gcs_enabled', return_value=False)
+    mocker.patch('hippique_orchestrator.runner_chain.is_gcs_enabled', return_value=False)
     race_start_time = dt.datetime.now() + dt.timedelta(minutes=30)
     planning_data = [{
         "id_course": "789101",
@@ -518,7 +517,7 @@ def test_planning_mode_triggers_correct_phase(mock_runner_dependencies, mocker):
         '--planning', 'dummy_planning.json',
     ]
     mocker.patch.object(runner_chain.sys, 'argv', argv)
-    mock_trigger_phase = mocker.patch('src.runner_chain._trigger_phase')
+    mock_trigger_phase = mocker.patch('hippique_orchestrator.runner_chain._trigger_phase')
 
     # 1. Test H-30 window
     with freeze_time(race_start_time - dt.timedelta(minutes=30)):
@@ -578,9 +577,9 @@ def test_write_snapshot_handles_gcs_upload_error(mock_runner_dependencies, mocke
     """
     Tests that _write_snapshot logs a warning when GCS upload fails.
     """
-    mocker.patch('src.runner_chain.USE_GCS', True)
-    mock_upload = mocker.patch('src.runner_chain.upload_file', side_effect=OSError("GCS Error"))
-    mock_logger_warning = mocker.patch('src.runner_chain.logger.warning')
+    mocker.patch('hippique_orchestrator.runner_chain.USE_GCS', True)
+    mock_upload = mocker.patch('hippique_orchestrator.runner_chain.upload_file', side_effect=OSError("GCS Error"))
+    mock_logger_warning = mocker.patch('hippique_orchestrator.runner_chain.logger.warning')
 
     payload = runner_chain.RunnerPayload(
         id_course="123456",
@@ -618,9 +617,9 @@ def test_write_analysis_handles_gcs_upload_error(mock_runner_dependencies, mocke
     """
     Tests that _write_analysis logs a warning when GCS upload fails.
     """
-    mocker.patch('src.runner_chain.USE_GCS', True)
-    mock_upload = mocker.patch('src.runner_chain.upload_file', side_effect=OSError("GCS Error"))
-    mock_logger_warning = mocker.patch('src.runner_chain.logger.warning')
+    mocker.patch('hippique_orchestrator.runner_chain.USE_GCS', True)
+    mock_upload = mocker.patch('hippique_orchestrator.runner_chain.upload_file', side_effect=OSError("GCS Error"))
+    mock_logger_warning = mocker.patch('hippique_orchestrator.runner_chain.logger.warning')
 
     mock_base_path = mocker.Mock(spec=Path)
     mock_base_path.mkdir = mocker.Mock()
@@ -656,10 +655,10 @@ def test_write_analysis_handles_validation_error(mock_runner_dependencies, mocke
     """
     Tests that _write_analysis returns early when validate_ev raises a ValidationError.
     """
-    mock_simulate_ev_batch = mocker.patch('src.runner_chain.simulate_ev_batch', return_value={"ev": 0.1, "roi": 0.05})
-    mock_validate_ev = mocker.patch('src.runner_chain.validate_ev', side_effect=ValidatorEvValidationError("Validation failed"))
+    mock_simulate_ev_batch = mocker.patch('hippique_orchestrator.runner_chain.simulate_ev_batch', return_value={"ev": 0.1, "roi": 0.05})
+    mock_validate_ev = mocker.patch('hippique_orchestrator.runner_chain.validate_ev', side_effect=ValidatorEvValidationError("Validation failed"))
     mock_json_dump = mocker.patch('json.dump')
-    mock_upload = mocker.patch('src.runner_chain.upload_file')
+    mock_upload = mocker.patch('hippique_orchestrator.runner_chain.upload_file')
 
     mock_base_path = mocker.Mock(spec=Path)
     mock_base_path.mkdir = mocker.Mock()
@@ -694,11 +693,11 @@ def test_write_analysis_skips_if_calibration_not_available(mock_runner_dependenc
     Tests that _write_analysis skips EV simulation and writes an insufficient_data
     payload if calibration is not available.
     """
-    mocker.patch('src.runner_chain.USE_GCS', True)
-    mock_simulate_ev_batch = mocker.patch('src.runner_chain.simulate_ev_batch')
-    mock_validate_ev = mocker.patch('src.runner_chain.validate_ev')
+    mocker.patch('hippique_orchestrator.runner_chain.USE_GCS', True)
+    mock_simulate_ev_batch = mocker.patch('hippique_orchestrator.runner_chain.simulate_ev_batch')
+    mock_validate_ev = mocker.patch('hippique_orchestrator.runner_chain.validate_ev')
     mock_json_dump = mocker.patch('json.dump')
-    mock_upload = mocker.patch('src.runner_chain.upload_file')
+    mock_upload = mocker.patch('hippique_orchestrator.runner_chain.upload_file')
     
     mock_base_path = mocker.Mock(spec=Path)
     mock_base_path.mkdir = mocker.Mock()
@@ -746,7 +745,7 @@ def test_planning_mode_triggers_correct_phase(mock_runner_dependencies, mocker):
     Tests that planning mode correctly identifies and triggers the right phase
     based on the time window.
     """
-    mocker.patch('src.runner_chain.is_gcs_enabled', return_value=False)
+    mocker.patch('hippique_orchestrator.runner_chain.is_gcs_enabled', return_value=False)
     race_start_time = dt.datetime.now() + dt.timedelta(minutes=30)
     planning_data = [{
         "id_course": "789101",
@@ -763,7 +762,7 @@ def test_planning_mode_triggers_correct_phase(mock_runner_dependencies, mocker):
         '--planning', 'dummy_planning.json',
     ]
     mocker.patch.object(runner_chain.sys, 'argv', argv)
-    mock_trigger_phase = mocker.patch('src.runner_chain._trigger_phase')
+    mock_trigger_phase = mocker.patch('hippique_orchestrator.runner_chain._trigger_phase')
 
     # 1. Test H-30 window
     with freeze_time(race_start_time - dt.timedelta(minutes=30)):

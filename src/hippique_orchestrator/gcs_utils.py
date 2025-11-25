@@ -7,7 +7,7 @@ from pathlib import Path
 
 from google.cloud import storage
 
-from .app_config import get_config
+from src.config.config import config
 from .logging_utils import get_logger
 
 logger = get_logger(__name__)
@@ -26,7 +26,6 @@ def _get_gcs_client():
     return _gcs_client
 
 def is_gcs_enabled() -> bool:
-    config = get_config()
     return bool(config.gcs_bucket)
 
 def disabled_reason() -> str | None:
@@ -42,7 +41,7 @@ def upload_file(local_path: str | os.PathLike[str]) -> None:
     if not is_gcs_enabled():
         return
 
-    config = get_config()
+
     client = _get_gcs_client()
     if not client:
         return

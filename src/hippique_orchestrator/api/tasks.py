@@ -10,7 +10,7 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from hippique_orchestrator.app_config import get_config
+from src.config.config import config
 from hippique_orchestrator.logging_utils import get_logger
 from snapshot_manager import write_snapshot_for_day
 from hippique_orchestrator.runner import run_course # For /tasks/run-phase
@@ -18,7 +18,7 @@ from hippique_orchestrator.plan import build_plan_async # For /tasks/bootstrap-d
 from hippique_orchestrator.scheduler import enqueue_run_task # Use existing enqueue_run_task
 
 router = APIRouter(prefix="/tasks", tags=["Tasks"])
-config = get_config()
+
 logger = get_logger(__name__)
 
 # ============================================

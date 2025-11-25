@@ -28,6 +28,7 @@ from src.config.config import config # Added
 from .logging_utils import get_logger # Added
 from .plan import build_plan_async
 from .scheduler import schedule_all_races
+from .runner import run_course # Moved from inside tasks_run_phase
 import os # Added
 
 # ============================================
@@ -711,12 +712,6 @@ logger = get_logger(__name__)
 
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "static") # Added
 ANALYSES_DIR = Path("data/analyses") # Define analyses directory
-
-app = FastAPI(
-    title="Hippique Orchestrator",
-    description="Cloud Run service for automated horse racing analysis (GPI v5.1)",
-    version="2.0.0",
-)
 
 @app.get("/api/pronostics")
 async def get_pronostics(date: str = Query(..., description="Date in YYYY-MM-DD format", example="2025-10-16")):

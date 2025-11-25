@@ -21,10 +21,10 @@ from pathlib import Path
 from typing import Any
 
 from modules.tickets_store import render_ticket_html, save_ticket_html
-from gcs import upload_artifacts
+from src.gcs import upload_artifacts
 from .logging_utils import get_logger
 
-# from .config.config import config
+from src.config.config import config
 
 logger = get_logger(__name__)
 
@@ -107,7 +107,6 @@ def run_course(
     rc_dir = DATA_DIR / f"{reunion}{course}"
     rc_dir.mkdir(parents=True, exist_ok=True)
 
-    # Préparer l'environnement pour les sous-processus
     env = os.environ.copy()
     env["PYTHONPATH"] = str(Path.cwd())
     # Injecter explicitement la configuration pour les scripts enfants
@@ -121,7 +120,7 @@ def run_course(
 
     if phase_clean == "H30":
         logger.info("Step 1/1: Snapshot H30", correlation_id=correlation_id)
-        cmd_analyse = [sys.executable, str(MODULES_DIR / "analyse_courses_du_jour_enrichie.py"), "--reunion", reunion, "--course", course, "--phase", "H30", "--data-dir", str(DATA_DIR), "--course-url", course_url]
+        cmd_analyse = [sys.executable, str(SRC_DIR / "analyse_courses_du_jour_enrichie.py"), "--reunion", reunion, "--course", course, "--phase", "H30", "--data-dir", str(DATA_DIR), "--course-url", course_url]
         rc, stdout, stderr = _run_subprocess(cmd_analyse, timeout=config.timeout_seconds, env=env)
         if rc != 0:
             logger.error("H30 analysis failed", correlation_id=correlation_id, returncode=rc, stderr=stderr)
@@ -136,7 +135,7 @@ def run_course(
     logger.info("Starting H5 pipeline", correlation_id=correlation_id)
     
     logger.info("Step 1/6: analyse_courses_du_jour_enrichie H5", correlation_id=correlation_id)
-    cmd_analyse = [sys.executable, str(MODULES_DIR / "analyse_courses_du_jour_enrichie.py"), "--reunion", reunion, "--course", course, "--phase", "H5", "--data-dir", str(DATA_DIR), "--course-url", course_url]
+    cmd_analyse = [sys.executable, str(SRC_DIR / "analyse_courses_du_jour_enrichie.py"), "--reunion", reunion, "--course", course, "--phase", "H5", "--data-dir", str(DATA_DIR), "--course-url", course_url]
     rc, stdout, stderr = _run_subprocess(cmd_analyse, timeout=config.timeout_seconds, env=env)
     if rc != 0:
         logger.error("analyse_courses_du_jour_enrichie failed", correlation_id=correlation_id, returncode=rc, stderr=stderr)

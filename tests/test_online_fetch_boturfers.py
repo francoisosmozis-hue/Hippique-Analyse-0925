@@ -77,7 +77,7 @@ def test_fetch_html_success(mocker):
 def test_fetch_html_request_exception(mocker):
     """Tests HTML fetching failure due to a request exception."""
     mocker.patch("requests.get", side_effect=requests.exceptions.RequestException("Test error"))
-    logger_mock = mocker.patch("src.online_fetch_boturfers.logger")
+    logger_mock = mocker.patch("hippique_orchestrator.online_fetch_boturfers.logger")
 
     fetcher = BoturfersFetcher("http://dummy.url")
     result = fetcher._fetch_html()
@@ -111,7 +111,7 @@ def test_constructor_raises_on_empty_url():
 
 def test_parse_programme_handles_malformed_rows(malformed_programme_html, mocker):
     """Tests that the programme parser skips malformed rows and logs a warning."""
-    logger_mock = mocker.patch("src.online_fetch_boturfers.logger")
+    logger_mock = mocker.patch("hippique_orchestrator.online_fetch_boturfers.logger")
     fetcher = BoturfersFetcher(race_url="http://dummy.url/programme")
     fetcher.soup = BeautifulSoup(malformed_programme_html, "lxml")
 
@@ -131,11 +131,11 @@ def test_main_success(mocker):
     ])
 
     mocker.patch(
-        "src.online_fetch_boturfers.fetch_boturfers_programme",
+        "hippique_orchestrator.online_fetch_boturfers.fetch_boturfers_programme",
         return_value={"races": [{"rc": "R1C1", "url": "http://race.url"}]}
     )
     mocker.patch(
-        "src.online_fetch_boturfers.fetch_boturfers_race_details",
+        "hippique_orchestrator.online_fetch_boturfers.fetch_boturfers_race_details",
         return_value={"runners": [{"num": "1"}]}
     )
     mock_open = mocker.patch("builtins.open", mocker.mock_open())
@@ -152,7 +152,7 @@ def test_main_race_not_found(mocker):
     """Tests that main exits if the race is not found in the programme."""
     mocker.patch("sys.argv", ["", "--reunion", "R1", "--course", "C99", "--output", "out.json"])
     mocker.patch(
-        "src.online_fetch_boturfers.fetch_boturfers_programme",
+        "hippique_orchestrator.online_fetch_boturfers.fetch_boturfers_programme",
         return_value={"races": [{"rc": "R1C1", "url": "http://race.url"}]}
     )
     mock_exit = mocker.patch("sys.exit", side_effect=SystemExit)
@@ -166,11 +166,11 @@ def test_main_race_details_fail(mocker):
     """Tests that main exits if fetching race details fails."""
     mocker.patch("sys.argv", ["", "--reunion", "R1", "--course", "C1", "--output", "out.json"])
     mocker.patch(
-        "src.online_fetch_boturfers.fetch_boturfers_programme",
+        "hippique_orchestrator.online_fetch_boturfers.fetch_boturfers_programme",
         return_value={"races": [{"rc": "R1C1", "url": "http://race.url"}]}
     )
     mocker.patch(
-        "src.online_fetch_boturfers.fetch_boturfers_race_details",
+        "hippique_orchestrator.online_fetch_boturfers.fetch_boturfers_race_details",
         return_value={"error": "Failed"}
     )
     mock_exit = mocker.patch("sys.exit")
@@ -183,7 +183,7 @@ def test_fetch_boturfers_race_details_success(mocker):
     """Tests the successful path of the fetch_boturfers_race_details function."""
     mock_fetcher_instance = mocker.Mock()
     mock_fetcher_instance.get_race_snapshot.return_value = {"runners": ["test"]}
-    mocker.patch("src.online_fetch_boturfers.BoturfersFetcher", return_value=mock_fetcher_instance)
+    mocker.patch("hippique_orchestrator.online_fetch_boturfers.BoturfersFetcher", return_value=mock_fetcher_instance)
 
     result = online_fetch_boturfers.fetch_boturfers_race_details("http://dummy.url")
 
@@ -194,8 +194,8 @@ def test_fetch_boturfers_race_details_fails(mocker):
     """Tests the failure path of the fetch_boturfers_race_details function."""
     mock_fetcher_instance = mocker.Mock()
     mock_fetcher_instance.get_race_snapshot.return_value = {"error": "Failed"}
-    mocker.patch("src.online_fetch_boturfers.BoturfersFetcher", return_value=mock_fetcher_instance)
-    logger_mock = mocker.patch("src.online_fetch_boturfers.logger")
+    mocker.patch("hippique_orchestrator.online_fetch_boturfers.BoturfersFetcher", return_value=mock_fetcher_instance)
+    logger_mock = mocker.patch("hippique_orchestrator.online_fetch_boturfers.logger")
 
     result = online_fetch_boturfers.fetch_boturfers_race_details("http://dummy.url")
 
@@ -206,11 +206,11 @@ def test_main_handles_oserror(mocker):
     """Tests that main exits if writing the output file fails."""
     mocker.patch("sys.argv", ["", "--reunion", "R1", "--course", "C1", "--output", "out.json"])
     mocker.patch(
-        "src.online_fetch_boturfers.fetch_boturfers_programme",
+        "hippique_orchestrator.online_fetch_boturfers.fetch_boturfers_programme",
         return_value={"races": [{"rc": "R1C1", "url": "http://race.url"}]}
     )
     mocker.patch(
-        "src.online_fetch_boturfers.fetch_boturfers_race_details",
+        "hippique_orchestrator.online_fetch_boturfers.fetch_boturfers_race_details",
         return_value={"runners": [{"num": "1"}]}
     )
     mock_open = mocker.patch("builtins.open", mocker.mock_open())

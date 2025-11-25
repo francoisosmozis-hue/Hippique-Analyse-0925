@@ -27,9 +27,12 @@ def test_upload_artifacts_uses_bucket_env(tmp_path, monkeypatch):
     client_mock.bucket.return_value = bucket_mock
     bucket_mock.blob.return_value = blob_mock
 
-    with patch("src.config.Config", return_value=config_mock), \
+    with patch("src.config.config.config", new=config_mock), \
          patch("google.cloud.storage.Client", return_value=client_mock) as storage_client_mock:
-        importlib.reload(gcs)
+        
+        # Force reload of gcs to pick up the patched config
+        importlib.reload(gcs) 
+
         # Act
         gcs.upload_artifacts(rc_dir, artifacts)
 

@@ -18,11 +18,11 @@ from urllib.parse import urljoin
 import requests
 from bs4 import BeautifulSoup
 
-from .logging_io import CSV_HEADER, append_csv_line
-from .scripts.gcs_utils import disabled_reason, is_gcs_enabled
+from hippique_orchestrator.logging_io import CSV_HEADER, append_csv_line
+from hippique_orchestrator.gcs_utils import disabled_reason, is_gcs_enabled
 
 try:
-    from .scripts.online_fetch_zeturf import normalize_snapshot
+    from hippique_orchestrator.online_fetch_zeturf import normalize_snapshot
 except (ImportError, SyntaxError) as _normalize_import_error:  # pragma: no cover - fallback
     def _raise_normalize_snapshot(payload: Mapping[str, Any]) -> dict[str, Any]:
         """Placeholder lorsque :mod:`scripts.online_fetch_zeturf` est invalide."""
@@ -34,8 +34,8 @@ except (ImportError, SyntaxError) as _normalize_import_error:  # pragma: no cove
     normalize_snapshot = _raise_normalize_snapshot
 import pipeline_run
 
-from .scripts.analysis_utils import compute_overround_cap
-from .scripts.fetch_je_stats import collect_stats
+from hippique_orchestrator.analysis_utils import compute_overround_cap
+from hippique_orchestrator.fetch_je_stats import collect_stats
 from .scripts.online_fetch_zeturf import ZeturfFetcher
 from .simulate_wrapper import PAYOUT_CALIBRATION_PATH, evaluate_combo
 

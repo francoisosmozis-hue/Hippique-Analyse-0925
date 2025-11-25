@@ -18,7 +18,6 @@ def upload_artifacts(rc_dir: Path, artifacts: list[str]) -> None:
         rc_dir: Répertoire data/R1C3/
         artifacts: Liste de chemins d'artefacts
     """
-    config = Config()
     if not config.gcs_bucket:
         return
 
