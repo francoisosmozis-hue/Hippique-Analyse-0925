@@ -1,0 +1,221 @@
+<html>
+<head profile="http://www.w3.org/2005/11/profile">
+    <link rel="icon" type="image/ico" href="https://static.geny.com/web/images/favicon.ico">
+    <meta name="viewport" content="width=980">
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <title>Erreur - Geny</title>
+
+    <meta name="robots" content="noindex,nofollow">
+    <link rel="stylesheet" type="text/css" href="https://static.geny.com/web/yahoo/2.8.0/build/reset-fonts-grids/reset-fonts-grids.css">
+    <link href="https://www.geny.com/web/css/geny.4.27.css" rel="stylesheet" type="text/css">
+
+    <script type="text/JavaScript">
+        // Initialisations effectuées après le chargement de la page (balise body onload).
+        function changeUrl(itemArray) {
+            var nb, item, i;
+
+            nb = itemArray.length;
+            for (i = 0; i < nb; i++) {
+                item = itemArray[i];
+                item.link = "https://www.geny.com/" + item.link;
+            }
+        }
+    </script>
+    <!-- Didomi -->
+
+<script type="text/javascript">window.gdprAppliesGlobally = true;
+(function () {
+    function n(e) {
+        if (!window.frames[e]) {
+            if (document.body && document.body.firstChild) {
+                var t = document.body;
+                var r = document.createElement("iframe");
+                r.style.display = "none";
+                r.name = e;
+                r.title = e;
+                t.insertBefore(r, t.firstChild)
+            } else {
+                setTimeout(function () {
+                    n(e)
+                }, 5)
+            }
+        }
+    }
+
+    function e(r, a, o, s, c) {
+        function e(e, t, r, n) {
+            if (typeof r !== "function") {
+                return
+            }
+            if (!window[a]) {
+                window[a] = []
+            }
+            var i = false;
+            if (c) {
+                i = c(e, n, r)
+            }
+            if (!i) {
+                window[a].push({command: e, version: t, callback: r, parameter: n})
+            }
+        }
+
+        e.stub = true;
+        e.stubVersion = 2;
+
+        function t(n) {
+            if (!window[r] || window[r].stub !== true) {
+                return
+            }
+            if (!n.data) {
+                return
+            }
+            var i = typeof n.data === "string";
+            var e;
+            try {
+                e = i ? JSON.parse(n.data) : n.data
+            } catch (t) {
+                return
+            }
+            if (e[o]) {
+                var a = e[o];
+                window[r](a.command, a.version, function (e, t) {
+                    var r = {};
+                    r[s] = {returnValue: e, success: t, callId: a.callId};
+                    n.source.postMessage(i ? JSON.stringify(r) : r, "*")
+                }, a.parameter)
+            }
+        }
+
+        if (typeof window[r] !== "function") {
+            window[r] = e;
+            if (window.addEventListener) {
+                window.addEventListener("message", t, false)
+            } else {
+                window.attachEvent("onmessage", t)
+            }
+        }
+    }
+
+    e("__uspapi", "__uspapiBuffer", "__uspapiCall", "__uspapiReturn");
+    n("__uspapiLocator");
+    e("__tcfapi", "__tcfapiBuffer", "__tcfapiCall", "__tcfapiReturn");
+    n("__tcfapiLocator");
+    (function (e) {
+        var t = document.createElement("link");
+        t.rel = "preconnect";
+        t.as = "script";
+        var r = document.createElement("link");
+        r.rel = "dns-prefetch";
+        r.as = "script";
+        var n = document.createElement("link");
+        n.rel = "preload";
+        n.as = "script";
+        var i = document.createElement("script");
+        i.id = "spcloader";
+        i.type = "text/javascript";
+        i["async"] = true;
+        i.charset = "utf-8";
+        var a = "https://sdk.privacy-center.org/" + e + "/loader.js?target=" + document.location.hostname;
+        if (window.didomiConfig && window.didomiConfig.user) {
+            var o = window.didomiConfig.user;
+            var s = o.country;
+            var c = o.region;
+            if (s) {
+                a = a + "&country=" + s;
+                if (c) {
+                    a = a + "&region=" + c
+                }
+            }
+        }
+        t.href = "https://sdk.privacy-center.org/";
+        r.href = "https://sdk.privacy-center.org/";
+        n.href = a;
+        i.src = a;
+        var d = document.getElementsByTagName("script")[0];
+        d.parentNode.insertBefore(t, d);
+        d.parentNode.insertBefore(r, d);
+        d.parentNode.insertBefore(n, d);
+        d.parentNode.insertBefore(i, d)
+    })("8f52745a-6a6a-4bd1-9b50-adb56c9c6938")
+})();
+
+
+window.didomiConfig = {
+    languages: {
+        enabled: ['fr'],
+        default: 'fr'
+    }
+};
+
+</script>
+<!-- /Didomi -->
+<script async src="https://widget.betin.ai/get/geny"></script>
+<link rel="alternate" type="application/rss+xml" title="www.geny.com: Le Telex de Geny (PMU)" href="https://rss.geny.com/web/media/rss.xml">
+<link rel="alternate" type="application/rss+xml" title="www.geny.com: Le Telex de Geny (Province)" href="https://rss.geny.com/web/media/province.xml">
+<link rel="alternate" type="application/atom+xml" title="www.geny.com: Le Telex de Geny" href="https://rss.geny.com/web/media/atom.xml">
+</head>
+
+<body>
+<table id="bd" width="700" style="margin-bottom: 8px; border: 1px solid #007168; margin-top: 5px;">
+    <tr>
+        <td width="200"><img src="https://www.geny.com/web/images/corporate/ent01.jpg" width="200"
+                             height="89" alt=""></td>
+        <td width="500"><img src="https://www.geny.com/web/images/corporate/ent02.jpg" width="498"
+                             height="89" alt=""></td>
+    </tr>
+    <tr valign="top">
+        <td height="300" colspan="2"><br><br>
+            <span class="txtGrandGras">La page que vous recherchez n'existe plus ou est actuellement indisponible.</span><br>
+            <br>
+            <a href="https://www.geny.com">Retour &agrave; la page d'accueil</a>.
+            <br><br><br><br><br>
+            Vous pouvez &eacute;galement retrouver l&rsquo;ensemble de nos informations par t&eacute;l&eacute;phone sur
+            le<br>
+            <img src="https://www.geny.com/web/images/geny/3601.gif" width="103" height="37" alt="">
+        </td>
+    </tr>
+    <tr>
+        <td height="30" colspan="2" style="color: #999999;" align="center">Matchem - 67/69 avenue Pierre Mendès France Paris 13, *0,60 euro/min
+        </td>
+    </tr>
+</table>
+<!--<br>
+<table border="1">
+    <tr>
+        <td>Erreur</td>
+        <td>404</td>
+    </tr>
+    <tr>
+        <td>Servlet</td>
+        <td>geny-spring</td>
+    </tr>
+    <tr>
+        <td>URI</td>
+        <td>/reunions-courses-pmu/_daujourdhui</td>
+    </tr>
+    <tr>
+        <td>Pile (Cause)</td>
+        <td>
+            Unknown</td>
+    </tr>
+</table>
+--><div id="Geny_Sticky"></div>
+<script type="application/javascript">
+    var slmadshb = slmadshb || {};
+    slmadshb.que = slmadshb.que || [];
+    slmadshb.que.push(function() {
+        slmadshb.display("Geny_Sticky");
+    });
+</script>
+<!-- Geny_video -->
+<div id="Geny_Video"></div>
+<script type="application/javascript">
+    var slmadshb = slmadshb || {};
+    slmadshb.que = slmadshb.que || [];
+    slmadshb.que.push(function() {
+        slmadshb.display("Geny_Video");
+    });
+</script>
+<!-- /Geny_video -->
+</body>
+</html>
