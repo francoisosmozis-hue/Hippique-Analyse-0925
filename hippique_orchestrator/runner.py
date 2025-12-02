@@ -62,7 +62,7 @@ def run_course(
 
     try:
         # Get budget from the central configuration
-        budget = config.budget_total
+        budget = config.BUDGET_TOTAL
 
         # Delegate directly to the refactored analysis function
         result = analysis_pipeline.process_single_course_analysis(
@@ -107,8 +107,9 @@ def run_course(
             }
 
     except Exception as e:
-        logger.exception(
+        logger.error( # Changed from logger.exception
             "An unexpected error occurred during course analysis.",
+            exc_info=e, # Added exc_info=e
             extra={
                 "correlation_id": correlation_id,
                 "trace_id": trace_id,
