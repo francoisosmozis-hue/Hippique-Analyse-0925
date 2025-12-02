@@ -196,7 +196,7 @@ def enqueue_run_task(
     }
 
     # Add OIDC token if auth required
-    if config.require_auth:
+    if config.REQUIRE_AUTH:
         task["http_request"]["oidc_token"] = {
             "service_account_email": config.service_account_email,
             "audience": config.oidc_audience,

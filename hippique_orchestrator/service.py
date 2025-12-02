@@ -143,7 +143,7 @@ async def verify_oidc_token(request: Request, call_next):
         return await call_next(request)
     
     # Skip if auth not required
-    if not config.require_auth:
+    if not config.REQUIRE_AUTH:
         return await call_next(request)
     
     # Verify Bearer token
