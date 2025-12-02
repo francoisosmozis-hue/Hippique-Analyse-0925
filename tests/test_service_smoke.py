@@ -20,7 +20,7 @@ def test_health_check(client):
     assert response.status_code == 200
     assert response.json()["status"] == "healthy"
 
-def test_pronostics_endpoint_returns_ok_when_no_data(mocker):
+def test_pronostics_endpoint_returns_ok_when_no_data(client, mocker):
     """
     Tests that the /api/pronostics endpoint returns an OK response (but with no data)
     when no pronostics are found in Firestore for the given date.
@@ -35,7 +35,7 @@ def test_pronostics_endpoint_returns_ok_when_no_data(mocker):
     assert response_data["total_races"] == 0
     assert "No pronostics found for date" in response_data["message"]
 
-def test_pronostics_endpoint_returns_data_when_file_exists(mocker):
+def test_pronostics_endpoint_returns_data_when_file_exists(client, mocker):
     """
     Tests that the /api/pronostics endpoint successfully returns data
     when a valid pronostics document is present in Firestore.
