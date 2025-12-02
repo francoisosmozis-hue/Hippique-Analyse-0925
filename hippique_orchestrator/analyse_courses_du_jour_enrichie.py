@@ -2095,15 +2095,10 @@ def _process_single_course(
     reunion: str,
     course: str,
     phase: str,
-    data_dir: Path,
-    *,
-    budget: float,
-    kelly: float,
-    gcs_prefix: str | None,
-    ev_min: float = EV_MIN_THRESHOLD,
-    roi_min: float = ROI_SP_MIN_THRESHOLD,
-    payout_min: float = PAYOUT_MIN_THRESHOLD,
-    overround_max: float = OVERROUND_MAX_THRESHOLD,
+    ev_min: float = config.EV_MIN_GLOBAL,
+    roi_min: float = config.ROI_MIN_GLOBAL,
+    payout_min: float = 0.0, # PAYOUT_MIN_THRESHOLD is not defined in config.py, defaulting to 0.0
+    overround_max: float = config.MAX_COMBO_OVERROUND,
 ) -> dict[str, Any] | None:
     """Fetch and analyse a specific course designated by ``reunion``/``course``."""
 
