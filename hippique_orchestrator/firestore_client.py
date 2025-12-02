@@ -45,7 +45,7 @@ def save_race_document(collection: str, document_id: str, data: dict[str, Any]) 
         return
     
     config = get_config()
-    client = _get_firestore_client(project_id=config.project_id)
+    client = _get_firestore_client(project_id=config.PROJECT_ID)
     if not client:
         logger.error("Firestore client not available, cannot save document.")
         return
@@ -70,7 +70,7 @@ def update_race_document(collection: str, document_id: str, data: dict[str, Any]
         return
 
     config = get_config()
-    client = _get_firestore_client(project_id=config.project_id)
+    client = _get_firestore_client(project_id=config.PROJECT_ID)
     if not client:
         logger.error("Firestore client not available, cannot update document.")
         return
@@ -95,7 +95,7 @@ def get_race_document(collection: str, document_id: str) -> dict[str, Any] | Non
         return None
 
     config = get_config()
-    client = _get_firestore_client(project_id=config.project_id)
+    client = _get_firestore_client(project_id=config.PROJECT_ID)
     if not client:
         logger.error("Firestore client not available.")
         return None
@@ -125,7 +125,7 @@ def get_races_by_date_prefix(date_prefix: str) -> list[dict[str, Any]]:
         return []
 
     config = get_config()
-    client = _get_firestore_client(project_id=config.project_id)
+    client = _get_firestore_client(project_id=config.PROJECT_ID)
     if not client:
         logger.error("Firestore client not available.")
         return []
@@ -165,7 +165,7 @@ def list_subcollection_documents(collection: str, document_id: str, subcollectio
         return []
 
     config = get_config()
-    client = _get_firestore_client(project_id=config.project_id)
+    client = _get_firestore_client(project_id=config.PROJECT_ID)
     if not client:
         logger.error("Firestore client not available.")
         return []

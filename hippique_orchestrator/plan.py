@@ -20,8 +20,6 @@ from __future__ import annotations
 import asyncio
 import json
 import re
-import subprocess
-import sys
 import time
 from datetime import datetime
 from pathlib import Path
@@ -29,67 +27,14 @@ from typing import Any
 
 import aiohttp
 
-from src.config.config import config
+from hippique_orchestrator.config import get_config
 from hippique_orchestrator.logging_utils import get_logger
-from hippique_orchestrator.online_fetch_boturfers import fetch_boturfers_programme
+from hippique_orchestrator import data_source
+from hippique_orchestrator.scrapers.geny import fetch_geny_programme
+
+config = get_config()
 
 logger = get_logger(__name__)
-
-# Chemins des modules existants
-MODULES_DIR = Path(__file__).parent.parent / "modules"
-DISCOVER_GENY = Path(__file__).parent.parent / "discover_geny_today.py"
-
-
-
-
-
-# ============================================
-# Helpers - discover_geny_today.py
-# ============================================
-
-def _call_discover_geny() -> dict[str, Any]:
-    """
-    Appelle discover_geny_today.py pour obtenir la liste des courses.
-
-    Returns:
-        {
-            "date": "2025-10-16",
-            "meetings": [
-                {
-                    "r": "R1",
-                    "hippo": "Paris-Vincennes (FR)",
-                    "slug": "paris-vincennes",
-                    "courses": [
-                        {"c": "C1", "id_course": "12345"},
-                        {"c": "C3", "id_course": "12346"}
-                    ]
-                }
-            ]
-        }
-    """
-    if not DISCOVER_GENY.exists():
-        logger.error(f"discover_geny_today.py not found at {DISCOVER_GENY}")
-        return {"date": datetime.now().strftime("%Y-%m-%d"), "meetings": []}
-
-    try:
-        result = subprocess.run(
-            [sys.executable, str(DISCOVER_GENY)],
-            check=False, capture_output=True,
-            text=True,
-            timeout=30,
-        )
-
-        if result.returncode != 0:
-            logger.error(f"discover_geny_today.py failed: {result.stderr}")
-            return {"date": datetime.now().strftime("%Y-%m-%d"), "meetings": []}
-
-        data = json.loads(result.stdout)
-        logger.info(f"Discovered {len(data.get('meetings', []))} meetings from Geny")
-        return data
-
-    except Exception as e:
-        logger.error(f"Failed to call discover_geny_today.py: {e}", exc_info=e)
-        return {"date": datetime.now().strftime("%Y-%m-%d"), "meetings": []}
 
 
 
@@ -126,53 +71,54 @@ async def _rate_limited_request():
 
 async def _enrich_plan_with_times_async(plan: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """
-    Enrichit le plan avec les heures et les URLs depuis Boturfers.
+    Enrichit le plan avec les heures et les URLs depuis la source de données.
 
     Args:
-        plan: Liste de courses sans time_local et avec URLs ZEturf provisoires.
+        plan: Liste de courses sans time_local et avec URLs provisoires.
 
     Returns:
-        Liste enrichie avec time_local et URLs Boturfers (courses sans heure sont filtrées).
+        Liste enrichie avec time_local et URLs (courses sans heure sont filtrées).
     """
     if not plan:
-        logger.info("Plan from Geny is empty, skipping Boturfers enrichment.")
+        logger.info("Plan from Geny is empty, skipping enrichment from data source.")
         return []
 
-    logger.info("Fetching programme from Boturfers to enrich plan.")
+    logger.info("Fetching programme from data source to enrich plan.")
 
-    boturfers_programme_url = "https://www.boturfers.fr/programme-pmu-du-jour"
-    boturfers_data = await asyncio.to_thread(fetch_boturfers_programme, boturfers_programme_url)
-    logger.info(f"Boturfers programme data received: {json.dumps(boturfers_data, indent=2)}")
+    programme_url = "https://www.boturfers.fr/programme-pmu-du-jour"
+    # Use the data_source abstraction layer
+    source_data = await asyncio.to_thread(data_source.fetch_programme, programme_url)
+    logger.info(f"Data source programme data received: {json.dumps(source_data, indent=2)}")
 
-    if not boturfers_data or not boturfers_data.get("races"):
-        logger.warning("Failed to fetch Boturfers programme or it was empty.")
+    if not source_data or not source_data.get("races"):
+        logger.warning("Failed to fetch programme from data source or it was empty.")
         return []
 
-    # Créer un mapping rapide des courses Boturfers par "R_C"
-    boturfers_races_map = {}
-    for race in boturfers_data["races"]:
+    # Créer un mapping rapide des courses par "R_C"
+    source_races_map = {}
+    for race in source_data["races"]:
         # Nettoyer le format "R1C1" pour correspondre à celui de Geny
         rc_key = f"{race['reunion']}{race['rc'].split(race['reunion'])[1].strip()}"
-        boturfers_races_map[rc_key] = race
+        source_races_map[rc_key] = race
 
     enriched = []
     for race_geny in plan:
         geny_rc_key = f"{race_geny['r_label']}{race_geny['c_label']}"
         logger.debug(f"Attempting to match Geny race {geny_rc_key}")
         
-        if geny_rc_key in boturfers_races_map:
-            race_boturfers = boturfers_races_map[geny_rc_key]
-            if race_boturfers.get("start_time"):
-                race_geny["time_local"] = race_boturfers["start_time"]
-                race_geny["course_url"] = race_boturfers["url"] # Mettre à jour avec l'URL Boturfers
+        if geny_rc_key in source_races_map:
+            race_source = source_races_map[geny_rc_key]
+            if race_source.get("start_time"):
+                race_geny["time_local"] = race_source["start_time"]
+                race_geny["course_url"] = race_source["url"] # Mettre à jour avec l'URL de la source
                 enriched.append(race_geny)
-                logger.debug(f"Enriched {geny_rc_key} with time {race_geny['time_local']} and URL {race_geny['course_url']} from Boturfers.")
+                logger.debug(f"Enriched {geny_rc_key} with time {race_geny['time_local']} and URL {race_geny['course_url']} from data source.")
             else:
-                logger.warning(f"No start_time found for {geny_rc_key} in Boturfers data, skipping.")
+                logger.warning(f"No start_time found for {geny_rc_key} in data source, skipping.")
         else:
-            logger.warning(f"No matching Boturfers race found for Geny race {geny_rc_key}, skipping.")
+            logger.warning(f"No matching race found for Geny race {geny_rc_key} in data source, skipping.")
 
-    logger.info(f"Successfully enriched {len(enriched)}/{len(plan)} races from Boturfers.")
+    logger.info(f"Successfully enriched {len(enriched)}/{len(plan)} races from data source.")
     return enriched
 
 # ============================================
@@ -258,8 +204,8 @@ async def build_plan_async(date: str) -> list[dict[str, Any]]:
 
     logger.info(f"Building plan for {date}")
 
-    # 1. Obtenir la liste des courses depuis Geny (subprocess)
-    geny_data = _call_discover_geny()
+    # 1. Obtenir la liste des courses depuis Geny (en non-bloquant)
+    geny_data = await asyncio.to_thread(fetch_geny_programme)
     logger.info(f"DEBUG: Geny data received: {json.dumps(geny_data, indent=2)}")
 
     if not geny_data.get("meetings"):
