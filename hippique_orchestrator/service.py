@@ -648,9 +648,9 @@ async def startup_event():
     logger.info(
         "Service starting",
         version="2.0.0",
-        project_id=config.project_id,
-        region=config.region,
-        environment=config.environment,
+        project_id=config.PROJECT_ID,
+        region=config.REGION,
+        # environment=config.environment, # Removed as it doesn't exist
     )
 
 @app.on_event("shutdown")
