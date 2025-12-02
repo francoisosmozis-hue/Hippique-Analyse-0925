@@ -1,5 +1,3 @@
-from fastapi.testclient import TestClient
-from hippique_orchestrator.service import app
 import json
 from unittest.mock import patch
 from pathlib import Path

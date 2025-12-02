@@ -9,10 +9,6 @@ import os
 from unittest.mock import MagicMock, patch
 import httpx
 
-from fastapi.testclient import TestClient
-
-# --- Add project root to sys.path ---
-
 
 # Removed global client = TestClient(app) - now handled by conftest.py client fixture
 
