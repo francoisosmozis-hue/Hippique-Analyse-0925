@@ -148,8 +148,8 @@ def enqueue_run_task(
     task_name_safe = _sanitize_task_name(task_name_short)
 
     # Full task path
-    logger.info(f"Cloud Tasks parent path components: project_id={config.project_id}, region={config.region}, queue_id={config.queue_id}")
-    parent = f"projects/{config.project_id}/locations/{config.region}/queues/{config.queue_id}"
+    logger.info(f"Cloud Tasks parent path components: project_id={config.PROJECT_ID}, region={config.REGION}, queue_id={config.QUEUE_ID}")
+    parent = f"projects/{config.PROJECT_ID}/locations/{config.REGION}/queues/{config.QUEUE_ID}"
     task_path = f"{parent}/tasks/{task_name_safe}"
 
     # Check if task already exists (idempotence)
@@ -198,8 +198,8 @@ def enqueue_run_task(
     # Add OIDC token if auth required
     if config.REQUIRE_AUTH:
         task["http_request"]["oidc_token"] = {
-            "service_account_email": config.service_account_email,
-            "audience": config.oidc_audience,
+            "service_account_email": config.SERVICE_ACCOUNT_EMAIL,
+            "audience": config.OIDC_AUDIENCE,
         }
 
     # Create task
