@@ -112,12 +112,16 @@ def mock_config(mocker):
 
     return mock_config_instance
 
+@pytest.fixture(scope="module")
+def app_with_mock_config(mock_config): # This fixture ensures app is imported AFTER mock_config is active
+    from hippique_orchestrator.service import app
+    return app
+
 # Fixture for TestClient setup, ensuring it uses the mocked config
 @pytest.fixture(scope="module")
-def client(mock_config): # Pass mock_config here
+def client(app_with_mock_config): # Now client depends on app_with_mock_config
     """
     Test client for the FastAPI app, using a mocked configuration.
     """
-    from hippique_orchestrator.service import app
     from fastapi.testclient import TestClient
-    return TestClient(app)
+    return TestClient(app_with_mock_config)
