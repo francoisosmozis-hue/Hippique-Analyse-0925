@@ -51,18 +51,22 @@ ZETURF_HTML_R2C1 = """
 """
 
 @pytest.mark.asyncio
-async def test_build_plan_async(monkeypatch):
+async def test_build_plan_async(mocker): # Use mocker instead of monkeypatch for patching functions
     """Test complete plan building with Boturfers data."""
 
-    def mock_call_discover_geny():
-        return json.loads(GENY_HTML)
+    # Mock fetch_geny_programme
+    mocker.patch(
+        "hippique_orchestrator.scrapers.geny.fetch_geny_programme",
+        return_value=json.loads(GENY_HTML)
+    )
 
-    def mock_fetch_boturfers_programme(url):
-        # Simulate Boturfers data for the races in GENY_HTML
-        return {
+    # Mock data_source.fetch_programme
+    mocker.patch(
+        "hippique_orchestrator.data_source.fetch_programme",
+        return_value={
             "source": "boturfers",
             "type": "programme",
-            "url": url,
+            "url": "https://www.boturfers.fr/programme-pmu-du-jour",
             "scraped_at": "2025-10-15T12:00:00",
             "races": [
                 {
@@ -91,9 +95,7 @@ async def test_build_plan_async(monkeypatch):
                 }
             ]
         }
-
-    monkeypatch.setattr("hippique_orchestrator.plan._call_discover_geny", mock_call_discover_geny)
-    monkeypatch.setattr("hippique_orchestrator.plan.fetch_boturfers_programme", mock_fetch_boturfers_programme)
+    )
 
     plan_result = await build_plan_async("2025-10-15")
 
@@ -159,40 +161,6 @@ def test_build_plan_structure():
     assert race1.get("time_local") is None # Time is not added at this stage
     assert race1["course_url"] is None
     assert race1["reunion_url"] is None
-
-def test_call_discover_geny_subprocess_error(mocker):
-    """Tests that _call_discover_geny handles a subprocess error."""
-    # Mock subprocess.run to simulate a failure
-    mock_run = mocker.patch("subprocess.run")
-    mock_run.return_value.returncode = 1
-    mock_run.return_value.stderr = "Subprocess failed"
-
-    # Mock the logger to capture error messages
-    mock_logger = mocker.patch("hippique_orchestrator.plan.logger")
-
-    result = plan._call_discover_geny()
-
-    # Should return a default structure with no meetings
-    assert result["meetings"] == []
-    # Should log the error
-    mock_logger.error.assert_called_with("discover_geny_today.py failed: Subprocess failed")
-
-def test_call_discover_geny_json_error(mocker):
-    """Tests that _call_discover_geny handles invalid JSON output."""
-    mock_run = mocker.patch("subprocess.run")
-    mock_run.return_value.returncode = 0
-    mock_run.return_value.stdout = "This is not JSON"
-
-    mock_logger = mocker.patch("hippique_orchestrator.plan.logger")
-
-    result = plan._call_discover_geny()
-
-    assert result["meetings"] == []
-    # Check that an error was logged with exception info
-    assert mock_logger.error.call_count == 1
-    call_args, call_kwargs = mock_logger.error.call_args
-    assert "Failed to call discover_geny_today.py" in call_args[0]
-    assert call_kwargs["exc_info"]
 
 
 
