@@ -55,7 +55,7 @@ def mock_subprocess_run(session_mocker):
     session_mocker.patch("subprocess.run", return_value=mock_process)
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
 def mock_config(mocker):
     """
     Fixture to provide a test-specific Config object and ensure it's used globally.
@@ -112,13 +112,13 @@ def mock_config(mocker):
 
     return mock_config_instance
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
 def app_with_mock_config(mock_config): # This fixture ensures app is imported AFTER mock_config is active
     from hippique_orchestrator.service import app
     return app
 
 # Fixture for TestClient setup, ensuring it uses the mocked config
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session", autouse=True)
 def client(app_with_mock_config): # Now client depends on app_with_mock_config
     """
     Test client for the FastAPI app, using a mocked configuration.
