@@ -33,7 +33,7 @@ class Config(BaseSettings):
     DEBUG: bool = False
 
     # --- Security ---
-    REQUIRE_AUTH: bool = True
+    REQUIRE_AUTH: bool = False
     OIDC_AUDIENCE: str | None = None
 
     # --- Performance & Rate Limiting ---
