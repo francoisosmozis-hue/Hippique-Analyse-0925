@@ -737,11 +737,11 @@ def run_pipeline(
 
     rc_dir = Path(rc_dir)
 
-    ev_threshold = EV_MIN_THRESHOLD if ev_min is None else float(ev_min)
-    roi_threshold = ROI_SP_MIN_THRESHOLD if roi_min is None else float(roi_min)
-    payout_threshold = PAYOUT_MIN_THRESHOLD if payout_min is None else float(payout_min)
+    ev_threshold = config.EV_MIN_GLOBAL if ev_min is None else float(ev_min)
+    roi_threshold = config.ROI_MIN_GLOBAL if roi_min is None else float(roi_min)
+    payout_threshold = 0.0 if payout_min is None else float(payout_min) # PAYOUT_MIN_THRESHOLD is not defined in config.py, defaulting to 0.0
     overround_threshold = (
-        OVERROUND_MAX_THRESHOLD if overround_max is None else float(overround_max)
+        config.MAX_COMBO_OVERROUND if overround_max is None else float(overround_max)
     )
 
     # If ``rc_dir`` already holds a freshly generated ``p_finale.json`` we do
