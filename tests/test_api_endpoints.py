@@ -8,16 +8,10 @@ from freezegun import freeze_time
 
 # Importez l'application FastAPI depuis src.service
 from hippique_orchestrator.service import app
-from hippique_orchestrator.config import get_config
-config = get_config()
-# config.require_auth = False # Disable auth for tests
-
-# Importez l'application FastAPI depuis src.service
-from hippique_orchestrator.service import app
 
 # Créez un client de test pour l'application FastAPI
 @pytest.fixture(scope="module")
-def client():
+def client(mock_config): # Use mock_config here
     return TestClient(app)
 
 # Test 1: Vérifier que l'endpoint de santé répond 200 OK

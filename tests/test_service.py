@@ -14,43 +14,17 @@ from fastapi.testclient import TestClient
 # --- Add project root to sys.path ---
 
 
-from hippique_orchestrator.service import app
+# Removed global client = TestClient(app) - now handled by conftest.py client fixture
 
-client = TestClient(app)
+# Removed setup_test_data fixture as it creates real files and uses undefined _PROJECT_ROOT
 
-@pytest.fixture(scope="module")
-def setup_test_data():
-    data_dir = _PROJECT_ROOT / "data"
-    race_dir = data_dir / "R1C1"
-    race_dir.mkdir(parents=True, exist_ok=True)
+def test_health_check(client): # Added client fixture
+    response = client.get("/healthz")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "healthy"
 
-    # Create a dummy analysis file
-    analysis_data = {
-        "reunion": "R1",
-        "course": "C1",
-        "abstain": False,
-        "tickets": [
-            {"type": "SP", "detail": "3-5", "mise": 2.0},
-            {"type": "CG", "detail": "3-5-7", "mise": 3.0}
-        ],
-        "validation": {
-            "roi_global_est": 25.0
-        }
-    }
-    with open(race_dir / "analysis_H5.json", "w") as f:
-        json.dump(analysis_data, f)
-
-    yield
-
-    # Teardown
-    shutil.rmtree(race_dir)
-
-    def test_health_check():
-        response = client.get("/healthz")
-        assert response.status_code == 200
-        data = response.json()
-        assert data["status"] == "healthy"
-def xtest_pipeline_run_success(mocker):
+def xtest_pipeline_run_success(client, mocker):
     # This test verifies the file-reading logic of the endpoint.
     # We mock subprocess.run as it's not relevant to this path.
     mock_run = mocker.patch("subprocess.run")
@@ -59,15 +33,15 @@ def xtest_pipeline_run_success(mocker):
     mock_run.return_value.stderr = ""
 
     # Create a dummy analysis file for the endpoint to find
-    data_dir = _PROJECT_ROOT / "data" / "R1C2"
-    data_dir.mkdir(parents=True, exist_ok=True)
-    analysis_data = {
-        "abstain": False,
-        "tickets": [{"type": "SP", "detail": "1-2", "mise": 5.0}],
-        "validation": {"roi_global_est": 30.0}
-    }
-    with open(data_dir / "analysis_H5.json", "w") as f:
-        json.dump(analysis_data, f)
+    # data_dir = _PROJECT_ROOT / "data" / "R1C2" # _PROJECT_ROOT is not defined
+    # data_dir.mkdir(parents=True, exist_ok=True)
+    # analysis_data = {
+    #     "abstain": False,
+    #     "tickets": [{"type": "SP", "detail": "1-2", "mise": 5.0}],
+    #     "validation": {"roi_global_est": 30.0}
+    # }
+    # with open(data_dir / "analysis_H5.json", "w") as f:
+    #     json.dump(analysis_data, f)
 
     response = client.post("/pipeline/run?use_file_logic=true", json={"reunion": "R1", "course": "C2", "phase": "H5", "budget": 5.0})
 
@@ -79,9 +53,9 @@ def xtest_pipeline_run_success(mocker):
     assert response_json["roi_global_est"] == 30.0
 
     # Teardown
-    shutil.rmtree(data_dir)
+    # shutil.rmtree(data_dir)
 
-def xtest_tickets_endpoint(setup_test_data):
+def xtest_tickets_endpoint(client, setup_test_data):
     response = client.get("/tickets")
     assert response.status_code == 200
     content = response.content.decode("utf-8")
@@ -92,7 +66,7 @@ def xtest_tickets_endpoint(setup_test_data):
     assert "<li>CG - 3-5-7 - 3.0€</li>" in content
 
 
-def test_run_endpoint_success(mocker):
+def test_run_endpoint_success(client, mocker):
     """
     Vérifie que le point de terminaison /run traite une requête valide avec succès.
     """
@@ -111,7 +85,7 @@ def test_run_endpoint_success(mocker):
     assert response.json()["ok"] is True
 
 
-def test_schedule_endpoint_success(mocker):
+def test_schedule_endpoint_success(client, mocker):
     """
     Vérifie que le point de terminaison /schedule traite une requête valide avec succès.
     """
@@ -142,7 +116,7 @@ def test_schedule_endpoint_success(mocker):
     assert response.json()["total_races"] == 2, "The number of races should match the mocked plan"
 
 
-def test_schedule_endpoint_handles_scheduling_error(mocker):
+def test_schedule_endpoint_handles_scheduling_error(client, mocker):
     """
     Vérifie que le point de terminaison /schedule gère les erreurs de l'ordonnanceur.
     """
@@ -173,11 +147,11 @@ def test_schedule_endpoint_handles_scheduling_error(mocker):
     assert response_json["ok"] is False
     assert response_json["total_races"] == 2, "The number of races should match the mocked plan"
 
-def test_debug_parse_endpoint(mocker):
+def test_debug_parse_endpoint(client, mocker):
     """
     Vérifie que le point de terminaison /debug/parse fonctionne correctement.
     """
-    mock_build_plan = mocker.patch("hippique_orchestrator.plan.build_plan_async")
+    mock_build_plan = mocker.patch("hippique_orchestrator.service.build_plan_async")
     mock_build_plan.return_value = [{"reunion": "R1", "course": "C1", "details": "Test Race"}]
 
     response = client.get("/debug/parse?date=2025-01-01")

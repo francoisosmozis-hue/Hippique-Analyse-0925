@@ -13,14 +13,10 @@ async def override_auth():
 # A simpler way for TestClient is to override the dependency that requires auth.
 # Let's assume there's a dependency that provides the user or validates the token.
 # After inspecting service.py, there is no named dependency, it's a pure middleware.
-# The middleware itself checks `config.require_auth`. We can patch that.
-from hippique_orchestrator.config import get_config
-config = get_config()
-# config.require_auth = False
+# The middleware itself checks `config.REQUIRE_AUTH`. We can patch that.
+# global client is removed, now handled by conftest.py
 
-client = TestClient(app)
-
-def test_health_check():
+def test_health_check(client):
     """Tests if the /healthz endpoint is reachable and returns OK."""
     response = client.get("/healthz")
     assert response.status_code == 200

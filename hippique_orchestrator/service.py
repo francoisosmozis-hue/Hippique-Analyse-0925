@@ -232,13 +232,16 @@ async def schedule_daily_plan(request: Request, body: ScheduleRequest):
         
         if not plan:
             logger.warning("Empty plan generated", correlation_id=correlation_id, trace_id=trace_id)
-            return {
-                "ok": False,
-                "error": "No races found for this date",
-                "date": body.date,
-                "correlation_id": correlation_id,
-                "trace_id": trace_id,
-            }
+            return JSONResponse(
+                status_code=status.HTTP_202_ACCEPTED,
+                content={
+                    "ok": False,
+                    "error": "No races found for this date",
+                    "date": body.date,
+                    "correlation_id": correlation_id,
+                    "trace_id": trace_id,
+                }
+            )
         
         logger.info(
             f"Plan built: {len(plan)} races",
@@ -702,22 +705,28 @@ async def debug_parse(date: str = "2025-10-17"):
         logger.info(f"Debug parse for {date}", extra={"correlation_id": correlation_id})
         result = await build_plan_async(date)
         
-        return {
-            "ok": True,
-            "date": date,
-            "count": len(result),
-            "races": result[:3] if result else [],
-            "correlation_id": correlation_id
-        }
+        return JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content={
+                "ok": True,
+                "date": date,
+                "count": len(result),
+                "races": result[:3] if result else [],
+                "correlation_id": correlation_id
+            }
+        )
     except Exception as e:
         import traceback
         logger.error(f"Debug parse failed: {e}", extra={"correlation_id": correlation_id})
-        return {
-            "ok": False,
-            "error": str(e),
-            "traceback": traceback.format_exc(),
-            "correlation_id": correlation_id
-        }
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={
+                "ok": False,
+                "error": str(e),
+                "traceback": traceback.format_exc(),
+                "correlation_id": correlation_id
+            }
+        )
 
 
 @app.get("/debug/info")
@@ -729,8 +738,8 @@ async def debug_info():
         "cwd": os.getcwd(),
         "env": {
             "TZ": config.TZ,
-            "PROJECT_ID": config.project_id,
-            "REGION": config.region,
+            "PROJECT_ID": config.PROJECT_ID,
+            "REGION": config.REGION,
         }
     }
 
