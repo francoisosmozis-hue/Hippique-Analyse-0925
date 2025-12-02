@@ -10,7 +10,7 @@ from unittest.mock import MagicMock
 # Import the Config class and get_config function
 from hippique_orchestrator.config import Config, get_config
 
-@pytest.fixture(scope="session", autouse=True)
+@pytest.fixture(scope="session")
 def mock_network_calls(session_mocker):
     """
     Session-scoped fixture to automatically mock all network calls made with `requests.get`.
@@ -38,7 +38,7 @@ def mock_network_calls(session_mocker):
     session_mocker.patch("httpx.get", return_value=session_mocker.Mock(status_code=200, text=str(html_content)))
 
 
-@pytest.fixture(scope="session", autouse=True)
+@pytest.fixture(scope="session")
 def mock_subprocess_run(session_mocker):
     """
     Session-scoped fixture to automatically mock all calls to `subprocess.run`.
