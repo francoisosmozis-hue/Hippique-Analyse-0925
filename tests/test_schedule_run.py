@@ -1,39 +1,21 @@
 import os
 import httpx
 from httpx import AsyncClient
-from fastapi.testclient import TestClient
+# from fastapi.testclient import TestClient # Removed
 
 # TZ cohérent
 os.environ["TZ"] = "Europe/Paris"
 
 # Imports app & modules (le sys.path vers src est géré par tests/conftest.py)
 from hippique_orchestrator import plan
-from hippique_orchestrator.service import app
+# from hippique_orchestrator.service import app # Removed
 
-client = TestClient(app)
-
-# HTML minimal conforme au parseur boturfers de plan.py
-BOTURFERS_HTML = """
-<div class="card shadow mb-4">
-  <h2 class="text-primary">R1 - Vincennes</h2>
-  <table><tbody>
-    <tr>
-      <th><a href="/courses/2025-10-26/vincennes/course-C1">C1</a></th>
-      <td></td>
-      <td></td>
-      <td class="d-none d-lg-table-cell">Trot attelé</td>
-      <td><span class="race-time">14h30</span></td>
-    </tr>
-  </tbody></table>
-</div>
-"""
+# client = TestClient(app) # Removed
 
 import pytest
 
-BOTURFERS_HTML = """..."""  # Gardé pour référence, mais non utilisé
-
 @pytest.mark.asyncio
-async def test_schedule_to_run_flow(monkeypatch, mocker):
+async def test_schedule_to_run_flow(client, monkeypatch, mocker): # Added client
     # 1) Mock la fonction de construction du plan ASYNCHRONE
     mock_plan_result = [
         {
