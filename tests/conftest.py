@@ -56,7 +56,7 @@ def mock_subprocess_run(session_mocker):
 
 
 @pytest.fixture(scope="session")
-def mock_config(mocker):
+def mock_config(session_mocker):
     """
     Fixture to provide a test-specific Config object and ensure it's used globally.
     """
@@ -84,7 +84,7 @@ def mock_config(mocker):
         CALIB_PATH="test/calib/path",
         SOURCES_FILE="test-sources-file",
         RUNNER_SNAP_DIR="test-snap-dir",
-        RUNNER_ANALYSIS_DIR="test-analysis-dir",
+    RUNNER_ANALYSIS_DIR="test-analysis-dir",
         RUNNER_OUTPUT_DIR="test-output-dir",
         USE_GCS=True,
         USE_DRIVE=False,
@@ -92,22 +92,22 @@ def mock_config(mocker):
     )
     
     # Patch the Config class itself so any new Config() call returns our mock instance
-    mocker.patch("hippique_orchestrator.config.Config", return_value=mock_config_instance)
+    session_mocker.patch("hippique_orchestrator.config.Config", return_value=mock_config_instance)
     
     # Also patch the config object imported in modules at the global level
     # This is crucial for modules that do `config = get_config()` at import time
-    mocker.patch("hippique_orchestrator.service.config", new=mock_config_instance)
-    mocker.patch("hippique_orchestrator.plan.config", new=mock_config_instance)
-    mocker.patch("hippique_orchestrator.runner.config", new=mock_config_instance)
-    mocker.patch("hippique_orchestrator.simulate_wrapper.config", new=mock_config_instance)
-    mocker.patch("hippique_orchestrator.validator_ev.config", new=mock_config_instance)
-    mocker.patch("hippique_orchestrator.analyse_courses_du_jour_enrichie.config", new=mock_config_instance)
-    mocker.patch("hippique_orchestrator.gcs_client.config", new=mock_config_instance)
-    mocker.patch("hippique_orchestrator.firestore_client.config", new=mock_config_instance)
-    mocker.patch("hippique_orchestrator.scripts.update_excel_planning.config", new=mock_config_instance) # Added for update_excel_planning.py
+    session_mocker.patch("hippique_orchestrator.service.config", new=mock_config_instance)
+    session_mocker.patch("hippique_orchestrator.plan.config", new=mock_config_instance)
+    session_mocker.patch("hippique_orchestrator.runner.config", new=mock_config_instance)
+    session_mocker.patch("hippique_orchestrator.simulate_wrapper.config", new=mock_config_instance)
+    session_mocker.patch("hippique_orchestrator.validator_ev.config", new=mock_config_instance)
+    session_mocker.patch("hippique_orchestrator.analyse_courses_du_jour_enrichie.config", new=mock_config_instance)
+    session_mocker.patch("hippique_orchestrator.gcs_client.config", new=mock_config_instance)
+    session_mocker.patch("hippique_orchestrator.firestore_client.config", new=mock_config_instance)
+    session_mocker.patch("hippique_orchestrator.scripts.update_excel_planning.config", new=mock_config_instance) # Added for update_excel_planning.py
 
     # The get_config() function itself still needs to return the mocked instance
-    mocker.patch("hippique_orchestrator.config.get_config", return_value=mock_config_instance)
+    session_mocker.patch("hippique_orchestrator.config.get_config", return_value=mock_config_instance)
 
 
     return mock_config_instance
