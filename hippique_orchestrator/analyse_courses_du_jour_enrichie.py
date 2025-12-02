@@ -2169,11 +2169,10 @@ def _process_reunion(
     budget: float,
     kelly: float,
     gcs_prefix: str | None,
-    ev_min: float = EV_MIN_THRESHOLD,
-    roi_min: float = ROI_SP_MIN_THRESHOLD,
-    payout_min: float = PAYOUT_MIN_THRESHOLD,
-    overround_max: float = OVERROUND_MAX_THRESHOLD,
-) -> None:
+            ev_min: float = config.EV_MIN_GLOBAL,
+            roi_min: float = config.ROI_MIN_GLOBAL,
+            payout_min: float = 0.0, # PAYOUT_MIN_THRESHOLD is not defined in config.py, defaulting to 0.0
+            overround_max: float = config.MAX_COMBO_OVERROUND,) -> None:
     """Fetch ``url`` and run the pipeline for each course of the meeting."""
 
     resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
