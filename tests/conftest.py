@@ -102,7 +102,7 @@ def mock_config(session_mocker):
     session_mocker.patch("hippique_orchestrator.simulate_wrapper.config", new=mock_config_instance)
     session_mocker.patch("hippique_orchestrator.validator_ev.config", new=mock_config_instance)
     session_mocker.patch("hippique_orchestrator.analyse_courses_du_jour_enrichie.config", new=mock_config_instance)
-    session_mocker.patch("hippique_orchestrator.firestore_client.config", new=mock_config_instance)
+
     session_mocker.patch("hippique_orchestrator.scripts.update_excel_planning.config", new=mock_config_instance) # Added for update_excel_planning.py
 
     # The get_config() function itself still needs to return the mocked instance
