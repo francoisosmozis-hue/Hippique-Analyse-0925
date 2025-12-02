@@ -26,8 +26,9 @@ from pydantic import BaseModel, Field
 
 from hippique_orchestrator.config import get_config
 from hippique_orchestrator.logging_utils import get_logger # Added
-from hippique_orchestrator.plan import build_plan_async, ADVANCED_EXTRACTION
+from hippique_orchestrator.plan import build_plan_async
 from hippique_orchestrator.scheduler import schedule_all_races
+from hippique_orchestrator.snapshot_manager import write_snapshot_for_day
 from hippique_orchestrator.runner import run_course # Moved from inside tasks_run_phase
 import os # Added
 
@@ -83,6 +84,7 @@ class RunRequest(BaseModel):
         description="Race date in YYYY-MM-DD format",
         example="2025-10-16"
     )
+    trace_id: str | None = None
 
 # ============================================
 # Middleware - Request Logging
@@ -208,44 +210,50 @@ async def schedule_daily_plan(request: Request, body: ScheduleRequest):
           "scheduled_h5": 38,
           "mode": "tasks",
           "plan_summary": [...],
-          "correlation_id": "..."
+          "correlation_id": "...",
+          "trace_id": "..."
         }
     """
     correlation_id = request.state.correlation_id
+    trace_id = str(uuid.uuid4())
     
     logger.info(
         "Schedule request received",
         correlation_id=correlation_id,
+        trace_id=trace_id,
         date=body.date,
         mode=body.mode,
     )
     
     try:
         # 1. Build plan asynchronously (parallel HTTP fetching)
-        logger.info("Building daily plan...", correlation_id=correlation_id)
+        logger.info("Building daily plan...", correlation_id=correlation_id, trace_id=trace_id)
         plan = await build_plan_async(body.date)
         
         if not plan:
-            logger.warning("Empty plan generated", correlation_id=correlation_id)
+            logger.warning("Empty plan generated", correlation_id=correlation_id, trace_id=trace_id)
             return {
                 "ok": False,
                 "error": "No races found for this date",
                 "date": body.date,
                 "correlation_id": correlation_id,
+                "trace_id": trace_id,
             }
         
         logger.info(
             f"Plan built: {len(plan)} races",
             correlation_id=correlation_id,
+            trace_id=trace_id,
             total_races=len(plan),
         )
         
         # 2. Schedule all races (H-30 + H-5)
-        logger.info("Scheduling Cloud Tasks...", correlation_id=correlation_id)
+        logger.info("Scheduling Cloud Tasks...", correlation_id=correlation_id, trace_id=trace_id)
         scheduled = schedule_all_races(
             plan=plan,
             mode=body.mode,
             correlation_id=correlation_id,
+            trace_id=trace_id,
         )
         
         # 3. Build response
@@ -255,6 +263,7 @@ async def schedule_daily_plan(request: Request, body: ScheduleRequest):
         logger.info(
             "Scheduling complete",
             correlation_id=correlation_id,
+            trace_id=trace_id,
             total=len(plan),
             success_h30=success_h30,
             success_h5=success_h5,
@@ -281,12 +290,14 @@ async def schedule_daily_plan(request: Request, body: ScheduleRequest):
             "plan_summary": plan_summary,
             "scheduled_details": scheduled,
             "correlation_id": correlation_id,
+            "trace_id": trace_id,
         }
     
     except Exception as e:
         logger.error(
             f"Schedule failed: {e}",
             correlation_id=correlation_id,
+            trace_id=trace_id,
             exc_info=e,
         )
         return JSONResponse(
@@ -296,6 +307,7 @@ async def schedule_daily_plan(request: Request, body: ScheduleRequest):
                 "error": str(e),
                 "traceback": traceback.format_exc(),
                 "correlation_id": correlation_id,
+                "trace_id": trace_id,
             },
         )
 
@@ -311,7 +323,6 @@ async def tasks_snapshot_9h(request: Request, body: ScheduleRequest):
         # Assuming write_snapshot_for_day is an async function or can be run in a thread pool
         # For now, we'll just log and return accepted.
         # In a real scenario, this would dispatch to a background worker or Cloud Task.
-        from hippique_orchestrator.api.tasks import write_snapshot_for_day
         # This should ideally be awaited or run in a background task executor
         # For testing purposes, we'll just call it directly or mock it.
         write_snapshot_for_day(date_str=body.date, phase="H9", correlation_id=correlation_id)
@@ -346,9 +357,12 @@ async def tasks_run_phase(request: Request, body: RunRequest):
     Execute analysis for one race (H-30 or H-5).
     """
     correlation_id = request.state.correlation_id
+    trace_id = body.trace_id or correlation_id # Fallback to correlation_id
+    
     logger.info(
         f"Run phase task received for course: {body.course_url}, phase: {body.phase}, date: {body.date}",
         correlation_id=correlation_id,
+        trace_id=trace_id,
     )
     
     try:
@@ -358,6 +372,7 @@ async def tasks_run_phase(request: Request, body: RunRequest):
             phase=body.phase,
             date=body.date,
             correlation_id=correlation_id,
+            trace_id=trace_id,
         )
         
         return JSONResponse(
@@ -367,12 +382,14 @@ async def tasks_run_phase(request: Request, body: RunRequest):
                 "phase": result.get("phase"),
                 "artifacts": result.get("artifacts", []),
                 "correlation_id": correlation_id,
+                "trace_id": trace_id,
             },
         )
     except Exception as e:
         logger.error(
             f"Run phase task failed: {e}",
             correlation_id=correlation_id,
+            trace_id=trace_id,
             exc_info=e,
         )
         return JSONResponse(
@@ -382,6 +399,7 @@ async def tasks_run_phase(request: Request, body: RunRequest):
                 "error": str(e),
                 "traceback": traceback.format_exc(),
                 "correlation_id": correlation_id,
+                "trace_id": trace_id,
             },
         )
 
@@ -412,21 +430,23 @@ async def tasks_bootstrap_day(request: Request, body: ScheduleRequest):
         }
     """
     correlation_id = request.state.correlation_id
+    trace_id = str(uuid.uuid4())
     
     logger.info(
         "Bootstrap day task received",
         correlation_id=correlation_id,
+        trace_id=trace_id,
         date=body.date,
         mode=body.mode,
     )
     
     try:
         # 1. Build plan asynchronously (parallel HTTP fetching)
-        logger.info("Building daily plan...", correlation_id=correlation_id)
+        logger.info("Building daily plan...", correlation_id=correlation_id, trace_id=trace_id)
         plan = await build_plan_async(body.date)
         
         if not plan:
-            logger.warning("Empty plan generated", correlation_id=correlation_id)
+            logger.warning("Empty plan generated", correlation_id=correlation_id, trace_id=trace_id)
             return JSONResponse(
                 status_code=status.HTTP_202_ACCEPTED, # Still accepted, but no tasks scheduled
                 content={
@@ -435,21 +455,24 @@ async def tasks_bootstrap_day(request: Request, body: ScheduleRequest):
                     "date": body.date,
                     "scheduled_tasks": 0,
                     "correlation_id": correlation_id,
+                    "trace_id": trace_id,
                 }
             )
         
         logger.info(
             f"Plan built: {len(plan)} races",
             correlation_id=correlation_id,
+            trace_id=trace_id,
             total_races=len(plan),
         )
         
         # 2. Schedule all races (H-30 + H-5)
-        logger.info("Scheduling Cloud Tasks...", correlation_id=correlation_id)
+        logger.info("Scheduling Cloud Tasks...", correlation_id=correlation_id, trace_id=trace_id)
         scheduled = schedule_all_races(
             plan=plan,
             mode=body.mode,
             correlation_id=correlation_id,
+            trace_id=trace_id,
         )
         
         # 3. Build response
@@ -461,6 +484,7 @@ async def tasks_bootstrap_day(request: Request, body: ScheduleRequest):
         logger.info(
             "Scheduling complete",
             correlation_id=correlation_id,
+            trace_id=trace_id,
             total=total_scheduled,
             success_h30=success_h30,
             success_h5=success_h5,
@@ -490,6 +514,7 @@ async def tasks_bootstrap_day(request: Request, body: ScheduleRequest):
                 "plan_summary": plan_summary,
                 "scheduled_details": scheduled,
                 "correlation_id": correlation_id,
+                "trace_id": trace_id,
             },
         )
     
@@ -497,6 +522,7 @@ async def tasks_bootstrap_day(request: Request, body: ScheduleRequest):
         logger.error(
             f"Bootstrap day task failed: {e}",
             correlation_id=correlation_id,
+            trace_id=trace_id,
             exc_info=e,
         )
         return JSONResponse(
@@ -506,6 +532,7 @@ async def tasks_bootstrap_day(request: Request, body: ScheduleRequest):
                 "error": str(e),
                 "traceback": traceback.format_exc(),
                 "correlation_id": correlation_id,
+                "trace_id": trace_id,
             },
         )
 
@@ -536,10 +563,12 @@ async def run_race_analysis(request: Request, body: RunRequest):
         }
     """
     correlation_id = request.state.correlation_id
+    trace_id = body.trace_id or correlation_id # Fallback to correlation_id
     
     logger.info(
         "Run request received",
         correlation_id=correlation_id,
+        trace_id=trace_id,
         course_url=body.course_url,
         phase=body.phase,
         date=body.date,
@@ -552,16 +581,19 @@ async def run_race_analysis(request: Request, body: RunRequest):
             phase=body.phase,
             date=body.date,
             correlation_id=correlation_id,
+            trace_id=trace_id,
         )
         
         # Add correlation ID to result
         result["correlation_id"] = correlation_id
+        result["trace_id"] = trace_id
         
         # Log result
         if result.get("ok"):
             logger.info(
                 "Run complete",
                 correlation_id=correlation_id,
+                trace_id=trace_id,
                 phase=result.get("phase"),
                 artifacts_count=len(result.get("artifacts", [])),
             )
@@ -569,6 +601,7 @@ async def run_race_analysis(request: Request, body: RunRequest):
             logger.error(
                 "Run failed",
                 correlation_id=correlation_id,
+                trace_id=trace_id,
                 error=result.get("error"),
                 returncode=result.get("returncode"),
             )
@@ -588,6 +621,7 @@ async def run_race_analysis(request: Request, body: RunRequest):
         logger.error(
             f"Run failed with exception: {e}",
             correlation_id=correlation_id,
+            trace_id=trace_id,
             exc_info=e,
         )
         return JSONResponse(
@@ -597,6 +631,7 @@ async def run_race_analysis(request: Request, body: RunRequest):
                 "error": str(e),
                 "traceback": traceback.format_exc(),
                 "correlation_id": correlation_id,
+                "trace_id": trace_id,
             },
         )
 
@@ -671,7 +706,6 @@ async def debug_parse(date: str = "2025-10-17"):
             "ok": True,
             "date": date,
             "count": len(result),
-            "advanced_extraction": ADVANCED_EXTRACTION,
             "races": result[:3] if result else [],
             "correlation_id": correlation_id
         }
@@ -694,7 +728,7 @@ async def debug_info():
         "python_version": sys.version,
         "cwd": os.getcwd(),
         "env": {
-            "TZ": os.getenv("TZ"),
+            "TZ": config.TZ,
             "PROJECT_ID": config.project_id,
             "REGION": config.region,
         }

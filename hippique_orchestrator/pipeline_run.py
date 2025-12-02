@@ -23,16 +23,15 @@ try:
             "  ZE4: 1.0\n"
             "  CPL: 1.0\n"
         )
-    os.environ["PAYOUT_CALIBRATION_PATH"] = str(CALIB_PATH)
 except Exception as e:
     logging.getLogger(__name__).warning(f"Calibration auto-init failed: {e}")
 
 # --- Import core logic with fallbacks ---
 try:
     from hippique_orchestrator.kelly import calculate_kelly_fraction
-    from src.overround import adaptive_cap, compute_overround_place
+    from hippique_orchestrator.overround import adaptive_cap, compute_overround_place
     from hippique_orchestrator.simulate_wrapper import evaluate_combo
-    from analysis_utils import compute_overround_cap
+    from hippique_orchestrator.analysis_utils import compute_overround_cap
 except ImportError:
     logging.warning("One or more core modules not found. Using mock implementations.")
     def compute_overround_place(runners): return 1.20
@@ -56,12 +55,12 @@ def generate_tickets(
     snapshot_data: dict[str, Any],
     gpi_config: dict[str, Any],
     budget: float,
-    calibration_path: str,
+    calibration_data: dict[str, Any],
     allow_heuristic: bool = False
 ) -> dict[str, Any]:
     """
     Pure logic for ticket generation based on GPI v5.1 guardrails.
-    This function is I/O-free.
+    This function is I/O-free, except for a temporary file for calibration.
     """
     runners = snapshot_data.get("runners", [])
     if not runners:
@@ -74,9 +73,9 @@ def generate_tickets(
     # 1. Overround Guard & Calibration Check for Exotics
     overround_place = snapshot_data.get("market", {}).get("overround_place", compute_overround_place(runners))
 
-    calibration_available = calibration_path and pathlib.Path(calibration_path).exists()
+    calibration_available = bool(calibration_data)
     if not calibration_available:
-        logger.warning(f"Payout calibration file not found at {calibration_path}. Abstaining from combos.")
+        logger.warning("Payout calibration data not provided. Abstaining from combos.")
         allow_exotics = False
     else:
         allow_exotics = overround_place <= gpi_config["overround_max_exotics"]
@@ -146,7 +145,20 @@ def generate_tickets(
                 "legs": combo_selection,
                 "stake": min(remaining_budget, combo_cfg.get("stake_eur", 2.0))
             }
-            combo_eval = evaluate_combo(tickets=[combo_ticket], bankroll=budget, calibration=calibration_path, allow_heuristic=allow_heuristic)
+
+            # Write calibration to a temp file for evaluate_combo
+            temp_cal_path = None
+            try:
+                import tempfile
+                with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix=".yaml") as temp_cal_file:
+                    yaml.dump(calibration_data, temp_cal_file)
+                    temp_cal_path = temp_cal_file.name
+                
+                combo_eval = evaluate_combo(tickets=[combo_ticket], bankroll=budget, calibration=temp_cal_path, allow_heuristic=allow_heuristic)
+
+            finally:
+                if temp_cal_path and os.path.exists(temp_cal_path):
+                    os.remove(temp_cal_path)
 
             if combo_eval.get("status") == "ok" and combo_eval.get("roi", 0) >= gpi_config["ev_min_combo"] and combo_eval.get("payout_expected", 0) >= gpi_config["payout_min_combo"]:
                 combo_tickets.append({
@@ -174,3 +186,48 @@ def generate_tickets(
         "roi_global_est": round(roi_global_est, 4),
         "message": abstain_reason
     }
+
+def run_pipeline(rc_dir_str: str, budget: float, overround_max: float | None = None) -> None:
+    """
+    Orchestrates the analysis pipeline for a given race directory.
+    """
+    rc_dir = Path(rc_dir_str)
+    logger.info(f"Running pipeline for {rc_dir.name} with budget {budget}")
+
+    # 1. Load required data from files
+    try:
+        with open(rc_dir / "normalized_h5.json") as f:
+            snapshot_data = json.load(f)
+        with open(PROJECT_ROOT / "config" / "gpi_v52.yml") as f:
+            gpi_config = yaml.safe_load(f)
+        with open(CALIB_PATH) as f:
+            calibration_data = yaml.safe_load(f)
+    except FileNotFoundError as e:
+        logger.error(f"Missing required file for pipeline run in {rc_dir}: {e}")
+        return
+    except Exception as e:
+        logger.error(f"Error loading data for pipeline run in {rc_dir}: {e}")
+        return
+
+    # 2. Override config with passed parameters if any
+    if overround_max is not None:
+        gpi_config["overround_max_exotics"] = overround_max
+        logger.info(f"Overriding overround_max_exotics with {overround_max}")
+
+    # 3. Generate tickets
+    result = generate_tickets(
+        snapshot_data=snapshot_data,
+        gpi_config=gpi_config,
+        budget=budget,
+        calibration_data=calibration_data,
+        allow_heuristic=True  # Allow heuristic for combos if simulation fails
+    )
+
+    # 4. Save the final output
+    output_path = rc_dir / "p_finale.json"
+    try:
+        with open(output_path, "w") as f:
+            json.dump(result, f, indent=2, ensure_ascii=False)
+        logger.info(f"Successfully wrote p_finale.json to {output_path}")
+    except Exception as e:
+        logger.error(f"Failed to write p_finale.json to {output_path}: {e}")

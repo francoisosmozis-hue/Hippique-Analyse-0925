@@ -1,7 +1,7 @@
 
 import pytest
 
-from src.kelly import kelly_fraction, kelly_stake
+from hippique_orchestrator.kelly import kelly_fraction, kelly_stake
 
 
 @pytest.mark.parametrize(

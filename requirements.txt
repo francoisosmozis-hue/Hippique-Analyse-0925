@@ -4,6 +4,7 @@
 fastapi==0.120.0
 uvicorn[standard]==0.31.0
 pydantic==2.10.0
+pydantic-settings
 gunicorn==21.2.0
 
 # Google Cloud
@@ -55,3 +56,6 @@ httpx
 freezegun
 gunicorn
 google-cloud-firestore
+
+gcsfs
+google-cloud-storage

@@ -18,8 +18,12 @@ from urllib.parse import urljoin
 import requests
 from bs4 import BeautifulSoup
 
+from hippique_orchestrator.config import get_config
 from hippique_orchestrator.logging_io import CSV_HEADER, append_csv_line
-from hippique_orchestrator.gcs_utils import disabled_reason, is_gcs_enabled
+from hippique_orchestrator.gcs_client import get_gcs_manager
+
+config = get_config()
+gcs_manager = get_gcs_manager()
 
 try:
     from hippique_orchestrator.online_fetch_zeturf import normalize_snapshot
@@ -32,30 +36,14 @@ except (ImportError, SyntaxError) as _normalize_import_error:  # pragma: no cove
         ) from _normalize_import_error
 
     normalize_snapshot = _raise_normalize_snapshot
-import pipeline_run
+from hippique_orchestrator import pipeline_run
 
 from hippique_orchestrator.analysis_utils import compute_overround_cap
 from hippique_orchestrator.fetch_je_stats import collect_stats
-from hippique_orchestrator.scraping.online_fetch_zeturf import ZeturfFetcher
+from hippique_orchestrator.online_fetch_zeturf import ZeturfFetcher
 from hippique_orchestrator.simulate_wrapper import PAYOUT_CALIBRATION_PATH, evaluate_combo
 
 logger = logging.getLogger(__name__)
-
-
-def _env_float(name: str, default: float) -> float:
-    try:
-        return float(os.getenv(name, str(default)))
-    except (TypeError, ValueError):
-        return default
-
-
-GPI_BUDGET_DEFAULT = _env_float("GPI_BUDGET", 5.0)
-EV_MIN_THRESHOLD = _env_float("EV_MIN", 0.40)
-ROI_SP_MIN_THRESHOLD = _env_float("ROI_SP_MIN", 0.20)
-PAYOUT_MIN_THRESHOLD = _env_float("PAYOUT_MIN", 10.0)
-OVERROUND_MAX_THRESHOLD = _env_float("OVERROUND_MAX", 1.30)
-if "MAX_COMBO_OVERROUND" not in os.environ:
-    os.environ["MAX_COMBO_OVERROUND"] = f"{OVERROUND_MAX_THRESHOLD:.2f}"
 
 
 # Tests may insert a lightweight stub of ``scripts.online_fetch_zeturf`` to avoid
@@ -74,7 +62,7 @@ class MissingH30SnapshotError(RuntimeError):
         self.rc_dir = Path(rc_dir) if isinstance(rc_dir, (str, Path)) else None
 
 
-USE_GCS = is_gcs_enabled()
+
 
 TRACKING_HEADER = CSV_HEADER + ["phase", "status", "reason"]
 
@@ -133,25 +121,7 @@ def write_snapshot_from_boturfers(reunion: str, course: str, phase: str, rc_dir:
         logger.error(f"Failed to write snapshot to {output_path}: {e}")
 
 
-if USE_GCS:
-    try:  # pragma: no cover - optional dependency in tests
-        from scripts.drive_sync import (
-            build_remote_path as gcs_build_remote_path,
-        )
-        from scripts.drive_sync import (
-            push_tree,
-        )
-    except Exception as exc:  # pragma: no cover - used when optional deps are missing
-        print(
-            f"[WARN] Synchronisation GCS indisponible ({exc}), bascule en mode local.",
-            file=sys.stderr,
-        )
-        USE_GCS = False
-    gcs_build_remote_path = None  # type: ignore[assignment]
-    push_tree = None  # type: ignore[assignment]
-else:  # pragma: no cover - Cloud sync explicitly disabled
-    gcs_build_remote_path = None  # type: ignore[assignment]
-    push_tree = None  # type: ignore[assignment]
+
 
 
 # --- RÈGLES ANTI-COTES FAIBLES (SP min 4/1 ; CP somme > 6.0 déc) ---------------
@@ -160,28 +130,70 @@ MIN_CP_SUM_DEC = 6.0  # (o1-1)+(o2-1) ≥ 4  <=> (o1+o2) ≥ 6.0
 
 
 def _write_json_file(path: Path, payload: Any) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    """Writes a JSON payload to GCS if configured, otherwise to local disk."""
+    if gcs_manager:
+        gcs_path = gcs_manager.get_gcs_path(str(path))
+        try:
+            with gcs_manager.fs.open(gcs_path, "w", encoding="utf-8") as f:
+                json.dump(payload, f, ensure_ascii=False, indent=2)
+            logger.debug(f"Successfully wrote to GCS: {gcs_path}")
+        except Exception as e:
+            logger.error(f"Failed to write to GCS path {gcs_path}: {e}")
+            raise
+    else:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def _write_minimal_csv(
     path: Path, headers: Iterable[Any], rows: Iterable[Iterable[Any]] | None = None
 ) -> None:
-    """Persist a tiny CSV artefact with the provided ``headers`` and ``rows``."""
+    """Persist a tiny CSV artefact to GCS or local disk."""
 
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", newline="", encoding="utf-8") as fh:
+    def _write_content(fh):
         writer = csv.writer(fh)
         writer.writerow(list(headers))
         if rows:
             for row in rows:
                 writer.writerow(list(row))
 
+    if gcs_manager:
+        gcs_path = gcs_manager.get_gcs_path(str(path))
+        try:
+            with gcs_manager.fs.open(gcs_path, "w", newline="", encoding="utf-8") as fh:
+                _write_content(fh)
+            logger.debug(f"Successfully wrote CSV to GCS: {gcs_path}")
+        except Exception as e:
+            logger.error(f"Failed to write CSV to GCS path {gcs_path}: {e}")
+            raise
+    else:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("w", newline="", encoding="utf-8") as fh:
+            _write_content(fh)
+
+
+def _path_exists(path: Path) -> bool:
+    """Checks if a path exists, on GCS if configured, otherwise locally."""
+    if gcs_manager:
+        gcs_path = gcs_manager.get_gcs_path(str(path))
+        return gcs_manager.fs.exists(gcs_path)
+    return path.exists()
+
 
 def _load_json_if_exists(path: Path) -> dict[str, Any] | None:
+    """Loads a JSON file from GCS if configured, otherwise from local disk."""
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+        if gcs_manager:
+            gcs_path = gcs_manager.get_gcs_path(str(path))
+            if not gcs_manager.fs.exists(gcs_path):
+                return None
+            with gcs_manager.fs.open(gcs_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        else:
+            if not path.exists():
+                return None
+            data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, FileNotFoundError):
         return None
     return data if isinstance(data, dict) else None
 
@@ -344,11 +356,11 @@ def _extract_stats_mapping(stats_payload: Any) -> dict[str, dict[str, Any]]:
 def _write_je_csv_file(
     path: Path, *, id2name: dict[str, str], stats_payload: Any
 ) -> None:
-    """Materialise the ``*_je.csv`` companion using the provided mappings."""
+    """Materialise the ``*_je.csv`` companion to GCS or local disk."""
 
     stats_mapping = _extract_stats_mapping(stats_payload)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", newline="", encoding="utf-8") as fh:
+
+    def _write_content(fh):
         writer = csv.writer(fh)
         writer.writerow(["num", "nom", "j_rate", "e_rate"])
         for cid, name in sorted(id2name.items(), key=lambda item: item[0]):
@@ -363,6 +375,20 @@ def _write_je_csv_file(
                     stats.get("e_rate", ""),
                 ]
             )
+
+    if gcs_manager:
+        gcs_path = gcs_manager.get_gcs_path(str(path))
+        try:
+            with gcs_manager.fs.open(gcs_path, "w", newline="", encoding="utf-8") as fh:
+                _write_content(fh)
+            logger.debug(f"Successfully wrote JE CSV to GCS: {gcs_path}")
+        except Exception as e:
+            logger.error(f"Failed to write JE CSV to GCS path {gcs_path}: {e}")
+            raise
+    else:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("w", newline="", encoding="utf-8") as fh:
+            _write_content(fh)
 
 
 def _norm_float(value: Any) -> float | None:
@@ -618,16 +644,27 @@ def enrich_h5(rc_dir: Path, *, budget: float, kelly: float) -> None:
     snap_stem = h5_raw_path.stem
     je_path = rc_dir / f"{snap_stem}_je.csv"
     try:
-        # collect_stats retourne le chemin vers un fichier JSON qui contient les stats
+        # collect_stats now returns a GCS path if enabled.
         stats_json_path_str = collect_stats(
             h5=str(rc_dir / "normalized_h5.json")
         )
-        stats_json_path = Path(stats_json_path_str)
-        if not stats_json_path.exists():
-            raise FileNotFoundError(f"collect_stats should have created {stats_json_path}")
+        
+        # The path string could be local or a full gs:// path.
+        # _load_json_if_exists can't handle a full gs path, so we read manually.
+        stats_result = None
+        if gcs_manager and stats_json_path_str.startswith('gs://'):
+            if not gcs_manager.fs.exists(stats_json_path_str):
+                 raise FileNotFoundError(f"collect_stats should have created {stats_json_path_str}")
+            with gcs_manager.fs.open(stats_json_path_str, 'r', encoding='utf-8') as f:
+                stats_result = json.load(f)
+        else:
+            stats_json_path = Path(stats_json_path_str)
+            if not stats_json_path.exists():
+                raise FileNotFoundError(f"collect_stats should have created {stats_json_path}")
+            stats_result = json.loads(stats_json_path.read_text(encoding="utf-8"))
 
-        # Lire le payload JSON
-        stats_result = json.loads(stats_json_path.read_text(encoding="utf-8"))
+        if not stats_result:
+            raise ValueError("Failed to load stats result payload.")
 
         coverage = stats_result.get("coverage", 0)
         rows = stats_result.get("rows", [])
@@ -710,11 +747,11 @@ def run_pipeline(
     # If ``rc_dir`` already holds a freshly generated ``p_finale.json`` we do
     # not run the pipeline again – this is the case when ``build_p_finale`` was
     # just invoked on the directory.
-    if (rc_dir / "p_finale.json").exists():
+    if _path_exists(rc_dir / "p_finale.json"):
         return
 
     inputs_available = any(
-        rc_dir.joinpath(name).exists()
+        _path_exists(rc_dir.joinpath(name))
         for name in ("h5.json", "partants.json", "stats_je.json")
     )
     if inputs_available:
@@ -752,7 +789,7 @@ def build_prompt_from_meta(rc_dir: Path, *, budget: float, kelly: float) -> None
 
     rc_dir = Path(rc_dir)
     p_finale_path = rc_dir / "p_finale.json"
-    if not p_finale_path.exists():
+    if not _path_exists(p_finale_path):
         raise FileNotFoundError(f"p_finale.json introuvable dans {rc_dir}")
     data = json.loads(p_finale_path.read_text(encoding="utf-8"))
     meta = data.get("meta", {})
@@ -835,10 +872,9 @@ def _is_number(value: Any) -> bool:
 
 
 def _write_chronos_csv(path: Path, runners: Iterable[Any]) -> None:
-    """Persist a chronos CSV placeholder using runner identifiers."""
+    """Persist a chronos CSV placeholder to GCS or local disk."""
 
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", newline="", encoding="utf-8") as fh:
+    def _write_content(fh):
         writer = csv.writer(fh)
         writer.writerow(["num", "chrono"])
         for runner in runners or []:
@@ -849,6 +885,20 @@ def _write_chronos_csv(path: Path, runners: Iterable[Any]) -> None:
                 continue
             chrono = runner.get("chrono") or runner.get("time") or ""
             writer.writerow([cid, chrono])
+
+    if gcs_manager:
+        gcs_path = gcs_manager.get_gcs_path(str(path))
+        try:
+            with gcs_manager.fs.open(gcs_path, "w", newline="", encoding="utf-8") as fh:
+                _write_content(fh)
+            logger.debug(f"Successfully wrote chronos CSV to GCS: {gcs_path}")
+        except Exception as e:
+            logger.error(f"Failed to write chronos CSV to GCS path {gcs_path}: {e}")
+            raise
+    else:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("w", newline="", encoding="utf-8") as fh:
+            _write_content(fh)
 
 
 def _run_single_pipeline(
@@ -867,21 +917,20 @@ def _run_single_pipeline(
         OVERROUND_MAX_THRESHOLD if overround_max is None else float(overround_max)
     )
     required = {"h30.json", "h5.json", "partants.json", "stats_je.json"}
-    missing = [name for name in required if not (rc_dir / name).exists()]
+    missing = [name for name in required if not _path_exists(rc_dir / name)]
     if missing:
         raise FileNotFoundError(
             f"Fichiers manquants pour l'analyse dans {rc_dir}: {', '.join(missing)}"
         )
 
-    previous_overround = os.environ.get("MAX_COMBO_OVERROUND")
-    os.environ["MAX_COMBO_OVERROUND"] = f"{overround_threshold:.2f}"
     try:
-        pipeline_run.run_pipeline(str(rc_dir), budget=float(budget))
-    finally:
-        if previous_overround is None:
-            os.environ.pop("MAX_COMBO_OVERROUND", None)
-        else:
-            os.environ["MAX_COMBO_OVERROUND"] = previous_overround
+        pipeline_run.run_pipeline(
+            str(rc_dir), 
+            budget=float(budget), 
+            overround_max=overround_threshold
+        )
+    except Exception as e:
+        logger.error(f"Pipeline execution failed for {rc_dir.name}: {e}", exc_info=True)
 
     p_finale_path = rc_dir / "p_finale.json"
     try:
@@ -925,16 +974,31 @@ def _run_single_pipeline(
 
 def _find_je_csv(rc_dir: Path) -> Path | None:
     """Return the JE CSV produced during enrichment when available."""
-
     snap = _snap_prefix(rc_dir)
     if snap:
         candidate = rc_dir / f"{snap}_je.csv"
-        if candidate.exists():
+        if _path_exists(candidate):
             return candidate
-    for candidate in rc_dir.glob("*je.csv"):
-        if candidate.name.lower().endswith("je.csv") and candidate.is_file():
-            return candidate
-    return None
+    
+    if gcs_manager:
+        rc_dir_str = str(rc_dir)
+        gcs_path_pattern = gcs_manager.get_gcs_path(f"{rc_dir_str}/*je.csv")
+        candidates = gcs_manager.fs.glob(gcs_path_pattern)
+        for candidate_path in candidates:
+            # fs.glob returns full gs://<bucket>/path strings.
+            # We need to check if it's a file and return a Path object relative to the root.
+            if gcs_manager.fs.isfile(candidate_path):
+                # This is tricky. The caller expects a Path object.
+                # Let's return a Path object representing the relative path.
+                bucket_path = f"gs://{gcs_manager.bucket_name}/"
+                relative_path = candidate_path.replace(bucket_path, "")
+                return Path(relative_path)
+        return None
+    else:
+        for candidate in rc_dir.glob("*je.csv"):
+            if candidate.name.lower().endswith("je.csv") and candidate.is_file():
+                return candidate
+        return None
 
 
 def _is_combo_ticket(ticket: Mapping[str, Any]) -> bool:
@@ -1022,32 +1086,24 @@ def _run_h5_guard_phase(
     if je_csv is None:
         data_missing.append("je_csv")
         data_ok = False
-    if not chronos_path.exists():
+    if not _path_exists(chronos_path):
         data_missing.append("chronos")
         data_ok = False
 
-    calibration_ok = PAYOUT_CALIBRATION_PATH.exists()
+    calibration_ok = _path_exists(PAYOUT_CALIBRATION_PATH)
     if not calibration_ok:
         guards_context["calibration"] = str(PAYOUT_CALIBRATION_PATH)
 
     overround_value: float | None = None
     overround_cap: float | None = None
-    if h5_odds_path.exists():
-        try:
-            odds_payload = json.loads(h5_odds_path.read_text(encoding="utf-8"))
-        except json.JSONDecodeError:  # pragma: no cover - defensive
-            odds_payload = {}
+    odds_payload = _load_json_if_exists(h5_odds_path)
+    if odds_payload:
         if isinstance(odds_payload, Mapping):
             overround_value = pipeline_run._overround_from_odds_win(odds_payload.values())
 
-    partants_payload: Mapping[str, Any] = {}
-    if partants_path.exists():
-        try:
-            partants_data = json.loads(partants_path.read_text(encoding="utf-8"))
-        except json.JSONDecodeError:  # pragma: no cover - defensive
-            partants_data = {}
-        if isinstance(partants_data, Mapping):
-            partants_payload = partants_data
+    partants_payload = _load_json_if_exists(partants_path) or {}
+    if not isinstance(partants_payload, Mapping):
+        partants_payload = {}
 
     discipline_hint = (
         meta.get("discipline")
@@ -1077,7 +1133,7 @@ def _run_h5_guard_phase(
             partants_hint = len(runners_source)
 
     try:
-        default_cap = float(os.getenv("MAX_COMBO_OVERROUND", "1.30"))
+        default_cap = config.MAX_COMBO_OVERROUND
     except (TypeError, ValueError):  # pragma: no cover - defensive
         default_cap = 1.30
 
@@ -1229,46 +1285,45 @@ def _run_h5_guard_phase(
 
 
 def _upload_artifacts(rc_dir: Path, *, gcs_prefix: str | None) -> None:
-    """Upload ``rc_dir`` contents to Google Cloud Storage."""
-
-    if gcs_prefix is None:
-        return
-    if not USE_GCS or not push_tree:
-        reason = disabled_reason()
-        if reason:
-            detail = f"{reason}=false"
-        else:
-            detail = f"USE_GCS={USE_GCS}"
-        print(f"[gcs] Upload ignoré pour {rc_dir} ({detail})", file=sys.stderr)
-        return
-    try:
-        if gcs_build_remote_path:
-            prefix = gcs_build_remote_path(gcs_prefix, rc_dir.name)
-        else:  # pragma: no cover - best effort fallback
-            prefix = "/".join(
-                p for p in ((gcs_prefix or "").rstrip("/"), rc_dir.name) if p
-            )
-        push_tree(rc_dir, folder_id=prefix)
-    except Exception as exc:  # pragma: no cover - best effort
-        print(f"[WARN] Failed to upload {rc_dir}: {exc}")
+    """This function is deprecated. Artifacts are now written directly to GCS."""
+    logger.debug(
+        "_upload_artifacts is deprecated and does nothing. "
+        "Files are written directly to GCS during the pipeline."
+    )
+    pass
 
 
 def _snap_prefix(rc_dir: Path) -> str | None:
     """Return the stem of the most recent H-5 snapshot if available."""
+    if gcs_manager:
+        import os
+        rc_dir_str = str(rc_dir)
+        gcs_path_pattern = gcs_manager.get_gcs_path(f"{rc_dir_str}/*_H-5.json")
+        
+        snapshots = gcs_manager.fs.glob(gcs_path_pattern)
+        if not snapshots:
+            return None
 
-    snapshots = list(rc_dir.glob("*_H-5.json"))
-    if not snapshots:
-        return None
+        # gcsfs glob returns full paths, sorting them alphabetically works because of timestamp prefix
+        latest_path = max(snapshots)
+        
+        # Extract stem from the full path 'bucket/path/to/file.json'
+        file_name = os.path.basename(latest_path)
+        return file_name.replace('_H-5.json', '')
+    else:
+        snapshots = list(rc_dir.glob("*_H-5.json"))
+        if not snapshots:
+            return None
 
-    def _key(path: Path) -> tuple[float, str]:
-        try:
-            mtime = path.stat().st_mtime
-        except OSError:
-            mtime = 0.0
-        return (mtime, path.name)
+        def _key(path: Path) -> tuple[float, str]:
+            try:
+                mtime = path.stat().st_mtime
+            except OSError:
+                mtime = 0.0
+            return (mtime, path.name)
 
-    latest = max(snapshots, key=_key)
-    return latest.stem
+        latest = max(snapshots, key=_key)
+        return latest.stem
 
 
 _SCRIPTS_DIR = Path(__file__).resolve().with_name("scripts")
@@ -1296,9 +1351,9 @@ def _check_enrich_outputs(
         chronos_csv = rc_dir / "chronos.csv"
 
         missing: list[str] = []
-        if not je_csv or not je_csv.exists():
+        if not je_csv or not _path_exists(je_csv):
             missing.append(f"{snap}_je.csv" if snap else "*_je.csv")
-        if not chronos_csv.exists():
+        if not _path_exists(chronos_csv):
             missing.append("chronos.csv")
 
         if not missing:
@@ -1365,30 +1420,29 @@ def _run_fetch_script(script_path: Path, rc_dir: Path) -> bool:
 
         course_id: str | None = None
         partants_path = rc_dir / "partants.json"
-        if partants_path.exists():
-            try:
-                payload = json.loads(partants_path.read_text(encoding="utf-8"))
-            except json.JSONDecodeError as exc:  # pragma: no cover - defensive
-                print(
-                    f"[WARN] partants.json invalide dans {rc_dir}: {exc}",
-                    file=sys.stderr,
-                )
-            else:
-                if isinstance(payload, dict):
-                    course_id = _extract_course_id(payload)
+        payload = _load_json_if_exists(partants_path)
+        if payload:
+            course_id = _extract_course_id(payload)
 
         if not course_id:
             candidates: list[Path] = []
             normalized = rc_dir / "normalized_h5.json"
-            if normalized.exists():
+            if _path_exists(normalized):
                 candidates.append(normalized)
-            candidates.extend(sorted(rc_dir.glob("*_H-5.json")))
+
+            # GCS-aware glob
+            if gcs_manager:
+                rc_dir_str = str(rc_dir)
+                gcs_path_pattern = gcs_manager.get_gcs_path(f"{rc_dir_str}/*_H-5.json")
+                gcs_candidates = sorted(gcs_manager.fs.glob(gcs_path_pattern))
+                bucket_path = f"gs://{gcs_manager.bucket_name}/"
+                candidates.extend([Path(p.replace(bucket_path, "")) for p in gcs_candidates])
+            else:
+                candidates.extend(sorted(rc_dir.glob("*_H-5.json")))
+
             for candidate in candidates:
-                try:
-                    payload = json.loads(candidate.read_text(encoding="utf-8"))
-                except json.JSONDecodeError:
-                    continue
-                if isinstance(payload, dict):
+                payload = _load_json_if_exists(candidate)
+                if payload:
                     course_id = _extract_course_id(payload)
                 if course_id:
                     break
@@ -1401,10 +1455,19 @@ def _run_fetch_script(script_path: Path, rc_dir: Path) -> bool:
             return False
 
         h5_json_path = rc_dir / "normalized_h5.json"
-        if not h5_json_path.exists():
-            fallback = sorted(rc_dir.glob("*_H-5.json"))
-            if fallback:
-                h5_json_path = fallback[-1]
+        if not _path_exists(h5_json_path):
+            fallback_paths = []
+            if gcs_manager:
+                rc_dir_str = str(rc_dir)
+                gcs_path_pattern = gcs_manager.get_gcs_path(f"{rc_dir_str}/*_H-5.json")
+                gcs_candidates = sorted(gcs_manager.fs.glob(gcs_path_pattern))
+                bucket_path = f"gs://{gcs_manager.bucket_name}/"
+                fallback_paths = [Path(p.replace(bucket_path, "")) for p in gcs_candidates]
+            else:
+                fallback_paths = sorted(rc_dir.glob("*_H-5.json"))
+
+            if fallback_paths:
+                h5_json_path = fallback_paths[-1]
                 print(
                     f"[WARN] normalized_h5.json absent dans {rc_dir}, utilisation de {h5_json_path.name}",
                     file=sys.stderr,
@@ -1506,11 +1569,8 @@ def _rebuild_je_csv_from_stats(rc_dir: Path) -> bool:
 
     id2name: dict[str, str] = {}
     for candidate in [rc_dir / "partants.json", rc_dir / "normalized_h5.json"]:
-        if not candidate.exists():
-            continue
-        try:
-            payload = json.loads(candidate.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
+        payload = _load_json_if_exists(candidate)
+        if not payload:
             continue
         mapping = _extract_id2name(payload)
         if mapping:
@@ -1539,16 +1599,9 @@ def _rebuild_je_csv_from_stats(rc_dir: Path) -> bool:
 
 
 def _regenerate_chronos_csv(rc_dir: Path) -> bool:
-    """Attempt to rebuild ``chronos.csv`` from locally available runner data."""
+    """Attempt to rebuild ``chronos.csv`` from available runner data."""
 
     chronos_path = rc_dir / "chronos.csv"
-
-    def _load_payload(path: Path) -> dict[str, Any] | None:
-        try:
-            payload = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            return None
-        return payload if isinstance(payload, dict) else None
 
     def _extract_runners(payload: dict[str, Any]) -> list[dict[str, Any]]:
         def _clean(items: Any) -> list[dict[str, Any]]:
@@ -1583,17 +1636,26 @@ def _regenerate_chronos_csv(rc_dir: Path) -> bool:
 
     candidates: list[Path] = []
     partants_path = rc_dir / "partants.json"
-    if partants_path.exists():
+    if _path_exists(partants_path):
         candidates.append(partants_path)
 
     normalized_path = rc_dir / "normalized_h5.json"
-    if normalized_path.exists():
+    if _path_exists(normalized_path):
         candidates.append(normalized_path)
 
-    candidates.extend(sorted(rc_dir.glob("*_H-5.json"), reverse=True))
+    # GCS-aware glob
+    if gcs_manager:
+        rc_dir_str = str(rc_dir)
+        gcs_path_pattern = gcs_manager.get_gcs_path(f"{rc_dir_str}/*_H-5.json")
+        gcs_candidates = sorted(gcs_manager.fs.glob(gcs_path_pattern), reverse=True)
+        bucket_path = f"gs://{gcs_manager.bucket_name}/"
+        candidates.extend([Path(p.replace(bucket_path, "")) for p in gcs_candidates])
+    else:
+        candidates.extend(sorted(rc_dir.glob("*_H-5.json"), reverse=True))
+
 
     for candidate in candidates:
-        payload = _load_payload(candidate)
+        payload = _load_json_if_exists(candidate)
         if not payload:
             continue
         runners = _extract_runners(payload)
@@ -1748,7 +1810,7 @@ def _ensure_h5_artifacts(
         if _FETCH_JE_CHRONO_SCRIPT.exists():
             success = _run_fetch_script(_FETCH_JE_CHRONO_SCRIPT, rc_dir)
         chronos_path = rc_dir / "chronos.csv"
-        if not success or not chronos_path.exists():
+        if not success or not _path_exists(chronos_path):
             _regenerate_chronos_csv(rc_dir)
 
     if retried:
@@ -1827,9 +1889,14 @@ def safe_enrich_h5(
 
     rc_dir = Path(rc_dir)
     marker = rc_dir / "UNPLAYABLE.txt"
-    if marker.exists():
+    if _path_exists(marker):
         try:
-            marker_message = marker.read_text(encoding="utf-8").strip()
+            if gcs_manager:
+                gcs_path = gcs_manager.get_gcs_path(str(marker))
+                with gcs_manager.fs.open(gcs_path, 'r', encoding='utf-8') as f:
+                    marker_message = f.read().strip()
+            else:
+                marker_message = marker.read_text(encoding="utf-8").strip()
         except OSError:  # pragma: no cover - file removed between exists/read
             marker_message = ""
         details = {"marker": marker_message or None}
@@ -2201,33 +2268,33 @@ def main() -> None:
         "--data-dir", default="data", help="Répertoire racine pour les sorties"
     )
     ap.add_argument(
-        "--budget", type=float, default=GPI_BUDGET_DEFAULT, help="Budget à utiliser"
+        "--budget", type=float, default=config.budget_total, help="Budget à utiliser"
     )
-    ap.add_argument(
+    ap.addargument(
         "--kelly", type=float, default=1.0, help="Fraction de Kelly à appliquer"
     )
     ap.add_argument(
         "--ev-min",
         type=float,
-        default=EV_MIN_THRESHOLD,
+        default=config.EV_MIN_GLOBAL,
         help="Seuil EV global minimal (ratio).",
     )
     ap.add_argument(
         "--roi-min",
         type=float,
-        default=ROI_SP_MIN_THRESHOLD,
+        default=config.ROI_MIN_GLOBAL,
         help="ROI global minimal (ratio).",
     )
     ap.add_argument(
         "--payout-min",
         type=float,
-        default=PAYOUT_MIN_THRESHOLD,
+        default=10.0,
         help="Payout combinés minimal (euros).",
     )
     ap.add_argument(
         "--overround-max",
         type=float,
-        default=OVERROUND_MAX_THRESHOLD,
+        default=config.MAX_COMBO_OVERROUND,
         help="Overround place maximum autorisé.",
     )
     ap.add_argument(
@@ -2283,7 +2350,7 @@ def main() -> None:
         if args.gcs_prefix is not None:
             gcs_prefix = args.gcs_prefix
         else:
-            gcs_prefix = os.environ.get("GCS_PREFIX")
+            gcs_prefix = config.gcs_prefix
         if gcs_prefix is None:
             print("[WARN] gcs-prefix manquant, envoi vers GCS ignoré")
 

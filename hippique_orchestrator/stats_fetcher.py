@@ -177,15 +177,31 @@ def parse_horse_percentages(horse_name: str, *, get: Callable[[str], str] | None
 
 def collect_stats(
     h5: str, out: str | None = None, *, timeout: float = TIMEOUT, delay: float = DELAY, retries: int = RETRIES,
-    cache: bool = False, cache_dir: str | None = None, ttl_seconds: int = TTL_DEFAULT, neutral_on_fail: bool = False
+    cache: bool = False, cache_dir: str | None = None, ttl_seconds: int = TTL_DEFAULT, neutral_on_fail: bool = False,
+    correlation_id: str | None = None, trace_id: str | None = None
 ) -> str:
+    """
+    Fetches stats from Geny, using a GCS path for input and output.
+    """
+    from . import gcs_client # Local import to avoid circular dependency issues
+    gcs_manager = gcs_client.get_gcs_manager()
+    if not gcs_manager:
+        raise RuntimeError("GCS Manager is not initialized.")
+
+    log_extra = {"correlation_id": correlation_id, "trace_id": trace_id, "input_gcs_path": h5}
+    LOGGER.info("Starting stats collection from GCS.", extra=log_extra)
+
     conf = FetchConf(timeout=timeout, delay_between_requests=delay, user_agent=UA, use_cache=bool(cache), cache_dir=(Path(cache_dir) if cache_dir else Path.home()/'.cache'/'hippiques'/'geny'), ttl_seconds=int(ttl_seconds), retries=int(retries))
     def fetcher(url): return http_get(url, timeout=conf.timeout)
-    data = load_json(h5)
+
+    try:
+        with gcs_manager.fs.open(h5, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+    except Exception as e:
+        LOGGER.exception("Failed to read input snapshot from GCS.", extra=log_extra)
+        raise RuntimeError(f"Failed to read GCS file {h5}") from e
+
     runners = data.get("runners", [])
-    h5p = Path(h5)
-    json_out_path = h5p.parent / "stats_je.json"
-    ensure_parent(json_out_path)
     rows = []
     successful_fetches = 0
     for r in runners:
@@ -194,6 +210,7 @@ def collect_stats(
         j_rate = e_rate = h_win5 = h_place5 = h_win_career = h_place_career = None
         if name:
             try:
+                LOGGER.debug(f"Fetching stats for horse '{name}'", extra=log_extra)
                 h_url = discover_horse_url_by_name(name, get=fetcher)
                 time.sleep(conf.delay_between_requests)
                 if h_url:
@@ -210,20 +227,34 @@ def collect_stats(
                     if j_rate is not None or e_rate is not None:
                         successful_fetches += 1
             except Exception as e:
-                LOGGER.warning(f"Could not fetch stats for horse '{name}': {e}")
+                LOGGER.warning(f"Could not fetch stats for horse '{name}': {e}", extra=log_extra)
         def _fmt(x): return f"{float(x):.2f}" if isinstance(x, (int, float)) else ""
         rows.append({"num": num, "j_rate": _fmt(j_rate), "e_rate": _fmt(e_rate), "h_win5": _fmt(h_win5), "h_place5": _fmt(h_place5), "h_win_career": _fmt(h_win_career), "h_place_career": _fmt(h_place_career)})
+    
     coverage = (successful_fetches / len(runners) * 100) if runners else 0
-    output_payload = {"coverage": coverage, "rows": rows}
-    json_out_path.write_text(json.dumps(output_payload, indent=2, ensure_ascii=False), encoding="utf-8")
-    csv_out_path = Path(out) if out else (h5p.parent / f"{h5p.stem}_je.csv")
-    ensure_parent(csv_out_path)
-    with csv_out_path.open("w", encoding="utf-8", newline="") as f:
-        fieldnames = ["num", "j_rate", "e_rate", "h_win5", "h_place5", "h_win_career", "h_place_career"]
-        w = csv.DictWriter(f, fieldnames=fieldnames)
-        w.writeheader()
-        for row in rows: w.writerow({k: v for k, v in row.items() if k in fieldnames})
-    return str(json_out_path)
+    output_payload = {"coverage": coverage, "rows": rows, "correlation_id": correlation_id, "trace_id": trace_id}
+
+    # Construct GCS output path
+    # e.g., gs://bucket/data/2025-12-05_R1C1/snapshots/20251205_123000_H5.json
+    # becomes gs://bucket/data/2025-12-05_R1C1/snapshots/stats_je.json
+    # This is not ideal, let's place it one level up.
+    # gs://bucket/data/2025-12-05_R1C1/stats_je.json
+    
+    input_path_str = h5.split(gcs_manager.bucket_name, 1)[-1].strip("/")
+    output_path_str = str(Path(input_path_str).parent.parent / "stats_je.json")
+    output_gcs_path = gcs_manager.get_gcs_path(output_path_str)
+
+    log_extra["output_gcs_path"] = output_gcs_path
+    LOGGER.info("Writing stats result to GCS.", extra=log_extra)
+
+    try:
+        with gcs_manager.fs.open(output_gcs_path, 'w', encoding='utf-8') as f:
+            json.dump(output_payload, f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        LOGGER.exception("Failed to write stats output to GCS.", extra=log_extra)
+        raise RuntimeError(f"Failed to write to GCS file {output_gcs_path}") from e
+
+    return output_gcs_path
 
 def main():
     ap = argparse.ArgumentParser(description="Génère je_stats.csv (+cheval stats) via Geny (cheval → jockey/entraîneur) avec cache.")

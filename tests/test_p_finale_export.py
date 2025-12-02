@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from src.hippique_orchestrator.scripts.p_finale_export import export
+from hippique_orchestrator.scripts.p_finale_export import export
 
 
 def test_export_creates_csv_and_excel(tmp_path: Path):

@@ -18,6 +18,7 @@ from urllib.parse import quote_plus, urljoin
 
 import requests
 from bs4 import BeautifulSoup
+from hippique_orchestrator.gcs_client import get_gcs_manager
 
 LOGGER = logging.getLogger(__name__)
 
@@ -45,6 +46,18 @@ class FetchConf:
     retries: int
 
 def load_json(path: str) -> dict:
+    """Loads a JSON file from GCS if configured, otherwise from local disk."""
+    gcs_manager = get_gcs_manager()
+    if gcs_manager and not path.startswith("gs://"):
+        gcs_path = gcs_manager.get_gcs_path(path)
+        with gcs_manager.fs.open(gcs_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    # Handle local paths or direct gs:// paths if gcs_manager is not used
+    if path.startswith("gs://"):
+        # This assumes gcsfs is installed and can handle gs:// paths directly
+        # in libraries like pandas, but for raw open, we need the filesystem object.
+        # For simplicity, we rely on the gcs_manager path.
+        raise NotImplementedError("Direct gs:// path handling without gcs_manager is not supported.")
     return json.loads(Path(path).read_text(encoding="utf-8"))
 
 def ensure_parent(path: Path) -> None:
@@ -211,32 +224,21 @@ def collect_stats(
     ttl_seconds: int = TTL_DEFAULT,
     neutral_on_fail: bool = False
 ) -> str:
-    # This function has been modified to return a path to a JSON file with
-    # coverage and rows, as expected by analyse_courses_du_jour_enrichie.py.
-    # It also fixes internal calls to scraping functions.
-
+    gcs_manager = get_gcs_manager()
     conf = FetchConf(timeout=timeout, delay_between_requests=delay, user_agent=UA, use_cache=bool(cache), cache_dir=(Path(cache_dir) if cache_dir else Path.home()/'.cache'/'hippiques'/'geny'), ttl_seconds=int(ttl_seconds), retries=int(retries))
 
-    # Define a local fetcher to pass to helpers
     def fetcher(url):
         return http_get(url, timeout=conf.timeout)
 
     data = load_json(h5)
     runners = data.get("runners", [])
-    h5p = Path(h5)
-
-    # The primary output is now a JSON file, as expected by the caller.
-    json_out_path = h5p.parent / "stats_je.json"
-    ensure_parent(json_out_path)
-
+    
     rows = []
     successful_fetches = 0
     for r in runners:
         num = str(r.get("num"))
         name = (r.get("name") or "").strip()
         j_rate = e_rate = None
-        # h_win5, h_place5, h_win_career, h_place_career are disabled because
-        # the function parse_horse_percentages is missing from the original file.
         h_win5 = h_place5 = h_win_career = h_place_career = None
         if name:
             try:
@@ -259,12 +261,6 @@ def collect_stats(
 
                     if j_rate is not None or e_rate is not None:
                         successful_fetches += 1
-
-                    # The original implementation of parse_horse_percentages is missing
-                    # hs = parse_horse_percentages(h_html or "")
-                    # h_win5, h_place5 = hs.get("h_win5"), hs.get("h_place5")
-                    # h_win_career, h_place_career = hs.get("h_win_career"), hs.get("h_place_career")
-
             except Exception as e:
                 LOGGER.warning(f"Could not fetch stats for horse '{name}': {e}")
 
@@ -272,37 +268,48 @@ def collect_stats(
             return f"{float(x):.2f}" if isinstance(x, (int, float)) else ""
 
         rows.append({
-            "num": num,
-            "j_rate": _fmt(j_rate),
-            "e_rate": _fmt(e_rate),
-            "h_win5": _fmt(h_win5),
-            "h_place5": _fmt(h_place5),
-            "h_win_career": _fmt(h_win_career),
-            "h_place_career": _fmt(h_place_career)
+            "num": num, "j_rate": _fmt(j_rate), "e_rate": _fmt(e_rate),
+            "h_win5": _fmt(h_win5), "h_place5": _fmt(h_place5),
+            "h_win_career": _fmt(h_win_career), "h_place_career": _fmt(h_place_career)
         })
 
     coverage = (successful_fetches / len(runners) * 100) if runners else 0
+    output_payload = {"coverage": coverage, "rows": rows}
 
-    output_payload = {
-        "coverage": coverage,
-        "rows": rows
-    }
+    if gcs_manager:
+        import os
+        h5_dir = os.path.dirname(h5)
+        json_out_path_str = os.path.join(h5_dir, "stats_je.json")
+        gcs_json_path = gcs_manager.get_gcs_path(json_out_path_str)
+        
+        with gcs_manager.fs.open(gcs_json_path, 'w', encoding='utf-8') as f:
+            json.dump(output_payload, f, indent=2, ensure_ascii=False)
 
-    json_out_path.write_text(json.dumps(output_payload, indent=2, ensure_ascii=False), encoding="utf-8")
+        csv_out_path_str = out if out else os.path.join(h5_dir, f"{Path(h5).stem}_je.csv")
+        gcs_csv_path = gcs_manager.get_gcs_path(csv_out_path_str)
+        with gcs_manager.fs.open(gcs_csv_path, "w", encoding="utf-8", newline="") as f:
+            fieldnames = ["num", "j_rate", "e_rate", "h_win5", "h_place5", "h_win_career", "h_place_career"]
+            w = csv.DictWriter(f, fieldnames=fieldnames)
+            w.writeheader()
+            w.writerows([ {k: v for k, v in row.items() if k in fieldnames} for row in rows ])
+        
+        return gcs_json_path
 
-    # For backward compatibility, also write the CSV.
-    csv_out_path = Path(out) if out else (h5p.parent / f"{h5p.stem}_je.csv")
-    ensure_parent(csv_out_path)
-    with csv_out_path.open("w", encoding="utf-8", newline="") as f:
-        fieldnames = ["num", "j_rate", "e_rate", "h_win5", "h_place5", "h_win_career", "h_place_career"]
-        w = csv.DictWriter(f, fieldnames=fieldnames)
-        w.writeheader()
-        for row in rows:
-            # Write only the keys that are in fieldnames
-            w.writerow({k: v for k, v in row.items() if k in fieldnames})
+    else:
+        h5p = Path(h5)
+        json_out_path = h5p.parent / "stats_je.json"
+        ensure_parent(json_out_path)
+        json_out_path.write_text(json.dumps(output_payload, indent=2, ensure_ascii=False), encoding="utf-8")
 
-    # Return the path to the JSON file, as expected by enrich_h5
-    return str(json_out_path)
+        csv_out_path = Path(out) if out else (h5p.parent / f"{h5p.stem}_je.csv")
+        ensure_parent(csv_out_path)
+        with csv_out_path.open("w", encoding="utf-8", newline="") as f:
+            fieldnames = ["num", "j_rate", "e_rate", "h_win5", "h_place5", "h_win_career", "h_place_career"]
+            w = csv.DictWriter(f, fieldnames=fieldnames)
+            w.writeheader()
+            w.writerows([ {k: v for k, v in row.items() if k in fieldnames} for row in rows ])
+
+        return str(json_out_path)
 
 def main():
     ap = argparse.ArgumentParser(description="Génère je_stats.csv (+cheval stats) via Geny (cheval → jockey/entraîneur) avec cache.")

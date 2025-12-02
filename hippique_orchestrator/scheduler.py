@@ -20,9 +20,11 @@ from google.api_core import exceptions as gcp_exceptions
 from google.cloud import tasks_v2
 from google.protobuf import timestamp_pb2
 
-from src.config.config import config
+from hippique_orchestrator.config import get_config
 from hippique_orchestrator.logging_utils import get_logger
 from hippique_orchestrator.time_utils import convert_local_to_utc, format_rfc3339
+
+config = get_config()
 
 
 
@@ -107,6 +109,7 @@ def enqueue_run_task(
     r_label: str,
     c_label: str,
     correlation_id: str | None = None,
+    trace_id: str | None = None,
 ) -> str | None:
     """
     Crée une Cloud Task pour exécuter une analyse de course.
@@ -119,6 +122,7 @@ def enqueue_run_task(
         r_label: "R1"
         c_label: "C3"
         correlation_id: ID de corrélation pour logs
+        trace_id: ID de traçabilité pour le suivi de bout en bout
 
     Returns:
         Nom de la tâche créée ou None si échec
@@ -155,6 +159,7 @@ def enqueue_run_task(
         logger.info(
             f"Task {task_name_safe} already exists, skipping",
             correlation_id=correlation_id,
+            trace_id=trace_id,
             task_name=task_name_safe,
         )
         return task_path
@@ -170,6 +175,7 @@ def enqueue_run_task(
         "course_url": course_url,
         "phase": phase,
         "date": date,
+        "trace_id": trace_id,
     }
 
     # Build Cloud Task
@@ -203,6 +209,7 @@ def enqueue_run_task(
         logger.info(
             f"Task created: {task_name_safe}",
             correlation_id=correlation_id,
+            trace_id=trace_id,
             task_name=task_name_safe,
             phase=phase,
             race=f"{r_label}{c_label}",
@@ -218,6 +225,7 @@ def enqueue_run_task(
         logger.info(
             f"Task {task_name_safe} already exists (race condition), skipping",
             correlation_id=correlation_id,
+            trace_id=trace_id,
         )
         return task_path
 
@@ -225,6 +233,7 @@ def enqueue_run_task(
         logger.error(
             f"Failed to create task {task_name_safe}: {e}",
             correlation_id=correlation_id,
+            trace_id=trace_id,
             exc_info=e,
         )
         return None
@@ -237,6 +246,7 @@ def schedule_all_races(
     plan: list[dict[str, Any]],
     mode: str = "tasks",
     correlation_id: str | None = None,
+    trace_id: str | None = None,
 ) -> list[dict[str, Any]]:
     """
     Programme toutes les courses du plan (H-30 + H-5).
@@ -245,6 +255,7 @@ def schedule_all_races(
         plan: Liste de courses avec time_local
         mode: "tasks" (Cloud Tasks) ou "scheduler" (Cloud Scheduler fallback)
         correlation_id: ID de corrélation pour logs
+        trace_id: ID de traçabilité pour le suivi de bout en bout
 
     Returns:
         Liste de résultats par tâche:
@@ -282,6 +293,7 @@ def schedule_all_races(
             r_label=r_label,
             c_label=c_label,
             correlation_id=correlation_id,
+            trace_id=trace_id,
         )
 
         results.append({
@@ -301,6 +313,7 @@ def schedule_all_races(
             r_label=r_label,
             c_label=c_label,
             correlation_id=correlation_id,
+            trace_id=trace_id,
         )
 
         results.append({
@@ -319,6 +332,7 @@ def schedule_all_races(
     logger.info(
         f"Scheduling complete: {success}/{total} tasks created ({failed} failed)",
         correlation_id=correlation_id,
+        trace_id=trace_id,
         total=total,
         success=success,
         failed=failed,

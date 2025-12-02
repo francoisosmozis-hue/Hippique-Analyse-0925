@@ -12,10 +12,14 @@ from collections.abc import Callable
 from functools import partial
 from pathlib import Path
 
+from hippique_orchestrator.config import get_config
+
 try:  # pragma: no cover - optional dependency
     import yaml
 except Exception:  # pragma: no cover - yaml is optional for the CLI
     yaml = None  # type: ignore
+
+config = get_config()
 
 
 class ValidationError(Exception):
@@ -242,8 +246,8 @@ def validate_ev(
                 "reason": "missing payout_expected",
             }
 
-    min_sp = float(os.getenv("EV_MIN_SP", 0.15))
-    min_global = float(os.getenv("EV_MIN_GLOBAL", 0.35))
+    min_sp = config.EV_MIN_SP
+    min_global = config.EV_MIN_GLOBAL
 
     if ev_sp < min_sp:
         raise ValidationError("EV SP below threshold")

@@ -25,6 +25,8 @@ from typing import Any
 
 import yaml
 
+from hippique_orchestrator.config import get_config
+
 logger = logging.getLogger(__name__)
 
 try:  # pragma: no cover - numpy is optional at runtime
@@ -32,13 +34,14 @@ try:  # pragma: no cover - numpy is optional at runtime
 except Exception:  # pragma: no cover - handled gracefully
     np = None  # type: ignore
 
+config = get_config()
 CALIBRATION_PATH = Path("calibration/probabilities.yaml")
 
 
 def _default_payout_calibration_path() -> Path:
     """Return the payout calibration path configured via ``CALIB_PATH``."""
 
-    env_path = os.getenv("CALIB_PATH")
+    env_path = config.CALIB_PATH
     if env_path:
         try:
             return Path(env_path)
@@ -738,7 +741,7 @@ def evaluate_combo(
         allow_heuristic = False
 
     if calibration is None:
-        env_calib = os.getenv("CALIB_PATH")
+        env_calib = config.CALIB_PATH
         calib_path = Path(env_calib) if env_calib else PAYOUT_CALIBRATION_PATH
     else:
         calib_path = Path(calibration)

@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from src.resolve_course_id import (
+from hippique_orchestrator.scripts.resolve_course_id import (
     CourseContextError,
     _iter_schedule_entries,
     resolve_course_context,

@@ -15,6 +15,8 @@ from typing import Any
 from openpyxl import Workbook, load_workbook
 from openpyxl.worksheet.worksheet import Worksheet
 
+from hippique_orchestrator.config import get_config
+
 try:  # pragma: no cover - fallback for older Python versions
     from zoneinfo import ZoneInfo
 except Exception:  # pragma: no cover - very defensive
@@ -36,6 +38,7 @@ PLANNING_HEADERS: Sequence[str] = (
     "Commentaires",
 )
 
+config = get_config()
 
 @lru_cache(maxsize=1)
 def _env_timezone() -> dt.tzinfo | None:
@@ -44,7 +47,7 @@ def _env_timezone() -> dt.tzinfo | None:
     if ZoneInfo is None:
         return None
 
-    tz_name = os.environ.get("TZ")
+    tz_name = config.TZ
     if not tz_name:
         return None
 
@@ -237,30 +240,28 @@ def _extract_common_meta(
         match = re.search(r"C\s*(\d+)", rc_value, re.IGNORECASE)
         if match:
             course = f"C{int(match.group(1))}"
-    partants = _first_non_empty(
-        *(
-            [
-                "partants",
-                "nb_partants",
-                "runners_count",
-                "nb_partants_declares",
-                "nombre_partants",
-                "nb_participants",
-                "nombre_participants",
-                "participants_count",
-            ],
-            [
-                "partants",
-                "nb_partants",
-                "runners_count",
-                "nb_partants_declares",
-                "nombre_partants",
-                "nb_participants",
-                "nombre_participants",
-                "participants_count",
-            ],
-        )
-    )
+    partant_keys = [
+        "partants",
+        "nb_partants",
+        "runners_count",
+        "nb_partants_declares",
+        "nombre_partants",
+        "nb_participants",
+        "nombre_participants",
+        "participants_count",
+    ]
+    partants_val = _first_non_empty(*_values(partant_keys, partant_keys))
+    partants = None
+    if isinstance(partants_val, str):
+        match = re.search(r"\d+", partants_val)
+        if match:
+            partants = int(match.group(0))
+    elif partants_val is not None:
+        try:
+            partants = int(partants_val)
+        except (ValueError, TypeError):
+            pass
+
     if partants in (None, ""):
         for source in sources:
             meta = source.get("meta") if isinstance(source.get("meta"), Mapping) else None
@@ -269,51 +270,31 @@ def _extract_common_meta(
                 runners = meta.get("runners")
             if not runners:
                 runners = source.get("runners")
-            if isinstance(runners, Iterable) and not isinstance(runners, (str, bytes, Mapping)):
+            if isinstance(runners, Iterable) and not isinstance(
+                runners, (str, bytes, Mapping)
+            ):
                 partants = sum(1 for _ in runners)
                 if partants not in (None, ""):
                     break
-    start_time = _first_non_empty(
-        *(
-            [
-                "start_time",
-                "start",
-                "heure",
-                "time",
-                "hour",
-                "startTime",
-                "heure_depart",
-                "heure_depart_programme",
-                "heure_programme",
-                "official_start_time",
-                "official_time",
-                "heure_officielle",
-                "horaire",
-            ],
-            [
-                "start_time",
-                "start",
-                "heure",
-                "time",
-                "hour",
-                "startTime",
-                "heure_depart",
-                "heure_depart_programme",
-                "heure_programme",
-                "official_start_time",
-                "official_time",
-                "heure_officielle",
-                "horaire",
-            ],
-        )
-    )
+    start_time_keys = [
+        "start_time",
+        "start",
+        "heure",
+        "time",
+        "hour",
+        "startTime",
+        "heure_depart",
+        "heure_depart_programme",
+        "heure_programme",
+        "official_start_time",
+        "official_time",
+        "heure_officielle",
+        "horaire",
+    ]
+    start_time = _first_non_empty(*_values(start_time_keys, start_time_keys))
     formatted_time = _format_time(start_time)
-    discipline = _first_non_empty(
-        *_values(
-            ["discipline", "type", "specialite", "speciality"],
-            ["discipline", "type", "specialite", "speciality"],
-        )
-    )
+    discipline_keys = ["discipline", "type", "specialite", "speciality"]
+    discipline = _first_non_empty(*_values(discipline_keys, discipline_keys))
     return {
         "date": date,
         "hippodrome": hippodrome,

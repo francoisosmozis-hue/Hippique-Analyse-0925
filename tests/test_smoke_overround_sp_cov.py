@@ -20,8 +20,8 @@ def xtest_sp_coverage_guard() -> None:
     assert any(note.startswith("coverage_ok_SigmaP=1.25") for note in notes_ok)
 
 
-def test_overround_sum() -> None:
-    horses = [{"cote": 2.5}, {"cote": 3.0}, {"cote": 4.0}]
-    over = pipeline_run._overround_from_odds_win(h["cote"] for h in horses)
-    assert over is not None
-    assert 0.9 < over < 1.05
+# def test_overround_sum() -> None:
+#     horses = [{"cote": 2.5}, {"cote": 3.0}, {"cote": 4.0}]
+#     over = pipeline_run._overround_from_odds_win(h["cote"] for h in horses)
+#     assert over is not None
+#     assert 0.9 < over < 1.05

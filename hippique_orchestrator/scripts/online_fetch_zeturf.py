@@ -26,8 +26,10 @@ from zoneinfo import ZoneInfo
 
 import yaml
 
+from hippique_orchestrator.config import get_config
 from hippique_orchestrator.scripts import online_fetch_zeturf as _raw_impl
 
+config = get_config()
 _RC_COMBINED_RE = re.compile(r"R?\s*(\d+)\s*C\s*(\d+)", re.IGNORECASE)
 
 
@@ -844,7 +846,7 @@ def _load_sources_config(path: str | os.PathLike[str] | None = None) -> dict[str
     """Return the sources configuration used to resolve RC→URL mappings."""
 
     if path is None:
-        path = os.getenv("SOURCES_FILE") or _DEFAULT_SOURCES_FILE
+        path = config.sources_file or _DEFAULT_SOURCES_FILE
     candidate = Path(path)
     if not candidate.is_file():
         return _ensure_default_templates(None)

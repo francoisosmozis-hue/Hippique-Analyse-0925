@@ -3,14 +3,17 @@ from __future__ import annotations
 
 import datetime
 import json
-import os
 from typing import Any
 
 from google.cloud import storage
 from jinja2 import Template
 
-TICKETS_BUCKET = os.environ.get("TICKETS_BUCKET")
-TICKETS_PREFIX = os.environ.get("TICKETS_PREFIX", "tickets")
+from hippique_orchestrator.config import get_config
+
+config = get_config()
+
+TICKETS_BUCKET = config.tickets_bucket
+TICKETS_PREFIX = config.tickets_prefix
 
 _HTML_TMPL = Template("""<!doctype html>
 <html lang="fr"><head>

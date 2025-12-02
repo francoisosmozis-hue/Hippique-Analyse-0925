@@ -34,6 +34,7 @@ def run_course(
     phase: str,
     date: str,
     correlation_id: str | None = None,
+    trace_id: str | None = None,
 ) -> dict[str, Any]:
     """
     Executes the analysis for a single course by calling the Firestore-native pipeline.
@@ -44,16 +45,19 @@ def run_course(
     try:
         reunion, course = _extract_rc_from_url(course_url)
     except ValueError as e:
-        logger.error(str(e), correlation_id=correlation_id)
+        logger.error(str(e), extra={"correlation_id": correlation_id, "trace_id": trace_id})
         return {"ok": False, "error": str(e)}
 
     logger.info(
         "Starting Firestore-native course analysis",
-        correlation_id=correlation_id,
-        reunion=reunion,
-        course=course,
-        phase=phase_clean,
-        date=date,
+        extra={
+            "correlation_id": correlation_id,
+            "trace_id": trace_id,
+            "reunion": reunion,
+            "course": course,
+            "phase": phase_clean,
+            "date": date,
+        }
     )
 
     try:
@@ -67,14 +71,19 @@ def run_course(
             phase=phase_clean,
             date=date,
             budget=budget,
+            correlation_id=correlation_id,
+            trace_id=trace_id,
         )
 
         if result.get("success"):
             logger.info(
                 "Course analysis completed successfully.",
-                correlation_id=correlation_id,
-                race_doc_id=result.get("race_doc_id"),
-                analysis_result=result.get("analysis_result")
+                extra={
+                    "correlation_id": correlation_id,
+                    "trace_id": trace_id,
+                    "race_doc_id": result.get("race_doc_id"),
+                    "analysis_result": result.get("analysis_result")
+                }
             )
             return {
                 "ok": True,
@@ -84,9 +93,12 @@ def run_course(
         else:
             logger.error(
                 "Course analysis failed.",
-                correlation_id=correlation_id,
-                error_message=result.get("message"),
-                race_doc_id=result.get("race_doc_id"),
+                extra={
+                    "correlation_id": correlation_id,
+                    "trace_id": trace_id,
+                    "error_message": result.get("message"),
+                    "race_doc_id": result.get("race_doc_id"),
+                }
             )
             return {
                 "ok": False,
@@ -97,9 +109,12 @@ def run_course(
     except Exception as e:
         logger.exception(
             "An unexpected error occurred during course analysis.",
-            correlation_id=correlation_id,
-            reunion=reunion,
-            course=course,
+            extra={
+                "correlation_id": correlation_id,
+                "trace_id": trace_id,
+                "reunion": reunion,
+                "course": course,
+            }
         )
         return {
             "ok": False,

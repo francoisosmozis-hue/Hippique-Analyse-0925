@@ -12,8 +12,9 @@ steps:
     export PYTHONPATH=$$PYTHONPATH:/workspace
     export PROJECT_ID=analyse-hippique
     export CLOUD_TASKS_SA_EMAIL=test-sa@analyse-hippique.iam.gserviceaccount.com
+    export REQUIRE_AUTH=false
     echo "--- Checking Python syntax ---"
-    python -m py_compile runner_chain.py pipeline_run.py src/hippique_orchestrator/service.py
+    python -m py_compile hippique_orchestrator/pipeline_run.py hippique_orchestrator/service.py
     echo "--- Running smoke tests ---"
     pytest -q
 

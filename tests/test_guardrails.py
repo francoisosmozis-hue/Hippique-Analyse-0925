@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from src import guardrails
-from src.guardrails import evaluate_guardrail
+from hippique_orchestrator.scripts import guardrails
+from hippique_orchestrator.scripts.guardrails import evaluate_guardrail
 
 
 def _write_json(tmp_path: Path, name: str, payload: dict | list) -> Path:

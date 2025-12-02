@@ -8,9 +8,9 @@ from freezegun import freeze_time
 
 # Importez l'application FastAPI depuis src.service
 from hippique_orchestrator.service import app
-from src.config.config import config # Added
-
-config.require_auth = False # Disable auth for tests
+from hippique_orchestrator.config import get_config
+config = get_config()
+# config.require_auth = False # Disable auth for tests
 
 # Importez l'application FastAPI depuis src.service
 from hippique_orchestrator.service import app
@@ -28,35 +28,23 @@ def test_healthz_endpoint(client):
     assert "service" in response.json()
 
 # Test 2: Vérifier l'endpoint /api/pronostics sans données
-def test_api_pronostics_no_data(client):
+def test_api_pronostics_no_data(client, mocker):
     # Assurez-vous qu'il n'y a pas de fichiers d'analyse pour aujourd'hui
     # (cela peut nécessiter un nettoyage ou un mock plus avancé pour un test isolé)
+    mocker.patch("hippique_orchestrator.service.firestore_client.get_races_by_date_prefix", return_value=[])
     mock_date_str = datetime.now().strftime("%Y-%m-%d")
     response = client.get(f"/api/pronostics?date={mock_date_str}")
     assert response.status_code == 200
-    assert response.json()["ok"] == False
+    assert response.json()["ok"] == True
     assert response.json()["total_races"] == 0
     assert response.json()["pronostics"] == []
     assert "No pronostics found" in response.json()["message"]
 
 # Test 3: Vérifier l'endpoint /api/pronostics avec des données mockées
 # Pour ce test, nous allons créer un fichier analysis_H5.json temporaire
-def test_api_pronostics_with_mock_data(client, tmp_path, mocker):
-    # Create a dummy data/analyses directory within tmp_path
-    mock_analyses_dir = tmp_path / "data" / "analyses"
-    mock_analyses_dir.mkdir(parents=True)
-
-    # Create a dummy data/analyses directory within tmp_path
-    mock_analyses_dir = tmp_path / "data" / "analyses"
-    mock_analyses_dir.mkdir(parents=True, exist_ok=True)
-
-    # Mock src.service.Path so that Path("data/analyses") returns mock_analyses_dir
-    mocker.patch("pathlib.Path", side_effect=lambda p: mock_analyses_dir if p == "data/analyses" else Path(p))
-
+def test_api_pronostics_with_mock_data(client, mocker):
     # Créez une structure de répertoire et un fichier analysis_H5.json
     mock_date_str = datetime.now().strftime("%Y-%m-%d")
-    mock_race_dir = mock_analyses_dir / "R1C1"
-    mock_race_dir.mkdir()
     
     mock_analysis_data = {
         "date": mock_date_str,
@@ -70,20 +58,21 @@ def test_api_pronostics_with_mock_data(client, tmp_path, mocker):
             {"type": "Simple Gagnant", "cheval": "1", "mise": 1.5, "cote": 5.0, "ev": 0.8, "roi": 0.2}
         ]
     }
-    mock_file_path = mock_race_dir / f"{mock_date_str}_R1C1_H5.json"
-    with open(mock_file_path, "w") as f:
-        json.dump(mock_analysis_data, f)
+    
+    mocker.patch("hippique_orchestrator.service.firestore_client.get_races_by_date_prefix", return_value=[{"id": f"{mock_date_str}_R1C1", "tickets_analysis": mock_analysis_data}])
 
     response = client.get(f"/api/pronostics?date={mock_date_str}")
     assert response.status_code == 200
-    assert response.json()["ok"] == False
-    assert response.json()["total_races"] == 0
-    assert response.json()["pronostics"] == []
+    response_data = response.json()
+    assert response_data["ok"] == True
+    assert response_data["total_races"] == 1
+    assert len(response_data["pronostics"]) == 1
+    assert response_data["pronostics"][0]["rc"] == "R1C1"
 
 # Test 4: Vérifier l'endpoint /tasks/snapshot-9h (déclenchement en arrière-plan)
 def test_tasks_snapshot_9h(client, mocker):
     # Mock la fonction write_snapshot_for_day pour éviter le scraping réel
-    mocker.patch("hippique_orchestrator.api.tasks.write_snapshot_for_day", return_value=[])
+    mocker.patch("hippique_orchestrator.service.write_snapshot_for_day", return_value=[])
     
     mock_date_str = datetime.now().strftime("%Y-%m-%d")
     response = client.post("/tasks/snapshot-9h", json={"date": mock_date_str})
@@ -144,10 +133,10 @@ def test_tasks_bootstrap_day(client, mocker):
         {"course_url": "http://example.com/course/R1C1", "time_local": future_time_1, "r_label": "R1", "c_label": "C1", "date": now.strftime("%Y-%m-%d")},
         {"course_url": "http://example.com/course/R1C2", "time_local": future_time_2, "r_label": "R1", "c_label": "C2", "date": now.strftime("%Y-%m-%d")},
     ]
-    mocker.patch("hippique_orchestrator.plan.build_plan_async", return_value=mock_plan)
+    mocker.patch("hippique_orchestrator.service.build_plan_async", return_value=mock_plan)
 
     # Mock enqueue_run_task to avoid real Cloud Tasks creation
-    mocker.patch("hippique_orchestrator.scheduler.schedule_all_races", return_value=[
+    mock_schedule = mocker.patch("hippique_orchestrator.scheduler.schedule_all_races", return_value=[
         {"race": "R1C1", "phase": "H30", "ok": True, "task_name": "task-r1c1-h30"},
         {"race": "R1C1", "phase": "H5", "ok": True, "task_name": "task-r1c1-h5"},
         {"race": "R1C2", "phase": "H30", "ok": True, "task_name": "task-r1c2-h30"},
@@ -160,76 +149,54 @@ def test_tasks_bootstrap_day(client, mocker):
     assert response.status_code == 202
     assert response.json()["ok"] is True
     assert response.json()["scheduled_tasks"] == 4  # 2 courses * (H30 + H5)
-    assert mock_enqueue.call_count == 4
+    mock_schedule.assert_called_once()
 
-def test_api_pronostics_handles_malformed_json(client, tmp_path, mocker):
+def test_api_pronostics_handles_malformed_json(client, mocker):
     """
-    Tests that the /api/pronostics endpoint gracefully handles a malformed JSON file
+    Tests that the /api/pronostics endpoint gracefully handles a malformed document
     by logging an error and excluding it from the results, without crashing.
     """
-    mock_analyses_dir = tmp_path / "data" / "analyses"
-    mock_analyses_dir.mkdir(parents=True, exist_ok=True)
-
-    mocker.patch("pathlib.Path", side_effect=lambda p: mock_analyses_dir if p == "data/analyses" else Path(p))
-
     mock_date_str = datetime.now().strftime("%Y-%m-%d")
     
-    # Create a valid file
-    valid_race_dir = mock_analyses_dir / "R1C1"
-    valid_race_dir.mkdir()
     valid_data = {"rc": "R1C1", "gpi_decision": "OK", "tickets": []}
-    valid_file_path = valid_race_dir / f"{mock_date_str}_R1C1_H5.json"
-    with open(valid_file_path, "w") as f:
-        json.dump(valid_data, f)
+    malformed_data = {"rc": "R1C2", "gpi_decision": "INVALID"} # Missing tickets_analysis
 
-    # Create a malformed file
-    malformed_race_dir = mock_analyses_dir / "R1C2"
-    malformed_race_dir.mkdir()
-    malformed_file_path = malformed_race_dir / f"{mock_date_str}_R1C2_H5.json"
-    with open(malformed_file_path, "w") as f:
-        f.write("{'rc': 'R1C2', 'gpi_decision': 'INVALID JSON'") # Invalid JSON
+    mocker.patch("hippique_orchestrator.service.firestore_client.get_races_by_date_prefix", return_value=[
+        {"id": f"{mock_date_str}_R1C1", "tickets_analysis": valid_data},
+        {"id": f"{mock_date_str}_R1C2", "some_other_key": malformed_data},
+    ])
 
     response = client.get(f"/api/pronostics?date={mock_date_str}")
     
     assert response.status_code == 200
-    assert response.json()["ok"] == False
-    assert response.json()["total_races"] == 0
-    assert response.json()["pronostics"] == []
+    response_data = response.json()
+    assert response_data["ok"] is True
+    assert response_data["total_races"] == 1
+    assert len(response_data["pronostics"]) == 1
+    assert response_data["pronostics"][0]["rc"] == "R1C1"
 
-def test_api_pronostics_aggregates_multiple_files(client, tmp_path, mocker):
+def test_api_pronostics_aggregates_multiple_files(client, mocker):
     """
     Tests that the /api/pronostics endpoint correctly aggregates data from multiple
-    valid analysis files for the same day.
+    valid analysis documents from Firestore.
     """
-    mock_analyses_dir = tmp_path / "data" / "analyses"
-    mock_analyses_dir.mkdir(parents=True, exist_ok=True)
-
-    mocker.patch("pathlib.Path", side_effect=lambda p: mock_analyses_dir if p == "data/analyses" else Path(p))
-
     mock_date_str = datetime.now().strftime("%Y-%m-%d")
     
-    # Create first valid file
-    race1_dir = mock_analyses_dir / "R1C1"
-    race1_dir.mkdir()
     race1_data = {"rc": "R1C1", "gpi_decision": "OK", "tickets": []}
-    race1_file_path = race1_dir / f"{mock_date_str}_R1C1_H5.json"
-    with open(race1_file_path, "w") as f:
-        json.dump(race1_data, f)
-
-    # Create second valid file
-    race2_dir = mock_analyses_dir / "R1C2"
-    race2_dir.mkdir()
     race2_data = {"rc": "R1C2", "gpi_decision": "OK", "tickets": []}
-    race2_file_path = race2_dir / f"{mock_date_str}_R1C2_H5.json"
-    with open(race2_file_path, "w") as f:
-        json.dump(race2_data, f)
+
+    mocker.patch("hippique_orchestrator.service.firestore_client.get_races_by_date_prefix", return_value=[
+        {"id": f"{mock_date_str}_R1C1", "tickets_analysis": race1_data},
+        {"id": f"{mock_date_str}_R1C2", "tickets_analysis": race2_data},
+    ])
 
     response = client.get(f"/api/pronostics?date={mock_date_str}")
     
     assert response.status_code == 200
-    assert response.json()["ok"] == False
-    assert response.json()["total_races"] == 0
-    assert response.json()["pronostics"] == []
+    response_data = response.json()
+    assert response_data["ok"] is True
+    assert response_data["total_races"] == 2
+    assert len(response_data["pronostics"]) == 2
 
 def test_api_pronostics_invalid_date_format(client):
     """

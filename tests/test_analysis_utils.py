@@ -1,7 +1,7 @@
 
 import pytest
 
-from src import analysis_utils
+from hippique_orchestrator import analysis_utils
 
 
 @pytest.mark.parametrize(

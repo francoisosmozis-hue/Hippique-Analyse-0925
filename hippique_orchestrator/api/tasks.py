@@ -10,9 +10,11 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from src.config.config import config
+from hippique_orchestrator.config import get_config
 from hippique_orchestrator.logging_utils import get_logger
-from snapshot_manager import write_snapshot_for_day
+from hippique_orchestrator.snapshot_manager import write_snapshot_for_day
+
+config = get_config()
 from hippique_orchestrator.runner import run_course # For /tasks/run-phase
 from hippique_orchestrator.plan import build_plan_async # For /tasks/bootstrap-day
 from hippique_orchestrator.scheduler import enqueue_run_task # Use existing enqueue_run_task
