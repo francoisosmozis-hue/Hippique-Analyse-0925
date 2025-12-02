@@ -1,4 +1,4 @@
-import pipeline_run
+from hippique_orchestrator import pipeline_run
 
 
 def xtest_sp_coverage_guard() -> None:

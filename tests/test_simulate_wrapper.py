@@ -10,7 +10,7 @@ import yaml
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-import simulate_wrapper as sw
+from hippique_orchestrator import simulate_wrapper as sw
 
 
 def test_calibration_details_expose_metadata(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
