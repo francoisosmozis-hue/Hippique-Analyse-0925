@@ -135,12 +135,12 @@ async def verify_oidc_token(request: Request, call_next):
     Verify OIDC token for authenticated endpoints.
     
     Skips verification for:
-    - /healthz
+    - /healthz-test
     - /ping
     - REQUIRE_AUTH=false
     """
     # Skip health check and ping
-    if request.url.path.startswith("/healthz") or request.url.path.startswith("/ping"):
+    if request.url.path.startswith("/healthz-test") or request.url.path.startswith("/ping"):
         return await call_next(request)
     
     # Skip if auth not required
