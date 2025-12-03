@@ -747,6 +747,18 @@ async def debug_info():
         }
     }
 
+@app.get("/debug/static")
+async def debug_static():
+    """Debug static files path"""
+    static_dir_path = STATIC_DIR
+    is_dir = os.path.isdir(static_dir_path)
+    dir_content = os.listdir(static_dir_path) if is_dir else "Not a directory"
+    return {
+        "static_dir_path": static_dir_path,
+        "is_directory": is_dir,
+        "directory_content": dir_content
+    }
+
 from pathlib import Path # Added
 
 # ============================================
