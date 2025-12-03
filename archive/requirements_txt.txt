@@ -1,7 +1,7 @@
 # Web Framework
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
-gunicorn==21.2.0
+gunicorn==22.0.0
 
 # Configuration & Validation
 pydantic==2.5.0
@@ -9,7 +9,7 @@ pydantic-settings==2.1.0
 python-dotenv==1.0.0
 
 # HTTP & Scraping
-requests==2.31.0
+requests==2.32.4
 httpx==0.25.1
 beautifulsoup4==4.12.2
 lxml==4.9.3

@@ -1,15 +1,15 @@
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
-gunicorn==21.2.0
+gunicorn==22.0.0
 pydantic==2.5.0
-python-multipart==0.0.6
+python-multipart==0.0.18
 
 google-cloud-tasks==2.14.2
 google-cloud-scheduler==2.11.3
 google-cloud-storage==2.13.0
 google-auth==2.25.2
 
-requests==2.31.0
+requests==2.32.4
 beautifulsoup4==4.12.2
 lxml==4.9.3
 pandas==2.1.3
