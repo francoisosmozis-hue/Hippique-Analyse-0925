@@ -262,7 +262,8 @@ async def schedule_daily_plan(request: Request, body: ScheduleRequest):
         # 3. Build response
         success_h30 = sum(1 for s in scheduled if s["phase"] == "H30" and s["ok"])
         success_h5 = sum(1 for s in scheduled if s["phase"] == "H5" and s["ok"])
-        
+        all_ok = all(s["ok"] for s in scheduled)
+
         logger.info(
             "Scheduling complete",
             correlation_id=correlation_id,
@@ -271,7 +272,7 @@ async def schedule_daily_plan(request: Request, body: ScheduleRequest):
             success_h30=success_h30,
             success_h5=success_h5,
         )
-        
+
         # Plan summary for response (first 5 races)
         plan_summary = [
             {
@@ -282,19 +283,22 @@ async def schedule_daily_plan(request: Request, body: ScheduleRequest):
             }
             for p in plan[:5]
         ]
-        
-        return {
-            "ok": True,
-            "date": body.date,
-            "total_races": len(plan),
-            "scheduled_h30": success_h30,
-            "scheduled_h5": success_h5,
-            "mode": body.mode,
-            "plan_summary": plan_summary,
-            "scheduled_details": scheduled,
-            "correlation_id": correlation_id,
-            "trace_id": trace_id,
-        }
+
+        return JSONResponse(
+            status_code=status.HTTP_202_ACCEPTED,
+            content={
+                "ok": all_ok,
+                "date": body.date,
+                "total_races": len(plan),
+                "scheduled_h30": success_h30,
+                "scheduled_h5": success_h5,
+                "mode": body.mode,
+                "plan_summary": plan_summary,
+                "scheduled_details": scheduled,
+                "correlation_id": correlation_id,
+                "trace_id": trace_id,
+            },
+        )
     
     except Exception as e:
         logger.error(
@@ -740,7 +744,32 @@ async def debug_info():
             "TZ": config.TZ,
             "PROJECT_ID": config.PROJECT_ID,
             "REGION": config.REGION,
-        }
+        )
+
+@app.get("/debug/filesystem")
+async def debug_filesystem():
+    """
+    Debug endpoint to inspect the filesystem within the container.
+    """
+    cwd = os.getcwd()
+    static_dir_path = STATIC_DIR
+    static_dir_exists = os.path.exists(static_dir_path)
+    static_dir_is_dir = os.path.isdir(static_dir_path)
+    index_html_path = os.path.join(static_dir_path, "index.html")
+    index_html_exists = os.path.exists(index_html_path)
+    
+    return {
+        "cwd": cwd,
+        "static_dir": {
+            "path": static_dir_path,
+            "exists": static_dir_exists,
+            "is_directory": static_dir_is_dir,
+        },
+        "index_html": {
+            "path": index_html_path,
+            "exists": index_html_exists,
+        },
+        "file_system_list": os.listdir(cwd)
     }
 
 from pathlib import Path # Added
