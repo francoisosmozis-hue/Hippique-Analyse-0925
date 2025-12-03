@@ -744,32 +744,7 @@ async def debug_info():
             "TZ": config.TZ,
             "PROJECT_ID": config.PROJECT_ID,
             "REGION": config.REGION,
-        )
-
-@app.get("/debug/filesystem")
-async def debug_filesystem():
-    """
-    Debug endpoint to inspect the filesystem within the container.
-    """
-    cwd = os.getcwd()
-    static_dir_path = STATIC_DIR
-    static_dir_exists = os.path.exists(static_dir_path)
-    static_dir_is_dir = os.path.isdir(static_dir_path)
-    index_html_path = os.path.join(static_dir_path, "index.html")
-    index_html_exists = os.path.exists(index_html_path)
-    
-    return {
-        "cwd": cwd,
-        "static_dir": {
-            "path": static_dir_path,
-            "exists": static_dir_exists,
-            "is_directory": static_dir_is_dir,
-        },
-        "index_html": {
-            "path": index_html_path,
-            "exists": index_html_exists,
-        },
-        "file_system_list": os.listdir(cwd)
+        }
     }
 
 from pathlib import Path # Added
