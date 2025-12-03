@@ -140,7 +140,7 @@ async def verify_oidc_token(request: Request, call_next):
     - REQUIRE_AUTH=false
     """
     # Skip health check and ping
-    if request.url.path in ["/healthz", "/ping"]:
+    if request.url.path.rstrip("/") in ["/healthz", "/ping"]:
         return await call_next(request)
     
     # Skip if auth not required
