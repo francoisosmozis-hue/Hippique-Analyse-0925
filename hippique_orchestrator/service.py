@@ -136,10 +136,11 @@ async def verify_oidc_token(request: Request, call_next):
     
     Skips verification for:
     - /healthz
+    - /ping
     - REQUIRE_AUTH=false
     """
-    # Skip health check
-    if request.url.path == "/healthz":
+    # Skip health check and ping
+    if request.url.path in ["/healthz", "/ping"]:
         return await call_next(request)
     
     # Skip if auth not required
@@ -172,6 +173,11 @@ async def verify_oidc_token(request: Request, call_next):
 # ============================================
 # Endpoints
 # ============================================
+
+@app.get("/ping")
+async def ping():
+    """Simple ping endpoint."""
+    return {"status": "pong"}
 
 @app.get("/healthz")
 async def health_check():
