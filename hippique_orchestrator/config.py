@@ -17,7 +17,7 @@ class Config(BaseSettings):
     Configuration centralisée du service hippique-orchestrator.
     Les valeurs sont chargées depuis les variables d'environnement ou un fichier .env.
     """
-    model_config = SettingsConfigDict(env_file='.env', env_file_encoding='utf-8', case_sensitive=False)
+    model_config = SettingsConfigDict(env_file='.env', env_file_encoding='utf-8', case_sensitive=False, extra="ignore")
 
     # --- GCP Configuration ---
     PROJECT_ID: str
@@ -86,6 +86,7 @@ def get_config() -> Config:
     logger.info("Loading configuration...")
     try:
         config = Config()
+        logger.debug(f"DEBUG: Config.USE_GCS is {config.USE_GCS}") # TEMPORARY DEBUG LINE
         # Log a subset of the config for debugging, avoiding sensitive values
         logger.info(f"Configuration loaded: PROJECT_ID={config.PROJECT_ID}, GCS_BUCKET={config.GCS_BUCKET}, MODE={config.SCHEDULING_MODE}")
         return config
