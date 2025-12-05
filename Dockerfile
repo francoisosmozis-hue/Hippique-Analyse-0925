@@ -11,16 +11,7 @@ WORKDIR /app
 ENV PYTHONPATH=/app
 
 # Install system dependencies, including gnupg for key management
-RUN apt-get update && apt-get install -y wget gnupg ca-certificates tzdata curl
-
-# Add Google's official GPG key using the recommended, modern method
-RUN wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /usr/share/keyrings/google-chrome.gpg
-
-# Add the Google Chrome repository and sign it with the key
-RUN echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list
-
-# Install Google Chrome Stable
-RUN apt-get update && apt-get install -y google-chrome-stable
+RUN apt-get update && apt-get install -y ca-certificates tzdata curl && rm -rf /var/lib/apt/lists/*
 
 # Copy the requirements file into the container
 COPY requirements.txt .
@@ -48,7 +39,7 @@ EXPOSE 8080
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD curl -f http://localhost:8080/health || exit 1
+    CMD curl -f http://localhost:8080/healthz || exit 1
 
 # Run the application
 CMD uvicorn hippique_orchestrator.service:app --host 0.0.0.0 --port $PORT --log-level info
