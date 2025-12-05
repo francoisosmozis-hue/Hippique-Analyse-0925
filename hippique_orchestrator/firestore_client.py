@@ -16,11 +16,15 @@ _firestore_client = None
 
 def _get_firestore_client(project_id: str | None = None):
     """
-    Returns a Firestore client, initializing it if necessary.
-    Explicitly uses the provided project_id.
+    Returns a Firestore client, initializing it if necessary, or None if disabled.
     """
     global _firestore_client
     if _firestore_client is None:
+        current_config = get_config()
+        if not current_config.USE_FIRESTORE:
+            logger.info("Firestore operations are disabled via configuration (USE_FIRESTORE=False).")
+            return None
+
         try:
             # Explicitly pass the project_id to the client constructor
             _firestore_client = firestore.Client(project=project_id)
@@ -32,8 +36,9 @@ def _get_firestore_client(project_id: str | None = None):
 
 
 def is_firestore_enabled() -> bool:
-    """Check if Firestore is configured and enabled."""
-    return True
+    """Check if Firestore is configured and enabled via config."""
+    config = get_config()
+    return config.USE_FIRESTORE or False # Default to False if None
 
 
 def save_race_document(collection: str, document_id: str, data: dict[str, Any]) -> None:
@@ -179,4 +184,3 @@ def list_subcollection_documents(collection: str, document_id: str, subcollectio
             exc_info=e,
         )
         return []
-

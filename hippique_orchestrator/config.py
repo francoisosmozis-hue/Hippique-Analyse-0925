@@ -28,7 +28,7 @@ class Config(BaseSettings):
     GCS_BUCKET: str | None = None
 
     # --- Application Configuration ---
-    LOG_LEVEL: str = "INFO"
+    LOG_LEVEL: str = "DEBUG"
     TZ: str = "Europe/Paris"
     DEBUG: bool = False
 
@@ -62,6 +62,7 @@ class Config(BaseSettings):
     RUNNER_ANALYSIS_DIR: str | None = None
     RUNNER_OUTPUT_DIR: str | None = None
     USE_GCS: bool | None = None
+    USE_FIRESTORE: bool | None = None # Added for local disablement
     USE_DRIVE: bool | None = None
 
     @property
@@ -86,7 +87,6 @@ def get_config() -> Config:
     logger.info("Loading configuration...")
     try:
         config = Config()
-        logger.debug(f"DEBUG: Config.USE_GCS is {config.USE_GCS}") # TEMPORARY DEBUG LINE
         # Log a subset of the config for debugging, avoiding sensitive values
         logger.info(f"Configuration loaded: PROJECT_ID={config.PROJECT_ID}, GCS_BUCKET={config.GCS_BUCKET}, MODE={config.SCHEDULING_MODE}")
         return config
