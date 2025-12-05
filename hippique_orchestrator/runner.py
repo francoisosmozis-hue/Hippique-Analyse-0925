@@ -20,13 +20,21 @@ config = get_config()
 
 def _extract_rc_from_url(course_url: str) -> tuple[str, str]:
     """
-    Extracts Reunion and Course numbers from a ZEturf-like URL.
+    Extracts Reunion and Course numbers from a URL (Boturfers or ZEturf-like).
     """
-    match = re.search(r"/R(\d+)C(\d+)", course_url, re.IGNORECASE)
-    if not match:
-        raise ValueError(f"Cannot extract R/C from URL: {course_url}")
-    r_num, c_num = match.groups()
-    return f"R{int(r_num)}", f"C{int(c_num)}"
+    # Regex for Boturfers format like "...-r2c2-..."
+    boturfers_match = re.search(r"r(\d+)c(\d+)", course_url, re.IGNORECASE)
+    if boturfers_match:
+        r_num, c_num = boturfers_match.groups()
+        return f"R{int(r_num)}", f"C{int(c_num)}"
+    
+    # Fallback to original regex for ZEturf format like "/R1C2"
+    zeturf_match = re.search(r"/R(\d+)C(\d+)", course_url, re.IGNORECASE)
+    if zeturf_match:
+        r_num, c_num = zeturf_match.groups()
+        return f"R{int(r_num)}", f"C{int(c_num)}"
+
+    raise ValueError(f"Cannot extract R/C from URL: {course_url}")
 
 
 def run_course(
