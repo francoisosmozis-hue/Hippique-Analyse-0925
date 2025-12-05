@@ -82,6 +82,7 @@ logs/
 # Scripts (not needed in container)
 scripts/
 *.sh
+!entrypoint.sh
 
 # Tests
 tests/

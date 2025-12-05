@@ -37,6 +37,8 @@ except ImportError:
     def calculate_kelly_fraction(odds, prob, fraction=1.0): return fraction * (odds * prob - 1) / (odds - 1)
     def evaluate_combo(**kwargs): return {"status": "insufficient_data", "message": "Simulation unavailable"}
     def compute_overround_cap(*args, **kwargs): return 1.0
+    def compute_overround_place(*args, **kwargs): return 1.0
+    def adaptive_cap(*args, **kwargs): return 1.0
 
 # --- Logging ---
 logger = logging.getLogger(__name__)

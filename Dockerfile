@@ -41,5 +41,8 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD curl -f http://localhost:8080/healthz || exit 1
 
-# Run the application
-CMD uvicorn hippique_orchestrator.service:app --host 0.0.0.0 --port $PORT --log-level info
+COPY entrypoint.sh .
+
+# Run the application via the entrypoint script
+ENTRYPOINT ["/app/entrypoint.sh"]
+CMD []
