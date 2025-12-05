@@ -86,6 +86,10 @@ def get_gcs_manager() -> GCSManager | None:
     Returns a singleton instance of the GCSManager, creating it on first call.
     This deferred initialization helps prevent circular import issues.
     """
+    config = get_config()
+    if not config.USE_GCS:
+        logger.info("GCS operations are disabled via configuration (USE_GCS=False).")
+        return None
     try:
         return GCSManager()
     except ValueError as e:
