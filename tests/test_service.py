@@ -66,8 +66,11 @@ def test_run_endpoint_success(client, mocker):
     """
     Vérifie que le point de terminaison /run traite une requête valide avec succès.
     """
+    # Mock GCSFileSystem to prevent real GCS calls
+    mocker.patch('gcsfs.GCSFileSystem')
+    
     # Mock la fonction run_course pour isoler le test de l'exécution réelle
-    mock_run = mocker.patch("hippique_orchestrator.runner.run_course", return_value={"ok": True, "phase": "H-5"})
+    mock_run = mocker.patch("hippique_orchestrator.service.run_course", return_value={"ok": True, "phase": "H-5"})
     
     payload = {
         "course_url": "https://www.zeturf.fr/fr/course/2025-10-20/R1C2-marseille-borely/details",

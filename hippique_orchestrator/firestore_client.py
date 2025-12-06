@@ -184,3 +184,20 @@ def list_subcollection_documents(collection: str, document_id: str, subcollectio
             exc_info=e,
         )
         return []
+
+def is_day_planned(date_str: str) -> bool:
+    """Checks if a 'plan' document exists for the given date."""
+    if not is_firestore_enabled():
+        logger.warning("Firestore is not enabled, cannot check if day is planned.")
+        return True  # Assume planned to prevent re-running
+
+    doc = get_race_document("plans", date_str)
+    return doc is not None
+
+def mark_day_as_planned(date_str: str, plan_details: dict[str, Any]) -> None:
+    """Creates a 'plan' document for the given date to mark it as planned."""
+    if not is_firestore_enabled():
+        logger.warning("Firestore is not enabled, cannot mark day as planned.")
+        return
+    
+    save_race_document("plans", date_str, plan_details)

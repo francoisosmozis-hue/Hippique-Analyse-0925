@@ -76,8 +76,12 @@ def generate_tickets(
     runners = snapshot_data.get("runners", [])
 
     if not runners:
-
-        return {"abstain": True, "tickets": [], "roi_global_est": 0, "message": "No runners found in snapshot"}
+        return {
+            "gpi_decision": "Abstain: No runners found in snapshot",
+            "tickets": [],
+            "roi_global_est": 0,
+            "message": "No runners found in snapshot"
+        }
 
 
 
@@ -305,12 +309,16 @@ def generate_tickets(
 
         roi_global_est = 0
 
+    gpi_decision = "Play"
+    if not all_tickets:
+        gpi_decision = f"Abstain: {abstain_reason}"
+
     # --- Return Result ---
     return {
-        "abstain": not all_tickets,
+        "gpi_decision": gpi_decision,
         "tickets": all_tickets,
         "roi_global_est": round(roi_global_est, 4),
-        "message": abstain_reason
+        "message": abstain_reason if not all_tickets else f"Generated {len(all_tickets)} ticket(s) with estimated global ROI of {roi_global_est:.2%}",
     }
 
 def run_pipeline(rc_dir_str: str, budget: float, overround_max: float | None = None) -> None:

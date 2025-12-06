@@ -1,48 +1,51 @@
 # ==============================================================================
-# Dockerfile - Hippique Orchestrator GPI v5.1
+# Dockerfile - Hippique Orchestrator GPI v5.2 (Optimized - Final)
 # ==============================================================================
 
 # Use an official Python runtime as a parent image
-FROM python:3.12-slim
-
-# Set the working directory in the container
+FROM python:3.12-slim as base
 WORKDIR /app
-
-ENV PYTHONPATH=/app
-
-# Install system dependencies, including gnupg for key management
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app
 RUN apt-get update && apt-get install -y ca-certificates tzdata curl && rm -rf /var/lib/apt/lists/*
 
-# Copy the requirements file into the container
+# --- Builder Stage ---
+# This stage builds the Python wheels
+FROM base as builder
+RUN pip install --upgrade pip
 COPY requirements.txt .
+RUN pip wheel --no-cache-dir --wheel-dir /app/wheels -r requirements.txt
 
-# Install any needed packages specified in requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+# --- Final Stage ---
+# This stage assembles the final, lean image
+FROM base
 
-# Copy application code
-# Create a non-root user to run the application
+# Create the non-root user first
 RUN addgroup --system appuser && adduser --system --ingroup appuser appuser
 
+# Copy installed dependencies from the builder stage
+COPY --from=builder /app/wheels /wheels
+COPY --from=builder /app/requirements.txt .
+RUN pip install --no-cache /wheels/*
 
-
-# Copy the rest of the application code
+# Copy the application source code
 COPY . .
 
-# Create necessary directories and change ownership
-RUN mkdir -p /app/data /app/logs /app/config && chown -R appuser:appuser /app
+# Set permissions for the entrypoint BEFORE changing user
+RUN chmod +x /app/entrypoint.sh
+
+# Change ownership of all application files to the non-root user
+RUN chown -R appuser:appuser /app
 
 # Switch to the non-root user
 USER appuser
 
-# Expose port
+# Expose port and set health check
 EXPOSE 8080
-
-# Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD curl -f http://localhost:8080/healthz || exit 1
 
-COPY entrypoint.sh .
-
-# Run the application via the entrypoint script
+# Run the application
 ENTRYPOINT ["/app/entrypoint.sh"]
 CMD []

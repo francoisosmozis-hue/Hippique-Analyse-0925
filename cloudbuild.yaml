@@ -21,7 +21,7 @@ steps:
 # Build the Docker image
 - name: 'gcr.io/cloud-builders/docker'
   id: Build
-  args: ['build', '--no-cache', '-t', '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_IMAGE}:latest', '.']
+  args: ['build', '-t', '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_IMAGE}:latest', '.']
 
 # Push the Docker image to Artifact Registry
 - name: 'gcr.io/cloud-builders/docker'
@@ -52,4 +52,4 @@ substitutions:
   _IMAGE: hippique-orchestrator
   # L'URL sera mise à jour par le premier déploiement réussi.
   _CLOUD_RUN_URL: 'https://hippique-orchestrator-h3tdqmb7jq-ew.a.run.app'
-  _SERVICE_ACCOUNT_EMAIL: 'your-service-account@your-project-id.iam.gserviceaccount.com' # REPLACE WITH ACTUAL SA EMAIL
+  _SERVICE_ACCOUNT_EMAIL: '1084663881709-compute@developer.gserviceaccount.com'

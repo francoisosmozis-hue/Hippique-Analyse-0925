@@ -107,7 +107,7 @@ def process_single_course_analysis(
         storage.update_race_document(race_doc_id, {f"{phase.lower()}_snapshot_ref": gcs_path}, correlation_id=correlation_id, trace_id=trace_id)
 
         # --- Step 3: Enrichment and Pipeline (only for H5) ---
-        if phase == "H5":
+        if phase in ["H5", "H30"]:
             # 3a. Enrich with stats
             h5_snapshot_gcs_path = gcs_path
             stats_gcs_path = collect_stats(h5=h5_snapshot_gcs_path, correlation_id=correlation_id, trace_id=trace_id)

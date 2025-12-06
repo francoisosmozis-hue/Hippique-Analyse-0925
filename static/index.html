@@ -3,15 +3,101 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pronostics Hippiques</title>
+    <title>Pronostics Hippiques du Jour</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; background-color: #f5f5f5; color: #333; text-align: center; padding: 50px; }
-        h1 { font-weight: 300; color: #0056b3; }
-        p { font-size: 1.1em; color: #555; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; background-color: #f5f5f5; color: #333; margin: 0; padding: 20px; }
+        .container { max-width: 900px; margin: auto; background: #fff; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        h1 { font-weight: 300; color: #0056b3; text-align: center; }
+        #date { text-align: center; font-size: 1.2em; color: #555; margin-bottom: 20px; }
+        .race { border: 1px solid #ddd; border-radius: 5px; margin-bottom: 20px; padding: 15px; }
+        .race-header { font-weight: bold; font-size: 1.1em; margin-bottom: 10px; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { text-align: left; padding: 8px; border-bottom: 1px solid #ddd; }
+        th { background-color: #f2f2f2; }
+        #loading, #error { text-align: center; font-size: 1.1em; color: #888; padding: 20px; }
     </style>
 </head>
 <body>
-    <h1>Pronostics Hippiques</h1>
-    <p>Le service est correctement configuré et en ligne.</p>
+    <div class="container">
+        <h1>Pronostics Hippiques</h1>
+        <div id="date"></div>
+        <div id="pronostics-container"></div>
+        <div id="loading">Chargement des pronostics...</div>
+        <div id="error" style="display: none;"></div>
+    </div>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            const today = new Date();
+            const year = today.getFullYear();
+            const month = String(today.getMonth() + 1).padStart(2, '0');
+            const day = String(today.getDate()).padStart(2, '0');
+            const dateStr = `${year}-${month}-${day}`;
+
+            document.getElementById('date').textContent = `Date: ${day}/${month}/${year}`;
+            
+            fetch(`/api/pronostics?date=${dateStr}`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`Erreur HTTP: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    document.getElementById('loading').style.display = 'none';
+                    const container = document.getElementById('pronostics-container');
+                    
+                    if (data.ok && data.total_races > 0) {
+                        data.pronostics.forEach(prono => {
+                            const raceDiv = document.createElement('div');
+                            raceDiv.className = 'race';
+                            
+                            const header = document.createElement('div');
+                            header.className = 'race-header';
+                            header.textContent = `Course ${prono.rc} - Décision: ${prono.gpi_decision}`;
+                            raceDiv.appendChild(header);
+
+                            if (prono.tickets && prono.tickets.length > 0) {
+                                const table = document.createElement('table');
+                                const thead = document.createElement('thead');
+                                thead.innerHTML = '<tr><th>Type</th><th>Cheval</th><th>Mise</th><th>Cote</th><th>EV</th><th>ROI</th></tr>';
+                                table.appendChild(thead);
+                                
+                                const tbody = document.createElement('tbody');
+                                prono.tickets.forEach(ticket => {
+                                    const row = document.createElement('tr');
+                                    row.innerHTML = `
+                                        <td>${ticket.type || ''}</td>
+                                        <td>${ticket.cheval || ''}</td>
+                                        <td>${ticket.mise || ''}</td>
+                                        <td>${ticket.cote || ''}</td>
+                                        <td>${ticket.ev || ''}</td>
+                                        <td>${ticket.roi || ''}</td>
+                                    `;
+                                    tbody.appendChild(row);
+                                });
+                                table.appendChild(tbody);
+                                raceDiv.appendChild(table);
+                            } else {
+                                const noTickets = document.createElement('p');
+                                noTickets.textContent = 'Aucun ticket pour cette course.';
+                                raceDiv.appendChild(noTickets);
+                            }
+                            container.appendChild(raceDiv);
+                        });
+                    } else {
+                        const noData = document.createElement('p');
+                        noData.textContent = 'Aucun pronostic trouvé pour aujourd\'hui.';
+                        container.appendChild(noData);
+                    }
+                })
+                .catch(err => {
+                    document.getElementById('loading').style.display = 'none';
+                    const errorDiv = document.getElementById('error');
+                    errorDiv.textContent = `Erreur lors de la récupération des pronostics: ${err.message}`;
+                    errorDiv.style.display = 'block';
+                });
+        });
+    </script>
 </body>
 </html>
