@@ -136,6 +136,14 @@ def enqueue_run_task(
             "audience": config.OIDC_AUDIENCE,
         }
 
+    logger.debug(
+        f"Constructed Cloud Task for {task_name_safe}: "
+        f"URL='{task['http_request']['url']}', "
+        f"Auth_Required={config.REQUIRE_AUTH}, "
+        f"OIDC_Audience='{config.OIDC_AUDIENCE}'" if config.REQUIRE_AUTH else "No OIDC Auth",
+        extra={**log_extra, "task_name": task_name_safe, "task_payload_url": task['http_request']['url'], "auth_required": config.REQUIRE_AUTH}
+    )
+
     try:
         response = client.create_task(parent=parent, task=task)
         logger.info(
