@@ -18,6 +18,7 @@ import logging
 import math
 import os
 import re
+import sys
 from collections import OrderedDict
 from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
@@ -27,7 +28,15 @@ import yaml
 
 from hippique_orchestrator.config import get_config
 
+# Explicitly configure logging for this module for debugging purposes
 logger = logging.getLogger(__name__)
+if not logger.handlers:
+    handler = logging.StreamHandler(sys.stdout)
+    formatter = logging.Formatter('%(levelname)s:%(name)s:%(message)s')
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    logger.setLevel(logging.DEBUG)
+
 
 try:  # pragma: no cover - numpy is optional at runtime
     import numpy as np
@@ -738,19 +747,58 @@ def evaluate_combo(
             "[COMBO] allow_heuristic override ignored; payout calibration is "
             "mandatory for combo evaluation."
         )
+        logger.debug(f"[evaluate_combo] allow_heuristic was True, now setting to False. Current value: {allow_heuristic}")
         allow_heuristic = False
 
+    # Ensure calib_path is always defined before first use
     if calibration is None:
         env_calib = config.CALIB_PATH
         calib_path = Path(env_calib) if env_calib else PAYOUT_CALIBRATION_PATH
     else:
         calib_path = Path(calibration)
+
     notes: list[str] = []
     requirements: _RequirementsList = _RequirementsList()
     try:
+        logger.debug(f"[evaluate_combo] Resolving calib_path: {calib_path}")
         calibration_used = calib_path.is_file()
-    except OSError:
+        logger.debug(f"[evaluate_combo] calibration_used (calib_path.is_file()): {calibration_used}")
+    except OSError as e:
+        logger.error(f"[evaluate_combo] OSError when checking calib_path.is_file(): {e}", exc_info=True)
         calibration_used = False
+    
+    if not calibration_used:
+        logger.debug(f"[evaluate_combo] calibration_used is False. allow_heuristic: {allow_heuristic}")
+        notes.append("no_calibration_yaml")
+        requirements.append(str(calib_path))
+        if not allow_heuristic:
+            logger.debug("[evaluate_combo] Returning insufficient_data due to no calibration and allow_heuristic is False.")
+            return {
+                "status": "insufficient_data",
+                "message": (
+                    "Calibration file "
+                    f"'{calib_path}' is required to evaluate tickets. "
+                    "Populate it using the versioned skeleton (version: 1 → "
+                    "couple_place/trio/ze4)."
+                ),
+                "calibration_used": False,
+                "notes": notes,
+                "requirements": requirements,
+            }
+        else: # calibration_used is False, but allow_heuristic is True. Proceeding with heuristic.
+            logger.debug("[evaluate_combo] Proceeding with heuristic (allow_heuristic is True despite no calibration).")
+    
+    # This path continues to execute `compute_ev_roi` and eventually `return result`
+
+    # This is the normal path if calibration_used is True, or if calibration_used is False AND allow_heuristic is True
+    from hippique_orchestrator.ev_calculator import compute_ev_roi
+    stats = compute_ev_roi(
+        [dict(t) for t in tickets],
+        budget=bankroll,
+        simulate_fn=simulate_wrapper,
+        kelly_cap=1.0,
+        round_to=0.0,
+    )
 
     combo_notes: list[str] = []
     for ticket in tickets:
@@ -790,3 +838,6 @@ def evaluate_combo(
             result["calibration_metadata"] = meta_detail
 
     return result
+
+    # Default return in case no other return path is hit (should not be reached normally)
+    return {"status": "error", "message": "Unexpected code path in evaluate_combo"}
