@@ -22,8 +22,7 @@ GENY_HTML = """
             "hippo": "Paris Vincennes",
             "slug": "paris-vincennes",
             "courses": [
-                {"c": "C3", "id_course": "12345"},
-                {"c": "C5", "id_course": "12346"}
+                {"c": "C2", "id_course": "12345"}
             ]
         },
         {
@@ -31,7 +30,15 @@ GENY_HTML = """
             "hippo": "Deauville",
             "slug": "deauville",
             "courses": [
-                {"c": "C1", "id_course": "12347"}
+                {"c": "C3", "id_course": "12346"}
+            ]
+        },
+        {
+            "r": "R3",
+            "hippo": "Chantilly",
+            "slug": "chantilly",
+            "courses": [
+                {"c": "C2", "id_course": "12347"}
             ]
         }
     ]
@@ -56,7 +63,7 @@ async def test_build_plan_async(mocker): # Use mocker instead of monkeypatch for
 
     # Mock fetch_geny_programme
     mocker.patch(
-        "hippique_orchestrator.scrapers.geny.fetch_geny_programme",
+        "hippique_orchestrator.plan.fetch_geny_programme",
         return_value=json.loads(GENY_HTML)
     )
 
@@ -70,26 +77,26 @@ async def test_build_plan_async(mocker): # Use mocker instead of monkeypatch for
             "scraped_at": "2025-10-15T12:00:00",
             "races": [
                 {
-                    "rc": "R1 C3",
+                    "rc": "R1 C2",
                     "reunion": "R1",
-                    "name": "Prix Test C3",
-                    "url": "https://www.boturfers.fr/course/12345-r1c3-prix-test-c3",
+                    "name": "Prix Test C2",
+                    "url": "https://www.boturfers.fr/course/12345-r1c2-prix-test-c2",
                     "runners_count": 10,
                     "start_time": "15:20"
                 },
                 {
-                    "rc": "R1 C5",
-                    "reunion": "R1",
-                    "name": "Prix Test C5",
-                    "url": "https://www.boturfers.fr/course/12346-r1c5-prix-test-c5",
+                    "rc": "R2 C3",
+                    "reunion": "R2",
+                    "name": "Prix Test C3",
+                    "url": "https://www.boturfers.fr/course/12346-r2c3-prix-test-c3",
                     "runners_count": 12,
                     "start_time": "16:45"
                 },
                 {
-                    "rc": "R2 C1",
-                    "reunion": "R2",
-                    "name": "Prix Test C1",
-                    "url": "https://www.boturfers.fr/course/12347-r2c1-prix-test-c1",
+                    "rc": "R3 C2",
+                    "reunion": "R3",
+                    "name": "Prix Test C2",
+                    "url": "https://www.boturfers.fr/course/12347-r3c2-prix-test-c2",
                     "runners_count": 8,
                     "start_time": "14:10"
                 }
@@ -111,22 +118,22 @@ async def test_build_plan_async(mocker): # Use mocker instead of monkeypatch for
     assert times == sorted(times)
 
     # Check first race (earliest)
-    assert plan_result[0]["r_label"] == "R2"
-    assert plan_result[0]["c_label"] == "C1"
+    assert plan_result[0]["r_label"] == "R3"
+    assert plan_result[0]["c_label"] == "C2"
     assert plan_result[0]["time_local"] == "14:10"
-    assert plan_result[0]["course_url"] == "https://www.boturfers.fr/course/12347-r2c1-prix-test-c1"
+    assert plan_result[0]["course_url"] == "https://www.boturfers.fr/course/12347-r3c2-prix-test-c2"
 
     # Check second race
     assert plan_result[1]["r_label"] == "R1"
-    assert plan_result[1]["c_label"] == "C3"
+    assert plan_result[1]["c_label"] == "C2"
     assert plan_result[1]["time_local"] == "15:20"
-    assert plan_result[1]["course_url"] == "https://www.boturfers.fr/course/12345-r1c3-prix-test-c3"
+    assert plan_result[1]["course_url"] == "https://www.boturfers.fr/course/12345-r1c2-prix-test-c2"
 
     # Check third race
-    assert plan_result[2]["r_label"] == "R1"
-    assert plan_result[2]["c_label"] == "C5"
+    assert plan_result[2]["r_label"] == "R2"
+    assert plan_result[2]["c_label"] == "C3"
     assert plan_result[2]["time_local"] == "16:45"
-    assert plan_result[2]["course_url"] == "https://www.boturfers.fr/course/12346-r1c5-prix-test-c5"
+    assert plan_result[2]["course_url"] == "https://www.boturfers.fr/course/12346-r2c3-prix-test-c3"
 def test_build_plan_structure():
     """Tests the construction of the plan from Geny data, including deduplication."""
     geny_data = {

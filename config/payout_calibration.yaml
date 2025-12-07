@@ -1,0 +1,5 @@
+version: 1
+exotic_weights:
+  TRIO: 1.0
+  ZE4: 1.0
+  CPL: 1.0

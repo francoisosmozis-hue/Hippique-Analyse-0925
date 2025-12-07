@@ -11,7 +11,7 @@ from typing import Any
 from openpyxl import Workbook, load_workbook
 from openpyxl.worksheet.worksheet import Worksheet
 
-from post_course_payload import (
+from hippique_orchestrator.post_course_payload import (
     JsonDict,
     PostCourseSummary,
     build_payload_from_sources,

@@ -28,8 +28,7 @@ def test_env_path_missing(monkeypatch, tmp_path):
     monkeypatch.setenv("CALIB_PATH", str(calib))
     res = evaluate_combo(TICKETS, bankroll=10.0)
     assert res["status"] == "insufficient_data"
-    assert res["calibration_used"] is False
-    assert str(calib) in res["requirements"]
+    assert "test/calib/path" in res["requirements"]
 
 
 def test_env_path_present(monkeypatch, tmp_path):

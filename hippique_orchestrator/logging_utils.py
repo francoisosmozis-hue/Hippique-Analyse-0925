@@ -1,97 +1,52 @@
-"""
-src/logging_utils.py - Logs Structurés JSON
-
-Logs structurés pour Cloud Logging avec severity, timestamp, correlation_id.
-"""
-
-from __future__ import annotations
-
 import json
 import logging
 import sys
+import traceback
 from datetime import datetime
-from typing import Any
 
+class JsonFormatter(logging.Formatter):
+    """Formats log records as JSON for Cloud Logging."""
 
-class StructuredLogger:
-    """Logger with JSON-structured output for Cloud Logging"""
-
-    def __init__(self, name: str):
-        self.name = name
-        self.logger = logging.getLogger(name)
-
-        # Configure logger
-        if self.logger.hasHandlers():
-            self.logger.handlers.clear()
-        handler = logging.StreamHandler(sys.stderr)
-        handler.setFormatter(logging.Formatter("%(message)s"))
-        self.logger.addHandler(handler)
-        self.logger.setLevel(logging.DEBUG)
-
-    def _log(
-        self,
-        severity: str,
-        message: str,
-        **kwargs: Any
-    ) -> None:
-        """
-        Log a structured message.
-
-        Args:
-            severity: "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"
-            message: Log message
-            **kwargs: Additional fields (correlation_id, etc.)
-        """
+    def format(self, record: logging.LogRecord) -> str:
         log_entry = {
-            "severity": severity,
-            "message": message,
-            "timestamp": datetime.utcnow().isoformat() + "Z",
-            "logger": self.name,
+            "severity": record.levelname,
+            "message": record.getMessage(),
+            "timestamp": datetime.utcfromtimestamp(record.created).isoformat() + "Z",
+            "logger": record.name,
         }
 
-        # Add custom fields
-        for key, value in kwargs.items():
-            if value is not None:
-                # Convert exception objects to string representation
-                if isinstance(value, Exception):
-                    log_entry[key] = str(value)
-                else:
-                    log_entry[key] = value
+        # The LogRecord already has 'extra' fields if passed by logger.info(msg, extra={...})
+        # We need to copy these to our log_entry
+        for key, value in record.__dict__.items():
+            if key not in ['name', 'msg', 'levelname', 'levelno', 'pathname', 'filename',
+                           'lineno', 'funcName', 'created', 'msecs', 'relativeCreated',
+                           'thread', 'threadName', 'processName', 'process', 'exc_info',
+                           'exc_text', 'stack_info', 'args', 'module', 'asctime'] and not key.startswith('_'):
+                log_entry[key] = value
 
-        # Print JSON line
-        print(json.dumps(log_entry), file=sys.stderr, flush=True)
+        # Add exception info if present
+        if record.exc_info:
+            log_entry["traceback"] = "".join(traceback.format_exception(*record.exc_info))
+        
+        return json.dumps(log_entry)
 
-    def debug(self, message: str, **kwargs: Any) -> None:
-        """Log DEBUG level"""
-        self._log("DEBUG", message, **kwargs)
+_loggers: dict[str, logging.Logger] = {}
 
-    def info(self, message: str, **kwargs: Any) -> None:
-        """Log INFO level"""
-        self._log("INFO", message, **kwargs)
-
-    def warning(self, message: str, **kwargs: Any) -> None:
-        """Log WARNING level"""
-        self._log("WARNING", message, **kwargs)
-
-    def error(self, message: str, exc_info: Exception | None = None, **kwargs: Any) -> None:
-        """Log ERROR level"""
-        if exc_info:
-            import traceback
-            kwargs["traceback"] = traceback.format_exc()
-        self._log("ERROR", message, **kwargs)
-
-    def critical(self, message: str, exc_info: Exception | None = None, **kwargs: Any) -> None:
-        """Log CRITICAL level"""
-        if exc_info:
-            import traceback
-            kwargs["traceback"] = traceback.format_exc()
-        self._log("CRITICAL", message, **kwargs)
-
-# Cache loggers
-_loggers: dict[str, StructuredLogger] = {}
-
-def get_logger(name: str) -> StructuredLogger:
-    """Get or create a structured logger"""
+def get_logger(name: str) -> logging.Logger:
+    """Get or create a logger configured to output structured JSON."""
     if name not in _loggers:
-        _loggers[name] = StructuredLogger(name)
+        logger = logging.getLogger(name)
+        
+        if logger.hasHandlers():
+            logger.handlers.clear()
+            
+        handler = logging.StreamHandler(sys.stdout)
+        handler.setFormatter(JsonFormatter())
+        
+        logger.addHandler(handler)
+        logger.setLevel(logging.INFO)
+        logger.propagate = False
+        
+        _loggers[name] = logger
+        
     return _loggers[name]

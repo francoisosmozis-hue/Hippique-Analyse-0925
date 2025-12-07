@@ -27,10 +27,12 @@ def _get_firestore_client(project_id: str | None = None):
 
         try:
             # Explicitly pass the project_id to the client constructor
-            _firestore_client = firestore.Client(project=project_id)
-            logger.info(f"Firestore client initialized successfully for project '{project_id}'.")
+            # Fallback to config.PROJECT_ID if project_id is None
+            resolved_project_id = project_id if project_id else current_config.PROJECT_ID
+            _firestore_client = firestore.Client(project=resolved_project_id)
+            logger.info(f"Firestore client initialized successfully for project '{resolved_project_id}'.")
         except Exception as e:
-            logger.error(f"Failed to initialize Firestore client for project '{project_id}': {e}", exc_info=e)
+            logger.error(f"Failed to initialize Firestore client for project '{resolved_project_id}': {e}", exc_info=e)
             return None
     return _firestore_client
 
@@ -89,6 +91,7 @@ def update_race_document(collection: str, document_id: str, data: dict[str, Any]
             f"Failed to update document {document_id} in {collection}: {e}",
             exc_info=e,
         )
+        return
 
 
 def get_race_document(collection: str, document_id: str) -> dict[str, Any] | None:
@@ -195,9 +198,39 @@ def is_day_planned(date_str: str) -> bool:
     return doc is not None
 
 def mark_day_as_planned(date_str: str, plan_details: dict[str, Any]) -> None:
-    """Creates a 'plan' document for the given date to mark it as planned."""
+    """Creates/updates a 'plan' document for the given date to mark it as planned."""
     if not is_firestore_enabled():
         logger.warning("Firestore is not enabled, cannot mark day as planned.")
         return
     
-    save_race_document("plans", date_str, plan_details)
+    # Use set with merge=True for idempotence in case it's called multiple times
+    config = get_config()
+    client = _get_firestore_client(project_id=config.PROJECT_ID)
+    if not client:
+        logger.error("Firestore client not available, cannot mark day as planned.")
+        return
+    try:
+        doc_ref = client.collection("plans").document(date_str)
+        doc_ref.set(plan_details, merge=True)
+        logger.info(f"Day {date_str} marked as planned in Firestore.")
+    except Exception as e:
+        logger.error(f"Failed to mark day {date_str} as planned: {e}", exc_info=e)
+
+
+def unmark_day_as_planned(date_str: str) -> None:
+    """Deletes the 'plan' document for the given date, effectively unmarking it."""
+    if not is_firestore_enabled():
+        logger.warning("Firestore is not enabled, cannot unmark day as planned.")
+        return
+    
+    config = get_config()
+    client = _get_firestore_client(project_id=config.PROJECT_ID)
+    if not client:
+        logger.error("Firestore client not available, cannot unmark day as planned.")
+        return
+    try:
+        doc_ref = client.collection("plans").document(date_str)
+        doc_ref.delete()
+        logger.info(f"Day {date_str} unmarked (deleted plan document) in Firestore.")
+    except Exception as e:
+        logger.error(f"Failed to unmark day {date_str} as planned: {e}", exc_info=e)

@@ -8,6 +8,9 @@
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; background-color: #f5f5f5; color: #333; margin: 0; padding: 20px; }
         .container { max-width: 900px; margin: auto; background: #fff; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
         h1 { font-weight: 300; color: #0056b3; text-align: center; }
+        .controls { text-align: center; margin-bottom: 20px; }
+        #date-picker { padding: 8px; border-radius: 4px; border: 1px solid #ccc; }
+        #load-button { padding: 8px 16px; border-radius: 4px; border: none; background-color: #007bff; color: white; cursor: pointer; }
         #date { text-align: center; font-size: 1.2em; color: #555; margin-bottom: 20px; }
         .race { border: 1px solid #ddd; border-radius: 5px; margin-bottom: 20px; padding: 15px; }
         .race-header { font-weight: bold; font-size: 1.1em; margin-bottom: 10px; }
@@ -15,11 +18,16 @@
         th, td { text-align: left; padding: 8px; border-bottom: 1px solid #ddd; }
         th { background-color: #f2f2f2; }
         #loading, #error { text-align: center; font-size: 1.1em; color: #888; padding: 20px; }
+        #error { color: red; }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>Pronostics Hippiques</h1>
+        <div class="controls">
+            <input type="date" id="date-picker">
+            <button id="load-button">Charger</button>
+        </div>
         <div id="date"></div>
         <div id="pronostics-container"></div>
         <div id="loading">Chargement des pronostics...</div>
@@ -27,16 +35,25 @@
     </div>
 
     <script>
-        document.addEventListener("DOMContentLoaded", () => {
-            const today = new Date();
-            const year = today.getFullYear();
-            const month = String(today.getMonth() + 1).padStart(2, '0');
-            const day = String(today.getDate()).padStart(2, '0');
-            const dateStr = `${year}-${month}-${day}`;
+        const datePicker = document.getElementById('date-picker');
+        const loadButton = document.getElementById('load-button');
+        const dateDisplay = document.getElementById('date');
+        const container = document.getElementById('pronostics-container');
+        const loadingDiv = document.getElementById('loading');
+        const errorDiv = document.getElementById('error');
 
-            document.getElementById('date').textContent = `Date: ${day}/${month}/${year}`;
-            
-            fetch(`/api/pronostics?date=${dateStr}`)
+        function fetchAndRenderPronostics(date = '') {
+            let url = '/pronostics'; // API endpoint
+            if (date) {
+                url += `?date=${date}`;
+            }
+
+            loadingDiv.style.display = 'block';
+            errorDiv.style.display = 'none';
+            container.innerHTML = '';
+            dateDisplay.textContent = '';
+
+            fetch(url)
                 .then(response => {
                     if (!response.ok) {
                         throw new Error(`Erreur HTTP: ${response.status}`);
@@ -44,10 +61,14 @@
                     return response.json();
                 })
                 .then(data => {
-                    document.getElementById('loading').style.display = 'none';
-                    const container = document.getElementById('pronostics-container');
+                    loadingDiv.style.display = 'none';
                     
-                    if (data.ok && data.total_races > 0) {
+                    const [year, month, day] = data.date.split('-');
+                    dateDisplay.textContent = `Date: ${day}/${month}/${year}`;
+                    datePicker.value = data.date;
+
+
+                    if (data.ok && data.pronostics && data.pronostics.length > 0) {
                         data.pronostics.forEach(prono => {
                             const raceDiv = document.createElement('div');
                             raceDiv.className = 'race';
@@ -60,19 +81,16 @@
                             if (prono.tickets && prono.tickets.length > 0) {
                                 const table = document.createElement('table');
                                 const thead = document.createElement('thead');
-                                thead.innerHTML = '<tr><th>Type</th><th>Cheval</th><th>Mise</th><th>Cote</th><th>EV</th><th>ROI</th></tr>';
+                                thead.innerHTML = '<tr><th>Type</th><th>Chevaux</th><th>Mise</th></tr>';
                                 table.appendChild(thead);
                                 
                                 const tbody = document.createElement('tbody');
                                 prono.tickets.forEach(ticket => {
                                     const row = document.createElement('tr');
                                     row.innerHTML = `
-                                        <td>${ticket.type || ''}</td>
-                                        <td>${ticket.cheval || ''}</td>
-                                        <td>${ticket.mise || ''}</td>
-                                        <td>${ticket.cote || ''}</td>
-                                        <td>${ticket.ev || ''}</td>
-                                        <td>${ticket.roi || ''}</td>
+                                        <td>${ticket.type || 'N/A'}</td>
+                                        <td>${ticket.horses ? ticket.horses.join(', ') : (ticket.cheval || 'N/A')}</td>
+                                        <td>${ticket.stake ? ticket.stake.toFixed(2) + '€' : 'N/A'}</td>
                                     `;
                                     tbody.appendChild(row);
                                 });
@@ -87,16 +105,32 @@
                         });
                     } else {
                         const noData = document.createElement('p');
-                        noData.textContent = 'Aucun pronostic trouvé pour aujourd\'hui.';
+                        noData.textContent = `Aucun pronostic trouvé pour le ${day}/${month}/${year}.`;
                         container.appendChild(noData);
                     }
                 })
                 .catch(err => {
-                    document.getElementById('loading').style.display = 'none';
-                    const errorDiv = document.getElementById('error');
+                    loadingDiv.style.display = 'none';
                     errorDiv.textContent = `Erreur lors de la récupération des pronostics: ${err.message}`;
                     errorDiv.style.display = 'block';
                 });
+        }
+
+        // Load today's pronostics by default on page load
+        document.addEventListener("DOMContentLoaded", () => {
+            // Set date picker to today
+            const today = new Date();
+            const year = today.getFullYear();
+            const month = String(today.getMonth() + 1).padStart(2, '0');
+            const day = String(today.getDate()).padStart(2, '0');
+            datePicker.value = `${year}-${month}-${day}`;
+
+            fetchAndRenderPronostics();
+        });
+
+        // Load pronostics for the selected date when the button is clicked
+        loadButton.addEventListener("click", () => {
+            fetchAndRenderPronostics(datePicker.value);
         });
     </script>
 </body>

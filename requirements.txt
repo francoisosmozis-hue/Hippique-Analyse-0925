@@ -52,6 +52,6 @@ lightgbm>=4.0.0
 
 # Browser Simulation
 httpx
-google-cloud-firestore
+google-cloud-firestore>=2.0.0
 
 gcsfs

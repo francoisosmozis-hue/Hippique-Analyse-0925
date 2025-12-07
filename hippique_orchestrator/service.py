@@ -12,17 +12,16 @@ import uuid
 from datetime import datetime
 from typing import Any
 import os
+from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI, Request, Response, HTTPException, status, Query, BackgroundTasks
-from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel, Field
 
 from hippique_orchestrator.config import get_config
 from hippique_orchestrator.logging_utils import get_logger
 from hippique_orchestrator.plan import build_plan_async
 from hippique_orchestrator.scheduler import schedule_all_races
-from hippique_orchestrator.snapshot_manager import write_snapshot_for_day
 from hippique_orchestrator.runner import run_course
 from hippique_orchestrator import firestore_client, time_utils
 
@@ -62,16 +61,14 @@ class RunRequest(BaseModel):
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     correlation_id = request.headers.get("X-Correlation-ID", str(uuid.uuid4()))
-    request.state.correlation_id = correlation_id
-    
-    logger.info(f"{request.method} {request.url.path}", extra={"correlation_id": correlation_id})
     
     try:
         response = await call_next(request)
+        logger.info(f"{request.method} {request.url.path}", extra={"correlation_id": correlation_id, "status_code": response.status_code})
         response.headers["X-Correlation-ID"] = correlation_id
         return response
     except Exception as e:
-        logger.error(f"Request failed: {e}", extra={"correlation_id": correlation_id, "exc_info": e})
+        logger.error(f"Request failed: {e}", exc_info=True, extra={"correlation_id": correlation_id})
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content={"error": "Internal server error", "correlation_id": correlation_id},
@@ -82,33 +79,46 @@ async def log_requests(request: Request, call_next):
 # Endpoints
 # ============================================
 
+@app.get("/pronostics/ui", response_class=FileResponse, include_in_schema=False)
+async def get_pronostics_page():
+    """Serves the main HTML page for pronostics."""
+    return os.path.join(STATIC_DIR, "index.html")
+
 @app.get("/pronostics")
-async def get_pronostics(date: str = Query(..., description="Date in YYYY-MM-DD format")):
-    try:
-        datetime.strptime(date, "%Y-%m-%d")
-    except ValueError:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid date format. Please use YYYY-MM-DD.")
+async def get_pronostics(date: str | None = Query(default=None, description="Date in YYYY-MM-DD format. Defaults to today (Paris time).")):
+    
+    date_to_use = date
+    if date_to_use is None:
+        today = datetime.now(ZoneInfo("Europe/Paris")).date()
+        date_to_use = today.strftime("%Y-%m-%d")
+    else:
+        try:
+            datetime.strptime(date_to_use, "%Y-%m-%d")
+        except ValueError:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid date format. Please use YYYY-MM-DD.")
 
     correlation_id = str(uuid.uuid4())
-    logger.info(f"Fetching pronostics for date: {date} from Firestore", extra={"correlation_id": correlation_id})
+    log_extra = {"correlation_id": correlation_id, "date": date_to_use}
+    logger.info(f"Fetching pronostics for date: {date_to_use} from Firestore", extra=log_extra)
 
     try:
-        race_documents = firestore_client.get_races_by_date_prefix(date)
+        race_documents = firestore_client.get_races_by_date_prefix(date_to_use)
         
         all_pronostics = []
         for doc in race_documents:
             analysis = doc.get("tickets_analysis")
-            if analysis:
+            if analysis and analysis.get("tickets"): # <-- Changed condition
                 all_pronostics.append({
                     "rc": doc.get("rc", "N/A"),
                     "gpi_decision": analysis.get("gpi_decision", "N/A"),
                     "tickets": analysis.get("tickets", [])
                 })
         
-        return {"ok": True, "total_races": len(all_pronostics), "date": date, "pronostics": all_pronostics}
+        return {"ok": True, "total_races": len(all_pronostics), "date": date_to_use, "pronostics": all_pronostics}
     except Exception as e:
-        logger.error(f"Error fetching pronostics from Firestore: {e}", extra={"correlation_id": correlation_id, "exc_info": e})
+        logger.error("Error fetching pronostics from Firestore", exc_info=True, extra=log_extra)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to fetch pronostics from Firestore.")
+
 
 @app.get("/ping")
 async def ping():
@@ -124,18 +134,19 @@ async def health_check():
     }
 
 @app.post("/schedule", status_code=status.HTTP_202_ACCEPTED)
-async def schedule_daily_plan(request: Request, body: ScheduleRequest):
-    correlation_id = request.state.correlation_id
+async def schedule_daily_plan(body: ScheduleRequest):
+    correlation_id = str(uuid.uuid4())
     trace_id = str(uuid.uuid4())
-    logger.info("Schedule request received", extra={"correlation_id": correlation_id, "trace_id": trace_id, "date": body.date, "mode": body.mode})
+    log_extra = {"correlation_id": correlation_id, "trace_id": trace_id, "date": body.date, "mode": body.mode}
+    logger.info("Schedule request received", extra=log_extra)
     
     try:
         plan = await build_plan_async(body.date)
         if not plan:
-            logger.warning("Empty plan generated", extra={"correlation_id": correlation_id, "trace_id": trace_id})
+            logger.warning("Empty plan generated", extra=log_extra)
             return JSONResponse(status_code=status.HTTP_202_ACCEPTED, content={"ok": False, "error": "No races found for this date"})
         
-        logger.info(f"Plan built: {len(plan)} races", extra={"correlation_id": correlation_id, "trace_id": trace_id})
+        logger.info(f"Plan built: {len(plan)} races", extra=log_extra)
         
         scheduled = schedule_all_races(plan=plan, mode=body.mode, correlation_id=correlation_id, trace_id=trace_id)
         
@@ -143,7 +154,7 @@ async def schedule_daily_plan(request: Request, body: ScheduleRequest):
         success_h5 = sum(1 for s in scheduled if s["phase"] == "H5" and s["ok"])
         all_ok = all(s["ok"] for s in scheduled)
 
-        logger.info("Scheduling complete", extra={"correlation_id": correlation_id, "trace_id": trace_id, "success_h30": success_h30, "success_h5": success_h5})
+        logger.info("Scheduling complete", extra={**log_extra, "success_h30": success_h30, "success_h5": success_h5})
 
         return JSONResponse(status_code=status.HTTP_202_ACCEPTED, content={
             "ok": all_ok, "date": body.date, "total_races": len(plan),
@@ -151,15 +162,16 @@ async def schedule_daily_plan(request: Request, body: ScheduleRequest):
             "mode": body.mode, "correlation_id": correlation_id, "trace_id": trace_id,
         })
     except Exception as e:
-        logger.error(f"Schedule failed: {e}", extra={"correlation_id": correlation_id, "trace_id": trace_id, "exc_info": e})
+        logger.error(f"Schedule failed: {e}", exc_info=True, extra=log_extra)
         return JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, content={"ok": False, "error": str(e)})
 
 
 @app.post("/run")
-async def run_race_analysis(request: Request, body: RunRequest):
-    correlation_id = request.state.correlation_id
+async def run_race_analysis(body: RunRequest):
+    correlation_id = str(uuid.uuid4())
     trace_id = body.trace_id or correlation_id
-    logger.info("Run request received", extra={"correlation_id": correlation_id, "trace_id": trace_id, "course_url": body.course_url, "phase": body.phase})
+    log_extra = {"correlation_id": correlation_id, "trace_id": trace_id, "course_url": body.course_url, "phase": body.phase}
+    logger.info("Run request received", extra=log_extra)
     
     try:
         result = run_course(course_url=body.course_url, phase=body.phase, date=body.date, correlation_id=correlation_id, trace_id=trace_id)
@@ -169,7 +181,7 @@ async def run_race_analysis(request: Request, body: RunRequest):
         status_code = status.HTTP_200_OK if result.get("ok") else status.HTTP_500_INTERNAL_SERVER_ERROR
         return JSONResponse(status_code=status_code, content=result)
     except Exception as e:
-        logger.error(f"Run failed with exception: {e}", extra={"correlation_id": correlation_id, "trace_id": trace_id, "exc_info": e})
+        logger.error(f"Run failed with exception: {e}", exc_info=True, extra=log_extra)
         return JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, content={"ok": False, "error": str(e)})
 
 # ============================================
@@ -177,8 +189,8 @@ async def run_race_analysis(request: Request, body: RunRequest):
 # ============================================
 
 @app.post("/tasks/bootstrap-day", status_code=status.HTTP_202_ACCEPTED)
-async def tasks_bootstrap_day(request: Request, body: ScheduleRequest, background_tasks: BackgroundTasks):
-    correlation_id = request.state.correlation_id
+async def tasks_bootstrap_day(body: ScheduleRequest, background_tasks: BackgroundTasks):
+    correlation_id = str(uuid.uuid4())
     trace_id = str(uuid.uuid4())
     logger.info("Bootstrap day task received", extra={"correlation_id": correlation_id, "trace_id": trace_id, "date": body.date})
     
@@ -187,8 +199,8 @@ async def tasks_bootstrap_day(request: Request, body: ScheduleRequest, backgroun
     return {"ok": True, "message": f"Bootstrap for {body.date} initiated in background."}
 
 @app.post("/tasks/run-phase", status_code=status.HTTP_200_OK)
-async def tasks_run_phase(request: Request, body: RunRequest):
-    correlation_id = request.state.correlation_id
+async def tasks_run_phase(body: RunRequest):
+    correlation_id = str(uuid.uuid4())
     trace_id = body.trace_id or correlation_id
     logger.info(f"Run phase task received for course: {body.course_url}", extra={"correlation_id": correlation_id, "trace_id": trace_id})
     
@@ -208,9 +220,46 @@ async def debug_parse(date: str = "2025-10-17"):
 @app.get("/debug/config")
 async def debug_config():
     """Returns the current application configuration."""
-    # Convert all values to strings for consistent JSON serialization
     config_dict = {k: str(v) for k, v in get_config().model_dump().items()}
     return {"ok": True, "config": config_dict}
+
+@app.post("/debug/force-bootstrap/{date_str}", status_code=status.HTTP_202_ACCEPTED)
+async def debug_force_bootstrap(date_str: str, background_tasks: BackgroundTasks):
+    """
+    Forces the daily bootstrap pipeline for a specific date, bypassing the "already planned" check.
+    Useful for debugging and re-triggering planning.
+    """
+    correlation_id = str(uuid.uuid4())
+    trace_id = str(uuid.uuid4())
+    log_extra = {"correlation_id": correlation_id, "trace_id": trace_id, "date": date_str}
+    logger.warning(f"Forcing bootstrap pipeline for {date_str} via debug endpoint.", extra=log_extra)
+
+    # Clear the "day planned" status in Firestore if it exists, to ensure a fresh run
+    # (Optional, but good for idempotence for debug endpoint)
+    firestore_client.unmark_day_as_planned(date_str)
+    
+    background_tasks.add_task(bootstrap_day_pipeline, date_str=date_str, correlation_id=correlation_id, trace_id=trace_id)
+    
+    return {"ok": True, "message": f"Forced bootstrap for {date_str} initiated in background.", "correlation_id": correlation_id, "trace_id": trace_id}
+
+@app.get("/debug/races/{race_doc_id}")
+async def debug_get_race_document(race_doc_id: str):
+    """
+    Fetches a specific race document from the 'races' collection in Firestore.
+    """
+    correlation_id = str(uuid.uuid4())
+    log_extra = {"correlation_id": correlation_id, "race_doc_id": race_doc_id}
+    logger.info(f"Fetching race document: {race_doc_id} from Firestore via debug endpoint", extra=log_extra)
+
+    try:
+        doc = firestore_client.get_race_document("races", race_doc_id)
+        if doc:
+            return {"ok": True, "race_doc_id": race_doc_id, "data": doc}
+        else:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Race document {race_doc_id} not found.")
+    except Exception as e:
+        logger.error(f"Error fetching race document {race_doc_id} from Firestore", exc_info=True, extra=log_extra)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to fetch race document from Firestore.")
 
 # ============================================
 # Core Logic (used by startup and endpoints)
@@ -218,14 +267,28 @@ async def debug_config():
 
 async def bootstrap_day_pipeline(date_str: str, correlation_id: str, trace_id: str) -> dict[str, Any] | None:
     """Builds the plan for the day and schedules all races."""
-    logger.info(f"Starting bootstrap pipeline for {date_str}", extra={"correlation_id": correlation_id, "trace_id": trace_id})
+    log_extra = {"correlation_id": correlation_id, "trace_id": trace_id, "date": date_str}
+    logger.info(f"Starting bootstrap pipeline for {date_str}", extra=log_extra)
     plan = await build_plan_async(date_str)
     if not plan:
-        logger.warning(f"No plan built for {date_str}. Aborting bootstrap.", extra={"correlation_id": correlation_id, "trace_id": trace_id})
+        logger.warning(f"No plan built for {date_str}. Aborting bootstrap.", extra=log_extra)
         return None
     
-    logger.info(f"Plan built with {len(plan)} races. Now scheduling tasks.", extra={"correlation_id": correlation_id, "trace_id": trace_id})
-    schedule_all_races(plan=plan, mode="tasks", correlation_id=correlation_id, trace_id=trace_id)
+    logger.info(f"Plan built with {len(plan)} races. Now scheduling tasks.", extra=log_extra)
+    
+    scheduled_tasks_results = schedule_all_races(plan=plan, mode="tasks", correlation_id=correlation_id, trace_id=trace_id)
+    
+    # Mark the day as planned ONLY if scheduling was successful for at least one race
+    if plan and any(s["ok"] for s in scheduled_tasks_results):
+        firestore_client.mark_day_as_planned(date_str, {
+            "created_at": datetime.now(time_utils.get_tz()).isoformat(),
+            "races_count": len(plan),
+            "correlation_id": correlation_id
+        })
+        logger.info(f"Successfully marked {date_str} as planned in Firestore.", extra=log_extra)
+    else:
+        logger.warning(f"No races successfully scheduled for {date_str}. Not marking as planned.", extra=log_extra)
+    
     return {"races_count": len(plan), "races": plan}
 
 async def run_bootstrap_if_needed():
@@ -235,7 +298,9 @@ async def run_bootstrap_if_needed():
     """
     await asyncio.sleep(10) # Wait a bit for other services to be ready if needed
     
-    today_str = time_utils.get_today_str()
+    today = datetime.now(ZoneInfo("Europe/Paris")).date()
+    today_str = today.strftime("%Y-%m-%d")
+
     correlation_id = str(uuid.uuid4())
     log_extra = {"correlation_id": correlation_id, "trace_id": correlation_id, "date": today_str}
 
@@ -250,14 +315,10 @@ async def run_bootstrap_if_needed():
     try:
         plan_details = await bootstrap_day_pipeline(date_str=today_str, correlation_id=correlation_id, trace_id=correlation_id)
         if plan_details:
-            firestore_client.mark_day_as_planned(today_str, {
-                "created_at": datetime.now(time_utils.get_tz()).isoformat(),
-                "races_count": plan_details.get("races_count", 0),
-                "correlation_id": correlation_id
-            })
+            # Mark as planned is now handled inside bootstrap_day_pipeline
             logger.info(f"Successfully completed bootstrap for {today_str} on startup.", extra=log_extra)
     except Exception as e:
-        logger.error(f"Startup bootstrap process for {today_str} failed: {e}", extra=log_extra, exc_info=True)
+        logger.error(f"Startup bootstrap process for {today_str} failed.", exc_info=True, extra=log_extra)
 
 
 # ============================================

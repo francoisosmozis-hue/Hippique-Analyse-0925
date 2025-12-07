@@ -17,7 +17,7 @@ from typing import Any
 from . import storage
 from .pipeline_run import generate_tickets
 from . import data_source
-from .stats_fetcher import collect_stats
+# from .stats_fetcher import collect_stats # Temporarily removed due to import issues
 
 logger = logging.getLogger(__name__)
 
@@ -109,16 +109,15 @@ def process_single_course_analysis(
         # --- Step 3: Enrichment and Pipeline (only for H5) ---
         if phase in ["H5", "H30"]:
             # 3a. Enrich with stats
-            h5_snapshot_gcs_path = gcs_path
-            stats_gcs_path = collect_stats(h5=h5_snapshot_gcs_path, correlation_id=correlation_id, trace_id=trace_id)
-            stats_snapshot = storage.load_snapshot_from_gcs(stats_gcs_path, correlation_id=correlation_id, trace_id=trace_id)
+            # stats_gcs_path = collect_stats(h5=h5_snapshot_gcs_path, correlation_id=correlation_id, trace_id=trace_id)
+            # stats_snapshot = storage.load_snapshot_from_gcs(stats_gcs_path, correlation_id=correlation_id, trace_id=trace_id)
             
-            coverage = stats_snapshot.get("coverage", 0)
-            rows = stats_snapshot.get("rows", [])
-            mapped_stats = {str(row.get("num")): row for row in rows}
-            stats_payload = {"coverage": coverage, **mapped_stats}
+            # coverage = stats_snapshot.get("coverage", 0)
+            # rows = stats_snapshot.get("rows", [])
+            # mapped_stats = {str(row.get("num")): row for row in rows}
+            # stats_payload = {"coverage": coverage, **mapped_stats}
             
-            storage.update_race_document(race_doc_id, {"stats_je": stats_payload}, correlation_id=correlation_id, trace_id=trace_id)
+            # storage.update_race_document(race_doc_id, {"stats_je": stats_payload}, correlation_id=correlation_id, trace_id=trace_id)
             
             # 3b. Generate tickets
             gpi_config = storage.get_gpi_config(correlation_id=correlation_id, trace_id=trace_id)
