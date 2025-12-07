@@ -53,3 +53,4 @@ substitutions:
   # L'URL sera mise à jour par le premier déploiement réussi.
   _CLOUD_RUN_URL: 'https://hippique-orchestrator-h3tdqmb7jq-ew.a.run.app'
   _SERVICE_ACCOUNT_EMAIL: '1084663881709-compute@developer.gserviceaccount.com'
+# Ce commentaire a été ajouté pour déclencher un nouveau build Cloud Build.
