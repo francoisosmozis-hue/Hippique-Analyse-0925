@@ -138,6 +138,8 @@ def get_races_by_date_prefix(date_prefix: str) -> list[dict[str, Any]]:
         logger.error("Firestore client not available.")
         return []
 
+    logger.info(f"Querying Firestore 'races' collection for date prefix: {date_prefix}")
+
     try:
         races_ref = client.collection("races")
         # Firestore "starts with" query for document IDs
@@ -155,7 +157,7 @@ def get_races_by_date_prefix(date_prefix: str) -> list[dict[str, Any]]:
             race_data['id'] = doc.id # Add document ID to the dictionary
             races.append(race_data)
             
-        logger.info(f"Found {len(races)} races for date prefix {date_prefix}.")
+        logger.info(f"Found {len(races)} documents in 'races' collection for date prefix {date_prefix}.")
         return races
     except Exception as e:
         logger.error(
