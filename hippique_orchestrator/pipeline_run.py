@@ -163,7 +163,8 @@ def generate_tickets(
                 pass
 
     # If no tickets were generated through the specific logic,
-    # but no abstention conditions were met, create a generic dummy ticket.
+    # but no abstention conditions were met, ensure tickets is not empty
+    # to allow `service.py` to count the race.
     if not tickets:
         tickets.append({
             "type": "GENERIC_DUMMY",
@@ -172,8 +173,9 @@ def generate_tickets(
             "horses": ["GEN1"],
             "message": "Dummy ticket for pipeline verification if no specific tickets generated."
         })
-        gpi_decision = "Play" # Ensure it's marked as Play if a dummy is added
-        roi_global_est = 0.10 # Set a dummy ROI
+        # If we add a dummy ticket, ensure gpi_decision and roi_global_est are consistent
+        gpi_decision = "Play"
+        roi_global_est = 0.10
 
     return {
         "gpi_decision": gpi_decision,

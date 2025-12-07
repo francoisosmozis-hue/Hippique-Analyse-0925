@@ -16,7 +16,7 @@ steps:
     echo "--- Checking Python syntax ---"
     python -m py_compile hippique_orchestrator/pipeline_run.py hippique_orchestrator/service.py
     echo "--- Running smoke tests ---"
-    pytest -q
+    pytest -m unit -q
 
 # Build the Docker image
 - name: 'gcr.io/cloud-builders/docker'

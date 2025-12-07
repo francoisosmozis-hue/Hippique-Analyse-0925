@@ -9,7 +9,7 @@ from typing import Any
 from . import storage
 from .pipeline_run import generate_tickets
 from . import data_source
-# from .stats_fetcher import collect_stats # Temporarily removed due to import issues
+from .stats_fetcher import collect_stats 
 
 logger = logging.getLogger(__name__)
 
@@ -108,15 +108,28 @@ def process_single_course_analysis(
         if phase in ["H5", "H30"]:
             logger.info(f"Step 3: Starting enrichment and ticket generation for {race_doc_id}, phase {phase}.", extra=log_extra)
             # 3a. Enrich with stats
-            # stats_gcs_path = collect_stats(h5=h5_snapshot_gcs_path, correlation_id=correlation_id, trace_id=trace_id)
-            # stats_snapshot = storage.load_snapshot_from_gcs(stats_gcs_path, correlation_id=correlation_id, trace_id=trace_id)
+            stats_gcs_path = collect_stats(
+                race_doc_id=race_doc_id,
+                phase=phase,
+                date=date,
+                correlation_id=correlation_id,
+                trace_id=trace_id
+            )
             
-            # coverage = stats_snapshot.get("coverage", 0)
-            # rows = stats_snapshot.get("rows", [])
-            # mapped_stats = {str(row.get("num")): row for row in rows}
-            # stats_payload = {"coverage": coverage, **mapped_stats}
+            # Since collect_stats is a placeholder, handle its dummy return value
+            if stats_gcs_path == "dummy_gcs_path_for_stats":
+                logger.warning("Using dummy stats as collect_stats is a placeholder.", extra=log_extra)
+                stats_snapshot = {"coverage": 0, "rows": []}
+            else:
+                logger.info(f"Loading stats snapshot from GCS: {stats_gcs_path}", extra=log_extra)
+                stats_snapshot = storage.load_snapshot_from_gcs(stats_gcs_path, correlation_id=correlation_id, trace_id=trace_id)
             
-            # storage.update_race_document(race_doc_id, {"stats_je": stats_payload}, correlation_id=correlation_id, trace_id=trace_id)
+            coverage = stats_snapshot.get("coverage", 0)
+            rows = stats_snapshot.get("rows", [])
+            mapped_stats = {str(row.get("num")): row for row in rows}
+            stats_payload = {"coverage": coverage, **mapped_stats}
+            
+            storage.update_race_document(race_doc_id, {"stats_je": stats_payload}, correlation_id=correlation_id, trace_id=trace_id)
             
             # 3b. Generate tickets
             gpi_config = storage.get_gpi_config(correlation_id=correlation_id, trace_id=trace_id)

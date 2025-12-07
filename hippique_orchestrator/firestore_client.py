@@ -156,7 +156,8 @@ def get_races_by_date_prefix(date_prefix: str) -> list[dict[str, Any]]:
             race_data = doc.to_dict()
             race_data['id'] = doc.id # Add document ID to the dictionary
             races.append(race_data)
-            
+        
+        logger.debug(f"DEBUG: firestore_client.get_races_by_date_prefix found docs: {[r['id'] for r in races]}", extra={"date_prefix": date_prefix})
         logger.info(f"Found {len(races)} races for date prefix {date_prefix}.")
         return races
     except Exception as e:

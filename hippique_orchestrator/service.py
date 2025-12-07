@@ -110,6 +110,7 @@ async def get_pronostics(date: str | None = Query(default=None, description="Dat
         for doc in race_documents:
             analysis = doc.get("tickets_analysis")
             logger.debug(f"DEBUG: Processing doc {doc.get('id')}. Analysis: {analysis}", extra=log_extra)
+            logger.debug(f"DEBUG: raw doc in pronostics loop - id: {doc.get('id')}, tickets_analysis: {doc.get('tickets_analysis')}", extra=log_extra)
             if analysis and analysis.get("tickets"): # <-- Changed condition
                 logger.debug(f"DEBUG: Document {doc.get('id')} has valid tickets. Adding to pronostics.", extra=log_extra)
                 all_pronostics.append({

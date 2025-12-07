@@ -7,12 +7,12 @@ from pathlib import Path
 
 from google.cloud import storage
 
-from src.config.config import config
-from hippique_orchestrator.logging_utils import get_logger
+from hippique_orchestrator.config import get_config
 
 logger = get_logger(__name__)
 
 _gcs_client = None
+config = get_config()
 
 def _get_gcs_client():
     """Returns a GCS client, initializing it if necessary."""

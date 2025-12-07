@@ -18,6 +18,7 @@ ROI_THRESHOLD = SIG.parameters["roi_threshold"].default
 KELLY_CAP = SIG.parameters["kelly_cap"].default
 ROUND_TO = SIG.parameters["round_to"].default
 
+@pytest.mark.unit
 def test_single_bet_ev_positive_and_negative() -> None:
     """Check EV sign for a positive and a negative edge."""
     pos_ticket = [{"p": 0.6, "odds": 2.0, "stake": 10}]
@@ -30,6 +31,7 @@ def test_single_bet_ev_positive_and_negative() -> None:
     assert res_neg["ev"] <= 0
 
 
+@pytest.mark.unit
 def test_dutching_group_equal_profit() -> None:
     """Dutching groups should normalise stakes for identical profit."""
     tickets: list[dict[str, Any]] = [
@@ -47,6 +49,7 @@ def test_dutching_group_equal_profit() -> None:
     assert math.isclose(profit1, profit2)
 
 
+@pytest.mark.unit
 def test_combined_bet_with_simulator() -> None:
     """Combined bets rely on the provided simulation function for probability."""
     called: list[list[Any]] = []
@@ -64,6 +67,7 @@ def test_combined_bet_with_simulator() -> None:
     assert math.isclose(res["roi"], 1.5)
 
 
+@pytest.mark.unit
 def test_simulate_fn_called_once_for_identical_legs() -> None:
     """Repeated combined bets with same legs should reuse cached probability."""
     call_count = 0
@@ -84,6 +88,7 @@ def test_simulate_fn_called_once_for_identical_legs() -> None:
     assert call_count == 1
 
 
+@pytest.mark.unit
 def test_kelly_cap_respected() -> None:
     """Stake must be capped to 60% of the Kelly recommendation."""
     p, odds = 0.6, 2.0
@@ -102,6 +107,7 @@ def test_kelly_cap_respected() -> None:
     assert math.isclose(actual_stake, expected_stake)
 
 
+@pytest.mark.unit
 def test_invalid_probability_raises() -> None:
     """Probabilities must be strictly between 0 and 1."""
     with pytest.raises(ValueError):
@@ -110,6 +116,7 @@ def test_invalid_probability_raises() -> None:
         compute_ev_roi([{"p": 1.5, "odds": 2.0}], budget=100)
 
 
+@pytest.mark.unit
 def test_invalid_odds_raises() -> None:
     """Odds must be greater than 1."""
     with pytest.raises(ValueError):
@@ -118,6 +125,7 @@ def test_invalid_odds_raises() -> None:
         compute_ev_roi([{"p": 0.5, "odds": 1.0}], budget=100)
 
 
+@pytest.mark.unit
 def test_budget_must_be_positive() -> None:
     """Budget must be greater than 0."""
     with pytest.raises(ValueError):
@@ -126,6 +134,7 @@ def test_budget_must_be_positive() -> None:
         compute_ev_roi([{"p": 0.5, "odds": 2.0}], budget=-1)
 
 
+@pytest.mark.unit
 def test_apply_dutching_ignores_invalid_odds() -> None:
     """Tickets with odds <= 1 are ignored during dutching."""
     tickets = [
@@ -139,6 +148,7 @@ def test_apply_dutching_ignores_invalid_odds() -> None:
     assert tickets[1]["stake"] == 50
 
 
+@pytest.mark.unit
 def test_stakes_normalized_when_exceeding_budget() -> None:
     """Stakes are proportionally reduced when exceeding the budget."""
     budget = 100
@@ -164,6 +174,7 @@ def test_stakes_normalized_when_exceeding_budget() -> None:
     assert math.isclose(res["total_stake_normalized"], budget)
 
 
+@pytest.mark.unit
 def test_rounded_stakes_sum_to_budget() -> None:
     """After rounding, total stakes should match the budget."""
     budget = 1.0
@@ -178,6 +189,7 @@ def test_rounded_stakes_sum_to_budget() -> None:
     assert math.isclose(total, budget, abs_tol=ROUND_TO / 2)
 
 
+@pytest.mark.unit
 def test_ticket_metrics_and_std_dev() -> None:
     """Ticket metrics and aggregated statistics should be reported."""
     tickets = [
@@ -235,6 +247,7 @@ def test_ticket_metrics_and_std_dev() -> None:
     assert math.isclose(res["calibrated_expected_payout"], total_expected)
 
 
+@pytest.mark.unit
 def test_average_clv_from_closing_odds() -> None:
     """Providing closing odds should compute CLV per ticket and overall."""
     tickets = [
@@ -251,6 +264,7 @@ def test_average_clv_from_closing_odds() -> None:
     assert math.isclose(res["clv"], (clv1 + clv2) / 2)
 
 
+@pytest.mark.unit
 def test_enforce_ror_threshold_reduces_high_risk_pack() -> None:
     """High-risk packs should be trimmed below the configured ROR target."""
 
@@ -284,6 +298,7 @@ def test_enforce_ror_threshold_reduces_high_risk_pack() -> None:
     assert final_stake < baseline_stake
 
 
+@pytest.mark.unit
 def test_enforce_ror_threshold_preserves_safe_pack() -> None:
     """When the pack is safe, stakes should remain unchanged."""
 
@@ -316,6 +331,7 @@ def test_enforce_ror_threshold_preserves_safe_pack() -> None:
     assert stats["risk_of_ruin"] <= cfg["ROR_MAX"]
 
 
+@pytest.mark.unit
 def test_risk_of_ruin_decreases_with_lower_variance() -> None:
     """Risk of ruin should drop as variance decreases for the same EV."""
     ev = 2.0
@@ -329,6 +345,7 @@ def test_risk_of_ruin_decreases_with_lower_variance() -> None:
     assert risk_low < risk_high
 
 
+@pytest.mark.unit
 def test_risk_of_ruin_respects_baseline_variance() -> None:
     """Baseline variance acts as a conservative floor for ruin risk."""
 
@@ -351,6 +368,7 @@ def test_risk_of_ruin_respects_baseline_variance() -> None:
     assert guarded_risk == pytest.approx(baseline_risk)
 
 
+@pytest.mark.unit
 def test_covariance_increases_ror_for_shared_runner() -> None:
     """Tickets sharing the same runner should increase risk via covariance."""
 
@@ -369,6 +387,7 @@ def test_covariance_increases_ror_for_shared_runner() -> None:
     assert res["risk_of_ruin"] >= naive_risk
 
 
+@pytest.mark.unit
 def test_optimized_allocation_respects_budget_and_improves_ev() -> None:
     """Optimisation should keep stakes within budget and increase EV."""
     tickets = [
@@ -402,6 +421,7 @@ def test_optimized_allocation_respects_budget_and_improves_ev() -> None:
 
 
 
+@pytest.mark.unit
 def test_green_flag_true_when_thresholds_met() -> None:
     """EV ratio and ROI above thresholds should yield a green flag."""
     tickets = [{"p": 0.8, "odds": 2.5}]
@@ -419,6 +439,7 @@ def test_green_flag_true_when_thresholds_met() -> None:
     assert "failure_reasons" not in res
 
 
+@pytest.mark.unit
 @pytest.mark.parametrize(
     "tickets,budget,expected_reasons",
     [
@@ -453,6 +474,7 @@ def test_green_flag_failure_reasons(
     assert res["failure_reasons"] == expected_reasons
 
 
+@pytest.mark.unit
 def test_variance_cap_triggers_failure() -> None:
     """High variance should trigger a failure reason when capped."""
     tickets = [{"p": 0.5, "odds": 10.0, "stake": 20}]
