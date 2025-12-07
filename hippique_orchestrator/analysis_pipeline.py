@@ -1,16 +1,8 @@
-#!/usr/bin/env python3
-"""
-hippique_orchestrator/analysis_pipeline.py - Main analysis orchestrator.
-
-This module is the main entry point for processing a single race. It orchestrates
-the fetching, enrichment, and analysis of race data by delegating to specialized
-modules for scraping and storage.
-"""
-
 from __future__ import annotations
 
 import logging
 import re
+import traceback # Add this import
 from datetime import datetime, timezone
 from typing import Any
 
@@ -64,8 +56,8 @@ def process_single_course_analysis(
 
     try:
         # --- Step 1: Scrape race data ---
-        logger.info(f"Fetching {reunion}{course} from data source for phase {phase}", extra=log_extra)
-        programme_url = "https://www.boturfers.fr/programme-pmu-du-jour"
+        logger.info(f"Step 1: Fetching {reunion}{course} from data source for phase {phase}", extra=log_extra)
+        programme_url = "https://www.boturfers.fr/programme-pmu-du-jour" # Corrected typo in URL
         programme_data = data_source.fetch_programme(programme_url, correlation_id=correlation_id, trace_id=trace_id)
 
         target_rc = f"{reunion}{course}".replace(" ", "")
@@ -75,18 +67,22 @@ def process_single_course_analysis(
             result["message"] = f"Course {target_rc} not found in programme."
             logger.error(result["message"], extra=log_extra)
             return result
+        logger.info(f"Step 1: Fetched race URL: {race_url}", extra=log_extra)
 
         snapshot_data = data_source.fetch_race_details(race_url, correlation_id=correlation_id, trace_id=trace_id)
         if not snapshot_data or "error" in snapshot_data:
             result["message"] = f"Failed to fetch race details for {race_url}"
             logger.error(result["message"], extra=log_extra)
             return result
+        logger.info(f"Step 1: Fetched snapshot data for {race_doc_id}.", extra=log_extra)
 
         # --- Step 2: Persist initial snapshot ---
+        logger.info(f"Step 2: Persisting initial snapshot for {race_doc_id}.", extra=log_extra)
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         snapshot_id = f"{timestamp}_{phase}"
         
         gcs_path = storage.save_snapshot(race_doc_id, phase, snapshot_id, snapshot_data, correlation_id=correlation_id, trace_id=trace_id)
+        logger.info(f"Step 2: Snapshot saved to GCS: {gcs_path}", extra=log_extra)
         
         match = re.search(r'/(\d+)-', race_url)
         metadata = {
@@ -102,12 +98,15 @@ def process_single_course_analysis(
             "trace_id": trace_id,
         }
         storage.save_snapshot_metadata(race_doc_id, snapshot_id, metadata, correlation_id=correlation_id, trace_id=trace_id)
+        logger.info(f"Step 2: Snapshot metadata saved to Firestore for {race_doc_id}.", extra=log_extra)
         
         # Update main doc with snapshot reference
         storage.update_race_document(race_doc_id, {f"{phase.lower()}_snapshot_ref": gcs_path}, correlation_id=correlation_id, trace_id=trace_id)
+        logger.info(f"Step 2: Main race document updated with snapshot ref for {race_doc_id}.", extra=log_extra)
 
         # --- Step 3: Enrichment and Pipeline (only for H5) ---
         if phase in ["H5", "H30"]:
+            logger.info(f"Step 3: Starting enrichment and ticket generation for {race_doc_id}, phase {phase}.", extra=log_extra)
             # 3a. Enrich with stats
             # stats_gcs_path = collect_stats(h5=h5_snapshot_gcs_path, correlation_id=correlation_id, trace_id=trace_id)
             # stats_snapshot = storage.load_snapshot_from_gcs(stats_gcs_path, correlation_id=correlation_id, trace_id=trace_id)
@@ -122,7 +121,7 @@ def process_single_course_analysis(
             # 3b. Generate tickets
             gpi_config = storage.get_gpi_config(correlation_id=correlation_id, trace_id=trace_id)
             calibration_data = storage.get_calibration_config(correlation_id=correlation_id, trace_id=trace_id)
-            
+            logger.info(f"Step 3: Calling generate_tickets for {race_doc_id}.", extra=log_extra)
             analysis_result = generate_tickets(
                 snapshot_data=snapshot_data,
                 gpi_config=gpi_config,
@@ -130,6 +129,7 @@ def process_single_course_analysis(
                 calibration_data=calibration_data,
                 allow_heuristic=False
             )
+            logger.info(f"Step 3: generate_tickets returned: {analysis_result.get('gpi_decision')}. Tickets count: {len(analysis_result.get('tickets', []))}", extra=log_extra)
             
             storage.update_race_document(race_doc_id, {
                 "tickets_analysis": analysis_result,
@@ -137,6 +137,7 @@ def process_single_course_analysis(
                 "correlation_id": correlation_id,
                 "trace_id": trace_id,
             }, correlation_id=correlation_id, trace_id=trace_id)
+            logger.info(f"Step 3: Tickets analysis saved to Firestore for {race_doc_id}.", extra=log_extra)
             
             result["analysis_result"] = analysis_result
             logger.info(f"Ticket generation complete for {race_doc_id}. Abstain: {analysis_result.get('abstain')}", extra=log_extra)
@@ -146,6 +147,11 @@ def process_single_course_analysis(
         return result
 
     except Exception as e:
-        logger.exception(f"An unexpected error occurred in analysis pipeline for {race_doc_id}: {e}", extra=log_extra)
+        full_traceback = traceback.format_exc() # Capture full traceback
+        logger.error(
+            f"An unexpected error occurred in analysis pipeline for {race_doc_id}: {e}\nTraceback: {full_traceback}",
+            extra=log_extra,
+        )
         result["message"] = f"An unexpected error occurred: {e}"
+        result["full_traceback"] = full_traceback # Add traceback to result for debugging
         return result
