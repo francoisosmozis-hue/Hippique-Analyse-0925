@@ -28,13 +28,13 @@ def test_health_check(client):
 
 def test_pronostics_endpoint_returns_ok_when_no_data(client, mocker):
     """
-    Tests that the /api/pronostics endpoint returns an OK response (but with no data)
+    Tests that the /pronostics endpoint returns an OK response (but with no data)
     when no pronostics are found in Firestore for the given date.
     """
     date_str = "2025-11-28"
     mocker.patch("hippique_orchestrator.service.firestore_client.get_races_by_date_prefix", return_value=[])
     
-    response = client.get(f"/api/pronostics?date={date_str}")
+    response = client.get(f"/pronostics?date={date_str}")
     assert response.status_code == 200
     response_data = response.json()
     assert response_data["ok"] is True
@@ -43,7 +43,7 @@ def test_pronostics_endpoint_returns_ok_when_no_data(client, mocker):
 
 def test_pronostics_endpoint_returns_data_when_file_exists(client, mocker):
     """
-    Tests that the /api/pronostics endpoint successfully returns data
+    Tests that the /pronostics endpoint successfully returns data
     when a valid pronostics document is present in Firestore, matching the new API structure.
     """
     date_str = "2025-11-28"
@@ -59,7 +59,7 @@ def test_pronostics_endpoint_returns_data_when_file_exists(client, mocker):
     }
     mocker.patch("hippique_orchestrator.service.firestore_client.get_races_by_date_prefix", return_value=[mock_firestore_doc])
 
-    response = client.get(f"/api/pronostics?date={date_str}")
+    response = client.get(f"/pronostics?date={date_str}")
     assert response.status_code == 200
     
     response_data = response.json()

@@ -41,8 +41,6 @@ app = FastAPI(
     version="2.1.0",
 )
 
-app.mount("/pronostics", StaticFiles(directory=STATIC_DIR, html=True), name="pronostics")
-
 # ============================================
 # Request/Response Models
 # ============================================
@@ -83,6 +81,34 @@ async def log_requests(request: Request, call_next):
 # ============================================
 # Endpoints
 # ============================================
+
+@app.get("/pronostics")
+async def get_pronostics(date: str = Query(..., description="Date in YYYY-MM-DD format")):
+    try:
+        datetime.strptime(date, "%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid date format. Please use YYYY-MM-DD.")
+
+    correlation_id = str(uuid.uuid4())
+    logger.info(f"Fetching pronostics for date: {date} from Firestore", extra={"correlation_id": correlation_id})
+
+    try:
+        race_documents = firestore_client.get_races_by_date_prefix(date)
+        
+        all_pronostics = []
+        for doc in race_documents:
+            analysis = doc.get("tickets_analysis")
+            if analysis:
+                all_pronostics.append({
+                    "rc": doc.get("rc", "N/A"),
+                    "gpi_decision": analysis.get("gpi_decision", "N/A"),
+                    "tickets": analysis.get("tickets", [])
+                })
+        
+        return {"ok": True, "total_races": len(all_pronostics), "date": date, "pronostics": all_pronostics}
+    except Exception as e:
+        logger.error(f"Error fetching pronostics from Firestore: {e}", extra={"correlation_id": correlation_id, "exc_info": e})
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to fetch pronostics from Firestore.")
 
 @app.get("/ping")
 async def ping():
@@ -174,38 +200,17 @@ async def tasks_run_phase(request: Request, body: RunRequest):
 # API & Debug Endpoints
 # ============================================
 
-@app.get("/api/pronostics")
-async def get_pronostics(date: str = Query(..., description="Date in YYYY-MM-DD format")):
-    try:
-        datetime.strptime(date, "%Y-%m-%d")
-    except ValueError:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid date format. Please use YYYY-MM-DD.")
-
-    correlation_id = str(uuid.uuid4())
-    logger.info(f"Fetching pronostics for date: {date} from Firestore", extra={"correlation_id": correlation_id})
-
-    try:
-        race_documents = firestore_client.get_races_by_date_prefix(date)
-        
-        all_pronostics = []
-        for doc in race_documents:
-            analysis = doc.get("tickets_analysis")
-            if analysis:
-                all_pronostics.append({
-                    "rc": doc.get("rc", "N/A"),
-                    "gpi_decision": analysis.get("gpi_decision", "N/A"),
-                    "tickets": analysis.get("tickets", [])
-                })
-        
-        return {"ok": True, "total_races": len(all_pronostics), "date": date, "pronostics": all_pronostics}
-    except Exception as e:
-        logger.error(f"Error fetching pronostics from Firestore: {e}", extra={"correlation_id": correlation_id, "exc_info": e})
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to fetch pronostics from Firestore.")
-
 @app.get("/debug/parse")
 async def debug_parse(date: str = "2025-10-17"):
     result = await build_plan_async(date)
     return {"ok": True, "date": date, "count": len(result), "races": result[:3] if result else []}
+
+@app.get("/debug/config")
+async def debug_config():
+    """Returns the current application configuration."""
+    # Convert all values to strings for consistent JSON serialization
+    config_dict = {k: str(v) for k, v in get_config().model_dump().items()}
+    return {"ok": True, "config": config_dict}
 
 # ============================================
 # Core Logic (used by startup and endpoints)
