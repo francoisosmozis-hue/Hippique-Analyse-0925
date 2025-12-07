@@ -120,7 +120,7 @@ def enqueue_run_task(
         "name": task_path,
         "http_request": {
             "http_method": tasks_v2.HttpMethod.POST,
-            "url": f"{config.cloud_run_url}/run",
+            "url": f"{config.cloud_run_url}/tasks/run-phase",
             "headers": {
                 "Content-Type": "application/json",
                 "X-Correlation-ID": correlation_id or "",
