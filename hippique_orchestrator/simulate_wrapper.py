@@ -751,32 +751,6 @@ def evaluate_combo(
         calibration_used = calib_path.is_file()
     except OSError:
         calibration_used = False
-    if not calibration_used:
-        notes.append("no_calibration_yaml")
-        requirements.append(str(calib_path))
-        if not allow_heuristic:
-            return {
-                "status": "insufficient_data",
-                "message": (
-                    "Calibration file "
-                    f"'{calib_path}' is required to evaluate tickets. "
-                    "Populate it using the versioned skeleton (version: 1 → "
-                    "couple_place/trio/ze4)."
-                ),
-                "calibration_used": False,
-                "notes": notes,
-                "requirements": requirements,
-            }
-
-    from hippique_orchestrator.ev_calculator import compute_ev_roi
-
-    stats = compute_ev_roi(
-        [dict(t) for t in tickets],
-        budget=bankroll,
-        simulate_fn=simulate_wrapper,
-        kelly_cap=1.0,
-        round_to=0.0,
-    )
 
     combo_notes: list[str] = []
     for ticket in tickets:

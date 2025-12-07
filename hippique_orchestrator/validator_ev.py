@@ -544,25 +544,29 @@ def _cli(argv: list[str] | None = None) -> int:
             roi_target = float(roi_target)
         except (TypeError, ValueError):
             roi_target = None
+    
     if roi_target is not None and not _readme_has_roi_sp(roi_target):
-        print(
-            f"[FAIL] README ROI_SP mismatch (<{roi_target * 100:.0f}%)",
-            file=sys.stderr,
-        )
+        summary = {"ok": False, "reason": f"README ROI_SP mismatch (<{roi_target * 100:.0f}%)"}
+        print(json.dumps(summary, ensure_ascii=False))
         return 2
 
     try:
         cfg, partants, odds, stats = _prepare_validation_inputs(args)
+        summary = summarise_validation(partial(validate_inputs, cfg, partants, odds, stats))
+        print(json.dumps(summary, ensure_ascii=False))
+        return 0 if summary.get("ok") else 1
     except FileNotFoundError as exc:
-        parser.error(str(exc))
+        summary = {"ok": False, "reason": f"Fichier non trouvé: {exc}"}
+        print(json.dumps(summary, ensure_ascii=False))
+        return 1
     except ValueError as exc:
-        parser.error(str(exc))
-    except Exception as exc:  # pragma: no cover - defensive
-        parser.error(f"Erreur inattendue: {exc}")
-
-    summary = summarise_validation(partial(validate_inputs, cfg, partants, odds, stats))
-    print(json.dumps(summary, ensure_ascii=False))
-    return 0 if summary.get("ok") else 1
+        summary = {"ok": False, "reason": f"Erreur de valeur: {exc}"}
+        print(json.dumps(summary, ensure_ascii=False))
+        return 1
+    except Exception as exc:
+        summary = {"ok": False, "reason": f"Erreur inattendue: {exc}"}
+        print(json.dumps(summary, ensure_ascii=False))
+        return 1
 
 
 def main(argv: list[str] | None = None) -> int:

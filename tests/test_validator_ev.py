@@ -192,7 +192,7 @@ def test_summarise_validation_failure_returns_reason():
 
 
 def test_validator_cli_returns_non_zero_on_failure(tmp_path):
-    script = Path(__file__).resolve().parents[1] / "validator_ev.py"
+    script = Path(__file__).resolve().parents[1] / "hippique_orchestrator/validator_ev.py"
     artefacts_dir = tmp_path
 
     partants = {"runners": _sample_partants(5)}
