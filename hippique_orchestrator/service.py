@@ -100,20 +100,27 @@ async def get_pronostics(date: str | None = Query(default=None, description="Dat
     correlation_id = str(uuid.uuid4())
     log_extra = {"correlation_id": correlation_id, "date": date_to_use}
     logger.info(f"Fetching pronostics for date: {date_to_use} from Firestore", extra=log_extra)
+    logger.debug(f"DEBUG: get_pronostics for date: {date_to_use}", extra=log_extra)
 
     try:
         race_documents = firestore_client.get_races_by_date_prefix(date_to_use)
+        logger.debug(f"DEBUG: Fetched {len(race_documents)} raw race documents for {date_to_use}", extra=log_extra)
         
         all_pronostics = []
         for doc in race_documents:
             analysis = doc.get("tickets_analysis")
+            logger.debug(f"DEBUG: Processing doc {doc.get('id')}. Analysis: {analysis}", extra=log_extra)
             if analysis and analysis.get("tickets"): # <-- Changed condition
+                logger.debug(f"DEBUG: Document {doc.get('id')} has valid tickets. Adding to pronostics.", extra=log_extra)
                 all_pronostics.append({
                     "rc": doc.get("rc", "N/A"),
                     "gpi_decision": analysis.get("gpi_decision", "N/A"),
                     "tickets": analysis.get("tickets", [])
                 })
+            else:
+                logger.debug(f"DEBUG: Document {doc.get('id')} does not have valid tickets. Skipping.", extra=log_extra)
         
+        logger.debug(f"DEBUG: Final count of pronostics to return: {len(all_pronostics)}", extra=log_extra)
         return {"ok": True, "total_races": len(all_pronostics), "date": date_to_use, "pronostics": all_pronostics}
     except Exception as e:
         logger.error("Error fetching pronostics from Firestore", exc_info=True, extra=log_extra)
