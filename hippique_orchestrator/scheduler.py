@@ -206,11 +206,11 @@ def schedule_all_races(
 
     results = []
     for race_plan in plan:
-        r_label = race_plan["r"]
-        c_label = race_plan["c"]
-        course_url = race_plan["url"]
+        r_label = race_plan["r_label"]
+        c_label = race_plan["c_label"]
+        course_url = race_plan["course_url"]
         date_str = race_plan["date"]
-        race_time_local = race_plan["time"]
+        race_time_local = race_plan["time_local"]
 
         logger.debug(f"Attempting to enqueue tasks for {r_label}{c_label}", extra=log_extra)
 
