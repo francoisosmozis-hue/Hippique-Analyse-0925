@@ -42,6 +42,7 @@ def calibration_data():
         }
     }
 
+@pytest.mark.unit
 def test_generate_tickets_no_runners(gpi_config, calibration_data):
     """Test that the function abstains when there are no runners."""
     snapshot = {"runners": []}
@@ -50,6 +51,7 @@ def test_generate_tickets_no_runners(gpi_config, calibration_data):
     assert result["tickets"] == []
 
 
+@pytest.mark.unit
 def test_abstain_on_high_overround(gpi_config, calibration_data):
     """
     Tests that exotic bets are disallowed and the function abstains if overround is too high
@@ -72,6 +74,7 @@ def test_abstain_on_high_overround(gpi_config, calibration_data):
     assert result["tickets"] == []
 
 
+@pytest.mark.unit
 def test_abstain_on_low_global_roi(gpi_config, calibration_data):
     """
     Tests that the function abstains if SP tickets are generated but their
@@ -95,6 +98,7 @@ def test_abstain_on_low_global_roi(gpi_config, calibration_data):
     assert result["tickets"] == []
 
 
+@pytest.mark.unit
 def test_correct_kelly_staking(gpi_config, calibration_data):
     """
     Tests that the Kelly Criterion is applied correctly for SP dutching stakes.
@@ -123,6 +127,7 @@ def test_correct_kelly_staking(gpi_config, calibration_data):
     assert details[1] > details[2]
 
 
+@pytest.mark.unit
 def test_combo_bet_triggered_on_success(gpi_config, calibration_data, mocker):
     """
     Tests that a combo bet is created when all guardrails pass.
@@ -155,6 +160,7 @@ def test_combo_bet_triggered_on_success(gpi_config, calibration_data, mocker):
     assert combo_ticket["roi_est"] == 0.5
     assert combo_ticket["payout_est"] == 25.0
 
+@pytest.mark.unit
 def test_combo_bet_blocked_without_calibration(gpi_config, mocker):
     """
     Tests that a combo bet is NOT created if calibration data is missing.
