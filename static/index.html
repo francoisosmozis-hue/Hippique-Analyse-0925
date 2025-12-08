@@ -1,137 +1,137 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pronostics Hippiques du Jour</title>
-    <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; background-color: #f5f5f5; color: #333; margin: 0; padding: 20px; }
-        .container { max-width: 900px; margin: auto; background: #fff; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-        h1 { font-weight: 300; color: #0056b3; text-align: center; }
-        .controls { text-align: center; margin-bottom: 20px; }
-        #date-picker { padding: 8px; border-radius: 4px; border: 1px solid #ccc; }
-        #load-button { padding: 8px 16px; border-radius: 4px; border: none; background-color: #007bff; color: white; cursor: pointer; }
-        #date { text-align: center; font-size: 1.2em; color: #555; margin-bottom: 20px; }
-        .race { border: 1px solid #ddd; border-radius: 5px; margin-bottom: 20px; padding: 15px; }
-        .race-header { font-weight: bold; font-size: 1.1em; margin-bottom: 10px; }
-        table { width: 100%; border-collapse: collapse; }
-        th, td { text-align: left; padding: 8px; border-bottom: 1px solid #ddd; }
-        th { background-color: #f2f2f2; }
-        #loading, #error { text-align: center; font-size: 1.1em; color: #888; padding: 20px; }
-        #error { color: red; }
-    </style>
+  <meta charset="UTF-8" />
+  <title>Pronostics Hippiques</title>
 </head>
 <body>
-    <div class="container">
-        <h1>Pronostics Hippiques</h1>
-        <div class="controls">
-            <input type="date" id="date-picker">
-            <button id="load-button">Charger</button>
-        </div>
-        <div id="date"></div>
-        <div id="pronostics-container"></div>
-        <div id="loading">Chargement des pronostics...</div>
-        <div id="error" style="display: none;"></div>
-    </div>
+  <h1>Pronostics Hippiques</h1>
 
-    <script>
-        const datePicker = document.getElementById('date-picker');
-        const loadButton = document.getElementById('load-button');
-        const dateDisplay = document.getElementById('date');
-        const container = document.getElementById('pronostics-container');
-        const loadingDiv = document.getElementById('loading');
-        const errorDiv = document.getElementById('error');
+  <div>
+    <label for="date-input">Date :</label>
+    <input type="date" id="date-input" />
+    <button id="btn-load">Charger</button>
+  </div>
 
-        function fetchAndRenderPronostics(date = '') {
-            let url = '/pronostics'; // API endpoint
-            if (date) {
-                url += `?date=${date}`;
-            }
+  <div id="results">Chargement des pronostics...</div>
 
-            loadingDiv.style.display = 'block';
-            errorDiv.style.display = 'none';
-            container.innerHTML = '';
-            dateDisplay.textContent = '';
+  <script>
+    let lastUpdated = null;
+    let lastTotalRaces = 0;
+    let currentDate = null;
 
-            fetch(url)
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error(`Erreur HTTP: ${response.status}`);
-                    }
-                    return response.json();
-                })
-                .then(data => {
-                    loadingDiv.style.display = 'none';
-                    
-                    const [year, month, day] = data.date.split('-');
-                    dateDisplay.textContent = `Date: ${day}/${month}/${year}`;
-                    datePicker.value = data.date;
+    function renderPronostics(data, date) {
+      const container = document.getElementById("results");
+      const races = data.pronostics || [];
+      if (!races.length) {
+        container.textContent = "Aucun pronostic disponible pour la date " + (data.date || date || "inconnue") + ".";
+        return;
+      }
 
+      container.innerHTML = "";
 
-                    if (data.ok && data.pronostics && data.pronostics.length > 0) {
-                        data.pronostics.forEach(prono => {
-                            const raceDiv = document.createElement('div');
-                            raceDiv.className = 'race';
-                            
-                            const header = document.createElement('div');
-                            header.className = 'race-header';
-                            header.textContent = `Course ${prono.rc} - Décision: ${prono.gpi_decision}`;
-                            raceDiv.appendChild(header);
+      const title = document.createElement("h2");
+      title.textContent = "Pronostics du " + (data.date || date || "inconnue") + " (dernière mise à jour: " + new Date(data.last_updated).toLocaleTimeString() + ")";
+      container.appendChild(title);
 
-                            if (prono.tickets && prono.tickets.length > 0) {
-                                const table = document.createElement('table');
-                                const thead = document.createElement('thead');
-                                thead.innerHTML = '<tr><th>Type</th><th>Chevaux</th><th>Mise</th></tr>';
-                                table.appendChild(thead);
-                                
-                                const tbody = document.createElement('tbody');
-                                prono.tickets.forEach(ticket => {
-                                    const row = document.createElement('tr');
-                                    row.innerHTML = `
-                                        <td>${ticket.type || 'N/A'}</td>
-                                        <td>${ticket.horses ? ticket.horses.join(', ') : (ticket.cheval || 'N/A')}</td>
-                                        <td>${ticket.stake ? ticket.stake.toFixed(2) + '€' : 'N/A'}</td>
-                                    `;
-                                    tbody.appendChild(row);
-                                });
-                                table.appendChild(tbody);
-                                raceDiv.appendChild(table);
-                            } else {
-                                const noTickets = document.createElement('p');
-                                noTickets.textContent = 'Aucun ticket pour cette course.';
-                                raceDiv.appendChild(noTickets);
-                            }
-                            container.appendChild(raceDiv);
-                        });
-                    } else {
-                        const noData = document.createElement('p');
-                        noData.textContent = `Aucun pronostic trouvé pour le ${day}/${month}/${year}.`;
-                        container.appendChild(noData);
-                    }
-                })
-                .catch(err => {
-                    loadingDiv.style.display = 'none';
-                    errorDiv.textContent = `Erreur lors de la récupération des pronostics: ${err.message}`;
-                    errorDiv.style.display = 'block';
-                });
+      races.forEach((race) => {
+        const block = document.createElement("div");
+        block.style.border = "1px solid #ccc";
+        block.style.margin = "8px 0";
+        block.style.padding = "8px";
+
+        const header = document.createElement("h3");
+        header.textContent =
+          "Course " + (race.rc || "") +
+          " – décision : " + (race.gpi_decision || race.decision || "N/A");
+        block.appendChild(header);
+
+        const pre = document.createElement("pre");
+        pre.textContent = JSON.stringify(race.tickets || race, null, 2);
+        block.appendChild(pre);
+
+        container.appendChild(block);
+      });
+    }
+
+    async function loadPronostics(date) {
+      const container = document.getElementById("results");
+      container.textContent = "Chargement des pronostics...";
+      currentDate = date; 
+
+      let url = "/pronostics";
+      if (date) {
+        url += "?date=" + encodeURIComponent(date);
+      }
+
+      try {
+        const res = await fetch(url);
+        if (!res.ok) {
+          container.textContent = "Erreur lors du chargement des pronostics (HTTP " + res.status + ").";
+          return;
         }
 
-        // Load today's pronostics by default on page load
-        document.addEventListener("DOMContentLoaded", () => {
-            // Set date picker to today
-            const today = new Date();
-            const year = today.getFullYear();
-            const month = String(today.getMonth() + 1).padStart(2, '0');
-            const day = String(today.getDate()).padStart(2, '0');
-            datePicker.value = `${year}-${month}-${day}`;
+        const data = await res.json();
+        if (!data || data.ok === false) {
+          container.textContent = "Erreur : la réponse de l'API est invalide.";
+          return;
+        }
+        
+        lastUpdated = data.last_updated;
+        lastTotalRaces = data.total_races;
+        renderPronostics(data, date);
 
-            fetchAndRenderPronostics();
-        });
+      } catch (err) {
+        console.error(err);
+        container.textContent = "Erreur technique lors du chargement des pronostics.";
+      }
+    }
 
-        // Load pronostics for the selected date when the button is clicked
-        loadButton.addEventListener("click", () => {
-            fetchAndRenderPronostics(datePicker.value);
+    async function checkForUpdates() {
+      let url = "/pronostics";
+      if (currentDate) {
+        url += "?date=" + encodeURIComponent(currentDate);
+      }
+      
+      try {
+        const res = await fetch(url);
+        if (!res.ok) {
+          console.warn("Check for updates failed (HTTP " + res.status + ")");
+          return;
+        }
+        const data = await res.json();
+        if (data && data.ok && (data.last_updated !== lastUpdated || data.total_races !== lastTotalRaces)) {
+          console.log("Mise à jour détectée. Rechargement des pronostics.", {new_ts: data.last_updated, old_ts: lastUpdated, new_total: data.total_races, old_total: lastTotalRaces });
+          loadPronostics(currentDate);
+        }
+      } catch (err) {
+        console.error("Error checking for updates:", err);
+      }
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      const input = document.getElementById("date-input");
+      const today = new Date();
+      const year = today.getFullYear();
+      const month = String(today.getMonth() + 1).padStart(2, '0');
+      const day = String(today.getDate()).padStart(2, '0');
+      const todayStr = `${year}-${month}-${day}`;
+      
+      input.value = todayStr;
+      currentDate = todayStr;
+      
+      loadPronostics(currentDate);
+
+      const btn = document.getElementById("btn-load");
+      if (btn && input) {
+        btn.addEventListener("click", () => {
+          const value = input.value;
+          loadPronostics(value || null);
         });
-    </script>
+      }
+
+      setInterval(checkForUpdates, 15000); // Vérifie toutes les 15 secondes
+    });
+  </script>
 </body>
 </html>

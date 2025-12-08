@@ -82,7 +82,7 @@ async def log_requests(request: Request, call_next):
 @app.get("/pronostics/ui", response_class=FileResponse, include_in_schema=False)
 async def get_pronostics_page():
     """Serves the main HTML page for pronostics."""
-    return os.path.join(STATIC_DIR, "index.html")
+    return FileResponse(os.path.join(STATIC_DIR, "index.html"), media_type="text/html")
 
 @app.get("/pronostics")
 async def get_pronostics(date: str | None = Query(default=None, description="Date in YYYY-MM-DD format. Defaults to today (Paris time).")):
@@ -122,7 +122,13 @@ async def get_pronostics(date: str | None = Query(default=None, description="Dat
                 logger.debug(f"DEBUG: Document {doc.get('id')} does not have valid tickets. Skipping.", extra=log_extra)
         
         logger.debug(f"DEBUG: Final count of pronostics to return: {len(all_pronostics)}", extra=log_extra)
-        return {"ok": True, "total_races": len(all_pronostics), "date": date_to_use, "pronostics": all_pronostics}
+        return {
+            "ok": True, 
+            "total_races": len(all_pronostics), 
+            "date": date_to_use, 
+            "last_updated": datetime.utcnow().isoformat() + "Z",
+            "pronostics": all_pronostics
+        }
     except Exception as e:
         logger.error("Error fetching pronostics from Firestore", exc_info=True, extra=log_extra)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to fetch pronostics from Firestore.")
@@ -283,8 +289,14 @@ async def bootstrap_day_pipeline(date_str: str, correlation_id: str, trace_id: s
         return None
     
     logger.info(f"Plan built with {len(plan)} races. Now scheduling tasks.", extra=log_extra)
+    logger.info(f"DEBUG_SERVICE: About to call schedule_all_races with {len(plan)} races.", extra=log_extra)
+    print(f"DEBUG_PRINT_SERVICE: Plan before scheduling: {plan}")
     
-    scheduled_tasks_results = schedule_all_races(plan=plan, mode="tasks", correlation_id=correlation_id, trace_id=trace_id)
+    try:
+        scheduled_tasks_results = schedule_all_races(plan=plan, mode="tasks", correlation_id=correlation_id, trace_id=trace_id)
+    except Exception as e:
+        logger.error(f"Failed to schedule all races: {e}", exc_info=True, extra=log_extra)
+        scheduled_tasks_results = [] # Ensure it's still iterable for subsequent logic
     
     # Mark the day as planned ONLY if scheduling was successful for at least one race
     if plan and any(s["ok"] for s in scheduled_tasks_results):
