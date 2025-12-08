@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import re
+import logging
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -79,7 +80,9 @@ def enqueue_run_task(
     trace_id: str | None = None,
 ) -> str | None:
     """Crée une Cloud Task pour exécuter une analyse de course."""
+    print(f"DEBUG_PRINT: Entering enqueue_run_task for {r_label}{c_label}-{phase}")
     log_extra = {"correlation_id": correlation_id, "trace_id": trace_id}
+    logger.debug(f"Entering enqueue_run_task for {r_label}{c_label}-{phase}", extra=log_extra)
     offset = 30 if phase == "H30" else 5
 
     try:
@@ -144,10 +147,20 @@ def enqueue_run_task(
         extra={**log_extra, "task_name": task_name_safe, "task_payload_url": task['http_request']['url'], "auth_required": config.REQUIRE_AUTH}
     )
 
+    logger.debug(
+        f"Attempting to create task: {task_name_safe} with details: {task}",
+        extra={
+            **log_extra,
+            "task_payload_url": task["http_request"]["url"],
+            "task_payload_body": task["http_request"]["body"].decode(),
+            "task_schedule_time": task["schedule_time"].seconds,
+        }
+    )
+    print(f"DEBUG_PRINT: Creating task {task_name_safe} with URL: {task['http_request']['url']} and OIDC_Audience: {task['http_request'].get('oidc_token', {}).get('audience')}")
     try:
         response = client.create_task(parent=parent, task=task)
         logger.info(
-            f"Task created: {task_name_safe}",
+            f"Task created: {task_name_safe}. Response name: {response.name}",
             extra={
                 **log_extra,
                 "task_name": task_name_safe,
@@ -156,6 +169,7 @@ def enqueue_run_task(
                 "race_time": race_time_local,
                 "snapshot_time_utc": format_rfc3339(snapshot_datetime_utc),
                 "snapshot_time_local": snapshot_datetime_local.strftime("%Y-%m-%d %H:%M"),
+                "task_creation_response_name": response.name,
             },
         )
         return response.name
@@ -178,66 +192,58 @@ def enqueue_run_task(
 # ============================================
 
 def schedule_all_races(
-    plan: list[dict[str, Any]],
-    mode: str = "tasks",
-    correlation_id: str | None = None,
-    trace_id: str | None = None,
+    plan: list[dict], mode: str, correlation_id: str, trace_id: str
 ) -> list[dict[str, Any]]:
-    """Programme toutes les courses du plan (H-30 + H-5)."""
-    if mode != "tasks":
-        logger.warning(f"Mode '{mode}' not supported yet, using 'tasks'")
-        mode = "tasks"
+    """
+    Orchestre la planification de toutes les courses d'un plan donné.
+    """
+    print(f"DEBUG_PRINT: Starting schedule_all_races with {len(plan)} races")
+    log_extra = {"correlation_id": correlation_id, "trace_id": trace_id}
+    logger.debug(f"Starting schedule_all_races with {len(plan)} races", extra=log_extra)
+    
+    # TEMPORARY DEBUG: Log the current logger level
+    logger.info(f"DEBUG_SCHEDULER_LOGGER_LEVEL: Logger level is {logger.level} ({logging.getLevelName(logger.level)})", extra=log_extra)
 
     results = []
-    for race in plan:
-        task_h30 = enqueue_run_task(
-            course_url=race["course_url"],
+    for race_plan in plan:
+        r_label = race_plan["r"]
+        c_label = race_plan["c"]
+        course_url = race_plan["url"]
+        date_str = race_plan["date"]
+        race_time_local = race_plan["time"]
+
+        logger.debug(f"Attempting to enqueue tasks for {r_label}{c_label}", extra=log_extra)
+
+        # H30 task
+        h30_task_ok = enqueue_run_task(
+            course_url=course_url,
             phase="H30",
-            date=race["date"],
-            race_time_local=race["time_local"],
-            r_label=race["r_label"],
-            c_label=race["c_label"],
+            date=date_str,
+            race_time_local=race_time_local,
+            r_label=r_label,
+            c_label=c_label,
             correlation_id=correlation_id,
             trace_id=trace_id,
-        )
-        results.append({
-            "race": f"{race['r_label']}{race['c_label']}",
-            "phase": "H30",
-            "ok": task_h30 is not None,
-            "task_name": task_h30 or "",
-            "race_time_local": race["time_local"],
-        })
+        ) is not None
+        print(f"DEBUG_PRINT: H30 task for {r_label}{c_label} creation {'OK' if h30_task_ok else 'FAILED'}")
+        results.append({"phase": "H30", "ok": h30_task_ok})
 
-        task_h5 = enqueue_run_task(
-            course_url=race["course_url"],
+        # H5 task
+        h5_task_ok = enqueue_run_task(
+            course_url=course_url,
             phase="H5",
-            date=race["date"],
-            race_time_local=race["time_local"],
-            r_label=race["r_label"],
-            c_label=race["c_label"],
+            date=date_str,
+            race_time_local=race_time_local,
+            r_label=r_label,
+            c_label=c_label,
             correlation_id=correlation_id,
             trace_id=trace_id,
-        )
-        results.append({
-            "race": f"{race['r_label']}{race['c_label']}",
-            "phase": "H5",
-            "ok": task_h5 is not None,
-            "task_name": task_h5 or "",
-            "race_time_local": race["time_local"],
-        })
-
-    total = len(results)
-    success = sum(1 for r in results if r["ok"])
-    logger.info(
-        f"Scheduling complete: {success}/{total} tasks created ({total - success} failed)",
-        extra={
-            "correlation_id": correlation_id,
-            "trace_id": trace_id,
-            "total": total,
-            "success": success,
-            "failed": total - success,
-        },
-    )
+        ) is not None
+        print(f"DEBUG_PRINT: H5 task for {r_label}{c_label} creation {'OK' if h5_task_ok else 'FAILED'}")
+        results.append({"phase": "H5", "ok": h5_task_ok})
+    
+    print("DEBUG_PRINT: Finished schedule_all_races loop.")
+    logger.debug("Finished schedule_all_races", extra=log_extra)
     return results
 
 # ============================================
