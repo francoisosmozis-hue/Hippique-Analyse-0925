@@ -15,7 +15,8 @@ import os
 from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI, Request, Response, HTTPException, status, Query, BackgroundTasks
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
 
 from hippique_orchestrator.config import get_config
@@ -33,6 +34,8 @@ logger = get_logger(__name__)
 config = get_config()
 
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "static")
+templates = Jinja2Templates(directory="templates")
+
 
 app = FastAPI(
     title="Hippique Orchestrator",
@@ -79,10 +82,10 @@ async def log_requests(request: Request, call_next):
 # Endpoints
 # ============================================
 
-@app.get("/pronostics/ui", response_class=FileResponse, include_in_schema=False)
-async def get_pronostics_page():
+@app.get("/pronostics/ui", response_class=HTMLResponse)
+async def pronostics_ui(request: Request):
     """Serves the main HTML page for pronostics."""
-    return FileResponse(os.path.join(STATIC_DIR, "index.html"), media_type="text/html")
+    return templates.TemplateResponse("pronostics.html", {"request": request})
 
 @app.get("/pronostics")
 async def get_pronostics(date: str | None = Query(default=None, description="Date in YYYY-MM-DD format. Defaults to today (Paris time).")):
@@ -107,26 +110,34 @@ async def get_pronostics(date: str | None = Query(default=None, description="Dat
         logger.debug(f"DEBUG: Fetched {len(race_documents)} raw race documents for {date_to_use}", extra=log_extra)
         
         all_pronostics = []
+        latest_update_time = None
         for doc in race_documents:
             analysis = doc.get("tickets_analysis")
-            logger.debug(f"DEBUG: Processing doc {doc.get('id')}. Analysis: {analysis}", extra=log_extra)
-            logger.debug(f"DEBUG: raw doc in pronostics loop - id: {doc.get('id')}, tickets_analysis: {doc.get('tickets_analysis')}", extra=log_extra)
-            if analysis and analysis.get("tickets"): # <-- Changed condition
-                logger.debug(f"DEBUG: Document {doc.get('id')} has valid tickets. Adding to pronostics.", extra=log_extra)
+            if analysis and analysis.get("tickets"):
                 all_pronostics.append({
                     "rc": doc.get("rc", "N/A"),
                     "gpi_decision": analysis.get("gpi_decision", "N/A"),
                     "tickets": analysis.get("tickets", [])
                 })
-            else:
-                logger.debug(f"DEBUG: Document {doc.get('id')} does not have valid tickets. Skipping.", extra=log_extra)
+                
+                # Track the latest update time
+                last_analyzed_str = doc.get("last_analyzed_at")
+                if last_analyzed_str:
+                    try:
+                        # Ensure timestamp is offset-aware for correct comparison
+                        current_doc_time = datetime.fromisoformat(last_analyzed_str)
+                        if latest_update_time is None or current_doc_time > latest_update_time:
+                            latest_update_time = current_doc_time
+                    except (ValueError, TypeError):
+                        logger.warning(f"Could not parse last_analyzed_at: {last_analyzed_str}")
+
+        final_last_updated = latest_update_time if latest_update_time else datetime.utcnow().replace(tzinfo=ZoneInfo("UTC"))
         
-        logger.debug(f"DEBUG: Final count of pronostics to return: {len(all_pronostics)}", extra=log_extra)
         return {
             "ok": True, 
             "total_races": len(all_pronostics), 
             "date": date_to_use, 
-            "last_updated": datetime.utcnow().isoformat() + "Z",
+            "last_updated": final_last_updated.isoformat().replace('+00:00', 'Z'),
             "pronostics": all_pronostics
         }
     except Exception as e:
