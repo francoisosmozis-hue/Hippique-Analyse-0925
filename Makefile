@@ -3,7 +3,7 @@
 .PHONY: help setup test deploy scheduler logs clean
 
 # Configuration
-include .env
+-include .env
 export
 
 help: ## Show this help message
