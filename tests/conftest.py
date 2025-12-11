@@ -2,13 +2,14 @@
 conftest.py - Global test configuration and fixtures for pytest.
 """
 
-import pytest
-from pathlib import Path
 import subprocess
-from unittest.mock import MagicMock
+from pathlib import Path
+
+import pytest
 
 # Import the Config class and get_config function
 from hippique_orchestrator.config import Config, get_config
+
 
 @pytest.fixture(scope="session")
 def mock_network_calls(session_mocker):
@@ -70,6 +71,7 @@ def mock_config(session_mocker):
         QUEUE_ID="test-queue",
         GCS_BUCKET="test-bucket",
         REQUIRE_AUTH=False, # Auth disabled for tests
+        OIDC_AUDIENCE="test-audience", # Added for auth module
         TZ="Europe/Paris",
         BUDGET_TOTAL=5.0,
         EV_MIN_GLOBAL=0.40,
@@ -90,10 +92,10 @@ def mock_config(session_mocker):
         USE_DRIVE=False,
         SCHEDULING_MODE="tasks", # Default value from Config
     )
-    
+
     # Patch the Config class itself so any new Config() call returns our mock instance
     session_mocker.patch("hippique_orchestrator.config.Config", return_value=mock_config_instance)
-    
+
     # Also patch the config object imported in modules at the global level
     # This is crucial for modules that do `config = get_config()` at import time
     session_mocker.patch("hippique_orchestrator.service.config", new=mock_config_instance)

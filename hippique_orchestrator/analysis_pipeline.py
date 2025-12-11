@@ -2,14 +2,13 @@ from __future__ import annotations
 
 import logging
 import re
-import traceback # Add this import
+import traceback  # Add this import
 from datetime import datetime, timezone
 from typing import Any
 
-from . import storage
+from . import data_source, storage
 from .pipeline_run import generate_tickets
-from . import data_source
-from .stats_fetcher import collect_stats 
+from .stats_fetcher import collect_stats
 
 logger = logging.getLogger(__name__)
 
@@ -80,10 +79,10 @@ def process_single_course_analysis(
         logger.info(f"Step 2: Persisting initial snapshot for {race_doc_id}.", extra=log_extra)
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         snapshot_id = f"{timestamp}_{phase}"
-        
+
         gcs_path = storage.save_snapshot(race_doc_id, phase, snapshot_id, snapshot_data, correlation_id=correlation_id, trace_id=trace_id)
         logger.info(f"Step 2: Snapshot saved to GCS: {gcs_path}", extra=log_extra)
-        
+
         match = re.search(r'/(\d+)-', race_url)
         metadata = {
             "snapshot_id": snapshot_id,
@@ -99,7 +98,7 @@ def process_single_course_analysis(
         }
         storage.save_snapshot_metadata(race_doc_id, snapshot_id, metadata, correlation_id=correlation_id, trace_id=trace_id)
         logger.info(f"Step 2: Snapshot metadata saved to Firestore for {race_doc_id}.", extra=log_extra)
-        
+
         # Update main doc with snapshot reference
         storage.update_race_document(race_doc_id, {f"{phase.lower()}_snapshot_ref": gcs_path}, correlation_id=correlation_id, trace_id=trace_id)
         logger.info(f"Step 2: Main race document updated with snapshot ref for {race_doc_id}.", extra=log_extra)
@@ -115,7 +114,7 @@ def process_single_course_analysis(
                 correlation_id=correlation_id,
                 trace_id=trace_id
             )
-            
+
             # Since collect_stats is a placeholder, handle its dummy return value
             if stats_gcs_path == "dummy_gcs_path_for_stats":
                 logger.warning("Using dummy stats as collect_stats is a placeholder.", extra=log_extra)
@@ -123,14 +122,13 @@ def process_single_course_analysis(
             else:
                 logger.info(f"Loading stats snapshot from GCS: {stats_gcs_path}", extra=log_extra)
                 stats_snapshot = storage.load_snapshot_from_gcs(stats_gcs_path, correlation_id=correlation_id, trace_id=trace_id)
-            
+
             coverage = stats_snapshot.get("coverage", 0)
             rows = stats_snapshot.get("rows", [])
             mapped_stats = {str(row.get("num")): row for row in rows}
             stats_payload = {"coverage": coverage, **mapped_stats}
-            
-            storage.update_race_document(race_doc_id, {"stats_je": stats_payload}, correlation_id=correlation_id, trace_id=trace_id)
-            
+
+
             # 3b. Generate tickets
             gpi_config = storage.get_gpi_config(correlation_id=correlation_id, trace_id=trace_id)
             calibration_data = storage.get_calibration_config(correlation_id=correlation_id, trace_id=trace_id)
@@ -140,10 +138,11 @@ def process_single_course_analysis(
                 gpi_config=gpi_config,
                 budget=budget,
                 calibration_data=calibration_data,
+                je_stats=stats_payload,
                 allow_heuristic=False
             )
             logger.info(f"Step 3: generate_tickets returned: {analysis_result.get('gpi_decision')}. Tickets count: {len(analysis_result.get('tickets', []))}", extra=log_extra)
-            
+
             storage.update_race_document(race_doc_id, {
                 "tickets_analysis": analysis_result,
                 "last_analyzed_at": datetime.now(timezone.utc).isoformat(),
@@ -151,7 +150,7 @@ def process_single_course_analysis(
                 "trace_id": trace_id,
             }, correlation_id=correlation_id, trace_id=trace_id)
             logger.info(f"Step 3: Tickets analysis saved to Firestore for {race_doc_id}.", extra=log_extra)
-            
+
             result["analysis_result"] = analysis_result
             logger.info(f"Ticket generation complete for {race_doc_id}. Abstain: {analysis_result.get('abstain')}", extra=log_extra)
 

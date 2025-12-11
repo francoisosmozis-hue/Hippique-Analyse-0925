@@ -1,41 +1,14 @@
 steps:
-# Lint the code
+# Lint, Test and Check syntax
 - name: 'python:3.12-slim'
-  id: Lint
+  id: "Lint and Test"
   entrypoint: 'bash'
   args:
-  - '-c'
-  - |
-    pip install -r requirements-dev.txt
-    ruff check .
-
-# Install dependencies, check syntax, and run tests
-- name: 'python:3.12-slim'
-  id: Test
-  entrypoint: 'bash'
-  args:
-  - '-c'
-  - |
-    apt-get update && apt-get install -y curl
-    pip install -r requirements.txt -r requirements-dev.txt
-    pip install .
-    export PYTHONPATH=$$PYTHONPATH:/workspace
-    export PROJECT_ID=analyse-hippique
-    export CLOUD_TASKS_SA_EMAIL=test-sa@analyse-hippique.iam.gserviceaccount.com
-    export REQUIRE_AUTH=false
-    echo "--- Checking Python syntax ---"
-    python -m py_compile hippique_orchestrator/pipeline_run.py hippique_orchestrator/service.py
-    echo "--- Debugging Calibration and Config Files ---"
-    echo "Contents of calibration/:"
-    ls -la calibration/ || true
-    echo "Contents of config/:"
-    ls -la config/ || true
-    echo "Content of calibration/probabilities.yaml (if exists):"
-    cat calibration/probabilities.yaml || echo "File not found"
-    echo "Content of config/payout_calibration.yaml (if exists):"
-    cat config/payout_calibration.yaml || echo "File not found"
-    echo "--- Running smoke tests with full tracebacks ---"
-    pytest -m unit -q --tb=long
+    - '-c'
+    - |
+      pip install -r requirements.txt -r requirements-dev.txt
+      ruff check .
+      pytest
 
 # Build the Docker image
 - name: 'gcr.io/cloud-builders/docker'
@@ -68,4 +41,3 @@ substitutions:
   _IMAGE: hippique-orchestrator
   _SERVICE_ACCOUNT_EMAIL: 'sa-hippique-orchestrator@analyse-hippique.iam.gserviceaccount.com'
   _ACTUAL_CLOUD_RUN_URL: 'https://hippique-orchestrator-1084663881709.europe-west1.run.app'
-# Ce commentaire a été ajouté pour déclencher un nouveau build Cloud Build.

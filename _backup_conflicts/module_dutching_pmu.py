@@ -29,7 +29,6 @@ Notes
 from collections.abc import Callable, Sequence
 
 import pandas as pd
-
 from kelly import kelly_fraction
 
 

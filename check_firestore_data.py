@@ -1,6 +1,6 @@
-import os
-from google.cloud import firestore
 import logging
+
+from google.cloud import firestore
 
 # Set up logging to see output
 logging.basicConfig(level=logging.INFO)
@@ -40,7 +40,7 @@ for doc in query.stream():
         tickets_found += 1
         logger.info(f"    - Contains tickets: {len(analysis.get('tickets'))}")
     else:
-        logger.info(f"    - No tickets found in 'tickets_analysis' or 'tickets' is empty.")
+        logger.info("    - No tickets found in 'tickets_analysis' or 'tickets' is empty.")
 
 logger.info(f"--- Summary for {date_prefix} ---")
 logger.info(f"Total documents found: {docs_found}")

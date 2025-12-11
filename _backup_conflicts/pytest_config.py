@@ -40,6 +40,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.config import Config
+
 from hippique_orchestrator.logging_utils import setup_logger
 
 # ----------------------------------------------------------------------------

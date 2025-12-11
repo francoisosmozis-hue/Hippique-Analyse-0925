@@ -49,11 +49,29 @@ def _print_plan(plan) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("inputs", nargs="+", help="analysis.json files or directories")
-    parser.add_argument("--bankroll", type=float, required=True, help="Daily bankroll to allocate")
-    parser.add_argument("--target-ror", type=float, default=0.05, help="Daily risk of ruin target (default 5%)")
-    parser.add_argument("--min-roi", type=float, default=0.10, help="Minimum ROI to keep a race in the slate")
-    parser.add_argument("--json-out", type=Path, help="Optional path to persist the allocation plan as JSON")
+    parser.add_argument(
+        "inputs", nargs="+", help="analysis.json files or directories"
+    )
+    parser.add_argument(
+        "--bankroll", type=float, required=True, help="Daily bankroll to allocate"
+    )
+    parser.add_argument(
+        "--target-ror",
+        type=float,
+        default=0.05,
+        help="Daily risk of ruin target (default 5%)",
+    )
+    parser.add_argument(
+        "--min-roi",
+        type=float,
+        default=0.10,
+        help="Minimum ROI to keep a race in the slate",
+    )
+    parser.add_argument(
+        "--json-out",
+        type=Path,
+        help="Optional path to persist the allocation plan as JSON",
+    )
     args = parser.parse_args(argv)
 
     inputs = _iter_inputs(args.inputs)

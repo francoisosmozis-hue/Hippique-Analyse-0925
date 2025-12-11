@@ -4,6 +4,9 @@ import sys
 import traceback
 from datetime import datetime
 
+from hippique_orchestrator.config import get_config  # Import get_config
+
+
 class JsonFormatter(logging.Formatter):
     """Formats log records as JSON for Cloud Logging."""
 
@@ -27,7 +30,7 @@ class JsonFormatter(logging.Formatter):
         # Add exception info if present
         if record.exc_info:
             log_entry["traceback"] = "".join(traceback.format_exception(*record.exc_info))
-        
+
         return json.dumps(log_entry)
 
 _loggers: dict[str, logging.Logger] = {}
@@ -36,17 +39,21 @@ def get_logger(name: str) -> logging.Logger:
     """Get or create a logger configured to output structured JSON."""
     if name not in _loggers:
         logger = logging.getLogger(name)
-        
+
         if logger.hasHandlers():
             logger.handlers.clear()
-            
+
         handler = logging.StreamHandler(sys.stdout)
         handler.setFormatter(JsonFormatter())
-        
+
         logger.addHandler(handler)
-        logger.setLevel(logging.INFO)
+
+        # Dynamically set level from config
+        app_config = get_config() # Get the config
+        logger.setLevel(app_config.LOG_LEVEL.upper()) # Set level based on config
+
         logger.propagate = False
-        
+
         _loggers[name] = logger
-        
+
     return _loggers[name]

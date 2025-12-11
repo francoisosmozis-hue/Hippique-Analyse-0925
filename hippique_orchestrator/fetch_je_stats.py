@@ -18,6 +18,7 @@ from urllib.parse import quote_plus, urljoin
 
 import requests
 from bs4 import BeautifulSoup
+
 from hippique_orchestrator.gcs_client import get_gcs_manager
 
 LOGGER = logging.getLogger(__name__)
@@ -232,7 +233,7 @@ def collect_stats(
 
     data = load_json(h5)
     runners = data.get("runners", [])
-    
+
     rows = []
     successful_fetches = 0
     for r in runners:
@@ -281,7 +282,7 @@ def collect_stats(
         h5_dir = os.path.dirname(h5)
         json_out_path_str = os.path.join(h5_dir, "stats_je.json")
         gcs_json_path = gcs_manager.get_gcs_path(json_out_path_str)
-        
+
         with gcs_manager.fs.open(gcs_json_path, 'w', encoding='utf-8') as f:
             json.dump(output_payload, f, indent=2, ensure_ascii=False)
 
@@ -292,7 +293,7 @@ def collect_stats(
             w = csv.DictWriter(f, fieldnames=fieldnames)
             w.writeheader()
             w.writerows([ {k: v for k, v in row.items() if k in fieldnames} for row in rows ])
-        
+
         return gcs_json_path
 
     else:

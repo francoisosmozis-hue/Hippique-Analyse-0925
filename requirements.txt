@@ -36,6 +36,7 @@ tzdata==2023.3
 
 # Configuration
 python-dotenv==1.0.0
+tenacity==8.2.3
 
 # Testing
 pytest==8.2.0
@@ -52,6 +53,6 @@ lightgbm>=4.0.0
 
 # Browser Simulation
 httpx
-google-cloud-firestore>=2.0.0
+google-cloud-firestore==2.15.0
 
 gcsfs

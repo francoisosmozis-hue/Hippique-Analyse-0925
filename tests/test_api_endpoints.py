@@ -1,5 +1,3 @@
-from datetime import datetime
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -7,7 +5,7 @@ import pytest
 
 def test_healthz_endpoint(client):
     """Tests if the /healthz endpoint is reachable and returns OK."""
-    response = client.get("/healthz")
+    response = client.get("/health")
     assert response.status_code == 200
     assert response.json()["status"] == "healthy"
 
@@ -17,7 +15,7 @@ def test_api_pronostics_no_data(client, mocker):
     when no pronostics are found in Firestore for the given date.
     """
     mocker.patch("hippique_orchestrator.firestore_client.get_races_by_date_prefix", return_value=[])
-    
+
     # Test without date parameter (uses default today)
     response = client.get("/pronostics")
     assert response.status_code == 200
@@ -59,12 +57,12 @@ def test_api_pronostics_with_mock_data(client, mocker):
 
     response = client.get(f"/pronostics?date={mock_date_str}")
     assert response.status_code == 200
-    
+
     data = response.json()
     assert data["ok"] is True
     assert data["total_races"] == 1
     assert data["date"] == mock_date_str
-    
+
     pronostic = data["pronostics"][0]
     assert pronostic["rc"] == "R1C1"
     assert pronostic["gpi_decision"] == "Play"
@@ -93,7 +91,7 @@ def test_api_pronostics_handles_malformed_doc(client, mocker):
     mocker.patch("hippique_orchestrator.firestore_client.get_races_by_date_prefix", return_value=[valid_doc, malformed_doc])
 
     response = client.get(f"/pronostics?date={mock_date_str}")
-    
+
     assert response.status_code == 200
     data = response.json()
     assert data["ok"] is True
@@ -115,7 +113,7 @@ def test_api_pronostics_aggregates_multiple_docs(client, mocker):
     mocker.patch("hippique_orchestrator.firestore_client.get_races_by_date_prefix", return_value=[doc1, doc2])
 
     response = client.get(f"/pronostics?date={mock_date_str}")
-    
+
     assert response.status_code == 200
     data = response.json()
     assert data["ok"] is True
@@ -152,7 +150,7 @@ async def test_tasks_bootstrap_day(client, mocker):
 @pytest.mark.asyncio
 async def test_tasks_run_phase(client, mocker):
     mocker.patch("hippique_orchestrator.runner.run_course", return_value={"ok": True, "phase": "H30", "artifacts": ["path/to/artifact"]})
-    
+
     payload = {
                     "course_url": "http://example.com/r1c1-course",        "phase": "H30",
         "date": "2025-11-24",

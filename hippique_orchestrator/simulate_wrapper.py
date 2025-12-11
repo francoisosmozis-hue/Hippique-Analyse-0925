@@ -44,7 +44,7 @@ except Exception:  # pragma: no cover - handled gracefully
     np = None  # type: ignore
 
 config = get_config()
-CALIBRATION_PATH = Path("calibration/probabilities.yaml")
+CALIBRATION_PATH = Path("config/probabilities.yaml")
 
 
 def _default_payout_calibration_path() -> Path:
@@ -766,7 +766,7 @@ def evaluate_combo(
     except OSError as e:
         logger.error(f"[evaluate_combo] OSError when checking calib_path.is_file(): {e}", exc_info=True)
         calibration_used = False
-    
+
     if not calibration_used:
         logger.debug(f"[evaluate_combo] calibration_used is False. allow_heuristic: {allow_heuristic}")
         notes.append("no_calibration_yaml")
@@ -787,7 +787,7 @@ def evaluate_combo(
             }
         else: # calibration_used is False, but allow_heuristic is True. Proceeding with heuristic.
             logger.debug("[evaluate_combo] Proceeding with heuristic (allow_heuristic is True despite no calibration).")
-    
+
     # This path continues to execute `compute_ev_roi` and eventually `return result`
 
     # This is the normal path if calibration_used is True, or if calibration_used is False AND allow_heuristic is True

@@ -2,6 +2,7 @@
 hippique_orchestrator/time_utils.py - Time and timezone utilities.
 """
 from datetime import datetime
+
 import pytz
 
 # Centralize timezone definition

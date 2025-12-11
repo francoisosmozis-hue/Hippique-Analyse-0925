@@ -1,7 +1,7 @@
 
 import pytest
 
-from hippique_orchestrator.kelly import kelly_fraction, kelly_stake
+from hippique_orchestrator.kelly import calculate_kelly_fraction, kelly_stake
 
 
 @pytest.mark.parametrize(
@@ -34,7 +34,7 @@ from hippique_orchestrator.kelly import kelly_fraction, kelly_stake
 )
 def test_kelly_fraction(p, odds, lam, cap, expected):
     """Tests kelly_fraction with various inputs."""
-    assert kelly_fraction(p, odds, lam=lam, cap=cap) == pytest.approx(expected)
+    assert calculate_kelly_fraction(p, odds, lam=lam, cap=cap) == pytest.approx(expected)
 
 def test_kelly_stake():
     """Tests the kelly_stake calculation."""

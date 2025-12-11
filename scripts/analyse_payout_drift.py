@@ -2,14 +2,15 @@
 
 import argparse
 import sys
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
 # Add project root to path
 project_root = Path(__file__).resolve().parent.parent
 sys.path.append(str(project_root))
 
 from hippique_orchestrator import firestore_client
+
 
 def get_manual_payout(race_id: str, ticket_type: str) -> float | None:
     """
@@ -30,13 +31,13 @@ def analyze_drift(date: str):
     Analyzes the drift between estimated and real payouts for a given date.
     """
     print(f"Fetching race analyses for date: {date}")
-    
+
     if not firestore_client.is_firestore_enabled():
         print("Firestore is not enabled. Please configure your environment.")
         return
 
     race_documents = firestore_client.get_races_by_date_prefix(date)
-    
+
     if not race_documents:
         print(f"No race documents found for {date}.")
         return
@@ -46,7 +47,7 @@ def analyze_drift(date: str):
     for doc in race_documents:
         race_id = doc.get("id", "UnknownRace")
         analysis = doc.get("tickets_analysis")
-        
+
         if not analysis or analysis.get("abstain"):
             continue
 
@@ -63,17 +64,17 @@ def analyze_drift(date: str):
             print(f"Race: {race_id}")
             print(f"Ticket Type: {ticket_type}")
             print(f"Estimated Payout: {estimated_payout:.2f} €")
-            
+
             real_payout = get_manual_payout(race_id, ticket_type)
 
             if real_payout is not None:
                 # Drift = (Real - Estimated) / Estimated
                 drift = (real_payout - estimated_payout) / estimated_payout
-                
+
                 if ticket_type not in drifts:
                     drifts[ticket_type] = []
                 drifts[ticket_type].append(drift)
-                
+
                 print(f"  -> Drift: {drift:+.2%}")
 
     print("\n" + "="*50)
@@ -89,7 +90,7 @@ def analyze_drift(date: str):
         print(f"Bet Type: {ticket_type}")
         print(f"  - Observations: {len(values)}")
         print(f"  - Average Drift: {avg_drift:+.2%}")
-        
+
         if avg_drift > 0.05:
             print(f"  - SUGGESTION: Payouts are underestimated. Consider DECREASING the weight for '{ticket_type}' in payout_calibration.yaml.")
         elif avg_drift < -0.05:
@@ -108,5 +109,5 @@ if __name__ == "__main__":
         help="Date to analyze in YYYY-MM-DD format (default: today)."
     )
     args = parser.parse_args()
-    
+
     analyze_drift(args.date)

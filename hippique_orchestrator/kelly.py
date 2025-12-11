@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 
-__all__ = ["kelly_fraction", "kelly_stake"]
+__all__ = ["calculate_kelly_fraction", "kelly_stake"]
 
 def _to_float(x, default: float | None = None) -> float | None:
     try:
@@ -13,7 +13,7 @@ def _to_float(x, default: float | None = None) -> float | None:
     except Exception:
         return default
 
-def kelly_fraction(p: float, odds: float, lam: float = 1.0, cap: float = 1.0) -> float:
+def calculate_kelly_fraction(p: float, odds: float, lam: float = 1.0, cap: float = 1.0) -> float:
     """
     Fraction de Kelly (pour cotes décimales) avec Kelly fractionné et plafond
 
@@ -63,7 +63,7 @@ def kelly_stake(p: float, odds: float, bankroll: float, lam: float = 1.0, cap: f
     """
     Montant conseillé (en €) selon Kelly fractionné + plafond.
     """
-    frac = kelly_fraction(p, odds, lam=lam, cap=cap)
+    frac = calculate_kelly_fraction(p, odds, lam=lam, cap=cap)
     bk = _to_float(bankroll, 0.0) or 0.0
     if bk <= 0.0:
         return 0.0

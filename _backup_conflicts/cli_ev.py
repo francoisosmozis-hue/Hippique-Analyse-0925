@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-
 from ev_calculator import compute_ev_roi
 
 SIG = inspect.signature(compute_ev_roi)

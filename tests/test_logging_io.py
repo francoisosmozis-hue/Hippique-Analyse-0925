@@ -1,6 +1,7 @@
-from hippique_orchestrator.logging_io import CSV_HEADER, append_csv_line
 from fsspec.implementations.memory import MemoryFileSystem
-import pytest
+
+from hippique_orchestrator.logging_io import CSV_HEADER, append_csv_line
+
 
 def test_csv_header_and_columns(tmp_path, mocker):
     # Mock GCS manager to use an in-memory filesystem
@@ -12,7 +13,7 @@ def test_csv_header_and_columns(tmp_path, mocker):
 
     path = tmp_path / "log.csv"
     append_csv_line(path, {"reunion": "R1", "course": "C1", "partants": 8})
-    
+
     # Since we mocked GCS, we need to read from the in-memory filesystem
     gcs_path = str(path)
     assert mock_gcs_manager.fs.exists(gcs_path)

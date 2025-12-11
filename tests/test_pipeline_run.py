@@ -1,7 +1,9 @@
 # tests/test_pipeline_run.py
 
 import pytest
+
 from hippique_orchestrator.pipeline_run import generate_tickets
+
 
 @pytest.fixture
 def gpi_config():
@@ -67,9 +69,9 @@ def test_abstain_on_high_overround(gpi_config, calibration_data):
         ]
     }
     gpi_config["overround_max_exotics"] = 1.25
-    
+
     result = generate_tickets(snapshot, gpi_config, 5.0, calibration_data)
-    
+
     assert "Abstain: No valid tickets found" in result["gpi_decision"]
     assert result["tickets"] == []
 
@@ -90,10 +92,10 @@ def test_abstain_on_low_global_roi(gpi_config, calibration_data):
         ]
     }
     gpi_config["roi_min_global"] = 0.25
-    gpi_config["roi_min_sp"] = 0.1 
+    gpi_config["roi_min_sp"] = 0.1
 
     result = generate_tickets(snapshot, gpi_config, 5.0, calibration_data)
-    
+
     assert "Abstain: Global ROI" in result["gpi_decision"]
     assert result["tickets"] == []
 
@@ -116,12 +118,12 @@ def test_correct_kelly_staking(gpi_config, calibration_data):
     gpi_config["roi_min_global"] = 0.1
 
     result = generate_tickets(snapshot, gpi_config, 5.0, calibration_data)
-    
+
     assert result["gpi_decision"] == "Play"
     assert len(result["tickets"]) == 1
     sp_ticket = result["tickets"][0]
     assert sp_ticket["type"] == "SP_DUTCHING"
-    
+
     assert sp_ticket["stake"] == pytest.approx(3.0, abs=0.1)
     details = sp_ticket["details"]
     assert details[1] > details[2]
@@ -153,7 +155,7 @@ def test_combo_bet_triggered_on_success(gpi_config, calibration_data, mocker):
 
     assert result["gpi_decision"] == "Play"
     assert len(result["tickets"]) == 2  # SP Dutching + Combo
-    
+
     combo_ticket = next(t for t in result["tickets"] if t["type"] == "TRIO")
     assert combo_ticket is not None
     assert combo_ticket["stake"] == 2.0
@@ -179,9 +181,10 @@ def test_combo_bet_blocked_without_calibration(gpi_config, mocker):
         ]
     }
     gpi_config["roi_min_global"] = 0.1
-    
+
     result = generate_tickets(snapshot, gpi_config, 5.0, calibration_data={})
 
+    # The system should play the SP ticket but abstain from the combo
     assert result["gpi_decision"] == "Play"
     assert len(result["tickets"]) == 1
     assert result["tickets"][0]["type"] == "SP_DUTCHING"

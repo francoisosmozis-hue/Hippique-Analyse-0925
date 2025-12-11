@@ -158,7 +158,9 @@ def _merge_meta(arrivee: JsonDict, tickets: JsonDict) -> JsonDict:
     return meta
 
 
-def _compute_ticket_metrics(tickets: Iterable[JsonDict]) -> tuple[float, float, float, float, float, float, float]:
+def _compute_ticket_metrics(
+    tickets: Iterable[JsonDict],
+) -> tuple[float, float, float, float, float, float, float]:
     total_stake = 0.0
     total_gain = 0.0
     total_ev = 0.0

@@ -6,8 +6,8 @@ Handles all interactions with Google Cloud Storage (GCS) and Firestore.
 
 import json
 import logging
-from pathlib import Path # Added for local storage fallback
-from typing import Any, Dict
+from pathlib import Path  # Added for local storage fallback
+from typing import Any
 
 import yaml
 
@@ -16,10 +16,10 @@ from . import firestore_client, gcs_client
 logger = logging.getLogger(__name__)
 
 
-def get_gpi_config(correlation_id: str | None = None, trace_id: str | None = None) -> Dict[str, Any]:
+def get_gpi_config(correlation_id: str | None = None, trace_id: str | None = None) -> dict[str, Any]:
     """Loads the GPI YAML configuration from GCS or local filesystem."""
     gcs_manager = gcs_client.get_gcs_manager()
-        
+
     config_filename = "config/gpi_v52.yml"
     log_extra = {"correlation_id": correlation_id, "trace_id": trace_id}
 
@@ -34,11 +34,11 @@ def get_gpi_config(correlation_id: str | None = None, trace_id: str | None = Non
         if not local_path.exists():
             raise FileNotFoundError(f"Local GPI config not found at {local_path}")
         logger.info(f"Loading GPI config from local path {local_path}", extra=log_extra)
-        with open(local_path, 'r') as f:
+        with open(local_path) as f:
             return yaml.safe_load(f)
 
 
-def get_calibration_config(correlation_id: str | None = None, trace_id: str | None = None) -> Dict[str, Any]:
+def get_calibration_config(correlation_id: str | None = None, trace_id: str | None = None) -> dict[str, Any]:
     """Loads the payout calibration YAML configuration from GCS or local filesystem."""
     gcs_manager = gcs_client.get_gcs_manager()
 
@@ -59,18 +59,18 @@ def get_calibration_config(correlation_id: str | None = None, trace_id: str | No
             logger.warning(f"Local calibration config not found at {local_path}. Returning empty config.", extra=log_extra)
             return {}
         logger.info(f"Loading calibration config from local path {local_path}", extra=log_extra)
-        with open(local_path, 'r') as f:
+        with open(local_path) as f:
             return yaml.safe_load(f)
 
 
-def save_snapshot(race_doc_id: str, phase: str, snapshot_id: str, data: Dict[str, Any], correlation_id: str | None = None, trace_id: str | None = None) -> str:
+def save_snapshot(race_doc_id: str, phase: str, snapshot_id: str, data: dict[str, Any], correlation_id: str | None = None, trace_id: str | None = None) -> str:
     """
     Saves a race snapshot to GCS or local filesystem and returns the path.
     """
     gcs_manager = gcs_client.get_gcs_manager()
 
     gcs_path_str = f"data/{race_doc_id}/snapshots/{snapshot_id}.json"
-    
+
     # Add correlation_id and trace_id to the stored data
     data_to_store = {**data, "correlation_id": correlation_id, "trace_id": trace_id}
 
@@ -92,7 +92,7 @@ def save_snapshot(race_doc_id: str, phase: str, snapshot_id: str, data: Dict[str
         return str(local_path)
 
 
-def save_snapshot_metadata(race_doc_id: str, snapshot_id: str, metadata: Dict[str, Any], correlation_id: str | None = None, trace_id: str | None = None):
+def save_snapshot_metadata(race_doc_id: str, snapshot_id: str, metadata: dict[str, Any], correlation_id: str | None = None, trace_id: str | None = None):
     """Saves snapshot metadata to a Firestore subcollection."""
     collection_path = f"races/{race_doc_id}/snapshots"
     log_extra = {"correlation_id": correlation_id, "trace_id": trace_id, "firestore_path": f"{collection_path}/{snapshot_id}"}
@@ -102,7 +102,7 @@ def save_snapshot_metadata(race_doc_id: str, snapshot_id: str, metadata: Dict[st
     firestore_client.save_race_document(collection_path, snapshot_id, metadata_to_save)
 
 
-def update_race_document(race_doc_id: str, data: Dict[str, Any], correlation_id: str | None = None, trace_id: str | None = None):
+def update_race_document(race_doc_id: str, data: dict[str, Any], correlation_id: str | None = None, trace_id: str | None = None):
     """Updates the main race document in Firestore."""
     log_extra = {"correlation_id": correlation_id, "trace_id": trace_id, "race_doc_id": race_doc_id}
     logger.info("Updating Firestore document", extra=log_extra)
@@ -111,14 +111,14 @@ def update_race_document(race_doc_id: str, data: Dict[str, Any], correlation_id:
     firestore_client.update_race_document("races", race_doc_id, data_to_update)
 
 
-def get_race_document(race_doc_id: str, correlation_id: str | None = None, trace_id: str | None = None) -> Dict[str, Any] | None:
+def get_race_document(race_doc_id: str, correlation_id: str | None = None, trace_id: str | None = None) -> dict[str, Any] | None:
     """Retrieves a race document from Firestore."""
     log_extra = {"correlation_id": correlation_id, "trace_id": trace_id, "race_doc_id": race_doc_id}
     logger.info("Fetching Firestore document", extra=log_extra)
     return firestore_client.get_race_document("races", race_doc_id)
 
 
-def get_latest_snapshot_metadata(race_doc_id: str, phase: str, correlation_id: str | None = None, trace_id: str | None = None) -> Dict[str, Any] | None:
+def get_latest_snapshot_metadata(race_doc_id: str, phase: str, correlation_id: str | None = None, trace_id: str | None = None) -> dict[str, Any] | None:
     """Finds the metadata of the latest snapshot for a given phase in Firestore."""
     log_extra = {"correlation_id": correlation_id, "trace_id": trace_id, "race_doc_id": race_doc_id, "phase": phase}
     logger.info("Looking for latest snapshot", extra=log_extra)
@@ -127,15 +127,15 @@ def get_latest_snapshot_metadata(race_doc_id: str, phase: str, correlation_id: s
     if not candidates:
         logger.warning(f"No '{phase}' snapshots found for {race_doc_id}", extra=log_extra)
         return None
-    
+
     latest = sorted(candidates, key=lambda s: s.get("snapshot_id", ""))[-1]
     return latest
 
 
-def load_snapshot_from_gcs(gcs_path: str, correlation_id: str | None = None, trace_id: str | None = None) -> Dict[str, Any]:
+def load_snapshot_from_gcs(gcs_path: str, correlation_id: str | None = None, trace_id: str | None = None) -> dict[str, Any]:
     """Loads and parses a JSON snapshot from a GCS path."""
     gcs_manager = gcs_client.get_gcs_manager()
-        
+
     log_extra = {"correlation_id": correlation_id, "trace_id": trace_id, "gcs_path": gcs_path}
 
     if gcs_manager:
@@ -145,9 +145,9 @@ def load_snapshot_from_gcs(gcs_path: str, correlation_id: str | None = None, tra
     else:
         # Fallback to local filesystem
         # gcs_path is actually the local path when USE_GCS is False, as returned by save_snapshot
-        local_path = Path(gcs_path) 
+        local_path = Path(gcs_path)
         if not local_path.exists():
             raise FileNotFoundError(f"Local snapshot not found at {local_path}")
         logger.info("Loading snapshot from local path", extra=log_extra)
-        with open(local_path, 'r', encoding='utf-8') as f:
+        with open(local_path, encoding='utf-8') as f:
             return json.load(f)

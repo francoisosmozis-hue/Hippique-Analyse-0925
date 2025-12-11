@@ -24,24 +24,25 @@ CSV_HEADER = [
 ]
 
 
+
 from hippique_orchestrator.gcs_client import get_gcs_manager
-import io
+
 
 def append_csv_line(path: str, data: Mapping[str, object], header: Iterable[str] = CSV_HEADER) -> None:
     """Append a line to a CSV file, with GCS support."""
-    
+
     gcs_manager = get_gcs_manager()
     if gcs_manager:
         gcs_path = gcs_manager.get_gcs_path(path)
-        
+
         lines = []
         is_new = not gcs_manager.fs.exists(gcs_path)
-        
+
         if not is_new:
             with gcs_manager.fs.open(gcs_path, "r", encoding="utf-8", newline="") as fh:
                 reader = csv.reader(fh, delimiter=";")
                 lines = list(reader)
-        
+
         # Ensure header is present for new or empty files
         if is_new or not lines:
             lines.insert(0, list(header))

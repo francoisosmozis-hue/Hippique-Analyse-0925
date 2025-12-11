@@ -13,8 +13,7 @@ from __future__ import annotations
 
 import json
 import re
-import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from google.api_core import exceptions as gcp_exceptions
@@ -27,19 +26,6 @@ from hippique_orchestrator.time_utils import convert_local_to_utc, format_rfc333
 
 config = get_config()
 logger = get_logger(__name__)
-
-# ============================================
-# Cloud Tasks Client (singleton)
-# ============================================
-
-_tasks_client: tasks_v2.CloudTasksClient | None = None
-
-def get_tasks_client() -> tasks_v2.CloudTasksClient:
-    """Get or create Cloud Tasks client (singleton)"""
-    global _tasks_client
-    if _tasks_client is None:
-        _tasks_client = tasks_v2.CloudTasksClient()
-    return _tasks_client
 
 # ============================================
 # Task Name Generation
@@ -70,6 +56,7 @@ def _sanitize_task_name(name: str) -> str:
 # ============================================
 
 def enqueue_run_task(
+    client: tasks_v2.CloudTasksClient,
     course_url: str,
     phase: str,
     date: str,
@@ -80,7 +67,6 @@ def enqueue_run_task(
     trace_id: str | None = None,
 ) -> str | None:
     """Crée une Cloud Task pour exécuter une analyse de course."""
-    print(f"DEBUG_PRINT: Entering enqueue_run_task for {r_label}{c_label}-{phase}")
     log_extra = {"correlation_id": correlation_id, "trace_id": trace_id}
     logger.debug(f"Entering enqueue_run_task for {r_label}{c_label}-{phase}", extra=log_extra)
     offset = 30 if phase == "H30" else 5
@@ -93,13 +79,22 @@ def enqueue_run_task(
 
     snapshot_datetime_local = race_datetime_local - timedelta(minutes=offset)
     snapshot_datetime_utc = convert_local_to_utc(snapshot_datetime_local)
+
+    # Cloud Tasks API requires schedule_time to be in the future.
+    # Add a buffer of a few seconds to be safe.
+    if snapshot_datetime_utc < datetime.utcnow().replace(tzinfo=timezone.utc) + timedelta(seconds=5):
+        logger.warning(
+            f"Skipping task for {r_label}{c_label} phase {phase} because its schedule time is in the past.",
+            extra={**log_extra, "race_time_local": race_time_local, "snapshot_time_utc": format_rfc3339(snapshot_datetime_utc)},
+        )
+        return None
+
     task_name_short = _generate_task_name(date, r_label, c_label, phase)
     task_name_safe = _sanitize_task_name(task_name_short)
 
     parent = f"projects/{config.PROJECT_ID}/locations/{config.REGION}/queues/{config.QUEUE_ID}"
     task_path = f"{parent}/tasks/{task_name_safe}"
 
-    client = get_tasks_client()
     try:
         client.get_task(name=task_path)
         logger.info(
@@ -139,28 +134,10 @@ def enqueue_run_task(
             "audience": config.OIDC_AUDIENCE,
         }
 
-    logger.debug(
-        f"Constructed Cloud Task for {task_name_safe}: "
-        f"URL='{task['http_request']['url']}', "
-        f"Auth_Required={config.REQUIRE_AUTH}, "
-        f"OIDC_Audience='{config.OIDC_AUDIENCE}'" if config.REQUIRE_AUTH else "No OIDC Auth",
-        extra={**log_extra, "task_name": task_name_safe, "task_payload_url": task['http_request']['url'], "auth_required": config.REQUIRE_AUTH}
-    )
-
-    logger.debug(
-        f"Attempting to create task: {task_name_safe} with details: {task}",
-        extra={
-            **log_extra,
-            "task_payload_url": task["http_request"]["url"],
-            "task_payload_body": task["http_request"]["body"].decode(),
-            "task_schedule_time": task["schedule_time"].seconds,
-        }
-    )
-    print(f"DEBUG_PRINT: Creating task {task_name_safe} with URL: {task['http_request']['url']} and OIDC_Audience: {task['http_request'].get('oidc_token', {}).get('audience')}")
     try:
         response = client.create_task(parent=parent, task=task)
         logger.info(
-            f"Task created: {task_name_safe}. Response name: {response.name}",
+            f"Task created: {response.name}",
             extra={
                 **log_extra,
                 "task_name": task_name_safe,
@@ -169,7 +146,6 @@ def enqueue_run_task(
                 "race_time": race_time_local,
                 "snapshot_time_utc": format_rfc3339(snapshot_datetime_utc),
                 "snapshot_time_local": snapshot_datetime_local.strftime("%Y-%m-%d %H:%M"),
-                "task_creation_response_name": response.name,
             },
         )
         return response.name
@@ -197,52 +173,65 @@ def schedule_all_races(
     """
     Orchestre la planification de toutes les courses d'un plan donné.
     """
-    print(f"DEBUG_PRINT: Starting schedule_all_races with {len(plan)} races")
     log_extra = {"correlation_id": correlation_id, "trace_id": trace_id}
     logger.debug(f"Starting schedule_all_races with {len(plan)} races", extra=log_extra)
-    
-    # TEMPORARY DEBUG: Log the current logger level
-    logger.info(f"DEBUG_SCHEDULER_LOGGER_LEVEL: Logger level is {logger.level} ({logging.getLevelName(logger.level)})", extra=log_extra)
+
+    try:
+        client = tasks_v2.CloudTasksClient()
+        logger.info("Cloud Tasks client initialized successfully.")
+    except Exception as e:
+        logger.error(f"FATAL: Failed to initialize Cloud Tasks client: {e}", exc_info=True, extra=log_extra)
+        # Cannot proceed without a client. Return failure for all potential tasks.
+        return [{"phase": "H30", "ok": False, "error": "Client initialization failed"},
+                {"phase": "H5", "ok": False, "error": "Client initialization failed"}] * len(plan)
 
     results = []
-    for race_plan in plan:
-        r_label = race_plan["r_label"]
-        c_label = race_plan["c_label"]
-        course_url = race_plan["course_url"]
-        date_str = race_plan["date"]
-        race_time_local = race_plan["time_local"]
+    for i, race_plan in enumerate(plan):
+        try:
+            r_label = race_plan["r_label"]
+            c_label = race_plan["c_label"]
+            course_url = race_plan["course_url"]
+            date_str = race_plan["date"]
+            race_time_local = race_plan["time_local"]
+        except KeyError as e:
+            logger.error(f"Missing key in race_plan item {i}: {e}", exc_info=True, extra=log_extra)
+            continue
 
         logger.debug(f"Attempting to enqueue tasks for {r_label}{c_label}", extra=log_extra)
 
-        # H30 task
-        h30_task_ok = enqueue_run_task(
-            course_url=course_url,
-            phase="H30",
-            date=date_str,
-            race_time_local=race_time_local,
-            r_label=r_label,
-            c_label=c_label,
-            correlation_id=correlation_id,
-            trace_id=trace_id,
-        ) is not None
-        print(f"DEBUG_PRINT: H30 task for {r_label}{c_label} creation {'OK' if h30_task_ok else 'FAILED'}")
-        results.append({"phase": "H30", "ok": h30_task_ok})
+        try:
+            # H30 task
+            h30_task_ok = enqueue_run_task(
+                client=client,
+                course_url=course_url,
+                phase="H30",
+                date=date_str,
+                race_time_local=race_time_local,
+                r_label=r_label,
+                c_label=c_label,
+                correlation_id=correlation_id,
+                trace_id=trace_id,
+            ) is not None
+            results.append({"phase": "H30", "ok": h30_task_ok})
 
-        # H5 task
-        h5_task_ok = enqueue_run_task(
-            course_url=course_url,
-            phase="H5",
-            date=date_str,
-            race_time_local=race_time_local,
-            r_label=r_label,
-            c_label=c_label,
-            correlation_id=correlation_id,
-            trace_id=trace_id,
-        ) is not None
-        print(f"DEBUG_PRINT: H5 task for {r_label}{c_label} creation {'OK' if h5_task_ok else 'FAILED'}")
-        results.append({"phase": "H5", "ok": h5_task_ok})
-    
-    print("DEBUG_PRINT: Finished schedule_all_races loop.")
+            # H5 task
+            h5_task_ok = enqueue_run_task(
+                client=client,
+                course_url=course_url,
+                phase="H5",
+                date=date_str,
+                race_time_local=race_time_local,
+                r_label=r_label,
+                c_label=c_label,
+                correlation_id=correlation_id,
+                trace_id=trace_id,
+            ) is not None
+            results.append({"phase": "H5", "ok": h5_task_ok})
+        except Exception as e:
+            logger.error(f"Unhandled exception during enqueue_run_task call for {r_label}{c_label}: {e}", exc_info=True, extra=log_extra)
+            results.append({"phase": "H30", "ok": False, "error": str(e)})
+            results.append({"phase": "H5", "ok": False, "error": str(e)})
+
     logger.debug("Finished schedule_all_races", extra=log_extra)
     return results
 

@@ -1,12 +1,8 @@
 import math
-import os
-import sys
 
 import pytest
 
-
-
-from hippique_orchestrator.kelly import kelly_fraction
+from hippique_orchestrator.kelly import calculate_kelly_fraction
 from hippique_orchestrator.simulate_ev import (
     allocate_dutching_sp,
     gate_ev,
@@ -32,8 +28,8 @@ def test_normalize_overround_balances_dict():
 
 
 def test_kelly_fraction_basic():
-    assert math.isclose(kelly_fraction(0.6, 2.0, lam=1.0), 0.2)
-    assert math.isclose(kelly_fraction(0.2, 2.0, lam=1.0), 0.0)
+    assert math.isclose(calculate_kelly_fraction(0.6, 2.0, lam=1.0), 0.2)
+    assert math.isclose(calculate_kelly_fraction(0.2, 2.0, lam=1.0), 0.0)
 
 
 def test_allocate_dutching_sp_cap():

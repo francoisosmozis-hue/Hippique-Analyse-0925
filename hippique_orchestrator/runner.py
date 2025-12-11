@@ -11,7 +11,6 @@ from typing import Any
 # Assuming analyse_courses_du_jour_enrichie is at the root level and is importable.
 # This might need adjustment based on final project structure.
 from hippique_orchestrator import analysis_pipeline
-
 from hippique_orchestrator.config import get_config
 from hippique_orchestrator.logging_utils import get_logger
 
@@ -27,7 +26,7 @@ def _extract_rc_from_url(course_url: str) -> tuple[str, str]:
     if boturfers_match:
         r_num, c_num = boturfers_match.groups()
         return f"R{int(r_num)}", f"C{int(c_num)}"
-    
+
     # Fallback to original regex for ZEturf format like "/R1C2"
     zeturf_match = re.search(r"/R(\d+)C(\d+)", course_url, re.IGNORECASE)
     if zeturf_match:
@@ -49,7 +48,7 @@ def run_course(
     This function is now a high-level orchestrator that delegates to the analysis module.
     """
     phase_clean = phase.upper().replace("-", "")
-    
+
     try:
         reunion, course = _extract_rc_from_url(course_url)
     except ValueError as e:

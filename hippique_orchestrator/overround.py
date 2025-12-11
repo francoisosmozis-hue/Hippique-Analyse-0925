@@ -7,7 +7,8 @@ dynamically adjusting volatility caps based on race characteristics.
 from __future__ import annotations
 
 import logging
-from typing import Any, Iterable
+from collections.abc import Iterable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +34,7 @@ def compute_overround_place(runners: Iterable[dict[str, Any]]) -> float:
             continue
 
         place_odds = runner.get("cote_place") or runner.get("odds_place")
-        
+
         if place_odds is None:
             # Fallback to 'cote' if 'cote_place' is missing
             place_odds = runner.get("cote")
@@ -44,7 +45,7 @@ def compute_overround_place(runners: Iterable[dict[str, Any]]) -> float:
                 implied_probabilities.append(1.0 / odds)
         except (ValueError, TypeError, ZeroDivisionError):
             continue
-    
+
     if not implied_probabilities:
         logger.warning("Could not calculate place overround: no valid place odds found.")
         return 0.0

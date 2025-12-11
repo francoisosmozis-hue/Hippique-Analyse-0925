@@ -1,9 +1,9 @@
 import csv
 import json
 from pathlib import Path
-from fsspec.implementations.memory import MemoryFileSystem
 
 import pytest
+from fsspec.implementations.memory import MemoryFileSystem
 
 from hippique_orchestrator import fetch_je_stats
 
@@ -79,8 +79,10 @@ def test_discover_horse_url_by_name(mocker, search_page_html):
     mock_get.assert_called_once()
 
 def test_discover_horse_url_by_name_http_error(mocker):
-    """Tests that discover_horse_url_by_name handles HTTP errors."""
-    mocker.patch("hippique_orchestrator.fetch_je_stats.http_get", side_effect=RuntimeError("HTTP failed"))
+    mocker.patch(
+        "hippique_orchestrator.fetch_je_stats.http_get",
+        side_effect=RuntimeError("HTTP failed"),
+    )
     url = fetch_je_stats.discover_horse_url_by_name("Bold Eagle")
     assert url is None
 
@@ -104,7 +106,9 @@ def test_parse_horse_percentages_success(mocker, search_page_html, horse_page_ht
 def test_parse_horse_percentages_handles_failures(mocker):
     """Tests that parse_horse_percentages returns None for various failures."""
 
-    mocker.patch("hippique_orchestrator.fetch_je_stats.discover_horse_url_by_name", return_value=None)
+    mocker.patch(
+        "hippique_orchestrator.fetch_je_stats.discover_horse_url_by_name", return_value=None
+    )
     j_rate, t_rate = fetch_je_stats.parse_horse_percentages("Unknown Horse")
     assert j_rate is None
     assert t_rate is None
@@ -115,23 +119,31 @@ def test_parse_horse_percentages_handles_failures(mocker):
     assert j_rate is None
     assert t_rate is None
 
-def test_collect_stats_integration(mocker, tmp_path, search_page_html, horse_page_html, profile_page_html):
+def test_collect_stats_integration(
+    mocker, tmp_path, search_page_html, horse_page_html, profile_page_html
+):
     """Tests the collect_stats function's orchestration."""
     # Mock GCS manager to use an in-memory filesystem
     mem_fs = MemoryFileSystem()
     mock_gcs_manager = mocker.MagicMock()
     mock_gcs_manager.fs = mem_fs
     mock_gcs_manager.get_gcs_path.side_effect = lambda path: path
-    mocker.patch("hippique_orchestrator.fetch_je_stats.get_gcs_manager", return_value=mock_gcs_manager)
+    mocker.patch(
+        "hippique_orchestrator.fetch_je_stats.get_gcs_manager",
+        return_value=mock_gcs_manager,
+    )
 
     h5_path = tmp_path / "h5_snapshot.json"
     h5_data = {"runners": [{"num": 1, "name": "HORSE A"}]}
     mem_fs.pipe_file(str(h5_path), json.dumps(h5_data).encode("utf-8"))
 
     def mock_fetcher(url, **kwargs):
-        if "recherche" in url: return search_page_html
-        if "cheval" in url: return horse_page_html
-        if "jockey" in url or "entraineur" in url: return profile_page_html
+        if "recherche" in url:
+            return search_page_html
+        if "cheval" in url:
+            return horse_page_html
+        if "jockey" in url or "entraineur" in url:
+            return profile_page_html
         return ""
 
     mocker.patch("hippique_orchestrator.fetch_je_stats.http_get", side_effect=mock_fetcher)

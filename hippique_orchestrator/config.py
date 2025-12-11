@@ -3,12 +3,10 @@ src/config.py - Configuration centralisée du service
 """
 from __future__ import annotations
 
-import os
+import logging
 from functools import lru_cache
-from typing import ClassVar
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
-import logging
 
 logger = logging.getLogger(__name__)
 

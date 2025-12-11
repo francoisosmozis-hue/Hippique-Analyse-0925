@@ -6,7 +6,6 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 import pytest
-
 from src.time_utils import (
     calculate_snapshots,
     now_paris,

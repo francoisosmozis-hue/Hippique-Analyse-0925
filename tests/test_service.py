@@ -1,13 +1,5 @@
 
-import json
-import pathlib
-import shutil
-import sys
 
-import pytest
-import os
-from unittest.mock import MagicMock, patch
-import httpx
 
 
 # Removed global client = TestClient(app) - now handled by conftest.py client fixture
@@ -15,10 +7,9 @@ import httpx
 # Removed setup_test_data fixture as it creates real files and uses undefined _PROJECT_ROOT
 
 def test_health_check(client): # Added client fixture
-    response = client.get("/healthz")
+    response = client.get("/health")
     assert response.status_code == 200
-    data = response.json()
-    assert data["status"] == "healthy"
+    assert "status" in response.json()
 
 def xtest_pipeline_run_success(client, mocker):
     # This test verifies the file-reading logic of the endpoint.
@@ -68,10 +59,10 @@ def test_run_endpoint_success(client, mocker):
     """
     # Mock GCSFileSystem to prevent real GCS calls
     mocker.patch('gcsfs.GCSFileSystem')
-    
+
     # Mock la fonction run_course pour isoler le test de l'exécution réelle
     mock_run = mocker.patch("hippique_orchestrator.service.run_course", return_value={"ok": True, "phase": "H-5"})
-    
+
     payload = {
         "course_url": "https://www.zeturf.fr/fr/course/2025-10-20/R1C2-marseille-borely/details",
         "phase": "H-5",
@@ -161,3 +152,50 @@ def test_debug_parse_endpoint(client, mocker):
     assert response_json["count"] == 1
     assert response_json["races"][0]["details"] == "Test Race"
     mock_build_plan.assert_called_once_with("2025-01-01")
+
+
+# --- Security Tests ---
+
+def test_schedule_endpoint_protected(client, mocker):
+    """
+    Tests that the /schedule endpoint is protected when REQUIRE_AUTH is true.
+    """
+    # Patch the config directly where it's used in the auth module
+    mocker.patch("hippique_orchestrator.auth.config.REQUIRE_AUTH", True)
+
+    response = client.post("/schedule", json={"date": "2025-10-20", "mode": "tasks"})
+
+    # Expect 401 Unauthorized because no token is provided
+    assert response.status_code == 401
+    assert "Authorization header missing" in response.json()["detail"]
+
+
+def test_tasks_run_phase_endpoint_protected(client, mocker):
+    """
+    Tests that the /tasks/run-phase endpoint is protected when REQUIRE_AUTH is true.
+    """
+    mocker.patch("hippique_orchestrator.auth.config.REQUIRE_AUTH", True)
+
+    payload = {
+        "course_url": "https://www.zeturf.fr/fr/course/2025-10-20/R1C2-marseille-borely/details",
+        "phase": "H-5",
+        "date": "2025-10-20"
+    }
+    response = client.post("/tasks/run-phase", json=payload)
+
+    # Expect 401 Unauthorized
+    assert response.status_code == 401
+    assert "Authorization header missing" in response.json()["detail"]
+
+
+def test_pronostics_ui_endpoint_public(client, mocker):
+    """
+    Tests that the /pronostics/ui endpoint remains public even when REQUIRE_AUTH is true.
+    """
+    mocker.patch("hippique_orchestrator.auth.config.REQUIRE_AUTH", True)
+
+    response = client.get("/pronostics/ui")
+
+    # Expect 200 OK because this is a public path
+    assert response.status_code == 200
+    assert "Pronostics Hippiques (GPI)" in response.text

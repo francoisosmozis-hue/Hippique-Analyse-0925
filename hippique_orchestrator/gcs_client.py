@@ -1,11 +1,11 @@
-# -*- coding: utf-8 -*-
 """
 Utilities for interacting with Google Cloud Storage (GCS).
 """
 import logging
-from functools import lru_cache
-from google.cloud import storage
+from functools import cache
+
 import gcsfs
+from google.cloud import storage
 
 from hippique_orchestrator.config import get_config
 
@@ -33,7 +33,7 @@ class GCSManager:
                 "GCS operations will fail."
             )
             raise ValueError("GCS_BUCKET must be set.")
-        
+
         self._client = None
         self._fs = None
 
@@ -80,7 +80,7 @@ class GCSManager:
         """
         return self.fs.exists(gcs_path)
 
-@lru_cache(maxsize=None)
+@cache
 def get_gcs_manager() -> GCSManager | None:
     """
     Returns a singleton instance of the GCSManager, creating it on first call.
@@ -96,7 +96,7 @@ def get_gcs_manager() -> GCSManager | None:
         logger.warning(f"Could not initialize GCSManager: {e}")
         return None
 
-@lru_cache(maxsize=None)
+@cache
 def get_gcs_fs():
     """
     Returns a cached instance of the GCS filesystem.

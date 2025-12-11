@@ -7,7 +7,7 @@ from collections.abc import Sequence
 from typing import Any
 
 from hippique_orchestrator.ev_calculator import compute_ev_roi
-from hippique_orchestrator.kelly import kelly_fraction
+from hippique_orchestrator.kelly import calculate_kelly_fraction
 from hippique_orchestrator.simulate_wrapper import simulate_wrapper
 
 
@@ -136,7 +136,7 @@ def allocate_dutching_sp(
     for runner, p, o in zip(runners, probs, odds, strict=False):
         if not (0.0 < p < 1.0) or o <= 1.0:
             continue
-        k = kelly_fraction(p, o, lam=1.0, cap=1.0)
+        k = calculate_kelly_fraction(p, o, lam=1.0, cap=1.0)
         total_kelly += k
         valid.append((runner, p, o))
     if not valid:
@@ -151,7 +151,7 @@ def allocate_dutching_sp(
     tickets: list[dict[str, Any]] = []
     ev_sp = 0.0
     for runner, p, o in valid:
-        frac = kelly_fraction(p, o, lam=kelly_coef / total_kelly, cap=1.0)
+        frac = calculate_kelly_fraction(p, o, lam=kelly_coef / total_kelly, cap=1.0)
         raw_stake = budget * frac
         cap_value = budget * cap
         raw_stake = min(raw_stake, cap_value)

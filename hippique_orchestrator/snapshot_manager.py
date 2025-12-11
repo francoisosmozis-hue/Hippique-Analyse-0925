@@ -4,19 +4,18 @@ snapshot_manager.py - Manages the creation of daily snapshots.
 from __future__ import annotations
 
 import asyncio
-from typing import List, Optional
 
+from hippique_orchestrator.logging_utils import get_logger
 from hippique_orchestrator.plan import build_plan_async
 from hippique_orchestrator.runner import run_course
-from hippique_orchestrator.logging_utils import get_logger
 
 logger = get_logger(__name__)
 
 async def write_snapshot_for_day_async(
     date_str: str,
     phase: str,
-    race_urls: Optional[List[str]] = None,
-    rc_labels: Optional[List[str]] = None,
+    race_urls: list[str] | None = None,
+    rc_labels: list[str] | None = None,
     correlation_id: str = "N/A",
 ):
     """
@@ -62,7 +61,7 @@ async def write_snapshot_for_day_async(
                 correlation_id=correlation_id
             )
             snapshot_tasks.append(course_url) # Keep track of what was processed
-            
+
         logger.info(
             f"Finished creating {len(snapshot_tasks)} snapshot tasks for {date_str}.",
             extra={"correlation_id": correlation_id},
@@ -78,8 +77,8 @@ async def write_snapshot_for_day_async(
 def write_snapshot_for_day(
     date_str: str,
     phase: str,
-    race_urls: Optional[List[str]] = None,
-    rc_labels: Optional[List[str]] = None,
+    race_urls: list[str] | None = None,
+    rc_labels: list[str] | None = None,
     correlation_id: str = "N/A",
 ):
     """

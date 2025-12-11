@@ -50,7 +50,7 @@ def save_race_document(collection: str, document_id: str, data: dict[str, Any]) 
     if not is_firestore_enabled():
         logger.warning("Firestore is not enabled, skipping save.")
         return
-    
+
     config = get_config()
     client = _get_firestore_client(project_id=config.PROJECT_ID)
     if not client:
@@ -73,22 +73,23 @@ def update_race_document(collection: str, document_id: str, data: dict[str, Any]
     Updates a document in a Firestore collection, merging data.
     """
     if not is_firestore_enabled():
-        logger.warning("Firestore is not enabled, skipping update.")
+        logger.warning(f"Firestore is not enabled, skipping update for {document_id} in {collection}.")
         return
 
     config = get_config()
     client = _get_firestore_client(project_id=config.PROJECT_ID)
     if not client:
-        logger.error("Firestore client not available, cannot update document.")
+        logger.error(f"Firestore client not available, cannot update document {document_id} in {collection}.")
         return
 
     try:
         doc_ref = client.collection(collection).document(document_id)
+        logger.debug(f"Attempting to update document {document_id} in collection '{collection}' with merge=True. Data keys: {list(data.keys())}.")
         doc_ref.set(data, merge=True)
-        logger.info(f"Document {document_id} updated in collection {collection}.")
+        logger.info(f"Document {document_id} updated successfully in collection '{collection}'.")
     except Exception as e:
         logger.error(
-            f"Failed to update document {document_id} in {collection}: {e}",
+            f"Failed to update document {document_id} in collection '{collection}': {e}",
             exc_info=e,
         )
         return
@@ -148,15 +149,15 @@ def get_races_by_date_prefix(date_prefix: str) -> list[dict[str, Any]]:
             .where(firestore.FieldPath.document_id(), ">=", date_prefix)
             .where(firestore.FieldPath.document_id(), "<", date_prefix + "\uf8ff")
         )
-        
+
         docs_stream = query.stream()
-        
+
         races = []
         for doc in docs_stream:
             race_data = doc.to_dict()
             race_data['id'] = doc.id # Add document ID to the dictionary
             races.append(race_data)
-        
+
         logger.debug(f"DEBUG: firestore_client.get_races_by_date_prefix found docs: {[r['id'] for r in races]}", extra={"date_prefix": date_prefix})
         logger.info(f"Found {len(races)} races for date prefix {date_prefix}.")
         return races
@@ -205,7 +206,7 @@ def mark_day_as_planned(date_str: str, plan_details: dict[str, Any]) -> None:
     if not is_firestore_enabled():
         logger.warning("Firestore is not enabled, cannot mark day as planned.")
         return
-    
+
     # Use set with merge=True for idempotence in case it's called multiple times
     config = get_config()
     client = _get_firestore_client(project_id=config.PROJECT_ID)
@@ -225,7 +226,7 @@ def unmark_day_as_planned(date_str: str) -> None:
     if not is_firestore_enabled():
         logger.warning("Firestore is not enabled, cannot unmark day as planned.")
         return
-    
+
     config = get_config()
     client = _get_firestore_client(project_id=config.PROJECT_ID)
     if not client:

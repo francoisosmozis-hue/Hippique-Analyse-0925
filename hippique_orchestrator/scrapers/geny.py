@@ -3,13 +3,12 @@ Scraper for Geny.com to fetch daily race programs.
 """
 from __future__ import annotations
 
-import httpx
-import json
 import re
 import unicodedata
 from datetime import datetime
 from typing import Any
 
+import httpx
 from bs4 import BeautifulSoup
 
 from hippique_orchestrator.logging_utils import get_logger
@@ -99,15 +98,15 @@ def fetch_geny_programme() -> dict[str, Any]:
                 "courses": []
             }
             r_counter += 1
-        
+
         meetings_map[hippo]["courses"].append({"c": c, "id_course": id_course})
 
     meetings = list(meetings_map.values())
-    
+
     data = {
         "date": datetime.today().strftime("%Y-%m-%d"),
         "meetings": meetings,
     }
-    
+
     logger.info(f"Discovered {len(meetings)} meetings from Geny")
     return data

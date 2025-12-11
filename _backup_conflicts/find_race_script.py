@@ -1,8 +1,10 @@
 
 import asyncio
-from hippique_orchestrator.plan import build_plan_async
 import json
 import sys
+
+from hippique_orchestrator.plan import build_plan_async
+
 
 async def find_race():
     # The date is now ignored by plan.py, but we pass it for compatibility
@@ -10,20 +12,20 @@ async def find_race():
     try:
         # The new plan.py builds the plan from a local html file
         plan = await build_plan_async(date_str)
-        
+
         target_race = None
         # Looking for R3C4 at Vincennes, as Pau is not in the file
         for race in plan:
             r_label = race.get('r_label', '').upper()
             c_label = race.get('c_label', '').upper()
             meeting_name = race.get('meeting', '').lower()
-            
-            if (r_label == 'R3' and 
-                c_label == 'C4' and 
+
+            if (r_label == 'R3' and
+                c_label == 'C4' and
                 'vincennes' in meeting_name):
                 target_race = race
                 break
-                
+
         if target_race:
             print(json.dumps(target_race, indent=2))
         else:

@@ -21,7 +21,7 @@ try:  # pragma: no cover - SciPy is optional
 except ImportError:  # pragma: no cover - handled gracefully
     minimize = None  # type: ignore
 
-from hippique_orchestrator.kelly import kelly_fraction
+from hippique_orchestrator.kelly import calculate_kelly_fraction
 
 # ``simulate_wrapper`` is an optional dependency kept for backward compatibility.
 try:  # pragma: no cover - optional dependency
@@ -57,7 +57,7 @@ def _kelly_fraction(p: float, odds: float) -> float:
     if odds <= 1:
         raise ValueError("odds must be > 1")
 
-    return kelly_fraction(p, odds, lam=1.0, cap=1.0)
+    return calculate_kelly_fraction(p, odds, lam=1.0, cap=1.0)
 
 
 def _apply_dutching(tickets: Iterable[dict[str, Any]]) -> None:
@@ -375,7 +375,7 @@ def optimize_stake_allocation(
     for t in tickets:
         p = t["p"]
         odds = t["odds"]
-        cap_fraction = kelly_fraction(p, odds, lam=kelly_cap, cap=1.0)
+        cap_fraction = calculate_kelly_fraction(p, odds, lam=kelly_cap, cap=1.0)
         cap_fraction = min(cap_fraction, 1 - 1e-9)
         p_odds.append((p, odds))
         bounds.append((0.0, cap_fraction))
@@ -572,7 +572,7 @@ def compute_ev_roi(
             t["clv"] = clv
 
         kelly_stake = _kelly_fraction(p, odds) * budget
-        max_stake = kelly_fraction(p, odds, lam=kelly_cap, cap=1.0) * budget
+        max_stake = calculate_kelly_fraction(p, odds, lam=kelly_cap, cap=1.0) * budget
         stake_input = t.get("stake", kelly_stake)
         capped = stake_input > max_stake
         stake = min(stake_input, max_stake)

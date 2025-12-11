@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-import os
 import re
 import sys
 from collections.abc import Callable
@@ -544,7 +543,7 @@ def _cli(argv: list[str] | None = None) -> int:
             roi_target = float(roi_target)
         except (TypeError, ValueError):
             roi_target = None
-    
+
     if roi_target is not None and not _readme_has_roi_sp(roi_target):
         summary = {"ok": False, "reason": f"README ROI_SP mismatch (<{roi_target * 100:.0f}%)"}
         print(json.dumps(summary, ensure_ascii=False))

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import os
 from collections.abc import Iterable
 from pathlib import Path
 

@@ -190,7 +190,7 @@ def generate_tickets(
 
         # Calculer les fractions de Kelly brutes
         for cand in sp_candidates:
-            frac = calculate_kelly_fraction(cand["odds"], cand["prob"], kelly_frac)
+            frac = calculate_kelly_fraction(cand["prob"], cand["odds"], kelly_frac)
             if frac > 0:
                 stakes[cand["num"]] = frac
                 total_kelly_frac += frac
@@ -224,10 +224,9 @@ def generate_tickets(
 
         # Le test mocke cette fonction.
         combo_eval_result = evaluate_combo(
-            tickets_to_evaluate=[{"type": "TRIO", "legs": sp_candidates}], # Placeholder
-            budget=combo_budget,
-            gpi_config=gpi_config,
-            calibration_data=calibration_data
+            tickets=[{"type": "TRIO", "odds": 2.0, "legs": sp_candidates}], # Placeholder
+            bankroll=combo_budget,
+            calibration=CALIB_PATH
         )
 
         if combo_eval_result.get("status") == "ok":

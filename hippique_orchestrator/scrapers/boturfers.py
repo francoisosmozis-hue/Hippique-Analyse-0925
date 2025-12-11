@@ -5,11 +5,8 @@ Ce module fournit les fonctionnalités pour scraper les données des courses
 depuis le site Boturfers.fr.
 """
 
-import argparse
-import json
 import logging
 import re
-import sys
 from datetime import datetime
 from typing import Any
 from urllib.parse import urljoin
