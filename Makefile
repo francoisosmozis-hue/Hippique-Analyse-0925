@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # Makefile for Hippique Orchestrator Cloud Run
 
 .PHONY: help setup test deploy scheduler logs clean
@@ -131,24 +130,4 @@ destroy: ## Destroy all GCP resources (DANGEROUS)
 		gcloud tasks queues delete $(QUEUE_ID) --location=$(QUEUE_LOCATION) --project=$(PROJECT_ID) --quiet || true; \
 		echo "✅ Resources deleted"; \
 	fi
-=======
-.PHONY: fmt lint test run-h30 run-h5
 
-fmt:
-\tpython -m pip install -q ruff
-\truff check --select I --fix .
-
-lint:
-\tpython -m pip install -q ruff
-\truff check .
-
-test:
-\tpython -m pip install -q pytest
-\tpytest -q
-
-run-h30:
-\tpython analyse_courses_du_jour_enrichie.py --phase H30
-
-run-h5:
-\tpython analyse_courses_du_jour_enrichie.py --phase H5
->>>>>>> ef632c0 (feat: Refactor EV calculator and clean up git repository)
