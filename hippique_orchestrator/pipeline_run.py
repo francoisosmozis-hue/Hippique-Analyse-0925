@@ -1,8 +1,6 @@
 import logging
-import os
 import pathlib
 import sys
-from pathlib import Path  # Add this import
 from typing import Any
 
 import yaml
@@ -26,19 +24,9 @@ try:
 except Exception as e:
     logging.getLogger(__name__).warning(f"Calibration auto-init failed: {e}")
 
-# --- Import core logic with fallbacks ---
-try:
-    from hippique_orchestrator.kelly import calculate_kelly_fraction
-    from hippique_orchestrator.overround import adaptive_cap, compute_overround_place
-    from hippique_orchestrator.simulate_wrapper import evaluate_combo
-    from hippique_orchestrator.analysis_utils import compute_overround_cap
-except ImportError:
-    logging.warning("One or more core modules not found. Using mock implementations.")
-    def calculate_kelly_fraction(odds, prob, fraction=1.0): return fraction * (odds * prob - 1) / (odds - 1)
-    def evaluate_combo(**kwargs): return {"status": "insufficient_data", "message": "Simulation unavailable"}
-    def compute_overround_cap(*args, **kwargs): return 1.0
-    def compute_overround_place(*args, **kwargs): return 1.0
-    def adaptive_cap(*args, **kwargs): return 1.0
+# --- Import core logic ---
+from hippique_orchestrator.kelly import calculate_kelly_fraction
+from hippique_orchestrator.simulate_wrapper import evaluate_combo
 
 # --- Logging ---
 logger = logging.getLogger(__name__)
@@ -51,11 +39,83 @@ def load_gpi_config(config_path: pathlib.Path) -> dict[str, Any]:
     with open(config_path) as f:
         return yaml.safe_load(f)
 
+def calculate_p_finale(p_base: float, runner_stats: dict[str, Any], weights: dict[str, Any]) -> float:
+    """
+    Calculates the final, weighted probability for a runner.
+    """
+    p_final = p_base
+
+    # Apply JE bonus/malus
+    je_weights = weights.get("base", {})
+    p_final *= _get_je_factor(runner_stats, je_weights)
+
+    # Apply horse stats bonus/malus
+    horse_weights = weights.get("horse_stats", {})
+    p_final *= _get_horse_stats_factor(runner_stats, horse_weights)
+
+    # TODO: Implement other weight adjustments (chrono, drift)
+
+    return min(p_final, 0.99) # Cap probability at 0.99 for safety
+
+def _get_je_factor(runner_stats: dict, je_weights: dict) -> float:
+    """Gets the jockey/trainer bonus/malus factor."""
+    je_bonus = je_weights.get("je_bonus", 1.0)
+    je_malus = je_weights.get("je_malus", 1.0)
+
+    try:
+        j_rate = float(runner_stats.get("j_rate")) if runner_stats.get("j_rate") is not None else None
+        e_rate = float(runner_stats.get("e_rate")) if runner_stats.get("e_rate") is not None else None
+    except (ValueError, TypeError):
+        logger.warning(f"Could not parse j_rate/e_rate for runner stats: {runner_stats}")
+        return 1.0
+
+    if j_rate is not None and e_rate is not None:
+        if j_rate >= 12.0 or e_rate >= 15.0:
+            return je_bonus
+        if j_rate < 6.0 or e_rate < 8.0:
+            return je_malus
+    return 1.0
+
+def _get_horse_stats_factor(runner_stats: dict, horse_weights: dict) -> float:
+    """Gets the horse performance bonus/malus factor."""
+    factor = 1.0
+
+    # Short form stats
+    sf_good = horse_weights.get("short_form_place_good", {})
+    sf_bad = horse_weights.get("short_form_place_bad", {})
+    try:
+        sf_pct = float(runner_stats.get("short_form_place_pct")) if runner_stats.get("short_form_place_pct") is not None else None
+        if sf_pct is not None:
+            if sf_pct >= sf_good.get("threshold_pct", 101):
+                factor *= sf_good.get("factor", 1.0)
+            elif sf_pct <= sf_bad.get("threshold_pct", -1):
+                factor *= sf_bad.get("factor", 1.0)
+    except (ValueError, TypeError):
+        pass # Ignore if stats are not parseable
+
+    # Career stats
+    career_good = horse_weights.get("career_place_good", {})
+    career_bad = horse_weights.get("career_place_bad", {})
+    try:
+        career_pct = float(runner_stats.get("career_place_pct")) if runner_stats.get("career_place_pct") is not None else None
+        if career_pct is not None:
+            if career_pct >= career_good.get("threshold_pct", 101):
+                factor *= career_good.get("factor", 1.0)
+            elif career_pct <= career_bad.get("threshold_pct", -1):
+                factor *= career_bad.get("factor", 1.0)
+    except (ValueError, TypeError):
+        pass # Ignore if stats are not parseable
+
+    return factor
+
+
+
 def generate_tickets(
     snapshot_data: dict[str, Any],
     gpi_config: dict[str, Any],
     budget: float,
     calibration_data: dict[str, Any],
+    je_stats: dict[str, Any] | None = None,
     allow_heuristic: bool = False
 ) -> dict[str, Any]:
     """
@@ -75,6 +135,9 @@ def generate_tickets(
     sp_config = gpi_config.get("tickets", {}).get("sp_dutching", {})
     exotics_config = gpi_config.get("tickets", {}).get("exotics", {})
     roi_min_global = gpi_config.get("roi_min_global", 0.25)
+    weights = gpi_config.get("weights", {})
+
+    je_stats = je_stats or {}
 
     final_tickets = []
     analysis_messages = []
@@ -91,22 +154,21 @@ def generate_tickets(
          analysis_messages.append("Exotics blocked: missing calibration data.")
 
     # 2. Calcul des probabilités finales (p_finale)
-    # TODO: Implémenter la logique de calcul de p_finale en utilisant les poids de gpi_config
-    # Pour l'instant, on utilise une probabilité brute si elle existe.
     for runner in runners:
-        # Utiliser p_no_vig ou p_place comme fallback pour les tests
-        if "p_no_vig" in runner:
-             runner["p_finale"] = runner["p_no_vig"]
-        elif "p_place" in runner:
-             runner["p_finale"] = runner.get("p_place", 0)
-        else:
-            # Si aucune probabilité n'est disponible, on ne peut pas analyser
+        p_base = runner.get("p_no_vig") or runner.get("p_place")
+        if p_base is None:
             return {
-                "gpi_decision": "Abstain: Missing probabilities in snapshot.",
+                "gpi_decision": "Abstain: Missing base probabilities in snapshot.",
                 "tickets": [],
                 "roi_global_est": 0,
-                "message": "Missing probabilities (p_no_vig or p_place) in snapshot data for runners."
+                "message": "Missing p_no_vig or p_place in snapshot for runners."
             }
+
+        runner_num = str(runner.get("num"))
+        runner_stats = je_stats.get(runner_num, {})
+
+        runner["p_finale"] = calculate_p_finale(p_base, runner_stats, weights)
+
 
     # 3. Génération des tickets SP Dutching
     sp_budget = budget * sp_config.get("budget_ratio", 0.6)
@@ -120,19 +182,19 @@ def generate_tickets(
              roi = (prob * (odds - 1) - (1 - prob)) # ROI pour une mise de 1€
              if roi / 1 >= gpi_config.get("roi_min_sp", 0.20):
                   sp_candidates.append({"num": r["num"], "odds": odds, "prob": prob, "roi": roi})
-    
+
     if len(sp_candidates) >= sp_config.get("legs_min", 2):
         kelly_frac = sp_config.get("kelly_frac", 0.25)
         stakes = {}
         total_kelly_frac = 0
-        
+
         # Calculer les fractions de Kelly brutes
         for cand in sp_candidates:
             frac = calculate_kelly_fraction(cand["odds"], cand["prob"], kelly_frac)
             if frac > 0:
                 stakes[cand["num"]] = frac
                 total_kelly_frac += frac
-        
+
         # Normaliser les mises pour correspondre au budget SP
         final_stakes = {}
         if total_kelly_frac > 0:
@@ -159,7 +221,7 @@ def generate_tickets(
         # et construirait les combinaisons de chevaux.
         # Pour le test, on simule un appel pour le type "TRIO".
         combo_budget = budget * (1 - sp_config.get("budget_ratio", 0.6))
-        
+
         # Le test mocke cette fonction.
         combo_eval_result = evaluate_combo(
             tickets_to_evaluate=[{"type": "TRIO", "legs": sp_candidates}], # Placeholder
@@ -167,10 +229,10 @@ def generate_tickets(
             gpi_config=gpi_config,
             calibration_data=calibration_data
         )
-        
+
         if combo_eval_result.get("status") == "ok":
-            ev_min = exotics_config.get("enable_if", {}).get("ev_min", 0.40)
-            payout_min = exotics_config.get("enable_if", {}).get("payout_min", 10.0)
+            ev_min = exotics_config.get("enable_if", {}).get("ev_min", gpi_config.get("ev_min_combo", 0.40))
+            payout_min = exotics_config.get("enable_if", {}).get("payout_min", gpi_config.get("payout_min_combo", 10.0))
 
             if combo_eval_result.get("roi", 0) >= ev_min and combo_eval_result.get("payout_expected", 0) >= payout_min:
                 combo_ticket = {
