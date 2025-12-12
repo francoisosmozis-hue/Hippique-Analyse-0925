@@ -204,7 +204,7 @@ def test_validator_cli_returns_non_zero_on_failure(tmp_path):
     (artefacts_dir / "stats_je.json").write_text(json.dumps(stats), encoding="utf-8")
 
     result = subprocess.run(
-        [sys.executable, str(script), "--artefacts", str(artefacts_dir)],
+        [sys.executable, "-m", "hippique_orchestrator.validator_ev", "--artefacts", str(artefacts_dir)],
         check=False, capture_output=True,
         text=True,
     )

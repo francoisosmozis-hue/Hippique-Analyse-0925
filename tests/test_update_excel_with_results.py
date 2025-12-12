@@ -70,7 +70,8 @@ def test_update_excel_records_observed_roi(tmp_path: Path) -> None:
 
     cmd = [
         sys.executable,
-        str(repo_root / "hippique_orchestrator/scripts/update_excel_with_results.py"),
+        "-m",
+        "hippique_orchestrator.scripts.update_excel_with_results",
         "--excel",
         str(excel_path),
         "--arrivee",

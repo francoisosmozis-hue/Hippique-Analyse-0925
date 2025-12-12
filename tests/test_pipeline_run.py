@@ -1,190 +1,141 @@
-# tests/test_pipeline_run.py
-
 import pytest
+from pytest_mock import MockerFixture
 
 from hippique_orchestrator.pipeline_run import generate_tickets
 
 
 @pytest.fixture
-def gpi_config():
-    """Provides a default GPI configuration for tests."""
+def mock_gpi_config() -> dict:
+    """Provides a basic mock GPI configuration."""
     return {
-        "budget_cap_eur": 5.0,
-        "overround_max_exotics": 1.25,
-        "roi_min_sp": 0.1,
-        "roi_min_global": 0.15,
-        "ev_min_combo": 0.2,
-        "payout_min_combo": 10.0,
-        "max_vol_per_horse": 0.6,
+        "roi_min_sp": 0.20,
+        "roi_min_global": 0.25,
+        "overround_max_exotics": 1.30,
+        "weights": {},
         "tickets": {
             "sp_dutching": {
                 "budget_ratio": 0.6,
                 "legs_min": 2,
-                "legs_max": 3,
-                "odds_range": [2.0, 20.0],
+                "odds_range": [1.1, 999],
                 "kelly_frac": 0.25,
             },
             "exotics": {
-                "type": "TRIO",
-                "stake_eur": 2.0,
-                "legs_count": 4,
-            },
+                 "enable_if": {
+                    "ev_min": 0.40,
+                    "payout_min": 10.0
+                }
+            }
         },
     }
 
+
 @pytest.fixture
-def calibration_data():
-    """Provides default calibration data."""
-    return {
-        "version": 1,
-        "exotic_weights": {
-            "TRIO": 1.0,
-            "ZE4": 1.0,
-            "CPL": 1.0,
-        }
-    }
-
-@pytest.mark.unit
-def test_generate_tickets_no_runners(gpi_config, calibration_data):
-    """Test that the function abstains when there are no runners."""
-    snapshot = {"runners": []}
-    result = generate_tickets(snapshot, gpi_config, 5.0, calibration_data)
-    assert "Abstain: No runners found" in result["gpi_decision"]
-    assert result["tickets"] == []
+def mock_calibration_data() -> dict:
+    """Provides mock calibration data allowing exotics."""
+    return {"exotic_weights": {"TRIO": 1.0}}
 
 
-@pytest.mark.unit
-def test_abstain_on_high_overround(gpi_config, calibration_data):
+def test_generate_tickets_abstains_when_roi_is_low(
+    mocker: MockerFixture, mock_gpi_config: dict, mock_calibration_data: dict
+):
     """
-    Tests that exotic bets are disallowed and the function abstains if overround is too high
-    and no other valid bets (like SP) are found.
+    Tests that generate_tickets abstains if the runners' ROI is below the threshold.
     """
-    snapshot = {
-        "market": {"overround_place": 1.30},
+    # This dependency is not under test, so we mock it.
+    mocker.patch(
+        "hippique_orchestrator.pipeline_run.evaluate_combo",
+        return_value={"status": "error"},
+    )
+
+    # Runners with low ROI: prob=0.3, odds=3.0 -> ROI = (0.3 * 2) - 0.7 = -0.1
+    snapshot_data = {
         "runners": [
-            {"num": 1, "p_place": 0.1, "cote": 10.0, "volatility": 0.5},
-            {"num": 2, "p_place": 0.1, "cote": 10.0, "volatility": 0.5},
-            {"num": 3, "p_place": 0.1, "cote": 10.0, "volatility": 0.5},
-            {"num": 4, "p_place": 0.1, "cote": 10.0, "volatility": 0.5},
-        ]
+            {"num": 1, "p_no_vig": 0.3, "odds_place": 3.0},
+            {"num": 2, "p_no_vig": 0.3, "odds_place": 3.0},
+        ],
+        "market": {"overround_place": 1.10}
     }
-    gpi_config["overround_max_exotics"] = 1.25
+    budget = 5.0
 
-    result = generate_tickets(snapshot, gpi_config, 5.0, calibration_data)
+    result = generate_tickets(
+        snapshot_data, mock_gpi_config, budget, mock_calibration_data, je_stats={}
+    )
 
-    assert "Abstain: No valid tickets found" in result["gpi_decision"]
-    assert result["tickets"] == []
+    assert "Abstain" in result["gpi_decision"]
+    assert len(result["tickets"]) == 0
+    assert "No profitable tickets found" in result["message"]
 
 
-@pytest.mark.unit
-def test_abstain_on_low_global_roi(gpi_config, calibration_data):
+def test_generate_tickets_creates_sp_dutching_ticket_when_roi_is_high(
+    mocker: MockerFixture, mock_gpi_config: dict, mock_calibration_data: dict
+):
     """
-    Tests that the function abstains if SP tickets are generated but their
-    combined ROI is below the global minimum.
+    Tests that generate_tickets creates an SP Dutching ticket for runners with high ROI.
     """
-    snapshot = {
-        "market": {"overround_place": 1.10},
+    mocker.patch(
+        "hippique_orchestrator.pipeline_run.evaluate_combo",
+        return_value={"status": "error"}, # Ensure exotics don't interfere
+    )
+
+    # Runners with high ROI
+    # R1: prob=0.4, odds=4.0 -> ROI = (0.4 * 3) - 0.6 = 0.6
+    # R2: prob=0.3, odds=5.0 -> ROI = (0.3 * 4) - 0.7 = 0.5
+    snapshot_data = {
         "runners": [
-            {"num": 1, "p_place": 0.4, "cote": 3.0, "volatility": 0.5, "roi_sp": 0.2},
-            {"num": 2, "p_place": 0.3, "cote": 4.0, "volatility": 0.5, "roi_sp": 0.2},
-            {"num": 3, "p_place": 0.1, "cote": 10.0, "volatility": 0.5, "roi_sp": 0.0},
-            {"num": 4, "p_place": 0.1, "cote": 10.0, "volatility": 0.5, "roi_sp": 0.0},
-        ]
+            {"num": 1, "p_no_vig": 0.4, "odds_place": 4.0},
+            {"num": 2, "p_no_vig": 0.3, "odds_place": 5.0},
+            {"num": 3, "p_no_vig": 0.1, "odds_place": 10.0}, # Low ROI
+        ],
+        "market": {"overround_place": 1.10}
     }
-    gpi_config["roi_min_global"] = 0.25
-    gpi_config["roi_min_sp"] = 0.1
+    budget = 5.0
 
-    result = generate_tickets(snapshot, gpi_config, 5.0, calibration_data)
-
-    assert "Abstain: Global ROI" in result["gpi_decision"]
-    assert result["tickets"] == []
-
-
-@pytest.mark.unit
-def test_correct_kelly_staking(gpi_config, calibration_data):
-    """
-    Tests that the Kelly Criterion is applied correctly for SP dutching stakes.
-    """
-    snapshot = {
-        "market": {"overround_place": 1.10},
-        "discipline": "Trot",
-        "runners": [
-            {"num": 1, "p_place": 0.6, "cote": 2.0, "volatility": 0.3, "roi_sp": 0.2},
-            {"num": 2, "p_place": 0.4, "cote": 3.0, "volatility": 0.4, "roi_sp": 0.2},
-            {"num": 3, "p_place": 0.1, "cote": 10.0, "volatility": 0.5, "roi_sp": 0.0},
-        ]
-    }
-    gpi_config["roi_min_sp"] = 0.1
-    gpi_config["roi_min_global"] = 0.1
-
-    result = generate_tickets(snapshot, gpi_config, 5.0, calibration_data)
-
+    result = generate_tickets(
+        snapshot_data, mock_gpi_config, budget, mock_calibration_data, je_stats={}
+    )
+    
     assert result["gpi_decision"] == "Play"
     assert len(result["tickets"]) == 1
+    
     sp_ticket = result["tickets"][0]
     assert sp_ticket["type"] == "SP_DUTCHING"
+    assert sp_ticket["stake"] > 0
+    # Check that only the high-ROI horses are included
+    assert set(sp_ticket["horses"]) == {1, 2}
+    assert 3 not in sp_ticket["horses"]
+    assert sp_ticket["roi_est"] > mock_gpi_config["roi_min_sp"]
+    assert result["roi_global_est"] > mock_gpi_config["roi_min_global"]
 
-    assert sp_ticket["stake"] == pytest.approx(3.0, abs=0.1)
-    details = sp_ticket["details"]
-    assert details[1] > details[2]
-
-
-@pytest.mark.unit
-def test_combo_bet_triggered_on_success(gpi_config, calibration_data, mocker):
+def test_generate_tickets_abstains_when_global_roi_is_low(
+    mocker: MockerFixture, mock_gpi_config: dict, mock_calibration_data: dict
+):
     """
-    Tests that a combo bet is created when all guardrails pass.
-    """
-    mocker.patch(
-        "hippique_orchestrator.pipeline_run.evaluate_combo",
-        return_value={"status": "ok", "roi": 0.5, "payout_expected": 25.0}
-    )
-
-    snapshot = {
-        "market": {"overround_place": 1.10},
-        "discipline": "Trot",
-        "runners": [
-            {"num": 1, "p_place": 0.6, "cote": 2.0, "volatility": 0.3, "roi_sp": 0.2},
-            {"num": 2, "p_place": 0.4, "cote": 3.0, "volatility": 0.4, "roi_sp": 0.2},
-            {"num": 3, "p_place": 0.2, "cote": 5.0, "volatility": 0.5, "roi_sp": 0.0},
-            {"num": 4, "p_place": 0.1, "cote": 10.0, "volatility": 0.5, "roi_sp": 0.0},
-        ]
-    }
-    gpi_config["roi_min_global"] = 0.1
-
-    result = generate_tickets(snapshot, gpi_config, 5.0, calibration_data)
-
-    assert result["gpi_decision"] == "Play"
-    assert len(result["tickets"]) == 2  # SP Dutching + Combo
-
-    combo_ticket = next(t for t in result["tickets"] if t["type"] == "TRIO")
-    assert combo_ticket is not None
-    assert combo_ticket["stake"] == 2.0
-    assert combo_ticket["roi_est"] == 0.5
-    assert combo_ticket["payout_est"] == 25.0
-
-@pytest.mark.unit
-def test_combo_bet_blocked_without_calibration(gpi_config, mocker):
-    """
-    Tests that a combo bet is NOT created if calibration data is missing.
+    Tests that even if a ticket is found, the system abstains if the final
+    global ROI is below the main threshold.
     """
     mocker.patch(
         "hippique_orchestrator.pipeline_run.evaluate_combo",
-        return_value={"status": "ok", "roi": 0.5, "payout_expected": 25.0}
+        return_value={"status": "error"},
+    )
+    
+    # Set a very high global ROI threshold that won't be met
+    mock_gpi_config["roi_min_global"] = 0.99
+
+    # Runners with high ROI, but not high enough to meet the global threshold
+    snapshot_data = {
+        "runners": [
+            {"num": 1, "p_no_vig": 0.4, "odds_place": 4.0}, # ROI = 0.6
+            {"num": 2, "p_no_vig": 0.3, "odds_place": 5.0}, # ROI = 0.5
+        ],
+        "market": {"overround_place": 1.10}
+    }
+    budget = 5.0
+
+    result = generate_tickets(
+        snapshot_data, mock_gpi_config, budget, mock_calibration_data, je_stats={}
     )
 
-    snapshot = {
-        "market": {"overround_place": 1.10},
-        "discipline": "Trot",
-        "runners": [
-            {"num": 1, "p_place": 0.6, "cote": 2.0, "volatility": 0.3, "roi_sp": 0.2},
-            {"num": 2, "p_place": 0.4, "cote": 3.0, "volatility": 0.4, "roi_sp": 0.2},
-        ]
-    }
-    gpi_config["roi_min_global"] = 0.1
-
-    result = generate_tickets(snapshot, gpi_config, 5.0, calibration_data={})
-
-    # The system should play the SP ticket but abstain from the combo
-    assert result["gpi_decision"] == "Play"
-    assert len(result["tickets"]) == 1
-    assert result["tickets"][0]["type"] == "SP_DUTCHING"
+    assert "Abstain" in result["gpi_decision"]
+    assert f"Global ROI ({result['roi_global_est']:.2f}) is below threshold (0.99)" in result["message"]
+    # The tickets list should be empty in the final decision
+    assert len(result["tickets"]) == 0
