@@ -146,8 +146,8 @@ def get_races_by_date_prefix(date_prefix: str) -> list[dict[str, Any]]:
         # Firestore "starts with" query for document IDs
         query = (
             races_ref
-            .where(firestore.FieldPath.document_id(), ">=", date_prefix)
-            .where(firestore.FieldPath.document_id(), "<", date_prefix + "\uf8ff")
+            .where(firestore.Client.DOCUMENT_ID, ">=", date_prefix)
+            .where(firestore.Client.DOCUMENT_ID, "<", date_prefix + "\uf8ff")
         )
 
         docs_stream = query.stream()
