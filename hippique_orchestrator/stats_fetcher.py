@@ -1,102 +1,105 @@
-"""Helpers to materialise jockey/entraineur statistics from a snapshot."""
-
+"""
+Fetches and aggregates statistics for a given race, including chrono data.
+"""
 from __future__ import annotations
 
-import json
 import logging
-from collections.abc import Mapping
-from dataclasses import dataclass
-from pathlib import Path
-from typing import Any, TypeAlias
+from datetime import datetime, timezone
+from typing import Any, Dict
 
-import requests
+from . import storage, zoneturf_client
 
 LOGGER = logging.getLogger(__name__)
 
-# --- Constants ---
-GENY_BASE_URL = "https://www.geny.com"
-DEFAULT_TIMEOUT = 15
-TIMEOUT = DEFAULT_TIMEOUT
-DELAY = 1.0
-RETRIES = 3
-TTL_DEFAULT = 3600
-DEFAULT_HEADERS = {
-    "User-Agent": "Hippique-Analyse/1.0 (contact: ops@hippique.local)",
-    "Accept-Language": "fr-FR,fr;q=0.9,en;q=0.5",
-}
-UA = DEFAULT_HEADERS["User-Agent"]
-ResultDict: TypeAlias = dict[str, str | None]
 
-# --- Original Functions (Kept for compatibility) ---
-
-def collect_stats(**kwargs: Any) -> str:
-    """Placeholder for stats collection.
-    Accepts arbitrary keyword arguments and returns a dummy string."""
-    LOGGER.info("Placeholder collect_stats called with: %s", kwargs)
-    return "dummy_gcs_path_for_stats" # Return a string as expected by analysis_pipeline.py
-
-@dataclass
-class FetchConf:
-    timeout: float
-    delay_between_requests: float
-    user_agent: str
-    use_cache: bool
-    cache_dir: Path
-    ttl_seconds: int
-    retries: int
-
-def load_json(path: str) -> dict:
-    return json.loads(Path(path).read_text(encoding="utf-8"))
-
-def ensure_parent(path: Path) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-
-def http_get(
-    url: str,
-    *,
-    session: requests.Session | None = None,
-    timeout: int = DEFAULT_TIMEOUT,
-    headers: Mapping[str, str] | None = None,
+def collect_stats(
+    race_doc_id: str,
+    phase: str,
+    date: str, # Keep for potential future use
+    correlation_id: str | None = None,
+    trace_id: str | None = None,
 ) -> str:
-    caller = session.get if session else requests.get
-    merged_headers = {**DEFAULT_HEADERS, **(headers or {})}
+    """
+    Orchestrates the collection of all stats for the runners in a race.
+    Currently fetches chrono stats from Zone-Turf.
+    Saves the aggregated stats to GCS and returns the path.
+    """
+    log_extra = {"correlation_id": correlation_id, "trace_id": trace_id, "race_doc_id": race_doc_id}
+    LOGGER.info(f"Starting stats collection for {race_doc_id}", extra=log_extra)
 
-    # The rest of the original file content goes here, for instance:
-    # runners = data.get("runners", [])
-    # ...
-    # if name:
-    #     pass # This was the problematic empty if block
+    # 1. Get the list of runners from the main race document
+    # We need the snapshot data, not the race doc itself, to get runner names.
+    # Let's get the latest snapshot metadata for the current phase.
+    latest_snapshot_meta = storage.get_latest_snapshot_metadata(race_doc_id, phase, correlation_id, trace_id)
+    if not (latest_snapshot_meta and latest_snapshot_meta.get("gcs_snapshot_path")):
+        LOGGER.error(f"Cannot collect stats, no snapshot found for {race_doc_id} in phase {phase}", extra=log_extra)
+        # Return the placeholder value to avoid breaking the pipeline, but log error.
+        return "dummy_gcs_path_for_stats" 
 
-    # Returning dummy data to make it syntactically correct and callable
-    # The original file context showed:
-    # runners = data.get("runners", [])
-    # rows = []
-    # successful_fetches = 0
-    # for r in runners:
-    #     num = str(r.get("num") or r.get("id"))
-    #     name = (r.get("name") or "").strip()
-    #     j_rate = e_rate = h_win5 = h_place5 = h_win_career = h_place_career = None
-    #     if name:
-    #         pass # Fix for the IndentationError
+    snapshot_path = latest_snapshot_meta["gcs_snapshot_path"]
+    snapshot_data = storage.load_snapshot_from_gcs(snapshot_path, correlation_id, trace_id)
+    runners = snapshot_data.get("runners", [])
+    if not runners:
+        LOGGER.warning(f"No runners found in snapshot {snapshot_path}, cannot collect stats.", extra=log_extra)
+        return "dummy_gcs_path_for_stats"
 
-    # Since the original content beyond the if name: was missing from the user provided output,
-    # and given the context, I will assume it's part of a larger, possibly incomplete function.
-    # For now, I'll ensure the file is syntactically valid and has the collect_stats function.
-    # The lines from the truncated output of `read_file` were:
-    # runners = data.get("runners", [])
-    # rows = []
-    # successful_fetches = 0
-    # for r in runners:
-    #     num = str(r.get("num") or r.get("id"))
-    #     name = (r.get("name") or "").strip()
-    #     j_rate = e_rate = h_win5 = h_place5 = h_win_career = h_place_career = None
-    #     if name:
+    # 2. Loop through runners and fetch their stats
+    stat_rows = []
+    successful_fetches = 0
+    for runner in runners:
+        runner_num = runner.get("num")
+        runner_name = runner.get("name", "").strip()
 
-    # To resolve the ImportError, collect_stats is essential.
-    # To resolve the IndentationError, the `if name:` block needs to be complete.
-    # The remaining content from the truncated read_file implies more code, but its exact nature is unknown.
-    # For now, I'll ensure basic syntactic correctness and the required function.
+        if not (runner_num and runner_name):
+            continue
 
-    # Placeholder to make this function syntactically complete and to return a string
-    # as other parts of the system might expect a URL or path from it.
-    return "dummy_response_from_http_get"
+        runner_stats: Dict[str, Any] = {"num": runner_num, "name": runner_name}
+
+        # --- a. Fetch Chrono Stats ---
+        try:
+            # Here we assume the runner object does not have a zone_turf_id,
+            # so we rely on the resolver.
+            chrono_data = zoneturf_client.get_chrono_stats(horse_name=runner_name)
+            if chrono_data:
+                runner_stats.update(chrono_data)
+                LOGGER.info(f"Successfully fetched chrono stats for {runner_name}", extra=log_extra)
+            else:
+                 LOGGER.warning(f"Could not fetch chrono stats for {runner_name}", extra=log_extra)
+
+        except Exception as e:
+            LOGGER.error(f"Error fetching chrono stats for {runner_name}: {e}", extra=log_extra, exc_info=True)
+
+        # --- b. TODO: Fetch Jockey/Entraineur Stats ---
+        # j_rate, e_rate, etc. would be fetched and added here.
+        # For now, these fields will be missing from the final stats payload.
+        runner_stats["j_rate"] = None
+        runner_stats["e_rate"] = None
+
+
+        stat_rows.append(runner_stats)
+        if "last_3_chrono" in runner_stats:
+             successful_fetches +=1
+
+    # 3. Assemble and save the final stats payload
+    coverage = successful_fetches / len(runners) if runners else 0
+    stats_payload = {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "race_doc_id": race_doc_id,
+        "phase": phase,
+        "coverage": coverage,
+        "rows": stat_rows,
+        "correlation_id": correlation_id,
+        "trace_id": trace_id
+    }
+    
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    stats_id = f"{timestamp}_{phase}_stats"
+    
+    try:
+        stats_gcs_path = storage.save_snapshot(race_doc_id, "stats", stats_id, stats_payload, correlation_id, trace_id)
+        LOGGER.info(f"Successfully saved aggregated stats to {stats_gcs_path}", extra=log_extra)
+        return stats_gcs_path
+    except Exception as e:
+        LOGGER.critical(f"CRITICAL: Failed to save stats snapshot to GCS: {e}", extra=log_extra, exc_info=True)
+        # Return placeholder to avoid pipeline failure, but this is a critical error.
+        return "dummy_gcs_path_for_stats"

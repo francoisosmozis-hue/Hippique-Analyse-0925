@@ -27,3 +27,12 @@ tickets:
     type: "TRIO"
     legs_count: 4
     stake_eur: 2.0
+
+# -- Probability Adjustments (v5.1 spec) --
+adjustments:
+  chrono:
+    k_c: 0.18
+  drift:
+    k_d: 0.70
+    k_d_fav_drift: 0.90
+    k_d_out_steam: 0.85

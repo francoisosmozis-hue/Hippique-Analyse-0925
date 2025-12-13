@@ -129,7 +129,23 @@ def process_single_course_analysis(
             stats_payload = {"coverage": coverage, **mapped_stats}
 
 
-            # 3b. Generate tickets
+            # 3b. Load H-30 data for Drift calculation if in H-5 phase
+            h30_snapshot_data = None
+            if phase == "H5":
+                logger.info("H5 phase: trying to load H30 snapshot for drift analysis.", extra=log_extra)
+                try:
+                    h30_metadata = storage.get_latest_snapshot_metadata(race_doc_id, "H30", correlation_id, trace_id)
+                    if h30_metadata and "gcs_snapshot_path" in h30_metadata:
+                        h30_path = h30_metadata["gcs_snapshot_path"]
+                        logger.info(f"Found H30 snapshot at {h30_path}", extra=log_extra)
+                        h30_snapshot_data = storage.load_snapshot_from_gcs(h30_path, correlation_id, trace_id)
+                    else:
+                        logger.warning("H30 snapshot metadata not found for drift analysis.", extra=log_extra)
+                except Exception as e:
+                    logger.error(f"Failed to load H30 snapshot: {e}", exc_info=True, extra=log_extra)
+
+
+            # 3c. Generate tickets
             gpi_config = storage.get_gpi_config(correlation_id=correlation_id, trace_id=trace_id)
             calibration_data = storage.get_calibration_config(correlation_id=correlation_id, trace_id=trace_id)
             logger.info(f"Step 3: Calling generate_tickets for {race_doc_id}.", extra=log_extra)
@@ -139,7 +155,7 @@ def process_single_course_analysis(
                 budget=budget,
                 calibration_data=calibration_data,
                 je_stats=stats_payload,
-                allow_heuristic=False
+                h30_snapshot_data=h30_snapshot_data
             )
             logger.info(f"Step 3: generate_tickets returned: {analysis_result.get('gpi_decision')}. Tickets count: {len(analysis_result.get('tickets', []))}", extra=log_extra)
 
