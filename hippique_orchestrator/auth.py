@@ -81,7 +81,8 @@ async def auth_middleware(request: Request, call_next):
         "/docs",
         "/openapi.json",
         "/pronostics",
-        "/pronostics/ui"
+        "/pronostics/ui",
+        "/debug/",
     ]
 
     # If auth is disabled globally, or if the path is public, skip validation
