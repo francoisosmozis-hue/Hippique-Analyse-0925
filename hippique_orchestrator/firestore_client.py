@@ -20,15 +20,15 @@ def _get_firestore_client(project_id: str | None = None):
     """
     global _firestore_client
     if _firestore_client is None:
+        logger.debug("Firestore client is None, attempting to initialize.")
         current_config = get_config()
         if not current_config.USE_FIRESTORE:
             logger.info("Firestore operations are disabled via configuration (USE_FIRESTORE=False).")
             return None
 
         try:
-            # Explicitly pass the project_id to the client constructor
-            # Fallback to config.PROJECT_ID if project_id is None
             resolved_project_id = project_id if project_id else current_config.PROJECT_ID
+            logger.debug(f"Attempting to initialize Firestore client for project '{resolved_project_id}'.")
             _firestore_client = firestore.Client(project=resolved_project_id)
             logger.info(f"Firestore client initialized successfully for project '{resolved_project_id}'.")
         except Exception as e:
@@ -99,6 +99,7 @@ def get_race_document(collection: str, document_id: str) -> dict[str, Any] | Non
     """
     Retrieves a document from a Firestore collection.
     """
+    logger.debug(f"Attempting to get document '{document_id}' from collection '{collection}'.")
     if not is_firestore_enabled():
         logger.warning("Firestore is not enabled, cannot get document.")
         return None
@@ -106,13 +107,18 @@ def get_race_document(collection: str, document_id: str) -> dict[str, Any] | Non
     config = get_config()
     client = _get_firestore_client(project_id=config.PROJECT_ID)
     if not client:
-        logger.error("Firestore client not available.")
+        logger.error("Firestore client not available for get_race_document.")
         return None
+    logger.debug("Firestore client is available.")
 
     try:
+        logger.debug(f"Getting reference for document '{document_id}'.")
         doc_ref = client.collection(collection).document(document_id)
+        logger.debug(f"Calling doc_ref.get() for document '{document_id}'.")
         doc = doc_ref.get()
+        logger.debug(f"doc_ref.get() returned. doc.exists: {doc.exists}")
         if doc.exists:
+            logger.debug(f"Document '{document_id}' exists.")
             return doc.to_dict()
         else:
             logger.info(f"Document {document_id} not found in collection {collection}.")
