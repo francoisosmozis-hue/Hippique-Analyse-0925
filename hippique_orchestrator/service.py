@@ -13,7 +13,7 @@ from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, Request, status
+from fastapi import APIRouter, BackgroundTasks, FastAPI, HTTPException, Query, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
@@ -42,6 +42,8 @@ app = FastAPI(
     description="Cloud Run service for automated horse racing analysis (GPI v5.2)",
     version="2.1.0",
 )
+
+app.include_router(api_router)
 
 # ============================================
 # Request/Response Models
@@ -82,15 +84,17 @@ async def log_requests(request: Request, call_next):
         )
 
 # ============================================
-# Endpoints
+# API Router
 # ============================================
 
-@app.get("/pronostics/ui", response_class=HTMLResponse)
+api_router = APIRouter(prefix="/api")
+
+@api_router.get("/pronostics/ui", response_class=HTMLResponse)
 async def pronostics_ui(request: Request):
     """Serves the main HTML page for pronostics."""
     return templates.TemplateResponse("pronostics.html", {"request": request})
 
-@app.get("/pronostics")
+@api_router.get("/pronostics")
 async def get_pronostics(date: str | None = Query(default=None, description="Date in YYYY-MM-DD format. Defaults to today (Paris time).")):
 
     date_to_use = date
