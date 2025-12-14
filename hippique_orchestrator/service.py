@@ -284,14 +284,18 @@ async def debug_get_race_document(race_doc_id: str):
     log_extra = {"correlation_id": correlation_id, "race_doc_id": race_doc_id}
     logger.info(f"Fetching race document: {race_doc_id} from Firestore via debug endpoint", extra=log_extra)
 
-    logger.debug(f"Calling firestore_client.get_race_document for {race_doc_id}", extra=log_extra)
-    doc = firestore_client.get_race_document("races", race_doc_id)
-    logger.debug(f"firestore_client.get_race_document returned: {doc}", extra=log_extra)
-    if doc:
-        return {"ok": True, "race_doc_id": race_doc_id, "data": doc}
-    else:
-        # This will now correctly raise a 404 if the document is not found
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Race document '{race_doc_id}' not found.")
+    try:
+        logger.debug(f"Calling firestore_client.get_race_document for {race_doc_id}", extra=log_extra)
+        doc = firestore_client.get_race_document("races", race_doc_id)
+        logger.debug(f"firestore_client.get_race_document returned: {doc}", extra=log_extra)
+        if doc:
+            return {"ok": True, "race_doc_id": race_doc_id, "data": doc}
+        else:
+            # This will now correctly raise a 404 if the document is not found
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Race document '{race_doc_id}' not found.")
+    except Exception as e:
+        logger.error(f"An unexpected error occurred in debug_get_race_document: {e}", exc_info=True, extra=log_extra)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"An unexpected error occurred while fetching race document {race_doc_id}.")
 
 # ============================================
 # Core Logic (used by startup and endpoints)
