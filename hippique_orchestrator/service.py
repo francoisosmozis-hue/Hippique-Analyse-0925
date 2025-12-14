@@ -295,7 +295,7 @@ async def debug_get_race_document(race_doc_id: str):
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Race document '{race_doc_id}' not found.")
     except Exception as e:
         logger.error(f"An unexpected error occurred in debug_get_race_document: {e}", exc_info=True, extra=log_extra)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"An unexpected error occurred while fetching race document {race_doc_id}: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"An unexpected error occurred while fetching race document {race_doc_id}.")
 
 # ============================================
 # Core Logic (used by startup and endpoints)
