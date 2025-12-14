@@ -43,8 +43,6 @@ app = FastAPI(
     version="2.1.0",
 )
 
-app.include_router(api_router)
-
 # ============================================
 # Request/Response Models
 # ============================================
@@ -150,6 +148,9 @@ async def get_pronostics(date: str | None = Query(default=None, description="Dat
     except Exception:
         logger.error("Error fetching pronostics from Firestore", exc_info=True, extra=log_extra)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to fetch pronostics from Firestore.")
+
+
+app.include_router(api_router)
 
 
 @app.get("/ping")
