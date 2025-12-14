@@ -17,7 +17,7 @@ def test_api_pronostics_no_data(client, mocker):
     mocker.patch("hippique_orchestrator.firestore_client.get_races_by_date_prefix", return_value=[])
 
     # Test without date parameter (uses default today)
-    response = client.get("/pronostics")
+    response = client.get("/api/pronostics")
     assert response.status_code == 200
     data = response.json()
     assert data["ok"] is True
@@ -25,9 +25,7 @@ def test_api_pronostics_no_data(client, mocker):
     assert data["pronostics"] == []
     assert "date" in data # Ensure date used is returned
 
-    # Test with a specific date
-    mock_date_str = "2025-12-07"
-    response = client.get(f"/pronostics?date={mock_date_str}")
+response = client.get(f"/api/pronostics?date={mock_date_str}")
     assert response.status_code == 200
     data = response.json()
     assert data["ok"] is True
@@ -53,9 +51,7 @@ def test_api_pronostics_with_mock_data(client, mocker):
         }
     }
 
-    mocker.patch("hippique_orchestrator.firestore_client.get_races_by_date_prefix", return_value=[mock_firestore_doc])
-
-    response = client.get(f"/pronostics?date={mock_date_str}")
+response = client.get(f"/api/pronostics?date={mock_date_str}")
     assert response.status_code == 200
 
     data = response.json()
@@ -88,9 +84,7 @@ def test_api_pronostics_handles_malformed_doc(client, mocker):
         "some_other_field": {} # Missing 'tickets_analysis'
     }
 
-    mocker.patch("hippique_orchestrator.firestore_client.get_races_by_date_prefix", return_value=[valid_doc, malformed_doc])
-
-    response = client.get(f"/pronostics?date={mock_date_str}")
+response = client.get(f"/api/pronostics?date={mock_date_str}")
 
     assert response.status_code == 200
     data = response.json()
@@ -128,7 +122,7 @@ def test_api_pronostics_invalid_date_format(client):
     Tests that the /pronostics endpoint returns a 422 error for an invalid
     date format.
     """
-    response = client.get("/pronostics?date=not-a-date")
+    response = client.get("/api/pronostics?date=not-a-date")
     assert response.status_code == 422
     assert "invalid date format" in response.json()["detail"].lower()
 

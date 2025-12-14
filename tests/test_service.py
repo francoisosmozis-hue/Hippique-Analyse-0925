@@ -194,7 +194,7 @@ def test_pronostics_ui_endpoint_public(client, mocker):
     """
     mocker.patch("hippique_orchestrator.auth.config.REQUIRE_AUTH", True)
 
-    response = client.get("/pronostics/ui")
+    response = client.get("/api/pronostics/ui")
 
     # Expect 200 OK because this is a public path
     assert response.status_code == 200
