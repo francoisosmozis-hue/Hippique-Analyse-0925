@@ -54,9 +54,12 @@ def process_single_course_analysis(
     log_extra = {"correlation_id": correlation_id, "trace_id": trace_id, "race_doc_id": race_doc_id}
 
     try:
+        # --- Pre-Step: Load GPI config for data source ---
+        gpi_config = storage.get_gpi_config(correlation_id=correlation_id, trace_id=trace_id)
+        
         # --- Step 1: Scrape race data ---
         logger.info(f"Step 1: Fetching {reunion}{course} from data source for phase {phase}", extra=log_extra)
-        programme_url = "https://www.boturfers.fr/programme-pmu-du-jour" # Corrected typo in URL
+        programme_url = gpi_config.get("data_sources", {}).get("programme_url", "https://www.boturfers.fr/programme-pmu-du-jour")
         programme_data = data_source.fetch_programme(programme_url, correlation_id=correlation_id, trace_id=trace_id)
 
         target_rc = f"{reunion}{course}".replace(" ", "")
