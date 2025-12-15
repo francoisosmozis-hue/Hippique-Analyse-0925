@@ -36,3 +36,12 @@ adjustments:
     k_d: 0.70
     k_d_fav_drift: 0.90
     k_d_out_steam: 0.85
+
+# -- Probability adjustment weights --
+weights:
+  base:
+    je_bonus: 1.10
+    je_malus: 0.90
+  horse_stats:
+    # Placeholder for future expansion
+    some_stat_factor: 1.0
