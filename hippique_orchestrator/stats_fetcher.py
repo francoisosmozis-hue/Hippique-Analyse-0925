@@ -1,15 +1,13 @@
 """
-Fetches and aggregates statistics for a given race, using the new StatsProvider architecture.
+Fetches and aggregates statistics for a given race, including chrono data.
 """
 from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Dict
 
-from . import storage
-from .config import get_config
-from .stats_provider import ZoneTurfProvider
+from . import storage, zoneturf_client
 
 LOGGER = logging.getLogger(__name__)
 
@@ -22,16 +20,20 @@ def collect_stats(
     trace_id: str | None = None,
 ) -> str:
     """
-    Orchestrates the collection of all stats for the runners in a race using a StatsProvider.
+    Orchestrates the collection of all stats for the runners in a race.
+    Currently fetches chrono stats from Zone-Turf.
     Saves the aggregated stats to GCS and returns the path.
     """
     log_extra = {"correlation_id": correlation_id, "trace_id": trace_id, "race_doc_id": race_doc_id}
-    LOGGER.info(f"Starting stats collection for {race_doc_id} using StatsProvider", extra=log_extra)
+    LOGGER.info(f"Starting stats collection for {race_doc_id}", extra=log_extra)
 
-    # 1. Load snapshot data to get runner list
+    # 1. Get the list of runners from the main race document
+    # We need the snapshot data, not the race doc itself, to get runner names.
+    # Let's get the latest snapshot metadata for the current phase.
     latest_snapshot_meta = storage.get_latest_snapshot_metadata(race_doc_id, phase, correlation_id, trace_id)
     if not (latest_snapshot_meta and latest_snapshot_meta.get("gcs_snapshot_path")):
         LOGGER.error(f"Cannot collect stats, no snapshot found for {race_doc_id} in phase {phase}", extra=log_extra)
+        # Return the placeholder value to avoid breaking the pipeline, but log error.
         return "dummy_gcs_path_for_stats" 
 
     snapshot_path = latest_snapshot_meta["gcs_snapshot_path"]
@@ -41,54 +43,44 @@ def collect_stats(
         LOGGER.warning(f"No runners found in snapshot {snapshot_path}, cannot collect stats.", extra=log_extra)
         return "dummy_gcs_path_for_stats"
 
-    # 2. Instantiate the provider
-    config = get_config()
-    zt_config = config.data_sources.get("zoneturf", {})
-    provider = ZoneTurfProvider(config=zt_config)
-
-    # 3. Loop through runners and fetch their stats
+    # 2. Loop through runners and fetch their stats
     stat_rows = []
     successful_fetches = 0
     for runner in runners:
         runner_num = runner.get("num")
-        horse_name = runner.get("name", "").strip()
-        jockey_name = runner.get("jockey", "").strip()
-        trainer_name = runner.get("entraineur", "").strip()
+        runner_name = runner.get("name", "").strip()
 
-        if not all([runner_num, horse_name, jockey_name, trainer_name]):
+        if not (runner_num and runner_name):
             continue
 
-        # Using the user-defined JSON contract for the output structure
-        # We assume no known_ids are passed for now, forcing resolution
-        jockey_stats = provider.fetch_jockey_stats(jockey_name=jockey_name)
-        trainer_stats = provider.fetch_trainer_stats(trainer_name=trainer_name)
-        chrono_stats = provider.fetch_horse_chrono(horse_name=horse_name)
+        runner_stats: Dict[str, Any] = {"num": runner_num, "name": runner_name}
 
-        # Assemble the row as per the new contract
-        runner_output = {
-            "num": runner_num,
-            "horse_name": horse_name,
-            "jockey_name": jockey_name,
-            "trainer_name": trainer_name,
-            "jockey_stats": jockey_stats.model_dump() if jockey_stats else None,
-            "trainer_stats": trainer_stats.model_dump() if trainer_stats else None,
-            "chrono": chrono_stats.model_dump() if chrono_stats else None,
-            "quality": {
-                "complete": all([jockey_stats, trainer_stats, chrono_stats]),
-                "missing_fields": [
-                    field for field, data in [
-                        ("jockey_stats", jockey_stats), 
-                        ("trainer_stats", trainer_stats), 
-                        ("chrono", chrono_stats)
-                    ] if not data
-                ]
-            }
-        }
-        stat_rows.append(runner_output)
-        if runner_output["quality"]["complete"]:
-            successful_fetches += 1
+        # --- a. Fetch Chrono Stats ---
+        try:
+            # Here we assume the runner object does not have a zone_turf_id,
+            # so we rely on the resolver.
+            chrono_data = zoneturf_client.get_chrono_stats(horse_name=runner_name)
+            if chrono_data:
+                runner_stats.update(chrono_data)
+                LOGGER.info(f"Successfully fetched chrono stats for {runner_name}", extra=log_extra)
+            else:
+                 LOGGER.warning(f"Could not fetch chrono stats for {runner_name}", extra=log_extra)
 
-    # 4. Assemble and save the final stats payload
+        except Exception as e:
+            LOGGER.error(f"Error fetching chrono stats for {runner_name}: {e}", extra=log_extra, exc_info=True)
+
+        # --- b. TODO: Fetch Jockey/Entraineur Stats ---
+        # j_rate, e_rate, etc. would be fetched and added here.
+        # For now, these fields will be missing from the final stats payload.
+        runner_stats["j_rate"] = None
+        runner_stats["e_rate"] = None
+
+
+        stat_rows.append(runner_stats)
+        if "last_3_chrono" in runner_stats:
+             successful_fetches +=1
+
+    # 3. Assemble and save the final stats payload
     coverage = successful_fetches / len(runners) if runners else 0
     stats_payload = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -109,4 +101,5 @@ def collect_stats(
         return stats_gcs_path
     except Exception as e:
         LOGGER.critical(f"CRITICAL: Failed to save stats snapshot to GCS: {e}", extra=log_extra, exc_info=True)
+        # Return placeholder to avoid pipeline failure, but this is a critical error.
         return "dummy_gcs_path_for_stats"
