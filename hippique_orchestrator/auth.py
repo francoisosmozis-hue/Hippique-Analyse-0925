@@ -57,8 +57,16 @@ class OIDCValidator:
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
-# Singleton instance of the validator
-oidc_validator = OIDCValidator(audience=config.OIDC_AUDIENCE)
+# Singleton instance of the validator - initialized only if needed
+oidc_validator: OIDCValidator | None = None
+if config.REQUIRE_AUTH:
+    try:
+        oidc_validator = OIDCValidator(audience=config.OIDC_AUDIENCE)
+    except ValueError as e:
+        logger.error(f"Failed to initialize OIDCValidator: {e}", exc_info=True)
+        # Depending on strictness, you might want to exit here if auth is required but misconfigured
+        # For now, we log the error, and it will fail at runtime if an auth-protected route is hit.
+        pass
 
 async def verify_oidc_token(request: Request):
     """
@@ -66,8 +74,11 @@ async def verify_oidc_token(request: Request):
     It inspects the Authorization header for a Bearer token.
     """
     if config.REQUIRE_AUTH:
+        if not oidc_validator:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="OIDC Validator is not configured.")
         auth_header: HTTPAuthorizationCredentials = await oidc_scheme(request)
-        await oidc_validator.validate(auth_header.credentials)
+        if auth_header:
+            await oidc_validator.validate(auth_header.credentials)
 
 async def auth_middleware(request: Request, call_next):
     """
@@ -80,17 +91,24 @@ async def auth_middleware(request: Request, call_next):
         "/health",
         "/docs",
         "/openapi.json",
-        "/pronostics",
-        "/pronostics/ui",
-        "/debug/",
+        # Allow accessing pronostics data without auth
         "/api/pronostics",
+        # Keep debug endpoints accessible, especially for local/staging
+        "/debug/",
     ]
+    
+    # FastAPI's router registers UI paths like /api/pronostics/ui, not needed to list twice
+    # Static files are also typically handled separately and don't need to be in this list.
 
     # If auth is disabled globally, or if the path is public, skip validation
-    if not config.REQUIRE_AUTH or request.url.path in public_paths or any(request.url.path.startswith(p) for p in public_paths if p.endswith('/')):
+    path = request.url.path
+    if not config.REQUIRE_AUTH or any(path.startswith(p) for p in public_paths):
         return await call_next(request)
 
     try:
+        if not oidc_validator:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="OIDC Validator is not configured.")
+            
         # For protected paths, extract and validate the token
         auth_header = request.headers.get("Authorization")
         if not auth_header or not auth_header.startswith("Bearer "):
