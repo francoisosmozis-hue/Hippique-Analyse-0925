@@ -72,7 +72,10 @@ async def build_plan_async(date: str) -> list[dict[str, Any]]:
     logger.info(f"Building plan for {date} using Boturfers as the single source.")
 
     # 1. Obtenir le programme depuis la source de données (Boturfers)
-    programme_url = "https://www.boturfers.fr/programme-pmu-du-jour"
+    if date == datetime.now().strftime("%Y-%m-%d"):
+        programme_url = "https://www.boturfers.fr/programme-pmu-du-jour"
+    else:
+        programme_url = f"https://www.boturfers.fr/courses/{date}"
     source_data = await asyncio.to_thread(data_source.fetch_programme, programme_url)
 
     if not source_data or not source_data.get("races"):
