@@ -1,18 +1,17 @@
 from __future__ import annotations
 
 import json
-import re
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+import google.auth
 from google.api_core import exceptions as gcp_exceptions
 from google.cloud import tasks_v2
 from google.protobuf import timestamp_pb2
-import google.auth
 
 from hippique_orchestrator.config import get_config
 from hippique_orchestrator.logging_utils import get_logger
-from hippique_orchestrator.time_utils import convert_local_to_utc, format_rfc3339
+from hippique_orchestrator.time_utils import convert_local_to_utc
 
 config = get_config()
 logger = get_logger(__name__)
@@ -37,16 +36,16 @@ def enqueue_run_task(
 ) -> str | None:
     """Crée une Cloud Task pour exécuter une analyse de course."""
     log_extra = {"correlation_id": correlation_id, "trace_id": trace_id}
-    
+
     try:
         task_name_short = _generate_task_name(date, r_label, c_label, phase)
-        
+
         creds, inferred_project = google.auth.default()
-        
+
         project_id = config.PROJECT_ID or inferred_project
         location = config.REGION
         queue = config.QUEUE_ID
-        
+
         parent = client.queue_path(project_id, location, queue)
         task_name_full = client.task_path(project_id, location, queue, task_name_short)
 
@@ -68,9 +67,9 @@ def enqueue_run_task(
 
         timestamp = timestamp_pb2.Timestamp()
         timestamp.FromDatetime(snapshot_time_utc)
-        
+
         payload = {"course_url": course_url, "phase": phase, "date": date, "trace_id": trace_id}
-        
+
         task = {
             "name": task_name_full,
             "http_request": {
@@ -85,11 +84,11 @@ def enqueue_run_task(
             "schedule_time": timestamp
         }
         logger.critical(f"--- Enqueueing task with parent: {parent} ---", extra=log_extra)
-        
+
         response = client.create_task(parent=parent, task=task)
         logger.info(f"Task created: {response.name}")
         return response.name
-        
+
     except Exception as e:
         logger.error(f"Failed to create task: {e}", exc_info=True, extra=log_extra)
         return None
@@ -98,7 +97,7 @@ def schedule_all_races(
     plan: list[dict], mode: str, correlation_id: str, trace_id: str
 ) -> list[dict[str, Any]]:
     log_extra = {"correlation_id": correlation_id, "trace_id": trace_id}
-    
+
     try:
         client = tasks_v2.CloudTasksClient()
     except Exception as e:
@@ -120,5 +119,5 @@ def schedule_all_races(
                 trace_id=trace_id,
             ) is not None
             results.append({"phase": phase, "ok": task_ok})
-            
+
     return results

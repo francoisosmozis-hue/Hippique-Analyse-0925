@@ -6,8 +6,6 @@ import sys
 from itertools import combinations
 from typing import Any
 
-import yaml
-
 # --- Project Root and Configuration Setup ---
 PROJECT_ROOT = pathlib.Path(__file__).resolve().parent
 if str(PROJECT_ROOT) not in sys.path:
@@ -52,7 +50,7 @@ def _normalize_probs(probs: list[float]) -> list[float]:
 
 def _apply_base_stat_adjustment(runners: list[dict], je_stats: dict, weights: dict) -> list[float]:
     """Applies JE and Horse Stats adjustments to base probabilities. Returns UNNORMALIZED probabilities."""
-    
+
     def get_je_factor(runner_stats: dict, je_weights: dict) -> float:
         je_bonus = je_weights.get("je_bonus", 1.0)
         je_malus = je_weights.get("je_malus", 1.0)
@@ -79,13 +77,13 @@ def _apply_base_stat_adjustment(runners: list[dict], je_stats: dict, weights: di
         p_base = runner["p_base"]
         runner_num = str(runner.get("num"))
         runner_je_stats = je_stats.get(runner_num, {})
-        
+
         factor = 1.0
         factor *= get_je_factor(runner_je_stats, je_weights)
         factor *= get_horse_stats_factor(runner_je_stats, horse_weights)
-        
+
         adjusted_probs.append(p_base * factor)
-        
+
     return adjusted_probs
 
 
@@ -96,7 +94,7 @@ def _apply_chrono_adjustment(runners: list[dict], je_stats: dict, chrono_config:
     """
     k_c = chrono_config.get("k_c", 0.18)
     factors = []
-    
+
     best_chronos = []
     for runner in runners:
         runner_num = str(runner.get("num"))
@@ -105,7 +103,7 @@ def _apply_chrono_adjustment(runners: list[dict], je_stats: dict, chrono_config:
         last_3_chrono = runner_je_stats.get("last_3_chrono", [])
         if last_3_chrono and isinstance(last_3_chrono, list) and all(isinstance(i, (int, float)) for i in last_3_chrono):
             best_chronos.append((runner["num"], min(last_3_chrono)))
-    
+
     if not best_chronos:
         return [1.0] * len(runners)
 
@@ -120,15 +118,15 @@ def _apply_chrono_adjustment(runners: list[dict], je_stats: dict, chrono_config:
         if rk_best3 is None:
             factors.append(1.0)
             continue
-            
+
         z_chrono = _clamp((rk_median - rk_best3) / 0.5, -2.0, 2.0)
         f_chrono = _clamp(math.exp(k_c * z_chrono), 0.85, 1.25)
-        
+
         if rk_best3 > rk_median + 1.0:
             f_chrono = min(f_chrono, 0.92)
 
         factors.append(f_chrono)
-        
+
     return factors
 
 
@@ -136,7 +134,7 @@ def _apply_drift_adjustment(runners: list[dict], h30_odds_map: dict, drift_confi
     """Applies odds drift adjustment factor based on GPI v5.1 spec."""
     k_d_default = drift_config.get("k_d", 0.70)
     factors = []
-    
+
     for runner in runners:
         runner_num = runner.get("num")
         odds_5 = runner.get("odds_place")
@@ -159,7 +157,7 @@ def _apply_drift_adjustment(runners: list[dict], h30_odds_map: dict, drift_confi
             k_d = drift_config.get("k_d_out_steam", 0.85)
 
         f_drift = _clamp(math.exp(-k_d * r), 0.80, 1.20)
-        
+
         if odds_30 > 60 or odds_5 > 60:
             f_drift = _clamp(f_drift, 0.90, 1.10)
         if (odds_5 / odds_30) > 1.80:
@@ -221,11 +219,11 @@ def generate_tickets(
 
     # 2b. Apply base stats adjustments (JE, Horse)
     p_adjusted_stat = _apply_base_stat_adjustment(runners, je_stats, weights)
-    
+
     # 2c. Apply chrono adjustments
     chrono_factors = _apply_chrono_adjustment(runners, je_stats, chrono_config)
-    p_adjusted_chrono = [p * f for p, f in zip(p_adjusted_stat, chrono_factors)]
-    
+    p_adjusted_chrono = [p * f for p, f in zip(p_adjusted_stat, chrono_factors, strict=False)]
+
     # 2d. Apply drift adjustments if applicable
     p_unnormalized = p_adjusted_chrono
     if h30_snapshot_data:
@@ -233,7 +231,7 @@ def generate_tickets(
         h30_odds_map = {r.get("num"): r.get("odds_place") for r in h30_runners if r.get("num") and r.get("odds_place")}
         if h30_odds_map:
             drift_factors = _apply_drift_adjustment(runners, h30_odds_map, drift_config)
-            p_unnormalized = [p * f for p, f in zip(p_adjusted_chrono, drift_factors)]
+            p_unnormalized = [p * f for p, f in zip(p_adjusted_chrono, drift_factors, strict=False)]
             analysis_messages.append("Drift adjustment applied.")
 
     # 2e. Normaliser pour p_finale (utilisé par Kelly etc.)
@@ -253,7 +251,7 @@ def generate_tickets(
              roi = (prob_for_roi * (odds - 1) - (1 - prob_for_roi))
              if roi >= roi_min_sp:
                   sp_candidates.append({
-                      "num": r["num"], "odds": odds, 
+                      "num": r["num"], "odds": odds,
                       "prob": r["p_finale"], # Utiliser p_finale normalisée pour Kelly
                       "roi": roi
                   })
@@ -267,12 +265,12 @@ def generate_tickets(
             if frac > 0:
                 stakes[cand["num"]] = frac
                 total_kelly_frac += frac
-        
+
         final_stakes = {}
         if total_kelly_frac > 0:
             for num, frac in stakes.items():
                 final_stakes[num] = (frac / total_kelly_frac) * sp_budget
-        
+
         if final_stakes:
             total_stake = sum(final_stakes.values())
             weighted_roi = sum(c["roi"] * final_stakes[c["num"]] for c in sp_candidates if c["num"] in final_stakes) / total_stake if total_stake > 0 else 0
@@ -284,7 +282,7 @@ def generate_tickets(
 
     # 4. Génération des tickets combinés (Exotics)
     exotics_allowed = snapshot_data.get("market", {}).get("overround_place", 0.0) <= overround_max
-    
+
     if exotics_allowed and exotics_config.get("type") == "TRIO" and len(sp_candidates) >= 3:
         combo_budget = budget * (1 - sp_config["budget_ratio"])
         trio_combinations = list(combinations(sp_candidates, 3))
@@ -309,7 +307,7 @@ def generate_tickets(
                         "roi": combo_eval_result.get("roi"),
                         "payout": combo_eval_result.get("payout_expected")
                     })
-        
+
         if evaluated_combos:
             best_combo = max(evaluated_combos, key=lambda x: x["roi"])
             final_tickets.append({

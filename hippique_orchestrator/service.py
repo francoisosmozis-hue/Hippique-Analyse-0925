@@ -311,8 +311,6 @@ async def debug_cloudtasks_ping(request: Request):
 
 
         import google.auth
-
-
         from google.cloud import tasks_v2
 
 
@@ -331,7 +329,7 @@ async def debug_cloudtasks_ping(request: Request):
             logger.info(f"google.auth.default() inferred_project: {inferred_project}", extra=log_extra)
 
 
-            
+
 
 
             # Log service account email if available
@@ -454,7 +452,7 @@ async def debug_cloudtasks_ping(request: Request):
             logger.error(f"get_queue failed with exception: {e}", exc_info=True, extra=log_extra)
 
 
-            
+
 
 
             error_details = {"message": str(e)}

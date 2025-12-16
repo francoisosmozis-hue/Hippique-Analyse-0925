@@ -1,34 +1,23 @@
 import json
 from datetime import datetime, timedelta
-from unittest.mock import MagicMock, call
+from unittest.mock import MagicMock
 
 import pytest
 from google.api_core import exceptions as gcp_exceptions
 from pytest_mock import MockerFixture
 
 from hippique_orchestrator import scheduler, time_utils
-from hippique_orchestrator.config import AppConfig
+from hippique_orchestrator.config import Config
+
 
 @pytest.fixture
 def mock_tasks_client(mocker: MockerFixture) -> MagicMock:
     """Mocks the CloudTasksClient and its methods."""
     mock_client = MagicMock()
     mock_client.get_task.side_effect = gcp_exceptions.NotFound("Task not found")
+    mock_client.task_path.side_effect = lambda project, location, queue, task: f"projects/{project}/locations/{location}/queues/{queue}/tasks/{task}"
     mocker.patch("hippique_orchestrator.scheduler.tasks_v2.CloudTasksClient", return_value=mock_client)
     return mock_client
-
-@pytest.fixture
-def mock_config(mocker):
-    """Overrides the application configuration for tests."""
-    mock_config = AppConfig(
-        PROJECT_ID="test-project",
-        REGION="test-region",
-        QUEUE_ID="test-queue",
-        SERVICE_ACCOUNT_EMAIL="test-sa@example.com",
-        cloud_run_url="http://test.run.app"
-    )
-    mocker.patch("hippique_orchestrator.scheduler.config", mock_config)
-    return mock_config
 
 def test_schedule_all_races_creates_h30_and_h5_tasks(mock_tasks_client: MagicMock, mock_config):
     """

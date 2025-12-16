@@ -2,9 +2,11 @@
 Unit tests for the StatsProvider implementations.
 """
 
-import pytest
 from datetime import datetime
-from hippique_orchestrator.stats_provider import ZoneTurfProvider, Chrono, JEStats
+
+import pytest
+
+from hippique_orchestrator.stats_provider import ZoneTurfProvider
 
 # Mock config for the provider
 MOCK_ZT_CONFIG = {
@@ -60,7 +62,7 @@ class TestZoneTurfProviderParsing:
         mock_response = mocker.Mock()
         mock_response.text = mock_html
         mock_response.raise_for_status = mocker.Mock()
-        
+
         mocker.patch.object(zt_provider.client, 'get', return_value=mock_response)
         mocker.patch.object(zt_provider, '_resolve_entity_id', return_value="12345")
 
@@ -90,7 +92,7 @@ class TestZoneTurfProviderParsing:
         mock_response = mocker.Mock()
         mock_response.text = mock_html
         mock_response.raise_for_status = mocker.Mock()
-        
+
         mocker.patch.object(zt_provider.client, 'get', return_value=mock_response)
         mocker.patch.object(zt_provider, '_resolve_entity_id', return_value="2957")
 
@@ -122,7 +124,7 @@ class TestZoneTurfProviderParsing:
         mock_response = mocker.Mock()
         mock_response.text = mock_html
         mock_response.raise_for_status = mocker.Mock()
-        
+
         mocker.patch.object(zt_provider.client, 'get', return_value=mock_response)
         mocker.patch.object(zt_provider, '_resolve_entity_id', return_value="54007")
 
@@ -146,7 +148,7 @@ class TestZoneTurfIdResolution:
         mock_http_get = mocker.patch.object(zt_provider.client, 'get')
 
         entity_id = zt_provider._resolve_entity_id("horse", "My Horse")
-        
+
         assert entity_id == "12345"
         zt_provider._get_id_from_cache.assert_called_once_with("horse", "My Horse")
         mock_http_get.assert_not_called()

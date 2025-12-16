@@ -96,10 +96,10 @@ def test_generate_tickets_creates_sp_dutching_ticket_when_roi_is_high(
         je_stats={},
         h30_snapshot_data=None
     )
-    
+
     assert result["gpi_decision"] == "Play"
     assert len(result["tickets"]) == 1
-    
+
     sp_ticket = result["tickets"][0]
     assert sp_ticket["type"] == "SP_DUTCHING"
     assert sp_ticket["stake"] > 0
@@ -174,12 +174,12 @@ def test_generate_tickets_creates_trio_ticket_with_best_roi(
         je_stats={},
         h30_snapshot_data=None
     )
-    
+
     assert result["gpi_decision"] == "Play"
     assert len(result["tickets"]) == 2, "Should create one SP and one TRIO ticket"
 
     trio_ticket = next((t for t in result["tickets"] if t["type"] == "TRIO"), None)
-    
+
     assert trio_ticket is not None, "A TRIO ticket should have been created"
     assert set(trio_ticket["horses"]) == {1, 2, 3}
     assert trio_ticket["roi_est"] == 0.8

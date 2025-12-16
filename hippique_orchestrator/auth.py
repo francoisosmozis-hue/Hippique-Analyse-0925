@@ -96,7 +96,7 @@ async def auth_middleware(request: Request, call_next):
         # Keep debug endpoints accessible, especially for local/staging
         "/debug/",
     ]
-    
+
     # FastAPI's router registers UI paths like /api/pronostics/ui, not needed to list twice
     # Static files are also typically handled separately and don't need to be in this list.
 
@@ -108,7 +108,7 @@ async def auth_middleware(request: Request, call_next):
     try:
         if not oidc_validator:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="OIDC Validator is not configured.")
-            
+
         # For protected paths, extract and validate the token
         auth_header = request.headers.get("Authorization")
         if not auth_header or not auth_header.startswith("Bearer "):

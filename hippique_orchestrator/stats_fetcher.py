@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict
+from typing import Any
 
 from . import storage, zoneturf_client
 
@@ -34,7 +34,7 @@ def collect_stats(
     if not (latest_snapshot_meta and latest_snapshot_meta.get("gcs_snapshot_path")):
         LOGGER.error(f"Cannot collect stats, no snapshot found for {race_doc_id} in phase {phase}", extra=log_extra)
         # Return the placeholder value to avoid breaking the pipeline, but log error.
-        return "dummy_gcs_path_for_stats" 
+        return "dummy_gcs_path_for_stats"
 
     snapshot_path = latest_snapshot_meta["gcs_snapshot_path"]
     snapshot_data = storage.load_snapshot_from_gcs(snapshot_path, correlation_id, trace_id)
@@ -53,7 +53,7 @@ def collect_stats(
         if not (runner_num and runner_name):
             continue
 
-        runner_stats: Dict[str, Any] = {"num": runner_num, "name": runner_name}
+        runner_stats: dict[str, Any] = {"num": runner_num, "name": runner_name}
 
         # --- a. Fetch Chrono Stats ---
         try:
@@ -91,10 +91,10 @@ def collect_stats(
         "correlation_id": correlation_id,
         "trace_id": trace_id
     }
-    
+
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     stats_id = f"{timestamp}_{phase}_stats"
-    
+
     try:
         stats_gcs_path = storage.save_snapshot(race_doc_id, "stats", stats_id, stats_payload, correlation_id, trace_id)
         LOGGER.info(f"Successfully saved aggregated stats to {stats_gcs_path}", extra=log_extra)

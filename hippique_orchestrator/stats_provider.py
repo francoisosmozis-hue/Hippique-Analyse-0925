@@ -202,7 +202,7 @@ class ZoneTurfProvider:
         # Adjust for names that don't start with a letter
         if not 'a' <= first_letter <= 'z':
             first_letter = '0-9'
-            
+
         target_name = name.lower()
 
         for page_num in range(1, self.MAX_PAGES_TO_SCRAPE + 1):
@@ -245,13 +245,13 @@ class ZoneTurfProvider:
         """Parses a chrono string like 1'11"6 or 59"8 into seconds."""
         if not chrono_str:
             return None
-        
+
         try:
             # Standardize separators
             chrono_str = chrono_str.replace("''", '"').replace("'", '"')
-            
+
             parts = chrono_str.split('"')
-            
+
             if len(parts) == 3: # Format M"S"T e.g., 1"11"6
                 minutes = int(parts[0])
                 seconds = int(parts[1])
@@ -267,7 +267,7 @@ class ZoneTurfProvider:
         except (ValueError, IndexError):
             logger.warning(f"Could not parse chrono string: {chrono_str}")
             return None
-        
+
         logger.warning(f"Unhandled chrono format: {chrono_str}")
         return None
 
@@ -279,14 +279,14 @@ class ZoneTurfProvider:
 
         slug = _slugify(horse_name)
         url_path = self.paths["horse"].format(slug=slug, id=entity_id)
-        
+
         try:
             response = self.client.get(url_path)
             response.raise_for_status()
             soup = BeautifulSoup(response.text, "lxml")
 
             chrono_data = {}
-            
+
             # 1. Parse records
             records_table = soup.find("table", class_="performances-table")
             if records_table:
@@ -313,11 +313,11 @@ class ZoneTurfProvider:
                         chrono_val = self._parse_chrono_to_seconds(cells[6].get_text(strip=True))
                         if chrono_val:
                             last3_rk.append(chrono_val)
-            
+
             chrono_data["last3_rk_sec"] = last3_rk
             if last3_rk:
                 chrono_data["rk_best3_sec"] = min(last3_rk)
-            
+
             if not chrono_data:
                 logger.warning(f"No chrono data found for horse '{horse_name}' at {url_path}")
                 return None
@@ -347,18 +347,18 @@ class ZoneTurfProvider:
             soup = BeautifulSoup(response.text, "lxml")
 
             stats = {"year": datetime.now().year}
-            
+
             # Find the stats table/section
             stats_header = soup.find("h2", string=re.compile(r"Statistiques \d{4} de"))
             if not stats_header:
                 logger.warning(f"Stats section not found for jockey '{jockey_name}' at {url_path}")
                 return None
-            
+
             stats_table = stats_header.find_next_sibling("table")
             if not stats_table:
                 logger.warning(f"Stats table not found for jockey '{jockey_name}' at {url_path}")
                 return None
-                
+
             # Extract stats from the table
             # This is highly dependent on the page structure
             for row in stats_table.find_all("tr"):
@@ -377,7 +377,7 @@ class ZoneTurfProvider:
                         stats["wins"] = value
                     elif label == "Placés":
                         stats["places"] = value
-            
+
             if stats.get("starters", 0) > 0:
                 stats["win_rate"] = stats.get("wins", 0) / stats["starters"]
                 stats["place_rate"] = stats.get("places", 0) / stats["starters"]
@@ -409,17 +409,17 @@ class ZoneTurfProvider:
             soup = BeautifulSoup(response.text, "lxml")
 
             stats = {"year": datetime.now().year}
-            
+
             stats_header = soup.find("h2", string=re.compile(r"Statistiques \d{4} de"))
             if not stats_header:
                 logger.warning(f"Stats section not found for trainer '{trainer_name}' at {url_path}")
                 return None
-            
+
             stats_table = stats_header.find_next_sibling("table")
             if not stats_table:
                 logger.warning(f"Stats table not found for trainer '{trainer_name}' at {url_path}")
                 return None
-                
+
             for row in stats_table.find_all("tr"):
                 cells = row.find_all("td")
                 if len(cells) == 2:
@@ -436,7 +436,7 @@ class ZoneTurfProvider:
                         stats["wins"] = value
                     elif label == "Placés":
                         stats["places"] = value
-            
+
             if stats.get("starters", 0) > 0:
                 stats["win_rate"] = stats.get("wins", 0) / stats["starters"]
                 stats["place_rate"] = stats.get("places", 0) / stats["starters"]

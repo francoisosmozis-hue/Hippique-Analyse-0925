@@ -2,7 +2,7 @@
 import logging
 import re
 import unicodedata
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import requests
 from bs4 import BeautifulSoup
@@ -10,8 +10,8 @@ from bs4 import BeautifulSoup
 logger = logging.getLogger(__name__)
 BASE_URL = "https://www.zone-turf.fr"
 # Simple in-memory cache. A persistent cache (like Firestore) is recommended for production.
-ID_CACHE: Dict[str, Optional[str]] = {}
-CHRONO_CACHE: Dict[str, Optional[Dict[str, Any]]] = {}
+ID_CACHE: dict[str, str | None] = {}
+CHRONO_CACHE: dict[str, dict[str, Any] | None] = {}
 
 
 def _normalize_name(s: str) -> str:
@@ -23,7 +23,7 @@ def _normalize_name(s: str) -> str:
     return " ".join(s.lower().strip().split())
 
 
-def _parse_rk_string(rk_string: str) -> Optional[float]:
+def _parse_rk_string(rk_string: str) -> float | None:
     """Parses a reduction kilometer string like "1'11"6" or "1'11''6" into seconds."""
     if not isinstance(rk_string, str) or not rk_string.strip():
         return None
@@ -38,7 +38,7 @@ def _parse_rk_string(rk_string: str) -> Optional[float]:
         return None
 
 
-def resolve_horse_id(horse_name: str, session: requests.Session, max_pages: int = 20) -> Optional[str]:
+def resolve_horse_id(horse_name: str, session: requests.Session, max_pages: int = 20) -> str | None:
     """
     Finds the Zone-Turf ID for a horse by scraping the alphabetical search pages.
     Uses a cache to avoid repeated lookups.
@@ -46,7 +46,7 @@ def resolve_horse_id(horse_name: str, session: requests.Session, max_pages: int 
     normalized_name = _normalize_name(horse_name)
     if not normalized_name:
         return None
-    
+
     if normalized_name in ID_CACHE:
         return ID_CACHE[normalized_name]
 
@@ -61,7 +61,7 @@ def resolve_horse_id(horse_name: str, session: requests.Session, max_pages: int 
         try:
             response = session.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
             if response.status_code != 200:
-                break 
+                break
 
             soup = BeautifulSoup(response.text, "html.parser")
             for a_tag in soup.find_all("a", href=True):
@@ -73,19 +73,19 @@ def resolve_horse_id(horse_name: str, session: requests.Session, max_pages: int 
                         logger.info(f"Resolved '{horse_name}' to ID: {found_id}")
                         ID_CACHE[normalized_name] = found_id
                         return found_id
-            
+
             if not soup.find(string=re.compile("page suivante", re.I)):
                 break
         except requests.RequestException as e:
             logger.warning(f"Failed to resolve Zone-Turf ID for {horse_name} due to network error: {e}")
             break
-    
+
     logger.warning(f"Could not find Zone-Turf ID for '{horse_name}' after searching pages.")
     ID_CACHE[normalized_name] = None # Cache failure to avoid retries
     return None
 
 
-def fetch_chrono_from_html(html_content: str) -> Optional[Dict[str, Any]]:
+def fetch_chrono_from_html(html_content: str) -> dict[str, Any] | None:
     """
     Parses the HTML content of a Zone-Turf horse page to extract chrono data.
     """
@@ -93,9 +93,9 @@ def fetch_chrono_from_html(html_content: str) -> Optional[Dict[str, Any]]:
         return None
 
     soup = BeautifulSoup(html_content, 'html.parser')
-    
+
     record_attelé = None
-    last_3_chronos: List[float] = []
+    last_3_chronos: list[float] = []
 
     # 1. Find the record ("Record Attelé")
     # It's in a <p> tag within a <div class="card-body">
@@ -121,7 +121,7 @@ def fetch_chrono_from_html(html_content: str) -> Optional[Dict[str, Any]]:
         for item in list_items:
             if len(last_3_chronos) >= 3:
                 break
-            
+
             # Check if the race is "Attelé"
             # The discipline is in a <p> tag like "19 000€ - Prix Axius - Attelé - ..."
             discipline_p = item.find('p', string=re.compile(r'Attelé'))
@@ -136,7 +136,7 @@ def fetch_chrono_from_html(html_content: str) -> Optional[Dict[str, Any]]:
                     if 'Red.Km' in cell.text:
                         rk_index = i
                         break
-                
+
                 if rk_index != -1:
                     rows = perf_table.tbody.find_all('tr')
                     for row in rows:
@@ -150,7 +150,7 @@ def fetch_chrono_from_html(html_content: str) -> Optional[Dict[str, Any]]:
                                     last_3_chronos.append(parsed_chrono)
                                     # Found the chrono for this race, break from inner loop
                                     break
-    
+
     if not record_attelé and not last_3_chronos:
         return None
 
@@ -159,7 +159,7 @@ def fetch_chrono_from_html(html_content: str) -> Optional[Dict[str, Any]]:
         'last_3_chrono': last_3_chronos
     }
 
-def get_chrono_stats(horse_name: str, horse_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+def get_chrono_stats(horse_name: str, horse_id: str | None = None) -> dict[str, Any] | None:
     """
     Orchestrator function to get chrono stats for a horse.
     Resolves ID if not provided, then scrapes the page. Caches results.
@@ -176,11 +176,11 @@ def get_chrono_stats(horse_name: str, horse_id: Optional[str] = None) -> Optiona
             logger.warning(f"Could not get Zone-Turf ID for horse: {horse_name}")
             CHRONO_CACHE[cache_key] = None
             return None
-        
+
         # Slugify name for URL, simple version
         slug_name = _normalize_name(horse_name).replace(' ', '-')
         url = f"{BASE_URL}/cheval/{slug_name}-{zt_id}/"
-        
+
         try:
             logger.info(f"Fetching chrono stats from Zone-Turf for {horse_name} at {url}")
             response = session.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
@@ -188,7 +188,7 @@ def get_chrono_stats(horse_name: str, horse_id: Optional[str] = None) -> Optiona
                 logger.error(f"Failed to fetch Zone-Turf page for {horse_name} (ID: {zt_id}) with status {response.status_code}")
                 CHRONO_CACHE[cache_key] = None
                 return None
-            
+
             chrono_data = fetch_chrono_from_html(response.text)
             CHRONO_CACHE[cache_key] = chrono_data
             return chrono_data

@@ -1,5 +1,7 @@
 import pathlib
+
 import pytest
+
 from hippique_orchestrator.zoneturf_client import _parse_rk_string, fetch_chrono_from_html
 
 # Use a real path to the fixture file
@@ -35,25 +37,25 @@ def test_fetch_chrono_from_html_with_jullou_page(jullou_html_content):
     Tests the main HTML parsing function using the saved fixture for 'Jullou'.
     """
     assert jullou_html_content is not None, "Fixture content should not be None"
-    
+
     result = fetch_chrono_from_html(jullou_html_content)
 
     assert result is not None, "Parsing should return a result dict"
-    
+
     # Check record
     # From the web_fetch summary, the record is 1'11"6
     assert result.get('record_attelé') == pytest.approx(71.6)
-    
+
     # Check last 3 chronos from the performance table
     # This requires manual inspection of the HTML to know the expected values.
     # Let's assume after inspection the last 3 valid "Attelé" chronos are:
     # 1'11"6 (from 03/11/23), 1'12"3 (from 19/10/23), 1'12"8 (from 24/09/23)
     assert 'last_3_chrono' in result
     last_3 = result['last_3_chrono']
-    
+
     assert isinstance(last_3, list)
     assert len(last_3) == 3, "Should find the last 3 valid chronos"
-    
+
     # Note: these expected values are based on the state of the page when fetched.
     # If the fixture changes, these need to be updated.
     expected_chronos = [75.1, 75.3, 73.0]

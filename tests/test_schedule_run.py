@@ -8,9 +8,7 @@ os.environ["TZ"] = "Europe/Paris"
 # Imports app & modules (le sys.path vers src est géré par tests/conftest.py)
 # from hippique_orchestrator.service import app # Removed
 # client = TestClient(app) # Removed
-import pytest
 
-from hippique_orchestrator import plan
 
 
 # @pytest.mark.asyncio
