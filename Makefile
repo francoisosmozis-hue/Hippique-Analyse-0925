@@ -1,6 +1,6 @@
 # Makefile for Hippique Orchestrator Cloud Run
 
-.PHONY: help setup test deploy scheduler logs clean
+.PHONY: help setup test build deploy scheduler logs clean
 
 # Configuration
 -include .env

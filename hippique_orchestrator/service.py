@@ -67,9 +67,11 @@ app.middleware("http")(auth_middleware)
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     correlation_id = request.headers.get("X-Correlation-ID", str(uuid.uuid4()))
+    request.state.correlation_id = correlation_id
 
     try:
         response = await call_next(request)
+        # Use the same correlation_id for the response log
         logger.info(f"{request.method} {request.url.path}", extra={"correlation_id": correlation_id, "status_code": response.status_code})
         response.headers["X-Correlation-ID"] = correlation_id
         return response
@@ -221,6 +223,21 @@ async def run_race_analysis(body: RunRequest):
 # Task Endpoints (for Cloud Tasks)
 # ============================================
 
+@app.post("/receive-trigger", status_code=status.HTTP_202_ACCEPTED)
+async def receive_trigger(body: ScheduleRequest, background_tasks: BackgroundTasks):
+    """
+    Receives a trigger (likely from Cloud Scheduler) to start the daily bootstrap.
+    This is a compatibility endpoint for a misconfigured scheduler.
+    """
+    correlation_id = str(uuid.uuid4())
+    trace_id = str(uuid.uuid4())
+    logger.info("Received trigger to start daily bootstrap", extra={"correlation_id": correlation_id, "trace_id": trace_id, "date": body.date})
+
+    background_tasks.add_task(bootstrap_day_pipeline, date_str=body.date, correlation_id=correlation_id, trace_id=trace_id)
+
+    return {"ok": True, "message": f"Bootstrap for {body.date} initiated in background from trigger."}
+
+
 @app.post("/tasks/bootstrap-day", status_code=status.HTTP_202_ACCEPTED)
 async def tasks_bootstrap_day(body: ScheduleRequest, background_tasks: BackgroundTasks):
     correlation_id = str(uuid.uuid4())
@@ -255,6 +272,261 @@ async def debug_config():
     """Returns the current application configuration."""
     config_dict = {k: str(v) for k, v in get_config().model_dump().items()}
     return {"ok": True, "config": config_dict}
+
+
+@app.get("/debug/cloudtasks/ping")
+
+
+async def debug_cloudtasks_ping(request: Request):
+
+
+    """
+
+
+    Pings the Cloud Tasks queue to verify connectivity and permissions.
+
+
+    """
+
+
+    # Use the correlation_id from the middleware
+
+
+    correlation_id = getattr(request.state, 'correlation_id', str(uuid.uuid4()))
+
+
+    log_extra = {"correlation_id": correlation_id}
+
+
+    logger.info("Starting Cloud Tasks ping debug.", extra=log_extra)
+
+
+
+
+
+    try:
+
+
+        # Import what we need, where we need it
+
+
+        import google.auth
+
+
+        from google.cloud import tasks_v2
+
+
+
+
+
+        # 1. Log effective project and environment
+
+
+        try:
+
+
+            credentials, inferred_project = google.auth.default()
+
+
+            logger.info(f"google.auth.default() inferred_project: {inferred_project}", extra=log_extra)
+
+
+            
+
+
+            # Log service account email if available
+
+
+            if hasattr(credentials, 'service_account_email'):
+
+
+                logger.info(f"Service Account Email: {credentials.service_account_email}", extra=log_extra)
+
+
+            else:
+
+
+                logger.info("Service Account Email: Not available on credentials.", extra=log_extra)
+
+
+
+
+
+        except (google.auth.exceptions.DefaultCredentialsError, AttributeError) as e:
+
+
+            inferred_project = None
+
+
+            logger.error(f"Could not determine project via google.auth.default(): {e}", extra=log_extra)
+
+
+
+
+
+        env_project = os.getenv("GOOGLE_CLOUD_PROJECT")
+
+
+        logger.info(f"os.getenv('GOOGLE_CLOUD_PROJECT'): {env_project}", extra=log_extra)
+
+
+
+
+
+        # 2. Get client and config
+
+
+        client = tasks_v2.CloudTasksClient()
+
+
+        task_config = get_config()
+
+
+        project = task_config.PROJECT_ID
+
+
+        location = task_config.REGION
+
+
+        queue = task_config.QUEUE_ID
+
+
+
+
+
+        logger.info(f"Using config: project={project}, location={location}, queue={queue}", extra=log_extra)
+
+
+
+
+
+        # 3. Construct queue path and call get_queue
+
+
+        parent = client.queue_path(project, location, queue)
+
+
+        logger.info(f"Attempting to get_queue with name: {parent}", extra=log_extra)
+
+
+
+
+
+        try:
+
+
+            queue_info = client.get_queue(name=parent)
+
+
+            logger.info("Successfully got queue info.", extra=log_extra)
+
+
+            return {
+
+
+                "ok": True,
+
+
+                "status": "Successfully pinged queue",
+
+
+                "queue_name": queue_info.name,
+
+
+                "queue_state": str(queue_info.state),
+
+
+                "inferred_project": inferred_project,
+
+
+                "env_project": env_project
+
+
+            }
+
+
+        except Exception as e:
+
+
+            # This is the critical part for debugging the 404
+
+
+            logger.error(f"get_queue failed with exception: {e}", exc_info=True, extra=log_extra)
+
+
+            
+
+
+            error_details = {"message": str(e)}
+
+
+            if hasattr(e, 'details'):
+
+
+                error_details['details'] = e.details()
+
+
+            if hasattr(e, 'code'):
+
+
+                error_details['code'] = e.code().name
+
+
+
+
+
+            raise HTTPException(
+
+
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+
+
+                detail={
+
+
+                    "ok": False,
+
+
+                    "status": "Failed to get queue",
+
+
+                    "error": error_details,
+
+
+                    "queue_name_constructed": parent,
+
+
+                    "inferred_project": inferred_project,
+
+
+                    "env_project": env_project,
+
+
+                }
+
+
+            )
+
+
+
+
+
+    except Exception as e:
+
+
+        logger.error(f"An unexpected error occurred in the ping endpoint: {e}", exc_info=True, extra=log_extra)
+
+
+        raise HTTPException(
+
+
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+
+
+            detail={"ok": False, "error": "An unexpected error occurred in the ping endpoint."}
+
+
+        )
 
 @app.post("/debug/force-bootstrap/{date_str}", status_code=status.HTTP_202_ACCEPTED)
 async def debug_force_bootstrap(date_str: str, background_tasks: BackgroundTasks):

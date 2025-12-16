@@ -15,6 +15,7 @@ def test_api_pronostics_no_data(client, mocker):
     when no pronostics are found in Firestore for the given date.
     """
     mocker.patch("hippique_orchestrator.firestore_client.get_races_by_date_prefix", return_value=[])
+    mock_date_str = "2025-12-07"
 
     # Test without date parameter (uses default today)
     response = client.get("/api/pronostics")
@@ -25,7 +26,7 @@ def test_api_pronostics_no_data(client, mocker):
     assert data["pronostics"] == []
     assert "date" in data # Ensure date used is returned
 
-response = client.get(f"/api/pronostics?date={mock_date_str}")
+    response = client.get(f"/api/pronostics?date={mock_date_str}")
     assert response.status_code == 200
     data = response.json()
     assert data["ok"] is True
@@ -50,8 +51,9 @@ def test_api_pronostics_with_mock_data(client, mocker):
             "roi_global_est": 0.2
         }
     }
+    mocker.patch("hippique_orchestrator.firestore_client.get_races_by_date_prefix", return_value=[mock_firestore_doc])
 
-response = client.get(f"/api/pronostics?date={mock_date_str}")
+    response = client.get(f"/api/pronostics?date={mock_date_str}")
     assert response.status_code == 200
 
     data = response.json()
@@ -83,8 +85,9 @@ def test_api_pronostics_handles_malformed_doc(client, mocker):
         "rc": "R1C2",
         "some_other_field": {} # Missing 'tickets_analysis'
     }
+    mocker.patch("hippique_orchestrator.firestore_client.get_races_by_date_prefix", return_value=[valid_doc, malformed_doc])
 
-response = client.get(f"/api/pronostics?date={mock_date_str}")
+    response = client.get(f"/api/pronostics?date={mock_date_str}")
 
     assert response.status_code == 200
     data = response.json()
@@ -106,7 +109,7 @@ def test_api_pronostics_aggregates_multiple_docs(client, mocker):
 
     mocker.patch("hippique_orchestrator.firestore_client.get_races_by_date_prefix", return_value=[doc1, doc2])
 
-    response = client.get(f"/pronostics?date={mock_date_str}")
+    response = client.get(f"/api/pronostics?date={mock_date_str}")
 
     assert response.status_code == 200
     data = response.json()

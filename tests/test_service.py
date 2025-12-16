@@ -162,6 +162,7 @@ def test_schedule_endpoint_protected(client, mocker):
     """
     # Patch the config directly where it's used in the auth module
     mocker.patch("hippique_orchestrator.auth.config.REQUIRE_AUTH", True)
+    mocker.patch("hippique_orchestrator.auth.oidc_validator", mocker.MagicMock())
 
     response = client.post("/schedule", json={"date": "2025-10-20", "mode": "tasks"})
 
@@ -175,6 +176,7 @@ def test_tasks_run_phase_endpoint_protected(client, mocker):
     Tests that the /tasks/run-phase endpoint is protected when REQUIRE_AUTH is true.
     """
     mocker.patch("hippique_orchestrator.auth.config.REQUIRE_AUTH", True)
+    mocker.patch("hippique_orchestrator.auth.oidc_validator", mocker.MagicMock())
 
     payload = {
         "course_url": "https://www.zeturf.fr/fr/course/2025-10-20/R1C2-marseille-borely/details",

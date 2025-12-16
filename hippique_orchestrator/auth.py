@@ -93,9 +93,6 @@ async def auth_middleware(request: Request, call_next):
         "/openapi.json",
         # Allow accessing pronostics data without auth
         "/api/pronostics",
-        # Allow task handlers to be called without auth
-        "/tasks/run-phase",
-        "/receive-trigger",
         # Keep debug endpoints accessible, especially for local/staging
         "/debug/",
     ]

@@ -192,13 +192,22 @@ DEPLOY_CMD=(
     --max-instances="$MAX_INSTANCES"
     --min-instances="$MIN_INSTANCES"
     --no-allow-unauthenticated
-    --set-env-vars="PROJECT_ID=$PROJECT_ID,REGION=$REGION,SERVICE_NAME=$SERVICE_NAME,QUEUE_ID=$QUEUE_ID,SERVICE_ACCOUNT_EMAIL=$SERVICE_ACCOUNT_EMAIL,TZ=Europe/Paris"
 )
+
+# Construire la liste des variables d'environnement
+ENV_VARS="PROJECT_ID=$PROJECT_ID,REGION=$REGION,SERVICE_NAME=$SERVICE_NAME,QUEUE_ID=$QUEUE_ID,SERVICE_ACCOUNT_EMAIL=$SERVICE_ACCOUNT_EMAIL,TZ=Europe/Paris"
+
+# Ajouter OIDC_AUDIENCE si elle est définie dans l'environnement du script
+if [ -n "${OIDC_AUDIENCE:-}" ]; then
+    ENV_VARS+=",OIDC_AUDIENCE=${OIDC_AUDIENCE}"
+fi
 
 # Ajouter GCS_BUCKET si défini
 if [ -n "$GCS_BUCKET" ]; then
-    DEPLOY_CMD+=(--set-env-vars="GCS_BUCKET=$GCS_BUCKET,GCS_PREFIX=$GCS_PREFIX")
+    ENV_VARS+=",GCS_BUCKET=$GCS_BUCKET,GCS_PREFIX=$GCS_PREFIX"
 fi
+
+DEPLOY_CMD+=(--set-env-vars="$ENV_VARS")
 
 # Exécuter le déploiement
 "${DEPLOY_CMD[@]}"
@@ -211,18 +220,14 @@ echo ""
 echo "🔐 Configuration IAM..."
 
 # Permettre au service account d'invoquer le service
+# Note : Le service s'invoque lui-même si create_task utilise le même SA.
 gcloud run services add-iam-policy-binding "$SERVICE_NAME" \
     --region="$REGION" \
     --project="$PROJECT_ID" \
     --member="serviceAccount:$SERVICE_ACCOUNT_EMAIL" \
-    --role="roles/run.invoker"
+    --role="roles/run.invoker" --quiet
 
-# Permettre à Cloud Tasks d'invoquer le service
-gcloud run services add-iam-policy-binding "$SERVICE_NAME" \
-    --region="$REGION" \
-    --project="$PROJECT_ID" \
-    --member="serviceAccount:$SERVICE_ACCOUNT_EMAIL" \
-    --role="roles/run.invoker"
+# Le script ajoutait la policy deux fois, une seule suffit.
 
 # ============================================
 # Récupérer l'URL du service

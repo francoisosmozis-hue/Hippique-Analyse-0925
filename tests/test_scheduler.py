@@ -1,74 +1,84 @@
 import json
 from datetime import datetime, timedelta
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, call
 
 import pytest
 from google.api_core import exceptions as gcp_exceptions
 from pytest_mock import MockerFixture
 
-from hippique_orchestrator import scheduler
-
+from hippique_orchestrator import scheduler, time_utils
+from hippique_orchestrator.config import AppConfig
 
 @pytest.fixture
 def mock_tasks_client(mocker: MockerFixture) -> MagicMock:
     """Mocks the CloudTasksClient and its methods."""
     mock_client = MagicMock()
-    # Simulate that tasks do not exist by default, so create_task should be called
     mock_client.get_task.side_effect = gcp_exceptions.NotFound("Task not found")
-    
-    # Patch the client inside the scheduler module
     mocker.patch("hippique_orchestrator.scheduler.tasks_v2.CloudTasksClient", return_value=mock_client)
-    
     return mock_client
 
+@pytest.fixture
+def mock_config(mocker):
+    """Overrides the application configuration for tests."""
+    mock_config = AppConfig(
+        PROJECT_ID="test-project",
+        REGION="test-region",
+        QUEUE_ID="test-queue",
+        SERVICE_ACCOUNT_EMAIL="test-sa@example.com",
+        cloud_run_url="http://test.run.app"
+    )
+    mocker.patch("hippique_orchestrator.scheduler.config", mock_config)
+    return mock_config
 
-def test_schedule_all_races_creates_h30_and_h5_tasks(mock_tasks_client: MagicMock):
+def test_schedule_all_races_creates_h30_and_h5_tasks(mock_tasks_client: MagicMock, mock_config):
     """
     Tests that for a single race in the plan, two tasks (H30 and H5) are created.
     """
-    # Define a race time in the future to ensure tasks are schedulable
-    tomorrow = datetime.now() + timedelta(days=1)
-    future_time = (datetime.now() + timedelta(hours=2)).strftime("%H:%M")
-    
+    future_date = datetime.now(time_utils.get_tz()) + timedelta(days=1)
+    future_time_str = (future_date + timedelta(hours=2)).strftime("%H:%M")
+    date_str = future_date.strftime("%Y-%m-%d")
+
     plan = [
         {
-            "date": tomorrow.strftime("%Y-%m-%d"),
+            "date": date_str,
             "r_label": "R1",
             "c_label": "C1",
             "course_url": "http://example.com/r1c1",
-            "time_local": future_time,
+            "time_local": future_time_str,
         }
     ]
 
-    # Act
     results = scheduler.schedule_all_races(plan, mode="tasks", correlation_id="test-corr", trace_id="test-trace")
 
-    # Assert
     assert mock_tasks_client.create_task.call_count == 2
     assert len(results) == 2
     assert all(res["ok"] for res in results)
 
-    # Inspect the H30 task
+    # Inspect calls to create_task
     h30_call_args = mock_tasks_client.create_task.call_args_list[0]
-    h30_task_payload = json.loads(h30_call_args.kwargs["task"]["http_request"]["body"])
-    assert h30_task_payload["phase"] == "H30"
-    assert "h30" in h30_call_args.kwargs["task"]["name"]
-
-    # Inspect the H5 task
     h5_call_args = mock_tasks_client.create_task.call_args_list[1]
-    h5_task_payload = json.loads(h5_call_args.kwargs["task"]["http_request"]["body"])
-    assert h5_task_payload["phase"] == "H5"
-    assert "h5" in h5_call_args.kwargs["task"]["name"]
 
+    h30_task = h30_call_args.kwargs["task"]
+    h5_task = h5_call_args.kwargs["task"]
 
-def test_schedule_all_races_skips_existing_tasks(mock_tasks_client: MagicMock):
+    # Verify H30 task
+    assert "h30" in h30_task["name"]
+    h30_payload = json.loads(h30_task["http_request"]["body"])
+    assert h30_payload["phase"] == "H30"
+    assert h30_payload["course_url"] == "http://example.com/r1c1"
+
+    # Verify H5 task
+    assert "h5" in h5_task["name"]
+    h5_payload = json.loads(h5_task["http_request"]["body"])
+    assert h5_payload["phase"] == "H5"
+
+def test_schedule_all_races_skips_existing_tasks(mock_tasks_client: MagicMock, mock_config):
     """
     Tests idempotency: if get_task succeeds (doesn't raise NotFound),
     then create_task should not be called.
     """
-    # Override the default mock behavior to simulate tasks already existing
-    mock_tasks_client.get_task.side_effect = None  # get_task now returns the default MagicMock, not an error
-    mock_tasks_client.get_task.return_value = MagicMock() # Be explicit
+    mock_tasks_client.get_task.side_effect = None
+    mock_tasks_client.get_task.return_value = MagicMock()
 
     future_time = (datetime.now() + timedelta(hours=2)).strftime("%H:%M")
     plan = [
@@ -81,23 +91,18 @@ def test_schedule_all_races_skips_existing_tasks(mock_tasks_client: MagicMock):
         }
     ]
 
-    # Act
     scheduler.schedule_all_races(plan, mode="tasks", correlation_id="test-corr", trace_id="test-trace")
 
-    # Assert
-    # get_task should have been called twice (for H30 and H5)
     assert mock_tasks_client.get_task.call_count == 2
-    # create_task should never be called because the tasks "exist"
     assert mock_tasks_client.create_task.call_count == 0
 
-
-def test_enqueue_run_task_skips_past_races(mock_tasks_client: MagicMock):
+def test_enqueue_run_task_skips_past_races(mock_tasks_client: MagicMock, mock_config):
     """
     Tests that no task is created if the calculated snapshot time is in the past.
     """
     past_time = (datetime.now() - timedelta(hours=1)).strftime("%H:%M")
     today = datetime.now().strftime("%Y-%m-%d")
-    
+
     res = scheduler.enqueue_run_task(
         client=mock_tasks_client,
         course_url="http://example.com/r1c1",
