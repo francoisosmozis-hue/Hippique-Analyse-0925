@@ -18,6 +18,7 @@ config = get_config()
 # Use a custom scheme to clearly identify OIDC tokens in documentation
 oidc_scheme = HTTPBearer(scheme_name="OIDC Token")
 
+
 class OIDCValidator:
     """
     Validates Google OIDC tokens.
@@ -43,9 +44,7 @@ class OIDCValidator:
         try:
             # Verify the token against Google's certs
             id_info = id_token.verify_oauth2_token(
-                id_token=token,
-                request=self.request,
-                audience=self.audience
+                id_token=token, request=self.request, audience=self.audience
             )
             return id_info
 
@@ -55,7 +54,8 @@ class OIDCValidator:
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail=f"Invalid authentication token: {e}",
                 headers={"WWW-Authenticate": "Bearer"},
-            )
+            ) from e
+
 
 # Singleton instance of the validator - initialized only if needed
 oidc_validator: OIDCValidator | None = None
@@ -68,6 +68,7 @@ if config.REQUIRE_AUTH:
         # For now, we log the error, and it will fail at runtime if an auth-protected route is hit.
         pass
 
+
 async def verify_oidc_token(request: Request):
     """
     Dependency that can be used on a per-endpoint basis to enforce auth.
@@ -75,10 +76,14 @@ async def verify_oidc_token(request: Request):
     """
     if config.REQUIRE_AUTH:
         if not oidc_validator:
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="OIDC Validator is not configured.")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="OIDC Validator is not configured.",
+            )
         auth_header: HTTPAuthorizationCredentials = await oidc_scheme(request)
         if auth_header:
             await oidc_validator.validate(auth_header.credentials)
+
 
 async def auth_middleware(request: Request, call_next):
     """
@@ -107,12 +112,18 @@ async def auth_middleware(request: Request, call_next):
 
     try:
         if not oidc_validator:
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="OIDC Validator is not configured.")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="OIDC Validator is not configured.",
+            )
 
         # For protected paths, extract and validate the token
         auth_header = request.headers.get("Authorization")
         if not auth_header or not auth_header.startswith("Bearer "):
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authorization header missing or invalid.")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authorization header missing or invalid.",
+            )
 
         token = auth_header.split(" ")[1]
         await oidc_validator.validate(token)
@@ -131,5 +142,5 @@ async def auth_middleware(request: Request, call_next):
         logger.error(f"Unexpected error in auth middleware: {e}", exc_info=True)
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            content={"detail": "Internal server error during authentication."}
+            content={"detail": "Internal server error during authentication."},
         )

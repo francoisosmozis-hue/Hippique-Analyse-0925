@@ -10,12 +10,19 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
 
+
 class Config(BaseSettings):
     """
     Configuration centralisée du service hippique-orchestrator.
     Les valeurs sont chargées depuis les variables d'environnement ou un fichier .env.
     """
-    model_config = SettingsConfigDict(env_file='.env', env_file_encoding='utf-8', case_sensitive=False, extra="ignore")
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",
+    )
 
     # --- GCP Configuration ---
     PROJECT_ID: str
@@ -60,7 +67,7 @@ class Config(BaseSettings):
     RUNNER_ANALYSIS_DIR: str | None = None
     RUNNER_OUTPUT_DIR: str | None = None
     USE_GCS: bool | None = None
-    USE_FIRESTORE: bool | None = None # Added for local disablement
+    USE_FIRESTORE: bool | None = None  # Added for local disablement
     USE_DRIVE: bool | None = None
 
     @property
@@ -76,6 +83,7 @@ class Config(BaseSettings):
         """Constructs the full Cloud Tasks queue path."""
         return f"projects/{self.PROJECT_ID}/locations/{self.REGION}/queues/{self.QUEUE_ID}"
 
+
 @lru_cache
 def get_config() -> Config:
     """
@@ -86,11 +94,17 @@ def get_config() -> Config:
     try:
         config = Config()
         # Log a subset of the config for debugging, avoiding sensitive values
-        logger.info(f"Configuration loaded: PROJECT_ID={config.PROJECT_ID}, GCS_BUCKET={config.GCS_BUCKET}, MODE={config.SCHEDULING_MODE}")
+        logger.info(
+            ("Configuration loaded: PROJECT_ID=%s, GCS_BUCKET=%s, MODE=%s"),
+            config.PROJECT_ID,
+            config.GCS_BUCKET,
+            config.SCHEDULING_MODE,
+        )
         return config
     except Exception as e:
         logger.critical(f"Failed to load configuration: {e}", exc_info=True)
         raise
+
 
 def reload_config() -> Config:
     """
