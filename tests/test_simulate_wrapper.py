@@ -11,6 +11,10 @@ import yaml
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from hippique_orchestrator import simulate_wrapper as sw
+from hippique_orchestrator.ev_calculator import compute_ev_roi
+from hippique_orchestrator.simulate_wrapper import evaluate_combo
+
+TICKETS = [{"legs": ["a", "b"], "odds": 10.0, "stake": 1.0}]
 
 
 def test_calibration_details_expose_metadata(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
@@ -192,7 +196,6 @@ def test_correlation_penalty_reduces_probability_and_ev(
         entry = sw._calibration_cache[sw._combo_key(legs)]
         detail = entry.get("details") or {}
         corr_info = detail.get("__correlation__", [])
-        from hippique_orchestrator.ev_calculator import compute_ev_roi
 
         ticket = {
             "odds": 4.0,
@@ -204,8 +207,7 @@ def test_correlation_penalty_reduces_probability_and_ev(
             [ticket],
             budget=10.0,
             simulate_fn=sw.simulate_wrapper,
-            cache_simulations=False,
-            round_to=0.0,
+            config={"cache_simulations": False, "round_to": 0.0},
         )
         return prob, float(stats.get("ev", 0.0)), corr_info
 

@@ -2,34 +2,37 @@ import logging
 import math
 import pathlib
 import statistics
-import sys
 from itertools import combinations
 from typing import Any
 
-# --- Project Root and Configuration Setup ---
-PROJECT_ROOT = pathlib.Path(__file__).resolve().parent
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
-
-CALIB_PATH = PROJECT_ROOT / "config" / "payout_calibration.yaml"
-try:
-    CALIB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    if not CALIB_PATH.exists():
-        CALIB_PATH.write_text("version: 1\nexotic_weights:\n  TRIO: 1.0\n")
-except Exception as e:
-    logging.getLogger(__name__).warning(f"Calibration auto-init failed: {e}")
-
-# --- Import core logic ---
 from hippique_orchestrator.kelly import calculate_kelly_fraction
 from hippique_orchestrator.simulate_wrapper import evaluate_combo
 
 # --- Logging ---
 logger = logging.getLogger(__name__)
 
+CALIB_PATH = pathlib.Path(__file__).resolve().parent / "config" / "payout_calibration.yaml"
+
+
+J_RATE_BONUS_THRESHOLD = 12.0
+E_RATE_BONUS_THRESHOLD = 15.0
+J_RATE_MALUS_THRESHOLD = 6.0
+E_RATE_MALUS_THRESHOLD = 8.0
+
+DRIFT_THRESHOLD = 0.07
+FAVORITE_ODDS_THRESHOLD = 4.0
+FAVORITE_DRIFT_FACTOR = 1.20
+OUTSIDER_ODDS_THRESHOLD = 8.0
+OUTSIDER_STEAM_FACTOR = 0.85
+HIGH_ODDS_THRESHOLD = 60
+EXTREME_DRIFT_FACTOR = 1.80
+MIN_SP_CANDIDATES_FOR_EXOTICS = 3
+
 
 # ==============================================================================
 # Helper Functions
 # ==============================================================================
+
 
 def _clamp(value: float, min_val: float, max_val: float) -> float:
     """Clamps a value between a minimum and a maximum."""
@@ -48,20 +51,31 @@ def _normalize_probs(probs: list[float]) -> list[float]:
 # Probability Adjustment Logic
 # ==============================================================================
 
+
 def _apply_base_stat_adjustment(runners: list[dict], je_stats: dict, weights: dict) -> list[float]:
-    """Applies JE and Horse Stats adjustments to base probabilities. Returns UNNORMALIZED probabilities."""
+    """Applies JE and Horse Stats adjustments. Returns UNNORMALIZED probabilities."""
 
     def get_je_factor(runner_stats: dict, je_weights: dict) -> float:
         je_bonus = je_weights.get("je_bonus", 1.0)
         je_malus = je_weights.get("je_malus", 1.0)
         try:
-            j_rate = float(runner_stats.get("j_rate")) if runner_stats.get("j_rate") is not None else None
-            e_rate = float(runner_stats.get("e_rate")) if runner_stats.get("e_rate") is not None else None
+            j_rate = (
+                float(runner_stats.get("j_rate"))
+                if runner_stats.get("j_rate") is not None
+                else None
+            )
+            e_rate = (
+                float(runner_stats.get("e_rate"))
+                if runner_stats.get("e_rate") is not None
+                else None
+            )
         except (ValueError, TypeError):
             return 1.0
         if j_rate is not None and e_rate is not None:
-            if j_rate >= 12.0 or e_rate >= 15.0: return je_bonus
-            if j_rate < 6.0 or e_rate < 8.0: return je_malus
+            if j_rate >= J_RATE_BONUS_THRESHOLD or e_rate >= E_RATE_BONUS_THRESHOLD:
+                return je_bonus
+            if j_rate < J_RATE_MALUS_THRESHOLD or e_rate < E_RATE_MALUS_THRESHOLD:
+                return je_malus
         return 1.0
 
     def get_horse_stats_factor(runner_stats: dict, horse_weights: dict) -> float:
@@ -87,10 +101,12 @@ def _apply_base_stat_adjustment(runners: list[dict], je_stats: dict, weights: di
     return adjusted_probs
 
 
-def _apply_chrono_adjustment(runners: list[dict], je_stats: dict, chrono_config: dict) -> list[float]:
+def _apply_chrono_adjustment(
+    runners: list[dict], je_stats: dict, chrono_config: dict
+) -> list[float]:
     """
     Applies chrono adjustment factor based on GPI v5.1 spec.
-    ASSUMPTION: je_stats contains 'last_3_chrono': [float, float, float] in seconds.
+    ASSUMPTION: je_stats contains 'last_3_chrono': [float, float, float].
     """
     k_c = chrono_config.get("k_c", 0.18)
     factors = []
@@ -101,7 +117,11 @@ def _apply_chrono_adjustment(runners: list[dict], je_stats: dict, chrono_config:
         runner_je_stats = je_stats.get(runner_num, {})
         # Ensure last_3_chrono is a list of numbers
         last_3_chrono = runner_je_stats.get("last_3_chrono", [])
-        if last_3_chrono and isinstance(last_3_chrono, list) and all(isinstance(i, (int, float)) for i in last_3_chrono):
+        if (
+            last_3_chrono
+            and isinstance(last_3_chrono, list)
+            and all(isinstance(i, (int, float)) for i in last_3_chrono)
+        ):
             best_chronos.append((runner["num"], min(last_3_chrono)))
 
     if not best_chronos:
@@ -130,7 +150,9 @@ def _apply_chrono_adjustment(runners: list[dict], je_stats: dict, chrono_config:
     return factors
 
 
-def _apply_drift_adjustment(runners: list[dict], h30_odds_map: dict, drift_config: dict) -> list[float]:
+def _apply_drift_adjustment(
+    runners: list[dict], h30_odds_map: dict, drift_config: dict
+) -> list[float]:
     """Applies odds drift adjustment factor based on GPI v5.1 spec."""
     k_d_default = drift_config.get("k_d", 0.70)
     factors = []
@@ -144,23 +166,23 @@ def _apply_drift_adjustment(runners: list[dict], h30_odds_map: dict, drift_confi
             factors.append(1.0)
             continue
 
-        if abs(odds_5 / odds_30 - 1.0) < 0.07:
+        if abs(odds_5 / odds_30 - 1.0) < DRIFT_THRESHOLD:
             factors.append(1.0)
             continue
 
         r = math.log(odds_5 / odds_30)
         k_d = k_d_default
 
-        if odds_30 <= 4.0 and (odds_5 / odds_30) >= 1.20:
+        if odds_30 <= FAVORITE_ODDS_THRESHOLD and (odds_5 / odds_30) >= FAVORITE_DRIFT_FACTOR:
             k_d = drift_config.get("k_d_fav_drift", 0.90)
-        elif odds_30 >= 8.0 and (odds_5 / odds_30) <= 0.85:
+        elif odds_30 >= OUTSIDER_ODDS_THRESHOLD and (odds_5 / odds_30) <= OUTSIDER_STEAM_FACTOR:
             k_d = drift_config.get("k_d_out_steam", 0.85)
 
         f_drift = _clamp(math.exp(-k_d * r), 0.80, 1.20)
 
-        if odds_30 > 60 or odds_5 > 60:
+        if odds_30 > HIGH_ODDS_THRESHOLD or odds_5 > HIGH_ODDS_THRESHOLD:
             f_drift = _clamp(f_drift, 0.90, 1.10)
-        if (odds_5 / odds_30) > 1.80:
+        if (odds_5 / odds_30) > EXTREME_DRIFT_FACTOR:
             f_drift = max(f_drift, 0.80)
 
         factors.append(f_drift)
@@ -172,89 +194,116 @@ def _apply_drift_adjustment(runners: list[dict], h30_odds_map: dict, drift_confi
 # Main Ticket Generation Logic
 # ==============================================================================
 
-def generate_tickets(
-    snapshot_data: dict[str, Any],
-    gpi_config: dict[str, Any],
-    budget: float,
-    calibration_data: dict[str, Any],
-    je_stats: dict[str, Any] | None = None,
-    h30_snapshot_data: dict[str, Any] | None = None
-) -> dict[str, Any]:
-    """
-    Génère des tickets de paris basés sur les règles GPI v5.2,
-    incluant les ajustements Chrono et Drift.
-    """
-    # 1. Initialisation et validation
+
+def _initialize_and_validate(
+    snapshot_data: dict[str, Any], gpi_config: dict[str, Any]
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     runners = snapshot_data.get("runners", [])
+
     if not runners:
-        return {"gpi_decision": "Abstain: No runners found", "tickets": [], "roi_global_est": 0}
+        raise ValueError("No runners found")
 
     try:
-        sp_config = gpi_config["tickets"]["sp_dutching"]
-        exotics_config = gpi_config["tickets"]["exotics"]
-        chrono_config = gpi_config.get("adjustments", {}).get("chrono", {})
-        drift_config = gpi_config.get("adjustments", {}).get("drift", {})
-        roi_min_global = gpi_config["roi_min_global"]
-        roi_min_sp = gpi_config["roi_min_sp"]
-        weights = gpi_config["weights"]
-        overround_max = gpi_config["overround_max_exotics"]
-        ev_min_combo = gpi_config["ev_min_combo"]
-        payout_min_combo = gpi_config["payout_min_combo"]
+        config = {
+            "budget": gpi_config["budget"],
+            "je_stats": gpi_config.get("je_stats"),
+            "h30_snapshot_data": gpi_config.get("h30_snapshot_data"),
+            "sp_config": gpi_config["tickets"]["sp_dutching"],
+            "exotics_config": gpi_config["tickets"]["exotics"],
+            "chrono_config": gpi_config.get("adjustments", {}).get("chrono", {}),
+            "drift_config": gpi_config.get("adjustments", {}).get("drift", {}),
+            "roi_min_global": gpi_config["roi_min_global"],
+            "roi_min_sp": gpi_config["roi_min_sp"],
+            "weights": gpi_config["weights"],
+            "overround_max": gpi_config["overround_max_exotics"],
+            "ev_min_combo": gpi_config["ev_min_combo"],
+            "payout_min_combo": gpi_config["payout_min_combo"],
+        }
+
     except KeyError as e:
-        raise ValueError(f"Configuration file is missing a critical key: {e}")
+        raise ValueError(f"Configuration file is missing a critical key: {e}") from e
 
-    je_stats = je_stats or {}
-    final_tickets = []
+    return runners, config
+
+
+def _calculate_adjusted_probabilities(
+    runners: list[dict[str, Any]], config: dict[str, Any]
+) -> tuple[list[dict[str, Any]], list[str]]:
+    je_stats = config["je_stats"] or {}
+    weights = config["weights"]
+    chrono_config = config["chrono_config"]
+    drift_config = config["drift_config"]
+    h30_snapshot_data = config.get("h30_snapshot_data")
+
     analysis_messages = []
-
-    # 2. Construction de la probabilité ajustée (non normalisée) pour le ROI
-    # 2a. p_base
     p_bases = []
     for runner in runners:
         p_base = runner.get("p_no_vig") or runner.get("p_place")
         if p_base is None:
-            return {"gpi_decision": "Abstain: Missing base probabilities", "tickets": [], "roi_global_est": 0}
+            raise ValueError("Missing base probabilities")
         runner["p_base"] = p_base
         p_bases.append(p_base)
 
-    # 2b. Apply base stats adjustments (JE, Horse)
     p_adjusted_stat = _apply_base_stat_adjustment(runners, je_stats, weights)
-
-    # 2c. Apply chrono adjustments
     chrono_factors = _apply_chrono_adjustment(runners, je_stats, chrono_config)
-    p_adjusted_chrono = [p * f for p, f in zip(p_adjusted_stat, chrono_factors, strict=False)]
+    p_adjusted_chrono = [
+        p * f for p, f in zip(p_adjusted_stat, chrono_factors, strict=False)
+    ]
 
-    # 2d. Apply drift adjustments if applicable
     p_unnormalized = p_adjusted_chrono
     if h30_snapshot_data:
         h30_runners = h30_snapshot_data.get("runners", [])
-        h30_odds_map = {r.get("num"): r.get("odds_place") for r in h30_runners if r.get("num") and r.get("odds_place")}
+        h30_odds_map = {
+            r.get("num"): r.get("odds_place")
+            for r in h30_runners
+            if r.get("num") and r.get("odds_place")
+        }
         if h30_odds_map:
-            drift_factors = _apply_drift_adjustment(runners, h30_odds_map, drift_config)
-            p_unnormalized = [p * f for p, f in zip(p_adjusted_chrono, drift_factors, strict=False)]
+            drift_factors = _apply_drift_adjustment(
+                runners, h30_odds_map, drift_config
+            )
+            p_unnormalized = [
+                p * f for p, f in zip(p_adjusted_chrono, drift_factors, strict=False)
+            ]
             analysis_messages.append("Drift adjustment applied.")
 
-    # 2e. Normaliser pour p_finale (utilisé par Kelly etc.)
     p_finale_list = _normalize_probs(p_unnormalized)
     for i, runner in enumerate(runners):
         runner["p_unnormalized_for_roi"] = p_unnormalized[i]
         runner["p_finale"] = p_finale_list[i]
 
+    return runners, analysis_messages
 
-    # 3. Génération des tickets SP Dutching
+
+def _generate_sp_dutching_tickets(
+    runners: list[dict[str, Any]],
+    config: dict[str, Any],
+    final_tickets: list[dict[str, Any]],
+    analysis_messages: list[str],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[str]]:
+    sp_config = config["sp_config"]
+    roi_min_sp = config["roi_min_sp"]
+    budget = config["budget"]
+
     sp_budget = budget * sp_config["budget_ratio"]
     sp_candidates = []
     for r in runners:
         odds = r.get("odds_place", 0)
         prob_for_roi = r.get("p_unnormalized_for_roi", 0)
-        if odds > 1 and sp_config["odds_range"][0] <= odds <= sp_config["odds_range"][1]:
-             roi = (prob_for_roi * (odds - 1) - (1 - prob_for_roi))
-             if roi >= roi_min_sp:
-                  sp_candidates.append({
-                      "num": r["num"], "odds": odds,
-                      "prob": r["p_finale"], # Utiliser p_finale normalisée pour Kelly
-                      "roi": roi
-                  })
+        if (
+            odds > 1
+            and sp_config["odds_range"][0] <= odds <= sp_config["odds_range"][1]
+        ):
+            roi = prob_for_roi * (odds - 1) - (1 - prob_for_roi)
+            if roi >= roi_min_sp:
+                sp_candidates.append(
+                    {
+                        "num": r["num"],
+                        "odds": odds,
+                        "prob": r["p_finale"],
+                        "roi": roi,
+                    }
+                )
 
     if len(sp_candidates) >= sp_config["legs_min"]:
         kelly_frac = sp_config["kelly_frac"]
@@ -273,67 +322,170 @@ def generate_tickets(
 
         if final_stakes:
             total_stake = sum(final_stakes.values())
-            weighted_roi = sum(c["roi"] * final_stakes[c["num"]] for c in sp_candidates if c["num"] in final_stakes) / total_stake if total_stake > 0 else 0
-            final_tickets.append({
-                "type": "SP_DUTCHING", "stake": total_stake, "roi_est": weighted_roi,
-                "horses": list(final_stakes.keys()), "details": final_stakes
-            })
-            analysis_messages.append(f"SP Dutching ticket created with {len(final_stakes)} horses.")
+            weighted_roi = (
+                sum(
+                    c["roi"] * final_stakes[c["num"]]
+                    for c in sp_candidates
+                    if c["num"] in final_stakes
+                )
+                / total_stake
+                if total_stake > 0
+                else 0
+            )
+            final_tickets.append(
+                {
+                    "type": "SP_DUTCHING",
+                    "stake": total_stake,
+                    "roi_est": weighted_roi,
+                    "horses": list(final_stakes.keys()),
+                    "details": final_stakes,
+                }
+            )
+            analysis_messages.append(
+                f"SP Dutching ticket created with {len(final_stakes)} horses."
+            )
+    return sp_candidates, final_tickets, analysis_messages
 
-    # 4. Génération des tickets combinés (Exotics)
-    exotics_allowed = snapshot_data.get("market", {}).get("overround_place", 0.0) <= overround_max
 
-    if exotics_allowed and exotics_config.get("type") == "TRIO" and len(sp_candidates) >= 3:
+def _generate_exotic_tickets(
+    sp_candidates: list[dict[str, Any]],
+    snapshot_data: dict[str, Any],
+    config: dict[str, Any],
+    final_tickets: list[dict[str, Any]],
+    analysis_messages: list[str],
+) -> tuple[list[dict[str, Any]], list[str]]:
+    exotics_config = config["exotics_config"]
+    overround_max = config["overround_max"]
+    budget = config["budget"]
+    sp_config = config["sp_config"]
+    ev_min_combo = config["ev_min_combo"]
+    payout_min_combo = config["payout_min_combo"]
+
+    exotics_allowed = (
+        snapshot_data.get("market", {}).get("overround_place", 0.0) <= overround_max
+    )
+
+    if (
+        exotics_allowed
+        and exotics_config.get("type") == "TRIO"
+        and len(sp_candidates) >= MIN_SP_CANDIDATES_FOR_EXOTICS
+    ):
         combo_budget = budget * (1 - sp_config["budget_ratio"])
-        trio_combinations = list(combinations(sp_candidates, 3))
+        trio_combinations = list(
+            combinations(sp_candidates, MIN_SP_CANDIDATES_FOR_EXOTICS)
+        )
         evaluated_combos = []
 
         for combo in trio_combinations:
             combo_legs = list(combo)
             try:
-                combo_odds_heuristic = math.prod(leg['odds'] for leg in combo_legs)
+                combo_odds_heuristic = math.prod(leg["odds"] for leg in combo_legs)
             except (TypeError, KeyError):
                 continue
 
             combo_eval_result = evaluate_combo(
-                tickets=[{"type": "TRIO", "odds": combo_odds_heuristic, "legs": combo_legs}],
-                bankroll=combo_budget, calibration=CALIB_PATH
+                tickets=[
+                    {"type": "TRIO", "odds": combo_odds_heuristic, "legs": combo_legs}
+                ],
+                bankroll=combo_budget,
+                calibration=CALIB_PATH,
             )
 
             if combo_eval_result.get("status") == "ok":
-                if combo_eval_result.get("roi", 0) >= ev_min_combo and combo_eval_result.get("payout_expected", 0) >= payout_min_combo:
-                    evaluated_combos.append({
-                        "legs": [c["num"] for c in combo_legs],
-                        "roi": combo_eval_result.get("roi"),
-                        "payout": combo_eval_result.get("payout_expected")
-                    })
+                if (
+                    combo_eval_result.get("roi", 0) >= ev_min_combo
+                    and combo_eval_result.get("payout_expected", 0) >= payout_min_combo
+                ):
+                    evaluated_combos.append(
+                        {
+                            "legs": [c["num"] for c in combo_legs],
+                            "roi": combo_eval_result.get("roi"),
+                            "payout": combo_eval_result.get("payout_expected"),
+                        }
+                    )
 
         if evaluated_combos:
             best_combo = max(evaluated_combos, key=lambda x: x["roi"])
-            final_tickets.append({
-                "type": "TRIO", "stake": combo_budget, "roi_est": best_combo["roi"],
-                "payout_est": best_combo["payout"], "horses": best_combo["legs"]
-            })
-            analysis_messages.append(f"Profitable TRIO combo found: {best_combo['legs']}.")
+            final_tickets.append(
+                {
+                    "type": "TRIO",
+                    "stake": combo_budget,
+                    "roi_est": best_combo["roi"],
+                    "payout_est": best_combo["payout"],
+                    "horses": best_combo["legs"],
+                }
+            )
+            analysis_messages.append(
+                f"Profitable TRIO combo found: {best_combo['legs']}."
+            )
+    return final_tickets, analysis_messages
 
-    # 5. Validation finale et décision
+
+def _finalize_and_decide(
+    final_tickets: list[dict[str, Any]],
+    roi_min_global: float,
+    analysis_messages: list[str],
+) -> dict[str, Any]:
     if not final_tickets:
         return {
-            "gpi_decision": "Abstain: No valid tickets found", "tickets": [],
-            "roi_global_est": 0, "message": " ".join(["No profitable tickets found after analysis."] + analysis_messages)
+            "gpi_decision": "Abstain: No valid tickets found",
+            "tickets": [],
+            "roi_global_est": 0,
+            "message": " ".join(
+                ["No profitable tickets found after analysis."] + analysis_messages
+            ),
         }
 
     total_stake = sum(t.get("stake", 0) for t in final_tickets)
-    roi_global_est = sum(t.get("roi_est", 0) * t.get("stake", 0) for t in final_tickets) / total_stake if total_stake > 0 else 0
+    roi_global_est = (
+        sum(t.get("roi_est", 0) * t.get("stake", 0) for t in final_tickets) / total_stake
+        if total_stake > 0
+        else 0
+    )
 
     if roi_global_est < roi_min_global:
         return {
-            "gpi_decision": f"Abstain: Global ROI ({roi_global_est:.2f}) < threshold ({roi_min_global:.2f})",
-            "tickets": [], "roi_global_est": roi_global_est,
-            "message": f"Global ROI ({roi_global_est:.2f}) is below the minimum threshold."
+            "gpi_decision": (
+                f"Abstain: Global ROI ({roi_global_est:.2f}) < threshold ({roi_min_global:.2f})"
+            ),
+            "tickets": [],
+            "roi_global_est": roi_global_est,
+            "message": f"Global ROI ({roi_global_est:.2f}) is below the minimum threshold.",
         }
 
     return {
-        "gpi_decision": "Play", "tickets": final_tickets, "roi_global_est": roi_global_est,
-        "message": "Profitable tickets found. " + " ".join(analysis_messages)
+        "gpi_decision": "Play",
+        "tickets": final_tickets,
+        "roi_global_est": roi_global_est,
+        "message": "Profitable tickets found. " + " ".join(analysis_messages),
     }
+
+
+def generate_tickets(
+    snapshot_data: dict[str, Any], gpi_config: dict[str, Any]
+) -> dict[str, Any]:
+    """
+    Génère des tickets de paris basés sur les règles GPI v5.2,
+    incluant les ajustements Chrono et Drift.
+    """
+    analysis_messages = []
+    try:
+        runners, config = _initialize_and_validate(snapshot_data, gpi_config)
+        runners, analysis_messages = _calculate_adjusted_probabilities(runners, config)
+    except ValueError as e:
+        return {"gpi_decision": f"Abstain: {e}", "tickets": [], "roi_global_est": 0}
+
+    final_tickets = []
+    sp_candidates, final_tickets, analysis_messages = _generate_sp_dutching_tickets(
+        runners, config, final_tickets, analysis_messages
+    )
+    final_tickets, analysis_messages = _generate_exotic_tickets(
+        sp_candidates,
+        snapshot_data,
+        config,
+        final_tickets,
+        analysis_messages,
+    )
+    return _finalize_and_decide(
+        final_tickets, config["roi_min_global"], analysis_messages
+    )

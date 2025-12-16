@@ -796,8 +796,7 @@ def evaluate_combo(
         [dict(t) for t in tickets],
         budget=bankroll,
         simulate_fn=simulate_wrapper,
-        kelly_cap=1.0,
-        round_to=0.0,
+        config={"kelly_cap": 1.0, "round_to": 0.0},
     )
 
     combo_notes: list[str] = []

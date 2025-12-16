@@ -223,13 +223,13 @@ def process_single_course_analysis(
                 f"Step 3: Calling generate_tickets for {race_doc_id}.",
                 extra=log_extra,
             )
+            gpi_config["budget"] = budget
+            gpi_config["calibration_data"] = calibration_data
+            gpi_config["je_stats"] = stats_payload
+            gpi_config["h30_snapshot_data"] = h30_snapshot_data
             analysis_result = generate_tickets(
                 snapshot_data=snapshot_data,
                 gpi_config=gpi_config,
-                budget=budget,
-                calibration_data=calibration_data,
-                je_stats=stats_payload,
-                h30_snapshot_data=h30_snapshot_data,
             )
             logger.info(
                 (

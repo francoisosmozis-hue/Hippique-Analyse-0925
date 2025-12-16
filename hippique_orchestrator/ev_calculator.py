@@ -37,6 +37,24 @@ if "simulate_wrapper" in sys.modules:  # pragma: no cover - optional dependency
 _LOGGER = logging.getLogger(__name__)
 
 
+MIN_DUTCHING_GROUP_SIZE = 2
+MIN_TICKETS_FOR_JOINT_MOMENTS = 2
+MIN_INDICES_FOR_COMBINATIONS = 2
+COVARIANCE_THRESHOLD = 1e-12
+GRID_SEARCH_TOLERANCE = 1e-9
+MIN_COMBINED_PAYOUT = 12.0
+DEFAULT_EV_THRESHOLD = 0.35
+DEFAULT_ROI_THRESHOLD = 0.25
+DEFAULT_KELLY_CAP = 0.60
+DEFAULT_ROUND_TO = 0.10
+DEFAULT_ROR_THRESHOLD = None
+DEFAULT_OPTIMIZE = False
+DEFAULT_VARIANCE_CAP = None
+
+
+
+
+
 def _make_hashable(value: Any) -> Any:
     """Return a hashable representation of ``value`` for caching purposes."""
 
@@ -78,7 +96,7 @@ def _apply_dutching(tickets: Iterable[dict[str, Any]]) -> None:
         # computing ``1 / (odds - 1)``.  These tickets are left untouched and
         # will later trigger validation errors in ``compute_ev_roi``.
         valid_tickets = [t for t in group_tickets if t.get("odds", 0) > 1]
-        if len(valid_tickets) < 2:
+        if len(valid_tickets) < MIN_DUTCHING_GROUP_SIZE:
             continue
 
         total = sum(t.get("stake", 0) for t in valid_tickets)
@@ -299,7 +317,7 @@ def compute_joint_moments(
 ) -> tuple[float, list[dict[str, Any]]]:
     """Return covariance adjustment and detailed pairs for correlated tickets."""
 
-    if len(ticket_infos) < 2:
+    if len(ticket_infos) < MIN_TICKETS_FOR_JOINT_MOMENTS:
         return 0.0, []
 
     exposure_map: dict[str, list[int]] = defaultdict(list)
@@ -309,7 +327,7 @@ def compute_joint_moments(
 
     candidate_pairs: set[tuple[int, int]] = set()
     for indices in exposure_map.values():
-        if len(indices) < 2:
+        if len(indices) < MIN_INDICES_FOR_COMBINATIONS:
             continue
         for i, j in itertools.combinations(sorted(set(indices)), 2):
             candidate_pairs.add((i, j))
@@ -327,7 +345,7 @@ def compute_joint_moments(
             continue
         joint = _estimate_joint_probability(info_i, info_j, simulate_fn, cache)
         covariance = _covariance_from_joint(info_i, info_j, joint)
-        if abs(covariance) < 1e-12:
+        if abs(covariance) < COVARIANCE_THRESHOLD:
             continue
         adjustment += 2.0 * covariance
         details.append(
@@ -402,7 +420,7 @@ def optimize_stake_allocation(
         def search(i: int, remaining: float, current: list[float]) -> None:
             nonlocal best_val, best_fracs
             if i == len(p_odds):
-                if remaining < -1e-9:
+                if remaining < -GRID_SEARCH_TOLERANCE:
                     return
                 val = objective(current)
                 if val < best_val:
@@ -446,93 +464,20 @@ def risk_of_ruin(
     return math.exp(-2 * total_ev * bankroll / effective_variance)
 
 
-def compute_ev_roi(
+def _process_tickets(
     tickets: list[dict[str, Any]],
     budget: float,
-    simulate_fn: Callable[[Iterable[Any]], float] | None = None,
-    *,
-    cache_simulations: bool = True,
-    ev_threshold: float = 0.35,
-    roi_threshold: float = 0.25,
-    ror_threshold: float | None = None,
-    kelly_cap: float = 0.60,
-    round_to: float = 0.10,
-    optimize: bool = False,
-    variance_cap: float | None = None,
-) -> dict[str, Any]:
-    """Compute EV and ROI for a list of betting tickets.
-
-    Parameters
-    ----------
-    tickets:
-        Each ticket is a mapping containing ``p`` (probability), ``odds`` and an
-        optional ``stake``.  Tickets forming a dutching SP group may share a
-        ``dutching`` identifier.  Combined bets may provide ``legs`` and omit
-        ``p``; in that case ``simulate_fn`` is used to estimate the
-        probability.
-    budget:
-        Bankroll used for Kelly criterion computations. Must be greater than ``0``.
-    simulate_fn:
-        Callable used to estimate the probability of combined bets from their
-        ``legs``.  Its signature must be ``legs -> probability``.  Required when
-        tickets contain ``legs`` without providing ``p``.
-    cache_simulations:
-        When ``True`` (default), results of ``simulate_fn`` are cached so that
-        repeated combined bets with identical ``legs`` reuse the previously
-        computed probability.  Set to ``False`` to disable this behaviour.
-    ev_threshold:
-        Minimum EV ratio (``ev / budget``) required for the ticket set to be
-        considered "green".
-    roi_threshold:
-        Minimum ROI required for the ticket set to be considered "green".
-    kelly_cap:
-        Maximum fraction of the Kelly stake to actually wager.  Defaults to
-        ``0.60``.
-    round_to:
-        Amount to which individual stakes are rounded.  ``0.10`` by default.
-        Set to ``0`` to disable rounding.
-    optimize:
-        When ``True`` the stake allocation is optimised globally to maximise
-        the sum of expected log-returns under the budget and Kelly cap
-        constraints.  The result will also include ``ev_individual`` and
-        ``roi_individual`` for the pre-optimisation allocation.
-
-    Returns
-    -------
-    dict
-        A dictionary with keys ``ev`` (global expected value), ``roi`` (overall
-        ROI), ``ev_ratio`` (EV relative to the budget), ``green`` (boolean flag)
-        and ``total_stake_normalized`` (total stake after potential
-        normalisation).  When ``green`` is ``False`` an additional
-        ``failure_reasons`` list explains which criteria were not met
-    Raises
-    ------
-    ValueError
-        If ``budget`` is not greater than ``0``.
-    """
-    if budget <= 0:
-        raise ValueError("budget must be > 0")
-    if variance_cap is not None and variance_cap <= 0:
-        raise ValueError("variance_cap must be > 0")
-
-    # First adjust stakes for dutching groups
-    _apply_dutching(tickets)
-
-    if simulate_fn is None:
-        simulate_fn = simulate_wrapper
-
-    cache: dict[tuple[Any, ...], float] = {}
-    total_ev = 0.0
-    total_variance = 0.0
-    total_stake = 0.0
-    combined_expected_payout = 0.0
-    total_expected_payout = 0.0
-    has_combined = False
+    simulate_fn: Callable[[Iterable[Any]], float] | None,
+    cache_simulations: bool,
+    kelly_cap: float,
+    round_to: float,
+    cache: dict[tuple[Any, ...], float],
+) -> tuple[list[dict[str, Any]], float, int, bool]:
+    processed: list[dict[str, Any]] = []
     total_clv = 0.0
     clv_count = 0
-    ticket_metrics: list[dict[str, float]] = []
+    has_combined = False
 
-    processed: list[dict[str, Any]] = []
     for t in tickets:
         p = t.get("p")
         legs_for_probability = t.get("legs_details") or t.get("legs")
@@ -596,88 +541,719 @@ def compute_ev_roi(
         )
         if "legs" in t or "legs_details" in t:
             has_combined = True
+    return processed, total_clv, clv_count, has_combined
 
-    total_stake = sum(d["stake"] for d in processed)
-    if round_to > 0 and total_stake < budget:
-        remaining = budget - total_stake
-        non_capped = [d for d in processed if not d["capped"]]
-        if non_capped and remaining >= round_to / 2:
-            weight_sum = sum(d["kelly_stake"] for d in non_capped)
-            for d in non_capped:
-                max_extra = d["max_stake"] - d["stake"]
-                if max_extra <= 0:
-                    continue
-                allocation = (
-                    remaining * (d["kelly_stake"] / weight_sum) if weight_sum else 0.0
-                )
-                allocation = min(allocation, max_extra)
-                allocation = math.floor((allocation + 1e-12) / round_to) * round_to
-                d["stake"] += allocation
-                remaining -= allocation
-            if remaining >= round_to / 2:
-                non_capped.sort(key=lambda x: x["kelly_stake"], reverse=True)
-                for d in non_capped:
-                    if remaining < round_to / 2:
-                        break
-                    max_extra = d["max_stake"] - d["stake"]
-                    add_units = min(
-                        int((max_extra + 1e-12) / round_to),
-                        int((remaining + 1e-12) / round_to),
-                    )
-                    if add_units <= 0:
-                        continue
-                    add_amount = add_units * round_to
-                    d["stake"] += add_amount
-                    remaining -= add_amount
-                    if remaining < round_to / 2:
-                        break
-            total_stake = budget - remaining
+
+
+
+
+def _calculate_ticket_metrics(
+
+
+
+
+
+    processed: list[dict[str, Any]]
+
+
+
+
+
+) -> tuple[float, float, float, float, list[dict[str, float]], list[dict[str, Any]]]:
+
+
+
+
+
+    total_ev = 0.0
+
+
+
+
+
+    total_variance = 0.0
+
+
+
+
+
+    total_expected_payout = 0.0
+
+
+
+
+
+    combined_expected_payout = 0.0
+
+
+
+
+
+    ticket_metrics: list[dict[str, float]] = []
+
+
+
+
 
     covariance_inputs: list[dict[str, Any]] = []
 
+
+
+
+
+
+
+
+
+
+
     for d in processed:
+
+
+
+
+
         t = d["ticket"]
+
+
+
+
+
         stake = d["stake"]
+
+
+
+
+
         p = d["p"]
+
+
+
+
+
         odds = d["odds"]
 
+
+
+
+
+
+
+
+
+
+
         ev = stake * (p * (odds - 1) - (1 - p))
+
+
+
+
+
         variance = p * (stake * (odds - 1)) ** 2 + (1 - p) * (-stake) ** 2 - ev**2
+
+
+
+
+
         roi = ev / stake if stake else 0.0
+
+
+
+
+
         expected_payout = p * stake * odds
+
+
+
+
+
         ticket_variance = max(variance, 0.0)
+
+
+
+
+
         ticket_std = math.sqrt(ticket_variance)
+
+
+
+
+
         sharpe_ticket = ev / ticket_std if ticket_std else 0.0
+
+
+
+
+
         metrics = {
+
+
+
+
+
             "kelly_stake": d["kelly_stake"],
+
+
+
+
+
             "stake": stake,
+
+
+
+
+
             "ev": ev,
+
+
+
+
+
             "roi": roi,
+
+
+
+
+
             "variance": ticket_variance,
+
+
+
+
+
             "clv": d["clv"],
+
+
+
+
+
             "expected_payout": expected_payout,
+
+
+
+
+
             "sharpe": sharpe_ticket,
+
+
+
+
+
         }
+
+
+
+
+
         t.update(metrics)
+
+
+
+
+
         ticket_metrics.append(metrics)
+
+
+
+
+
         total_ev += ev
+
+
+
+
+
         total_variance += ticket_variance
+
+
+
+
+
         total_expected_payout += expected_payout
+
+
+
+
+
         if "legs" in t:
+
+
+
+
+
             combined_expected_payout += p * stake * odds
 
+
+
+
+
+
+
+
+
+
+
         dependencies = d.get("dependencies", {})
+
+
+
+
+
         covariance_inputs.append(
+
+
+
+
+
             {
+
+
+
+
+
                 "p": p,
+
+
+
+
+
                 "ev": ev,
+
+
+
+
+
                 "win_value": stake * (odds - 1),
+
+
+
+
+
                 "loss_value": -stake,
+
+
+
+
+
                 "exposures": dependencies.get("exposures", frozenset()),
+
+
+
+
+
                 "legs_for_sim": dependencies.get("legs", ()),
+
+
+
+
+
                 "label": _ticket_label(t, len(covariance_inputs)),
+
+
+
+
+
             }
+
+
+
+
+
         )
+
+
+
+
+
+    return (
+
+
+
+
+
+        total_ev,
+
+
+
+
+
+        total_variance,
+
+
+
+
+
+        total_expected_payout,
+
+
+
+
+
+        combined_expected_payout,
+
+
+
+
+
+        ticket_metrics,
+
+
+
+
+
+        covariance_inputs,
+
+
+
+
+
+    )
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+def _adjust_stakes(
+
+
+
+
+
+    processed: list[dict[str, Any]], budget: float, round_to: float
+
+
+
+
+
+) -> float:
+
+
+
+
+
+    total_stake = sum(d["stake"] for d in processed)
+
+
+
+
+
+    if round_to > 0 and total_stake < budget:
+
+
+
+
+
+        remaining = budget - total_stake
+
+
+
+
+
+        non_capped = [d for d in processed if not d["capped"]]
+
+
+
+
+
+        if non_capped and remaining >= round_to / 2:
+
+
+
+
+
+            weight_sum = sum(d["kelly_stake"] for d in non_capped)
+
+
+
+
+
+            for d in non_capped:
+
+
+
+
+
+                max_extra = d["max_stake"] - d["stake"]
+
+
+
+
+
+                if max_extra <= 0:
+
+
+
+
+
+                    continue
+
+
+
+
+
+                allocation = (
+
+
+
+
+
+                    remaining * (d["kelly_stake"] / weight_sum) if weight_sum else 0.0
+
+
+
+
+
+                )
+
+
+
+
+
+                allocation = min(allocation, max_extra)
+
+
+
+
+
+                allocation = math.floor((allocation + 1e-12) / round_to) * round_to
+
+
+
+
+
+                d["stake"] += allocation
+
+
+
+
+
+                remaining -= allocation
+
+
+
+
+
+            if remaining >= round_to / 2:
+
+
+
+
+
+                non_capped.sort(key=lambda x: x["kelly_stake"], reverse=True)
+
+
+
+
+
+                for d in non_capped:
+
+
+
+
+
+                    if remaining < round_to / 2:
+
+
+
+
+
+                        break
+
+
+
+
+
+                    max_extra = d["max_stake"] - d["stake"]
+
+
+
+
+
+                    add_units = min(
+
+
+
+
+
+                        int((max_extra + 1e-12) / round_to),
+
+
+
+
+
+                        int((remaining + 1e-12) / round_to),
+
+
+
+
+
+                    )
+
+
+
+
+
+                    if add_units <= 0:
+
+
+
+
+
+                        continue
+
+
+
+
+
+                    add_amount = add_units * round_to
+
+
+
+
+
+                    d["stake"] += add_amount
+
+
+
+
+
+                    remaining -= add_amount
+
+
+
+
+
+                    if remaining < round_to / 2:
+
+
+
+
+
+                        break
+
+
+
+
+
+            total_stake = budget - remaining
+
+
+
+
+
+    return total_stake
+
+
+def compute_ev_roi(
+    tickets: list[dict[str, Any]],
+    budget: float,
+    simulate_fn: Callable[[Iterable[Any]], float] | None = None,
+    *,
+    cache_simulations: bool = True,
+    config: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Compute EV and ROI for a list of betting tickets.
+
+    Parameters
+    ----------
+    tickets:
+        Each ticket is a mapping containing ``p`` (probability), ``odds`` and an
+        optional ``stake``.  Tickets forming a dutching SP group may share a
+        ``dutching`` identifier.  Combined bets may provide ``legs`` and omit
+        ``p``; in that case ``simulate_fn`` is used to estimate the
+        probability.
+    budget:
+        Bankroll used for Kelly criterion computations. Must be greater than ``0``.
+    simulate_fn:
+        Callable used to estimate the probability of combined bets from their
+        ``legs``.  Its signature must be ``legs -> probability``.  Required when
+        tickets contain ``legs`` without providing ``p``.
+    cache_simulations:
+        When ``True`` (default), results of ``simulate_fn`` are cached so that
+        repeated combined bets with identical ``legs`` reuse the previously
+        computed probability.  Set to ``False`` to disable this behaviour.
+    config:
+        Dictionary of configuration options:
+        - ev_threshold: float, default 0.35
+        - roi_threshold: float, default 0.25
+        - ror_threshold: float or None, default None
+        - kelly_cap: float, default 0.60
+        - round_to: float, default 0.10
+        - optimize: bool, default False
+        - variance_cap: float or None, default None
+
+    Returns
+    -------
+    dict
+        A dictionary with keys ``ev`` (global expected value), ``roi`` (overall
+        ROI), ``ev_ratio`` (EV relative to the budget), ``green`` (boolean flag)
+        and ``total_stake_normalized`` (total stake after potential
+        normalisation).  When ``green`` is ``False`` an additional
+        ``failure_reasons`` list explains which criteria were not met
+    Raises
+    ------
+    ValueError
+        If ``budget`` is not greater than ``0``.
+    """
+    cfg = {
+        "ev_threshold": DEFAULT_EV_THRESHOLD,
+        "roi_threshold": DEFAULT_ROI_THRESHOLD,
+        "ror_threshold": DEFAULT_ROR_THRESHOLD,
+        "kelly_cap": DEFAULT_KELLY_CAP,
+        "round_to": DEFAULT_ROUND_TO,
+        "optimize": DEFAULT_OPTIMIZE,
+        "variance_cap": DEFAULT_VARIANCE_CAP,
+    }
+    if config:
+        cfg.update(config)
+
+    ev_threshold = cfg["ev_threshold"]
+    roi_threshold = cfg["roi_threshold"]
+    ror_threshold = cfg["ror_threshold"]
+    kelly_cap = cfg["kelly_cap"]
+    round_to = cfg["round_to"]
+    optimize = cfg["optimize"]
+    variance_cap = cfg["variance_cap"]
+
+    if budget <= 0:
+        raise ValueError("budget must be > 0")
+    if variance_cap is not None and variance_cap <= 0:
+        raise ValueError("variance_cap must be > 0")
+
+    # First adjust stakes for dutching groups
+    _apply_dutching(tickets)
+
+    if simulate_fn is None:
+        simulate_fn = simulate_wrapper
+
+    cache: dict[tuple[Any, ...], float] = {}
+    
+    processed, total_clv, clv_count, has_combined = _process_tickets(
+        tickets, budget, simulate_fn, cache_simulations, kelly_cap, round_to, cache
+    )
+
+    total_stake = _adjust_stakes(processed, budget, round_to)
+
+    (
+        total_ev,
+        total_variance,
+        total_expected_payout,
+        combined_expected_payout,
+        ticket_metrics,
+        covariance_inputs,
+    ) = _calculate_ticket_metrics(processed)
 
     total_variance_naive = total_variance
     covariance_adjustment = 0.0
@@ -902,7 +1478,7 @@ def compute_ev_roi(
             reasons.append(f"EV ratio below {ev_threshold:.2f}")
         if roi_opt < roi_threshold:
             reasons.append(f"ROI below {roi_threshold:.2f}")
-        if has_combined and opt_combined_payout <= 12:
+        if has_combined and opt_combined_payout <= MIN_COMBINED_PAYOUT:
             reasons.append("expected payout for combined bets ≤ 12€")
         if variance_exceeded_opt:
             reasons.append(f"variance above {variance_cap:.2f} * bankroll^2")
@@ -947,7 +1523,7 @@ def compute_ev_roi(
         reasons.append(f"EV ratio below {ev_threshold:.2f}")
     if roi_total < roi_threshold:
         reasons.append(f"ROI below {roi_threshold:.2f}")
-    if has_combined and combined_expected_payout <= 12:
+    if has_combined and combined_expected_payout <= MIN_COMBINED_PAYOUT:
         reasons.append("expected payout for combined bets ≤ 12€")
     if ror_threshold is not None and ruin_risk > ror_threshold:
         reasons.append(f"risk of ruin above {ror_threshold:.2%}")

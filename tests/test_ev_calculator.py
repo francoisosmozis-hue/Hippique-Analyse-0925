@@ -1,10 +1,13 @@
-import inspect
 import math
 from typing import Any
 
 import pytest
 
 from hippique_orchestrator.ev_calculator import (
+    DEFAULT_EV_THRESHOLD,
+    DEFAULT_KELLY_CAP,
+    DEFAULT_ROI_THRESHOLD,
+    DEFAULT_ROUND_TO,
     _apply_dutching,
     _kelly_fraction,
     compute_ev_roi,
@@ -12,11 +15,11 @@ from hippique_orchestrator.ev_calculator import (
 )
 from hippique_orchestrator.simulate_ev import allocate_dutching_sp
 
-SIG = inspect.signature(compute_ev_roi)
-EV_THRESHOLD = SIG.parameters["ev_threshold"].default
-ROI_THRESHOLD = SIG.parameters["roi_threshold"].default
-KELLY_CAP = SIG.parameters["kelly_cap"].default
-ROUND_TO = SIG.parameters["round_to"].default
+EV_THRESHOLD = DEFAULT_EV_THRESHOLD
+ROI_THRESHOLD = DEFAULT_ROI_THRESHOLD
+KELLY_CAP = DEFAULT_KELLY_CAP
+ROUND_TO = DEFAULT_ROUND_TO
+
 
 @pytest.mark.unit
 def test_single_bet_ev_positive_and_negative() -> None:
@@ -39,7 +42,7 @@ def test_dutching_group_equal_profit() -> None:
         {"p": 0.55, "odds": 4.0, "stake": 50, "dutching": "A"},
     ]
     # Large budget so that Kelly capping does not interfere
-    compute_ev_roi(tickets, budget=10_000, round_to=0)
+    compute_ev_roi(tickets, budget=10_000, config={"round_to": 0})
 
     total_stake = sum(t["stake"] for t in tickets)
     profit1 = tickets[0]["stake"] * (tickets[0]["odds"] - 1)
@@ -60,7 +63,9 @@ def test_combined_bet_with_simulator() -> None:
         return 0.25
 
     tickets = [{"odds": 10.0, "stake": 10, "legs": ["leg1", "leg2"]}]
-    res = compute_ev_roi(tickets, budget=1_000, simulate_fn=fake_simulator, round_to=0)
+    res = compute_ev_roi(
+        tickets, budget=1_000, simulate_fn=fake_simulator, config={"round_to": 0}
+    )
 
     assert called == [["leg1", "leg2"]]
     assert math.isclose(res["ev"], 15.0)
@@ -94,7 +99,7 @@ def test_kelly_cap_respected() -> None:
     p, odds = 0.6, 2.0
     budget = 1_000
     tickets = [{"p": p, "odds": odds, "stake": 1_000}]
-    res = compute_ev_roi(tickets, budget=budget, kelly_cap=KELLY_CAP)
+    res = compute_ev_roi(tickets, budget=budget, config={"kelly_cap": KELLY_CAP})
 
     kelly_fraction = (p * odds - 1) / (odds - 1)
     kelly_stake = kelly_fraction * budget
@@ -165,8 +170,7 @@ def test_stakes_normalized_when_exceeding_budget() -> None:
     expected1 = k1 * scale
     expected2 = k2 * scale
 
-    res = compute_ev_roi(tickets, budget=budget, kelly_cap=KELLY_CAP)
-
+    res = compute_ev_roi(tickets, budget=budget, config={"kelly_cap": KELLY_CAP})
 
     assert math.isclose(sum(t["stake"] for t in tickets), budget)
     assert math.isclose(tickets[0]["stake"], expected1)
@@ -183,7 +187,9 @@ def test_rounded_stakes_sum_to_budget() -> None:
         {"p": 0.9, "odds": 10.0, "stake": 0.33},
     ]
 
-    compute_ev_roi(tickets, budget=budget, kelly_cap=1.0, round_to=ROUND_TO)
+    compute_ev_roi(
+        tickets, budget=budget, config={"kelly_cap": 1.0, "round_to": ROUND_TO}
+    )
 
     total = sum(t["stake"] for t in tickets)
     assert math.isclose(total, budget, abs_tol=ROUND_TO / 2)
@@ -212,10 +218,15 @@ def test_ticket_metrics_and_std_dev() -> None:
     assert math.isclose(metrics[0]["ev"], ev1)
     assert math.isclose(metrics[0]["variance"], var1)
     assert math.isclose(metrics[0]["clv"], clv1)
-    assert math.isclose(metrics[0]["expected_payout"], tickets[0]["p"] * metrics[0]["stake"] * tickets[0]["odds"])
+    assert math.isclose(
+        metrics[0]["expected_payout"],
+        tickets[0]["p"] * metrics[0]["stake"] * tickets[0]["odds"],
+    )
     assert math.isclose(
         metrics[0]["sharpe"],
-        metrics[0]["ev"] / math.sqrt(metrics[0]["variance"]) if metrics[0]["variance"] > 0 else 0.0,
+        metrics[0]["ev"] / math.sqrt(metrics[0]["variance"])
+        if metrics[0]["variance"] > 0
+        else 0.0,
         rel_tol=1e-9,
         abs_tol=1e-12,
     )
@@ -230,10 +241,15 @@ def test_ticket_metrics_and_std_dev() -> None:
     assert math.isclose(metrics[1]["ev"], ev2)
     assert math.isclose(metrics[1]["variance"], var2)
     assert math.isclose(metrics[1]["clv"], clv2)
-    assert math.isclose(metrics[1]["expected_payout"], tickets[1]["p"] * metrics[1]["stake"] * tickets[1]["odds"])
+    assert math.isclose(
+        metrics[1]["expected_payout"],
+        tickets[1]["p"] * metrics[1]["stake"] * tickets[1]["odds"],
+    )
     assert math.isclose(
         metrics[1]["sharpe"],
-        metrics[1]["ev"] / math.sqrt(metrics[1]["variance"]) if metrics[1]["variance"] > 0 else 0.0,
+        metrics[1]["ev"] / math.sqrt(metrics[1]["variance"])
+        if metrics[1]["variance"] > 0
+        else 0.0,
         rel_tol=1e-9,
         abs_tol=1e-12,
     )
@@ -290,8 +306,10 @@ def test_enforce_ror_threshold_reduces_high_risk_pack() -> None:
     compute_ev_roi(
         baseline,
         budget=cfg["BUDGET_TOTAL"],
-        variance_cap=0.01, # Arbitrary small value
-        kelly_cap=cfg["MAX_VOL_PAR_CHEVAL"],
+        config={
+            "variance_cap": 0.01,
+            "kelly_cap": cfg["MAX_VOL_PAR_CHEVAL"],
+        },
     )
 
     final_stake = sum(t["stake"] for t in baseline)
@@ -323,9 +341,11 @@ def test_enforce_ror_threshold_preserves_safe_pack() -> None:
     stats = compute_ev_roi(
         baseline,
         budget=cfg["BUDGET_TOTAL"],
-        ror_threshold=cfg["ROR_MAX"],
-        kelly_cap=cfg["MAX_VOL_PAR_CHEVAL"],
-        round_to=0,
+        config={
+            "ror_threshold": cfg["ROR_MAX"],
+            "kelly_cap": cfg["MAX_VOL_PAR_CHEVAL"],
+            "round_to": 0,
+        },
     )
 
     assert stats["risk_of_ruin"] <= cfg["ROR_MAX"]
@@ -378,7 +398,7 @@ def test_covariance_increases_ror_for_shared_runner() -> None:
         {"id": "H1", "p": 0.55, "odds": 3.0, "stake": 5.0},
     ]
 
-    res = compute_ev_roi(tickets, budget=budget, round_to=0)
+    res = compute_ev_roi(tickets, budget=budget, config={"round_to": 0})
 
     assert res["variance"] >= res["variance_naive"]
     assert res["covariance_adjustment"] >= 0.0
@@ -396,7 +416,7 @@ def test_optimized_allocation_respects_budget_and_improves_ev() -> None:
         {"p": 0.7, "odds": 3.0},
     ]
 
-    res = compute_ev_roi(tickets, budget=100, optimize=True)
+    res = compute_ev_roi(tickets, budget=100, config={"optimize": True})
 
     assert sum(res["optimized_stakes"]) <= 100 + 1e-6
     assert res["ev"] > res["ev_individual"]
@@ -420,7 +440,6 @@ def test_optimized_allocation_respects_budget_and_improves_ev() -> None:
     assert math.isclose(res["sharpe"], res["ev_over_std"])
 
 
-
 @pytest.mark.unit
 def test_green_flag_true_when_thresholds_met() -> None:
     """EV ratio and ROI above thresholds should yield a green flag."""
@@ -429,8 +448,7 @@ def test_green_flag_true_when_thresholds_met() -> None:
     res = compute_ev_roi(
         tickets,
         budget=100,
-        ev_threshold=EV_THRESHOLD,
-        roi_threshold=ROI_THRESHOLD,
+        config={"ev_threshold": EV_THRESHOLD, "roi_threshold": ROI_THRESHOLD},
     )
 
     assert res["ev_ratio"] >= EV_THRESHOLD
@@ -466,8 +484,7 @@ def test_green_flag_failure_reasons(
     res = compute_ev_roi(
         tickets,
         budget=budget,
-        ev_threshold=EV_THRESHOLD,
-        roi_threshold=ROI_THRESHOLD,
+        config={"ev_threshold": EV_THRESHOLD, "roi_threshold": ROI_THRESHOLD},
     )
 
     assert res["green"] is False
@@ -479,6 +496,8 @@ def test_variance_cap_triggers_failure() -> None:
     """High variance should trigger a failure reason when capped."""
     tickets = [{"p": 0.5, "odds": 10.0, "stake": 20}]
 
-    res = compute_ev_roi(tickets, budget=100, variance_cap=0.01, ev_threshold=0.0)
+    res = compute_ev_roi(
+        tickets, budget=100, config={"variance_cap": 0.01, "ev_threshold": 0.0}
+    )
     assert res["green"] is False
     assert f"variance above {0.01:.2f} * bankroll^2" in res["failure_reasons"]
