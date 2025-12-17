@@ -94,7 +94,7 @@ def fetch_chrono_from_html(html_content: str) -> dict[str, Any] | None:
 
     soup = BeautifulSoup(html_content, 'html.parser')
 
-    record_attelé = None
+    record_attele = None
     last_3_chronos: list[float] = []
 
     # 1. Find the record ("Record Attelé")
@@ -108,9 +108,9 @@ def fetch_chrono_from_html(html_content: str) -> dict[str, Any] | None:
                 # The value is the text immediately after the <strong> tag
                 record_str = strong_tag.next_sibling
                 if record_str:
-                    record_attelé = _parse_rk_string(record_str.strip())
+                    record_attele = _parse_rk_string(record_str.strip())
                 break
-        if record_attelé:
+        if record_attele:
             break
 
     # 2. Find the last 3 chronos from the performance tables
@@ -151,11 +151,11 @@ def fetch_chrono_from_html(html_content: str) -> dict[str, Any] | None:
                                     # Found the chrono for this race, break from inner loop
                                     break
 
-    if not record_attelé and not last_3_chronos:
+    if not record_attele and not last_3_chronos:
         return None
 
     return {
-        'record_attelé': record_attelé,
+        'record_attele': record_attele,
         'last_3_chrono': last_3_chronos
     }
 

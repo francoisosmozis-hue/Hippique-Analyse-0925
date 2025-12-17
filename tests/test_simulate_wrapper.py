@@ -12,7 +12,6 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from hippique_orchestrator import simulate_wrapper as sw
 from hippique_orchestrator.ev_calculator import compute_ev_roi
-from hippique_orchestrator.simulate_wrapper import evaluate_combo
 
 TICKETS = [{"legs": ["a", "b"], "odds": 10.0, "stake": 1.0}]
 

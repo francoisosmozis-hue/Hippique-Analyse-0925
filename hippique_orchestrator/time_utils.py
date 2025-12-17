@@ -20,7 +20,7 @@ def get_today_str() -> str:
 
 def convert_local_to_utc(local_dt: datetime) -> datetime:
     """
-    Converts a naive datetime (assumed to be in local 'Europe/Paris' timezone) 
+    Converts a naive datetime (assumed to be in local 'Europe/Paris' timezone)
     to a timezone-aware UTC datetime.
     """
     local_aware = _TZ.localize(local_dt)

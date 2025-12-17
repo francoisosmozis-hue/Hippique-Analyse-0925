@@ -1,3 +1,7 @@
+from unittest.mock import call
+
+from requests.exceptions import HTTPError
+
 from hippique_orchestrator.scrapers import boturfers
 
 
@@ -12,10 +16,6 @@ def test_fetch_boturfers_race_details_success(mocker):
 
 def test_fetch_boturfers_race_details_fails(mocker):
     """Tests the failure path of the fetch_boturfers_race_details function."""
-    from unittest.mock import call
-
-    from requests.exceptions import HTTPError
-
     # Mock requests.get to raise an HTTPError
     mocker.patch("hippique_orchestrator.scrapers.boturfers.requests.get", side_effect=HTTPError("Mocked HTTP Error"))
     logger_mock = mocker.patch("hippique_orchestrator.scrapers.boturfers.logger")

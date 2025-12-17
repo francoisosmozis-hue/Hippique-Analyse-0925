@@ -27,6 +27,7 @@ from typing import Any
 import yaml
 
 from hippique_orchestrator.config import get_config
+from hippique_orchestrator.ev_calculator import compute_ev_roi
 
 # Explicitly configure logging for this module for debugging purposes
 logger = logging.getLogger(__name__)
@@ -791,7 +792,6 @@ def evaluate_combo(
     # This path continues to execute `compute_ev_roi` and eventually `return result`
 
     # This is the normal path if calibration_used is True, or if calibration_used is False AND allow_heuristic is True
-    from hippique_orchestrator.ev_calculator import compute_ev_roi
     stats = compute_ev_roi(
         [dict(t) for t in tickets],
         budget=bankroll,
@@ -837,6 +837,5 @@ def evaluate_combo(
             result["calibration_metadata"] = meta_detail
 
     return result
-
     # Default return in case no other return path is hit (should not be reached normally)
     return {"status": "error", "message": "Unexpected code path in evaluate_combo"}

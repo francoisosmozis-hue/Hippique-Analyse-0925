@@ -7,7 +7,6 @@ from google.api_core import exceptions as gcp_exceptions
 from pytest_mock import MockerFixture
 
 from hippique_orchestrator import scheduler, time_utils
-from hippique_orchestrator.config import Config
 
 
 @pytest.fixture

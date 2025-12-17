@@ -1,16 +1,14 @@
-# scripts/calculate_roi.py
-
 import argparse
 import sys
 from collections import defaultdict
 from datetime import datetime, timedelta
 from pathlib import Path
 
+from hippique_orchestrator import firestore_client
+
 # Add project root to path
 project_root = Path(__file__).resolve().parent.parent
 sys.path.append(str(project_root))
-
-from hippique_orchestrator import firestore_client
 
 
 def get_manual_results(race_id: str) -> dict[str, list[int]]:
@@ -54,17 +52,20 @@ def is_winner(ticket_type: str, ticket_horses: list[int], results: dict[str, lis
         return any(h in results.get("SP", []) for h in ticket_horses)
 
     elif ticket_type in ["CPL", "CG"]:
-        if "CG" not in results: return False
+        if "CG" not in results:
+            return False
         # Must match the top 2 exactly
         return set(ticket_horses) == set(results["CG"])
 
     elif ticket_type == "TRIO":
-        if "TRIO" not in results: return False
+        if "TRIO" not in results:
+            return False
         # Must match the top 3 exactly
         return set(ticket_horses) == set(results["TRIO"])
 
     elif ticket_type == "ZE4":
-        if "ZE4" not in results: return False
+        if "ZE4" not in results:
+            return False
         # Must match the top 4 exactly
         return set(ticket_horses) == set(results["ZE4"])
 

@@ -54,9 +54,9 @@ def _iter_urls(path: Path) -> Iterator[tuple[int, str]]:
 
 def _validate_domain(host: str, domains: Sequence[str]) -> bool:
     host = host.lower()
-    for domain in domains:
-        domain = domain.lower()
-        if host == domain or host.endswith(f".{domain}"):
+    for d in domains:
+        domain_lower = d.lower()
+        if host == domain_lower or host.endswith(f".{domain_lower}"):
             return True
     return False
 

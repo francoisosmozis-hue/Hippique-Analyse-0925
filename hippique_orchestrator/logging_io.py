@@ -3,6 +3,8 @@ import json
 from collections.abc import Iterable, Mapping
 from pathlib import Path
 
+from hippique_orchestrator.gcs_client import get_gcs_manager
+
 # CSV header for the tracking file.
 CSV_HEADER = [
     "reunion",
@@ -22,10 +24,6 @@ CSV_HEADER = [
     "clv_moyen",
     "model",
 ]
-
-
-
-from hippique_orchestrator.gcs_client import get_gcs_manager
 
 
 def append_csv_line(path: str, data: Mapping[str, object], header: Iterable[str] = CSV_HEADER) -> None:

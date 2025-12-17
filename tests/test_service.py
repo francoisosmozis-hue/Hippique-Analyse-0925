@@ -80,7 +80,7 @@ def test_schedule_endpoint_success(client, mocker):
     Vérifie que le point de terminaison /schedule traite une requête valide avec succès.
     """
     # Mock build_plan_async to return a valid plan
-    mock_build_plan = mocker.patch(
+    mocker.patch(
         "hippique_orchestrator.service.build_plan_async",  # Correct: Patch where the function is imported/used
         return_value=[
             {"r_label": "R1", "c_label": "C1", "course_url": "url1", "time_local": "10:00", "date": "2025-10-20"},
@@ -111,7 +111,7 @@ def test_schedule_endpoint_handles_scheduling_error(client, mocker):
     Vérifie que le point de terminaison /schedule gère les erreurs de l'ordonnanceur.
     """
     # Mock build_plan_async to return a valid plan
-    mock_build_plan = mocker.patch(
+    mocker.patch(
         "hippique_orchestrator.service.build_plan_async",  # Correct: Patch where the function is imported/used
         return_value=[
             {"r_label": "R1", "c_label": "C1", "course_url": "url1", "time_local": "10:00", "date": "2025-10-20"},

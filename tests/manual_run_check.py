@@ -20,10 +20,10 @@ def test_manual_run_phase():
         assert response.json()["ok"] is True
     except requests.exceptions.ConnectionError as e:
         print(f"Connection failed: {e}")
-        assert False, "Connection to the server failed."
+        raise AssertionError("Connection to the server failed.")
     except Exception as e:
         print(f"An error occurred: {e}")
         # If there's a response, print it
         if 'response' in locals():
             print(f"Response content: {response.text}")
-        assert False, f"An unexpected error occurred: {e}"
+        raise AssertionError(f"An unexpected error occurred: {e}")

@@ -44,7 +44,7 @@ def test_fetch_chrono_from_html_with_jullou_page(jullou_html_content):
 
     # Check record
     # From the web_fetch summary, the record is 1'11"6
-    assert result.get('record_attelé') == pytest.approx(71.6)
+    assert result.get('record_attele') == pytest.approx(71.6)
 
     # Check last 3 chronos from the performance table
     # This requires manual inspection of the HTML to know the expected values.

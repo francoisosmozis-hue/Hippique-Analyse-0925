@@ -10,7 +10,6 @@ from openpyxl import load_workbook
 
 
 def test_update_excel_records_observed_roi(tmp_path: Path) -> None:
-    repo_root = Path(__file__).resolve().parent.parent
     excel_path = tmp_path / "modele.xlsx"
 
     tickets_data = {

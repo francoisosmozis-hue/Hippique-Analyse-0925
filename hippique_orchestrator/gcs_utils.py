@@ -8,6 +8,7 @@ from pathlib import Path
 from google.cloud import storage
 
 from hippique_orchestrator.config import get_config
+from hippique_orchestrator.logging_utils import get_logger
 
 logger = get_logger(__name__)
 

@@ -8,6 +8,8 @@ import difflib
 import json
 import logging
 import re
+import shlex
+import subprocess
 import time
 import unicodedata
 from collections.abc import Callable, Mapping
@@ -321,11 +323,8 @@ def main():
 
 # À la fin de fetch_je_stats.py
 def enrich_from_snapshot(snapshot_path: str, reunion: str = "", course: str = "") -> str:
-    from pathlib import Path
     h5 = Path(snapshot_path)
     out = h5.parent / f"{h5.stem}_je.csv"
-    import shlex
-    import subprocess
     cmd = f'python fetch_je_stats.py --h5 "{h5}" --out "{out}" --cache --ttl-seconds 86400'
     subprocess.run(shlex.split(cmd), check=True)
     return str(out)

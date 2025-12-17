@@ -6,9 +6,11 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from fastapi.testclient import TestClient
 
 # Import the Config class and get_config function
 from hippique_orchestrator.config import Config, get_config
+from hippique_orchestrator.service import app
 
 
 @pytest.fixture(scope="session")
@@ -114,7 +116,6 @@ def mock_config(session_mocker):
 
 @pytest.fixture(scope="session")
 def app_with_mock_config(mock_config): # This fixture ensures app is imported AFTER mock_config is active
-    from hippique_orchestrator.service import app
     return app
 
 # Fixture for TestClient setup, ensuring it uses the mocked config
@@ -123,5 +124,4 @@ def client(app_with_mock_config): # Now client depends on app_with_mock_config
     """
     Test client for the FastAPI app, using a mocked configuration.
     """
-    from fastapi.testclient import TestClient
     return TestClient(app_with_mock_config)

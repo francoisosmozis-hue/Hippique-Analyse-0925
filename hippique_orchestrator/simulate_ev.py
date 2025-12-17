@@ -329,17 +329,16 @@ def implied_probs_place_from_odds(runners: list[dict[str, Any]]) -> dict[str, fl
 # -- Aliases historiques pour éviter les ImportError sur vieux scripts ---------
 
 # compute_ev était importé depuis simulate_ev; redirige vers compute_ev_roi
-try:
-    compute_ev  # type: ignore[name-defined]
-except NameError:
+if "compute_ev" not in globals():
+
     def compute_ev(*args, **kwargs):
         # Réutilise la fonction déjà importée en tête du fichier
         return compute_ev_roi(*args, **kwargs)
 
+
 # ev_sp anciennement attendu: renvoie tickets SP + EV du panier SP
-try:
-    ev_sp  # type: ignore[name-defined]
-except NameError:
+if "ev_sp" not in globals():
+
     def ev_sp(cfg: dict[str, float], runners: list[dict[str, Any]]):
         """
         Interface de compat:
@@ -349,17 +348,17 @@ except NameError:
         tickets, ev = allocate_dutching_sp(cfg, runners)
         return {"tickets": tickets, "ev_sp": ev}
 
+
 # cp_ev et estimate_payout: stubs raisonnables si appelés par du legacy
-try:
-    cp_ev  # type: ignore[name-defined]
-except NameError:
+if "cp_ev" not in globals():
+
     def cp_ev(*args, **kwargs):
         # À remplacer par ton calcul réel si nécessaire
         return {"ev": 0.0, "roi": 0.0, "ok": False}
 
-try:
-    estimate_payout  # type: ignore[name-defined]
-except NameError:
+
+if "estimate_payout" not in globals():
+
     def estimate_payout(*args, **kwargs) -> float:
         # Valeur par défaut conservatrice; mets ta calibration réelle si dispo
         return 10.0

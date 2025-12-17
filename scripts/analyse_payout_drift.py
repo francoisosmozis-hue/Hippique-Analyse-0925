@@ -1,15 +1,13 @@
-# scripts/analyse_payout_drift.py
-
 import argparse
 import sys
 from datetime import datetime
 from pathlib import Path
 
+from hippique_orchestrator import firestore_client
+
 # Add project root to path
 project_root = Path(__file__).resolve().parent.parent
 sys.path.append(str(project_root))
-
-from hippique_orchestrator import firestore_client
 
 
 def get_manual_payout(race_id: str, ticket_type: str) -> float | None:

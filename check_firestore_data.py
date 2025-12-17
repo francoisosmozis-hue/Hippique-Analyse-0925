@@ -1,4 +1,5 @@
 import logging
+import sys
 
 from google.cloud import firestore
 
@@ -15,7 +16,7 @@ try:
     logger.info(f"Firestore client initialized for project: {PROJECT_ID}")
 except Exception as e:
     logger.error(f"Failed to initialize Firestore client: {e}")
-    exit(1)
+    sys.exit(1)
 
 date_prefix = "2025-12-07"
 races_ref = db.collection("races")

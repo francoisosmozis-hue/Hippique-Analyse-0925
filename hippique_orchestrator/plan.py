@@ -37,6 +37,9 @@ logger = get_logger(__name__)
 # Rate Limiter Global
 # ============================================
 
+_rate_limiter_lock = asyncio.Lock()
+_last_request_time = 0
+
 async def _rate_limited_request():
     """
     Rate limiter global partagé entre toutes les tâches asyncio.

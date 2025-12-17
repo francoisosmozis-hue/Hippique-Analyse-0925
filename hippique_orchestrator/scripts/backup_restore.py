@@ -15,6 +15,7 @@ import argparse
 import csv
 import json
 import sys
+import time
 from collections import defaultdict
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -344,7 +345,6 @@ def main():
 
     # Run once or watch
     if args.watch:
-        import time
         try:
             while True:
                 run_report()

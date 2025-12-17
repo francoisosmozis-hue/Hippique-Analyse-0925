@@ -4,8 +4,6 @@
 from __future__ import annotations
 
 import datetime as dt
-import importlib.util
-import inspect
 import json
 import logging
 import math
@@ -27,10 +25,10 @@ from zoneinfo import ZoneInfo
 import yaml
 
 from hippique_orchestrator.config import get_config
-from hippique_orchestrator.scripts import online_fetch_zeturf as _raw_impl
 
 config = get_config()
 _RC_COMBINED_RE = re.compile(r"R?\s*(\d+)\s*C\s*(\d+)", re.IGNORECASE)
+_COURSE_ID_PATTERN = re.compile(r"/(\d{4}-\d{2}-\d{2}/R\d+C\d+)")
 
 
 def _normalise_rc_tag(reunion: str | int, course: str | int | None) -> str:
@@ -65,6 +63,14 @@ def _load_local_snapshot(rc_tag: str) -> Path | None:
     return candidates[0] if candidates else None
 
 
+def parse_course_page(url: str, snapshot: str) -> dict[str, Any]:
+    """
+    Parses the course page and returns a snapshot of the data.
+    This is a simplified version of the original parse_course_page.
+    """
+    return _double_extract(url, snapshot=snapshot)
+
+
 def fetch_race_snapshot(
     reunion: str,
     course: str,
@@ -96,12 +102,8 @@ def fetch_race_snapshot(
 
     course_url = f"{_ZT_BASE_URL}/fr/course/{date_text}/{reunion_norm}{course_norm}"
 
-    parse_fn = getattr(_impl, "parse_course_page", None)
-    if not callable(parse_fn):
-        raise ValueError("parse_course_page implementation unavailable")
-
     try:
-        parsed_payload = parse_fn(course_url, snapshot=snapshot_mode)
+        parsed_payload = parse_course_page(course_url, snapshot=snapshot_mode)
     except Exception as exc:  # pragma: no cover - defensive logging
         raise ValueError(f"unable to parse course page at {course_url}") from exc
 
@@ -142,45 +144,6 @@ def fetch_race_snapshot(
     return normalised
 
 
-def _load_full_impl() -> Any:
-    """Return the fully-featured ``scripts.online_fetch_zeturf`` module."""
-
-    module_name = "scripts.online_fetch_zeturf"
-    module_path = (
-        Path(__file__).resolve().with_name("scripts").joinpath("online_fetch_zeturf.py")
-    )
-
-    spec = importlib.util.spec_from_file_location(module_name, module_path)
-    if spec is None or spec.loader is None:  # pragma: no cover - defensive guard
-        raise ImportError(
-            f"Unable to locate {module_name} implementation at {module_path}"
-        )
-
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[module_name] = module
-    spec.loader.exec_module(module)
-    return module
-
-
-def _resolve_impl(module: Any) -> Any:
-    """Ensure the implementation module exposes the expected public API."""
-
-    required_attrs = {
-        "fetch_race_snapshot",
-        "fetch_runners",
-        "fetch_meetings",
-        "resolve_source_url",
-        "normalize_snapshot",
-        "requests",
-        "time",
-    }
-
-    if not all(hasattr(module, attr) for attr in required_attrs):
-        return _load_full_impl()
-    return module
-
-
-_impl = _resolve_impl(_raw_impl)
 
 try:  # pragma: no cover - requests is always available in production
     import requests
@@ -564,7 +527,7 @@ def _double_extract(
             fallback_data = _fallback_parse_html(html)
         return fallback_data
 
-    parse_fn = getattr(_impl, "parse_course_page", None)
+    parse_fn = parse_course_page
     snapshot_mode = "H-30" if str(snapshot).upper().replace("-", "") == "H30" else "H-5"
     if callable(parse_fn):
         try:
@@ -1232,364 +1195,6 @@ def _build_snapshot_payload(
     return snapshot.as_dict()
 
 
-def _fetch_race_snapshot_impl(
-    reunion: str,
-    course: str | None = None,
-    phase: str = "H30",
-    *,
-    url: str | None = None,
-    session: Any | None = None,
-    retry: int | None = 3,
-    retries: int | None = None,
-    backoff: float = 1.0,
-    sources: Mapping[str, Any] | None = None,
-) -> dict[str, Any]:
-    """Return a normalised snapshot for ``reunion``/``course``.
-
-    The signature enforces ``url`` as a keyword-only argument to mirror the
-    public contract advertised to downstream callers (runner_chain/pipeline).
-    Additional keyword-only knobs (``retry``/``retries``/``backoff``) remain
-    available for advanced use-cases while keeping the positional parameters
-    identical to the historical CLI wrapper.  Callers may supply a custom
-    ``sources`` mapping to override the default configuration loaded from
-    :mod:`config/sources.yml`.
-    """
-
-    reunion_text = str(reunion).strip()
-    course_text = "" if course is None else str(course).strip()
-
-    retry_count = retries if retries is not None else retry
-    try:
-        retry_count_int = int(retry_count) if retry_count is not None else 3
-    except (TypeError, ValueError):  # pragma: no cover - defensive fallback
-        retry_count_int = 3
-    if retry_count_int <= 0:
-        retry_count_int = 1
-
-    if not reunion_text:
-        raise ValueError("reunion value is required")
-
-    if not course_text:
-        match = _RC_COMBINED_RE.search(reunion_text.upper())
-        if match:
-            reunion_text = f"R{match.group(1)}"
-            course_text = f"C{match.group(2)}"
-        else:
-            raise ValueError("course value is required")
-
-    reunion_norm = _normalise_label(reunion_text, "R")
-    course_norm = _normalise_label(course_text, "C")
-    rc = f"{reunion_norm}{course_norm}"
-
-    if sources is not None:
-        sources_payload = _ensure_default_templates(sources)
-    else:
-        sources_payload = _load_sources_config()
-    rc_map_raw = (
-        sources_payload.get("rc_map") if isinstance(sources_payload, Mapping) else None
-    )
-    rc_map: dict[str, Any]
-    if isinstance(rc_map_raw, Mapping):
-        rc_map = {str(k): v for k, v in rc_map_raw.items()}
-    else:
-        rc_map = {}
-
-    entry: dict[str, Any] = {}
-    if rc in rc_map and isinstance(rc_map[rc], Mapping):
-        entry = dict(rc_map[rc])
-
-    entry.setdefault("reunion", reunion_norm)
-    entry.setdefault("course", course_norm)
-    if url:
-        entry["url"] = _ensure_absolute_url(url) or url
-
-    course_id_hint = None
-    try:
-        course_id_hint = _impl._extract_course_id_from_entry(entry)
-    except AttributeError:  # pragma: no cover - defensive fallback
-        course_id_hint = None
-
-    date_hint = _coerce_str(entry.get("date")) or _coerce_str(entry.get("jour"))
-    hippo_hint = _coerce_str(entry.get("hippodrome")) or _coerce_str(
-        entry.get("meeting")
-    )
-    meta_hint = entry.get("meta") if isinstance(entry.get("meta"), Mapping) else None
-    if isinstance(meta_hint, Mapping):
-        date_hint = date_hint or _coerce_str(
-            meta_hint.get("date") or meta_hint.get("jour") or meta_hint.get("day")
-        )
-        hippo_hint = hippo_hint or _coerce_str(
-            meta_hint.get("hippodrome")
-            or meta_hint.get("meeting")
-            or meta_hint.get("venue")
-        )
-
-    candidate_urls: list[str] = []
-    try:
-        entry_url = _impl._extract_url_from_entry(entry)
-    except AttributeError:  # pragma: no cover - defensive fallback
-        entry_url = entry.get("url") if isinstance(entry, Mapping) else None
-    normalised_entry_url = (
-        _ensure_absolute_url(entry_url) if isinstance(entry_url, str) else None
-    )
-    if normalised_entry_url and normalised_entry_url not in candidate_urls:
-        candidate_urls.append(normalised_entry_url)
-    normalised_user_url = _ensure_absolute_url(url) if url else None
-    if normalised_user_url:
-        if normalised_user_url in candidate_urls:
-            candidate_urls.remove(normalised_user_url)
-        candidate_urls.insert(0, normalised_user_url)
-
-    canonical_url = _build_canonical_course_url(
-        date_hint, reunion_norm, course_norm, hippo_hint
-    )
-    if canonical_url and canonical_url not in candidate_urls:
-        if normalised_user_url:
-            candidate_urls.append(canonical_url)
-        else:
-            candidate_urls.insert(0, canonical_url)
-
-    if not course_id_hint:
-        for candidate in candidate_urls:
-            if not candidate:
-                continue
-            try:
-                match = _impl._COURSE_ID_PATTERN.search(candidate)
-            except AttributeError:  # pragma: no cover - defensive fallback
-                match = None
-            if match:
-                course_id_hint = match.group(0)
-                entry.setdefault("course_id", course_id_hint)
-                break
-
-    if not course_id_hint:
-        recovered = getattr(_impl, "discover_course_id", lambda _rc: None)(rc)
-        if recovered:
-            entry["course_id"] = recovered
-            course_id_hint = recovered
-
-    if course_id_hint and not isinstance(entry.get("url"), str):
-        entry["url"] = _DEFAULT_ZETURF_TEMPLATE
-
-    seen_urls: set[str] = set()
-    fallback_urls: list[str] = []
-    for candidate in candidate_urls:
-        if not candidate:
-            continue
-        normalised = _ensure_absolute_url(candidate) or candidate
-        if normalised not in seen_urls:
-            fallback_urls.append(normalised)
-            seen_urls.add(normalised)
-
-    if course_id_hint:
-        for template in _COURSE_PAGE_TEMPLATES:
-            candidate = template.format(course_id=course_id_hint)
-            normalised = _ensure_absolute_url(candidate) or candidate
-            if normalised not in seen_urls:
-                fallback_urls.append(normalised)
-                seen_urls.add(normalised)
-
-    guessed_from_rc = _COURSE_PAGE_FROM_RC.format(rc=rc)
-    normalised_guess = _ensure_absolute_url(guessed_from_rc) or guessed_from_rc
-    if normalised_guess not in seen_urls:
-        fallback_urls.append(normalised_guess)
-        seen_urls.add(normalised_guess)
-
-    primary_url: str | None = None
-    if normalised_user_url:
-        primary_url = normalised_user_url
-    elif fallback_urls:
-        primary_url = fallback_urls[0]
-    rc_map[rc] = entry
-
-    sources_payload["rc_map"] = rc_map
-
-    phase_norm = _normalise_phase_alias(phase)
-
-    raw_snapshot: dict[str, Any] | None = None
-    last_error: Exception | None = None
-
-    html_attempted: set[str] = set()
-
-    owns_session = False
-    session_obj: Any | None = session
-    if session_obj is None and requests is not None:
-        try:
-            session_obj = requests.Session()
-        except Exception:  # pragma: no cover - defensive guard
-            session_obj = None
-        else:
-            owns_session = True
-
-    try:
-
-        def _try_html(urls: Iterable[str]) -> dict[str, Any] | None:
-            ordered: list[str] = []
-            for candidate in urls:
-                if not candidate or candidate in html_attempted:
-                    continue
-                ordered.append(candidate)
-            if not ordered:
-                return None
-            html_attempted.update(ordered)
-            return _fetch_snapshot_via_html(
-                ordered,
-                phase=phase_norm,
-                retries=retry_count_int,
-                backoff=backoff,
-                session=session_obj,
-            )
-
-        html_snapshot: dict[str, Any] | None = None
-        if url:
-            direct_url = _ensure_absolute_url(url) or url
-            base_delay = backoff if backoff > 0 else 1.0
-            for attempt in range(1, retry_count_int + 1):
-                try:
-                    html_snapshot = _double_extract(
-                        direct_url,
-                        snapshot=phase_norm,
-                        session=session_obj,
-                    )
-                except Exception as exc:  # pragma: no cover - defensive logging
-                    last_error = exc
-                    logger.warning(
-                        "[ZEturf] lecture directe échouée pour %s (tentative %d/%d): %s",
-                        direct_url,
-                        attempt,
-                        retry_count_int,
-                        exc,
-                    )
-                    if attempt < retry_count_int:
-                        _exp_backoff_sleep(attempt, base=base_delay)
-                    continue
-                else:
-                    html_attempted.add(direct_url)
-                    if html_snapshot:
-                        html_snapshot.setdefault("source_url", direct_url)
-                        html_snapshot.setdefault("phase", phase_norm)
-                        raw_snapshot = dict(html_snapshot)
-                    break
-            else:
-                html_attempted.add(direct_url)
-
-        if html_snapshot is None:
-            html_snapshot = _try_html(fallback_urls)
-        if isinstance(html_snapshot, dict) and html_snapshot:
-            raw_snapshot = dict(html_snapshot)
-
-        fetch_fn = _impl.fetch_race_snapshot
-        try:
-            signature = inspect.signature(fetch_fn)
-        except (TypeError, ValueError):  # pragma: no cover - builtins without signature
-            signature = None
-
-        fetch_kwargs = {
-            "phase": phase_norm,
-            "sources": sources_payload,
-            "url": _ensure_absolute_url(url) if url else url,
-            "retries": retry_count_int,
-            "backoff": backoff if backoff > 0 else 1.0,
-            "initial_delay": 0.3,
-        }
-
-        arg_candidates: list[tuple[Any, ...]] = []
-        if signature is not None and "course" in signature.parameters:
-            arg_candidates.append((reunion_norm, course_norm))
-        arg_candidates.append((rc,))
-
-        if raw_snapshot is None or not raw_snapshot.get("runners"):
-            for args in arg_candidates:
-                try:
-                    result = fetch_fn(*args, **fetch_kwargs)
-                except TypeError as exc:  # pragma: no cover - defensive
-                    last_error = exc
-                    continue
-                except Exception as exc:  # pragma: no cover - propagate after logging
-                    last_error = exc
-                    break
-                snapshot_candidate = dict(result) if isinstance(result, Mapping) else {}
-                if snapshot_candidate:
-                    if raw_snapshot is None:
-                        raw_snapshot = snapshot_candidate
-                    else:
-                        _merge_snapshot_data(raw_snapshot, snapshot_candidate)
-                    last_error = None
-                    break
-
-            if raw_snapshot is None or not raw_snapshot.get("runners"):
-                fallback_snapshot: dict[str, Any] | None = _try_html(fallback_urls)
-                if fallback_snapshot:
-                    if raw_snapshot is None:
-                        raw_snapshot = dict(fallback_snapshot)
-                    else:
-                        _merge_snapshot_data(raw_snapshot, fallback_snapshot)
-                    html_snapshot = fallback_snapshot
-
-        if raw_snapshot is None:
-            if last_error is not None:
-                logger.error(
-                    "[ZEturf] échec fetch_race_snapshot pour %s: %s", rc, last_error
-                )
-            else:
-                logger.error(
-                    "[ZEturf] échec fetch_race_snapshot pour %s: aucune donnée recueillie",
-                    rc,
-                )
-            return RaceSnapshot(
-                meeting=None,
-                date=None,
-                reunion=reunion_norm,
-                course=course_norm,
-                discipline=None,
-                runners=[],
-                partants_count=None,
-                phase=phase_norm,
-                rc=rc,
-                r_label=reunion_norm,
-                c_label=course_norm,
-                source_url=primary_url,
-            ).as_dict()
-
-        source_url = entry.get("url") if isinstance(entry.get("url"), str) else None
-        if (
-            not source_url
-            and html_snapshot
-            and isinstance(html_snapshot.get("source_url"), str)
-        ):
-            source_url = str(html_snapshot["source_url"])
-        if not source_url and url:
-            source_url = url
-        if not source_url and primary_url:
-            source_url = primary_url
-        snapshot = _build_snapshot_payload(
-            raw_snapshot,
-            reunion_norm,
-            course_norm,
-            phase=phase_norm,
-            source_url=source_url,
-        )
-
-        meta = raw_snapshot.get("meta") if isinstance(raw_snapshot, Mapping) else None
-        if isinstance(meta, dict):
-            thresholds = meta.setdefault("exotic_thresholds", {})
-            if isinstance(thresholds, dict):
-                thresholds.setdefault("ev_min", _BASE_EV_THRESHOLD)
-                thresholds.setdefault("payout_min", _BASE_PAYOUT_THRESHOLD)
-
-        if isinstance(raw_snapshot, Mapping):
-            market_block = raw_snapshot.get("market")
-            if market_block is not None and "market" not in snapshot:
-                snapshot["market"] = market_block
-
-        return snapshot
-    finally:
-        if owns_session and session_obj is not None:
-            try:
-                session_obj.close()
-            except Exception:  # pragma: no cover - best effort cleanup
-                pass
-
 
 def _coerce_partants_int(value: Any) -> int | None:
     if isinstance(value, bool):
@@ -1994,23 +1599,23 @@ def _normalise_snapshot_result(
         meta.setdefault("overround_win", market.get("overround_win"))
         meta.setdefault("overround_place", market.get("overround_place"))
 
-    resolver = getattr(_impl, "resolve_source_url", None)
-    if callable(resolver) and isinstance(sources_config, Mapping):
-        try:
-            mode_key = "h5" if phase_norm == "H5" else "h30"
-            template = resolver(sources_config, mode_key)
-        except Exception as exc:  # pragma: no cover - defensive logging
-            logger.debug("[ZEturf] unable to resolve source url: %s", exc)
-        else:
-            formatted_url = _format_source_url_from_template(
-                template,
-                course_id=result.get("course_id") or result.get("id_course"),
-                rc=rc_value,
-                reunion=reunion_meta,
-                course=course_meta,
-            )
-            if formatted_url and not result.get("source_url"):
-                result["source_url"] = formatted_url
+    # resolver = resolve_source_url
+    # if callable(resolver) and isinstance(sources_config, Mapping):
+    #     try:
+    #         mode_key = "h5" if phase_norm == "H5" else "h30"
+    #         template = resolver(sources_config, mode_key)
+    #     except Exception as exc:  # pragma: no cover - defensive logging
+    #         logger.debug("[ZEturf] unable to resolve source url: %s", exc)
+    #     else:
+    #         formatted_url = _format_source_url_from_template(
+    #             template,
+    #             course_id=result.get("course_id") or result.get("id_course"),
+    #             rc=rc_value,
+    #             reunion=reunion_meta,
+    #             course=course_meta,
+    #         )
+    #         if formatted_url and not result.get("source_url"):
+    #             result["source_url"] = formatted_url
 
     return result
 
@@ -2076,7 +1681,7 @@ def fetch_race_snapshot_full(
         else:
             fetch_kwargs.setdefault("sources", sources_config)
 
-    raw_snapshot = _fetch_race_snapshot_impl(
+    raw_snapshot = _fetch_race_snapshot_v50(
         reunion_arg,
         course_arg,
         phase=phase_norm,
@@ -2124,7 +1729,7 @@ def fetch_race_snapshot(
             f"[fetch_race_snapshot] URL ZEturf manquante (env {env_key})"
         )
 
-    parse_fn = getattr(_impl, "parse_course_page", None)
+    parse_fn = getattr(sys.modules[__name__], "parse_course_page", None)
     if not callable(parse_fn):
         raise RuntimeError("parse_course_page implementation unavailable")
 
@@ -2276,23 +1881,10 @@ def fetch_race_snapshot(
     return snapshot
 
 
-if hasattr(_impl, "main"):
-    main = _impl.main
-else:  # pragma: no cover - defensive fallback for stripped builds
+def main():
+    """CLI entry point."""
+    raise NotImplementedError("This script is not intended to be run directly.")
 
-    def main(*_args: Any, **_kwargs: Any) -> None:
-        raise RuntimeError("scripts.online_fetch_zeturf.main is unavailable")
-
-
-__all__ = ["fetch_race_snapshot", "fetch_race_snapshot_full", "main"]
-
-# Re-export normalisation helper when available so downstream tooling can rely
-# on the same convenience shim regardless of whether it imports the lightweight
-# wrapper (this module) or the historical implementation under ``scripts``.
-if hasattr(_impl, "normalize_snapshot"):
-    normalize_snapshot = _impl.normalize_snapshot  # type: ignore[attr-defined]
-    if "normalize_snapshot" not in __all__:
-        __all__.append("normalize_snapshot")
-
-if __name__ == "__main__":  # pragma: no cover
+if __name__ == "__main__":
     main()
+

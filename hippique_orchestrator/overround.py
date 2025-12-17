@@ -55,15 +55,14 @@ def compute_overround_place(runners: Iterable[dict[str, Any]]) -> float:
 def adaptive_cap(p_place: float | None, volatility: float | None, base_cap: float = 0.6) -> float:
     """
     Provides a placeholder for an adaptive volatility cap.
-    
-    In a real implementation, this could be adjusted based on the horse's
-    place probability (p_place) or other factors. For now, it returns the 
-    base cap.
 
+    In a real implementation, this could be adjusted based on the horse's
+    place probability (p_place) or other factors. For now, it returns the
+    base cap.
     Args:
-        p_place: The horse's probability of placing.
-        volatility: The horse's odds volatility.
-        base_cap: The default base cap.
+    p_place: The horse's probability of placing.
+    volatility: The horse's odds volatility.
+    base_cap: The default base cap.
 
     Returns:
         The calculated cap.

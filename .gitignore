@@ -101,3 +101,9 @@ excel/
 
 # Répertoire de travail temporaire
 _work_hippiques_2024/
+
+# Dossiers à ignorer
+_backup_conflicts/
+Google-Agent-Development-Kit-Demo/
+hippique-cloud-run/
+sklearn/

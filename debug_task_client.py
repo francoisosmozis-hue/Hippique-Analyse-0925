@@ -1,4 +1,6 @@
+import traceback
 
+from hippique_orchestrator.config import get_config
 from hippique_orchestrator.logging_utils import get_logger
 from hippique_orchestrator.scheduler import get_tasks_client
 
@@ -17,7 +19,6 @@ def main():
         print(f"PRINT: Client Cloud Tasks initialisé avec succès : {client}")
 
         # Tentative d'une opération simple (lister les queues)
-        from hippique_orchestrator.config import get_config
         config = get_config()
         parent = f"projects/{config.PROJECT_ID}/locations/{config.REGION}"
 
@@ -39,7 +40,6 @@ def main():
     except Exception as e:
         logger.error(f"Une erreur est survenue lors de l'initialisation ou de l'utilisation du client Tasks : {e}", exc_info=True)
         print(f"PRINT: Une erreur est survenue : {e}")
-        import traceback
         traceback.print_exc()
 
 if __name__ == "__main__":

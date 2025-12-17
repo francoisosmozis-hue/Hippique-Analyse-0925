@@ -25,6 +25,8 @@ from typing import Any
 
 import yaml
 
+from hippique_orchestrator.ev_calculator import compute_ev_roi
+
 logger = logging.getLogger(__name__)
 
 try:  # pragma: no cover - numpy is optional at runtime
@@ -770,8 +772,6 @@ def evaluate_combo(
                 "notes": notes,
                 "requirements": requirements,
             }
-
-    from ev_calculator import compute_ev_roi
 
     stats = compute_ev_roi(
         [dict(t) for t in tickets],

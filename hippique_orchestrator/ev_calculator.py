@@ -1239,7 +1239,7 @@ def compute_ev_roi(
         simulate_fn = simulate_wrapper
 
     cache: dict[tuple[Any, ...], float] = {}
-    
+
     processed, total_clv, clv_count, has_combined = _process_tickets(
         tickets, budget, simulate_fn, cache_simulations, kelly_cap, round_to, cache
     )

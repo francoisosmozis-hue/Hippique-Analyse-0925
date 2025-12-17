@@ -146,13 +146,13 @@ def load_analysis_reports(paths: Iterable[Path]) -> list[RaceMetrics]:
     """
 
     metrics: list[RaceMetrics] = []
-    for path in paths:
-        path = path.resolve()
+    for p in paths:
+        resolved_p = p.resolve()
         candidates: Sequence[Path]
-        if path.is_dir():
-            candidates = list(path.rglob("analysis.json"))
+        if resolved_p.is_dir():
+            candidates = list(resolved_p.rglob("analysis.json"))
         else:
-            candidates = [path]
+            candidates = [resolved_p]
         for file_path in candidates:
             try:
                 payload = json.loads(file_path.read_text(encoding="utf-8"))
