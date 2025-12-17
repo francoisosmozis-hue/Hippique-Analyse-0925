@@ -6,6 +6,8 @@ from __future__ import annotations
 import logging
 from functools import lru_cache
 
+import google.auth
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
@@ -25,7 +27,7 @@ class Config(BaseSettings):
     )
 
     # --- GCP Configuration ---
-    PROJECT_ID: str
+    PROJECT_ID: str = Field(default_factory=lambda: google.auth.default()[1])
     REGION: str = "europe-west1"
     SERVICE_NAME: str = "hippique-orchestrator"
     QUEUE_ID: str = "hippique-tasks"
