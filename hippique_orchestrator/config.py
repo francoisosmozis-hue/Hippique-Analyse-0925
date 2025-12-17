@@ -25,7 +25,7 @@ class Config(BaseSettings):
     )
 
     # --- GCP Configuration ---
-    PROJECT_ID: str = "analyse-hippique"
+    PROJECT_ID: str
     REGION: str = "europe-west1"
     SERVICE_NAME: str = "hippique-orchestrator"
     QUEUE_ID: str = "hippique-tasks"
