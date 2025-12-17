@@ -234,7 +234,7 @@
       bodyContainer.innerHTML = '<div class="loader"></div>';
       currentDate = date; 
 
-      const url = `/pronostics?date=${encodeURIComponent(date)}`;
+      const url = `/api/pronostics?date=${encodeURIComponent(date)}`;
 
       try {
         const res = await fetch(url);
@@ -263,7 +263,7 @@
 
     async function checkForUpdates() {
       if (!currentDate) return;
-      const url = `/pronostics?date=${encodeURIComponent(currentDate)}`;
+      const url = `/api/pronostics?date=${encodeURIComponent(currentDate)}`;
       
       try {
         const res = await fetch(url);
