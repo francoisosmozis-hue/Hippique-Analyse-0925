@@ -39,6 +39,7 @@ steps:
         --image="${_REGION}-docker.pkg.dev/analyse-hippique/${_REPO}/${_IMAGE}:${SHORT_SHA:-manual}" \
         --region="${_REGION}" \
         --platform=managed \
+        --allow-unauthenticated \
         --set-env-vars="TZ=Europe/Paris,PROJECT_ID=${_PROJECT_ID},REGION=${_REGION},SERVICE_NAME=hippique-analyse-0925,QUEUE_ID=hippique-tasks,SERVICE_ACCOUNT_EMAIL=${_SERVICE_ACCOUNT_EMAIL},GCS_BUCKET=analyse-hippique-data,REQUIRE_AUTH=true,OIDC_AUDIENCE=${_ACTUAL_CLOUD_RUN_URL},CLOUD_RUN_URL=${_ACTUAL_CLOUD_RUN_URL},USE_FIRESTORE=true,BUDGET_TOTAL=5,USE_GCS=true" \
         --quiet
 
