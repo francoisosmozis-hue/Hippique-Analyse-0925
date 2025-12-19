@@ -14,6 +14,8 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 import google.auth
+from io import StringIO
+import contextlib
 from fastapi import (
     APIRouter,
     BackgroundTasks,
@@ -123,8 +125,7 @@ async def pronostics_ui(request: Request):
 
 @api_router.get("/pronostics")
 async def get_pronostics(
-    date: str
-    | None = Query(
+    date: str | None = Query(
         default=None,
         description="Date in YYYY-MM-DD format. Defaults to today (Paris time).",
     ),
@@ -144,9 +145,7 @@ async def get_pronostics(
 
     correlation_id = str(uuid.uuid4())
     log_extra = {"correlation_id": correlation_id, "date": date_to_use}
-    logger.info(
-        f"Fetching pronostics for date: {date_to_use} from Firestore", extra=log_extra
-    )
+    logger.info(f"Fetching pronostics for date: {date_to_use} from Firestore", extra=log_extra)
     logger.debug(f"DEBUG: get_pronostics for date: {date_to_use}", extra=log_extra)
 
     try:
@@ -175,15 +174,10 @@ async def get_pronostics(
                     try:
                         # Ensure timestamp is offset-aware for correct comparison
                         current_doc_time = datetime.fromisoformat(last_analyzed_str)
-                        if (
-                            latest_update_time is None
-                            or current_doc_time > latest_update_time
-                        ):
+                        if latest_update_time is None or current_doc_time > latest_update_time:
                             latest_update_time = current_doc_time
                     except (ValueError, TypeError):
-                        logger.warning(
-                            f"Could not parse last_analyzed_at: {last_analyzed_str}"
-                        )
+                        logger.warning(f"Could not parse last_analyzed_at: {last_analyzed_str}")
 
         final_last_updated = (
             latest_update_time
@@ -199,9 +193,7 @@ async def get_pronostics(
             "pronostics": all_pronostics,
         }
     except Exception as e:
-        logger.error(
-            "Error fetching pronostics from Firestore", exc_info=True, extra=log_extra
-        )
+        logger.error("Error fetching pronostics from Firestore", exc_info=True, extra=log_extra)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to fetch pronostics from Firestore.",
@@ -314,9 +306,7 @@ async def run_race_analysis(body: RunRequest):
         result["trace_id"] = trace_id
 
         status_code = (
-            status.HTTP_200_OK
-            if result.get("ok")
-            else status.HTTP_500_INTERNAL_SERVER_ERROR
+            status.HTTP_200_OK if result.get("ok") else status.HTTP_500_INTERNAL_SERVER_ERROR
         )
         return JSONResponse(status_code=status_code, content=result)
     except Exception as e:
@@ -472,9 +462,7 @@ async def debug_cloudtasks_ping(request: Request):
             )
 
         env_project = os.getenv("GOOGLE_CLOUD_PROJECT")
-        logger.info(
-            f"os.getenv('GOOGLE_CLOUD_PROJECT'): {env_project}", extra=log_extra
-        )
+        logger.info(f"os.getenv('GOOGLE_CLOUD_PROJECT'): {env_project}", extra=log_extra)
 
         # 2. Get client and config
         client = tasks_v2.CloudTasksClient()
@@ -544,11 +532,10 @@ async def debug_cloudtasks_ping(request: Request):
         ) from e
 
 
-@app.post("/debug/force-bootstrap/{date_str}", status_code=status.HTTP_202_ACCEPTED)
-async def debug_force_bootstrap(date_str: str, background_tasks: BackgroundTasks):
+@app.post("/debug/force-bootstrap/{date_str}", status_code=status.HTTP_200_OK)
+async def debug_force_bootstrap(date_str: str):
     """
-    Forces the daily bootstrap pipeline for a specific date, bypassing the "already planned" check.
-    Useful for debugging and re-triggering planning.
+    Forces the daily bootstrap pipeline for a specific date, and returns the logs.
     """
     correlation_id = str(uuid.uuid4())
     trace_id = str(uuid.uuid4())
@@ -558,23 +545,35 @@ async def debug_force_bootstrap(date_str: str, background_tasks: BackgroundTasks
         extra=log_extra,
     )
 
-    # Clear the "day planned" status in Firestore if it exists, to ensure a fresh run
-    # (Optional, but good for idempotence for debug endpoint)
     firestore_client.unmark_day_as_planned(date_str)
 
-    background_tasks.add_task(
-        bootstrap_day_pipeline,
-        date_str=date_str,
-        correlation_id=correlation_id,
-        trace_id=trace_id,
-    )
-
-    return {
-        "ok": True,
-        "message": f"Forced bootstrap for {date_str} initiated in background.",
-        "correlation_id": correlation_id,
-        "trace_id": trace_id,
-    }
+    log_stream = StringIO()
+    with contextlib.redirect_stdout(log_stream):
+        try:
+            plan_details = await bootstrap_day_pipeline(
+                date_str=date_str,
+                correlation_id=correlation_id,
+                trace_id=trace_id,
+            )
+            logs = log_stream.getvalue()
+            return {
+                "ok": True,
+                "message": f"Forced bootstrap for {date_str} completed.",
+                "plan_details": plan_details,
+                "logs": logs.splitlines(),
+            }
+        except Exception as e:
+            logs = log_stream.getvalue()
+            logger.error(f"Debug bootstrap failed: {e}", exc_info=True, extra=log_extra)
+            # Get the traceback as a string
+            import traceback
+            exc_traceback = traceback.format_exc()
+            return {
+                "ok": False,
+                "error": str(e),
+                "traceback": exc_traceback.splitlines(),
+                "logs": logs.splitlines(),
+            }
 
 
 @app.get("/debug/races/{race_doc_id}")
@@ -595,9 +594,7 @@ async def debug_get_race_document(race_doc_id: str):
             extra=log_extra,
         )
         doc = firestore_client.get_race_document("races", race_doc_id)
-        logger.debug(
-            f"firestore_client.get_race_document returned: {doc}", extra=log_extra
-        )
+        logger.debug(f"firestore_client.get_race_document returned: {doc}", extra=log_extra)
         if doc:
             return {"ok": True, "race_doc_id": race_doc_id, "data": doc}
         # This will now correctly raise a 404 if the document is not found
@@ -630,14 +627,10 @@ async def bootstrap_day_pipeline(
     logger.info(f"Starting bootstrap pipeline for {date_str}", extra=log_extra)
     plan = await build_plan_async(date_str)
     if not plan:
-        logger.warning(
-            f"No plan built for {date_str}. Aborting bootstrap.", extra=log_extra
-        )
+        logger.warning(f"No plan built for {date_str}. Aborting bootstrap.", extra=log_extra)
         return None
 
-    logger.info(
-        f"Plan built with {len(plan)} races. Now scheduling tasks.", extra=log_extra
-    )
+    logger.info(f"Plan built with {len(plan)} races. Now scheduling tasks.", extra=log_extra)
     logger.info(
         f"DEBUG_SERVICE: About to call schedule_all_races with {len(plan)} races.",
         extra=log_extra,
@@ -695,9 +688,7 @@ async def run_bootstrap_if_needed():
         "date": today_str,
     }
 
-    logger.info(
-        "Startup check: Verifying if daily planning is needed.", extra=log_extra
-    )
+    logger.info("Startup check: Verifying if daily planning is needed.", extra=log_extra)
 
     if firestore_client.is_day_planned(today_str):
         logger.info(
