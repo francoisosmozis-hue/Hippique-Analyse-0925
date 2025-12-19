@@ -191,7 +191,7 @@ DEPLOY_CMD=(
     --timeout="${TIMEOUT}s"
     --max-instances="$MAX_INSTANCES"
     --min-instances="$MIN_INSTANCES"
-    --no-allow-unauthenticated
+    --allow-unauthenticated # Allow unauthenticated access for public endpoints
 )
 
 # Construire la liste des variables d'environnement
