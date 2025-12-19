@@ -2,136 +2,226 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Pronostics Hippiques</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; background-color: #f4f4f4; color: #333; }
+    .header-container { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    .status-indicator { font-size: 0.9em; padding: 5px 10px; border-radius: 5px; }
+    .status-online { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+    .status-offline { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+    #results { background-color: #fff; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    .pronostic-block { border: 1px solid #e0e0e0; margin-bottom: 15px; padding: 10px; border-radius: 5px; background-color: #fafafa; }
+    .pronostic-block h3 { margin-top: 0; color: #0056b3; }
+    .pronostic-block pre { background-color: #e9ecef; padding: 8px; border-radius: 4px; overflow-x: auto; }
+    .error-message { color: #dc3545; font-weight: bold; }
+    .info-message { color: #007bff; font-weight: bold; }
+    .last-updated-display { font-size: 0.8em; color: #666; margin-top: 10px; }
+    button { padding: 8px 15px; margin-left: 10px; border: none; border-radius: 5px; background-color: #007bff; color: white; cursor: pointer; }
+    button:hover { background-color: #0056b3; }
+    input[type="date"] { padding: 7px; border-radius: 5px; border: 1px solid #ccc; }
+  </style>
 </head>
 <body>
-  <h1>Pronostics Hippiques</h1>
+  <div class="header-container">
+    <h1>Pronostics Hippiques</h1>
+    <span id="status-indicator" class="status-indicator status-online">En ligne</span>
+  </div>
 
   <div>
     <label for="date-input">Date :</label>
     <input type="date" id="date-input" />
     <button id="btn-load">Charger</button>
+    <button id="btn-refresh">Rafraîchir</button>
   </div>
 
   <div id="results">Chargement des pronostics...</div>
 
   <script>
-    let lastUpdated = null;
-    let lastTotalRaces = 0;
+    const API_BASE_URL = "/api/pronostics";
+    const refreshIntervalMs = 20000; // 20 secondes
+    let currentIntervalId = null;
+    let retryCount = 0;
+    const maxRetryCount = 5;
+    const baseBackoffMs = 5000; // 5 secondes
+
+    let lastUpdatedTimestamp = null;
+    let lastETag = null;
     let currentDate = null;
 
-    function renderPronostics(data, date) {
-      const container = document.getElementById("results");
-      const races = data.pronostics || [];
-      if (!races.length) {
-        container.textContent = "Aucun pronostic disponible pour la date " + (data.date || date || "inconnue") + ".";
+    const resultsContainer = document.getElementById("results");
+    const statusIndicator = document.getElementById("status-indicator");
+    const dateInput = document.getElementById("date-input");
+    const btnLoad = document.getElementById("btn-load");
+    const btnRefresh = document.getElementById("btn-refresh");
+
+    function setStatus(isOnline) {
+      if (isOnline) {
+        statusIndicator.textContent = "En ligne";
+        statusIndicator.className = "status-indicator status-online";
+      } else {
+        statusIndicator.textContent = "Hors ligne";
+        statusIndicator.className = "status-indicator status-offline";
+      }
+    }
+
+    function displayMessage(message, type = "info") {
+      resultsContainer.innerHTML = `<p class="${type}-message">${message}</p>`;
+    }
+
+    function renderPronostics(data, requestedDate) {
+      if (!data || !data.ok) {
+        displayMessage("Erreur : la réponse de l'API est invalide ou indique une erreur.", "error");
         return;
       }
 
-      container.innerHTML = "";
+      lastUpdatedTimestamp = data.last_updated;
+      const formattedLastUpdated = lastUpdatedTimestamp ? new Date(lastUpdatedTimestamp).toLocaleString() : "N/A";
+
+      if (data.total_races === 0 || !data.pronostics || data.pronostics.length === 0) {
+        let message = `Aucune course analysée pour la date ${data.date || requestedDate}.`;
+        if (data.last_updated) {
+          message += ` (Dernière vérification: ${formattedLastUpdated})`;
+        }
+        displayMessage(message, "info");
+        return;
+      }
+
+      resultsContainer.innerHTML = "";
 
       const title = document.createElement("h2");
-      title.textContent = "Pronostics du " + (data.date || date || "inconnue") + " (dernière mise à jour: " + new Date(data.last_updated).toLocaleTimeString() + ")";
-      container.appendChild(title);
+      title.textContent = `Pronostics du ${data.date || requestedDate} (${data.total_races} courses)`;
+      resultsContainer.appendChild(title);
 
-      races.forEach((race) => {
+      const lastUpdatedDiv = document.createElement("div");
+      lastUpdatedDiv.className = "last-updated-display";
+      lastUpdatedDiv.textContent = `Dernière mise à jour: ${formattedLastUpdated}`;
+      resultsContainer.appendChild(lastUpdatedDiv);
+
+      data.pronostics.forEach((race) => {
         const block = document.createElement("div");
-        block.style.border = "1px solid #ccc";
-        block.style.margin = "8px 0";
-        block.style.padding = "8px";
+        block.className = "pronostic-block";
 
-        const header = document.createElement("h3");
-        header.textContent =
-          "Course " + (race.rc || "") +
-          " – décision : " + (race.gpi_decision || race.decision || "N/A");
+        const header = document("h3");
+        header.textContent = `Course ${race.rc || "N/A"} – Décision: ${race.gpi_decision || race.decision || "N/A"}`;
         block.appendChild(header);
 
         const pre = document.createElement("pre");
         pre.textContent = JSON.stringify(race.tickets || race, null, 2);
         block.appendChild(pre);
 
-        container.appendChild(block);
+        resultsContainer.appendChild(block);
       });
     }
 
-    async function loadPronostics(date) {
-      const container = document.getElementById("results");
-      container.textContent = "Chargement des pronostics...";
+    async function fetchPronostics(date, isRefresh = false) {
+      resultsContainer.textContent = "Chargement des pronostics...";
+      setStatus(true); // Assume online when trying to fetch
+
       currentDate = date; 
-
-      let url = "/pronostics";
+      let url = `${API_BASE_URL}`;
       if (date) {
-        url += "?date=" + encodeURIComponent(date);
+        url += `?date=${encodeURIComponent(date)}`;
+      }
+
+      const headers = new Headers();
+      if (lastETag && isRefresh) { // Only send ETag on subsequent refreshes
+        headers.append("If-None-Match", lastETag);
       }
 
       try {
-        const res = await fetch(url);
-        if (!res.ok) {
-          container.textContent = "Erreur lors du chargement des pronostics (HTTP " + res.status + ").";
+        const res = await fetch(url, { headers });
+
+        if (res.status === 304) {
+          console.log("304 Not Modified. Les pronostics sont à jour.");
+          displayMessage(`Pronostics du ${date || "aujourd'hui"} sont à jour. (Dernière mise à jour: ${new Date(lastUpdatedTimestamp).toLocaleString()})`, "info");
+          resetRefreshInterval(); // Reset interval if data is fresh
+          retryCount = 0;
           return;
         }
 
-        const data = await res.json();
-        if (!data || data.ok === false) {
-          container.textContent = "Erreur : la réponse de l'API est invalide.";
-          return;
+        if (!res.ok) {
+          throw new Error(`Erreur HTTP ${res.status}`);
         }
-        
-        lastUpdated = data.last_updated;
-        lastTotalRaces = data.total_races;
+
+        lastETag = res.headers.get("ETag"); // Store ETag from response
+
+        const data = await res.json();
         renderPronostics(data, date);
+        retryCount = 0;
+        resetRefreshInterval(); // Reset interval on success
 
       } catch (err) {
-        console.error(err);
-        container.textContent = "Erreur technique lors du chargement des pronostics.";
+        console.error("Erreur lors du chargement des pronostics:", err);
+        setStatus(false);
+        displayMessage(`Erreur lors du chargement des pronostics: ${err.message}. Réessaie dans quelques instants.`, "error");
+        
+        // Implement exponential backoff
+        if (retryCount < maxRetryCount) {
+          retryCount++;
+          const backoffTime = baseBackoffMs * Math.pow(2, retryCount - 1);
+          console.log(`Nouvelle tentative dans ${backoffTime / 1000} secondes (tentative ${retryCount}/${maxRetryCount}).`);
+          resetRefreshInterval(backoffTime);
+        } else {
+          displayMessage("Impossible de charger les pronostics après plusieurs tentatives. Veuillez vérifier votre connexion ou réessayer plus tard.", "error");
+          stopRefreshInterval();
+        }
       }
     }
 
-    async function checkForUpdates() {
-      let url = "/pronostics";
-      if (currentDate) {
-        url += "?date=" + encodeURIComponent(currentDate);
-      }
-      
-      try {
-        const res = await fetch(url);
-        if (!res.ok) {
-          console.warn("Check for updates failed (HTTP " + res.status + ")");
-          return;
-        }
-        const data = await res.json();
-        if (data && data.ok && (data.last_updated !== lastUpdated || data.total_races !== lastTotalRaces)) {
-          console.log("Mise à jour détectée. Rechargement des pronostics.", {new_ts: data.last_updated, old_ts: lastUpdated, new_total: data.total_races, old_total: lastTotalRaces });
-          loadPronostics(currentDate);
-        }
-      } catch (err) {
-        console.error("Error checking for updates:", err);
+    function resetRefreshInterval(delay = refreshIntervalMs) {
+      stopRefreshInterval();
+      currentIntervalId = setInterval(() => fetchPronostics(currentDate, true), delay);
+    }
+
+    function stopRefreshInterval() {
+      if (currentIntervalId) {
+        clearInterval(currentIntervalId);
+        currentIntervalId = null;
       }
     }
 
+    // Event Listeners
     document.addEventListener("DOMContentLoaded", () => {
-      const input = document.getElementById("date-input");
       const today = new Date();
-      const year = today.getFullYear();
-      const month = String(today.getMonth() + 1).padStart(2, '0');
-      const day = String(today.getDate()).padStart(2, '0');
-      const todayStr = `${year}-${month}-${day}`;
+      dateInput.value = today.toISOString().split('T')[0]; // Set to today's date
+      currentDate = dateInput.value;
       
-      input.value = todayStr;
-      currentDate = todayStr;
-      
-      loadPronostics(currentDate);
+      // Load initial pronostics for today
+      fetchPronostics(currentDate); 
+      resetRefreshInterval(); // Start auto-refresh
 
-      const btn = document.getElementById("btn-load");
-      if (btn && input) {
-        btn.addEventListener("click", () => {
-          const value = input.value;
-          loadPronostics(value || null);
-        });
-      }
+      btnLoad.addEventListener("click", () => {
+        const selectedDate = dateInput.value;
+        if (selectedDate) {
+          // Reset ETag when loading a new date to force a fresh fetch
+          lastETag = null; 
+          fetchPronostics(selectedDate);
+        }
+      });
 
-      setInterval(checkForUpdates, 15000); // Vérifie toutes les 15 secondes
+      btnRefresh.addEventListener("click", () => {
+        // Force refresh, including ETag for potential 304
+        fetchPronostics(currentDate, true); 
+      });
+
+      dateInput.addEventListener("change", () => {
+        const selectedDate = dateInput.value;
+        if (selectedDate) {
+          // Reset ETag when date changes
+          lastETag = null;
+          fetchPronostics(selectedDate);
+        }
+      });
     });
+
+    // Handle initial load based on URL parameter
+    const urlParams = new URLSearchParams(window.location.search);
+    const dateParam = urlParams.get('date');
+    if (dateParam) {
+      dateInput.value = dateParam;
+      currentDate = dateParam;
+    }
   </script>
 </body>
 </html>

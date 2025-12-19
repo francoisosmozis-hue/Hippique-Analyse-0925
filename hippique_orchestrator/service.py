@@ -4,18 +4,10 @@ src/service.py - FastAPI Service Principal
 Service Cloud Run orchestrant l'analyse hippique quotidienne.
 """
 
-from __future__ import annotations
-
-import asyncio
-import os
-import uuid
-from datetime import datetime
-from typing import Any
-from zoneinfo import ZoneInfo
-
-import google.auth
-from io import StringIO
-import contextlib
+import hashlib
+import json
+from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.staticfiles import StaticFiles
 from fastapi import (
     APIRouter,
     BackgroundTasks,
@@ -24,11 +16,9 @@ from fastapi import (
     Query,
     Request,
     status,
+    Header
 )
-from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
-from google.cloud import tasks_v2
-from pydantic import BaseModel, Field
 
 from hippique_orchestrator import firestore_client, time_utils
 from hippique_orchestrator.auth import auth_middleware
@@ -54,6 +44,9 @@ app = FastAPI(
     description="Cloud Run service for automated horse racing analysis (GPI v5.2)",
     version="2.1.0",
 )
+
+# Mount the static directory to serve static files
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 # ============================================
 # Request/Response Models
@@ -120,7 +113,10 @@ api_router = APIRouter(prefix="/api")
 @api_router.get("/pronostics/ui", response_class=HTMLResponse)
 async def pronostics_ui(request: Request):
     """Serves the main HTML page for pronostics."""
-    return templates.TemplateResponse("pronostics.html", {"request": request})
+    # Serve index.html directly from the static directory
+    with open(os.path.join(STATIC_DIR, "index.html"), "r") as f:
+        html_content = f.read()
+    return HTMLResponse(content=html_content)
 
 
 @api_router.get("/pronostics")
@@ -129,6 +125,7 @@ async def get_pronostics(
         default=None,
         description="Date in YYYY-MM-DD format. Defaults to today (Paris time).",
     ),
+    if_none_match: str | None = Header(None, alias="If-None-Match"),
 ):
     date_to_use = date
     if date_to_use is None:
@@ -185,13 +182,23 @@ async def get_pronostics(
             else datetime.utcnow().replace(tzinfo=ZoneInfo("UTC"))
         )
 
-        return {
+        response_content = {
             "ok": True,
             "total_races": len(all_pronostics),
             "date": date_to_use,
             "last_updated": final_last_updated.isoformat().replace("+00:00", "Z"),
             "pronostics": all_pronostics,
         }
+
+        # Generate ETag
+        etag = hashlib.sha1(json.dumps(response_content, sort_keys=True).encode("utf-8")).hexdigest()
+        
+        # Check If-None-Match header
+        if if_none_match == etag:
+            return Response(status_code=status.HTTP_304_NOT_MODIFIED)
+
+        # Return response with ETag header
+        return JSONResponse(content=response_content, headers={"ETag": etag})
     except Exception as e:
         logger.error("Error fetching pronostics from Firestore", exc_info=True, extra=log_extra)
         raise HTTPException(
