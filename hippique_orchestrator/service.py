@@ -199,11 +199,15 @@ async def get_pronostics(
         }
 
         # Generate ETag
-        etag = hashlib.sha1(json.dumps(response_content, sort_keys=True).encode("utf-8")).hexdigest()
-        
+        raw_etag = hashlib.sha1(json.dumps(response_content, sort_keys=True).encode("utf-8")).hexdigest()
+        etag = f'"{raw_etag}"' # Enclose ETag in quotes
+
         # Check If-None-Match header
-        if if_none_match == etag:
-            return Response(status_code=status.HTTP_304_NOT_MODIFIED)
+        if if_none_match:
+            clean_if_none_match = if_none_match.strip().strip('"')
+            if clean_if_none_match == raw_etag: # Compare raw etag to cleaned header value
+                logger.debug(f"ETag match: {clean_if_none_match} == {raw_etag}. Returning 304 Not Modified.")
+                return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers={"ETag": etag})
 
         # Return response with ETag header
         return JSONResponse(content=response_content, headers={"ETag": etag})

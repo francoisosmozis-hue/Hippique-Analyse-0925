@@ -102,7 +102,7 @@
         const block = document.createElement("div");
         block.className = "pronostic-block";
 
-        const header = document("h3");
+        const header = document.createElement("h3");
         header.textContent = `Course ${race.rc || "N/A"} – Décision: ${race.gpi_decision || race.decision || "N/A"}`;
         block.appendChild(header);
 
@@ -184,10 +184,15 @@
     // Event Listeners
     document.addEventListener("DOMContentLoaded", () => {
       const today = new Date();
-      dateInput.value = today.toISOString().split('T')[0]; // Set to today's date
+      const todayString = today.toISOString().split('T')[0];
+
+      const urlParams = new URLSearchParams(window.location.search);
+      const dateParam = urlParams.get('date');
+
+      dateInput.value = dateParam || todayString; // Use URL param if present, else today
       currentDate = dateInput.value;
       
-      // Load initial pronostics for today
+      // Load initial pronostics
       fetchPronostics(currentDate); 
       resetRefreshInterval(); // Start auto-refresh
 
@@ -214,14 +219,6 @@
         }
       });
     });
-
-    // Handle initial load based on URL parameter
-    const urlParams = new URLSearchParams(window.location.search);
-    const dateParam = urlParams.get('date');
-    if (dateParam) {
-      dateInput.value = dateParam;
-      currentDate = dateParam;
-    }
   </script>
 </body>
 </html>

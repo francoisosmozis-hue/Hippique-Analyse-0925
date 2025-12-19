@@ -1,6 +1,7 @@
 """
 src/config.py - Configuration centralisée du service
 """
+
 from __future__ import annotations
 
 import logging
@@ -20,7 +21,7 @@ class Config(BaseSettings):
     """
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=None, # Ensure .env files are not loaded, prioritizing environment variables
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
@@ -32,16 +33,29 @@ class Config(BaseSettings):
     SERVICE_NAME: str = "hippique-orchestrator"
     QUEUE_ID: str = "hippique-tasks"
     SERVICE_ACCOUNT_EMAIL: str | None = None
-    GCS_BUCKET: str | None = None
+    GCS_BUCKET: str = "analyse-hippique-data"
 
     # --- Application Configuration ---
     LOG_LEVEL: str = "DEBUG"
     TZ: str = "Europe/Paris"
-    DEBUG: bool = False
+    DEBUG: bool = True
 
     # --- Security ---
-    REQUIRE_AUTH: bool = False
+    REQUIRE_AUTH: bool = True
     OIDC_AUDIENCE: str | None = None
+
+    # --- Public Paths (for Auth Middleware) ---
+    PUBLIC_PATHS: list[str] = Field(
+        default=[
+            "/ping",
+            "/health",
+            "/docs",
+            "/openapi.json",
+            "/api/pronostics",
+            "/api/pronostics/ui",
+        ]
+    )
+
 
     # --- Performance & Rate Limiting ---
     MAX_RETRIES: int = 3
@@ -61,16 +75,16 @@ class Config(BaseSettings):
     # --- Feature Flags & Paths ---
     SCHEDULING_MODE: str = "tasks"  # "tasks" or "local"
     GCS_PREFIX: str = "prod"
-    TICKETS_BUCKET: str | None = None
+    TICKETS_BUCKET: str = "analyse-hippique-tickets"
     TICKETS_PREFIX: str = "tickets"
     CALIB_PATH: str | None = None
     SOURCES_FILE: str | None = None
     RUNNER_SNAP_DIR: str | None = None
     RUNNER_ANALYSIS_DIR: str | None = None
     RUNNER_OUTPUT_DIR: str | None = None
-    USE_GCS: bool | None = None
-    USE_FIRESTORE: bool | None = None  # Added for local disablement
-    USE_DRIVE: bool | None = None
+    USE_GCS: bool = True
+    USE_FIRESTORE: bool = True
+    USE_DRIVE: bool = False
 
     @property
     def cloud_run_url(self) -> str:
