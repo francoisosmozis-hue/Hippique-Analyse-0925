@@ -6,6 +6,12 @@ Service Cloud Run orchestrant l'analyse hippique quotidienne.
 
 import hashlib
 import json
+import os
+import asyncio
+import uuid
+from datetime import datetime
+from typing import Any
+from zoneinfo import ZoneInfo
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi import (
@@ -19,6 +25,8 @@ from fastapi import (
     Header
 )
 from fastapi.templating import Jinja2Templates
+
+from pydantic import BaseModel, Field
 
 from hippique_orchestrator import firestore_client, time_utils
 from hippique_orchestrator.auth import auth_middleware
