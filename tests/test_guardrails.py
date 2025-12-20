@@ -70,16 +70,25 @@ def test_append_env_writes_to_file(tmp_path: Path):
 
 def test_main_success_path(tmp_path: Path, mocker, capsys):
     """Tests the main function on a successful run (no abstention)."""
-    analysis_file = _write_json(tmp_path, "analysis.json", {"ev": {"global": 0.5}, "roi_global": 0.5})
+    analysis_file = _write_json(
+        tmp_path, "analysis.json", {"ev": {"global": 0.5}, "roi_global": 0.5}
+    )
     env_file = tmp_path / "github.env"
 
-    mocker.patch("sys.argv", [
-        "guardrails.py",
-        "--analysis", str(analysis_file),
-        "--ev-min", "0.4",
-        "--roi-min", "0.4",
-        "--env", str(env_file),
-    ])
+    mocker.patch(
+        "sys.argv",
+        [
+            "guardrails.py",
+            "--analysis",
+            str(analysis_file),
+            "--ev-min",
+            "0.4",
+            "--roi-min",
+            "0.4",
+            "--env",
+            str(env_file),
+        ],
+    )
 
     guardrails.main()
 
@@ -97,13 +106,20 @@ def test_main_abstention_path_creates_report(tmp_path: Path, mocker):
     analysis_file = _write_json(tmp_path, "analysis.json", {"ev_global": 0.1, "roi_global": 0.1})
     report_file = tmp_path / "report.json"
 
-    mocker.patch("sys.argv", [
-        "guardrails.py",
-        "--analysis", str(analysis_file),
-        "--ev-min", "0.2",
-        "--roi-min", "0.2",
-        "--report", str(report_file),
-    ])
+    mocker.patch(
+        "sys.argv",
+        [
+            "guardrails.py",
+            "--analysis",
+            str(analysis_file),
+            "--ev-min",
+            "0.2",
+            "--roi-min",
+            "0.2",
+            "--report",
+            str(report_file),
+        ],
+    )
 
     guardrails.main()
 
@@ -117,12 +133,18 @@ def test_main_abstention_path_creates_report(tmp_path: Path, mocker):
 
 def test_main_file_not_found(mocker):
     """Tests that main exits if the analysis file is not found."""
-    mocker.patch("sys.argv", [
-        "guardrails.py",
-        "--analysis", "nonexistent.json",
-        "--ev-min", "0.2",
-        "--roi-min", "0.2",
-    ])
+    mocker.patch(
+        "sys.argv",
+        [
+            "guardrails.py",
+            "--analysis",
+            "nonexistent.json",
+            "--ev-min",
+            "0.2",
+            "--roi-min",
+            "0.2",
+        ],
+    )
 
     with pytest.raises(SystemExit):
         guardrails.main()

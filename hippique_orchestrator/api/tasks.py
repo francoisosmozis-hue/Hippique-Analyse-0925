@@ -49,12 +49,8 @@ class RunPhaseRequest(BaseModel):
         description="Full ZEturf course URL",
         example="https://www.zeturf.fr/fr/course/2025-11-22/R1C1-prix-de-la-ville",
     )
-    phase: str = Field(
-        ..., description="Analysis phase: 'H9', 'H30', or 'H5'", example="H30"
-    )
-    date: str = Field(
-        ..., description="Race date in YYYY-MM-DD format", example="2025-11-22"
-    )
+    phase: str = Field(..., description="Analysis phase: 'H9', 'H30', or 'H5'", example="H30")
+    date: str = Field(..., description="Race date in YYYY-MM-DD format", example="2025-11-22")
 
 
 class BootstrapDayRequest(BaseModel):
@@ -147,20 +143,14 @@ async def run_phase_task(request: Request, body: RunPhaseRequest):
             )
 
         logger.info(
-            (
-                "Run phase completed successfully for"
-                f" {body.course_url} (phase: {body.phase})"
-            ),
+            (f"Run phase completed successfully for {body.course_url} (phase: {body.phase})"),
             extra={"correlation_id": correlation_id},
         )
         return result
 
     except Exception as e:
         logger.error(
-            (
-                "Exception during run-phase for"
-                f" {body.course_url} (phase: {body.phase}): {e}"
-            ),
+            (f"Exception during run-phase for {body.course_url} (phase: {body.phase}): {e}"),
             exc_info=True,
             extra={"correlation_id": correlation_id},
         )
@@ -249,10 +239,7 @@ async def bootstrap_day_task(request: Request, body: BootstrapDayRequest):
                 scheduled_tasks_count += 1
 
         logger.info(
-            (
-                "Bootstrap day completed. Scheduled"
-                f" {scheduled_tasks_count} tasks."
-            ),
+            (f"Bootstrap day completed. Scheduled {scheduled_tasks_count} tasks."),
             extra={"correlation_id": correlation_id},
         )
         return {

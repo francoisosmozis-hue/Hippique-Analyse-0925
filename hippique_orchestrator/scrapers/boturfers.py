@@ -20,12 +20,15 @@ HTTP_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/107.0.0.0 Safari/537.36"
 }
 
+
 class BoturfersFetcher:
     """
     Classe pour scraper les données des courses depuis Boturfers.fr.
     """
 
-    def __init__(self, race_url: str, correlation_id: str | None = None, trace_id: str | None = None):
+    def __init__(
+        self, race_url: str, correlation_id: str | None = None, trace_id: str | None = None
+    ):
         if not race_url:
             raise ValueError("L'URL de la course ne peut pas être vide.")
         self.race_url = race_url
@@ -42,7 +45,9 @@ class BoturfersFetcher:
             self.soup = BeautifulSoup(response.content, "lxml")
             return True
         except requests.exceptions.RequestException as e:
-            logger.error(f"Erreur lors du téléchargement de {self.race_url}: {e}", extra=self.log_extra)
+            logger.error(
+                f"Erreur lors du téléchargement de {self.race_url}: {e}", extra=self.log_extra
+            )
             return False
 
     def _parse_programme(self) -> list[dict[str, Any]]:
@@ -53,17 +58,27 @@ class BoturfersFetcher:
         races = []
         reunion_tabs = self.soup.select("div.tab-content div.tab-pane[id^='r']")
         if not reunion_tabs:
-            logger.warning("Aucun onglet de réunion ('div.tab-pane[id^=r]') trouvé sur la page du programme.", extra=self.log_extra)
+            logger.warning(
+                "Aucun onglet de réunion ('div.tab-pane[id^=r]') trouvé sur la page du programme.",
+                extra=self.log_extra,
+            )
             return []
 
         for reunion_tab in reunion_tabs:
             reunion_title_tag = reunion_tab.select_one("h3.reu-title")
-            reunion_id_match = re.search(r"^(R\d+)", reunion_title_tag.text.strip()) if reunion_title_tag else None
-            reunion_id = reunion_id_match.group(1) if reunion_id_match else reunion_tab.get("id", "").upper()
+            reunion_id_match = (
+                re.search(r"^(R\d+)", reunion_title_tag.text.strip()) if reunion_title_tag else None
+            )
+            reunion_id = (
+                reunion_id_match.group(1) if reunion_id_match else reunion_tab.get("id", "").upper()
+            )
 
             race_table = reunion_tab.select_one("table.table.data.prgm")
             if not race_table:
-                logger.warning(f"Tableau des courses ('table.table.data.prgm') introuvable pour la réunion {reunion_id}.", extra=self.log_extra)
+                logger.warning(
+                    f"Tableau des courses ('table.table.data.prgm') introuvable pour la réunion {reunion_id}.",
+                    extra=self.log_extra,
+                )
                 continue
 
             for row in race_table.select("tbody tr"):
@@ -71,17 +86,26 @@ class BoturfersFetcher:
                     # ... (parsing logic remains the same)
                     rc_tag = row.select_one("th.num span.rxcx")
                     if not rc_tag:
-                        logger.warning("Tag RC ('th.num span.rxcx') introuvable pour une ligne de course. Ligne ignorée.", extra=self.log_extra)
+                        logger.warning(
+                            "Tag RC ('th.num span.rxcx') introuvable pour une ligne de course. Ligne ignorée.",
+                            extra=self.log_extra,
+                        )
                         continue
                     rc_text = rc_tag.text.strip()
                     name_tag = row.select_one("td.crs a.link")
                     if not name_tag:
-                        logger.warning(f"Tag du nom de course ('td.crs a.link') introuvable pour {rc_text}. Ligne ignorée.", extra=self.log_extra)
+                        logger.warning(
+                            f"Tag du nom de course ('td.crs a.link') introuvable pour {rc_text}. Ligne ignorée.",
+                            extra=self.log_extra,
+                        )
                         continue
                     race_name = name_tag.text.strip()
                     relative_url = name_tag.get("href")
                     if not relative_url:
-                        logger.warning(f"URL relative introuvable pour {rc_text}. Ligne ignorée.", extra=self.log_extra)
+                        logger.warning(
+                            f"URL relative introuvable pour {rc_text}. Ligne ignorée.",
+                            extra=self.log_extra,
+                        )
                         continue
                     absolute_url = urljoin(self.race_url, relative_url)
                     time_tag = row.select_one("td.hour")
@@ -91,13 +115,26 @@ class BoturfersFetcher:
                         if time_match:
                             start_time = f"{time_match.group(1).zfill(2)}:{time_match.group(2)}"
                     runners_count_tag = row.select_one("td.nb")
-                    runners_count = int(runners_count_tag.text.strip()) if runners_count_tag and runners_count_tag.text.strip().isdigit() else None
-                    races.append({
-                        "rc": rc_text, "reunion": reunion_id, "name": race_name,
-                        "url": absolute_url, "runners_count": runners_count, "start_time": start_time,
-                    })
+                    runners_count = (
+                        int(runners_count_tag.text.strip())
+                        if runners_count_tag and runners_count_tag.text.strip().isdigit()
+                        else None
+                    )
+                    races.append(
+                        {
+                            "rc": rc_text,
+                            "reunion": reunion_id,
+                            "name": race_name,
+                            "url": absolute_url,
+                            "runners_count": runners_count,
+                            "start_time": start_time,
+                        }
+                    )
                 except Exception as e:
-                    logger.warning(f"Impossible d'analyser une ligne de course: {e}. Ligne ignorée.", extra=self.log_extra)
+                    logger.warning(
+                        f"Impossible d'analyser une ligne de course: {e}. Ligne ignorée.",
+                        extra=self.log_extra,
+                    )
                     continue
         return races
 
@@ -119,11 +156,17 @@ class BoturfersFetcher:
                 num_match = re.search(r'\d+', num_tag.text)
                 num = num_match.group(0) if num_match else None
                 if not num:
-                    logger.warning("Numéro du partant introuvable dans une ligne. Ligne ignorée.", extra=self.log_extra)
+                    logger.warning(
+                        "Numéro du partant introuvable dans une ligne. Ligne ignorée.",
+                        extra=self.log_extra,
+                    )
                     continue
                 name_tag = row.select_one("td.tl a.link")
                 if not name_tag:
-                    logger.warning(f"Nom du partant introuvable pour le numéro {num}. Ligne ignorée.", extra=self.log_extra)
+                    logger.warning(
+                        f"Nom du partant introuvable pour le numéro {num}. Ligne ignorée.",
+                        extra=self.log_extra,
+                    )
                     continue
                 name = name_tag.text.strip()
                 jockey_tag = row.select_one("td.tl > div.size-s > a.link")
@@ -132,7 +175,10 @@ class BoturfersFetcher:
                 trainer = trainer_tag.text.strip() if trainer_tag else None
                 runners.append({"num": num, "nom": name, "jockey": jockey, "entraineur": trainer})
             except Exception as e:
-                logger.warning(f"Impossible d'analyser une ligne de partant: {e}. Ligne ignorée.", extra=self.log_extra)
+                logger.warning(
+                    f"Impossible d'analyser une ligne de partant: {e}. Ligne ignorée.",
+                    extra=self.log_extra,
+                )
         return runners
 
     def get_snapshot(self) -> dict[str, Any]:
@@ -141,8 +187,16 @@ class BoturfersFetcher:
             return {"error": "Failed to fetch HTML"}
         races = self._parse_programme()
         if not races:
-            logger.error(f"Aucune course n'a pu être extraite de {self.race_url}.", extra=self.log_extra)
-        return {"source": "boturfers", "type": "programme", "url": self.race_url, "scraped_at": datetime.utcnow().isoformat(), "races": races}
+            logger.error(
+                f"Aucune course n'a pu être extraite de {self.race_url}.", extra=self.log_extra
+            )
+        return {
+            "source": "boturfers",
+            "type": "programme",
+            "url": self.race_url,
+            "scraped_at": datetime.utcnow().isoformat(),
+            "races": races,
+        }
 
     def get_race_snapshot(self) -> dict[str, Any]:
         """Orchestre le scraping d'une course et retourne les partants."""
@@ -150,11 +204,21 @@ class BoturfersFetcher:
             return {"error": "Failed to fetch HTML"}
         runners = self._parse_race_runners()
         if not runners:
-            logger.error(f"Aucun partant n'a pu être extrait de {self.race_url}.", extra=self.log_extra)
-        return {"source": "boturfers", "type": "race_details", "url": self.race_url, "scraped_at": datetime.utcnow().isoformat(), "runners": runners}
+            logger.error(
+                f"Aucun partant n'a pu être extrait de {self.race_url}.", extra=self.log_extra
+            )
+        return {
+            "source": "boturfers",
+            "type": "race_details",
+            "url": self.race_url,
+            "scraped_at": datetime.utcnow().isoformat(),
+            "runners": runners,
+        }
 
 
-def fetch_boturfers_programme(url: str, correlation_id: str | None = None, trace_id: str | None = None, *args, **kwargs) -> dict:
+def fetch_boturfers_programme(
+    url: str, correlation_id: str | None = None, trace_id: str | None = None, *args, **kwargs
+) -> dict:
     """Fonction principale pour scraper le programme des courses sur Boturfers."""
     log_extra = {"correlation_id": correlation_id, "trace_id": trace_id, "url": url}
     logger.info("Début du scraping du programme Boturfers.", extra=log_extra)
@@ -165,16 +229,25 @@ def fetch_boturfers_programme(url: str, correlation_id: str | None = None, trace
         fetcher = BoturfersFetcher(race_url=url, correlation_id=correlation_id, trace_id=trace_id)
         raw_snapshot = fetcher.get_snapshot()
         if "error" in raw_snapshot or not raw_snapshot.get("races"):
-            logger.error("Le scraping du programme a échoué ou n'a retourné aucune course.", extra=log_extra)
+            logger.error(
+                "Le scraping du programme a échoué ou n'a retourné aucune course.", extra=log_extra
+            )
             return {}
-        logger.info(f"Scraping du programme Boturfers réussi. {len(raw_snapshot.get('races',[]))} courses trouvées.", extra=log_extra)
+        logger.info(
+            f"Scraping du programme Boturfers réussi. {len(raw_snapshot.get('races', []))} courses trouvées.",
+            extra=log_extra,
+        )
         return raw_snapshot
     except Exception as e:
-        logger.exception(f"Une erreur inattendue est survenue lors du scraping de {url}: {e}", extra=log_extra)
+        logger.exception(
+            f"Une erreur inattendue est survenue lors du scraping de {url}: {e}", extra=log_extra
+        )
         return {}
 
 
-def fetch_boturfers_race_details(url: str, correlation_id: str | None = None, trace_id: str | None = None, *args, **kwargs) -> dict:
+def fetch_boturfers_race_details(
+    url: str, correlation_id: str | None = None, trace_id: str | None = None, *args, **kwargs
+) -> dict:
     """Fonction principale pour scraper les détails d'une course sur Boturfers."""
     log_extra = {"correlation_id": correlation_id, "trace_id": trace_id, "url": url}
     logger.info("Début du scraping des détails de course.", extra=log_extra)
@@ -189,11 +262,18 @@ def fetch_boturfers_race_details(url: str, correlation_id: str | None = None, tr
         if "error" in raw_snapshot or not raw_snapshot.get("runners"):
             logger.error("Le scraping des détails a échoué.", extra=log_extra)
             return {}
-        logger.info(f"Scraping des détails réussi. {len(raw_snapshot.get('runners',[]))} partants trouvés.", extra=log_extra)
+        logger.info(
+            f"Scraping des détails réussi. {len(raw_snapshot.get('runners', []))} partants trouvés.",
+            extra=log_extra,
+        )
         return raw_snapshot
     except Exception as e:
-        logger.exception(f"Une erreur inattendue est survenue lors du scraping des détails de {url}: {e}", extra=log_extra)
+        logger.exception(
+            f"Une erreur inattendue est survenue lors du scraping des détails de {url}: {e}",
+            extra=log_extra,
+        )
         return {}
+
 
 # main() function is removed as it's not used by the orchestrator
 # and was for command-line testing which is now obsolete with the new structure.

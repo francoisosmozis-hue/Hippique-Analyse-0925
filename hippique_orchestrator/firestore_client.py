@@ -23,16 +23,25 @@ def _get_firestore_client(project_id: str | None = None):
         logger.debug("Firestore client is None, attempting to initialize.")
         current_config = get_config()
         if not current_config.USE_FIRESTORE:
-            logger.info("Firestore operations are disabled via configuration (USE_FIRESTORE=False).")
+            logger.info(
+                "Firestore operations are disabled via configuration (USE_FIRESTORE=False)."
+            )
             return None
 
         try:
             resolved_project_id = project_id if project_id else current_config.PROJECT_ID
-            logger.debug(f"Attempting to initialize Firestore client for project '{resolved_project_id}'.")
+            logger.debug(
+                f"Attempting to initialize Firestore client for project '{resolved_project_id}'."
+            )
             _firestore_client = firestore.Client(project=resolved_project_id)
-            logger.info(f"Firestore client initialized successfully for project '{resolved_project_id}'.")
+            logger.info(
+                f"Firestore client initialized successfully for project '{resolved_project_id}'."
+            )
         except Exception as e:
-            logger.error(f"Failed to initialize Firestore client for project '{resolved_project_id}': {e}", exc_info=e)
+            logger.error(
+                f"Failed to initialize Firestore client for project '{resolved_project_id}': {e}",
+                exc_info=e,
+            )
             return None
     return _firestore_client
 
@@ -40,7 +49,7 @@ def _get_firestore_client(project_id: str | None = None):
 def is_firestore_enabled() -> bool:
     """Check if Firestore is configured and enabled via config."""
     config = get_config()
-    return config.USE_FIRESTORE or False # Default to False if None
+    return config.USE_FIRESTORE or False  # Default to False if None
 
 
 def save_race_document(collection: str, document_id: str, data: dict[str, Any]) -> None:
@@ -73,18 +82,24 @@ def update_race_document(collection: str, document_id: str, data: dict[str, Any]
     Updates a document in a Firestore collection, merging data.
     """
     if not is_firestore_enabled():
-        logger.warning(f"Firestore is not enabled, skipping update for {document_id} in {collection}.")
+        logger.warning(
+            f"Firestore is not enabled, skipping update for {document_id} in {collection}."
+        )
         return
 
     config = get_config()
     client = _get_firestore_client(project_id=config.PROJECT_ID)
     if not client:
-        logger.error(f"Firestore client not available, cannot update document {document_id} in {collection}.")
+        logger.error(
+            f"Firestore client not available, cannot update document {document_id} in {collection}."
+        )
         return
 
     try:
         doc_ref = client.collection(collection).document(document_id)
-        logger.debug(f"Attempting to update document {document_id} in collection '{collection}' with merge=True. Data keys: {list(data.keys())}.")
+        logger.debug(
+            f"Attempting to update document {document_id} in collection '{collection}' with merge=True. Data keys: {list(data.keys())}."
+        )
         doc_ref.set(data, merge=True)
         logger.info(f"Document {document_id} updated successfully in collection '{collection}'.")
     except Exception as e:
@@ -130,11 +145,13 @@ def get_race_document(collection: str, document_id: str) -> dict[str, Any] | Non
         )
         return None
 
+
 def get_races_by_date_prefix(date_prefix: str) -> list[dict[str, Any]]:
     """
     Retrieves all race documents from the 'races' collection where the
     document ID starts with the given date_prefix.
     """
+    logger.info(f"Inside get_races_by_date_prefix with date_prefix: '{date_prefix}' of type {type(date_prefix)}")
     if not is_firestore_enabled():
         logger.warning("Firestore is not enabled, cannot query races.")
         return []
@@ -149,11 +166,8 @@ def get_races_by_date_prefix(date_prefix: str) -> list[dict[str, Any]]:
 
     try:
         races_ref = client.collection("races")
-        # Firestore "starts with" query for document IDs
-        query = (
-            races_ref
-            .where("__name__", ">=", date_prefix)
-            .where("__name__", "<", date_prefix + "\uf8ff")
+        query = races_ref.order_by("__name__").start_at([date_prefix]).end_at(
+            [date_prefix + "\uf8ff"]
         )
 
         docs_stream = query.stream()
@@ -161,10 +175,13 @@ def get_races_by_date_prefix(date_prefix: str) -> list[dict[str, Any]]:
         races = []
         for doc in docs_stream:
             race_data = doc.to_dict()
-            race_data['id'] = doc.id # Add document ID to the dictionary
+            race_data['id'] = doc.id  # Add document ID to the dictionary
             races.append(race_data)
 
-        logger.debug(f"DEBUG: firestore_client.get_races_by_date_prefix found docs: {[r['id'] for r in races]}", extra={"date_prefix": date_prefix})
+        logger.debug(
+            f"DEBUG: firestore_client.get_races_by_date_prefix found docs: {[r['id'] for r in races]}",
+            extra={"date_prefix": date_prefix},
+        )
         logger.info(f"Found {len(races)} races for date prefix {date_prefix}.")
         return races
     except Exception as e:
@@ -174,7 +191,10 @@ def get_races_by_date_prefix(date_prefix: str) -> list[dict[str, Any]]:
         )
         return []
 
-def list_subcollection_documents(collection: str, document_id: str, subcollection: str) -> list[dict[str, Any]]:
+
+def list_subcollection_documents(
+    collection: str, document_id: str, subcollection: str
+) -> list[dict[str, Any]]:
     """
     Lists all documents in a subcollection.
     """
@@ -189,7 +209,9 @@ def list_subcollection_documents(collection: str, document_id: str, subcollectio
         return []
 
     try:
-        docs_stream = client.collection(collection).document(document_id).collection(subcollection).stream()
+        docs_stream = (
+            client.collection(collection).document(document_id).collection(subcollection).stream()
+        )
         return [doc.to_dict() for doc in docs_stream]
     except Exception as e:
         logger.error(
@@ -197,6 +219,7 @@ def list_subcollection_documents(collection: str, document_id: str, subcollectio
             exc_info=e,
         )
         return []
+
 
 def is_day_planned(date_str: str) -> bool:
     """Checks if a 'plan' document exists for the given date."""
@@ -206,6 +229,7 @@ def is_day_planned(date_str: str) -> bool:
 
     doc = get_race_document("plans", date_str)
     return doc is not None
+
 
 def mark_day_as_planned(date_str: str, plan_details: dict[str, Any]) -> None:
     """Creates/updates a 'plan' document for the given date to mark it as planned."""

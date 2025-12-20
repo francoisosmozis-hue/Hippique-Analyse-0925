@@ -310,9 +310,7 @@ def _find_correlation_groups(legs: Sequence[Any]) -> list[dict[str, Any]]:
         if len(unique) < 2:
             continue
         current = consolidated.get(unique)
-        if current is None or _identifier_priority(identifier) < _identifier_priority(
-            current
-        ):
+        if current is None or _identifier_priority(identifier) < _identifier_priority(current):
             consolidated[unique] = identifier
 
     groups: list[dict[str, Any]] = []
@@ -492,9 +490,7 @@ def _extract_leg_probability(leg: Any) -> tuple[float, str, str, dict[str, Any]]
             sources = entry.get("sources")
             if isinstance(sources, str):
                 source = sources
-            elif isinstance(sources, Sequence) and not isinstance(
-                sources, (str, bytes)
-            ):
+            elif isinstance(sources, Sequence) and not isinstance(sources, (str, bytes)):
                 source = str(next(iter(sources), "calibration"))
             else:
                 source = "calibration"
@@ -554,9 +550,7 @@ def _load_calibration() -> None:
             beta = float(v.get("beta", 1.0))
             p = float(v.get("p", alpha / (alpha + beta)))
             if alpha <= 0 or beta <= 0 or not (0.0 < p < 1.0):
-                raise ValueError(
-                    f"Invalid calibration for {k}: alpha={alpha}, beta={beta}, p={p}"
-                )
+                raise ValueError(f"Invalid calibration for {k}: alpha={alpha}, beta={beta}, p={p}")
             source = "calibration_combo" if "|" in key else "calibration_leg"
             weight = float(v.get("weight", alpha + beta))
             updated_at = v.get("updated_at")

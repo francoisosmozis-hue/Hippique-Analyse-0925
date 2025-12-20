@@ -1,6 +1,7 @@
 """
 src/auth.py - OIDC Authentication Middleware
 """
+
 from __future__ import annotations
 
 from fastapi import HTTPException, Request, status
@@ -42,10 +43,16 @@ class OIDCValidator:
             )
 
         try:
-            # Verify the token against Google's certs
-            id_info = id_token.verify_oauth2_token(
-                id_token=token, request=self.request, audience=self.audience
-            )
+            # Verify the token against Google's certs, but check audience manually
+            id_info = id_token.verify_oauth2_token(id_token=token, request=self.request)
+
+            # Manual, more flexible audience check
+            token_audience = id_info.get("aud")
+            if not token_audience or not token_audience.startswith(self.audience):
+                raise ValueError(
+                    f"Token audience '{token_audience}' does not match or start with expected '{self.audience}'"
+                )
+
             return id_info
 
         except ValueError as e:
@@ -91,24 +98,14 @@ async def auth_middleware(request: Request, call_next):
     Public paths are skipped.
     """
     # List of paths that do not require authentication
-    public_paths = [
-        "/ping",
-        "/health",
-        "/docs",
-        "/openapi.json",
-        # Allow accessing pronostics data without auth
-        "/api/pronostics",
-        "/api/pronostics/ui",
-        # Keep debug endpoints accessible, especially for local/staging
-        "/debug/",
-    ]
+
 
     # FastAPI's router registers UI paths like /api/pronostics/ui, not needed to list twice
     # Static files are also typically handled separately and don't need to be in this list.
 
     # If auth is disabled globally, or if the path is public, skip validation
     path = request.url.path
-    if not config.REQUIRE_AUTH or any(path.startswith(p) for p in public_paths):
+    if not config.REQUIRE_AUTH or any(path.startswith(p) for p in config.PUBLIC_PATHS):
         return await call_next(request)
 
     try:

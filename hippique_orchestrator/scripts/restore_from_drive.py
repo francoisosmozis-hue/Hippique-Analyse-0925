@@ -17,9 +17,8 @@ config = get_config()
 BUCKET_ENV = "GCS_BUCKET"
 PREFIX_ENV = "GCS_PREFIX"
 
-def _list_blobs(
-    service, bucket: str, base_prefix: str, date: str, prefix: str
-) -> Iterable[str]:
+
+def _list_blobs(service, bucket: str, base_prefix: str, date: str, prefix: str) -> Iterable[str]:
     """Yield object names under ``bucket`` whose filename matches ``prefix`` and ``date``."""
 
     search_prefix = build_remote_path(base_prefix, prefix)

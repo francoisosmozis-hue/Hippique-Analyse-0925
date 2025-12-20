@@ -39,6 +39,7 @@ PLANNING_HEADERS: Sequence[str] = (
 
 config = get_config()
 
+
 @lru_cache(maxsize=1)
 def _env_timezone() -> dt.tzinfo | None:
     """Return the timezone configured via ``$TZ`` when available."""
@@ -88,9 +89,7 @@ def _prepare_sheet(wb: Workbook, title: str) -> Worksheet:
 def _ensure_headers(ws: Worksheet, headers: Sequence[str]) -> Mapping[str, int]:
     header_map: dict[str, int] = {}
     blank_sheet = (
-        ws.max_row <= 1
-        and ws.max_column == 1
-        and ws.cell(row=1, column=1).value in (None, "")
+        ws.max_row <= 1 and ws.max_column == 1 and ws.cell(row=1, column=1).value in (None, "")
     )
     max_col = 0 if blank_sheet else ws.max_column
     if not blank_sheet:
@@ -269,9 +268,7 @@ def _extract_common_meta(
                 runners = meta.get("runners")
             if not runners:
                 runners = source.get("runners")
-            if isinstance(runners, Iterable) and not isinstance(
-                runners, (str, bytes, Mapping)
-            ):
+            if isinstance(runners, Iterable) and not isinstance(runners, (str, bytes, Mapping)):
                 partants = sum(1 for _ in runners)
                 if partants not in (None, ""):
                     break
@@ -350,7 +347,7 @@ def _course_like(obj: Mapping[str, Any]) -> bool:
 
 
 def _extract_course_payloads(
-    payload: Mapping[str, Any]
+    payload: Mapping[str, Any],
 ) -> list[tuple[Mapping[str, Any], tuple[Mapping[str, Any], ...]]]:
     results: list[tuple[Mapping[str, Any], tuple[Mapping[str, Any], ...]]] = []
     visited: set[int] = set()
@@ -387,7 +384,9 @@ def _extract_course_payloads(
     return unique_results
 
 
-def _upsert(ws: Worksheet, header_map: Mapping[str, int], row: Mapping[str, Any], keys: Sequence[str]) -> None:
+def _upsert(
+    ws: Worksheet, header_map: Mapping[str, int], row: Mapping[str, Any], keys: Sequence[str]
+) -> None:
     key_values = {key: row.get(key) for key in keys}
     for key, value in key_values.items():
         if value in (None, ""):
@@ -396,7 +395,10 @@ def _upsert(ws: Worksheet, header_map: Mapping[str, int], row: Mapping[str, Any]
     target_row = None
     max_row = ws.max_row
     for row_idx in range(2, max_row + 1):
-        if all(str(ws.cell(row=row_idx, column=header_map[key]).value or "") == str(key_values[key]) for key in keys):
+        if all(
+            str(ws.cell(row=row_idx, column=header_map[key]).value or "") == str(key_values[key])
+            for key in keys
+        ):
             target_row = row_idx
             break
     if target_row is None:
@@ -461,7 +463,15 @@ def _summarise_tickets(tickets: Any) -> str:
                 else:
                     _consume_selection(leg, horses)
         if not horses:
-            for key in ("selections", "horses", "selection", "horse", "combination", "combo", "numbers"):
+            for key in (
+                "selections",
+                "horses",
+                "selection",
+                "horse",
+                "combination",
+                "combo",
+                "numbers",
+            ):
                 if key in ticket:
                     _consume_selection(ticket.get(key), horses)
         odds = _first_non_empty(ticket.get("odds"), ticket.get("rapport"), ticket.get("payout"))
@@ -497,7 +507,9 @@ def _extract_roi(payload: Mapping[str, Any]) -> float | None:
         candidates.extend(
             [
                 validation.get("roi_global_est"),
-                (validation.get("sp") or {}).get("roi_est") if isinstance(validation.get("sp"), Mapping) else None,
+                (validation.get("sp") or {}).get("roi_est")
+                if isinstance(validation.get("sp"), Mapping)
+                else None,
             ]
         )
     for candidate in candidates:
@@ -619,7 +631,7 @@ def _prepare_h5_row(payload: Mapping[str, Any], status_label: str) -> dict[str, 
         "Partants": _blank_if_missing(meta.get("partants")),
         "Discipline": _blank_if_missing(meta.get("discipline")),
         "Statut H-5": _status_h5(status_label),
-        "Jouable H-5": _jouable_flag(payload)
+        "Jouable H-5": _jouable_flag(payload),
     }
     row["Tickets H-5"] = summary or ""
     row["Commentaires"] = _comment_h5(payload) or ""
@@ -628,8 +640,12 @@ def _prepare_h5_row(payload: Mapping[str, Any], status_label: str) -> dict[str, 
 
 def main(argv: Sequence[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Met à jour l'onglet Planning de l'Excel")
-    parser.add_argument("--phase", required=True, type=_phase_argument, help="Phase à appliquer (H30/H5)")
-    parser.add_argument("--input", "--in", dest="source", required=True, help="Fichier ou dossier source")
+    parser.add_argument(
+        "--phase", required=True, type=_phase_argument, help="Phase à appliquer (H30/H5)"
+    )
+    parser.add_argument(
+        "--input", "--in", dest="source", required=True, help="Fichier ou dossier source"
+    )
     parser.add_argument("--excel", required=True, help="Chemin du classeur Excel")
     parser.add_argument("--sheet", default="Planning", help="Nom de l'onglet à mettre à jour")
     parser.add_argument(

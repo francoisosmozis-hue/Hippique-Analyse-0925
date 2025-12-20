@@ -7,6 +7,7 @@ from hippique_orchestrator.zoneturf_client import _parse_rk_string, fetch_chrono
 # Use a real path to the fixture file
 FIXTURE_DIR = pathlib.Path(__file__).parent / 'fixtures'
 
+
 @pytest.fixture
 def jullou_html_content() -> str:
     """Provides the HTML content of the Jullou Zone-Turf page."""
@@ -15,22 +16,27 @@ def jullou_html_content() -> str:
         pytest.fail(f"Fixture file not found: {fixture_path}")
     return fixture_path.read_text(encoding='utf-8')
 
-@pytest.mark.parametrize("input_str, expected_seconds", [
-    ("1'11\"6", 71.6),
-    ("1'15''3", 75.3),
-    ("1'20\"0", 80.0),
-    ("0'59\"9", 59.9),
-    (None, None),
-    ("", None),
-    ("invalid", None),
-    ("1'11", None),
-])
+
+@pytest.mark.parametrize(
+    "input_str, expected_seconds",
+    [
+        ("1'11\"6", 71.6),
+        ("1'15''3", 75.3),
+        ("1'20\"0", 80.0),
+        ("0'59\"9", 59.9),
+        (None, None),
+        ("", None),
+        ("invalid", None),
+        ("1'11", None),
+    ],
+)
 def test_parse_rk_string(input_str, expected_seconds):
     """Tests the parsing of reduction kilometer strings."""
     if expected_seconds is None:
         assert _parse_rk_string(input_str) is None
     else:
         assert _parse_rk_string(input_str) == pytest.approx(expected_seconds)
+
 
 def test_fetch_chrono_from_html_with_jullou_page(jullou_html_content):
     """

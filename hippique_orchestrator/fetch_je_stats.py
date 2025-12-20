@@ -39,6 +39,7 @@ DEFAULT_HEADERS = {
 }
 UA = DEFAULT_HEADERS["User-Agent"]
 
+
 @dataclass
 class FetchConf:
     timeout: float
@@ -48,6 +49,7 @@ class FetchConf:
     cache_dir: Path
     ttl_seconds: int
     retries: int
+
 
 def load_json(path: str) -> dict:
     """Loads a JSON file from GCS if configured, otherwise from local disk."""
@@ -61,13 +63,18 @@ def load_json(path: str) -> dict:
         # This assumes gcsfs is installed and can handle gs:// paths directly
         # in libraries like pandas, but for raw open, we need the filesystem object.
         # For simplicity, we rely on the gcs_manager path.
-        raise NotImplementedError("Direct gs:// path handling without gcs_manager is not supported.")
+        raise NotImplementedError(
+            "Direct gs:// path handling without gcs_manager is not supported."
+        )
     return json.loads(Path(path).read_text(encoding="utf-8"))
+
 
 def ensure_parent(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
 
+
 # --- Web Scraping Logic from User Diff ---
+
 
 def http_get(
     url: str,
@@ -85,11 +92,13 @@ def http_get(
     except requests.RequestException as exc:
         raise RuntimeError(f"HTTP request failed for {url}") from exc
 
+
 @lru_cache(maxsize=512)
 def _normalise_text(value: str) -> str:
     decomposed = unicodedata.normalize("NFKD", value)
     cleaned = "".join(char for char in decomposed if char.isalnum())
     return cleaned.lower()
+
 
 def discover_horse_url_by_name(
     name: str,
@@ -130,6 +139,7 @@ def discover_horse_url_by_name(
             best_url = urljoin(GENY_BASE_URL, href)
     return best_url
 
+
 def extract_links_from_horse_page(html: str) -> dict[str, str]:
     soup = BeautifulSoup(html, "html.parser")
     links: dict[str, str] = {}
@@ -142,13 +152,21 @@ def extract_links_from_horse_page(html: str) -> dict[str, str]:
         href_lower = absolute.lower()
         if "jockey" in text or "driver" in text or re.search(r"/jockey|/driver", href_lower):
             links.setdefault("jockey", absolute)
-        if "entraine" in text or "entraîne" in text or "trainer" in text or "coach" in text or re.search(r"/entraine|/entraineur|/trainer|/coach", href_lower):
+        if (
+            "entraine" in text
+            or "entraîne" in text
+            or "trainer" in text
+            or "coach" in text
+            or re.search(r"/entraine|/entraineur|/trainer|/coach", href_lower)
+        ):
             links.setdefault("trainer", absolute)
     return links
+
 
 _PERCENT_RE = re.compile(r"(\d+(?:[.,]\d+)?)\s*%")
 _RATIO_RE = re.compile(r"(\d+)\s*/\s*(\d+)")
 _VICTORY_RE = re.compile(r"victoires?\s*[:=]\s*(\d+)", re.IGNORECASE)
+
 
 def _parse_percentage(text: str) -> float | None:
     if not text:
@@ -178,6 +196,7 @@ def _parse_percentage(text: str) -> float | None:
         return value
     return None
 
+
 def extract_rate_from_profile(html: str) -> float | None:
     soup = BeautifulSoup(html, "html.parser")
     for element in soup.find_all(["span", "div", "td", "th", "p", "li", "strong", "b"]):
@@ -188,7 +207,10 @@ def extract_rate_from_profile(html: str) -> float | None:
     fallback = soup.get_text(" ", strip=True)
     return _parse_percentage(fallback)
 
-def parse_horse_percentages(horse_name: str, *, get: Callable[[str], str] | None = None) -> tuple[float | None, float | None]:
+
+def parse_horse_percentages(
+    horse_name: str, *, get: Callable[[str], str] | None = None
+) -> tuple[float | None, float | None]:
     fetch = get or http_get
     horse_url = discover_horse_url_by_name(horse_name, get=fetch)
     if not horse_url:
@@ -214,7 +236,9 @@ def parse_horse_percentages(horse_name: str, *, get: Callable[[str], str] | None
             LOGGER.warning("Failed to fetch trainer profile %s", trainer_link)
     return jockey_rate, trainer_rate
 
+
 # --- Main Functions from User Diff ---
+
 
 def collect_stats(
     h5: str,
@@ -226,10 +250,18 @@ def collect_stats(
     cache: bool = False,
     cache_dir: str | None = None,
     ttl_seconds: int = TTL_DEFAULT,
-    neutral_on_fail: bool = False
+    neutral_on_fail: bool = False,
 ) -> str:
     gcs_manager = get_gcs_manager()
-    conf = FetchConf(timeout=timeout, delay_between_requests=delay, user_agent=UA, use_cache=bool(cache), cache_dir=(Path(cache_dir) if cache_dir else Path.home()/'.cache'/'hippiques'/'geny'), ttl_seconds=int(ttl_seconds), retries=int(retries))
+    conf = FetchConf(
+        timeout=timeout,
+        delay_between_requests=delay,
+        user_agent=UA,
+        use_cache=bool(cache),
+        cache_dir=(Path(cache_dir) if cache_dir else Path.home() / '.cache' / 'hippiques' / 'geny'),
+        ttl_seconds=int(ttl_seconds),
+        retries=int(retries),
+    )
 
     def fetcher(url):
         return http_get(url, timeout=conf.timeout)
@@ -271,11 +303,17 @@ def collect_stats(
         def _fmt(x):
             return f"{float(x):.2f}" if isinstance(x, (int, float)) else ""
 
-        rows.append({
-            "num": num, "j_rate": _fmt(j_rate), "e_rate": _fmt(e_rate),
-            "h_win5": _fmt(h_win5), "h_place5": _fmt(h_place5),
-            "h_win_career": _fmt(h_win_career), "h_place_career": _fmt(h_place_career)
-        })
+        rows.append(
+            {
+                "num": num,
+                "j_rate": _fmt(j_rate),
+                "e_rate": _fmt(e_rate),
+                "h_win5": _fmt(h_win5),
+                "h_place5": _fmt(h_place5),
+                "h_win_career": _fmt(h_win_career),
+                "h_place_career": _fmt(h_place_career),
+            }
+        )
 
     coverage = (successful_fetches / len(runners) * 100) if runners else 0
     output_payload = {"coverage": coverage, "rows": rows}
@@ -291,10 +329,18 @@ def collect_stats(
         csv_out_path_str = out if out else os.path.join(h5_dir, f"{Path(h5).stem}_je.csv")
         gcs_csv_path = gcs_manager.get_gcs_path(csv_out_path_str)
         with gcs_manager.fs.open(gcs_csv_path, "w", encoding="utf-8", newline="") as f:
-            fieldnames = ["num", "j_rate", "e_rate", "h_win5", "h_place5", "h_win_career", "h_place_career"]
+            fieldnames = [
+                "num",
+                "j_rate",
+                "e_rate",
+                "h_win5",
+                "h_place5",
+                "h_win_career",
+                "h_place_career",
+            ]
             w = csv.DictWriter(f, fieldnames=fieldnames)
             w.writeheader()
-            w.writerows([ {k: v for k, v in row.items() if k in fieldnames} for row in rows ])
+            w.writerows([{k: v for k, v in row.items() if k in fieldnames} for row in rows])
 
         return gcs_json_path
 
@@ -302,20 +348,33 @@ def collect_stats(
         h5p = Path(h5)
         json_out_path = h5p.parent / "stats_je.json"
         ensure_parent(json_out_path)
-        json_out_path.write_text(json.dumps(output_payload, indent=2, ensure_ascii=False), encoding="utf-8")
+        json_out_path.write_text(
+            json.dumps(output_payload, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
 
         csv_out_path = Path(out) if out else (h5p.parent / f"{h5p.stem}_je.csv")
         ensure_parent(csv_out_path)
         with csv_out_path.open("w", encoding="utf-8", newline="") as f:
-            fieldnames = ["num", "j_rate", "e_rate", "h_win5", "h_place5", "h_win_career", "h_place_career"]
+            fieldnames = [
+                "num",
+                "j_rate",
+                "e_rate",
+                "h_win5",
+                "h_place5",
+                "h_win_career",
+                "h_place_career",
+            ]
             w = csv.DictWriter(f, fieldnames=fieldnames)
             w.writeheader()
-            w.writerows([ {k: v for k, v in row.items() if k in fieldnames} for row in rows ])
+            w.writerows([{k: v for k, v in row.items() if k in fieldnames} for row in rows])
 
         return str(json_out_path)
 
+
 def main():
-    ap = argparse.ArgumentParser(description="Génère je_stats.csv (+cheval stats) via Geny (cheval → jockey/entraîneur) avec cache.")
+    ap = argparse.ArgumentParser(
+        description="Génère je_stats.csv (+cheval stats) via Geny (cheval → jockey/entraîneur) avec cache."
+    )
     ap.add_argument("--h5", required=True, help="Fichier JSON H-5")
     ap.add_argument("--out", default=None, help="Fichier CSV sortie (défaut: <h5_stem>_je.csv)")
     ap.add_argument("--timeout", type=float, default=TIMEOUT)
@@ -326,8 +385,19 @@ def main():
     ap.add_argument("--ttl-seconds", type=int, default=TTL_DEFAULT)
     ap.add_argument("--neutral-on-fail", action="store_true")
     args = ap.parse_args()
-    out_csv = collect_stats(args.h5, args.out, timeout=args.timeout, delay=args.delay, retries=args.retries, cache=bool(args.cache), cache_dir=args.cache_dir, ttl_seconds=args.ttl_seconds, neutral_on_fail=bool(args.neutral_on_fail))
+    out_csv = collect_stats(
+        args.h5,
+        args.out,
+        timeout=args.timeout,
+        delay=args.delay,
+        retries=args.retries,
+        cache=bool(args.cache),
+        cache_dir=args.cache_dir,
+        ttl_seconds=args.ttl_seconds,
+        neutral_on_fail=bool(args.neutral_on_fail),
+    )
     print(f"[OK] je_stats.csv écrit → {out_csv}")
+
 
 # À la fin de fetch_je_stats.py
 def enrich_from_snapshot(snapshot_path: str, reunion: str = "", course: str = "") -> str:

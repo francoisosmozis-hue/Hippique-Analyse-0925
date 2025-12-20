@@ -15,6 +15,7 @@ logger = get_logger(__name__)
 _gcs_client = None
 config = get_config()
 
+
 def _get_gcs_client():
     """Returns a GCS client, initializing it if necessary."""
     global _gcs_client
@@ -26,8 +27,10 @@ def _get_gcs_client():
             return None
     return _gcs_client
 
+
 def is_gcs_enabled() -> bool:
     return bool(config.gcs_bucket)
+
 
 def disabled_reason() -> str | None:
     """Return a reason if GCS is disabled."""
@@ -35,13 +38,13 @@ def disabled_reason() -> str | None:
         return "GCS_BUCKET_not_set"
     return None
 
+
 def upload_file(local_path: str | os.PathLike[str]) -> None:
     """
     Upload a single file to GCS.
     """
     if not is_gcs_enabled():
         return
-
 
     client = _get_gcs_client()
     if not client:
@@ -82,4 +85,3 @@ def upload_file(local_path: str | os.PathLike[str]) -> None:
 
     except Exception as e:
         logger.error(f"Failed to upload {local_path} to GCS: {e}", exc_info=e)
-

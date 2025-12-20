@@ -33,9 +33,7 @@ def mock_gpi_config() -> dict:
     }
 
 
-def test_generate_tickets_abstains_when_roi_is_low(
-    mocker: MockerFixture, mock_gpi_config: dict
-):
+def test_generate_tickets_abstains_when_roi_is_low(mocker: MockerFixture, mock_gpi_config: dict):
     """
     Tests that generate_tickets abstains if the runners' ROI is below the threshold.
     """
@@ -143,7 +141,7 @@ def test_generate_tickets_creates_trio_ticket_with_best_roi(
         ],
         "market": {"overround_place": 1.10},
     }
-    mock_gpi_config["tickets"]["exotics"]["type"] = "TRIO"
+    mock_gpi_config["tickets"]["exotics"]["allowed"] = ["TRIO"]
 
     def evaluate_combo_side_effect(tickets, bankroll, calibration):
         horse_nums = {leg["num"] for leg in tickets[0]["legs"]}

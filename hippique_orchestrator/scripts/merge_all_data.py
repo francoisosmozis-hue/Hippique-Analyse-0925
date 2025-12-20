@@ -1,4 +1,3 @@
-
 import json
 
 import pandas as pd
@@ -17,11 +16,13 @@ with open("trainer_stats_provided.json", encoding="utf-8") as f:
 df['j_rate'] = 0.0
 df['e_rate'] = 0.0
 
+
 # Normalize names for matching
 def normalize_name(name):
     if not isinstance(name, str):
         return ""
     return name.strip().upper()
+
 
 # Create mapping dictionaries with normalized names
 jockey_map = {normalize_name(k): v['j_rate'] for k, v in jockey_stats.items()}

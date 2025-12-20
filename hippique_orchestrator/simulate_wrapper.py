@@ -748,7 +748,9 @@ def evaluate_combo(
             "[COMBO] allow_heuristic override ignored; payout calibration is "
             "mandatory for combo evaluation."
         )
-        logger.debug(f"[evaluate_combo] allow_heuristic was True, now setting to False. Current value: {allow_heuristic}")
+        logger.debug(
+            f"[evaluate_combo] allow_heuristic was True, now setting to False. Current value: {allow_heuristic}"
+        )
         allow_heuristic = False
 
     # Ensure calib_path is always defined before first use
@@ -763,17 +765,25 @@ def evaluate_combo(
     try:
         logger.debug(f"[evaluate_combo] Resolving calib_path: {calib_path}")
         calibration_used = calib_path.is_file()
-        logger.debug(f"[evaluate_combo] calibration_used (calib_path.is_file()): {calibration_used}")
+        logger.debug(
+            f"[evaluate_combo] calibration_used (calib_path.is_file()): {calibration_used}"
+        )
     except OSError as e:
-        logger.error(f"[evaluate_combo] OSError when checking calib_path.is_file(): {e}", exc_info=True)
+        logger.error(
+            f"[evaluate_combo] OSError when checking calib_path.is_file(): {e}", exc_info=True
+        )
         calibration_used = False
 
     if not calibration_used:
-        logger.debug(f"[evaluate_combo] calibration_used is False. allow_heuristic: {allow_heuristic}")
+        logger.debug(
+            f"[evaluate_combo] calibration_used is False. allow_heuristic: {allow_heuristic}"
+        )
         notes.append("no_calibration_yaml")
         requirements.append(str(calib_path))
         if not allow_heuristic:
-            logger.debug("[evaluate_combo] Returning insufficient_data due to no calibration and allow_heuristic is False.")
+            logger.debug(
+                "[evaluate_combo] Returning insufficient_data due to no calibration and allow_heuristic is False."
+            )
             return {
                 "status": "insufficient_data",
                 "message": (
@@ -786,8 +796,10 @@ def evaluate_combo(
                 "notes": notes,
                 "requirements": requirements,
             }
-        else: # calibration_used is False, but allow_heuristic is True. Proceeding with heuristic.
-            logger.debug("[evaluate_combo] Proceeding with heuristic (allow_heuristic is True despite no calibration).")
+        else:  # calibration_used is False, but allow_heuristic is True. Proceeding with heuristic.
+            logger.debug(
+                "[evaluate_combo] Proceeding with heuristic (allow_heuristic is True despite no calibration)."
+            )
 
     # This path continues to execute `compute_ev_roi` and eventually `return result`
 

@@ -195,7 +195,7 @@ DEPLOY_CMD=(
 )
 
 # Construire la liste des variables d'environnement
-ENV_VARS="PROJECT_ID=$PROJECT_ID,REGION=$REGION,SERVICE_NAME=$SERVICE_NAME,QUEUE_ID=$QUEUE_ID,SERVICE_ACCOUNT_EMAIL=$SERVICE_ACCOUNT_EMAIL,TZ=Europe/Paris"
+ENV_VARS="PROJECT_ID=$PROJECT_ID,REGION=$REGION,SERVICE_NAME=$SERVICE_NAME,QUEUE_ID=$QUEUE_ID,SERVICE_ACCOUNT_EMAIL=$SERVICE_ACCOUNT_EMAIL,TZ=Europe/Paris,USE_FIRESTORE=True,USE_GCS=True,REQUIRE_AUTH=True,DEBUG=True,BUDGET_TOTAL=5"
 # OIDC_AUDIENCE will be set dynamically after service URL is known
 
 # Ajouter GCS_BUCKET si défini
@@ -239,14 +239,14 @@ echo "✅ Déploiement réussi!"
 echo "================================================"
 echo "Service URL: $SERVICE_URL"
 
-# Update OIDC_AUDIENCE environment variable to match the actual service URL
-echo "Updating OIDC_AUDIENCE environment variable to $SERVICE_URL..."
+# Update OIDC_AUDIENCE and CLOUD_RUN_URL environment variables to match the actual service URL
+echo "Updating OIDC_AUDIENCE and CLOUD_RUN_URL environment variables to $SERVICE_URL..."
 gcloud run services update "$SERVICE_NAME" \
     --region="$REGION" \
     --project="$PROJECT_ID" \
-    --set-env-vars="OIDC_AUDIENCE=$SERVICE_URL" \
+    --update-env-vars="OIDC_AUDIENCE=$SERVICE_URL,CLOUD_RUN_URL=$SERVICE_URL" \
     --quiet
-echo "OIDC_AUDIENCE environment variable updated."
+echo "OIDC_AUDIENCE and CLOUD_RUN_URL environment variables updated."
 echo ""
 echo "📝 Prochaines étapes:"
 echo "1. Mettre à jour .env avec OIDC_AUDIENCE=$SERVICE_URL"

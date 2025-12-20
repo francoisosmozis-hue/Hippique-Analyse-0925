@@ -1,6 +1,7 @@
 """
 Scraper for Geny.com to fetch daily race programs.
 """
+
 from __future__ import annotations
 
 import re
@@ -15,12 +16,14 @@ from hippique_orchestrator.logging_utils import get_logger
 
 logger = get_logger(__name__)
 
+
 def _slugify(value: str) -> str:
     """Return a slug suitable for URLs from a human readable string."""
     value = unicodedata.normalize("NFKD", value)
     value = value.encode("ascii", "ignore").decode("ascii")
     value = re.sub(r"[^a-z0-9]+", "-", value.lower())
     return value.strip("-")
+
 
 def fetch_geny_programme() -> dict[str, Any]:
     """
@@ -56,7 +59,9 @@ def fetch_geny_programme() -> dict[str, Any]:
         logger.error(f"An error occurred while requesting {e.request.url!r}: {e}")
         return empty_response
     except httpx.HTTPStatusError as e:
-        logger.error(f"Error response {e.response.status_code} while requesting {e.request.url!r}: {e}")
+        logger.error(
+            f"Error response {e.response.status_code} while requesting {e.request.url!r}: {e}"
+        )
         return empty_response
 
     soup = BeautifulSoup(html_content, "html.parser")
@@ -95,7 +100,7 @@ def fetch_geny_programme() -> dict[str, Any]:
                 "r": f"R{r_counter}",
                 "hippo": hippo,
                 "slug": slug,
-                "courses": []
+                "courses": [],
             }
             r_counter += 1
 

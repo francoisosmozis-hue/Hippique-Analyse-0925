@@ -69,3 +69,15 @@ tickets:
     enable_if:
       ev_min: 0.40
       payout_min: 10.0
+
+adjustments:
+  drift:
+    threshold: 0.07
+    favorite_odds: 4.0
+    favorite_factor: 1.20
+    outsider_odds: 8.0
+    outsider_steam_factor: 0.85
+    high_odds: 60.0
+    extreme_factor: 1.80
+  exotics:
+    min_sp_candidates: 3

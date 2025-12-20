@@ -17,6 +17,7 @@ from hippique_orchestrator.logging_utils import get_logger
 logger = get_logger(__name__)
 config = get_config()
 
+
 def _extract_rc_from_url(course_url: str) -> tuple[str, str]:
     """
     Extracts Reunion and Course numbers from a URL (Boturfers or ZEturf-like).
@@ -64,7 +65,7 @@ def run_course(
             "course": course,
             "phase": phase_clean,
             "date": date,
-        }
+        },
     )
 
     try:
@@ -89,14 +90,10 @@ def run_course(
                     "correlation_id": correlation_id,
                     "trace_id": trace_id,
                     "race_doc_id": result.get("race_doc_id"),
-                    "analysis_result": result.get("analysis_result")
-                }
+                    "analysis_result": result.get("analysis_result"),
+                },
             )
-            return {
-                "ok": True,
-                "phase": phase_clean,
-                "analysis": result.get("analysis_result")
-            }
+            return {"ok": True, "phase": phase_clean, "analysis": result.get("analysis_result")}
         else:
             logger.error(
                 "Course analysis failed.",
@@ -105,7 +102,7 @@ def run_course(
                     "trace_id": trace_id,
                     "error_message": result.get("message"),
                     "race_doc_id": result.get("race_doc_id"),
-                }
+                },
             )
             return {
                 "ok": False,
@@ -114,15 +111,15 @@ def run_course(
             }
 
     except Exception as e:
-        logger.error( # Changed from logger.exception
+        logger.error(  # Changed from logger.exception
             "An unexpected error occurred during course analysis.",
-            exc_info=e, # Added exc_info=e
+            exc_info=e,  # Added exc_info=e
             extra={
                 "correlation_id": correlation_id,
                 "trace_id": trace_id,
                 "reunion": reunion,
                 "course": course,
-            }
+            },
         )
         return {
             "ok": False,

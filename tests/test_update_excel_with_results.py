@@ -110,9 +110,7 @@ def test_update_excel_records_observed_roi(tmp_path: Path) -> None:
         for col in range(1, ws_prevision.max_column + 1)
         if ws_prevision.cell(row=1, column=col).value
     }
-    assert header_map_prevision["ROI_global"] == pytest.approx(
-        tickets_data["ev"]["roi_global"]
-    )
+    assert header_map_prevision["ROI_global"] == pytest.approx(tickets_data["ev"]["roi_global"])
 
     ws_suivi = wb["Suivi"]
     header_map_suivi = {

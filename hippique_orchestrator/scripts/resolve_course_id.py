@@ -1,4 +1,5 @@
 """Utilities to determine which course to analyse for scheduled runs."""
+
 from __future__ import annotations
 
 import argparse
@@ -155,8 +156,8 @@ def _iter_planning_entries(path: Path) -> Iterator[CourseContext]:
                 or course.get("num")
                 or None
             )
-            when = (
-                _parse_iso_datetime(course.get("start") or course.get("time") or course.get("hour"))
+            when = _parse_iso_datetime(
+                course.get("start") or course.get("time") or course.get("hour")
             )
             contexts.append(
                 CourseContext(

@@ -24,14 +24,17 @@ def test_validate_ev_passes_with_defaults(monkeypatch):
     monkeypatch.delenv("EV_MIN_GLOBAL", raising=False)
     assert validate_ev(ev_sp=0.5, ev_global=0.5)
 
+
 def test_validate_ev_sp_below_threshold(monkeypatch):
     monkeypatch.setenv("EV_MIN_SP", "0.2")
     with pytest.raises(ValidationError):
         validate_ev(ev_sp=0.1, ev_global=1.0)
 
+
 def test_validate_ev_combo_optional(monkeypatch):
     monkeypatch.setenv("EV_MIN_SP", "0.2")
     assert validate_ev(ev_sp=0.3, ev_global=None, need_combo=False)
+
 
 def test_validate_ev_combo_required(monkeypatch):
     monkeypatch.setenv("EV_MIN_SP", "0.2")
@@ -56,9 +59,7 @@ def test_validate_ev_logs_context(monkeypatch, caplog):
 
     assert result is True
     logged = [
-        record.message
-        for record in caplog.records
-        if "[validate_ev] context" in record.message
+        record.message for record in caplog.records if "[validate_ev] context" in record.message
     ]
     assert logged, "validate_ev should log contextual metrics"
     log_line = logged[-1]
@@ -170,9 +171,7 @@ def test_summarise_validation_success():
     partants = _sample_partants()
     odds = _sample_odds()
     stats = {"coverage": 90}
-    summary = summarise_validation(
-        partial(validate_inputs, cfg, partants, odds, stats)
-    )
+    summary = summarise_validation(partial(validate_inputs, cfg, partants, odds, stats))
     assert summary == {"ok": True, "reason": ""}
 
 
@@ -181,9 +180,7 @@ def test_summarise_validation_failure_returns_reason():
     partants = _sample_partants(5)
     odds = _sample_odds(5)
     stats = {"coverage": 85}
-    summary = summarise_validation(
-        partial(validate_inputs, cfg, partants, odds, stats)
-    )
+    summary = summarise_validation(partial(validate_inputs, cfg, partants, odds, stats))
     assert summary["ok"] is False
     assert "partants" in summary["reason"].lower()
     with pytest.raises(ValidationError):
@@ -202,8 +199,15 @@ def test_validator_cli_returns_non_zero_on_failure(tmp_path):
     (artefacts_dir / "stats_je.json").write_text(json.dumps(stats), encoding="utf-8")
 
     result = subprocess.run(
-        [sys.executable, "-m", "hippique_orchestrator.validator_ev", "--artefacts", str(artefacts_dir)],
-        check=False, capture_output=True,
+        [
+            sys.executable,
+            "-m",
+            "hippique_orchestrator.validator_ev",
+            "--artefacts",
+            str(artefacts_dir),
+        ],
+        check=False,
+        capture_output=True,
         text=True,
     )
 

@@ -35,12 +35,20 @@ steps:
   args:
     - '-c'
     - |
-      gcloud run deploy hippique-analyse-0925 \
+      gcloud run deploy hippique-orchestrator \
         --image="${_REGION}-docker.pkg.dev/analyse-hippique/${_REPO}/${_IMAGE}:${SHORT_SHA:-manual}" \
         --region="${_REGION}" \
         --platform=managed \
         --allow-unauthenticated \
-        --set-env-vars="TZ=Europe/Paris,PROJECT_ID=${_PROJECT_ID},REGION=${_REGION},SERVICE_NAME=hippique-analyse-0925,QUEUE_ID=hippique-tasks,SERVICE_ACCOUNT_EMAIL=${_SERVICE_ACCOUNT_EMAIL},GCS_BUCKET=analyse-hippique-data,REQUIRE_AUTH=true,OIDC_AUDIENCE=${_ACTUAL_CLOUD_RUN_URL},CLOUD_RUN_URL=${_ACTUAL_CLOUD_RUN_URL},USE_FIRESTORE=true,BUDGET_TOTAL=5,USE_GCS=true" \
+        --update-env-vars=TZ=Europe/Paris \
+        --update-env-vars=PROJECT_ID=${_PROJECT_ID} \
+        --update-env-vars=REGION=${_REGION} \
+        --update-env-vars=SERVICE_NAME=hippique-orchestrator \
+        --update-env-vars=QUEUE_ID=hippique-tasks \
+        --update-env-vars=SERVICE_ACCOUNT_EMAIL=${_SERVICE_ACCOUNT_EMAIL} \
+        --update-env-vars=OIDC_AUDIENCE=${_ACTUAL_CLOUD_RUN_URL} \
+        --update-env-vars=CLOUD_RUN_URL=${_ACTUAL_CLOUD_RUN_URL} \
+        --update-env-vars=BUDGET_TOTAL=5 \
         --quiet
 
 # Explicitly make the service public
@@ -50,17 +58,17 @@ steps:
   args:
     - '-c'
     - |
-      gcloud run services add-iam-policy-binding hippique-analyse-0925 \
+      gcloud run services add-iam-policy-binding hippique-orchestrator \
         --member="allUsers" \
         --role="roles/run.invoker" \
         --region="${_REGION}" \
         --quiet
 
 substitutions:
-  _PROJECT_ID: $PROJECT_ID
+  _PROJECT_ID: analyse-hippique
   _REGION: europe-west1
-  _SERVICE: hippique-analyse-0925
+
   _REPO: hippique-orchestrator
   _IMAGE: hippique-orchestrator
   _SERVICE_ACCOUNT_EMAIL: 'sa-hippique-orchestrator@analyse-hippique.iam.gserviceaccount.com'
-  _ACTUAL_CLOUD_RUN_URL: 'https://hippique-orchestrator-1084663881709.europe-west1.run.app'
+  _ACTUAL_CLOUD_RUN_URL: 'https://hippique-orchestrator-h3tdqmb7jq-ew.a.run.app'

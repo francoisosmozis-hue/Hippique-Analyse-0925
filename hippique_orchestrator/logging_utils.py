@@ -21,10 +21,29 @@ class JsonFormatter(logging.Formatter):
         # The LogRecord already has 'extra' fields if passed by logger.info(msg, extra={...})
         # We need to copy these to our log_entry
         for key, value in record.__dict__.items():
-            if key not in ['name', 'msg', 'levelname', 'levelno', 'pathname', 'filename',
-                           'lineno', 'funcName', 'created', 'msecs', 'relativeCreated',
-                           'thread', 'threadName', 'processName', 'process', 'exc_info',
-                           'exc_text', 'stack_info', 'args', 'module', 'asctime'] and not key.startswith('_'):
+            if key not in [
+                'name',
+                'msg',
+                'levelname',
+                'levelno',
+                'pathname',
+                'filename',
+                'lineno',
+                'funcName',
+                'created',
+                'msecs',
+                'relativeCreated',
+                'thread',
+                'threadName',
+                'processName',
+                'process',
+                'exc_info',
+                'exc_text',
+                'stack_info',
+                'args',
+                'module',
+                'asctime',
+            ] and not key.startswith('_'):
                 log_entry[key] = value
 
         # Add exception info if present
@@ -33,7 +52,9 @@ class JsonFormatter(logging.Formatter):
 
         return json.dumps(log_entry)
 
+
 _loggers: dict[str, logging.Logger] = {}
+
 
 def get_logger(name: str) -> logging.Logger:
     """Get or create a logger configured to output structured JSON."""
@@ -49,8 +70,8 @@ def get_logger(name: str) -> logging.Logger:
         logger.addHandler(handler)
 
         # Dynamically set level from config
-        app_config = get_config() # Get the config
-        logger.setLevel(app_config.LOG_LEVEL.upper()) # Set level based on config
+        app_config = get_config()  # Get the config
+        logger.setLevel(app_config.LOG_LEVEL.upper())  # Set level based on config
 
         logger.propagate = False
 

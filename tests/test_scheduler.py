@@ -14,9 +14,17 @@ def mock_tasks_client(mocker: MockerFixture) -> MagicMock:
     """Mocks the CloudTasksClient and its methods."""
     mock_client = MagicMock()
     mock_client.get_task.side_effect = gcp_exceptions.NotFound("Task not found")
-    mock_client.task_path.side_effect = lambda project, location, queue, task: f"projects/{project}/locations/{location}/queues/{queue}/tasks/{task}"
-    mocker.patch("hippique_orchestrator.scheduler.tasks_v2.CloudTasksClient", return_value=mock_client)
+    mock_client.task_path.side_effect = (
+        lambda project,
+        location,
+        queue,
+        task: f"projects/{project}/locations/{location}/queues/{queue}/tasks/{task}"
+    )
+    mocker.patch(
+        "hippique_orchestrator.scheduler.tasks_v2.CloudTasksClient", return_value=mock_client
+    )
     return mock_client
+
 
 def test_schedule_all_races_creates_h30_and_h5_tasks(mock_tasks_client: MagicMock, mock_config):
     """
@@ -36,7 +44,9 @@ def test_schedule_all_races_creates_h30_and_h5_tasks(mock_tasks_client: MagicMoc
         }
     ]
 
-    results = scheduler.schedule_all_races(plan, mode="tasks", correlation_id="test-corr", trace_id="test-trace")
+    results = scheduler.schedule_all_races(
+        plan, mode="tasks", correlation_id="test-corr", trace_id="test-trace"
+    )
 
     assert mock_tasks_client.create_task.call_count == 2
     assert len(results) == 2
@@ -60,6 +70,7 @@ def test_schedule_all_races_creates_h30_and_h5_tasks(mock_tasks_client: MagicMoc
     h5_payload = json.loads(h5_task["http_request"]["body"])
     assert h5_payload["phase"] == "H5"
 
+
 def test_schedule_all_races_skips_existing_tasks(mock_tasks_client: MagicMock, mock_config):
     """
     Tests idempotency: if get_task succeeds (doesn't raise NotFound),
@@ -79,10 +90,13 @@ def test_schedule_all_races_skips_existing_tasks(mock_tasks_client: MagicMock, m
         }
     ]
 
-    scheduler.schedule_all_races(plan, mode="tasks", correlation_id="test-corr", trace_id="test-trace")
+    scheduler.schedule_all_races(
+        plan, mode="tasks", correlation_id="test-corr", trace_id="test-trace"
+    )
 
     assert mock_tasks_client.get_task.call_count == 2
     assert mock_tasks_client.create_task.call_count == 0
+
 
 def test_enqueue_run_task_skips_past_races(mock_tasks_client: MagicMock, mock_config):
     """

@@ -4,28 +4,30 @@ src/service.py - FastAPI Service Principal
 Service Cloud Run orchestrant l'analyse hippique quotidienne.
 """
 
+import asyncio
+import contextlib
 import hashlib
 import json
 import os
-import asyncio
 import uuid
 from datetime import datetime
+from io import StringIO
 from typing import Any
 from zoneinfo import ZoneInfo
-from fastapi.responses import HTMLResponse, JSONResponse, Response
-from fastapi.staticfiles import StaticFiles
+
 from fastapi import (
     APIRouter,
     BackgroundTasks,
     FastAPI,
+    Header,
     HTTPException,
     Query,
     Request,
     status,
-    Header
 )
+from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-
 from pydantic import BaseModel, Field
 
 from hippique_orchestrator import firestore_client, time_utils
@@ -122,7 +124,7 @@ api_router = APIRouter(prefix="/api")
 async def pronostics_ui(request: Request):
     """Serves the main HTML page for pronostics."""
     # Serve index.html directly from the static directory
-    with open(os.path.join(STATIC_DIR, "index.html"), "r") as f:
+    with open(os.path.join(STATIC_DIR, "index.html")) as f:
         html_content = f.read()
     return HTMLResponse(content=html_content)
 

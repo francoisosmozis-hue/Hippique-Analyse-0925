@@ -10,7 +10,7 @@ def test_manual_run_phase():
     payload = {
         "course_url": "https://www.zeturf.fr/fr/course/2025-11-22/R1C1-prix-de-la-course",
         "phase": "H5",
-        "date": datetime.now().strftime("%Y-%m-%d")
+        "date": datetime.now().strftime("%Y-%m-%d"),
     }
     try:
         response = requests.post("http://localhost:8080/tasks/run-phase", json=payload, timeout=20)

@@ -20,6 +20,7 @@ def _iter_candidates(name: str, aliases: Sequence[str] | None) -> list[str]:
         return [name]
     return [name, *aliases]
 
+
 def get_env(
     name: str,
     default: T | None = None,

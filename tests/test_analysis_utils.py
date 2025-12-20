@@ -1,4 +1,3 @@
-
 import pytest
 
 from hippique_orchestrator import analysis_utils
@@ -17,6 +16,7 @@ from hippique_orchestrator import analysis_utils
 def test_normalise_text(value, expected):
     assert analysis_utils._normalise_text(value) == expected
 
+
 @pytest.mark.parametrize(
     "value, expected",
     [
@@ -33,25 +33,32 @@ def test_normalise_text(value, expected):
 def test_coerce_partants(value, expected):
     assert analysis_utils._coerce_partants(value) == expected
 
+
 def test_compute_overround_cap_default():
     """Tests that the default cap is returned when no special conditions apply."""
     cap = analysis_utils.compute_overround_cap("Trot", 10, default_cap=1.5)
     assert cap == 1.5
+
 
 def test_compute_overround_cap_flat_handicap_large_field():
     """Tests that the special cap is applied for large flat handicap races."""
     cap = analysis_utils.compute_overround_cap("Plat Handicap", 16, default_cap=1.5)
     assert cap == analysis_utils._FLAT_HANDICAP_CAP
 
+
 def test_compute_overround_cap_flat_large_field_from_label():
     """Tests that the special cap is applied for large flat races identified by label."""
-    cap = analysis_utils.compute_overround_cap("Plat", 14, default_cap=1.5, course_label="Grand Handicap de Deauville")
+    cap = analysis_utils.compute_overround_cap(
+        "Plat", 14, default_cap=1.5, course_label="Grand Handicap de Deauville"
+    )
     assert cap == analysis_utils._FLAT_HANDICAP_CAP
+
 
 def test_compute_overround_cap_small_field_uses_default():
     """Tests that the default cap is used for small handicap races."""
     cap = analysis_utils.compute_overround_cap("Plat Handicap", 13, default_cap=1.5)
     assert cap == 1.5
+
 
 def test_compute_overround_cap_updates_context():
     """Tests that the context dictionary is updated when a special cap is triggered."""

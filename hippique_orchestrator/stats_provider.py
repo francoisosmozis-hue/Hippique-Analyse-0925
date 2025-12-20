@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 # Helper Functions
 # ============================================
 
+
 def _slugify(text: str) -> str:
     """Converts a string into a URL-friendly slug."""
     if not text:
@@ -39,12 +40,15 @@ def _slugify(text: str) -> str:
     text = re.sub(r'[\s-]+', '-', text)
     return text
 
+
 # ============================================
 # Data Models (as per user specification)
 # ============================================
 
+
 class JEStats(BaseModel):
     """Statistics for a Jockey or Trainer."""
+
     year: int
     starters: int = 0
     wins: int = 0
@@ -52,8 +56,10 @@ class JEStats(BaseModel):
     win_rate: float | None = None
     place_rate: float | None = None
 
+
 class Chrono(BaseModel):
     """Chrono/performance data for a horse."""
+
     record_attele_sec: float | None = None
     record_monte_sec: float | None = None
     last3_rk_sec: list[float] = Field(default_factory=list)
@@ -64,12 +70,14 @@ class Chrono(BaseModel):
 # Provider Interface
 # ============================================
 
+
 @runtime_checkable
 class StatsProvider(Protocol):
     """
     Protocol defining the interface for a statistics provider.
     Ensures that any provider implements the required fetching methods.
     """
+
     def fetch_horse_chrono(self, horse_name: str, known_id: str | None) -> Chrono | None:
         """Fetches chrono data for a specific horse."""
         ...
@@ -87,12 +95,14 @@ class StatsProvider(Protocol):
 # ZoneTurf Provider Implementation
 # ============================================
 
+
 class ZoneTurfProvider:
     """
     StatsProvider implementation for scraping data from Zone-Turf.
     """
+
     CACHE_COLLECTION = "zoneturf_id_cache"
-    MAX_PAGES_TO_SCRAPE = 10 # Safety limit for pagination
+    MAX_PAGES_TO_SCRAPE = 10  # Safety limit for pagination
 
     def __init__(self, config: dict, cache_ttl_days: int = 30):
         self.base_url = config.get("base_url", "https://www.zone-turf.fr")
@@ -100,15 +110,21 @@ class ZoneTurfProvider:
             "horse": config.get("horse_path", "/cheval/{slug}-{id}/"),
             "jockey": config.get("jockey_path", "/jockey/{slug}-{id}/"),
             "trainer": config.get("trainer_path", "/entraineur/{slug}-{id}/"),
-            "horse_letter_index": config.get("horse_letter_index_path", "/cheval/lettre-{letter}.html?p={page}"),
-            "jockey_letter_index": config.get("jockey_letter_index_path", "/jockey/lettre-{letter}.html?p={page}"),
-            "trainer_letter_index": config.get("trainer_letter_index_path", "/entraineur/lettre-{letter}.html?p={page}"),
+            "horse_letter_index": config.get(
+                "horse_letter_index_path", "/cheval/lettre-{letter}.html?p={page}"
+            ),
+            "jockey_letter_index": config.get(
+                "jockey_letter_index_path", "/jockey/lettre-{letter}.html?p={page}"
+            ),
+            "trainer_letter_index": config.get(
+                "trainer_letter_index_path", "/entraineur/lettre-{letter}.html?p={page}"
+            ),
         }
         self.cache_ttl = timedelta(days=cache_ttl_days)
         self.client = httpx.Client(base_url=self.base_url, follow_redirects=True)
         # Map entity types to their specific list selectors on index pages
         self.index_selectors = {
-            "horse": "ul.list-chevaux > li > a", # Corrected selector
+            "horse": "ul.list-chevaux > li > a",  # Corrected selector
             "jockey": "ul.list-jockeys > li > a",
             "trainer": "ul.list-entraineurs > li > a",
         }
@@ -229,7 +245,9 @@ class ZoneTurfProvider:
             except httpx.HTTPStatusError as e:
                 # 404 is acceptable if a page doesn't exist (e.g., page 2 for a letter)
                 if e.response.status_code == 404:
-                    logger.debug(f"Page {page_num} not found for letter '{first_letter}', stopping pagination.")
+                    logger.debug(
+                        f"Page {page_num} not found for letter '{first_letter}', stopping pagination."
+                    )
                     break
                 logger.error(f"HTTP error while resolving ID for '{name}' at page {page_num}: {e}")
                 break
@@ -239,7 +257,6 @@ class ZoneTurfProvider:
 
         logger.warning(f"Could not resolve ID for {entity_type} '{name}' after scraping.")
         return None
-
 
     def _parse_chrono_to_seconds(self, chrono_str: str | None) -> float | None:
         """Parses a chrono string like 1'11"6 or 59"8 into seconds."""
@@ -252,16 +269,16 @@ class ZoneTurfProvider:
 
             parts = chrono_str.split('"')
 
-            if len(parts) == 3: # Format M"S"T e.g., 1"11"6
+            if len(parts) == 3:  # Format M"S"T e.g., 1"11"6
                 minutes = int(parts[0])
                 seconds = int(parts[1])
-                tenths = int(parts[2] or 0) # Treat empty string as 0
+                tenths = int(parts[2] or 0)  # Treat empty string as 0
                 return minutes * 60 + seconds + tenths / 10.0
-            elif len(parts) == 2: # Format S"T e.g., 59"8
+            elif len(parts) == 2:  # Format S"T e.g., 59"8
                 seconds = int(parts[0])
                 tenths = int(parts[1])
                 return seconds + tenths / 10.0
-            elif len(parts) == 1 and parts[0]: # Can be a single number
+            elif len(parts) == 1 and parts[0]:  # Can be a single number
                 return float(parts[0])
 
         except (ValueError, IndexError):
@@ -304,7 +321,9 @@ class ZoneTurfProvider:
             last3_rk = []
             performances_table = soup.find("table", id="horse-performances-table")
             if performances_table:
-                for row in performances_table.tbody.find_all("tr")[:5]: # Check last 5 races for 3 valid chronos
+                for row in performances_table.tbody.find_all("tr")[
+                    :5
+                ]:  # Check last 5 races for 3 valid chronos
                     if len(last3_rk) >= 3:
                         break
                     cells = row.find_all("td")
@@ -328,7 +347,9 @@ class ZoneTurfProvider:
             logger.error(f"HTTP error while fetching chrono for '{horse_name}': {e}")
             return None
         except Exception as e:
-            logger.error(f"An error occurred while fetching chrono for '{horse_name}': {e}", exc_info=True)
+            logger.error(
+                f"An error occurred while fetching chrono for '{horse_name}': {e}", exc_info=True
+            )
             return None
 
     def fetch_jockey_stats(self, jockey_name: str, known_id: str | None = None) -> JEStats | None:
@@ -391,7 +412,10 @@ class ZoneTurfProvider:
             logger.error(f"HTTP error while fetching stats for jockey '{jockey_name}': {e}")
             return None
         except Exception as e:
-            logger.error(f"An error occurred while fetching stats for jockey '{jockey_name}': {e}", exc_info=True)
+            logger.error(
+                f"An error occurred while fetching stats for jockey '{jockey_name}': {e}",
+                exc_info=True,
+            )
             return None
 
     def fetch_trainer_stats(self, trainer_name: str, known_id: str | None = None) -> JEStats | None:
@@ -412,7 +436,9 @@ class ZoneTurfProvider:
 
             stats_header = soup.find("h2", string=re.compile(r"Statistiques \d{4} de"))
             if not stats_header:
-                logger.warning(f"Stats section not found for trainer '{trainer_name}' at {url_path}")
+                logger.warning(
+                    f"Stats section not found for trainer '{trainer_name}' at {url_path}"
+                )
                 return None
 
             stats_table = stats_header.find_next_sibling("table")
@@ -450,7 +476,10 @@ class ZoneTurfProvider:
             logger.error(f"HTTP error while fetching stats for trainer '{trainer_name}': {e}")
             return None
         except Exception as e:
-            logger.error(f"An error occurred while fetching stats for trainer '{trainer_name}': {e}", exc_info=True)
+            logger.error(
+                f"An error occurred while fetching stats for trainer '{trainer_name}': {e}",
+                exc_info=True,
+            )
             return None
 
 

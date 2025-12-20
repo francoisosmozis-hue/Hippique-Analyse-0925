@@ -77,11 +77,13 @@ def resolve_horse_id(horse_name: str, session: requests.Session, max_pages: int 
             if not soup.find(string=re.compile("page suivante", re.I)):
                 break
         except requests.RequestException as e:
-            logger.warning(f"Failed to resolve Zone-Turf ID for {horse_name} due to network error: {e}")
+            logger.warning(
+                f"Failed to resolve Zone-Turf ID for {horse_name} due to network error: {e}"
+            )
             break
 
     logger.warning(f"Could not find Zone-Turf ID for '{horse_name}' after searching pages.")
-    ID_CACHE[normalized_name] = None # Cache failure to avoid retries
+    ID_CACHE[normalized_name] = None  # Cache failure to avoid retries
     return None
 
 
@@ -154,10 +156,8 @@ def fetch_chrono_from_html(html_content: str) -> dict[str, Any] | None:
     if not record_attele and not last_3_chronos:
         return None
 
-    return {
-        'record_attele': record_attele,
-        'last_3_chrono': last_3_chronos
-    }
+    return {'record_attele': record_attele, 'last_3_chrono': last_3_chronos}
+
 
 def get_chrono_stats(horse_name: str, horse_id: str | None = None) -> dict[str, Any] | None:
     """
@@ -185,7 +185,9 @@ def get_chrono_stats(horse_name: str, horse_id: str | None = None) -> dict[str, 
             logger.info(f"Fetching chrono stats from Zone-Turf for {horse_name} at {url}")
             response = session.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
             if response.status_code != 200:
-                logger.error(f"Failed to fetch Zone-Turf page for {horse_name} (ID: {zt_id}) with status {response.status_code}")
+                logger.error(
+                    f"Failed to fetch Zone-Turf page for {horse_name} (ID: {zt_id}) with status {response.status_code}"
+                )
                 CHRONO_CACHE[cache_key] = None
                 return None
 
@@ -194,6 +196,8 @@ def get_chrono_stats(horse_name: str, horse_id: str | None = None) -> dict[str, 
             return chrono_data
 
         except requests.RequestException as e:
-            logger.error(f"Failed to fetch Zone-Turf page for {horse_name} due to network error: {e}")
+            logger.error(
+                f"Failed to fetch Zone-Turf page for {horse_name} due to network error: {e}"
+            )
             CHRONO_CACHE[cache_key] = None
             return None

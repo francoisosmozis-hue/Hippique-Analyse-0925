@@ -1,9 +1,11 @@
 """Utilities for configuring Google Cloud Storage synchronisation toggles."""
+
 from __future__ import annotations
 
 from hippique_orchestrator.config import get_config
 
 config = get_config()
+
 
 def is_gcs_enabled(*, default: bool = True) -> bool:
     """Return ``True`` when Google Cloud synchronisation should run."""

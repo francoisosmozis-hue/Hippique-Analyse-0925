@@ -32,25 +32,14 @@ def _flatten(meetings: Iterable[dict[str, Any]]) -> list[dict[str, str]]:
     entries: list[dict[str, str]] = []
     for meeting in meetings:
         r_label = (
-            meeting.get("label")
-            or meeting.get("r")
-            or meeting.get("id")
-            or meeting.get("reunion")
+            meeting.get("label") or meeting.get("r") or meeting.get("id") or meeting.get("reunion")
         )
         date = meeting.get("date")
         races = meeting.get("races") or meeting.get("courses") or []
         for race in races:
-            c_label = (
-                race.get("course")
-                or race.get("c")
-                or race.get("num")
-                or race.get("id")
-            )
+            c_label = race.get("course") or race.get("c") or race.get("num") or race.get("id")
             time = (
-                race.get("time")
-                or race.get("start")
-                or race.get("hour")
-                or race.get("start_time")
+                race.get("time") or race.get("start") or race.get("hour") or race.get("start_time")
             )
             if not (r_label and c_label and time):
                 continue

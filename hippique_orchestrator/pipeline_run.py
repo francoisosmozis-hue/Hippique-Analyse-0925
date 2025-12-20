@@ -14,19 +14,6 @@ logger = logging.getLogger(__name__)
 CALIB_PATH = pathlib.Path(__file__).resolve().parent / "config" / "payout_calibration.yaml"
 
 
-J_RATE_BONUS_THRESHOLD = 12.0
-E_RATE_BONUS_THRESHOLD = 15.0
-J_RATE_MALUS_THRESHOLD = 6.0
-E_RATE_MALUS_THRESHOLD = 8.0
-
-DRIFT_THRESHOLD = 0.07
-FAVORITE_ODDS_THRESHOLD = 4.0
-FAVORITE_DRIFT_FACTOR = 1.20
-OUTSIDER_ODDS_THRESHOLD = 8.0
-OUTSIDER_STEAM_FACTOR = 0.85
-HIGH_ODDS_THRESHOLD = 60
-EXTREME_DRIFT_FACTOR = 1.80
-MIN_SP_CANDIDATES_FOR_EXOTICS = 3
 
 
 # ==============================================================================
@@ -58,6 +45,14 @@ def _apply_base_stat_adjustment(runners: list[dict], je_stats: dict, weights: di
     def get_je_factor(runner_stats: dict, je_weights: dict) -> float:
         je_bonus = je_weights.get("je_bonus", 1.0)
         je_malus = je_weights.get("je_malus", 1.0)
+
+        # NOTE: These thresholds should ideally be in the gpi_v52.yml config file.
+        # The code is now ready to receive them from there if they are added.
+        j_rate_bonus_threshold = je_weights.get("j_rate_bonus_threshold", 12.0)
+        e_rate_bonus_threshold = je_weights.get("e_rate_bonus_threshold", 15.0)
+        j_rate_malus_threshold = je_weights.get("j_rate_malus_threshold", 6.0)
+        e_rate_malus_threshold = je_weights.get("e_rate_malus_threshold", 8.0)
+
         try:
             j_rate = (
                 float(runner_stats.get("j_rate"))
@@ -71,10 +66,11 @@ def _apply_base_stat_adjustment(runners: list[dict], je_stats: dict, weights: di
             )
         except (ValueError, TypeError):
             return 1.0
+
         if j_rate is not None and e_rate is not None:
-            if j_rate >= J_RATE_BONUS_THRESHOLD or e_rate >= E_RATE_BONUS_THRESHOLD:
+            if j_rate >= j_rate_bonus_threshold or e_rate >= e_rate_bonus_threshold:
                 return je_bonus
-            if j_rate < J_RATE_MALUS_THRESHOLD or e_rate < E_RATE_MALUS_THRESHOLD:
+            if j_rate < j_rate_malus_threshold or e_rate < e_rate_malus_threshold:
                 return je_malus
         return 1.0
 
@@ -155,6 +151,13 @@ def _apply_drift_adjustment(
 ) -> list[float]:
     """Applies odds drift adjustment factor based on GPI v5.1 spec."""
     k_d_default = drift_config.get("k_d", 0.70)
+    drift_threshold = drift_config.get("threshold", 0.07)
+    fav_odds_threshold = drift_config.get("favorite_odds", 4.0)
+    fav_drift_factor = drift_config.get("favorite_factor", 1.20)
+    out_odds_threshold = drift_config.get("outsider_odds", 8.0)
+    out_steam_factor = drift_config.get("outsider_steam_factor", 0.85)
+    high_odds_threshold = drift_config.get("high_odds", 60.0)
+    extreme_drift_factor = drift_config.get("extreme_factor", 1.80)
     factors = []
 
     for runner in runners:
@@ -166,23 +169,23 @@ def _apply_drift_adjustment(
             factors.append(1.0)
             continue
 
-        if abs(odds_5 / odds_30 - 1.0) < DRIFT_THRESHOLD:
+        if abs(odds_5 / odds_30 - 1.0) < drift_threshold:
             factors.append(1.0)
             continue
 
         r = math.log(odds_5 / odds_30)
         k_d = k_d_default
 
-        if odds_30 <= FAVORITE_ODDS_THRESHOLD and (odds_5 / odds_30) >= FAVORITE_DRIFT_FACTOR:
+        if odds_30 <= fav_odds_threshold and (odds_5 / odds_30) >= fav_drift_factor:
             k_d = drift_config.get("k_d_fav_drift", 0.90)
-        elif odds_30 >= OUTSIDER_ODDS_THRESHOLD and (odds_5 / odds_30) <= OUTSIDER_STEAM_FACTOR:
+        elif odds_30 >= out_odds_threshold and (odds_5 / odds_30) <= out_steam_factor:
             k_d = drift_config.get("k_d_out_steam", 0.85)
 
         f_drift = _clamp(math.exp(-k_d * r), 0.80, 1.20)
 
-        if odds_30 > HIGH_ODDS_THRESHOLD or odds_5 > HIGH_ODDS_THRESHOLD:
+        if odds_30 > high_odds_threshold or odds_5 > high_odds_threshold:
             f_drift = _clamp(f_drift, 0.90, 1.10)
-        if (odds_5 / odds_30) > EXTREME_DRIFT_FACTOR:
+        if (odds_5 / odds_30) > extreme_drift_factor:
             f_drift = max(f_drift, 0.80)
 
         factors.append(f_drift)
@@ -206,12 +209,14 @@ def _initialize_and_validate(
     try:
         config = {
             "budget": gpi_config["budget"],
+            "max_vol_per_horse": gpi_config.get("max_vol_per_horse", 0.6),
             "je_stats": gpi_config.get("je_stats"),
             "h30_snapshot_data": gpi_config.get("h30_snapshot_data"),
             "sp_config": gpi_config["tickets"]["sp_dutching"],
             "exotics_config": gpi_config["tickets"]["exotics"],
             "chrono_config": gpi_config.get("adjustments", {}).get("chrono", {}),
             "drift_config": gpi_config.get("adjustments", {}).get("drift", {}),
+            "adjustments": gpi_config.get("adjustments", {}), # For other adjustments
             "roi_min_global": gpi_config["roi_min_global"],
             "roi_min_sp": gpi_config["roi_min_sp"],
             "weights": gpi_config["weights"],
@@ -246,9 +251,7 @@ def _calculate_adjusted_probabilities(
 
     p_adjusted_stat = _apply_base_stat_adjustment(runners, je_stats, weights)
     chrono_factors = _apply_chrono_adjustment(runners, je_stats, chrono_config)
-    p_adjusted_chrono = [
-        p * f for p, f in zip(p_adjusted_stat, chrono_factors, strict=False)
-    ]
+    p_adjusted_chrono = [p * f for p, f in zip(p_adjusted_stat, chrono_factors, strict=False)]
 
     p_unnormalized = p_adjusted_chrono
     if h30_snapshot_data:
@@ -259,12 +262,8 @@ def _calculate_adjusted_probabilities(
             if r.get("num") and r.get("odds_place")
         }
         if h30_odds_map:
-            drift_factors = _apply_drift_adjustment(
-                runners, h30_odds_map, drift_config
-            )
-            p_unnormalized = [
-                p * f for p, f in zip(p_adjusted_chrono, drift_factors, strict=False)
-            ]
+            drift_factors = _apply_drift_adjustment(runners, h30_odds_map, drift_config)
+            p_unnormalized = [p * f for p, f in zip(p_adjusted_chrono, drift_factors, strict=False)]
             analysis_messages.append("Drift adjustment applied.")
 
     p_finale_list = _normalize_probs(p_unnormalized)
@@ -290,10 +289,7 @@ def _generate_sp_dutching_tickets(
     for r in runners:
         odds = r.get("odds_place", 0)
         prob_for_roi = r.get("p_unnormalized_for_roi", 0)
-        if (
-            odds > 1
-            and sp_config["odds_range"][0] <= odds <= sp_config["odds_range"][1]
-        ):
+        if odds > 1 and sp_config["odds_range"][0] <= odds <= sp_config["odds_range"][1]:
             roi = prob_for_roi * (odds - 1) - (1 - prob_for_roi)
             if roi >= roi_min_sp:
                 sp_candidates.append(
@@ -341,10 +337,21 @@ def _generate_sp_dutching_tickets(
                     "details": final_stakes,
                 }
             )
-            analysis_messages.append(
-                f"SP Dutching ticket created with {len(final_stakes)} horses."
-            )
+            analysis_messages.append(f"SP Dutching ticket created with {len(final_stakes)} horses.")
     return sp_candidates, final_tickets, analysis_messages
+
+
+def _get_legs_for_exotic_type(exotic_type: str) -> int:
+    """Returns the number of horses required for a given exotic bet type."""
+    if exotic_type in ["COUPLE", "COUPLE_PLACE", "ZE234"]: # Assuming ZE234 is a 2-horse bet
+        return 2
+    if exotic_type == "TRIO":
+        return 3
+    if exotic_type == "ZE4":
+        return 4
+    # Add other types as needed
+    logger.warning(f"Unknown exotic type '{exotic_type}', assuming 3 legs.")
+    return 3
 
 
 def _generate_exotic_tickets(
@@ -360,23 +367,29 @@ def _generate_exotic_tickets(
     sp_config = config["sp_config"]
     ev_min_combo = config["ev_min_combo"]
     payout_min_combo = config["payout_min_combo"]
+    adjustments = config.get("adjustments", {})
+    min_sp_candidates_global = adjustments.get("exotics", {}).get("min_sp_candidates", 3)
 
-    exotics_allowed = (
-        snapshot_data.get("market", {}).get("overround_place", 0.0) <= overround_max
-    )
+    exotics_allowed_by_overround = snapshot_data.get("market", {}).get("overround_place", 0.0) <= overround_max
+    if not exotics_allowed_by_overround:
+        analysis_messages.append("Exotics forbidden due to high overround.")
+        return final_tickets, analysis_messages
 
-    if (
-        exotics_allowed
-        and exotics_config.get("type") == "TRIO"
-        and len(sp_candidates) >= MIN_SP_CANDIDATES_FOR_EXOTICS
-    ):
-        combo_budget = budget * (1 - sp_config["budget_ratio"])
-        trio_combinations = list(
-            combinations(sp_candidates, MIN_SP_CANDIDATES_FOR_EXOTICS)
-        )
-        evaluated_combos = []
+    allowed_exotic_types = exotics_config.get("allowed", [])
+    if not allowed_exotic_types:
+        return final_tickets, analysis_messages
 
-        for combo in trio_combinations:
+    combo_budget = budget * (1 - sp_config["budget_ratio"])
+    best_combo_overall = None
+
+    for exotic_type in allowed_exotic_types:
+        num_legs = _get_legs_for_exotic_type(exotic_type)
+        if len(sp_candidates) < num_legs:
+            continue
+
+        exotic_combinations = list(combinations(sp_candidates, num_legs))
+
+        for combo in exotic_combinations:
             combo_legs = list(combo)
             try:
                 combo_odds_heuristic = math.prod(leg["odds"] for leg in combo_legs)
@@ -384,40 +397,39 @@ def _generate_exotic_tickets(
                 continue
 
             combo_eval_result = evaluate_combo(
-                tickets=[
-                    {"type": "TRIO", "odds": combo_odds_heuristic, "legs": combo_legs}
-                ],
+                tickets=[{"type": exotic_type, "odds": combo_odds_heuristic, "legs": combo_legs}],
                 bankroll=combo_budget,
                 calibration=CALIB_PATH,
             )
 
             if combo_eval_result.get("status") == "ok":
-                if (
+                is_profitable = (
                     combo_eval_result.get("roi", 0) >= ev_min_combo
                     and combo_eval_result.get("payout_expected", 0) >= payout_min_combo
-                ):
-                    evaluated_combos.append(
-                        {
-                            "legs": [c["num"] for c in combo_legs],
-                            "roi": combo_eval_result.get("roi"),
-                            "payout": combo_eval_result.get("payout_expected"),
-                        }
-                    )
+                )
+                if is_profitable:
+                    current_combo_details = {
+                        "type": exotic_type,
+                        "legs": [c["num"] for c in combo_legs],
+                        "roi": combo_eval_result.get("roi"),
+                        "payout": combo_eval_result.get("payout_expected"),
+                    }
 
-        if evaluated_combos:
-            best_combo = max(evaluated_combos, key=lambda x: x["roi"])
-            final_tickets.append(
-                {
-                    "type": "TRIO",
-                    "stake": combo_budget,
-                    "roi_est": best_combo["roi"],
-                    "payout_est": best_combo["payout"],
-                    "horses": best_combo["legs"],
-                }
-            )
-            analysis_messages.append(
-                f"Profitable TRIO combo found: {best_combo['legs']}."
-            )
+                    if best_combo_overall is None or current_combo_details["roi"] > best_combo_overall["roi"]:
+                        best_combo_overall = current_combo_details
+
+    if best_combo_overall:
+        final_tickets.append(
+            {
+                "type": best_combo_overall["type"],
+                "stake": combo_budget,
+                "roi_est": best_combo_overall["roi"],
+                "payout_est": best_combo_overall["payout"],
+                "horses": best_combo_overall["legs"],
+            }
+        )
+        analysis_messages.append(f"Profitable {best_combo_overall['type']} combo found: {best_combo_overall['legs']}.")
+
     return final_tickets, analysis_messages
 
 
@@ -461,9 +473,7 @@ def _finalize_and_decide(
     }
 
 
-def generate_tickets(
-    snapshot_data: dict[str, Any], gpi_config: dict[str, Any]
-) -> dict[str, Any]:
+def generate_tickets(snapshot_data: dict[str, Any], gpi_config: dict[str, Any]) -> dict[str, Any]:
     """
     Génère des tickets de paris basés sur les règles GPI v5.2,
     incluant les ajustements Chrono et Drift.
@@ -486,6 +496,4 @@ def generate_tickets(
         final_tickets,
         analysis_messages,
     )
-    return _finalize_and_decide(
-        final_tickets, config["roi_min_global"], analysis_messages
-    )
+    return _finalize_and_decide(final_tickets, config["roi_min_global"], analysis_messages)

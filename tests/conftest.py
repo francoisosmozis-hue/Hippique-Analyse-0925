@@ -23,7 +23,9 @@ def mock_network_calls(session_mocker):
     # Read default HTML content to be returned by the mock
     # This can be overridden in specific tests if needed.
     try:
-        html_content = (Path(__file__).parent / "fixtures" / "boturfers_programme.html").read_bytes()
+        html_content = (
+            Path(__file__).parent / "fixtures" / "boturfers_programme.html"
+        ).read_bytes()
     except FileNotFoundError:
         # Provide a fallback if the fixture file is missing
         html_content = b"<html><head><title>Default Mock</title></head><body></body></html>"
@@ -31,14 +33,20 @@ def mock_network_calls(session_mocker):
     # Create a mock response object that simulates a real requests.Response
     mock_response = session_mocker.Mock()
     mock_response.content = html_content
-    mock_response.raise_for_status.return_value = None # Mock the method to do nothing
+    mock_response.raise_for_status.return_value = None  # Mock the method to do nothing
 
     # Patch requests.get in the modules where it's used.
     # It's important to patch where the object is looked up.
-    session_mocker.patch("hippique_orchestrator.scrapers.boturfers.requests.get", return_value=mock_response)
-    session_mocker.patch("hippique_orchestrator.stats_fetcher.requests.get", return_value=mock_response)
+    session_mocker.patch(
+        "hippique_orchestrator.scrapers.boturfers.requests.get", return_value=mock_response
+    )
+    session_mocker.patch(
+        "hippique_orchestrator.stats_fetcher.requests.get", return_value=mock_response
+    )
     # Patch requests.get for httpx as well if used directly (e.g., in geny scraper)
-    session_mocker.patch("httpx.get", return_value=session_mocker.Mock(status_code=200, text=str(html_content)))
+    session_mocker.patch(
+        "httpx.get", return_value=session_mocker.Mock(status_code=200, text=str(html_content))
+    )
 
 
 @pytest.fixture(scope="session")
@@ -72,8 +80,8 @@ def mock_config(session_mocker):
         SERVICE_NAME="test-service",
         QUEUE_ID="test-queue",
         GCS_BUCKET="test-bucket",
-        REQUIRE_AUTH=False, # Auth disabled for tests
-        OIDC_AUDIENCE="test-audience", # Added for auth module
+        REQUIRE_AUTH=False,  # Auth disabled for tests
+        OIDC_AUDIENCE="test-audience",  # Added for auth module
         TZ="Europe/Paris",
         BUDGET_TOTAL=5.0,
         EV_MIN_GLOBAL=0.40,
@@ -88,11 +96,11 @@ def mock_config(session_mocker):
         CALIB_PATH="test/calib/path",
         SOURCES_FILE="test-sources-file",
         RUNNER_SNAP_DIR="test-snap-dir",
-    RUNNER_ANALYSIS_DIR="test-analysis-dir",
+        RUNNER_ANALYSIS_DIR="test-analysis-dir",
         RUNNER_OUTPUT_DIR="test-output-dir",
         USE_GCS=False,
         USE_DRIVE=False,
-        SCHEDULING_MODE="tasks", # Default value from Config
+        SCHEDULING_MODE="tasks",  # Default value from Config
     )
 
     # Patch the Config class itself so any new Config() call returns our mock instance
@@ -109,18 +117,23 @@ def mock_config(session_mocker):
     # session_mocker.patch("hippique_orchestrator.scripts.update_excel_planning.config", new=mock_config_instance) # Removed due to FileNotFoundError
 
     # The get_config() function itself still needs to return the mocked instance
-    session_mocker.patch("hippique_orchestrator.config.get_config", return_value=mock_config_instance)
-
+    session_mocker.patch(
+        "hippique_orchestrator.config.get_config", return_value=mock_config_instance
+    )
 
     return mock_config_instance
 
+
 @pytest.fixture(scope="session")
-def app_with_mock_config(mock_config): # This fixture ensures app is imported AFTER mock_config is active
+def app_with_mock_config(
+    mock_config,
+):  # This fixture ensures app is imported AFTER mock_config is active
     return app
+
 
 # Fixture for TestClient setup, ensuring it uses the mocked config
 @pytest.fixture(scope="session", autouse=True)
-def client(app_with_mock_config): # Now client depends on app_with_mock_config
+def client(app_with_mock_config):  # Now client depends on app_with_mock_config
     """
     Test client for the FastAPI app, using a mocked configuration.
     """

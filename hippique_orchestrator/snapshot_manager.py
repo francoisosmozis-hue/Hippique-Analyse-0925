@@ -1,6 +1,7 @@
 """
 snapshot_manager.py - Manages the creation of daily snapshots.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -10,6 +11,7 @@ from hippique_orchestrator.plan import build_plan_async
 from hippique_orchestrator.runner import run_course
 
 logger = get_logger(__name__)
+
 
 async def write_snapshot_for_day_async(
     date_str: str,
@@ -54,13 +56,8 @@ async def write_snapshot_for_day_async(
                 continue
 
             # The new way to run the analysis
-            run_course(
-                course_url=course_url,
-                phase=phase,
-                date=date,
-                correlation_id=correlation_id
-            )
-            snapshot_tasks.append(course_url) # Keep track of what was processed
+            run_course(course_url=course_url, phase=phase, date=date, correlation_id=correlation_id)
+            snapshot_tasks.append(course_url)  # Keep track of what was processed
 
         logger.info(
             f"Finished creating {len(snapshot_tasks)} snapshot tasks for {date_str}.",
@@ -74,6 +71,7 @@ async def write_snapshot_for_day_async(
             extra={"correlation_id": correlation_id},
         )
 
+
 def write_snapshot_for_day(
     date_str: str,
     phase: str,
@@ -84,10 +82,12 @@ def write_snapshot_for_day(
     """
     Sync wrapper for the async snapshot creation function.
     """
-    asyncio.run(write_snapshot_for_day_async(
-        date_str=date_str,
-        phase=phase,
-        race_urls=race_urls,
-        rc_labels=rc_labels,
-        correlation_id=correlation_id
-    ))
+    asyncio.run(
+        write_snapshot_for_day_async(
+            date_str=date_str,
+            phase=phase,
+            race_urls=race_urls,
+            rc_labels=rc_labels,
+            correlation_id=correlation_id,
+        )
+    )

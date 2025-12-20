@@ -43,6 +43,7 @@ class Config(BaseSettings):
     # --- Security ---
     REQUIRE_AUTH: bool = True
     OIDC_AUDIENCE: str | None = None
+    CLOUD_RUN_URL: str | None = None
 
     # --- Public Paths (for Auth Middleware) ---
     PUBLIC_PATHS: list[str] = Field(

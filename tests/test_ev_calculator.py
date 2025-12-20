@@ -63,9 +63,7 @@ def test_combined_bet_with_simulator() -> None:
         return 0.25
 
     tickets = [{"odds": 10.0, "stake": 10, "legs": ["leg1", "leg2"]}]
-    res = compute_ev_roi(
-        tickets, budget=1_000, simulate_fn=fake_simulator, config={"round_to": 0}
-    )
+    res = compute_ev_roi(tickets, budget=1_000, simulate_fn=fake_simulator, config={"round_to": 0})
 
     assert called == [["leg1", "leg2"]]
     assert math.isclose(res["ev"], 15.0)
@@ -187,9 +185,7 @@ def test_rounded_stakes_sum_to_budget() -> None:
         {"p": 0.9, "odds": 10.0, "stake": 0.33},
     ]
 
-    compute_ev_roi(
-        tickets, budget=budget, config={"kelly_cap": 1.0, "round_to": ROUND_TO}
-    )
+    compute_ev_roi(tickets, budget=budget, config={"kelly_cap": 1.0, "round_to": ROUND_TO})
 
     total = sum(t["stake"] for t in tickets)
     assert math.isclose(total, budget, abs_tol=ROUND_TO / 2)
@@ -211,7 +207,7 @@ def test_ticket_metrics_and_std_dev() -> None:
     k1 = _kelly_fraction(0.6, 2.0) * 100
     s1 = min(k1, k1 * KELLY_CAP)
     ev1 = s1 * (0.6 * (2.0 - 1) - (1 - 0.6))
-    var1 = 0.6 * (s1 * (2.0 - 1)) ** 2 + 0.4 * (-s1) ** 2 - ev1 ** 2
+    var1 = 0.6 * (s1 * (2.0 - 1)) ** 2 + 0.4 * (-s1) ** 2 - ev1**2
     clv1 = (2.1 - 2.0) / 2.0
     assert math.isclose(metrics[0]["kelly_stake"], k1)
     assert math.isclose(metrics[0]["stake"], s1)
@@ -224,9 +220,7 @@ def test_ticket_metrics_and_std_dev() -> None:
     )
     assert math.isclose(
         metrics[0]["sharpe"],
-        metrics[0]["ev"] / math.sqrt(metrics[0]["variance"])
-        if metrics[0]["variance"] > 0
-        else 0.0,
+        metrics[0]["ev"] / math.sqrt(metrics[0]["variance"]) if metrics[0]["variance"] > 0 else 0.0,
         rel_tol=1e-9,
         abs_tol=1e-12,
     )
@@ -234,7 +228,7 @@ def test_ticket_metrics_and_std_dev() -> None:
     k2 = _kelly_fraction(0.4, 3.0) * 100
     s2 = min(k2, k2 * KELLY_CAP)
     ev2 = s2 * (0.4 * (3.0 - 1) - (1 - 0.4))
-    var2 = 0.4 * (s2 * (3.0 - 1)) ** 2 + 0.6 * (-s2) ** 2 - ev2 ** 2
+    var2 = 0.4 * (s2 * (3.0 - 1)) ** 2 + 0.6 * (-s2) ** 2 - ev2**2
     clv2 = (3.2 - 3.0) / 3.0
     assert math.isclose(metrics[1]["kelly_stake"], k2)
     assert math.isclose(metrics[1]["stake"], s2)
@@ -247,9 +241,7 @@ def test_ticket_metrics_and_std_dev() -> None:
     )
     assert math.isclose(
         metrics[1]["sharpe"],
-        metrics[1]["ev"] / math.sqrt(metrics[1]["variance"])
-        if metrics[1]["variance"] > 0
-        else 0.0,
+        metrics[1]["ev"] / math.sqrt(metrics[1]["variance"]) if metrics[1]["variance"] > 0 else 0.0,
         rel_tol=1e-9,
         abs_tol=1e-12,
     )
@@ -496,8 +488,6 @@ def test_variance_cap_triggers_failure() -> None:
     """High variance should trigger a failure reason when capped."""
     tickets = [{"p": 0.5, "odds": 10.0, "stake": 20}]
 
-    res = compute_ev_roi(
-        tickets, budget=100, config={"variance_cap": 0.01, "ev_threshold": 0.0}
-    )
+    res = compute_ev_roi(tickets, budget=100, config={"variance_cap": 0.01, "ev_threshold": 0.0})
     assert res["green"] is False
     assert f"variance above {0.01:.2f} * bankroll^2" in res["failure_reasons"]

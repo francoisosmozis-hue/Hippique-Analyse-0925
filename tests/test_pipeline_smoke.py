@@ -1,6 +1,3 @@
-
-
-
 from hippique_orchestrator.simulate_wrapper import PAYOUT_CALIBRATION_PATH
 
 DEFAULT_CALIBRATION = str(PAYOUT_CALIBRATION_PATH)
@@ -48,12 +45,40 @@ tickets:
 
 def partants_sample():
     runners_data = [
-        {"id": "1", "num": "1", "name": "A", "odds_place": 1.6, "odds_place_h30": 1.55, "odds": 2.2},
-        {"id": "2", "num": "2", "name": "B", "odds_place": 1.7, "odds_place_h30": 1.65, "odds": 3.1},
-        {"id": "3", "num": "3", "name": "C", "odds_place": 1.9, "odds_place_h30": 1.85, "odds": 4.2},
+        {
+            "id": "1",
+            "num": "1",
+            "name": "A",
+            "odds_place": 1.6,
+            "odds_place_h30": 1.55,
+            "odds": 2.2,
+        },
+        {
+            "id": "2",
+            "num": "2",
+            "name": "B",
+            "odds_place": 1.7,
+            "odds_place_h30": 1.65,
+            "odds": 3.1,
+        },
+        {
+            "id": "3",
+            "num": "3",
+            "name": "C",
+            "odds_place": 1.9,
+            "odds_place_h30": 1.85,
+            "odds": 4.2,
+        },
         {"id": "4", "num": "4", "name": "D", "odds_place": 2.4, "odds_place_h30": 2.3, "odds": 6.0},
         {"id": "5", "num": "5", "name": "E", "odds_place": 3.6, "odds_place_h30": 3.5, "odds": 9.0},
-        {"id": "6", "num": "6", "name": "F", "odds_place": 4.2, "odds_place_h30": 4.0, "odds": 11.0},
+        {
+            "id": "6",
+            "num": "6",
+            "name": "F",
+            "odds_place": 4.2,
+            "odds_place_h30": 4.0,
+            "odds": 11.0,
+        },
     ]
     for r in runners_data:
         r['cote'] = r['odds']
@@ -78,6 +103,7 @@ def partants_sample():
             ],
         },
     }
+
 
 def odds_h30():
     return {"1": 2.0, "2": 3.0, "3": 4.0, "4": 5.0, "5": 8.0, "6": 10.0}
@@ -196,10 +222,6 @@ def stats_sample():
 #     assert pipeline_run.market_drift_signal(10.0, 9.5, is_favorite=False) == 0
 
 
-
-
-
-
 # def test_drift_missing_snapshots():
 #
 #
@@ -222,9 +244,6 @@ def stats_sample():
 #
 #
 #     assert set(res["missing_h5"]) == {"1"}
-
-
-
 
 
 # def test_drift_filtering_topn(tmp_path):
@@ -258,9 +277,6 @@ def stats_sample():
 #
 #
 #     assert all(abs(r["delta"]) >= 1.5 for r in diff)
-
-
-
 
 
 # def test_snapshot_cli(tmp_path):
@@ -314,8 +330,6 @@ def stats_sample():
 #     assert dest.exists()
 #
 #     assert json.loads(dest.read_text(encoding="utf-8")) == {{}}
-
-
 
 
 # def test_smoke_run(tmp_path):
@@ -543,7 +557,6 @@ def stats_sample():
 #         assert stake_reduction["iterations"] in (0,)
 
 
-
 #
 #     if tickets:
 #
@@ -712,7 +725,6 @@ def stats_sample():
 #     assert not flags_ror["sp"]
 #
 #     assert not flags_ror["combo"]
-
 
 
 # def test_cmd_analyse_enriches_runners(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:

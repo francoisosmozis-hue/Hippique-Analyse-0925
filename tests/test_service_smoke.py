@@ -1,5 +1,5 @@
-
 # Test client is provided by conftest.py
+
 
 def test_ping(client):
     """Tests if the /ping endpoint is reachable and returns OK."""
@@ -7,11 +7,13 @@ def test_ping(client):
     assert response.status_code == 200
     assert response.json() == {"status": "pong"}
 
+
 def test_health_check(client):
     """Tests if the /health endpoint is reachable and returns OK."""
     response = client.get("/health")
     assert response.status_code == 200
     assert response.json()["status"] == "healthy"
+
 
 def test_pronostics_endpoint_returns_ok_when_no_data(client, mocker):
     """
@@ -27,7 +29,7 @@ def test_pronostics_endpoint_returns_ok_when_no_data(client, mocker):
     assert response_data["ok"] is True
     assert response_data["total_races"] == 0
     assert response_data["pronostics"] == []
-    assert "date" in response_data # Ensure date used is returned
+    assert "date" in response_data  # Ensure date used is returned
 
     # Test with a specific date
     date_str = "2025-11-28"
@@ -52,10 +54,13 @@ def test_pronostics_endpoint_returns_data_when_file_exists(client, mocker):
         "tickets_analysis": {
             "gpi_decision": "Play",
             "tickets": [{"type": "SP", "cheval": "1", "mise": 5.0}],
-            "roi_global_est": 0.25
-        }
+            "roi_global_est": 0.25,
+        },
     }
-    mocker.patch("hippique_orchestrator.firestore_client.get_races_by_date_prefix", return_value=[mock_firestore_doc])
+    mocker.patch(
+        "hippique_orchestrator.firestore_client.get_races_by_date_prefix",
+        return_value=[mock_firestore_doc],
+    )
 
     response = client.get(f"/api/pronostics?date={date_str}")
     assert response.status_code == 200

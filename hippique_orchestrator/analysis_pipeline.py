@@ -63,9 +63,7 @@ def process_single_course_analysis(
             f"Step 1: Fetching {reunion}{course} from data source for phase {phase}",
             extra=log_extra,
         )
-        programme_url = (
-            "https://www.boturfers.fr/programme-pmu-du-jour"  # Corrected typo in URL
-        )
+        programme_url = "https://www.boturfers.fr/programme-pmu-du-jour"  # Corrected typo in URL
         programme_data = data_source.fetch_programme(
             programme_url, correlation_id=correlation_id, trace_id=trace_id
         )
@@ -86,14 +84,10 @@ def process_single_course_analysis(
             result["message"] = f"Failed to fetch race details for {race_url}"
             logger.error(result["message"], extra=log_extra)
             return result
-        logger.info(
-            f"Step 1: Fetched snapshot data for {race_doc_id}.", extra=log_extra
-        )
+        logger.info(f"Step 1: Fetched snapshot data for {race_doc_id}.", extra=log_extra)
 
         # --- Step 2: Persist initial snapshot ---
-        logger.info(
-            f"Step 2: Persisting initial snapshot for {race_doc_id}.", extra=log_extra
-        )
+        logger.info(f"Step 2: Persisting initial snapshot for {race_doc_id}.", extra=log_extra)
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         snapshot_id = f"{timestamp}_{phase}"
 
@@ -213,9 +207,7 @@ def process_single_course_analysis(
                     )
 
             # 3c. Generate tickets
-            gpi_config = storage.get_gpi_config(
-                correlation_id=correlation_id, trace_id=trace_id
-            )
+            gpi_config = storage.get_gpi_config(correlation_id=correlation_id, trace_id=trace_id)
             calibration_data = storage.get_calibration_config(
                 correlation_id=correlation_id, trace_id=trace_id
             )
@@ -279,7 +271,5 @@ def process_single_course_analysis(
             extra=log_extra,
         )
         result["message"] = f"An unexpected error occurred: {e}"
-        result[
-            "full_traceback"
-        ] = full_traceback  # Add traceback to result for debugging
+        result["full_traceback"] = full_traceback  # Add traceback to result for debugging
         return result

@@ -177,4 +177,5 @@ def _write_csv(path: Path, rows: Iterable[dict[str, str]], columns: Iterable[str
         for row in rows:
             writer.writerow([row.get(column, "") for column in header])
 
+
 __all__ = ["enrich_from_snapshot"]

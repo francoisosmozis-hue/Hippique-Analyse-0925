@@ -35,7 +35,9 @@ def test_env_path_present(monkeypatch, tmp_path, mock_config):
     """Env var should be honoured when file exists."""
     calib = tmp_path / "custom_payout.yaml"
     calib.write_text("correlations: {}", encoding="utf-8")
-    monkeypatch.setattr(mock_config, "CALIB_PATH", str(calib)) # Set CALIB_PATH on the mocked config
+    monkeypatch.setattr(
+        mock_config, "CALIB_PATH", str(calib)
+    )  # Set CALIB_PATH on the mocked config
 
     prob_calib = tmp_path / "probabilities.yaml"
     prob_calib.write_text(

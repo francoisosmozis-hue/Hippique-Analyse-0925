@@ -83,7 +83,7 @@ if gcloud scheduler jobs describe "$JOB_NAME" \
         --time-zone="$TIMEZONE" \
         --uri="${SERVICE_URL}/schedule" \
         --http-method=POST \
-        --headers="Content-Type=application/json" \
+        --update-headers="Content-Type=application/json" \
         --message-body="$PAYLOAD" \
         --oidc-service-account-email="$SERVICE_ACCOUNT_EMAIL" \
         --oidc-token-audience="$SERVICE_URL" \

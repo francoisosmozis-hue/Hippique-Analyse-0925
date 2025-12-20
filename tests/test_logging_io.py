@@ -8,7 +8,9 @@ def test_csv_header_and_columns(tmp_path, mocker):
     mem_fs = MemoryFileSystem()
     mock_gcs_manager = mocker.MagicMock()
     mock_gcs_manager.fs = mem_fs
-    mock_gcs_manager.get_gcs_path.side_effect = lambda path: str(path) # Use string path for in-memory fs
+    mock_gcs_manager.get_gcs_path.side_effect = lambda path: str(
+        path
+    )  # Use string path for in-memory fs
     mocker.patch("hippique_orchestrator.logging_io.get_gcs_manager", return_value=mock_gcs_manager)
 
     path = tmp_path / "log.csv"

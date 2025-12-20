@@ -116,13 +116,9 @@ def fetch_race_snapshot(
     if isinstance(raw_snapshot.get("meta"), Mapping):
         meta_mapping = raw_snapshot["meta"]
         hippo_hint = meta_mapping.get("hippodrome") or meta_mapping.get("meeting")
-    hippo_hint = (
-        hippo_hint or raw_snapshot.get("hippodrome") or raw_snapshot.get("meeting")
-    )
+    hippo_hint = hippo_hint or raw_snapshot.get("hippodrome") or raw_snapshot.get("meeting")
 
-    canonical_url = _build_canonical_course_url(
-        date_text, reunion_norm, course_norm, hippo_hint
-    )
+    canonical_url = _build_canonical_course_url(date_text, reunion_norm, course_norm, hippo_hint)
     if canonical_url:
         course_url = canonical_url
 
@@ -137,12 +133,9 @@ def fetch_race_snapshot(
     )
 
     partants_count = normalised.get("partants_count")
-    logger.info(
-        "[ZEturf] phase=%s url=%s partants=%s", phase_norm, course_url, partants_count
-    )
+    logger.info("[ZEturf] phase=%s url=%s partants=%s", phase_norm, course_url, partants_count)
 
     return normalised
-
 
 
 try:  # pragma: no cover - requests is always available in production
@@ -254,9 +247,7 @@ def fetch_race_snapshot_cli(
         raise ValueError("course_url invalide")
     phase_norm = str(phase or "H5").strip() or "H5"
     work_dir = (
-        Path(out_dir).expanduser()
-        if out_dir
-        else Path(tempfile.mkdtemp(prefix="zeturf_snapshot_"))
+        Path(out_dir).expanduser() if out_dir else Path(tempfile.mkdtemp(prefix="zeturf_snapshot_"))
     )
     work_dir.mkdir(parents=True, exist_ok=True)
     base_cmd = [
@@ -384,9 +375,7 @@ def _fallback_parse_html(html: Any) -> dict[str, Any]:
             return None
         if strip_accents:
             text = "".join(
-                ch
-                for ch in unicodedata.normalize("NFKD", text)
-                if not unicodedata.combining(ch)
+                ch for ch in unicodedata.normalize("NFKD", text) if not unicodedata.combining(ch)
             )
         if lowercase:
             text = text.lower()
@@ -429,9 +418,7 @@ def _fallback_parse_html(html: Any) -> dict[str, Any]:
     discipline: str | None = None
     discipline_match = _DISCIPLINE_RE.search(html)
     if discipline_match:
-        discipline = _clean_text(
-            discipline_match.group(1), lowercase=True, strip_accents=True
-        )
+        discipline = _clean_text(discipline_match.group(1), lowercase=True, strip_accents=True)
 
     meeting: str | None = None
     meeting_match = _MEETING_RE.search(html)
@@ -744,9 +731,7 @@ def _build_canonical_course_url(
 
 _RUNNER_NUM_RE = re.compile(r"data-runner-num=['\"]?(\d+)", re.IGNORECASE)
 _RUNNER_NAME_RE = re.compile(r"data-runner-name=['\"]?([^'\"]+)", re.IGNORECASE)
-_RUNNER_ODDS_RE = re.compile(
-    r"data-odds=(?:'|\")?([0-9]+(?:[.,][0-9]+)?)", re.IGNORECASE
-)
+_RUNNER_ODDS_RE = re.compile(r"data-odds=(?:'|\")?([0-9]+(?:[.,][0-9]+)?)", re.IGNORECASE)
 _RUNNER_PLACE_RE = re.compile(
     r"data-(?:odds-place|place-odds|place)=(?:'|\")?([0-9]+(?:[.,][0-9]+)?)",
     re.IGNORECASE,
@@ -793,9 +778,7 @@ def _ensure_default_templates(config: Mapping[str, Any] | None) -> dict[str, Any
         result.get("online") if isinstance(result.get("online"), Mapping) else None
     )
     zet_online = _normalise_section(
-        online_section.get("zeturf")
-        if isinstance(online_section.get("zeturf"), Mapping)
-        else None
+        online_section.get("zeturf") if isinstance(online_section.get("zeturf"), Mapping) else None
     )
     if not any(isinstance(zet_online.get(key), str) for key in ("course", "url")):
         zet_online.setdefault("course", _DEFAULT_ZETURF_TEMPLATE)
@@ -862,12 +845,7 @@ def _coerce_runner_entry(entry: Mapping[str, Any]) -> dict[str, Any] | None:
     if not number:
         return None
 
-    name_raw = (
-        entry.get("name")
-        or entry.get("horse")
-        or entry.get("label")
-        or entry.get("runner")
-    )
+    name_raw = entry.get("name") or entry.get("horse") or entry.get("label") or entry.get("runner")
     name = str(name_raw).strip() if name_raw not in (None, "") else number
 
     runner: dict[str, Any] = {"num": number, "name": name}
@@ -923,9 +901,7 @@ def _coerce_runner_entry(entry: Mapping[str, Any]) -> dict[str, Any] | None:
             runner["odds"] = odds_val
 
     if "odds_place" not in runner:
-        odds_block = (
-            entry.get("odds") if isinstance(entry.get("odds"), Mapping) else None
-        )
+        odds_block = entry.get("odds") if isinstance(entry.get("odds"), Mapping) else None
         if isinstance(odds_block, Mapping):
             place_val = _coerce_float(
                 odds_block.get("place")
@@ -936,9 +912,7 @@ def _coerce_runner_entry(entry: Mapping[str, Any]) -> dict[str, Any] | None:
                 runner["odds_place"] = place_val
 
     if "odds_place" not in runner:
-        market_block = (
-            entry.get("market") if isinstance(entry.get("market"), Mapping) else None
-        )
+        market_block = entry.get("market") if isinstance(entry.get("market"), Mapping) else None
         if isinstance(market_block, Mapping):
             place_market = market_block.get("place")
             if isinstance(place_market, Mapping):
@@ -1056,9 +1030,7 @@ def _build_snapshot_payload(
                 return len(value) == 0
             return False
 
-        def _merge_runner(
-            existing: dict[str, Any], new_data: Mapping[str, Any]
-        ) -> None:
+        def _merge_runner(existing: dict[str, Any], new_data: Mapping[str, Any]) -> None:
             for key, value in new_data.items():
                 if key in existing:
                     if _is_missing(existing[key]) and not _is_missing(value):
@@ -1086,11 +1058,7 @@ def _build_snapshot_payload(
 
     partants_count = _coerce_int(raw_snapshot.get("partants"))
 
-    meta_raw = (
-        raw_snapshot.get("meta")
-        if isinstance(raw_snapshot.get("meta"), Mapping)
-        else None
-    )
+    meta_raw = raw_snapshot.get("meta") if isinstance(raw_snapshot.get("meta"), Mapping) else None
     course_meta = (
         meta_raw.get("course")
         if isinstance(meta_raw, Mapping) and isinstance(meta_raw.get("course"), Mapping)
@@ -1100,27 +1068,21 @@ def _build_snapshot_payload(
     if meeting is None:
         candidate = _coerce_str(
             _first_meta_value(meta_raw, "hippodrome", "meeting", "venue")
-        ) or _coerce_str(
-            _first_meta_value(course_meta, "hippodrome", "meeting", "venue")
-        )
+        ) or _coerce_str(_first_meta_value(course_meta, "hippodrome", "meeting", "venue"))
         if candidate:
             meeting = candidate
 
     if date is None:
         candidate = _coerce_str(_first_meta_value(meta_raw, "date", "jour", "day"))
         if not candidate:
-            candidate = _coerce_str(
-                _first_meta_value(course_meta, "date", "jour", "day")
-            )
+            candidate = _coerce_str(_first_meta_value(course_meta, "date", "jour", "day"))
         if candidate:
             date = candidate
 
     if discipline is None:
         candidate = _coerce_str(
             _first_meta_value(meta_raw, "discipline", "sport", "type")
-        ) or _coerce_str(
-            _first_meta_value(course_meta, "discipline", "type", "specialite")
-        )
+        ) or _coerce_str(_first_meta_value(course_meta, "discipline", "type", "specialite"))
         if candidate:
             discipline = candidate
 
@@ -1145,9 +1107,7 @@ def _build_snapshot_payload(
             meta_raw, "partants", "nb_partants", "n_partants", "participants"
         )
         if candidate is None:
-            candidate = _first_meta_value(
-                course_meta, "partants", "participants", "nb_partants"
-            )
+            candidate = _first_meta_value(course_meta, "partants", "participants", "nb_partants")
         partants_count = _coerce_int(candidate)
 
     if partants_count is None and runners:
@@ -1181,9 +1141,7 @@ def _build_snapshot_payload(
             missing_fields.append(name)
     if missing_fields:
         source_hint = snapshot.source_url or (
-            raw_snapshot.get("source_url")
-            if isinstance(raw_snapshot, Mapping)
-            else None
+            raw_snapshot.get("source_url") if isinstance(raw_snapshot, Mapping) else None
         )
         logger.warning(
             "[ZEturf] Champ(s) manquant(s): %s (rc=%s, url=%s)",
@@ -1193,7 +1151,6 @@ def _build_snapshot_payload(
         )
 
     return snapshot.as_dict()
-
 
 
 def _coerce_partants_int(value: Any) -> int | None:
@@ -1297,9 +1254,7 @@ def _merge_h30_odds(
 
     odds_map: dict[str, dict[str, Any]] = {}
 
-    def _register(
-        number: str, *, win: Any | None = None, place: Any | None = None
-    ) -> None:
+    def _register(number: str, *, win: Any | None = None, place: Any | None = None) -> None:
         updates = odds_map.setdefault(number, {})
         if win is not None:
             updates["odds_win_h30"] = win
@@ -1321,10 +1276,7 @@ def _merge_h30_odds(
                 continue
 
             number = _coerce_number(
-                entry.get("num")
-                or entry.get("id")
-                or entry.get("number")
-                or entry.get("runner_id")
+                entry.get("num") or entry.get("id") or entry.get("number") or entry.get("runner_id")
             )
             if not number:
                 continue
@@ -1481,12 +1433,8 @@ def _normalise_snapshot_result(
                 runners.append(dict(entry))
     result["runners"] = runners
 
-    existing_meta = (
-        result.get("meta") if isinstance(result.get("meta"), Mapping) else {}
-    )
-    meta: dict[str, Any] = (
-        dict(existing_meta) if isinstance(existing_meta, Mapping) else {}
-    )
+    existing_meta = result.get("meta") if isinstance(result.get("meta"), Mapping) else {}
+    meta: dict[str, Any] = dict(existing_meta) if isinstance(existing_meta, Mapping) else {}
 
     def _clean_str(value: Any) -> str | None:
         if value in (None, ""):
@@ -1497,14 +1445,10 @@ def _normalise_snapshot_result(
     course_hint_clean = _clean_str(course_hint)
 
     reunion_meta = (
-        _clean_str(meta.get("reunion"))
-        or reunion_hint_clean
-        or _clean_str(result.get("reunion"))
+        _clean_str(meta.get("reunion")) or reunion_hint_clean or _clean_str(result.get("reunion"))
     )
     course_meta = (
-        _clean_str(meta.get("course"))
-        or course_hint_clean
-        or _clean_str(result.get("course"))
+        _clean_str(meta.get("course")) or course_hint_clean or _clean_str(result.get("course"))
     )
     date_meta = _clean_str(meta.get("date")) or _clean_str(result.get("date"))
     hippo_meta = _clean_str(
@@ -1725,9 +1669,7 @@ def fetch_race_snapshot(
     env_key = f"ZETURF_URL_{reunion}{course}"
     url = os.environ.get(env_key)
     if not url:
-        raise RuntimeError(
-            f"[fetch_race_snapshot] URL ZEturf manquante (env {env_key})"
-        )
+        raise RuntimeError(f"[fetch_race_snapshot] URL ZEturf manquante (env {env_key})")
 
     parse_fn = getattr(sys.modules[__name__], "parse_course_page", None)
     if not callable(parse_fn):
@@ -1885,6 +1827,6 @@ def main():
     """CLI entry point."""
     raise NotImplementedError("This script is not intended to be run directly.")
 
+
 if __name__ == "__main__":
     main()
-

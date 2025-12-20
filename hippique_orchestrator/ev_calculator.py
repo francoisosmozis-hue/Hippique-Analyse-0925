@@ -52,9 +52,6 @@ DEFAULT_OPTIMIZE = False
 DEFAULT_VARIANCE_CAP = None
 
 
-
-
-
 def _make_hashable(value: Any) -> Any:
     """Return a hashable representation of ``value`` for caching purposes."""
 
@@ -105,6 +102,7 @@ def _apply_dutching(tickets: Iterable[dict[str, Any]]) -> None:
         for t, w in zip(valid_tickets, weights, strict=False):
             t["stake"] = total * w / weight_sum
 
+
 def _ticket_label(ticket: Mapping[str, Any], index: int) -> str:
     """Return a readable identifier for ``ticket`` when logging covariance."""
 
@@ -150,9 +148,7 @@ def _prepare_legs_for_covariance(
     return tuple(legs)
 
 
-def _ticket_dependency_keys(
-    ticket: Mapping[str, Any], legs: Sequence[Any]
-) -> frozenset[str]:
+def _ticket_dependency_keys(ticket: Mapping[str, Any], legs: Sequence[Any]) -> frozenset[str]:
     """Return dependency identifiers extracted from ``ticket`` and ``legs``."""
 
     exposures: set[str] = set()
@@ -275,9 +271,7 @@ def _estimate_joint_probability(
     return max(independence, joint)
 
 
-def _covariance_from_joint(
-    info_i: dict[str, Any], info_j: dict[str, Any], joint: float
-) -> float:
+def _covariance_from_joint(info_i: dict[str, Any], info_j: dict[str, Any], joint: float) -> float:
     win_i = info_i["win_value"]
     loss_i = info_i["loss_value"]
     win_j = info_j["win_value"]
@@ -407,9 +401,7 @@ def optimize_stake_allocation(
 
     constraints = {"type": "ineq", "fun": lambda x: 1.0 - sum(x)}
     if minimize is not None:
-        res = minimize(
-            objective, x0, bounds=bounds, constraints=[constraints], method="SLSQP"
-        )
+        res = minimize(objective, x0, bounds=bounds, constraints=[constraints], method="SLSQP")
         fractions = x0 if not res.success else res.x
     else:
         # Fallback: naive grid search with 5 % granularity
@@ -485,13 +477,9 @@ def _process_tickets(
             legs_for_sim = legs_for_probability
             if legs_for_sim is not None:
                 if simulate_fn is None:
-                    raise ValueError(
-                        "simulate_fn must be provided when tickets include 'legs'"
-                    )
+                    raise ValueError("simulate_fn must be provided when tickets include 'legs'")
                 if cache_simulations:
-                    key: tuple[Any, ...] = tuple(
-                        _make_hashable(leg) for leg in legs_for_sim
-                    )
+                    key: tuple[Any, ...] = tuple(_make_hashable(leg) for leg in legs_for_sim)
                     p = cache.get(key)
                     if p is None:
                         p = simulate_fn(legs_for_sim)
@@ -544,614 +532,146 @@ def _process_tickets(
     return processed, total_clv, clv_count, has_combined
 
 
-
-
-
 def _calculate_ticket_metrics(
-
-
-
-
-
-    processed: list[dict[str, Any]]
-
-
-
-
-
+    processed: list[dict[str, Any]],
 ) -> tuple[float, float, float, float, list[dict[str, float]], list[dict[str, Any]]]:
-
-
-
-
-
     total_ev = 0.0
-
-
-
-
 
     total_variance = 0.0
 
-
-
-
-
     total_expected_payout = 0.0
-
-
-
-
 
     combined_expected_payout = 0.0
 
-
-
-
-
     ticket_metrics: list[dict[str, float]] = []
-
-
-
-
 
     covariance_inputs: list[dict[str, Any]] = []
 
-
-
-
-
-
-
-
-
-
-
     for d in processed:
-
-
-
-
-
         t = d["ticket"]
-
-
-
-
 
         stake = d["stake"]
 
-
-
-
-
         p = d["p"]
-
-
-
-
 
         odds = d["odds"]
 
-
-
-
-
-
-
-
-
-
-
         ev = stake * (p * (odds - 1) - (1 - p))
-
-
-
-
 
         variance = p * (stake * (odds - 1)) ** 2 + (1 - p) * (-stake) ** 2 - ev**2
 
-
-
-
-
         roi = ev / stake if stake else 0.0
-
-
-
-
 
         expected_payout = p * stake * odds
 
-
-
-
-
         ticket_variance = max(variance, 0.0)
-
-
-
-
 
         ticket_std = math.sqrt(ticket_variance)
 
-
-
-
-
         sharpe_ticket = ev / ticket_std if ticket_std else 0.0
 
-
-
-
-
         metrics = {
-
-
-
-
-
             "kelly_stake": d["kelly_stake"],
-
-
-
-
-
             "stake": stake,
-
-
-
-
-
             "ev": ev,
-
-
-
-
-
             "roi": roi,
-
-
-
-
-
             "variance": ticket_variance,
-
-
-
-
-
             "clv": d["clv"],
-
-
-
-
-
             "expected_payout": expected_payout,
-
-
-
-
-
             "sharpe": sharpe_ticket,
-
-
-
-
-
         }
-
-
-
-
 
         t.update(metrics)
 
-
-
-
-
         ticket_metrics.append(metrics)
-
-
-
-
 
         total_ev += ev
 
-
-
-
-
         total_variance += ticket_variance
-
-
-
-
 
         total_expected_payout += expected_payout
 
-
-
-
-
         if "legs" in t:
-
-
-
-
-
             combined_expected_payout += p * stake * odds
-
-
-
-
-
-
-
-
-
-
 
         dependencies = d.get("dependencies", {})
 
-
-
-
-
         covariance_inputs.append(
-
-
-
-
-
             {
-
-
-
-
-
                 "p": p,
-
-
-
-
-
                 "ev": ev,
-
-
-
-
-
                 "win_value": stake * (odds - 1),
-
-
-
-
-
                 "loss_value": -stake,
-
-
-
-
-
                 "exposures": dependencies.get("exposures", frozenset()),
-
-
-
-
-
                 "legs_for_sim": dependencies.get("legs", ()),
-
-
-
-
-
                 "label": _ticket_label(t, len(covariance_inputs)),
-
-
-
-
-
             }
-
-
-
-
-
         )
 
-
-
-
-
     return (
-
-
-
-
-
         total_ev,
-
-
-
-
-
         total_variance,
-
-
-
-
-
         total_expected_payout,
-
-
-
-
-
         combined_expected_payout,
-
-
-
-
-
         ticket_metrics,
-
-
-
-
-
         covariance_inputs,
-
-
-
-
-
     )
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-def _adjust_stakes(
-
-
-
-
-
-    processed: list[dict[str, Any]], budget: float, round_to: float
-
-
-
-
-
-) -> float:
-
-
-
-
-
+def _adjust_stakes(processed: list[dict[str, Any]], budget: float, round_to: float) -> float:
     total_stake = sum(d["stake"] for d in processed)
 
-
-
-
-
     if round_to > 0 and total_stake < budget:
-
-
-
-
-
         remaining = budget - total_stake
-
-
-
-
 
         non_capped = [d for d in processed if not d["capped"]]
 
-
-
-
-
         if non_capped and remaining >= round_to / 2:
-
-
-
-
-
             weight_sum = sum(d["kelly_stake"] for d in non_capped)
 
-
-
-
-
             for d in non_capped:
-
-
-
-
-
                 max_extra = d["max_stake"] - d["stake"]
 
-
-
-
-
                 if max_extra <= 0:
-
-
-
-
-
                     continue
 
-
-
-
-
-                allocation = (
-
-
-
-
-
-                    remaining * (d["kelly_stake"] / weight_sum) if weight_sum else 0.0
-
-
-
-
-
-                )
-
-
-
-
+                allocation = remaining * (d["kelly_stake"] / weight_sum) if weight_sum else 0.0
 
                 allocation = min(allocation, max_extra)
 
-
-
-
-
                 allocation = math.floor((allocation + 1e-12) / round_to) * round_to
-
-
-
-
 
                 d["stake"] += allocation
 
-
-
-
-
                 remaining -= allocation
 
-
-
-
-
             if remaining >= round_to / 2:
-
-
-
-
-
                 non_capped.sort(key=lambda x: x["kelly_stake"], reverse=True)
 
-
-
-
-
                 for d in non_capped:
-
-
-
-
-
                     if remaining < round_to / 2:
-
-
-
-
-
                         break
-
-
-
-
 
                     max_extra = d["max_stake"] - d["stake"]
 
-
-
-
-
                     add_units = min(
-
-
-
-
-
                         int((max_extra + 1e-12) / round_to),
-
-
-
-
-
                         int((remaining + 1e-12) / round_to),
-
-
-
-
-
                     )
 
-
-
-
-
                     if add_units <= 0:
-
-
-
-
-
                         continue
-
-
-
-
 
                     add_amount = add_units * round_to
 
-
-
-
-
                     d["stake"] += add_amount
-
-
-
-
 
                     remaining -= add_amount
 
-
-
-
-
                     if remaining < round_to / 2:
-
-
-
-
-
                         break
 
-
-
-
-
             total_stake = budget - remaining
-
-
-
-
 
     return total_stake
 
@@ -1352,9 +872,7 @@ def compute_ev_roi(
             p = t["p"]
             odds = t["odds"]
             ev = stake_opt * (p * (odds - 1) - (1 - p))
-            variance = (
-                p * (stake_opt * (odds - 1)) ** 2 + (1 - p) * (-stake_opt) ** 2 - ev**2
-            )
+            variance = p * (stake_opt * (odds - 1)) ** 2 + (1 - p) * (-stake_opt) ** 2 - ev**2
             roi = ev / stake_opt if stake_opt else 0.0
             expected_payout = p * stake_opt * odds
             ticket_variance = max(variance, 0.0)
@@ -1454,16 +972,12 @@ def compute_ev_roi(
             opt_variance = total_variance
             opt_variance_naive = baseline_variance_naive
             opt_covariance_adjustment = baseline_covariance_adjustment
-            opt_covariance_details = [
-                dict(detail) for detail in baseline_covariance_details
-            ]
+            opt_covariance_details = [dict(detail) for detail in baseline_covariance_details]
             opt_stake_sum = total_stake_normalized
             opt_combined_payout = combined_expected_payout
             opt_expected_payout = total_expected_payout
             optimized_metrics = baseline_metrics
-            optimized_stakes = [
-                metrics.get("stake", 0.0) for metrics in baseline_metrics
-            ]
+            optimized_stakes = [metrics.get("stake", 0.0) for metrics in baseline_metrics]
             for ticket, metrics in zip(tickets, baseline_metrics, strict=False):
                 ticket["optimized_stake"] = metrics.get("stake")
                 ticket["optimized_expected_payout"] = metrics.get("expected_payout")

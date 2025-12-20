@@ -294,7 +294,14 @@ def _print_row(prefix: str, row: Mapping[str, Any]) -> None:
     print(f"{prefix} {json.dumps(printable, ensure_ascii=False, sort_keys=True)}")
 
 
-def update_excel(excel_path_str: str, payload_path_str: str | None = None, arrivee_path_str: str | None = None, tickets_path_str: str | None = None, sheet_prevision: str = "ROI Prévisionnel", sheet_observe: str = "ROI Observé") -> None:
+def update_excel(
+    excel_path_str: str,
+    payload_path_str: str | None = None,
+    arrivee_path_str: str | None = None,
+    tickets_path_str: str | None = None,
+    sheet_prevision: str = "ROI Prévisionnel",
+    sheet_observe: str = "ROI Observé",
+) -> None:
     """Updates the tracking Excel workbook with race results."""
     excel_path = Path(excel_path_str)
 
@@ -382,6 +389,7 @@ def update_excel(excel_path_str: str, payload_path_str: str | None = None, arriv
 
     excel_path.parent.mkdir(parents=True, exist_ok=True)
     wb.save(excel_path)
+
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Mettre à jour le ROI dans l'Excel de suivi")

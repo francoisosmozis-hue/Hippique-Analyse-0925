@@ -165,7 +165,11 @@ def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
 
-    domains = tuple(domain.lower() for domain in args.domains if domain) if args.domains else DEFAULT_DOMAINS
+    domains = (
+        tuple(domain.lower() for domain in args.domains if domain)
+        if args.domains
+        else DEFAULT_DOMAINS
+    )
 
     file_path = Path(args.file)
     diagnostics = lint_file(

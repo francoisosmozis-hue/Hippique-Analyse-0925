@@ -159,9 +159,7 @@ def validate(h30: dict, h5: dict, allow_je_na: bool) -> bool:
     for snap, label in [(h30, "H-30"), (h5, "H-5")]:
         for r in snap.get("runners", []):
             if "odds" not in r or r["odds"] in (None, ""):
-                raise ValueError(
-                    f"Cotes manquantes {label} pour {r.get('name', r.get('id'))}."
-                )
+                raise ValueError(f"Cotes manquantes {label} pour {r.get('name', r.get('id'))}.")
             try:
                 if float(r["odds"]) <= 1.01:
                     raise ValueError(
@@ -175,9 +173,7 @@ def validate(h30: dict, h5: dict, allow_je_na: bool) -> bool:
         for r in h5.get("runners", []):
             je = r.get("je_stats", {})
             if not je or ("j_win" not in je and "e_win" not in je):
-                raise ValueError(
-                    f"Stats J/E manquantes: {r.get('name', r.get('id'))}"
-                )
+                raise ValueError(f"Stats J/E manquantes: {r.get('name', r.get('id'))}")
     return True
 
 
@@ -473,10 +469,14 @@ def _resolve_rc_directory(
     if reunion and course:
         root = Path(base_dir) if base_dir else Path("data")
         return root / f"{reunion}{course}"
-    raise ValueError("Impossible de déterminer le dossier artefacts (fournir --artefacts ou --reunion/--course)")
+    raise ValueError(
+        "Impossible de déterminer le dossier artefacts (fournir --artefacts ou --reunion/--course)"
+    )
 
 
-def _discover_file(rc_dir: Path, candidates: tuple[str, ...], *, required: bool = True) -> Path | None:
+def _discover_file(
+    rc_dir: Path, candidates: tuple[str, ...], *, required: bool = True
+) -> Path | None:
     path = _find_first_existing(rc_dir, candidates)
     if path is None and required:
         names = ", ".join(candidates)
@@ -484,12 +484,20 @@ def _discover_file(rc_dir: Path, candidates: tuple[str, ...], *, required: bool 
     return path
 
 
-def _prepare_validation_inputs(args: argparse.Namespace) -> tuple[dict, list[dict], dict[str, float], dict]:
+def _prepare_validation_inputs(
+    args: argparse.Namespace,
+) -> tuple[dict, list[dict], dict[str, float], dict]:
     phase = _normalise_phase(args.phase)
     rc_dir = _resolve_rc_directory(args.artefacts, args.base_dir, args.reunion, args.course)
 
-    partants_path = Path(args.partants) if args.partants else _discover_file(rc_dir, _PARTANTS_CANDIDATES)
-    stats_path = Path(args.stats_je) if args.stats_je else _discover_file(rc_dir, _STATS_CANDIDATES, required=False)
+    partants_path = (
+        Path(args.partants) if args.partants else _discover_file(rc_dir, _PARTANTS_CANDIDATES)
+    )
+    stats_path = (
+        Path(args.stats_je)
+        if args.stats_je
+        else _discover_file(rc_dir, _STATS_CANDIDATES, required=False)
+    )
     odds_candidates = _ODDS_CANDIDATES.get(phase, _ODDS_CANDIDATES["H5"])
     odds_path = Path(args.odds) if args.odds else _discover_file(rc_dir, odds_candidates)
     config_path: Path | None

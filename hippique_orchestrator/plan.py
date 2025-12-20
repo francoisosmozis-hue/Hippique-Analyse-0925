@@ -32,13 +32,13 @@ config = get_config()
 logger = get_logger(__name__)
 
 
-
 # ============================================
 # Rate Limiter Global
 # ============================================
 
 _rate_limiter_lock = asyncio.Lock()
 _last_request_time = 0
+
 
 async def _rate_limited_request():
     """
@@ -61,9 +61,11 @@ async def _rate_limited_request():
 
         _last_request_time = time.time()
 
+
 # ============================================
 # Public API
 # ============================================
+
 
 async def build_plan_async(date: str) -> list[dict[str, Any]]:
     """
@@ -94,20 +96,26 @@ async def build_plan_async(date: str) -> list[dict[str, Any]]:
             # Extrait R et C de "R1 C1"
             rc_match = re.match(r"(R\d+)\s*(C\d+)", race_source.get("rc", ""))
             if not rc_match:
-                logger.warning(f"Could not parse R/C from '{race_source.get('rc')}'. Skipping race.")
+                logger.warning(
+                    f"Could not parse R/C from '{race_source.get('rc')}'. Skipping race."
+                )
                 continue
             r_label, c_label = rc_match.groups()
 
-            enriched_plan.append({
-                "date": date,
-                "r_label": r_label,
-                "c_label": c_label,
-                "course_id": None,  # Geny ID n'est plus disponible
-                "meeting": race_source.get("name", ""), # Le nom de la course est utilisé comme meeting
-                "time_local": race_source["start_time"],
-                "course_url": race_source["url"],
-                "reunion_url": None, # L'URL de la réunion n'est plus disponible
-            })
+            enriched_plan.append(
+                {
+                    "date": date,
+                    "r_label": r_label,
+                    "c_label": c_label,
+                    "course_id": None,  # Geny ID n'est plus disponible
+                    "meeting": race_source.get(
+                        "name", ""
+                    ),  # Le nom de la course est utilisé comme meeting
+                    "time_local": race_source["start_time"],
+                    "course_url": race_source["url"],
+                    "reunion_url": None,  # L'URL de la réunion n'est plus disponible
+                }
+            )
 
     # 3. Trier par heure
     if enriched_plan:
@@ -115,6 +123,7 @@ async def build_plan_async(date: str) -> list[dict[str, Any]]:
 
     logger.info(f"Plan complete: {len(enriched_plan)} races with times")
     return enriched_plan
+
 
 def build_plan(date: str) -> list[dict[str, Any]]:
     """
@@ -131,6 +140,8 @@ def build_plan(date: str) -> list[dict[str, Any]]:
         return asyncio.run(build_plan_async(date))
     except RuntimeError as e:
         if "cannot run" in str(e).lower():
-            logger.error("Cannot use build_plan() from within event loop. Use build_plan_async() instead.")
+            logger.error(
+                "Cannot use build_plan() from within event loop. Use build_plan_async() instead."
+            )
             raise RuntimeError("Use build_plan_async() in async context") from e
         raise

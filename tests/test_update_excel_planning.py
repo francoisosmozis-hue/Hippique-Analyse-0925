@@ -1,4 +1,3 @@
-
 import json
 from pathlib import Path
 
@@ -70,19 +69,34 @@ def test_h30_updates_existing_row(tmp_path: Path):
 
     dir1 = tmp_path / "dir1"
     dir1.mkdir()
-    payload1 = {
-        "meta": {"date": "2024-11-17", "reunion": "R1", "course": "C1", "partants": 10}
-    }
+    payload1 = {"meta": {"date": "2024-11-17", "reunion": "R1", "course": "C1", "partants": 10}}
     (dir1 / "p1.json").write_text(json.dumps(payload1))
     planner.main(["--phase", "H30", "--input", str(dir1), "--excel", str(excel_path)])
 
     dir2 = tmp_path / "dir2"
     dir2.mkdir()
     payload2 = {
-        "meta": {"date": "2024-11-17", "reunion": "R1", "course": "C1", "partants": 12, "discipline": "Trot"}
+        "meta": {
+            "date": "2024-11-17",
+            "reunion": "R1",
+            "course": "C1",
+            "partants": 12,
+            "discipline": "Trot",
+        }
     }
     (dir2 / "p2.json").write_text(json.dumps(payload2))
-    planner.main(["--phase", "H30", "--input", str(dir2), "--excel", str(excel_path), "--status-h30", "Mis à jour"])
+    planner.main(
+        [
+            "--phase",
+            "H30",
+            "--input",
+            str(dir2),
+            "--excel",
+            str(excel_path),
+            "--status-h30",
+            "Mis à jour",
+        ]
+    )
 
     wb = load_workbook(excel_path)
     ws = wb["Planning"]
@@ -221,14 +235,16 @@ def test_h5_abstention_uses_reason(tmp_path: Path) -> None:
         "runners": [{"id": 1}],
     }
     (meeting_dir / "snapshot.json").write_text(json.dumps(base_payload), encoding="utf-8")
-    planner.main([
-        "--phase",
-        "H30",
-        "--input",
-        str(meeting_dir),
-        "--excel",
-        str(excel_path),
-    ])
+    planner.main(
+        [
+            "--phase",
+            "H30",
+            "--input",
+            str(meeting_dir),
+            "--excel",
+            str(excel_path),
+        ]
+    )
 
     rc_dir = tmp_path / "R1C1"
     rc_dir.mkdir()
@@ -243,16 +259,18 @@ def test_h5_abstention_uses_reason(tmp_path: Path) -> None:
     }
     (rc_dir / "analysis.json").write_text(json.dumps(abstain_payload), encoding="utf-8")
 
-    planner.main([
-        "--phase",
-        "H5",
-        "--input",
-        str(rc_dir / "analysis.json"),
-        "--excel",
-        str(excel_path),
-        "--rc",
-        "R1C1",
-    ])
+    planner.main(
+        [
+            "--phase",
+            "H5",
+            "--input",
+            str(rc_dir / "analysis.json"),
+            "--excel",
+            str(excel_path),
+            "--rc",
+            "R1C1",
+        ]
+    )
 
     wb = load_workbook(excel_path)
     ws = wb["Planning"]
@@ -740,6 +758,7 @@ def test_h5_compact_ticket_summary(tmp_path: Path) -> None:
     assert row["Jouable H-5"] == "Oui"
     assert row["Tickets H-5"] == "SP:3-5@2 | CPL:1-3@1.5"
     assert row["Commentaires"] == "ROI estimé 12%"
+
 
 def test_format_time_respects_input_timezone(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("TZ", raising=False)

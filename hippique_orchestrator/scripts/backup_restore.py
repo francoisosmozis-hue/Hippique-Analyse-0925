@@ -86,13 +86,15 @@ def collect_analyses(data_dir: Path, date: str | None = None) -> list[dict[str, 
         metrics_file = rc_dir / "metrics.json"
         metrics = load_json_safe(metrics_file) if metrics_file.exists() else {}
 
-        analyses.append({
-            "rc": rc_dir.name,
-            "analysis": analysis,
-            "tracking": tracking,
-            "metrics": metrics,
-            "dir": rc_dir
-        })
+        analyses.append(
+            {
+                "rc": rc_dir.name,
+                "analysis": analysis,
+                "tracking": tracking,
+                "metrics": metrics,
+                "dir": rc_dir,
+            }
+        )
 
     return analyses
 
@@ -200,7 +202,7 @@ def compute_statistics(analyses: list[dict[str, Any]]) -> dict[str, Any]:
         "clv_avg": round(clv_avg, 4),
         "sharpe_avg": round(sharpe_avg, 4),
         "ror_avg": round(ror_avg, 6),
-        "by_type": dict(by_type)
+        "by_type": dict(by_type),
     }
 
 
@@ -232,18 +234,18 @@ def print_report(stats: dict[str, Any], detail: bool = False):
     # ROI Metrics
     print("📊 ROI METRICS")
     print("-" * 70)
-    print(f"  Real ROI:           {stats['real_roi']*100:.2f}%")
-    print(f"  Expected ROI (avg): {stats['expected_roi_avg']*100:.2f}%")
-    print(f"  ROI Variance:       {stats['roi_variance']*100:.2f}%")
-    print(f"  EV Ratio (avg):     {stats['ev_ratio_avg']*100:.2f}%")
+    print(f"  Real ROI:           {stats['real_roi'] * 100:.2f}%")
+    print(f"  Expected ROI (avg): {stats['expected_roi_avg'] * 100:.2f}%")
+    print(f"  ROI Variance:       {stats['roi_variance'] * 100:.2f}%")
+    print(f"  EV Ratio (avg):     {stats['ev_ratio_avg'] * 100:.2f}%")
     print()
 
     # Risk Metrics
     print("⚠️  RISK METRICS")
     print("-" * 70)
-    print(f"  CLV Average:        {stats['clv_avg']*100:.2f}%")
+    print(f"  CLV Average:        {stats['clv_avg'] * 100:.2f}%")
     print(f"  Sharpe Ratio (avg): {stats['sharpe_avg']:.3f}")
-    print(f"  Risk of Ruin (avg): {stats['ror_avg']*100:.4f}%")
+    print(f"  Risk of Ruin (avg): {stats['ror_avg'] * 100:.4f}%")
     print()
 
     # By bet type
@@ -263,8 +265,8 @@ def print_report(stats: dict[str, Any], detail: bool = False):
             print(f"    Tickets:    {count}")
             print(f"    Stake:      {stake:.2f} €")
             print(f"    Gain:       {gain:.2f} €")
-            print(f"    ROI:        {roi*100:.2f}%")
-            print(f"    Win Rate:   {win_rate*100:.1f}%")
+            print(f"    ROI:        {roi * 100:.2f}%")
+            print(f"    Win Rate:   {win_rate * 100:.1f}%")
             print()
 
     print("=" * 70)
@@ -278,39 +280,18 @@ def export_json(stats: dict[str, Any], output: Path):
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Monitor ROI performance from analysis files"
-    )
+    parser = argparse.ArgumentParser(description="Monitor ROI performance from analysis files")
     parser.add_argument(
         "--data-dir",
         type=Path,
         default=Path("data"),
-        help="Data directory containing R#C# folders (default: data)"
+        help="Data directory containing R#C# folders (default: data)",
     )
-    parser.add_argument(
-        "--date",
-        help="Filter by specific date (YYYY-MM-DD)"
-    )
-    parser.add_argument(
-        "--last-days",
-        type=int,
-        help="Show stats for last N days"
-    )
-    parser.add_argument(
-        "--detail",
-        action="store_true",
-        help="Show detailed breakdown by bet type"
-    )
-    parser.add_argument(
-        "--json-out",
-        type=Path,
-        help="Export statistics to JSON file"
-    )
-    parser.add_argument(
-        "--watch",
-        action="store_true",
-        help="Watch mode: refresh every 60 seconds"
-    )
+    parser.add_argument("--date", help="Filter by specific date (YYYY-MM-DD)")
+    parser.add_argument("--last-days", type=int, help="Show stats for last N days")
+    parser.add_argument("--detail", action="store_true", help="Show detailed breakdown by bet type")
+    parser.add_argument("--json-out", type=Path, help="Export statistics to JSON file")
+    parser.add_argument("--watch", action="store_true", help="Watch mode: refresh every 60 seconds")
 
     args = parser.parse_args()
 

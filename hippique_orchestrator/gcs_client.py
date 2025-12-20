@@ -1,6 +1,7 @@
 """
 Utilities for interacting with Google Cloud Storage (GCS).
 """
+
 import logging
 from functools import cache
 
@@ -13,10 +14,12 @@ from hippique_orchestrator.config import get_config
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
 class GCSManager:
     """
     A manager to handle interactions with Google Cloud Storage.
     """
+
     def __init__(self, bucket_name=None):
         """
         Initializes the GCSManager.
@@ -28,10 +31,7 @@ class GCSManager:
         config = get_config()
         self._bucket_name = bucket_name or config.GCS_BUCKET
         if not self._bucket_name:
-            logger.warning(
-                "GCS_BUCKET is not set in the configuration. "
-                "GCS operations will fail."
-            )
+            logger.warning("GCS_BUCKET is not set in the configuration. GCS operations will fail.")
             raise ValueError("GCS_BUCKET must be set.")
 
         self._client = None
@@ -80,6 +80,7 @@ class GCSManager:
         """
         return self.fs.exists(gcs_path)
 
+
 @cache
 def get_gcs_manager() -> GCSManager | None:
     """
@@ -96,6 +97,7 @@ def get_gcs_manager() -> GCSManager | None:
         logger.warning(f"Could not initialize GCSManager: {e}")
         return None
 
+
 @cache
 def get_gcs_fs():
     """
@@ -106,6 +108,7 @@ def get_gcs_fs():
         return manager.fs
     logger.error("GCSManager is not initialized. Cannot get filesystem.")
     return None
+
 
 def build_gcs_path(relative_path):
     """

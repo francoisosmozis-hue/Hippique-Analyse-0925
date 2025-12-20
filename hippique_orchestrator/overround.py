@@ -4,6 +4,7 @@ hippique_orchestrator/overround.py - Overround and Cap Utilities.
 This module provides functions for calculating market overround and for
 dynamically adjusting volatility caps based on race characteristics.
 """
+
 from __future__ import annotations
 
 import logging
@@ -11,6 +12,7 @@ from collections.abc import Iterable
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
 
 def compute_overround_place(runners: Iterable[dict[str, Any]]) -> float:
     """
@@ -51,6 +53,7 @@ def compute_overround_place(runners: Iterable[dict[str, Any]]) -> float:
         return 0.0
 
     return sum(implied_probabilities)
+
 
 def adaptive_cap(p_place: float | None, volatility: float | None, base_cap: float = 0.6) -> float:
     """

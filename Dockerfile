@@ -17,8 +17,6 @@ RUN pip install --upgrade pip
 COPY requirements.txt .
 RUN pip wheel --no-cache-dir --wheel-dir /app/wheels -r requirements.txt
 
-# --- Final Stage ---
-# This stage assembles the final, lean image
 FROM base
 
 # Create the non-root user first
@@ -44,7 +42,7 @@ USER appuser
 # Expose port and set health check
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD curl -f http://localhost:8080/health || exit 1
+    CMD curl -f http://localhost:8080/healthz || exit 1
 
 # Run the application
 ENTRYPOINT ["/app/entrypoint.sh"]

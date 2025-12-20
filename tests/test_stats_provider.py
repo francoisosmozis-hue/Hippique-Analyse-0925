@@ -19,24 +19,31 @@ MOCK_ZT_CONFIG = {
     "trainer_letter_index_path": "/entraineur/lettre-{letter}.html?p={page}",
 }
 
+
 @pytest.fixture
 def zt_provider() -> ZoneTurfProvider:
     """Provides a reusable instance of the ZoneTurfProvider for tests."""
     return ZoneTurfProvider(config=MOCK_ZT_CONFIG)
 
+
 class TestZoneTurfProviderParsing:
     """Tests the parsing logic of the ZoneTurfProvider."""
 
-    @pytest.mark.parametrize("chrono_str, expected_seconds", [
-        ("1'11\"6", 71.6),
-        ("1'12''3", 72.3),
-        ("1'10\"", 70.0),
-        ("59\"8", 59.8),
-        (None, None),
-        ("", None),
-        ("invalid", None),
-    ])
-    def test_parse_chrono_to_seconds(self, zt_provider: ZoneTurfProvider, chrono_str, expected_seconds):
+    @pytest.mark.parametrize(
+        "chrono_str, expected_seconds",
+        [
+            ("1'11\"6", 71.6),
+            ("1'12''3", 72.3),
+            ("1'10\"", 70.0),
+            ("59\"8", 59.8),
+            (None, None),
+            ("", None),
+            ("invalid", None),
+        ],
+    )
+    def test_parse_chrono_to_seconds(
+        self, zt_provider: ZoneTurfProvider, chrono_str, expected_seconds
+    ):
         """Tests the chrono string parsing utility."""
         assert zt_provider._parse_chrono_to_seconds(chrono_str) == expected_seconds
 
@@ -74,7 +81,6 @@ class TestZoneTurfProviderParsing:
         assert chrono.last3_rk_sec == [71.8, 72.2, 71.9]
         assert chrono.rk_best3_sec == 71.8
 
-
     def test_fetch_jockey_stats_parsing(self, zt_provider: ZoneTurfProvider, mocker):
         """Tests the parsing of a mock jockey page."""
         mock_html = """
@@ -105,7 +111,6 @@ class TestZoneTurfProviderParsing:
         assert stats.places == 425
         assert stats.win_rate == pytest.approx(150 / 850)
         assert stats.place_rate == pytest.approx(425 / 850)
-
 
     def test_fetch_trainer_stats_parsing(self, zt_provider: ZoneTurfProvider, mocker):
         """Tests the parsing of a mock trainer page."""
