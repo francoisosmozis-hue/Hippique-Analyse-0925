@@ -17,13 +17,39 @@ config = get_config()
 logger = get_logger(__name__)
 
 
-def _generate_task_name(date: str, r_label: str, c_label: str, phase: str) -> str:
-    date_compact = date.replace("-", "")
-    r_num = r_label[1:].lower()
-    c_num = c_label[1:].lower()
-    phase_lower = phase.lower().replace("-", "")
-    timestamp = int(datetime.now().timestamp())
-    return f"run-{date_compact}-r{r_num}c{c_num}-{phase_lower}-{timestamp}"
+def _get_and_normalize_queue_path(
+    client: tasks_v2.CloudTasksClient, queue_id_raw: str
+) -> tuple[str, str, str, str]:
+    """
+    Parses a queue ID (short name or full path) and returns normalized parts.
+
+    Returns:
+        A tuple of (project, location, queue_name, full_queue_path).
+    """
+    if "projects/" in queue_id_raw:
+        # If the full path is provided, parse it
+        try:
+            project, location, queue_name = client.parse_queue_path(queue_id_raw)[
+                "project"
+            ], client.parse_queue_path(queue_id_raw)["location"], client.parse_queue_path(
+                queue_id_raw
+            )["queue"]
+            full_queue_path = queue_id_raw
+            return project, location, queue_name, full_queue_path
+        except (ValueError, KeyError) as e:
+            raise ValueError(f"Invalid full queue path provided: {queue_id_raw}") from e
+    else:
+        # If short name, construct the full path from config/inferred project
+        _, inferred_project = google.auth.default()
+        project = config.PROJECT_ID or inferred_project
+        location = config.REGION
+        queue_name = queue_id_raw
+        if not all([project, location, queue_name]):
+            raise ValueError(
+                f"Cannot construct queue path from incomplete parts: project={project}, location={location}, queue={queue_name}"
+            )
+        full_queue_path = client.queue_path(project, location, queue_name)
+        return project, location, queue_name, full_queue_path
 
 
 def enqueue_run_task(
@@ -36,77 +62,81 @@ def enqueue_run_task(
     c_label: str,
     correlation_id: str | None = None,
     trace_id: str | None = None,
+    schedule_time_utc: datetime | None = None,
 ) -> str | None:
     """Crée une Cloud Task pour exécuter une analyse de course."""
-    print(f"--- In enqueue_run_task for {r_label}{c_label} {phase} ---")
     log_extra = {"correlation_id": correlation_id, "trace_id": trace_id}
+    logger.info(f"--- In enqueue_run_task for {r_label}{c_label} {phase} ---", extra=log_extra)
 
     try:
-        task_name_short = _generate_task_name(date, r_label, c_label, phase)
-
-        creds, inferred_project = google.auth.default()
-
-        project_id = config.PROJECT_ID or inferred_project
-        location = config.REGION
-        queue = config.QUEUE_ID
-
-        parent = client.queue_path(project_id, location, queue)
-        task_name_full = client.task_path(project_id, location, queue, task_name_short)
-
-        print("Checking if task exists...")
-        # Idempotency: Check if the task already exists
-        try:
-            client.get_task(name=task_name_full)
-            print(f"Task {task_name_full} already exists. Skipping creation.")
-            logger.info(f"Task {task_name_full} already exists. Skipping creation.")
-            return task_name_full
-        except gcp_exceptions.NotFound:
-            print("Task does not exist. Proceeding.")
-            pass  # Task does not exist, proceed to create it
-
-        # Scheduling logic
-        race_datetime_local = datetime.fromisoformat(f"{date}T{race_time_local}")
-        snapshot_time_utc = convert_local_to_utc(race_datetime_local) - timedelta(
-            minutes=int(phase[1:])
+        project_id, location, queue_name, parent_path = _get_and_normalize_queue_path(
+            client, config.QUEUE_ID
         )
-        print(f"Snapshot time (UTC): {snapshot_time_utc}")
 
-        if snapshot_time_utc < datetime.now(timezone.utc):
-            print("Snapshot time is in the past. Skipping.")
+        # Optional: In debug mode, check if queue exists to get a clearer error
+        if config.DEBUG:
+            try:
+                client.get_queue(name=parent_path)
+                logger.info(f"Queue check PASSED for {parent_path}", extra=log_extra)
+            except gcp_exceptions.NotFound:
+                logger.error(
+                    f"Queue check FAILED: Queue '{parent_path}' not found.",
+                    extra=log_extra,
+                )
+                # Fail fast if queue doesn't exist
+                return None
+
+        # Use provided schedule time or calculate H-30/H-5
+        if schedule_time_utc is None:
+            race_datetime_local = datetime.fromisoformat(f"{date}T{race_time_local}")
+            schedule_time_utc = convert_local_to_utc(race_datetime_local) - timedelta(
+                minutes=int(phase[1:])
+            )
+
+        logger.info(f"Calculated schedule time (UTC): {schedule_time_utc}", extra=log_extra)
+
+        if schedule_time_utc < datetime.now(timezone.utc):
             logger.warning(
-                f"Skipping task for {task_name_short} as its schedule time {snapshot_time_utc} is in the past."
+                f"Skipping task for {r_label}{c_label} as its schedule time {schedule_time_utc} is in the past."
             )
             return None
 
         timestamp = timestamp_pb2.Timestamp()
-        timestamp.FromDatetime(snapshot_time_utc)
+        timestamp.FromDatetime(schedule_time_utc)
 
         payload = {"course_url": course_url, "phase": phase, "date": date, "trace_id": trace_id}
+        target_url = f"{config.CLOUD_RUN_URL}/tasks/run-phase"
 
         task = {
-            "name": task_name_full,
             "http_request": {
                 "http_method": tasks_v2.HttpMethod.POST,
-                "url": f"{config.CLOUD_RUN_URL}/tasks/run-phase",
+                "url": target_url,
                 "headers": {"Content-Type": "application/json"},
                 "body": json.dumps(payload).encode(),
                 "oidc_token": {
                     "service_account_email": config.SERVICE_ACCOUNT_EMAIL,
-                    "audience": config.OIDC_AUDIENCE
+                    "audience": config.OIDC_AUDIENCE,
                 },
             },
             "schedule_time": timestamp,
         }
-        print("Creating task...")
-        logger.critical(f"--- Enqueueing task with parent: {parent} ---", extra=log_extra)
 
-        response = client.create_task(parent=parent, task=task)
-        print(f"Task created: {response.name}")
-        logger.info(f"Task created: {response.name}")
+        # Log all details just before the API call
+        log_details = {
+            "project_id": project_id,
+            "location": location,
+            "queue_id_raw": config.QUEUE_ID,
+            "parent_path": parent_path,
+            "target_url": target_url,
+            "client_endpoint": client._transport._host,
+        }
+        logger.info("--- PREPARING TO CREATE TASK ---", extra={**log_extra, **log_details})
+
+        response = client.create_task(parent=parent_path, task=task)
+        logger.info(f"Task created: {response.name}", extra=log_extra)
         return response.name
 
     except Exception as e:
-        print(f"Failed to create task: {e}")
         logger.error(f"Failed to create task: {e}", exc_info=True, extra=log_extra)
         return None
 
@@ -114,26 +144,29 @@ def enqueue_run_task(
 def schedule_all_races(
     plan: list[dict], mode: str, correlation_id: str, trace_id: str
 ) -> list[dict[str, Any]]:
-    print("--- In schedule_all_races ---")
-    log_extra = {"correlation_id": correlation_id, "trace_id": trace_id}
+    logger.info("--- In schedule_all_races ---", extra={"correlation_id": correlation_id})
 
     try:
-        print("Initializing Cloud Tasks client...")
+        logger.info("Initializing Cloud Tasks client...")
         client = tasks_v2.CloudTasksClient()
-        print("Cloud Tasks client initialized.")
+        logger.info("Cloud Tasks client initialized.")
     except Exception as e:
-        print(f"Failed to initialize Cloud Tasks client: {e}")
         logger.error(
-            f"Failed to initialize Cloud Tasks client: {e}", exc_info=True, extra=log_extra
+            f"Failed to initialize Cloud Tasks client: {e}",
+            exc_info=True,
+            extra={"correlation_id": correlation_id},
         )
         return []
 
     results = []
-    print(f"Looping through {len(plan)} races...")
+    logger.info(f"Looping through {len(plan)} races...", extra={"correlation_id": correlation_id})
     for i, race_plan in enumerate(plan):
-        print(f"Race {i+1}/{len(plan)}: {race_plan['r_label']}{race_plan['c_label']}")
+        logger.debug(
+            f"Race {i+1}/{len(plan)}: {race_plan['r_label']}{race_plan['c_label']}",
+            extra={"correlation_id": correlation_id},
+        )
         for phase in ["H30", "H5"]:
-            print(f"  Phase: {phase}")
+            logger.debug(f"  Phase: {phase}", extra={"correlation_id": correlation_id})
             task_ok = (
                 enqueue_run_task(
                     client=client,
@@ -148,8 +181,7 @@ def schedule_all_races(
                 )
                 is not None
             )
-            print(f"  Task OK: {task_ok}")
             results.append({"phase": phase, "ok": task_ok})
 
-    print("--- Exiting schedule_all_races ---")
+    logger.info("--- Exiting schedule_all_races ---", extra={"correlation_id": correlation_id})
     return results

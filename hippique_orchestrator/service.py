@@ -36,7 +36,7 @@ from hippique_orchestrator.config import get_config
 from hippique_orchestrator.logging_utils import get_logger
 from hippique_orchestrator.plan import build_plan_async
 from hippique_orchestrator.runner import run_course
-from hippique_orchestrator.scheduler import schedule_all_races
+from hippique_orchestrator.scheduler import enqueue_run_task, schedule_all_races
 
 # ============================================
 # Configuration
