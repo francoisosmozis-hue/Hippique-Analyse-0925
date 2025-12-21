@@ -54,6 +54,7 @@ class Config(BaseSettings):
             "/openapi.json",
             "/api/pronostics",
             "/api/pronostics/ui",
+            "/api/schedule/next",
         ]
     )
 
