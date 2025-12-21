@@ -173,13 +173,109 @@ class BoturfersFetcher:
                 jockey = jockey_tag.text.strip() if jockey_tag else None
                 trainer_tag = row.select_one("td.tl > a.link.lg")
                 trainer = trainer_tag.text.strip() if trainer_tag else None
-                runners.append({"num": num, "nom": name, "jockey": jockey, "entraineur": trainer})
+
+                # --- Odds (PMU) ---
+                odds_win_tag = row.select_one("td.cote-gagnant span.c")
+                odds_win = float(odds_win_tag.text.strip().replace(',', '.')) if odds_win_tag and odds_win_tag.text.strip() else None
+                
+                odds_place_tag = row.select_one("td.cote-place span.c")
+                odds_place = float(odds_place_tag.text.strip().replace(',', '.')) if odds_place_tag and odds_place_tag.text.strip() else None
+
+                # --- Musique (recent form) ---
+                musique_tag = row.select_one("td.musique")
+                musique = musique_tag.text.strip() if musique_tag else None
+
+                # --- Gains ---
+                gains_tag = row.select_one("td.gains")
+                gains_text = gains_tag.text.strip().replace(' ', '') if gains_tag else None
+                gains = float(gains_text) if gains_text and gains_text.replace('.', '', 1).isdigit() else None
+
+
+                runners.append({
+                    "num": num,
+                    "nom": name,
+                    "jockey": jockey,
+                    "entraineur": trainer,
+                    "odds_win": odds_win,
+                    "odds_place": odds_place,
+                    "musique": musique,
+                    "gains": gains,
+                    # Placeholders for future data points or derived values
+                    "dai": False, # Will be determined by parsing musique
+                    "volatility": "NEUTRE", # Will be determined by parsing musique
+                    "chronos": None, # If available on page
+                    "indicators_track_corde_distance": None, # If available on page
+                })
             except Exception as e:
                 logger.warning(
                     f"Impossible d'analyser une ligne de partant: {e}. Ligne ignorée.",
                     extra=self.log_extra,
                 )
         return runners
+
+    def _parse_race_metadata(self) -> dict[str, Any]:
+        """Analyse la page d'une course pour extraire ses métadonnées (type, distance, corde, conditions)."""
+        if not self.soup:
+            return {}
+
+        metadata = {}
+        
+        # Common pattern for race details, often in a description block or a table
+        # Searching for text patterns as exact CSS selectors can be fragile
+        race_info_block = self.soup.select_one("div.info-race") # Common class name
+        if race_info_block:
+            text_content = race_info_block.get_text(" ", strip=True)
+            
+            # Distance
+            distance_match = re.search(r'(\d{3,4})\s*m', text_content, re.IGNORECASE)
+            if distance_match:
+                metadata['distance'] = int(distance_match.group(1))
+
+            # Type de course (e.g., Attelé, Monté, Plat, Obstacle)
+            # This is often inferred from keywords
+            if "attelé" in text_content.lower():
+                metadata['type_course'] = "Attelé"
+            elif "monté" in text_content.lower():
+                metadata['type_course'] = "Monté"
+            elif "plat" in text_content.lower():
+                metadata['type_course'] = "Plat"
+            elif "obstacle" in text_content.lower():
+                metadata['type_course'] = "Obstacle"
+            
+            # Corde (left/right often specified for flat/obstacle races)
+            if "corde à gauche" in text_content.lower():
+                metadata['corde'] = "Gauche"
+            elif "corde à droite" in text_content.lower():
+                metadata['corde'] = "Droite"
+            else:
+                metadata['corde'] = "N/A" # Default or unknown
+
+            # Conditions (prix, âge, sexe, etc.) - often more complex to parse specifically
+            # For now, we'll try to get a general description
+            conditions_tag = self.soup.select_one("div.conditions-course") # Another common class
+            if conditions_tag:
+                metadata['conditions'] = conditions_tag.get_text(" ", strip=True)
+            elif race_info_block: # Fallback to general info block
+                 # Take a snippet if a specific conditions block isn't found
+                snippet_start = text_content.find("Conditions") 
+                if snippet_start != -1:
+                    metadata['conditions'] = text_content[snippet_start:].split('\n')[0].strip()
+
+        # Fallback for distance if not found in info-race block
+        if 'distance' not in metadata:
+            distance_tag = self.soup.select_one("span.distance") # Specific span
+            if distance_tag:
+                distance_match = re.search(r'(\d{3,4})\s*m', distance_tag.text, re.IGNORECASE)
+                if distance_match:
+                    metadata['distance'] = int(distance_match.group(1))
+
+
+        if not metadata:
+            logger.warning(
+                f"Aucune métadonnée de course (type, distance, corde, conditions) n'a pu être extraite de {self.race_url}.",
+                extra=self.log_extra,
+            )
+        return metadata
 
     def get_snapshot(self) -> dict[str, Any]:
         """Orchestre le scraping du programme et retourne la liste des courses."""
@@ -202,16 +298,21 @@ class BoturfersFetcher:
         """Orchestre le scraping d'une course et retourne les partants."""
         if not self._fetch_html():
             return {"error": "Failed to fetch HTML"}
+        
+        race_metadata = self._parse_race_metadata()
         runners = self._parse_race_runners()
+        
         if not runners:
             logger.error(
                 f"Aucun partant n'a pu être extrait de {self.race_url}.", extra=self.log_extra
             )
+        
         return {
             "source": "boturfers",
             "type": "race_details",
             "url": self.race_url,
             "scraped_at": datetime.utcnow().isoformat(),
+            "race_metadata": race_metadata, # Add race metadata here
             "runners": runners,
         }
 

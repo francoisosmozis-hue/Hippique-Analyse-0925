@@ -9,6 +9,7 @@ from typing import Any
 from . import data_source, storage
 from .pipeline_run import generate_tickets
 from .stats_fetcher import collect_stats
+from .analysis_utils import parse_musique, calculate_volatility, identify_outsider_reparable, identify_profil_oublie # New import
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +86,25 @@ def process_single_course_analysis(
             logger.error(result["message"], extra=log_extra)
             return result
         logger.info(f"Step 1: Fetched snapshot data for {race_doc_id}.", extra=log_extra)
+
+        # Add parsed musique and volatility to runners
+        for runner in snapshot_data.get("runners", []):
+            musique_str = runner.get("musique", "")
+            if musique_str:
+                parsed_musique_data = parse_musique(musique_str)
+                runner["parsed_musique"] = parsed_musique_data
+                runner["volatility"] = calculate_volatility(parsed_musique_data)
+            else:
+                runner["parsed_musique"] = {}
+                runner["volatility"] = "NEUTRE" # Default if no musique
+            
+            # Identify "outsider repérable"
+            runner["is_outsider_reparable"] = identify_outsider_reparable(runner)
+            
+            # Identify "profil oublié"
+            runner["is_profil_oublie"] = identify_profil_oublie(runner)
+
+        logger.info(f"Step 1: Enriched snapshot data with musique, volatility, and outsider status for {race_doc_id}.", extra=log_extra)
 
         # --- Step 2: Persist initial snapshot ---
         logger.info(f"Step 2: Persisting initial snapshot for {race_doc_id}.", extra=log_extra)

@@ -53,10 +53,16 @@ def collect_stats(
 
     # 2. Loop through runners and fetch their stats
     stat_rows = []
-    successful_fetches = 0
+    # This will track successful fetches for chrono, jockey, and trainer stats
+    successful_chrono_fetches = 0
+    successful_jockey_fetches = 0
+    successful_trainer_fetches = 0
+
     for runner in runners:
         runner_num = runner.get("num")
-        runner_name = runner.get("name", "").strip()
+        runner_name = runner.get("nom", "").strip()
+        jockey_name = runner.get("jockey", "").strip()
+        trainer_name = runner.get("entraineur", "").strip()
 
         if not (runner_num and runner_name):
             continue
@@ -65,15 +71,14 @@ def collect_stats(
 
         # --- a. Fetch Chrono Stats ---
         try:
-            # Here we assume the runner object does not have a zone_turf_id,
-            # so we rely on the resolver.
             chrono_data = zoneturf_client.get_chrono_stats(horse_name=runner_name)
             if chrono_data:
                 runner_stats.update(chrono_data)
                 LOGGER.info(f"Successfully fetched chrono stats for {runner_name}", extra=log_extra)
+                if "last_3_chrono" in chrono_data:
+                    successful_chrono_fetches += 1
             else:
                 LOGGER.warning(f"Could not fetch chrono stats for {runner_name}", extra=log_extra)
-
         except Exception as e:
             LOGGER.error(
                 f"Error fetching chrono stats for {runner_name}: {e}",
@@ -81,18 +86,70 @@ def collect_stats(
                 exc_info=True,
             )
 
-        # --- b. TODO: Fetch Jockey/Entraineur Stats ---
-        # j_rate, e_rate, etc. would be fetched and added here.
-        # For now, these fields will be missing from the final stats payload.
-        runner_stats["j_rate"] = None
-        runner_stats["e_rate"] = None
+        # --- b. Fetch Jockey Stats ---
+        runner_stats["j_rate"] = None  # Initialize
+        if jockey_name:
+            try:
+                jockey_stats = zoneturf_client.get_jockey_trainer_stats(jockey_name, "jockey")
+                if jockey_stats and "win_rate" in jockey_stats:
+                    runner_stats["j_rate"] = jockey_stats["win_rate"]
+                    successful_jockey_fetches += 1
+                    LOGGER.info(
+                        f"Successfully fetched jockey stats for {jockey_name}: {jockey_stats['win_rate']}%",
+                        extra=log_extra,
+                    )
+                else:
+                    LOGGER.warning(f"Could not fetch jockey stats for {jockey_name}", extra=log_extra)
+            except Exception as e:
+                LOGGER.error(
+                    f"Error fetching jockey stats for {jockey_name}: {e}",
+                    extra=log_extra,
+                    exc_info=True,
+                )
+        else:
+            LOGGER.warning(f"Jockey name not available for runner {runner_name}", extra=log_extra)
+
+        # --- c. Fetch Entraineur Stats ---
+        runner_stats["e_rate"] = None  # Initialize
+        if trainer_name:
+            try:
+                trainer_stats = zoneturf_client.get_jockey_trainer_stats(trainer_name, "entraineur")
+                if trainer_stats and "win_rate" in trainer_stats:
+                    runner_stats["e_rate"] = trainer_stats["win_rate"]
+                    successful_trainer_fetches += 1
+                    LOGGER.info(
+                        f"Successfully fetched trainer stats for {trainer_name}: {trainer_stats['win_rate']}%",
+                        extra=log_extra,
+                    )
+                else:
+                    LOGGER.warning(f"Could not fetch trainer stats for {trainer_name}", extra=log_extra)
+            except Exception as e:
+                LOGGER.error(
+                    f"Error fetching trainer stats for {trainer_name}: {e}",
+                    extra=log_extra,
+                    exc_info=True,
+                )
+        else:
+            LOGGER.warning(f"Trainer name not available for runner {runner_name}", extra=log_extra)
 
         stat_rows.append(runner_stats)
-        if "last_3_chrono" in runner_stats:
-            successful_fetches += 1
 
     # 3. Assemble and save the final stats payload
-    coverage = successful_fetches / len(runners) if runners else 0
+    # Recalculate coverage based on all fetched stats types
+    total_runners = len(runners) if runners else 1 # Avoid division by zero
+    
+    # A more sophisticated coverage could be average of individual coverages,
+    # or minimum of all coverages, but for now, we'll sum up positive fetches.
+    # This needs refinement to accurately reflect *all* required stats.
+    # For now, let's just indicate if we got *any* stats beyond basic runner info.
+    
+    # Simple coverage for now: count how many runners have at least one of the advanced stats
+    covered_runners_count = sum(
+        1 for r_stats in stat_rows
+        if r_stats.get("last_3_chrono") or r_stats.get("j_rate") or r_stats.get("e_rate")
+    )
+    coverage = covered_runners_count / total_runners
+    
     stats_payload = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "race_doc_id": race_doc_id,
@@ -116,5 +173,4 @@ def collect_stats(
         LOGGER.critical(
             f"CRITICAL: Failed to save stats snapshot to GCS: {e}", extra=log_extra, exc_info=True
         )
-        # Return placeholder to avoid pipeline failure, but this is a critical error.
         return "dummy_gcs_path_for_stats"

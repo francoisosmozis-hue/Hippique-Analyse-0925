@@ -23,6 +23,7 @@ def mock_gpi_config() -> dict:
             "sp_dutching": {
                 "budget_ratio": 0.6,
                 "legs_min": 2,
+                "legs_max": 3, # Added legs_max
                 "odds_range": [1.1, 999],
                 "kelly_frac": 0.25,
             },
@@ -41,10 +42,11 @@ def test_generate_tickets_abstains_when_roi_is_low(mocker: MockerFixture, mock_g
         "hippique_orchestrator.pipeline_run.evaluate_combo",
         return_value={"status": "error"},
     )
+    mock_gpi_config["roi_min_sp"] = 0.60 # Set a higher threshold to ensure abstention
     snapshot_data = {
         "runners": [
-            {"num": 1, "p_no_vig": 0.3, "odds_place": 3.0},
-            {"num": 2, "p_no_vig": 0.3, "odds_place": 3.0},
+            {"num": 1, "nom": "Cheval1", "p_no_vig": 0.3, "odds_place": 3.0},
+            {"num": 2, "nom": "Cheval2", "p_no_vig": 0.3, "odds_place": 3.0},
         ],
         "market": {"overround_place": 1.10},
     }
@@ -71,9 +73,9 @@ def test_generate_tickets_creates_sp_dutching_ticket_when_roi_is_high(
     )
     snapshot_data = {
         "runners": [
-            {"num": 1, "p_no_vig": 0.4, "odds_place": 4.0},
-            {"num": 2, "p_no_vig": 0.3, "odds_place": 5.0},
-            {"num": 3, "p_no_vig": 0.1, "odds_place": 10.0},
+            {"num": 1, "nom": "Cheval1", "p_no_vig": 0.4, "odds_place": 4.0},
+            {"num": 2, "nom": "Cheval2", "p_no_vig": 0.3, "odds_place": 5.0},
+            {"num": 3, "nom": "Cheval3", "p_no_vig": 0.1, "odds_place": 10.0},
         ],
         "market": {"overround_place": 1.10},
     }
@@ -109,12 +111,11 @@ def test_generate_tickets_abstains_when_global_roi_is_low(
     mock_gpi_config["roi_min_global"] = 0.99
     snapshot_data = {
         "runners": [
-            {"num": 1, "p_no_vig": 0.4, "odds_place": 4.0},
-            {"num": 2, "p_no_vig": 0.3, "odds_place": 5.0},
+            {"num": 1, "nom": "Cheval1", "p_no_vig": 0.4, "odds_place": 2.6},
+            {"num": 2, "nom": "Cheval2", "p_no_vig": 0.3, "odds_place": 3.0},
         ],
         "market": {"overround_place": 1.10},
     }
-
     result = generate_tickets(
         snapshot_data=snapshot_data,
         gpi_config=mock_gpi_config,
@@ -134,10 +135,10 @@ def test_generate_tickets_creates_trio_ticket_with_best_roi(
     """
     snapshot_data = {
         "runners": [
-            {"num": 1, "p_no_vig": 0.4, "odds_place": 4.0},
-            {"num": 2, "p_no_vig": 0.3, "odds_place": 5.0},
-            {"num": 3, "p_no_vig": 0.25, "odds_place": 6.0},
-            {"num": 4, "p_no_vig": 0.2, "odds_place": 7.0},
+            {"num": 1, "nom": "Cheval1", "p_no_vig": 0.4, "odds_place": 4.0},
+            {"num": 2, "nom": "Cheval2", "p_no_vig": 0.3, "odds_place": 5.0},
+            {"num": 3, "nom": "Cheval3", "p_no_vig": 0.25, "odds_place": 6.0},
+            {"num": 4, "nom": "Cheval4", "p_no_vig": 0.2, "odds_place": 7.0},
         ],
         "market": {"overround_place": 1.10},
     }

@@ -37,6 +37,8 @@ from hippique_orchestrator.logging_utils import get_logger
 from hippique_orchestrator.plan import build_plan_async
 from hippique_orchestrator.runner import run_course
 from hippique_orchestrator.scheduler import enqueue_run_task, schedule_all_races
+from hippique_orchestrator.analysis_pipeline import process_single_course_analysis # New import
+import re # New import for URL parsing
 from google.cloud import tasks_v2
 
 # ============================================
@@ -123,6 +125,11 @@ class RunRequest(BaseModel):
     date: str = Field(..., description="Race date in YYYY-MM-DD format")
     trace_id: str | None = None
 
+class GPIAnalysisRequest(BaseModel):
+    race_url: str = Field(..., description="Full URL of the race to analyze (e.g., from Boturfers)")
+    date: str = Field(..., description="Race date in YYYY-MM-DD format")
+    budget: float = Field(5.0, description="Budget in EUR to use for the analysis")
+
 
 # ============================================
 # Middleware
@@ -177,6 +184,61 @@ api_router = APIRouter(prefix="/api")
 #         html_content = f.read()
 #     return HTMLResponse(content=html_content)
 
+
+@api_router.post("/analyse-gpi-v52")
+async def analyse_gpi_v52(body: GPIAnalysisRequest, request: Request):
+    """
+    Performs a GPI v5.2 / LYRA analysis for a specific race.
+    """
+    correlation_id = getattr(request.state, "correlation_id", str(uuid.uuid4()))
+    trace_id = correlation_id # For this endpoint, trace_id can be same as correlation_id
+    log_extra = {
+        "correlation_id": correlation_id,
+        "trace_id": trace_id,
+        "race_url": body.race_url,
+        "date": body.date,
+        "budget": body.budget,
+    }
+    logger.info("GPI v5.2 analysis request received", extra=log_extra)
+
+    # Parse reunion and course from race_url
+    # Example URL: https://www.boturfers.fr/course/123456-R1C2-vincennes-prix-de-tarbes/partant
+    rc_match = re.search(r'-(R\d+C\d+)-', body.race_url, re.IGNORECASE)
+    if not rc_match:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Could not parse reunion (R) and course (C) from race_url. Expected format: -R1C2-",
+        )
+    reunion_course_str = rc_match.group(1).upper()
+    reunion = reunion_course_str[0:2] # e.g., "R1"
+    course = reunion_course_str[2:] # e.g., "C2"
+
+    try:
+        analysis_result = process_single_course_analysis(
+            reunion=reunion,
+            course=course,
+            phase="H5", # Always use H5 for the final analysis phase
+            date=body.date,
+            budget=body.budget,
+            correlation_id=correlation_id,
+            trace_id=trace_id,
+        )
+        if analysis_result.get("success"):
+            return JSONResponse(status_code=status.HTTP_200_OK, content=analysis_result)
+        else:
+            return JSONResponse(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                content={"ok": False, "error": analysis_result.get("message", "Analysis failed"), **analysis_result},
+            )
+
+    except HTTPException:
+        raise # Re-raise if it's an HTTPException from process_single_course_analysis
+    except Exception as e:
+        logger.error(f"GPI v5.2 analysis failed: {e}", exc_info=True, extra=log_extra)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An unexpected error occurred during GPI v5.2 analysis: {e}",
+        ) from e
 
 @api_router.get("/pronostics")
 async def get_pronostics(
