@@ -155,7 +155,7 @@ echo "✅ Image construite: $IMAGE_TAG"
 echo ""
 echo "📋 Vérification Cloud Tasks Queue..."
 
-QUEUE_ID="${QUEUE_ID:-hippique-tasks}"
+QUEUE_ID="${QUEUE_ID:-hippique-tasks-v2}" # Default to v2
 
 if ! gcloud tasks queues describe "$QUEUE_ID" \
     --location="$REGION" \
@@ -165,8 +165,8 @@ if ! gcloud tasks queues describe "$QUEUE_ID" \
     gcloud tasks queues create "$QUEUE_ID" \
         --location="$REGION" \
         --project="$PROJECT_ID" \
-        --max-concurrent-dispatches=10 \
-        --max-dispatches-per-second=5
+        --max-concurrent-dispatches=1000 \
+        --max-dispatches-per-second=500
 else
     echo "  - Queue Cloud Tasks existe déjà"
 fi
@@ -178,35 +178,73 @@ fi
 echo ""
 echo "☁️  Déploiement sur Cloud Run..."
 
-# Construire la commande de déploiement
-DEPLOY_CMD=(
-    gcloud run deploy "$SERVICE_NAME"
-    --image="$IMAGE_TAG"
-    --platform=managed
-    --region="$REGION"
-    --project="$PROJECT_ID"
-    --service-account="$SERVICE_ACCOUNT_EMAIL"
-    --memory="$MEMORY"
-    --cpu="$CPU"
-    --timeout="${TIMEOUT}s"
-    --max-instances="$MAX_INSTANCES"
-    --min-instances="$MIN_INSTANCES"
-    --allow-unauthenticated # Allow unauthenticated access for public endpoints
-)
+# Construire la liste des variables d'environnement connues à l'avance
+# OIDC_AUDIENCE et CLOUD_RUN_URL seront ajoutées dans une étape ultérieure
+ENV_VARS="PROJECT_ID=$PROJECT_ID"
+ENV_VARS+=",REGION=$REGION"
+ENV_VARS+=",SERVICE_NAME=$SERVICE_NAME"
+ENV_VARS+=",QUEUE_ID=${QUEUE_ID:-hippique-tasks-v2}"
+ENV_VARS+=",SERVICE_ACCOUNT_EMAIL=$SERVICE_ACCOUNT_EMAIL"
+ENV_VARS+=",TZ=Europe/Paris"
+ENV_VARS+=",USE_FIRESTORE=True"
+ENV_VARS+=",USE_GCS=True"
+ENV_VARS+=",REQUIRE_AUTH=True"
+ENV_VARS+=",DEBUG=True"
+ENV_VARS+=",BUDGET_TOTAL=5"
 
-# Construire la liste des variables d'environnement
-ENV_VARS="PROJECT_ID=$PROJECT_ID,REGION=$REGION,SERVICE_NAME=$SERVICE_NAME,QUEUE_ID=$QUEUE_ID,SERVICE_ACCOUNT_EMAIL=$SERVICE_ACCOUNT_EMAIL,TZ=Europe/Paris,USE_FIRESTORE=True,USE_GCS=True,REQUIRE_AUTH=True,DEBUG=True,BUDGET_TOTAL=5"
-# OIDC_AUDIENCE will be set dynamically after service URL is known
-
-# Ajouter GCS_BUCKET si défini
 if [ -n "$GCS_BUCKET" ]; then
     ENV_VARS+=",GCS_BUCKET=$GCS_BUCKET,GCS_PREFIX=$GCS_PREFIX"
 fi
 
-DEPLOY_CMD+=(--set-env-vars="$ENV_VARS")
+# Déployer le service avec les variables d'environnement initiales
+gcloud run deploy "$SERVICE_NAME" \
+    --image="$IMAGE_TAG" \
+    --platform=managed \
+    --region="$REGION" \
+    --project="$PROJECT_ID" \
+    --service-account="$SERVICE_ACCOUNT_EMAIL" \
+    --memory="$MEMORY" \
+    --cpu="$CPU" \
+    --timeout="${TIMEOUT}s" \
+    --max-instances="$MAX_INSTANCES" \
+    --min-instances="$MIN_INSTANCES" \
+    --allow-unauthenticated \
+    --set-env-vars="$ENV_VARS" \
+    --quiet
 
-# Exécuter le déploiement
-"${DEPLOY_CMD[@]}"
+echo "✅ Déploiement initial terminé."
+
+# ============================================
+# Mise à jour avec l'URL Canonique
+# ============================================
+
+echo ""
+echo "🔗 Récupération de l'URL canonique et mise à jour de l'audience OIDC..."
+
+# Attendre un court instant pour s'assurer que l'état du service est propagé
+sleep 5
+
+# Récupérer l'URL canonique (status.url), qui est la seule audience valide pour OIDC
+CANONICAL_SERVICE_URL=$(gcloud run services describe "$SERVICE_NAME" \
+    --region="$REGION" \
+    --project="$PROJECT_ID" \
+    --format="value(status.url)")
+
+if [ -z "$CANONICAL_SERVICE_URL" ]; then
+    echo "❌ Échec de la récupération de l'URL canonique du service. Abandon."
+    exit 1
+fi
+
+echo "  - URL Canonique (Audience OIDC): $CANONICAL_SERVICE_URL"
+
+# Mettre à jour le service avec les variables d'environnement dépendantes de l'URL
+gcloud run services update "$SERVICE_NAME" \
+    --region="$REGION" \
+    --project="$PROJECT_ID" \
+    --update-env-vars="OIDC_AUDIENCE=$CANONICAL_SERVICE_URL,CLOUD_RUN_URL=$CANONICAL_SERVICE_URL" \
+    --quiet
+
+echo "✅ Variables d'environnement OIDC_AUDIENCE et CLOUD_RUN_URL mises à jour."
 
 # ============================================
 # Configurer IAM
@@ -215,46 +253,31 @@ DEPLOY_CMD+=(--set-env-vars="$ENV_VARS")
 echo ""
 echo "🔐 Configuration IAM..."
 
-# Permettre au service account d'invoquer le service
-# Note : Le service s'invoque lui-même si create_task utilise le même SA.
+# Permettre au compte de service d'invoquer le service (pour Cloud Tasks)
 gcloud run services add-iam-policy-binding "$SERVICE_NAME" \
     --region="$REGION" \
     --project="$PROJECT_ID" \
     --member="serviceAccount:$SERVICE_ACCOUNT_EMAIL" \
-    --role="roles/run.invoker" --quiet
+    --role="roles/run.invoker" --quiet > /dev/null
 
-# Le script ajoutait la policy deux fois, une seule suffit.
+echo "✅ Rôle roles/run.invoker ajouté pour le compte de service."
 
 # ============================================
-# Récupérer l'URL du service
+# Finalisation
 # ============================================
-
-SERVICE_URL=$(gcloud run services describe "$SERVICE_NAME" \
-    --region="$REGION" \
-    --project="$PROJECT_ID" \
-    --format="value(status.url)")
 
 echo ""
-echo "✅ Déploiement réussi!"
+echo "🎉 Déploiement terminé avec succès!"
 echo "================================================"
-echo "Service URL: $SERVICE_URL"
-
-# Update OIDC_AUDIENCE and CLOUD_RUN_URL environment variables to match the actual service URL
-echo "Updating OIDC_AUDIENCE and CLOUD_RUN_URL environment variables to $SERVICE_URL..."
-gcloud run services update "$SERVICE_NAME" \
-    --region="$REGION" \
-    --project="$PROJECT_ID" \
-    --update-env-vars="OIDC_AUDIENCE=$SERVICE_URL,CLOUD_RUN_URL=$SERVICE_URL" \
-    --quiet
-echo "OIDC_AUDIENCE and CLOUD_RUN_URL environment variables updated."
+echo "Service URL: $CANONICAL_SERVICE_URL"
 echo ""
 echo "📝 Prochaines étapes:"
-echo "1. Mettre à jour .env avec OIDC_AUDIENCE=$SERVICE_URL"
-echo "2. Créer le job Cloud Scheduler:"
+echo "1. (Optionnel) Mettre à jour .env avec OIDC_AUDIENCE=$CANONICAL_SERVICE_URL"
+echo "2. Créer le job Cloud Scheduler si ce n'est pas déjà fait:"
 echo "   ./scripts/create_scheduler_0900.sh"
-echo "3. Tester les endpoints:"
-echo "   curl -H \"Authorization: Bearer \$(gcloud auth print-identity-token)\" \\"
-echo "     -X POST $SERVICE_URL/schedule \\"
+echo "3. Tester la création de tâches via le endpoint /schedule:"
+echo "   curl -H \"Authorization: Bearer \$(gcloud auth print-identity-token --impersonate-service-account=$SERVICE_ACCOUNT_EMAIL --audiences=$CANONICAL_SERVICE_URL)\" \\"
+echo "     -X POST \"$CANONICAL_SERVICE_URL/schedule\" \\"
 echo "     -H \"Content-Type: application/json\" \\"
 echo "     -d '{\"date\":\"today\",\"mode\":\"tasks\"}'"
 echo ""
