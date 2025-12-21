@@ -72,10 +72,7 @@ def get_scheduled_tasks(
     try:
         client = tasks_v2.CloudTasksClient()
         queue_path = client.queue_path(project, location, queue)
-        tasks = client.list_tasks(
-            parent=queue_path,
-            page_size=limit,
-        )
+        tasks = client.list_tasks(parent=queue_path)
 
         # Cloud Tasks API ne supporte pas le tri direct, donc on trie en mémoire
         # On ne récupère que les tâches avec une schedule_time
