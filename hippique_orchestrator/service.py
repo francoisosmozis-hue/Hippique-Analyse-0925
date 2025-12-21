@@ -286,6 +286,38 @@ async def get_next_scheduled_tasks():
     return {"ok": True, "tasks": tasks}
 
 
+@api_router.get("/plan")
+async def get_daily_plan(
+    date: str | None = Query(
+        default=None,
+        description="Date in YYYY-MM-DD format. Defaults to today (Paris time).",
+    )
+):
+    """Returns the full race plan for a given date."""
+    date_to_use = date
+    if date_to_use is None:
+        today = datetime.now(ZoneInfo("Europe/Paris")).date()
+        date_to_use = today.strftime("%Y-%m-%d")
+
+    try:
+        plan = await build_plan_async(date_to_use)
+        if not plan:
+            return {
+                "ok": True,
+                "date": date_to_use,
+                "count": 0,
+                "races": [],
+                "message": "No races found for this date.",
+            }
+        return {"ok": True, "date": date_to_use, "count": len(plan), "races": plan}
+    except Exception as e:
+        logger.error(f"Failed to build plan for date {date_to_use}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to build plan for {date_to_use}.",
+        ) from e
+
+
 app.include_router(api_router)
 
 

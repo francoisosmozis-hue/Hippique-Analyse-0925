@@ -39,9 +39,12 @@
 
   <div id="next-analyses" style="margin-top: 20px;"></div>
 
+  <div id="race-schedule" style="margin-top: 20px;"></div>
+
   <script>
     const API_BASE_URL = "/api/pronostics";
     const SCHEDULE_API_URL = "/api/schedule/next";
+    const PLAN_API_URL = "/api/plan";
     const refreshIntervalMs = 20000; // 20 secondes
     let currentIntervalId = null;
     let retryCount = 0;
@@ -54,6 +57,7 @@
 
     const resultsContainer = document.getElementById("results");
     const nextAnalysesContainer = document.getElementById("next-analyses");
+    const raceScheduleContainer = document.getElementById("race-schedule");
     const statusIndicator = document.getElementById("status-indicator");
     const dateInput = document.getElementById("date-input");
     const btnLoad = document.getElementById("btn-load");
@@ -98,6 +102,29 @@
       }
     }
 
+    async function fetchRaceSchedule(date) {
+      raceScheduleContainer.innerHTML = "Chargement du programme...";
+      try {
+        const res = await fetch(`${PLAN_API_URL}?date=${encodeURIComponent(date)}`);
+        if (!res.ok) throw new Error(`Erreur HTTP ${res.status}`);
+        
+        const data = await res.json();
+        if (data.ok && data.races && data.races.length > 0) {
+          let content = `<h3>Programme du ${data.date}</h3><ul>`;
+          data.races.forEach(race => {
+            content += `<li><strong>${race.r_label}${race.c_label}</strong> (${race.discipline}) - Départ à ${race.time_local}</li>`;
+          });
+          content += '</ul>';
+          raceScheduleContainer.innerHTML = content;
+        } else {
+          displayMessage("Aucune course au programme pour cette date.", "info", raceScheduleContainer);
+        }
+      } catch (err) {
+        console.error("Erreur lors du chargement du programme:", err);
+        displayMessage(`Erreur: ${err.message}`, "error", raceScheduleContainer);
+      }
+    }
+
     function renderPronostics(data, requestedDate) {
       if (!data || !data.ok) {
         displayMessage("Erreur : la réponse de l'API est invalide ou indique une erreur.", "error");
@@ -113,8 +140,9 @@
           message += ` (Dernière vérification: ${formattedLastUpdated})`;
         }
         displayMessage(message, "info");
-        // Même si aucune course n'est analysée, on affiche les tâches prévues
+        // Toujours afficher les tâches et le programme
         fetchScheduledTasks();
+        fetchRaceSchedule(requestedDate);
         return;
       }
 
@@ -144,13 +172,15 @@
         resultsContainer.appendChild(block);
       });
       
-      // Mettre à jour les tâches planifiées après un rendu réussi
+      // Mettre à jour les vues annexes après un rendu réussi
       fetchScheduledTasks();
+      fetchRaceSchedule(requestedDate);
     }
 
     async function fetchPronostics(date, isRefresh = false) {
       resultsContainer.textContent = "Chargement des pronostics...";
       nextAnalysesContainer.innerHTML = ""; // Clear previous schedule
+      raceScheduleContainer.innerHTML = ""; // Clear previous race plan
       setStatus(true); // Assume online when trying to fetch
 
       currentDate = date; 
@@ -173,6 +203,7 @@
           resetRefreshInterval(); // Reset interval if data is fresh
           retryCount = 0;
           fetchScheduledTasks(); // Refresh schedule view even if data is cached
+          fetchRaceSchedule(date);
           return;
         }
 
@@ -228,7 +259,7 @@
       dateInput.value = dateParam || todayString; // Use URL param if present, else today
       currentDate = dateInput.value;
       
-      // Load initial pronostics
+      // Load initial data
       fetchPronostics(currentDate); 
       resetRefreshInterval(); // Start auto-refresh
 
