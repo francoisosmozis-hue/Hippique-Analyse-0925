@@ -31,7 +31,7 @@ class Config(BaseSettings):
     PROJECT_ID: str = Field(default_factory=lambda: google.auth.default()[1])
     REGION: str = "europe-west1"
     SERVICE_NAME: str = "hippique-orchestrator"
-    QUEUE_ID: str = "hippique-tasks"
+    QUEUE_ID: str = "hippique-tasks-v2"
     SERVICE_ACCOUNT_EMAIL: str | None = None
     GCS_BUCKET: str = "analyse-hippique-data"
 
