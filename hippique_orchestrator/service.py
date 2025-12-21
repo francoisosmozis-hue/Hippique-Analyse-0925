@@ -173,13 +173,13 @@ async def log_requests(request: Request, call_next):
 api_router = APIRouter(prefix="/api")
 
 
-@api_router.get("/pronostics/ui", response_class=HTMLResponse)
-async def pronostics_ui(request: Request):
-    """Serves the main HTML page for pronostics."""
-    # Serve index.html directly from the static directory
-    with open(os.path.join(STATIC_DIR, "index.html")) as f:
-        html_content = f.read()
-    return HTMLResponse(content=html_content)
+# @api_router.get("/pronostics/ui", response_class=HTMLResponse)
+# async def pronostics_ui(request: Request):
+#     """Serves the main HTML page for pronostics."""
+#     # DEPRECATED: Use the root /pronostics endpoint instead for a cleaner URL.
+#     with open(os.path.join(STATIC_DIR, "index.html")) as f:
+#         html_content = f.read()
+#     return HTMLResponse(content=html_content)
 
 
 @api_router.get("/pronostics")
@@ -319,6 +319,14 @@ async def get_daily_plan(
 
 
 app.include_router(api_router)
+
+
+@app.get("/pronostics", response_class=HTMLResponse, include_in_schema=False)
+async def serve_pronostics_page(request: Request):
+    """Serves the main HTML page for pronostics."""
+    with open(os.path.join(STATIC_DIR, "index.html")) as f:
+        html_content = f.read()
+    return HTMLResponse(content=html_content)
 
 
 @app.get("/ping")

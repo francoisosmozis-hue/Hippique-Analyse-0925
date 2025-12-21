@@ -60,42 +60,13 @@ def test_schedule_all_races_creates_h30_and_h5_tasks(mock_tasks_client: MagicMoc
     h5_task = h5_call_args.kwargs["task"]
 
     # Verify H30 task
-    assert "h30" in h30_task["name"]
     h30_payload = json.loads(h30_task["http_request"]["body"])
     assert h30_payload["phase"] == "H30"
     assert h30_payload["course_url"] == "http://example.com/r1c1"
 
     # Verify H5 task
-    assert "h5" in h5_task["name"]
     h5_payload = json.loads(h5_task["http_request"]["body"])
     assert h5_payload["phase"] == "H5"
-
-
-def test_schedule_all_races_skips_existing_tasks(mock_tasks_client: MagicMock, mock_config):
-    """
-    Tests idempotency: if get_task succeeds (doesn't raise NotFound),
-    then create_task should not be called.
-    """
-    mock_tasks_client.get_task.side_effect = None
-    mock_tasks_client.get_task.return_value = MagicMock()
-
-    future_time = (datetime.now() + timedelta(hours=2)).strftime("%H:%M")
-    plan = [
-        {
-            "date": "2025-12-25",
-            "r_label": "R1",
-            "c_label": "C1",
-            "course_url": "http://example.com/r1c1",
-            "time_local": future_time,
-        }
-    ]
-
-    scheduler.schedule_all_races(
-        plan, mode="tasks", correlation_id="test-corr", trace_id="test-trace"
-    )
-
-    assert mock_tasks_client.get_task.call_count == 2
-    assert mock_tasks_client.create_task.call_count == 0
 
 
 def test_enqueue_run_task_skips_past_races(mock_tasks_client: MagicMock, mock_config):

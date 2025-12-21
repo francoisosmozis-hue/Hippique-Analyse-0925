@@ -51,19 +51,6 @@ steps:
         --update-env-vars=BUDGET_TOTAL=5 \
         --quiet
 
-# Explicitly make the service public
-- name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-  id: Make-Public
-  entrypoint: 'bash'
-  args:
-    - '-c'
-    - |
-      gcloud run services add-iam-policy-binding hippique-orchestrator \
-        --member="allUsers" \
-        --role="roles/run.invoker" \
-        --region="${_REGION}" \
-        --quiet
-
 substitutions:
   _PROJECT_ID: analyse-hippique
   _REGION: europe-west1
@@ -71,4 +58,6 @@ substitutions:
   _REPO: hippique-orchestrator
   _IMAGE: hippique-orchestrator
   _SERVICE_ACCOUNT_EMAIL: 'sa-hippique-orchestrator@analyse-hippique.iam.gserviceaccount.com'
+  # WARNING: This is a hardcoded value. If the Cloud Run service URL changes,
+  # this value MUST be updated manually for the task scheduling to work.
   _ACTUAL_CLOUD_RUN_URL: 'https://hippique-orchestrator-h3tdqmb7jq-ew.a.run.app'

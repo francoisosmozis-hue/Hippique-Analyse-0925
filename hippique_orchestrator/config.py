@@ -52,8 +52,8 @@ class Config(BaseSettings):
             "/health",
             "/docs",
             "/openapi.json",
-            "/api/pronostics",
-            "/api/pronostics/ui",
+            "/pronostics",  # Main UI page
+            "/api/pronostics",  # The API endpoint for data
             "/api/schedule/next",
             "/api/plan",
         ]

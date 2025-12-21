@@ -226,13 +226,13 @@ def test_tasks_run_phase_endpoint_protected(client, mocker):
     assert "Authorization header missing" in response.json()["detail"]
 
 
-def test_pronostics_ui_endpoint_public(client, mocker):
+def test_pronostics_page_is_public(client, mocker):
     """
-    Tests that the /pronostics/ui endpoint remains public even when REQUIRE_AUTH is true.
+    Tests that the root /pronostics page remains public even when REQUIRE_AUTH is true.
     """
     mocker.patch("hippique_orchestrator.auth.config.REQUIRE_AUTH", True)
 
-    response = client.get("/api/pronostics/ui")
+    response = client.get("/pronostics")
 
     # Expect 200 OK because this is a public path
     assert response.status_code == 200

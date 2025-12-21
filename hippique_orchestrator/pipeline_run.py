@@ -46,8 +46,6 @@ def _apply_base_stat_adjustment(runners: list[dict], je_stats: dict, weights: di
         je_bonus = je_weights.get("je_bonus", 1.0)
         je_malus = je_weights.get("je_malus", 1.0)
 
-        # NOTE: These thresholds should ideally be in the gpi_v52.yml config file.
-        # The code is now ready to receive them from there if they are added.
         j_rate_bonus_threshold = je_weights.get("j_rate_bonus_threshold", 12.0)
         e_rate_bonus_threshold = je_weights.get("e_rate_bonus_threshold", 15.0)
         j_rate_malus_threshold = je_weights.get("j_rate_malus_threshold", 6.0)
