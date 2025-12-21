@@ -37,8 +37,11 @@
 
   <div id="results">Chargement des pronostics...</div>
 
+  <div id="next-analyses" style="margin-top: 20px;"></div>
+
   <script>
     const API_BASE_URL = "/api/pronostics";
+    const SCHEDULE_API_URL = "/api/schedule/next";
     const refreshIntervalMs = 20000; // 20 secondes
     let currentIntervalId = null;
     let retryCount = 0;
@@ -50,6 +53,7 @@
     let currentDate = null;
 
     const resultsContainer = document.getElementById("results");
+    const nextAnalysesContainer = document.getElementById("next-analyses");
     const statusIndicator = document.getElementById("status-indicator");
     const dateInput = document.getElementById("date-input");
     const btnLoad = document.getElementById("btn-load");
@@ -65,8 +69,33 @@
       }
     }
 
-    function displayMessage(message, type = "info") {
-      resultsContainer.innerHTML = `<p class="${type}-message">${message}</p>`;
+    function displayMessage(message, type = "info", container = resultsContainer) {
+      container.innerHTML = `<p class="${type}-message">${message}</p>`;
+    }
+    
+    async function fetchScheduledTasks() {
+      try {
+        const res = await fetch(SCHEDULE_API_URL);
+        if (!res.ok) {
+          throw new Error(`Erreur HTTP ${res.status}`);
+        }
+        const data = await res.json();
+        
+        if (data.ok && data.tasks && data.tasks.length > 0) {
+          let content = '<h3>Prochaines analyses prévues</h3><ul>';
+          data.tasks.forEach(task => {
+            const scheduleDate = new Date(task.schedule_time_utc);
+            content += `<li>${scheduleDate.toLocaleString()} - ${task.info || 'Analyse'}</li>`;
+          });
+          content += '</ul>';
+          nextAnalysesContainer.innerHTML = content;
+        } else {
+          nextAnalysesContainer.innerHTML = '<p class="info-message">Aucune analyse future planifiée pour le moment.</p>';
+        }
+      } catch (err) {
+        console.error("Erreur lors du chargement des tâches planifiées:", err);
+        displayMessage(`Erreur: ${err.message}`, "error", nextAnalysesContainer);
+      }
     }
 
     function renderPronostics(data, requestedDate) {
@@ -84,6 +113,8 @@
           message += ` (Dernière vérification: ${formattedLastUpdated})`;
         }
         displayMessage(message, "info");
+        // Même si aucune course n'est analysée, on affiche les tâches prévues
+        fetchScheduledTasks();
         return;
       }
 
@@ -112,10 +143,14 @@
 
         resultsContainer.appendChild(block);
       });
+      
+      // Mettre à jour les tâches planifiées après un rendu réussi
+      fetchScheduledTasks();
     }
 
     async function fetchPronostics(date, isRefresh = false) {
       resultsContainer.textContent = "Chargement des pronostics...";
+      nextAnalysesContainer.innerHTML = ""; // Clear previous schedule
       setStatus(true); // Assume online when trying to fetch
 
       currentDate = date; 
@@ -137,6 +172,7 @@
           displayMessage(`Pronostics du ${date || "aujourd'hui"} sont à jour. (Dernière mise à jour: ${new Date(lastUpdatedTimestamp).toLocaleString()})`, "info");
           resetRefreshInterval(); // Reset interval if data is fresh
           retryCount = 0;
+          fetchScheduledTasks(); // Refresh schedule view even if data is cached
           return;
         }
 

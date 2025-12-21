@@ -37,6 +37,7 @@ from hippique_orchestrator.logging_utils import get_logger
 from hippique_orchestrator.plan import build_plan_async
 from hippique_orchestrator.runner import run_course
 from hippique_orchestrator.scheduler import enqueue_run_task, schedule_all_races
+from google.cloud import tasks_v2
 
 # ============================================
 # Configuration
@@ -58,9 +59,61 @@ app = FastAPI(
 # Mount the static directory to serve static files
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
+
+# ============================================
+# Task Utilities
+# ============================================
+
+
+def get_scheduled_tasks(
+    project: str, location: str, queue: str, limit: int = 10
+) -> list[dict]:
+    """Lists the next scheduled tasks from a Cloud Tasks queue."""
+    try:
+        client = tasks_v2.CloudTasksClient()
+        queue_path = client.queue_path(project, location, queue)
+        tasks = client.list_tasks(
+            parent=queue_path,
+            response_view=tasks_v2.Task.View.BASIC,
+            page_size=limit,
+        )
+
+        # Cloud Tasks API ne supporte pas le tri direct, donc on trie en mémoire
+        # On ne récupère que les tâches avec une schedule_time
+        pending_tasks = [task for task in tasks if task.schedule_time]
+        
+        # Tri par schedule_time
+        sorted_tasks = sorted(pending_tasks, key=lambda t: t.schedule_time.timestamp())
+
+        task_list = []
+        for task in sorted_tasks[:limit]:
+            # Extrait le nom de la course depuis le payload si possible
+            race_info = "Analyse de course"
+            try:
+                if task.http_request.body:
+                    payload = json.loads(task.http_request.body)
+                    # Exemple: "R1C1 H-30"
+                    race_info = f"{payload.get('rc', '')} {payload.get('phase', '')}".strip()
+            except (json.JSONDecodeError, KeyError):
+                pass # Garder l'information générique
+
+            task_list.append(
+                {
+                    "name": os.path.basename(task.name),
+                    "schedule_time_utc": task.schedule_time.isoformat(),
+                    "info": race_info
+                }
+            )
+        return task_list
+    except Exception as e:
+        logger.error(f"Failed to list scheduled tasks: {e}", exc_info=True)
+        return []
+
+
 # ============================================
 # Request/Response Models
 # ============================================
+
 
 
 class ScheduleRequest(BaseModel):
@@ -219,6 +272,18 @@ async def get_pronostics(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to fetch pronostics from Firestore.",
         ) from e
+
+
+@api_router.get("/schedule/next")
+async def get_next_scheduled_tasks():
+    """Returns the next 10 scheduled tasks from the Cloud Tasks queue."""
+    tasks = get_scheduled_tasks(
+        project=config.PROJECT_ID,
+        location=config.REGION,
+        queue=config.QUEUE_ID,
+        limit=10,
+    )
+    return {"ok": True, "tasks": tasks}
 
 
 app.include_router(api_router)
