@@ -55,6 +55,7 @@ class Config(BaseSettings):
             "/api/pronostics",
             "/api/pronostics/ui",
             "/api/schedule/next",
+            "/api/plan",
         ]
     )
 
