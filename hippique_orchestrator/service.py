@@ -74,7 +74,6 @@ def get_scheduled_tasks(
         queue_path = client.queue_path(project, location, queue)
         tasks = client.list_tasks(
             parent=queue_path,
-            response_view=tasks_v2.Task.View.BASIC,
             page_size=limit,
         )
 
