@@ -5,286 +5,315 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Pronostics Hippiques (GPI)</title>
   <style>
-    body { font-family: Arial, sans-serif; margin: 20px; background-color: #f4f4f4; color: #333; }
-    .header-container { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-    .status-indicator { font-size: 0.9em; padding: 5px 10px; border-radius: 5px; }
-    .status-online { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
-    .status-offline { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
-    #results { background-color: #fff; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-    .pronostic-block { border: 1px solid #e0e0e0; margin-bottom: 15px; padding: 10px; border-radius: 5px; background-color: #fafafa; }
-    .pronostic-block h3 { margin-top: 0; color: #0056b3; }
-    .pronostic-block pre { background-color: #e9ecef; padding: 8px; border-radius: 4px; overflow-x: auto; }
-    .error-message { color: #dc3545; font-weight: bold; }
-    .info-message { color: #007bff; font-weight: bold; }
-    .last-updated-display { font-size: 0.8em; color: #666; margin-top: 10px; }
-    button { padding: 8px 15px; margin-left: 10px; border: none; border-radius: 5px; background-color: #007bff; color: white; cursor: pointer; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; margin: 20px; background-color: #f4f7f9; color: #333; }
+    .header-container { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; }
+    h1 { color: #2c3e50; }
+    .controls { display: flex; gap: 10px; align-items: center; margin-bottom: 20px; flex-wrap: wrap; }
+    .status-indicator { font-size: 0.9em; padding: 5px 10px; border-radius: 15px; }
+    .status-online { background-color: #d4edda; color: #155724; }
+    .status-offline { background-color: #f8d7da; color: #721c24; }
+    #results, #ops-status, #diagnostics { background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.05); margin-bottom: 20px;}
+    .pronostic-block { border: 1px solid #e0e0e0; margin-bottom: 15px; padding: 15px; border-radius: 8px; background-color: #fafafa; transition: box-shadow 0.2s; }
+    .pronostic-block:hover { box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+    .pronostic-block h3 { margin-top: 0; color: #0056b3; font-size: 1.2em; }
+    .pronostic-block pre { background-color: #e9ecef; padding: 10px; border-radius: 4px; overflow-x: auto; font-size: 0.85em; }
+    .error-panel { background-color: #fff3cd; border: 1px solid #ffeeba; border-left: 5px solid #ffc107; padding: 15px; margin-bottom: 15px; border-radius: 5px; }
+    .error-panel strong { color: #856404; }
+    .error-panel pre { background-color: #f8f9fa; padding: 10px; border: 1px solid #dee2e6; border-radius: 4px; white-space: pre-wrap; word-wrap: break-word; max-height: 200px; overflow-y: auto; }
+    .info-message { color: #007bff; }
+    .last-updated-display { font-size: 0.9em; color: #6c757d; text-align: right; }
+    button { padding: 10px 18px; border: none; border-radius: 5px; background-color: #007bff; color: white; cursor: pointer; transition: background-color 0.2s; }
     button:hover { background-color: #0056b3; }
-    input[type="date"] { padding: 7px; border-radius: 5px; border: 1px solid #ccc; }
+    button.secondary { background-color: #6c757d; }
+    button.secondary:hover { background-color: #5a6268; }
+    input[type="date"] { padding: 9px; border-radius: 5px; border: 1px solid #ccc; }
+    #diagnostics { border-left: 5px solid #17a2b8; }
+    #diagnostics summary { font-weight: bold; cursor: pointer; color: #17a2b8;}
+    #diagnostics-content { margin-top: 10px; font-family: monospace; font-size: 0.9em; }
   </style>
 </head>
 <body>
   <div class="header-container">
     <h1>Pronostics Hippiques</h1>
-    <span id="status-indicator" class="status-indicator status-online">En ligne</span>
+    <span id="api-status-indicator" class="status-indicator status-online">API En ligne</span>
   </div>
 
-  <div>
+  <div class="controls">
     <label for="date-input">Date :</label>
     <input type="date" id="date-input" />
     <button id="btn-load">Charger</button>
-    <button id="btn-refresh">Rafraîchir</button>
+    <button id="btn-refresh" class="secondary">Rafraîchir</button>
   </div>
+  
+  <div id="error-container"></div>
 
-  <div id="results">Chargement des pronostics...</div>
+  <details id="diagnostics">
+    <summary>Panneau de Diagnostic</summary>
+    <div id="diagnostics-content">
+      <button id="btn-test-api">Tester les APIs</button>
+      <div id="test-results"></div>
+    </div>
+  </details>
 
-  <div id="next-analyses" style="margin-top: 20px;"></div>
-
-  <div id="race-schedule" style="margin-top: 20px;"></div>
-
+  <div id="results">Chargement...</div>
+  <div id="ops-status">Chargement du statut opérationnel...</div>
+  
   <script>
-    const API_BASE_URL = "/api/pronostics";
-    const SCHEDULE_API_URL = "/api/schedule/next";
-    const PLAN_API_URL = "/api/plan";
-    const refreshIntervalMs = 20000; // 20 secondes
-    let currentIntervalId = null;
-    let retryCount = 0;
-    const maxRetryCount = 5;
-    const baseBackoffMs = 5000; // 5 secondes
-
-    let lastUpdatedTimestamp = null;
-    let lastETag = null;
-    let currentDate = null;
-
+    // --- DOM Elements ---
     const resultsContainer = document.getElementById("results");
-    const nextAnalysesContainer = document.getElementById("next-analyses");
-    const raceScheduleContainer = document.getElementById("race-schedule");
-    const statusIndicator = document.getElementById("status-indicator");
+    const opsStatusContainer = document.getElementById("ops-status");
+    const errorContainer = document.getElementById("error-container");
+    const apiStatusIndicator = document.getElementById("api-status-indicator");
     const dateInput = document.getElementById("date-input");
     const btnLoad = document.getElementById("btn-load");
     const btnRefresh = document.getElementById("btn-refresh");
+    const btnTestApi = document.getElementById("btn-test-api");
+    const testResultsContainer = document.getElementById("test-results");
 
-    function setStatus(isOnline) {
-      if (isOnline) {
-        statusIndicator.textContent = "En ligne";
-        statusIndicator.className = "status-indicator status-online";
-      } else {
-        statusIndicator.textContent = "Hors ligne";
-        statusIndicator.className = "status-indicator status-offline";
-      }
+    // --- State ---
+    let lastPronosticsETag = null;
+    let currentDate = null;
+
+    // --- Utility Functions ---
+    function setApiStatus(isOnline, message = "") {
+      apiStatusIndicator.textContent = isOnline ? "API En ligne" : `API Hors ligne: ${message}`;
+      apiStatusIndicator.className = `status-indicator ${isOnline ? 'status-online' : 'status-offline'}`;
     }
 
-    function displayMessage(message, type = "info", container = resultsContainer) {
-      container.innerHTML = `<p class="${type}-message">${message}</p>`;
+    function logError(endpoint, status, body) {
+        const errorHtml = `
+            <div class="error-panel">
+                <strong>Erreur API Détectée</strong><br>
+                <strong>Endpoint:</strong> ${endpoint}<br>
+                <strong>Status:</strong> ${status}<br>
+                <strong>Réponse (extrait):</strong>
+                <pre>${body.substring(0, 300)}</pre>
+            </div>`;
+        errorContainer.insertAdjacentHTML('beforeend', errorHtml);
     }
     
-    async function fetchScheduledTasks() {
-      try {
-        const res = await fetch(SCHEDULE_API_URL);
-        if (!res.ok) {
-          throw new Error(`Erreur HTTP ${res.status}`);
-        }
-        const data = await res.json();
+    function displayInfo(container, message) {
+        container.innerHTML = `<p class="info-message">${message}</p>`;
+    }
+
+    function clearErrors() {
+        errorContainer.innerHTML = '';
+    }
+
+    // --- API Fetch Functions ---
+    async function fetchWithTimeout(url, options = {}, timeout = 15000) {
+        const controller = new AbortController();
+        const id = setTimeout(() => controller.abort(), timeout);
         
-        if (data.ok && data.tasks && data.tasks.length > 0) {
-          let content = '<h3>Prochaines analyses prévues</h3><ul>';
-          data.tasks.forEach(task => {
-            const scheduleDate = new Date(task.schedule_time_utc);
-            content += `<li>${scheduleDate.toLocaleString()} - ${task.info || 'Analyse'}</li>`;
-          });
-          content += '</ul>';
-          nextAnalysesContainer.innerHTML = content;
-        } else {
-          nextAnalysesContainer.innerHTML = '<p class="info-message">Aucune analyse future planifiée pour le moment.</p>';
-        }
-      } catch (err) {
-        console.error("Erreur lors du chargement des tâches planifiées:", err);
-        displayMessage(`Erreur: ${err.message}`, "error", nextAnalysesContainer);
-      }
+        const response = await fetch(url, {
+            ...options,
+            signal: controller.signal  
+        });
+
+        clearTimeout(id);
+        return response;
     }
 
-    async function fetchRaceSchedule(date) {
-      raceScheduleContainer.innerHTML = "Chargement du programme...";
-      try {
-        const res = await fetch(`${PLAN_API_URL}?date=${encodeURIComponent(date)}`);
-        if (!res.ok) throw new Error(`Erreur HTTP ${res.status}`);
+    async function performFetch(url, options = {}) {
+        try {
+            const response = await fetchWithTimeout(url, options);
+            if (!response.ok) {
+                const errorBody = await response.text();
+                logError(url, response.status, errorBody);
+                setApiStatus(true, `Erreur ${response.status}`);
+                // Ne pas lever d'erreur ici pour permettre à Promise.allSettled de continuer
+                return { status: 'rejected', reason: `HTTP ${response.status}`, url };
+            }
+            setApiStatus(true);
+            return { status: 'fulfilled', value: response, url };
+        } catch (error) {
+            setApiStatus(false, error.name === 'AbortError' ? 'Timeout' : 'Réseau');
+            const errorMessage = `Échec de la requête vers ${url}. Raison: ${error.message}`;
+            logError(url, 'N/A', errorMessage);
+            return { status: 'rejected', reason: error.message, url };
+        }
+    }
+
+    async function fetchApiData(date) {
+        currentDate = date;
+        clearErrors();
         
-        const data = await res.json();
-        if (data.ok && data.races && data.races.length > 0) {
-          let content = `<h3>Programme du ${data.date}</h3><ul>`;
-          data.races.forEach(race => {
-            content += `<li><strong>${race.r_label}${race.c_label}</strong> (${race.discipline}) - Départ à ${race.time_local}</li>`;
-          });
-          content += '</ul>';
-          raceScheduleContainer.innerHTML = content;
-        } else {
-          displayMessage("Aucune course au programme pour cette date.", "info", raceScheduleContainer);
-        }
-      } catch (err) {
-        console.error("Erreur lors du chargement du programme:", err);
-        displayMessage(`Erreur: ${err.message}`, "error", raceScheduleContainer);
-      }
-    }
+        const pronosticsUrl = `/api/pronostics?date=${date}`;
+        const opsStatusUrl = `/api/ops/status?date=${date}`;
+        const scheduleUrl = '/api/schedule/next';
 
-    function renderPronostics(data, requestedDate) {
-      if (!data || !data.ok) {
-        displayMessage("Erreur : la réponse de l'API est invalide ou indique une erreur.", "error");
-        return;
-      }
+        // Reset UI
+        resultsContainer.innerHTML = 'Chargement des pronostics...';
+        opsStatusContainer.innerHTML = 'Chargement du statut opérationnel...';
 
-      lastUpdatedTimestamp = data.last_updated;
-      const formattedLastUpdated = lastUpdatedTimestamp ? new Date(lastUpdatedTimestamp).toLocaleString() : "N/A";
-
-      if (data.total_races === 0 || !data.pronostics || data.pronostics.length === 0) {
-        let message = `Aucune course analysée pour la date ${data.date || requestedDate}.`;
-        if (data.last_updated) {
-          message += ` (Dernière vérification: ${formattedLastUpdated})`;
-        }
-        displayMessage(message, "info");
-        // Toujours afficher les tâches et le programme
-        fetchScheduledTasks();
-        fetchRaceSchedule(requestedDate);
-        return;
-      }
-
-      resultsContainer.innerHTML = "";
-
-      const title = document.createElement("h2");
-      title.textContent = `Pronostics du ${data.date || requestedDate} (${data.total_races} courses)`;
-      resultsContainer.appendChild(title);
-
-      const lastUpdatedDiv = document.createElement("div");
-      lastUpdatedDiv.className = "last-updated-display";
-      lastUpdatedDiv.textContent = `Dernière mise à jour: ${formattedLastUpdated}`;
-      resultsContainer.appendChild(lastUpdatedDiv);
-
-      data.pronostics.forEach((race) => {
-        const block = document.createElement("div");
-        block.className = "pronostic-block";
-
-        const header = document.createElement("h3");
-        header.textContent = `Course ${race.rc || "N/A"} – Décision: ${race.gpi_decision || race.decision || "N/A"}`;
-        block.appendChild(header);
-
-        const pre = document.createElement("pre");
-        pre.textContent = JSON.stringify(race.tickets || race, null, 2);
-        block.appendChild(pre);
-
-        resultsContainer.appendChild(block);
-      });
-      
-      // Mettre à jour les vues annexes après un rendu réussi
-      fetchScheduledTasks();
-      fetchRaceSchedule(requestedDate);
-    }
-
-    async function fetchPronostics(date, isRefresh = false) {
-      resultsContainer.textContent = "Chargement des pronostics...";
-      nextAnalysesContainer.innerHTML = ""; // Clear previous schedule
-      raceScheduleContainer.innerHTML = ""; // Clear previous race plan
-      setStatus(true); // Assume online when trying to fetch
-
-      currentDate = date; 
-      let url = `${API_BASE_URL}`;
-      if (date) {
-        url += `?date=${encodeURIComponent(date)}`;
-      }
-
-      const headers = new Headers();
-      if (lastETag && isRefresh) { // Only send ETag on subsequent refreshes
-        headers.append("If-None-Match", lastETag);
-      }
-
-      try {
-        const res = await fetch(url, { headers });
-
-        if (res.status === 304) {
-          console.log("304 Not Modified. Les pronostics sont à jour.");
-          displayMessage(`Pronostics du ${date || "aujourd'hui"} sont à jour. (Dernière mise à jour: ${new Date(lastUpdatedTimestamp).toLocaleString()})`, "info");
-          resetRefreshInterval(); // Reset interval if data is fresh
-          retryCount = 0;
-          fetchScheduledTasks(); // Refresh schedule view even if data is cached
-          fetchRaceSchedule(date);
-          return;
-        }
-
-        if (!res.ok) {
-          throw new Error(`Erreur HTTP ${res.status}`);
-        }
-
-        lastETag = res.headers.get("ETag"); // Store ETag from response
-
-        const data = await res.json();
-        renderPronostics(data, date);
-        retryCount = 0;
-        resetRefreshInterval(); // Reset interval on success
-
-      } catch (err) {
-        console.error("Erreur lors du chargement des pronostics:", err);
-        setStatus(false);
-        displayMessage(`Erreur lors du chargement des pronostics: ${err.message}. Réessaie dans quelques instants.`, "error");
+        const headers = new Headers();
+        if (lastPronosticsETag) headers.append("If-None-Match", lastPronosticsETag);
         
-        // Implement exponential backoff
-        if (retryCount < maxRetryCount) {
-          retryCount++;
-          const backoffTime = baseBackoffMs * Math.pow(2, retryCount - 1);
-          console.log(`Nouvelle tentative dans ${backoffTime / 1000} secondes (tentative ${retryCount}/${maxRetryCount}).`);
-          resetRefreshInterval(backoffTime);
+        const results = await Promise.allSettled([
+            performFetch(pronosticsUrl, { headers }),
+            performFetch(opsStatusUrl),
+            performFetch(scheduleUrl) // Géré comme les autres pour la robustesse
+        ]);
+
+        const [pronosticsResult, opsStatusResult, scheduleResult] = results;
+
+        // --- Handle Pronostics ---
+        if (pronosticsResult.status === 'fulfilled' && pronosticsResult.value.status === 'fulfilled') {
+            const response = pronosticsResult.value.value;
+            if (response.status === 304) {
+                // Données à jour, ne rien faire, le contenu est déjà affiché
+            } else {
+                lastPronosticsETag = response.headers.get("ETag");
+                const data = await response.json();
+                renderPronostics(data);
+            }
         } else {
-          displayMessage("Impossible de charger les pronostics après plusieurs tentatives. Veuillez vérifier votre connexion ou réessayer plus tard.", "error");
-          stopRefreshInterval();
+             displayInfo(resultsContainer, "Impossible de charger les pronostics. Voir le panneau d'erreurs.");
         }
-      }
+
+        // --- Handle Ops Status ---
+        if (opsStatusResult.status === 'fulfilled' && opsStatusResult.value.status === 'fulfilled') {
+            const data = await opsStatusResult.value.value.json();
+            renderOpsStatus(data);
+        } else {
+            displayInfo(opsStatusContainer, "Impossible de charger le statut opérationnel. Voir le panneau d'erreurs.");
+        }
+        
+        // --- Handle Schedule Info (optional) ---
+        if (scheduleResult.status === 'fulfilled' && scheduleResult.value.status === 'fulfilled') {
+            const data = await scheduleResult.value.value.json();
+            if (!data.ok) {
+                console.warn('Info Schedule:', data.message);
+                const scheduleInfo = document.createElement('p');
+                scheduleInfo.style.fontSize = '0.8em';
+                scheduleInfo.style.color = '#6c757d';
+                scheduleInfo.innerHTML = `ℹ️ Prochaine tâche : <i>${data.message}</i>`;
+                resultsContainer.prepend(scheduleInfo);
+            }
+        } else {
+            console.warn('Could not fetch schedule info.');
+        }
     }
 
-    function resetRefreshInterval(delay = refreshIntervalMs) {
-      stopRefreshInterval();
-      currentIntervalId = setInterval(() => fetchPronostics(currentDate, true), delay);
+    // --- UI Rendering ---
+    function renderPronostics(data) {
+        if (!data || !data.ok) {
+            displayInfo(resultsContainer, "Réponse invalide de l'API des pronostics.");
+            logError('/api/pronostics', 'Invalid Data', JSON.stringify(data));
+            return;
+        }
+
+        const lastUpdated = data.last_updated ? new Date(data.last_updated).toLocaleString('fr-FR') : 'Jamais';
+        let html = `
+            <div class="last-updated-display">
+                Dernière mise à jour: <strong>${lastUpdated}</strong>
+                <br>Source: ${data.source || 'inconnue'}
+            </div>
+            <h2>Pronostics du ${data.date} (${data.counts.total_in_plan} courses au programme)</h2>
+            <p>${data.status_message}</p>`;
+
+        if (!data.pronostics || data.pronostics.length === 0) {
+            html += `<p class="info-message">${data.reason_if_empty || 'Aucune course à afficher pour cette date.'}</p>`;
+        } else {
+            data.pronostics.forEach(race => {
+                html += `
+                    <div class="pronostic-block">
+                        <h3>Course ${race.rc || (race.reunion + race.num)} - ${race.nom || 'Non disponible'}</h3>
+                        <p>Statut: <strong>${race.status || 'N/A'}</strong> | Décision GPI: <strong>${race.gpi_decision || 'N/A'}</strong></p>
+                        <pre>${JSON.stringify(race.tickets_analysis || race, null, 2)}</pre>
+                    </div>`;
+            });
+        }
+        resultsContainer.innerHTML = html;
     }
 
-    function stopRefreshInterval() {
-      if (currentIntervalId) {
-        clearInterval(currentIntervalId);
-        currentIntervalId = null;
-      }
+    function renderOpsStatus(data) {
+        if (!data) {
+            displayInfo(opsStatusContainer, 'Données de statut opérationnel indisponibles.');
+            return;
+        }
+        let html = `<h2>Statut Opérationnel du ${data.date}</h2>
+            <p>
+                Courses au programme: ${data.summary.total_in_plan} | 
+                Traitées: ${data.summary.total_processed} | 
+                Jouables: ${data.summary.playable} | 
+                Abstention: ${data.summary.abstain} |
+                Erreurs: ${data.summary.errors}
+            </p>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Course</th>
+                        <th>Heure</th>
+                        <th>Nom</th>
+                        <th>Statut</th>
+                        <th>Dernière Analyse</th>
+                    </tr>
+                </thead>
+                <tbody>`;
+        if (data.races && data.races.length > 0) {
+            data.races.forEach(race => {
+                html += `
+                    <tr>
+                        <td>${race.rc}</td>
+                        <td>${race.time}</td>
+                        <td>${race.name}</td>
+                        <td class="${race.firestore_status === 'error' ? 'error-message' : ''}">${race.firestore_status}</td>
+                        <td>${race.last_analyzed_at ? new Date(race.last_analyzed_at).toLocaleTimeString('fr-FR') : 'N/A'}</td>
+                    </tr>`;
+            });
+        } else {
+            html += `<tr><td colspan="5">Aucune course dans le plan pour aujourd'hui.</td></tr>`;
+        }
+        html += `</tbody></table>`;
+        
+        const style = '<style> table { width: 100%; border-collapse: collapse; margin-top: 15px; } th, td { padding: 8px 12px; border: 1px solid #ddd; text-align: left; } thead { background-color: #f2f2f2; } tr:nth-child(even) { background-color: #f9f9f9; } .error-message { color: #dc3545; font-weight: bold; } </style>';
+        opsStatusContainer.innerHTML = style + html;
     }
 
-    // Event Listeners
+    // --- Event Listeners & Initialization ---
+    btnLoad.addEventListener("click", () => {
+        if (dateInput.value) {
+            lastPronosticsETag = null; // Force refresh for new date
+            fetchApiData(dateInput.value);
+        }
+    });
+
+    btnRefresh.addEventListener("click", () => {
+        if (currentDate) fetchApiData(currentDate);
+    });
+
+    btnTestApi.addEventListener("click", async () => {
+        testResultsContainer.innerHTML = "Lancement des tests...";
+        const date = currentDate || new Date().toISOString().split('T')[0];
+        const endpoints = [
+            '/health',
+            `/api/pronostics?date=${date}`,
+            `/api/ops/status?date=${date}`
+        ];
+        let resultsHtml = '<ul>';
+        for (const endpoint of endpoints) {
+            try {
+                const res = await fetchWithTimeout(endpoint);
+                const resBody = await res.text();
+                resultsHtml += `<li>✅ ${endpoint} <strong style="color: green;">(${res.status})</strong>
+                    <details><summary>Voir réponse</summary><pre>${resBody.substring(0, 500)}...</pre></details>
+                </li>`;
+            } catch (err) {
+                resultsHtml += `<li>❌ ${endpoint} <strong style="color: red;">(Échec: ${err.message})</strong></li>`;
+            }
+        }
+        resultsHtml += '</ul>';
+        testResultsContainer.innerHTML = resultsHtml;
+    });
+
     document.addEventListener("DOMContentLoaded", () => {
-      const today = new Date();
-      const todayString = today.toISOString().split('T')[0];
-
-      const urlParams = new URLSearchParams(window.location.search);
-      const dateParam = urlParams.get('date');
-
-      dateInput.value = dateParam || todayString; // Use URL param if present, else today
-      currentDate = dateInput.value;
-      
-      // Load initial data
-      fetchPronostics(currentDate); 
-      resetRefreshInterval(); // Start auto-refresh
-
-      btnLoad.addEventListener("click", () => {
-        const selectedDate = dateInput.value;
-        if (selectedDate) {
-          // Reset ETag when loading a new date to force a fresh fetch
-          lastETag = null; 
-          fetchPronostics(selectedDate);
-        }
-      });
-
-      btnRefresh.addEventListener("click", () => {
-        // Force refresh, including ETag for potential 304
-        fetchPronostics(currentDate, true); 
-      });
-
-      dateInput.addEventListener("change", () => {
-        const selectedDate = dateInput.value;
-        if (selectedDate) {
-          // Reset ETag when date changes
-          lastETag = null;
-          fetchPronostics(selectedDate);
-        }
-      });
+        const urlParams = new URLSearchParams(window.location.search);
+        const dateParam = urlParams.get('date');
+        const todayString = new Date().toISOString().split('T')[0];
+        
+        dateInput.value = dateParam || todayString;
+        fetchApiData(dateInput.value);
     });
   </script>
 </body>
