@@ -127,7 +127,7 @@ def enqueue_run_task(
         error_msg = (
             f"Permission denied to create Cloud Task. "
             f"Please grant 'roles/cloudtasks.enqueuer' to '{sa_email}'. "
-            f"Original error: {e.message}"
+            f"Original error: {e}"
         )
         logger.critical(error_msg)
         return False, error_msg
