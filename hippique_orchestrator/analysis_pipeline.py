@@ -42,7 +42,7 @@ async def run_analysis_for_phase(course_url: str, phase: str, date: str, race_do
         logger.info("Step 1: Fetching race details from data source.", extra=log_extra)
         snapshot_data = await data_source.fetch_race_details(course_url)
         if not snapshot_data or not snapshot_data.get("runners"):
-                        reason = "NO_DATA: snapshot missing or runners empty"
+            reason = "NO_DATA: snapshot missing or runners empty"
             logger.warning("Snapshot invalid or runners empty -> abstention.", extra={**log_extra, "reason": reason})
             analysis_content["status"] = "abstention"
             analysis_content["gpi_decision"] = "ABSTENTION_NO_DATA"
