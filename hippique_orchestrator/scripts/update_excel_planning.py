@@ -14,7 +14,7 @@ from typing import Any
 from openpyxl import Workbook, load_workbook
 from openpyxl.worksheet.worksheet import Worksheet
 
-from hippique_orchestrator.config import get_config
+from hippique_orchestrator import config
 
 try:  # pragma: no cover - fallback for older Python versions
     from zoneinfo import ZoneInfo
@@ -37,7 +37,7 @@ PLANNING_HEADERS: Sequence[str] = (
     "Commentaires",
 )
 
-config = get_config()
+
 
 
 @lru_cache(maxsize=1)
@@ -47,7 +47,7 @@ def _env_timezone() -> dt.tzinfo | None:
     if ZoneInfo is None:
         return None
 
-    tz_name = config.TZ
+    tz_name = config.TIMEZONE
     if not tz_name:
         return None
 

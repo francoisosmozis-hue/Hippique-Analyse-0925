@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from hippique_orchestrator.config import get_config
-
-config = get_config()
+from hippique_orchestrator import config
 
 
 def is_gcs_enabled(*, default: bool = True) -> bool:

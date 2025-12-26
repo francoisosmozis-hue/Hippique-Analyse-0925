@@ -1,6 +1,5 @@
-import os
-from google.cloud import tasks_v2
 from google.api_core import exceptions as gcp_exceptions
+from google.cloud import tasks_v2
 
 # Paramètres confirmés à l'étape 1
 PROJECT_ID = "analyse-hippique"
@@ -29,10 +28,10 @@ def main():
         print(f"--- SUCCÈS ! Tâche créée : {response.name} ---")
 
     except gcp_exceptions.NotFound as e:
-        print(f"--- ÉCHEC avec erreur 404 Not Found ---")
+        print("--- ÉCHEC avec erreur 404 Not Found ---")
         print(f"Détails de l'erreur: {e}")
     except Exception as e:
-        print(f"--- ÉCHEC avec une autre erreur ---")
+        print("--- ÉCHEC avec une autre erreur ---")
         print(f"Type d'erreur: {type(e).__name__}")
         print(f"Détails de l'erreur: {e}")
 

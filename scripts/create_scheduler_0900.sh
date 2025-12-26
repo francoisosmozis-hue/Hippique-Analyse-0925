@@ -17,14 +17,15 @@ PROJECT_ID="${PROJECT_ID:-}"
 REGION="${REGION:-europe-west1}"
 SERVICE_NAME="${SERVICE_NAME:-hippique-orchestrator}"
 SERVICE_ACCOUNT_EMAIL="${SERVICE_ACCOUNT_EMAIL:-}"
+INTERNAL_API_SECRET="${INTERNAL_API_SECRET:-}"
 
 if [ -z "$PROJECT_ID" ]; then
     echo "❌ PROJECT_ID is required"
     exit 1
 fi
 
-if [ -z "$SERVICE_ACCOUNT_EMAIL" ]; then
-    echo "❌ SERVICE_ACCOUNT_EMAIL is required"
+if [ -z "$INTERNAL_API_SECRET" ]; then
+    echo "❌ INTERNAL_API_SECRET is required"
     exit 1
 fi
 
@@ -83,10 +84,9 @@ if gcloud scheduler jobs describe "$JOB_NAME" \
         --time-zone="$TIMEZONE" \
         --uri="${SERVICE_URL}/schedule" \
         --http-method=POST \
-        --update-headers="Content-Type=application/json" \
+        --oidc-service-account-email="" \
+        --update-headers="Content-Type=application/json,X-API-KEY=${INTERNAL_API_SECRET}" \
         --message-body="$PAYLOAD" \
-        --oidc-service-account-email="$SERVICE_ACCOUNT_EMAIL" \
-        --oidc-token-audience="$SERVICE_URL" \
         --description="$DESCRIPTION"
     
     echo "✅ Job mis à jour"
@@ -100,13 +100,9 @@ else
         --time-zone="$TIMEZONE" \
         --uri="${SERVICE_URL}/schedule" \
         --http-method=POST \
-        --headers="Content-Type=application/json" \
+        --headers="Content-Type=application/json,X-API-KEY=${INTERNAL_API_SECRET}" \
         --message-body="$PAYLOAD" \
-        --oidc-service-account-email="$SERVICE_ACCOUNT_EMAIL" \
-        --oidc-token-audience="$SERVICE_URL" \
         --description="$DESCRIPTION"
-    
-    echo "✅ Job créé"
 fi
 
 # ============================================

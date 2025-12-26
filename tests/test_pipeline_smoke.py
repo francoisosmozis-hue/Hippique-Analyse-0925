@@ -1,4 +1,4 @@
-from hippique_orchestrator.simulate_wrapper import PAYOUT_CALIBRATION_PATH
+from hippique_orchestrator.config import PAYOUT_CALIBRATION_PATH
 
 DEFAULT_CALIBRATION = str(PAYOUT_CALIBRATION_PATH)
 

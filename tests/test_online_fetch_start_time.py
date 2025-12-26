@@ -1,8 +1,5 @@
-"""Tests for start time extraction from Boturfers HTML fragments."""
-
-from __future__ import annotations
-
 import textwrap
+import unittest.mock
 
 import pytest
 from bs4 import BeautifulSoup
@@ -50,7 +47,10 @@ def test_extract_start_time_from_programme_row(time_html: str, expected_time: st
     """
     soup = BeautifulSoup(textwrap.dedent(html), "lxml")
 
-    fetcher = BoturfersFetcher("https://www.boturfers.fr/programme-pmu-du-jour")
+    mock_session = unittest.mock.MagicMock()
+    fetcher = BoturfersFetcher(
+        "https://www.boturfers.fr/programme-pmu-du-jour"
+    )
     fetcher.soup = soup
 
     races = fetcher._parse_programme()

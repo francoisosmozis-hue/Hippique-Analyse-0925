@@ -14,57 +14,17 @@ Corrections v3:
   - ✅ Rate limiter global (lock partagé)
   - ✅ Import _extract_start_time depuis online_fetch_zeturf.py
 """
-
 from __future__ import annotations
 
 import asyncio
 import re
-import time
 from datetime import datetime
 from typing import Any
 
 from hippique_orchestrator import data_source
-from hippique_orchestrator.config import get_config
 from hippique_orchestrator.logging_utils import get_logger
 
-config = get_config()
-
 logger = get_logger(__name__)
-
-
-# ============================================
-# Rate Limiter Global
-# ============================================
-
-_rate_limiter_lock = asyncio.Lock()
-_last_request_time = 0
-
-
-async def _rate_limited_request():
-    """
-    Rate limiter global partagé entre toutes les tâches asyncio.
-
-    Garantit qu'il y a au moins 1/requests_per_second secondes entre chaque requête.
-
-    Correction bug #5: Lock global plutôt que await asyncio.sleep() dans chaque tâche.
-    """
-    global _last_request_time
-
-    async with _rate_limiter_lock:
-        now = time.time()
-        min_interval = 1.0 / config.requests_per_second
-        time_since_last = now - _last_request_time
-
-        if time_since_last < min_interval:
-            wait_time = min_interval - time_since_last
-            await asyncio.sleep(wait_time)
-
-        _last_request_time = time.time()
-
-
-# ============================================
-# Public API
-# ============================================
 
 
 async def build_plan_async(date: str) -> list[dict[str, Any]]:
@@ -81,7 +41,7 @@ async def build_plan_async(date: str) -> list[dict[str, Any]]:
         programme_url = "https://www.boturfers.fr/programme-pmu-du-jour"
     else:
         programme_url = f"https://www.boturfers.fr/courses/{date}"
-    source_data = await asyncio.to_thread(data_source.fetch_programme, programme_url)
+    source_data = await data_source.fetch_programme(programme_url)
 
     if not source_data or not source_data.get("races"):
         logger.warning("Failed to fetch programme from Boturfers or it was empty.")

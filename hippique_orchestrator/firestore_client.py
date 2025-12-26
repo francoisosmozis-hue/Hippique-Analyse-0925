@@ -1,270 +1,115 @@
 """Firestore client for saving and retrieving race data."""
-
 from __future__ import annotations
 
+import re
+from datetime import datetime
 from typing import Any
 
 from google.cloud import firestore
 
-from hippique_orchestrator.config import get_config
+from hippique_orchestrator import config
 from hippique_orchestrator.logging_utils import get_logger
 
 logger = get_logger(__name__)
 
-_firestore_client = None
+try:
+    db = firestore.Client(project=config.PROJECT_ID)
+    logger.info(f"Firestore client initialized for project '{config.PROJECT_ID}'.")
+except Exception as e:
+    db = None
+    logger.error(f"Failed to initialize Firestore client: {e}", exc_info=True)
 
 
-def _get_firestore_client(project_id: str | None = None):
-    """
-    Returns a Firestore client, initializing it if necessary, or None if disabled.
-    """
-    global _firestore_client
-    if _firestore_client is None:
-        logger.debug("Firestore client is None, attempting to initialize.")
-        current_config = get_config()
-        if not current_config.USE_FIRESTORE:
-            logger.info(
-                "Firestore operations are disabled via configuration (USE_FIRESTORE=False)."
-            )
-            return None
-
-        try:
-            resolved_project_id = project_id if project_id else current_config.PROJECT_ID
-            logger.debug(
-                f"Attempting to initialize Firestore client for project '{resolved_project_id}'."
-            )
-            _firestore_client = firestore.Client(project=resolved_project_id)
-            logger.info(
-                f"Firestore client initialized successfully for project '{resolved_project_id}'."
-            )
-        except Exception as e:
-            logger.error(
-                f"Failed to initialize Firestore client for project '{resolved_project_id}': {e}",
-                exc_info=e,
-            )
-            return None
-    return _firestore_client
-
-
-def is_firestore_enabled() -> bool:
-    """Check if Firestore is configured and enabled via config."""
-    config = get_config()
-    return config.USE_FIRESTORE or False  # Default to False if None
-
-
-def save_race_document(collection: str, document_id: str, data: dict[str, Any]) -> None:
-    """
-    Saves or overwrites a document in a Firestore collection.
-    """
-    if not is_firestore_enabled():
-        logger.warning("Firestore is not enabled, skipping save.")
-        return
-
-    config = get_config()
-    client = _get_firestore_client(project_id=config.PROJECT_ID)
-    if not client:
-        logger.error("Firestore client not available, cannot save document.")
+def update_race_document(document_id: str, data: dict[str, Any]) -> None:
+    """Updates a document in the main races collection, merging data."""
+    if not db:
+        logger.warning("Firestore is not available, skipping update.")
         return
 
     try:
-        doc_ref = client.collection(collection).document(document_id)
-        doc_ref.set(data)
-        logger.info(f"Document {document_id} saved to collection {collection}.")
-    except Exception as e:
-        logger.error(
-            f"Failed to save document {document_id} to {collection}: {e}",
-            exc_info=e,
-        )
-
-
-def update_race_document(collection: str, document_id: str, data: dict[str, Any]) -> None:
-    """
-    Updates a document in a Firestore collection, merging data.
-    """
-    if not is_firestore_enabled():
-        logger.warning(
-            f"Firestore is not enabled, skipping update for {document_id} in {collection}."
-        )
-        return
-
-    config = get_config()
-    client = _get_firestore_client(project_id=config.PROJECT_ID)
-    if not client:
-        logger.error(
-            f"Firestore client not available, cannot update document {document_id} in {collection}."
-        )
-        return
-
-    try:
-        doc_ref = client.collection(collection).document(document_id)
-        logger.debug(
-            f"Attempting to update document {document_id} in collection '{collection}' with merge=True. Data keys: {list(data.keys())}."
-        )
+        doc_ref = db.collection(config.FIRESTORE_COLLECTION).document(document_id)
         doc_ref.set(data, merge=True)
-        logger.info(f"Document {document_id} updated successfully in collection '{collection}'.")
+        logger.info(f"Document {document_id} updated successfully.")
     except Exception as e:
-        logger.error(
-            f"Failed to update document {document_id} in collection '{collection}': {e}",
-            exc_info=e,
-        )
-        return
+        logger.error(f"Failed to update document {document_id}: {e}", exc_info=e)
 
 
-def get_race_document(collection: str, document_id: str) -> dict[str, Any] | None:
-    """
-    Retrieves a document from a Firestore collection.
-    """
-    logger.debug(f"Attempting to get document '{document_id}' from collection '{collection}'.")
-    if not is_firestore_enabled():
-        logger.warning("Firestore is not enabled, cannot get document.")
+def get_races_for_date(date_str: str) -> list[firestore.DocumentSnapshot]:
+    """Retrieves all race document snapshots for a given date."""
+    if not db:
+        logger.warning("Firestore is not available, cannot query races.")
+        return []
+
+    try:
+        races_ref = db.collection(config.FIRESTORE_COLLECTION)
+        # Firestore __name__ queries require this format
+        query = races_ref.order_by("__name__").start_at([date_str]).end_at([date_str + "\uf8ff"])
+        docs = list(query.stream())
+        logger.info(f"Found {len(docs)} races in Firestore for date {date_str}.")
+        return docs
+    except Exception as e:
+        logger.error(f"Failed to query races by date {date_str}: {e}", exc_info=e)
+        return []
+
+
+def get_doc_id_from_url(url: str, date: str) -> str | None:
+    """Extracts a race ID (e.g., R1C2) from a URL and prefixes it with the date."""
+    rc_match = re.search(r'-(r\dc\d+)-', url, re.IGNORECASE)
+    if not rc_match:
         return None
-
-    config = get_config()
-    client = _get_firestore_client(project_id=config.PROJECT_ID)
-    if not client:
-        logger.error("Firestore client not available for get_race_document.")
-        return None
-    logger.debug("Firestore client is available.")
-
-    try:
-        logger.debug(f"Getting reference for document '{document_id}'.")
-        doc_ref = client.collection(collection).document(document_id)
-        logger.debug(f"Calling doc_ref.get() for document '{document_id}'.")
-        doc = doc_ref.get()
-        logger.debug(f"doc_ref.get() returned. doc.exists: {doc.exists}")
-        if doc.exists:
-            logger.debug(f"Document '{document_id}' exists.")
-            return doc.to_dict()
-        else:
-            logger.info(f"Document {document_id} not found in collection {collection}.")
-            return None
-    except Exception as e:
-        logger.error(
-            f"Failed to retrieve document {document_id} from {collection}: {e}",
-            exc_info=e,
-        )
-        return None
+    rc_str = rc_match.group(1).upper()
+    return f"{date}_{rc_str}"
 
 
-def get_races_by_date_prefix(date_prefix: str) -> list[dict[str, Any]]:
-    """
-    Retrieves all race documents from the 'races' collection where the
-    document ID starts with the given date_prefix.
-    """
-    logger.info(f"Inside get_races_by_date_prefix with date_prefix: '{date_prefix}' of type {type(date_prefix)}")
-    if not is_firestore_enabled():
-        logger.warning("Firestore is not enabled, cannot query races.")
-        return []
+def get_processing_status_for_date(date_str: str, daily_plan: list[dict]) -> dict[str, Any]:
+    """Aggregates processing status from Firestore for the /ops/status endpoint."""
+    races_from_db = get_races_for_date(date_str)
+    db_races_map = {doc.id.split('_')[-1]: doc.to_dict() for doc in races_from_db}
 
-    config = get_config()
-    client = _get_firestore_client(project_id=config.PROJECT_ID)
-    if not client:
-        logger.error("Firestore client not available.")
-        return []
+    race_statuses = []
+    summary = {
+        "total_in_plan": len(daily_plan),
+        "total_processed": len(db_races_map),
+        "playable": 0,
+        "abstain": 0,
+        "errors": 0,
+    }
 
-    logger.info(f"Querying Firestore 'races' collection for date prefix: {date_prefix}")
+    for race in daily_plan:
+        rc_label = race.get("c_label")
+        if not rc_label or not race.get("r_label"):
+            continue
+        
+        rc_key = f"{race.get('r_label')}{rc_label}"
+        db_data = db_races_map.get(rc_key)
+        
+        status_entry = {
+            "rc": rc_key,
+            "name": race.get("name"),
+            "time": race.get("time_local"),
+            "firestore_status": "Not Processed",
+            "last_analyzed_at": None,
+            "error_reason": None,
+        }
 
-    try:
-        races_ref = client.collection("races")
-        query = races_ref.order_by("__name__").start_at([date_prefix]).end_at(
-            [date_prefix + "\uf8ff"]
-        )
+        if db_data:
+            analysis = db_data.get("tickets_analysis", {})
+            decision = analysis.get("gpi_decision", "Unknown")
+            status_entry["firestore_status"] = decision
+            status_entry["last_analyzed_at"] = db_data.get("last_analyzed_at")
+            
+            if "play" in decision.lower():
+                summary["playable"] += 1
+            elif "abstain" in decision.lower():
+                summary["abstain"] += 1
+            elif "error" in decision.lower():
+                summary["errors"] += 1
+                status_entry["error_reason"] = analysis.get("reason")
 
-        docs_stream = query.stream()
+        race_statuses.append(status_entry)
 
-        races = []
-        for doc in docs_stream:
-            race_data = doc.to_dict()
-            race_data['id'] = doc.id  # Add document ID to the dictionary
-            races.append(race_data)
-
-        logger.debug(
-            f"DEBUG: firestore_client.get_races_by_date_prefix found docs: {[r['id'] for r in races]}",
-            extra={"date_prefix": date_prefix},
-        )
-        logger.info(f"Found {len(races)} races for date prefix {date_prefix}.")
-        return races
-    except Exception as e:
-        logger.error(
-            f"Failed to query races by date prefix {date_prefix}: {e}",
-            exc_info=e,
-        )
-        return []
-
-
-def list_subcollection_documents(
-    collection: str, document_id: str, subcollection: str
-) -> list[dict[str, Any]]:
-    """
-    Lists all documents in a subcollection.
-    """
-    if not is_firestore_enabled():
-        logger.warning("Firestore is not enabled, cannot list subcollection.")
-        return []
-
-    config = get_config()
-    client = _get_firestore_client(project_id=config.PROJECT_ID)
-    if not client:
-        logger.error("Firestore client not available.")
-        return []
-
-    try:
-        docs_stream = (
-            client.collection(collection).document(document_id).collection(subcollection).stream()
-        )
-        return [doc.to_dict() for doc in docs_stream]
-    except Exception as e:
-        logger.error(
-            f"Failed to list documents in subcollection {subcollection} for doc {document_id}: {e}",
-            exc_info=e,
-        )
-        return []
-
-
-def is_day_planned(date_str: str) -> bool:
-    """Checks if a 'plan' document exists for the given date."""
-    if not is_firestore_enabled():
-        logger.warning("Firestore is not enabled, cannot check if day is planned.")
-        return True  # Assume planned to prevent re-running
-
-    doc = get_race_document("plans", date_str)
-    return doc is not None
-
-
-def mark_day_as_planned(date_str: str, plan_details: dict[str, Any]) -> None:
-    """Creates/updates a 'plan' document for the given date to mark it as planned."""
-    if not is_firestore_enabled():
-        logger.warning("Firestore is not enabled, cannot mark day as planned.")
-        return
-
-    # Use set with merge=True for idempotence in case it's called multiple times
-    config = get_config()
-    client = _get_firestore_client(project_id=config.PROJECT_ID)
-    if not client:
-        logger.error("Firestore client not available, cannot mark day as planned.")
-        return
-    try:
-        doc_ref = client.collection("plans").document(date_str)
-        doc_ref.set(plan_details, merge=True)
-        logger.info(f"Day {date_str} marked as planned in Firestore.")
-    except Exception as e:
-        logger.error(f"Failed to mark day {date_str} as planned: {e}", exc_info=e)
-
-
-def unmark_day_as_planned(date_str: str) -> None:
-    """Deletes the 'plan' document for the given date, effectively unmarking it."""
-    if not is_firestore_enabled():
-        logger.warning("Firestore is not enabled, cannot unmark day as planned.")
-        return
-
-    config = get_config()
-    client = _get_firestore_client(project_id=config.PROJECT_ID)
-    if not client:
-        logger.error("Firestore client not available, cannot unmark day as planned.")
-        return
-    try:
-        doc_ref = client.collection("plans").document(date_str)
-        doc_ref.delete()
-        logger.info(f"Day {date_str} unmarked (deleted plan document) in Firestore.")
-    except Exception as e:
-        logger.error(f"Failed to unmark day {date_str} as planned: {e}", exc_info=e)
+    return {
+        "date": date_str,
+        "summary": summary,
+        "races": race_statuses,
+    }

@@ -6,14 +6,14 @@ import argparse
 from collections.abc import Iterable
 from pathlib import Path
 
-from hippique_orchestrator.config import get_config
+from hippique_orchestrator import config
 from hippique_orchestrator.scripts.drive_sync import (
     _build_service,
     build_remote_path,
     download_file,
 )
 
-config = get_config()
+
 BUCKET_ENV = "GCS_BUCKET"
 PREFIX_ENV = "GCS_PREFIX"
 
@@ -32,10 +32,10 @@ def download_day(date: str, dest: Path, *, service=None) -> None:
     """Download snapshot and analysis JSON files for ``date`` into ``dest``."""
 
     srv = service or _build_service()
-    bucket = config.gcs_bucket
+    bucket = config.BUCKET_NAME
     if not bucket:
         raise OSError(f"{BUCKET_ENV} is not set in config")
-    base_prefix = config.gcs_prefix or ""
+    base_prefix = "prod"
     dest.mkdir(parents=True, exist_ok=True)
     for prefix in ("snapshot_", "analysis"):
         for object_name in _list_blobs(srv, bucket, base_prefix, date, prefix):

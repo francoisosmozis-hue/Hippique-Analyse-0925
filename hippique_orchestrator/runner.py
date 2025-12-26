@@ -11,11 +11,7 @@ from typing import Any
 # Assuming analyse_courses_du_jour_enrichie is at the root level and is importable.
 # This might need adjustment based on final project structure.
 from hippique_orchestrator import analysis_pipeline
-from hippique_orchestrator.config import get_config
-from hippique_orchestrator.logging_utils import get_logger
-
-logger = get_logger(__name__)
-config = get_config()
+from hippique_orchestrator import config
 
 
 def _extract_rc_from_url(course_url: str) -> tuple[str, str]:

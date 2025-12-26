@@ -5,51 +5,50 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import google.auth
-from google.api_core import exceptions as gcp_exceptions
 from google.cloud import tasks_v2
 from google.protobuf import timestamp_pb2
 
-from hippique_orchestrator.config import get_config
+from hippique_orchestrator import config
 from hippique_orchestrator.logging_utils import get_logger
 from hippique_orchestrator.time_utils import convert_local_to_utc
 
-config = get_config()
 logger = get_logger(__name__)
 
 
-def _get_and_normalize_queue_path(
-    client: tasks_v2.CloudTasksClient, queue_id_raw: str
-) -> tuple[str, str, str, str]:
+def _calculate_task_schedule(
+    race_time_local: str, date: str, phase: str, force: bool
+) -> dict[str, Any]:
     """
-    Parses a queue ID (short name or full path) and returns normalized parts.
+    Calculates the UTC schedule time for a task and determines if it should be skipped.
 
     Returns:
-        A tuple of (project, location, queue_name, full_queue_path).
+        A dictionary containing the status, schedule time, and a reason.
     """
-    if "projects/" in queue_id_raw:
-        # If the full path is provided, parse it
-        try:
-            project, location, queue_name = client.parse_queue_path(queue_id_raw)[
-                "project"
-            ], client.parse_queue_path(queue_id_raw)["location"], client.parse_queue_path(
-                queue_id_raw
-            )["queue"]
-            full_queue_path = queue_id_raw
-            return project, location, queue_name, full_queue_path
-        except (ValueError, KeyError) as e:
-            raise ValueError(f"Invalid full queue path provided: {queue_id_raw}") from e
-    else:
-        # If short name, construct the full path from config/inferred project
-        _, inferred_project = google.auth.default()
-        project = config.PROJECT_ID or inferred_project
-        location = config.REGION
-        queue_name = queue_id_raw
-        if not all([project, location, queue_name]):
-            raise ValueError(
-                f"Cannot construct queue path from incomplete parts: project={project}, location={location}, queue={queue_name}"
-            )
-        full_queue_path = client.queue_path(project, location, queue_name)
-        return project, location, queue_name, full_queue_path
+    if force:
+        schedule_time_utc = datetime.now(timezone.utc) + timedelta(minutes=2)
+        reason = f"Forced schedule to now + 2 minutes: {schedule_time_utc.isoformat()}"
+        logger.info(f"[Force Mode] {reason}")
+        return {"status": "candidate", "schedule_time_utc": schedule_time_utc, "reason": reason}
+
+    try:
+        phase_minutes = int(phase[1:])
+        race_datetime_local = datetime.fromisoformat(f"{date}T{race_time_local}")
+        schedule_time_utc = convert_local_to_utc(race_datetime_local) - timedelta(
+            minutes=phase_minutes
+        )
+
+        if schedule_time_utc < datetime.now(timezone.utc):
+            reason = f"Schedule time {schedule_time_utc.isoformat()} is in the past."
+            logger.warning(f"Skipping task: {reason}")
+            return {"status": "skipped", "schedule_time_utc": schedule_time_utc, "reason": reason}
+
+        reason = f"Calculated schedule time (UTC): {schedule_time_utc.isoformat()}"
+        return {"status": "candidate", "schedule_time_utc": schedule_time_utc, "reason": reason}
+
+    except Exception as e:
+        reason = f"Error calculating schedule time: {e}"
+        logger.error(reason, exc_info=True)
+        return {"status": "skipped", "schedule_time_utc": None, "reason": reason}
 
 
 def enqueue_run_task(
@@ -57,131 +56,139 @@ def enqueue_run_task(
     course_url: str,
     phase: str,
     date: str,
-    race_time_local: str,
-    r_label: str,
-    c_label: str,
-    correlation_id: str | None = None,
-    trace_id: str | None = None,
-    schedule_time_utc: datetime | None = None,
-) -> str | None:
-    """Crée une Cloud Task pour exécuter une analyse de course."""
-    log_extra = {"correlation_id": correlation_id, "trace_id": trace_id}
-    logger.info(f"--- In enqueue_run_task for {r_label}{c_label} {phase} ---", extra=log_extra)
-
+    schedule_time_utc: datetime,
+) -> tuple[bool, str | None]:
+    """
+    Crée une Cloud Task et retourne un tuple (succès, résultat).
+    Le résultat est le nom de la tâche en cas de succès, ou un message d'erreur.
+    """
+    logger.debug(f"Preparing to enqueue task for {course_url} at {schedule_time_utc}")
     try:
-        project_id, location, queue_name, parent_path = _get_and_normalize_queue_path(
-            client, config.QUEUE_ID
+        _, project_id = google.auth.default()
+        parent_path = client.queue_path(
+            project_id or config.PROJECT_ID, config.LOCATION, config.TASK_QUEUE
         )
-
-        # Optional: In debug mode, check if queue exists to get a clearer error
-        if config.DEBUG:
-            try:
-                client.get_queue(name=parent_path)
-                logger.info(f"Queue check PASSED for {parent_path}", extra=log_extra)
-            except gcp_exceptions.NotFound:
-                logger.error(
-                    f"Queue check FAILED: Queue '{parent_path}' not found.",
-                    extra=log_extra,
-                )
-                # Fail fast if queue doesn't exist
-                return None
-
-        # Use provided schedule time or calculate H-30/H-5
-        if schedule_time_utc is None:
-            race_datetime_local = datetime.fromisoformat(f"{date}T{race_time_local}")
-            schedule_time_utc = convert_local_to_utc(race_datetime_local) - timedelta(
-                minutes=int(phase[1:])
-            )
-
-        logger.info(f"Calculated schedule time (UTC): {schedule_time_utc}", extra=log_extra)
-
-        if schedule_time_utc < datetime.now(timezone.utc):
-            logger.warning(
-                f"Skipping task for {r_label}{c_label} as its schedule time {schedule_time_utc} is in the past."
-            )
-            return None
 
         timestamp = timestamp_pb2.Timestamp()
         timestamp.FromDatetime(schedule_time_utc)
 
-        payload = {"course_url": course_url, "phase": phase, "date": date, "trace_id": trace_id}
-        target_url = f"{config.CLOUD_RUN_URL}/tasks/run-phase"
+        payload = {"course_url": course_url, "phase": phase, "date": date}
+        service_url = config.get_service_url()
+        if not service_url:
+            return False, "Service URL is not configured. Cannot create task."
+            
+        target_url = f"{service_url}/tasks/run-phase"
 
-        task = {
-            "http_request": {
-                "http_method": tasks_v2.HttpMethod.POST,
-                "url": target_url,
-                "headers": {"Content-Type": "application/json"},
-                "body": json.dumps(payload).encode(),
-                "oidc_token": {
-                    "service_account_email": config.SERVICE_ACCOUNT_EMAIL,
-                    "audience": config.OIDC_AUDIENCE,
-                },
-            },
-            "schedule_time": timestamp,
+        http_request = {
+            "http_method": tasks_v2.HttpMethod.POST,
+            "url": target_url,
+            "headers": {"Content-Type": "application/json"},
+            "body": json.dumps(payload).encode(),
         }
 
-        # Log all details just before the API call
-        log_details = {
-            "project_id": project_id,
-            "location": location,
-            "queue_id_raw": config.QUEUE_ID,
-            "parent_path": parent_path,
-            "target_url": target_url,
-            "client_endpoint": client._transport._host,
-        }
-        logger.info("--- PREPARING TO CREATE TASK ---", extra={**log_extra, **log_details})
+        if config.REQUIRE_AUTH:
+            if not config.TASK_OIDC_SA_EMAIL:
+                raise ValueError("TASK_OIDC_SA_EMAIL must be set when REQUIRE_AUTH is True.")
+            oidc_token = {
+                "service_account_email": config.TASK_OIDC_SA_EMAIL,
+                "audience": service_url,
+            }
+            http_request["oidc_token"] = oidc_token
 
+        task = {"http_request": http_request, "schedule_time": timestamp}
         response = client.create_task(parent=parent_path, task=task)
-        logger.info(f"Task created: {response.name}", extra=log_extra)
-        return response.name
+        logger.info(f"Task created: {response.name}")
+        return True, response.name
 
+    except tasks_v2.exceptions.PermissionDenied as e:
+        sa_email = config.TASK_OIDC_SA_EMAIL or "the service account of this Cloud Run service"
+        error_msg = (
+            f"Permission denied to create Cloud Task. "
+            f"Please grant 'roles/cloudtasks.enqueuer' to '{sa_email}'. "
+            f"Original error: {e.message}"
+        )
+        logger.critical(error_msg)
+        return False, error_msg
     except Exception as e:
-        logger.error(f"Failed to create task: {e}", exc_info=True, extra=log_extra)
-        return None
+        error_msg = f"Failed to create task for {course_url}: {e}"
+        logger.error(error_msg, exc_info=True)
+        return False, error_msg
 
 
 def schedule_all_races(
-    plan: list[dict], mode: str, correlation_id: str, trace_id: str
+    plan: list[dict], force: bool = False, dry_run: bool = False
 ) -> list[dict[str, Any]]:
-    logger.info("--- In schedule_all_races ---", extra={"correlation_id": correlation_id})
+    logger.info(f"--- Starting schedule_all_races (Force: {force}, Dry Run: {dry_run}) ---")
 
-    try:
-        logger.info("Initializing Cloud Tasks client...")
-        client = tasks_v2.CloudTasksClient()
-        logger.info("Cloud Tasks client initialized.")
-    except Exception as e:
-        logger.error(
-            f"Failed to initialize Cloud Tasks client: {e}",
-            exc_info=True,
-            extra={"correlation_id": correlation_id},
-        )
-        return []
-
+    candidate_tasks = []
     results = []
-    logger.info(f"Looping through {len(plan)} races...", extra={"correlation_id": correlation_id})
-    for i, race_plan in enumerate(plan):
-        logger.debug(
-            f"Race {i+1}/{len(plan)}: {race_plan['r_label']}{race_plan['c_label']}",
-            extra={"correlation_id": correlation_id},
-        )
-        for phase in ["H30", "H5"]:
-            logger.debug(f"  Phase: {phase}", extra={"correlation_id": correlation_id})
-            task_ok = (
-                enqueue_run_task(
-                    client=client,
-                    course_url=race_plan["course_url"],
-                    phase=phase,
-                    date=race_plan["date"],
-                    race_time_local=race_plan["time_local"],
-                    r_label=race_plan["r_label"],
-                    c_label=race_plan["c_label"],
-                    correlation_id=correlation_id,
-                    trace_id=trace_id,
-                )
-                is not None
-            )
-            results.append({"phase": phase, "ok": task_ok})
 
-    logger.info("--- Exiting schedule_all_races ---", extra={"correlation_id": correlation_id})
-    return results
+    for race_plan in plan:
+        for phase in ["H30", "H5"]:
+            task_info = {
+                "race": f"{race_plan['r_label']}{race_plan['c_label']}",
+                "phase": phase,
+                "course_url": race_plan["course_url"],
+                "date": race_plan["date"],
+            }
+            schedule_details = _calculate_task_schedule(
+                race_time_local=race_plan["time_local"],
+                date=race_plan["date"],
+                phase=phase,
+                force=force,
+            )
+            task_info.update(schedule_details)
+
+            if task_info["status"] == "candidate":
+                candidate_tasks.append(task_info)
+            else:
+                results.append({
+                    "race": task_info["race"],
+                    "phase": task_info["phase"],
+                    "task_name": None,
+                    "ok": False,
+                    "reason": task_info.get("reason"),
+                })
+    
+    logger.info(f"Calculation complete. Candidates: {len(candidate_tasks)}, Skipped: {len(results)}")
+
+    if dry_run:
+        logger.info("--- Dry run complete. Returning calculated tasks. ---")
+        # For dry run, we just show what would be scheduled
+        return [
+            {**task, "ok": True, "task_name": "dry_run_candidate"}
+            for task in candidate_tasks
+        ] + results
+
+    logger.info("--- Executing real run. Initializing Cloud Tasks client. ---")
+    try:
+        client = tasks_v2.CloudTasksClient()
+    except Exception as e:
+        logger.critical(f"Failed to initialize Cloud Tasks client: {e}", exc_info=True)
+        # If client fails, all candidates fail
+        for task in candidate_tasks:
+            results.append({
+                "race": task["race"], "phase": task["phase"], "task_name": None,
+                "ok": False, "reason": f"Failed to init CloudTasks client: {e}",
+            })
+        return results
+
+    for task in candidate_tasks:
+        success, result = enqueue_run_task(
+            client=client,
+            course_url=task["course_url"],
+            phase=task["phase"],
+            date=task["date"],
+            schedule_time_utc=task["schedule_time_utc"],
+        )
+        results.append({
+            "race": task["race"],
+            "phase": task["phase"],
+            "task_name": result if success else None,
+            "ok": success,
+            "reason": None if success else result,
+        })
+
+    logger.info("--- schedule_all_races complete. ---")
+    # Sort results to have a consistent order
+    return sorted(results, key=lambda x: (x["race"], x["phase"]))

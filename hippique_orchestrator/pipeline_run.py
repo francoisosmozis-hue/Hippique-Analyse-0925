@@ -5,9 +5,13 @@ import statistics
 from itertools import combinations
 from typing import Any
 
+from hippique_orchestrator.analysis_utils import (  # Added score_musique_form
+    convert_odds_to_implied_probabilities,
+    score_musique_form,
+)
 from hippique_orchestrator.kelly import calculate_kelly_fraction
 from hippique_orchestrator.simulate_wrapper import evaluate_combo
-from hippique_orchestrator.analysis_utils import convert_odds_to_implied_probabilities, score_musique_form # Added score_musique_form
+
  # New import
 
 # --- Logging ---
@@ -279,7 +283,7 @@ def _calculate_adjusted_probabilities(
     # --- New: Convert raw odds to implied probabilities ---
     win_odds_list = []
     place_odds_list = []
-    
+
     for runner in runners:
         win_odds = runner.get("odds_win")
         place_odds = runner.get("odds_place")
@@ -296,12 +300,12 @@ def _calculate_adjusted_probabilities(
         config['market'] = {}
     config['market']['overround_win'] = overround_win
     config['market']['overround_place'] = overround_place
-    
+
     # Assign calculated probabilities back to runners
     for i, runner in enumerate(runners):
         runner["p_no_vig"] = implied_win_probs[i] if i < len(implied_win_probs) else 0.0
         runner["p_place"] = implied_place_probs[i] if i < len(implied_place_probs) else 0.0
-    
+
     # --- Detect "Favori Réel" ---
     real_favorites_place = []
     for runner in runners:
@@ -309,7 +313,7 @@ def _calculate_adjusted_probabilities(
         runner["is_real_favorite_place"] = is_real_favorite_place
         if is_real_favorite_place:
             real_favorites_place.append(runner.get("nom", f"N°{runner.get('num')}"))
-    
+
     if real_favorites_place:
         analysis_messages.append(f"Favori(s) réel(s) (Place > 25%): {', '.join(real_favorites_place)}.")
     # --- End Favori Réel Detection ---
@@ -324,10 +328,10 @@ def _calculate_adjusted_probabilities(
         if p_base is None or p_base == 0.0: # Check for 0.0 as well, indicating invalid odds
             # Fallback if place odds were invalid or missing, try win odds
             p_base = runner.get("p_no_vig")
-        
+
         if p_base is None or p_base == 0.0:
             raise ValueError(f"Missing valid base probabilities for runner {runner.get('num')}")
-        
+
         runner["p_base"] = p_base
         p_bases.append(p_base)
 
@@ -376,7 +380,7 @@ def _generate_sp_dutching_tickets(
     budget = config["budget"]
 
     sp_budget = budget * sp_config["budget_ratio"]
-    
+
     # --- Step 1: Generate a pool of all profitable SP candidates within odds range ---
     # This pool will be used for both SP Dutching and as candidates for exotic bets.
     all_profitable_sp_candidates = []
@@ -386,7 +390,7 @@ def _generate_sp_dutching_tickets(
             continue
 
         prob_for_roi = r.get("p_unnormalized_for_roi", 0)
-        
+
         # Apply the general odds range for consideration in SP and exotics
         if odds >= sp_config["odds_range"][0] and odds <= sp_config["odds_range"][1]:
             roi = prob_for_roi * (odds - 1) - (1 - prob_for_roi)
@@ -415,7 +419,7 @@ def _generate_sp_dutching_tickets(
 
     # Filter `all_profitable_sp_candidates` by the specific odds range [2.5, 7.0] for Dutching SP ticket
     dutching_pool = [c for c in all_profitable_sp_candidates if c["odds"] >= 2.5 and c["odds"] <= 7.0]
-    
+
     # Try to select up to 3 horses for the SP Dutching ticket
     for candidate in dutching_pool:
         if len(sp_dutching_final_selection) < 2: # Always try to get at least 2 best ROI candidates
@@ -431,7 +435,7 @@ def _generate_sp_dutching_tickets(
                 sp_dutching_final_selection.append(candidate)
         else: # Already have 3 candidates, stop.
             break
-            
+
     # Ensure a maximum of 3 candidates for the SP Dutching ticket
     sp_dutching_final_selection = sp_dutching_final_selection[:3]
 
@@ -639,7 +643,7 @@ def generate_tickets(snapshot_data: dict[str, Any], gpi_config: dict[str, Any]) 
     # --- New: Add Top 5 Pronostic ---
     # Sort runners by p_finale in descending order
     sorted_runners = sorted(runners, key=lambda r: r.get("p_finale", 0.0), reverse=True)
-    
+
     top5_pronostic = []
     for i, runner in enumerate(sorted_runners[:5]): # Take top 5
         top5_pronostic.append({

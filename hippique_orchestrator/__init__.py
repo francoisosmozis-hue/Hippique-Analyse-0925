@@ -1,1 +1,1 @@
-# This file intentionally left blank to prevent circular imports.
+__version__ = "1.0.0"

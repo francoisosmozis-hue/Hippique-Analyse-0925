@@ -254,7 +254,7 @@ def fetch_person_stats_from_html(html_content: str, person_type: str) -> dict[st
                         stats['num_wins'] = int(row_data['Victoires']) if row_data['Victoires'].isdigit() else 0
                     if 'Places' in row_data:
                         stats['num_places'] = int(row_data['Places']) if row_data['Places'].isdigit() else 0
-    
+
     if not stats:
         logger.warning(f"Could not extract any stats for {person_type} from HTML content.")
         return None

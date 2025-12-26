@@ -11,14 +11,7 @@ from collections.abc import Callable
 from functools import partial
 from pathlib import Path
 
-from hippique_orchestrator.config import get_config
-
-try:  # pragma: no cover - optional dependency
-    import yaml
-except Exception:  # pragma: no cover - yaml is optional for the CLI
-    yaml = None  # type: ignore
-
-config = get_config()
+from hippique_orchestrator import config
 
 
 class ValidationError(Exception):

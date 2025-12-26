@@ -8,7 +8,7 @@ from functools import cache
 import gcsfs
 from google.cloud import storage
 
-from hippique_orchestrator.config import get_config
+from hippique_orchestrator import config
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -28,8 +28,7 @@ class GCSManager:
             bucket_name (str, optional): The GCS bucket name. If not provided,
                                          it's read from the central config.
         """
-        config = get_config()
-        self._bucket_name = bucket_name or config.GCS_BUCKET
+        self._bucket_name = bucket_name or config.BUCKET_NAME
         if not self._bucket_name:
             logger.warning("GCS_BUCKET is not set in the configuration. GCS operations will fail.")
             raise ValueError("GCS_BUCKET must be set.")
@@ -87,9 +86,8 @@ def get_gcs_manager() -> GCSManager | None:
     Returns a singleton instance of the GCSManager, creating it on first call.
     This deferred initialization helps prevent circular import issues.
     """
-    config = get_config()
-    if not config.USE_GCS:
-        logger.info("GCS operations are disabled via configuration (USE_GCS=False).")
+    if not config.BUCKET_NAME:
+        logger.info("GCS operations are disabled because BUCKET_NAME is not set.")
         return None
     try:
         return GCSManager()

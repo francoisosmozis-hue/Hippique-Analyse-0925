@@ -159,6 +159,7 @@ def test_fallback_uses_implied_odds(monkeypatch: pytest.MonkeyPatch, tmp_path) -
 
 
 def test_correlation_penalty_reduces_probability_and_ev(
+    mocker,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
 ) -> None:
@@ -172,7 +173,10 @@ def test_correlation_penalty_reduces_probability_and_ev(
     monkeypatch.setattr(sw, "_calibration_metadata", {})
 
     payout = tmp_path / "payout_calibration.yaml"
-    monkeypatch.setattr(sw, "PAYOUT_CALIBRATION_PATH", payout)
+    mocker.patch(
+        "hippique_orchestrator.simulate_wrapper._default_payout_calibration_path",
+        return_value=payout
+    )
     monkeypatch.setattr(sw, "_correlation_settings", {})
     monkeypatch.setattr(sw, "_correlation_mtime", 0.0)
 

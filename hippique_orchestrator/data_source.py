@@ -15,7 +15,7 @@ from .scrapers import boturfers
 logger = logging.getLogger(__name__)
 
 
-def fetch_programme(
+async def fetch_programme(
     url: str, correlation_id: str | None = None, trace_id: str | None = None
 ) -> dict[str, Any]:
     """
@@ -36,12 +36,12 @@ def fetch_programme(
         url,
         extra={"correlation_id": correlation_id, "trace_id": trace_id},
     )
-    return boturfers.fetch_boturfers_programme(
+    return await boturfers.fetch_boturfers_programme(
         url, correlation_id=correlation_id, trace_id=trace_id
     )
 
 
-def fetch_race_details(
+async def fetch_race_details(
     race_url: str, correlation_id: str | None = None, trace_id: str | None = None
 ) -> dict[str, Any]:
     """
@@ -61,6 +61,6 @@ def fetch_race_details(
         race_url,
         extra={"correlation_id": correlation_id, "trace_id": trace_id},
     )
-    return boturfers.fetch_boturfers_race_details(
+    return await boturfers.fetch_boturfers_race_details(
         race_url, correlation_id=correlation_id, trace_id=trace_id
     )

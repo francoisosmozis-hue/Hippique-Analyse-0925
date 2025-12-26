@@ -1,80 +1,33 @@
-import json
 import logging
 import sys
-import traceback
-from datetime import datetime
+from contextvars import ContextVar
+import uuid
 
-from hippique_orchestrator.config import get_config  # Import get_config
+# Context variables for correlation and trace IDs
+correlation_id_var = ContextVar("correlation_id", default=None)
+trace_id_var = ContextVar("trace_id", default=None)
 
+# This is a temporary, ultra-simple logging setup to diagnose startup crashes.
+# It avoids all Google Cloud client libraries.
 
-class JsonFormatter(logging.Formatter):
-    """Formats log records as JSON for Cloud Logging."""
-
-    def format(self, record: logging.LogRecord) -> str:
-        log_entry = {
-            "severity": record.levelname,
-            "message": record.getMessage(),
-            "timestamp": datetime.utcfromtimestamp(record.created).isoformat() + "Z",
-            "logger": record.name,
-        }
-
-        # The LogRecord already has 'extra' fields if passed by logger.info(msg, extra={...})
-        # We need to copy these to our log_entry
-        for key, value in record.__dict__.items():
-            if key not in [
-                'name',
-                'msg',
-                'levelname',
-                'levelno',
-                'pathname',
-                'filename',
-                'lineno',
-                'funcName',
-                'created',
-                'msecs',
-                'relativeCreated',
-                'thread',
-                'threadName',
-                'processName',
-                'process',
-                'exc_info',
-                'exc_text',
-                'stack_info',
-                'args',
-                'module',
-                'asctime',
-            ] and not key.startswith('_'):
-                log_entry[key] = value
-
-        # Add exception info if present
-        if record.exc_info:
-            log_entry["traceback"] = "".join(traceback.format_exception(*record.exc_info))
-
-        return json.dumps(log_entry)
-
-
-_loggers: dict[str, logging.Logger] = {}
+def setup_logging(log_level: str | None = "INFO"):
+    """
+    Configures a basic stdout logger.
+    """
+    # Use basicConfig which is simpler and safer for this test
+    logging.basicConfig(
+        level=(log_level or "INFO").upper(),
+        stream=sys.stdout,
+        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
+    )
+    logging.getLogger(__name__).info(f"Using basic stdout logging at level {(log_level or 'INFO').upper()}.")
 
 
 def get_logger(name: str) -> logging.Logger:
-    """Get or create a logger configured to output structured JSON."""
-    if name not in _loggers:
-        logger = logging.getLogger(name)
+    """Returns a logger with the given name."""
+    return logging.getLogger(name)
 
-        if logger.hasHandlers():
-            logger.handlers.clear()
 
-        handler = logging.StreamHandler(sys.stdout)
-        handler.setFormatter(JsonFormatter())
-
-        logger.addHandler(handler)
-
-        # Dynamically set level from config
-        app_config = get_config()  # Get the config
-        logger.setLevel(app_config.LOG_LEVEL.upper())  # Set level based on config
-
-        logger.propagate = False
-
-        _loggers[name] = logger
-
-    return _loggers[name]
+def generate_trace_id():
+    """Generates a unique trace ID."""
+    return str(uuid.uuid4())

@@ -8,133 +8,103 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-# Import the Config class and get_config function
-from hippique_orchestrator.config import Config, get_config
+# Import the app and the config module to be mocked
+from hippique_orchestrator import config as app_config
 from hippique_orchestrator.service import app
 
 
 @pytest.fixture(scope="session")
 def mock_network_calls(session_mocker):
     """
-    Session-scoped fixture to automatically mock all network calls made with `requests.get`.
-    This prevents any real HTTP requests during the entire test session, making tests
-    fast and reliable.
+    Session-scoped fixture to automatically mock all network calls made with `requests` and `httpx`.
+    This prevents any real HTTP requests during the entire test session.
     """
-    # Read default HTML content to be returned by the mock
-    # This can be overridden in specific tests if needed.
     try:
         html_content = (
             Path(__file__).parent / "fixtures" / "boturfers_programme.html"
         ).read_bytes()
     except FileNotFoundError:
-        # Provide a fallback if the fixture file is missing
-        html_content = b"<html><head><title>Default Mock</title></head><body></body></html>"
+        html_content = b"<html><body>Default Mock</body></html>"
 
-    # Create a mock response object that simulates a real requests.Response
-    mock_response = session_mocker.Mock()
-    mock_response.content = html_content
-    mock_response.raise_for_status.return_value = None  # Mock the method to do nothing
+    # Mock for 'requests' library
+    mock_requests_response = session_mocker.Mock()
+    mock_requests_response.content = html_content
+    mock_requests_response.raise_for_status.return_value = None
+    session_mocker.patch(
+        "hippique_orchestrator.scrapers.boturfers.requests.get", return_value=mock_requests_response
+    )
 
-    # Patch requests.get in the modules where it's used.
-    # It's important to patch where the object is looked up.
-    session_mocker.patch(
-        "hippique_orchestrator.scrapers.boturfers.requests.get", return_value=mock_response
-    )
-    session_mocker.patch(
-        "hippique_orchestrator.stats_fetcher.requests.get", return_value=mock_response
-    )
-    # Patch requests.get for httpx as well if used directly (e.g., in geny scraper)
-    session_mocker.patch(
-        "httpx.get", return_value=session_mocker.Mock(status_code=200, text=str(html_content))
-    )
+    # Mock for 'httpx' library
+    mock_httpx_response = session_mocker.Mock()
+    mock_httpx_response.status_code = 200
+    mock_httpx_response.content = html_content
+    mock_httpx_response.text = html_content.decode()
+    mock_httpx_response.raise_for_status.return_value = None
+
+    # Mock the async client context manager
+    async def mock_async_context_manager(*args, **kwargs):
+        return mock_httpx_response
+    
+    mock_async_client = session_mocker.AsyncMock()
+    mock_async_client.get = session_mocker.AsyncMock(return_value=mock_httpx_response)
+    
+    # Patch the AsyncClient context manager
+    session_mocker.patch("httpx.AsyncClient", return_value=mock_async_client)
 
 
 @pytest.fixture(scope="session")
 def mock_subprocess_run(session_mocker):
     """
     Session-scoped fixture to automatically mock all calls to `subprocess.run`.
-    This prevents tests from executing external scripts, which can be slow and
-    have unintended side effects.
     """
     mock_process = session_mocker.Mock(spec=subprocess.CompletedProcess)
     mock_process.returncode = 0
     mock_process.stdout = ""
     mock_process.stderr = ""
-
-    # Patch subprocess.run globally for the test session.
-    # Any module that imports `subprocess` will get this mock.
     session_mocker.patch("subprocess.run", return_value=mock_process)
 
 
-@pytest.fixture(scope="session")
-def mock_config(session_mocker):
+@pytest.fixture(autouse=True)
+def mock_config_values(mocker):
     """
-    Fixture to provide a test-specific Config object and ensure it's used globally.
+    Automatically mocks all necessary configuration variables for each test function.
+    This ensures test isolation and predictable behavior without hitting real services.
     """
-    # Clear the cache of get_config to ensure a fresh config is loaded for tests
-    get_config.cache_clear()
+    mocker.patch("hippique_orchestrator.config.PROJECT_ID", "test-project")
+    mocker.patch("hippique_orchestrator.config.LOCATION", "europe-west1")
+    mocker.patch("hippique_orchestrator.config.BUCKET_NAME", "test-bucket")
+    mocker.patch("hippique_orchestrator.config.TASK_QUEUE", "test-queue")
+    mocker.patch("hippique_orchestrator.config.TASK_OIDC_SA_EMAIL", "test-sa@example.com")
+    mocker.patch("hippique_orchestrator.config.REQUIRE_AUTH", False) # Disable auth for most tests
+    mocker.patch("hippique_orchestrator.config.FIRESTORE_COLLECTION", "races-test")
+    
+    # Mock get_service_url to prevent it from failing in test environments
+    mocker.patch("hippique_orchestrator.config.get_service_url", return_value="https://test-service.a.run.app")
 
-    mock_config_instance = Config(
-        PROJECT_ID="test-project",
-        REGION="europe-west1",
-        SERVICE_NAME="test-service",
-        QUEUE_ID="test-queue",
-        GCS_BUCKET="test-bucket",
-        REQUIRE_AUTH=False,  # Auth disabled for tests
-        OIDC_AUDIENCE="test-audience",  # Added for auth module
-        TZ="Europe/Paris",
-        BUDGET_TOTAL=5.0,
-        EV_MIN_GLOBAL=0.40,
-        ROI_MIN_GLOBAL=0.25,
-        EV_MIN_SP=0.15,
-        MAX_COMBO_OVERROUND=1.30,
-        # Add any other config fields that might be accessed by the application
-        # or its modules at a global level (e.g., in service.py, plan.py, runner.py)
-        GCS_PREFIX="test-prefix",
-        TICKETS_BUCKET="test-tickets-bucket",
-        TICKETS_PREFIX="test-tickets-prefix",
-        CALIB_PATH="test/calib/path",
-        SOURCES_FILE="test-sources-file",
-        RUNNER_SNAP_DIR="test-snap-dir",
-        RUNNER_ANALYSIS_DIR="test-analysis-dir",
-        RUNNER_OUTPUT_DIR="test-output-dir",
-        USE_GCS=False,
-        USE_DRIVE=False,
-        SCHEDULING_MODE="tasks",  # Default value from Config
-    )
-
-    # Patch the Config class itself so any new Config() call returns our mock instance
-    session_mocker.patch("hippique_orchestrator.config.Config", return_value=mock_config_instance)
-
-    # Also patch the config object imported in modules at the global level
-    # This is crucial for modules that do `config = get_config()` at import time
-    session_mocker.patch("hippique_orchestrator.service.config", new=mock_config_instance)
-    session_mocker.patch("hippique_orchestrator.plan.config", new=mock_config_instance)
-    session_mocker.patch("hippique_orchestrator.runner.config", new=mock_config_instance)
-    session_mocker.patch("hippique_orchestrator.simulate_wrapper.config", new=mock_config_instance)
-    session_mocker.patch("hippique_orchestrator.validator_ev.config", new=mock_config_instance)
-    # session_mocker.patch("hippique_orchestrator.analyse_courses_du_jour_enrichie.config", new=mock_config_instance) # Removed due to AttributeError
-    # session_mocker.patch("hippique_orchestrator.scripts.update_excel_planning.config", new=mock_config_instance) # Removed due to FileNotFoundError
-
-    # The get_config() function itself still needs to return the mocked instance
-    session_mocker.patch(
-        "hippique_orchestrator.config.get_config", return_value=mock_config_instance
-    )
-
-    return mock_config_instance
+    # Mock the firestore client initialization to prevent it from trying to connect
+    mocker.patch("hippique_orchestrator.firestore_client.db", None)
 
 
-@pytest.fixture(scope="session")
-def app_with_mock_config(
-    mock_config,
-):  # This fixture ensures app is imported AFTER mock_config is active
-    return app
-
-
-# Fixture for TestClient setup, ensuring it uses the mocked config
-@pytest.fixture(scope="session", autouse=True)
-def client(app_with_mock_config):  # Now client depends on app_with_mock_config
+@pytest.fixture(scope="function")
+def client():
     """
-    Test client for the FastAPI app, using a mocked configuration.
+    Test client for the FastAPI app. It's function-scoped to ensure
+    that mocks applied in one test don't leak into others.
     """
-    return TestClient(app_with_mock_config)
+    return TestClient(app)
+
+
+@pytest.fixture
+def disable_auth(mocker):
+    """Fixture to disable authentication for specific tests."""
+    from hippique_orchestrator.auth import check_api_key
+    
+    # Define an empty override function
+    async def override_check_api_key():
+        return
+    
+    # Override the dependency for the duration of the test
+    app.dependency_overrides[check_api_key] = override_check_api_key
+    yield
+    # Clean up the override after the test is done
+    app.dependency_overrides.clear()

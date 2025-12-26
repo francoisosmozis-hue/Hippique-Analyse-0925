@@ -107,23 +107,23 @@ def parse_musique(musique_str: str) -> dict[str, Any]:
     # Common transformations: remove 'p' (placé), 'h' (haies), 'c' (cross), 'a' (attelé), 'm' (monté) if they appear without numbers
     # Keep numbers, D (disqualifié), A (arrêté/absent/tombé).
     # Regex will be more robust for parsing.
-    
+
     # Clean up parenthesized years/race numbers, convert common special codes
     cleaned_musique = re.sub(r'\(\d{2,4}\)', '', musique_str).upper()
     cleaned_musique = cleaned_musique.replace('P', '').replace('H', '').replace('C', '') # Remove common placings/types
-    
+
     # Regex to find individual placings or special indicators.
     # Matches: numbers (0-9), 'D' (Disqualifié), 'A' (Arrêté/Absent), 'T' (Tombé), 'R' (Retiré)
     # This pattern assumes each char or digit is a placing.
     placing_pattern = re.compile(r'([0-9DATR]){1}')
-    
+
     placings_raw = placing_pattern.findall(cleaned_musique)
-    
+
     placings_numeric = []
     top3_count = 0
     top5_count = 0
     disqualified_count = 0
-    
+
     for p in placings_raw:
         if p.isdigit():
             placing_int = int(p)
@@ -139,13 +139,13 @@ def parse_musique(musique_str: str) -> dict[str, Any]:
         # Other non-numeric performances can be kept in placings_raw
 
     is_dai = disqualified_count > 0 # Simple check for now
-    
+
     # Calculate regularity score: lower average placing is better
     # Use a maximum placing (e.g., 9 for no placing) for horses that finish outside top ranks
     # or handle 0 as no placing. Let's assume 0 is a bad placing (e.g. > 9)
     performances_for_score = [p if p > 0 else 10 for p in placings_numeric] # 0 becomes 10 for score
     regularity_score = sum(performances_for_score) / len(performances_for_score) if performances_for_score else 10.0
-    
+
     last_race_placing = placings_numeric[0] if placings_numeric else None # Most recent numeric placing
 
     return {
@@ -199,11 +199,11 @@ def calculate_volatility(musique_data: dict[str, Any]) -> str:
         # Consistent mid-range results -> NEUTRE
         if 3.0 < regularity_score <= 6.0 and musique_data.get("top5_count", 0) >= (num_races_in_musique * 0.7): # At least 70% in top5
             return "NEUTRE"
-        
+
         # Consistent bad results or high average placing -> VOLATIL
         if regularity_score > 6.0:
             return "VOLATIL"
-    
+
     # Default if not enough data or rules don't strictly apply
     return "NEUTRE"
 
@@ -237,7 +237,7 @@ def convert_odds_to_implied_probabilities(odds_list: list[float]) -> tuple[list[
         implied_probabilities = [1.0 / len(odds_list)] * len(odds_list)
     else:
         implied_probabilities = [p / overround for p in raw_probabilities]
-        
+
     return implied_probabilities, overround
 
 
@@ -272,7 +272,7 @@ def score_musique_form(musique_data: dict[str, Any]) -> float:
     # Small penalty for disqualifications, if not already heavily penalized by volatility
     if musique_data.get("is_dai", False):
         score -= 2.0
-    
+
     # Ensure score doesn't go too low if it's very bad
     return max(-5.0, score) # Cap minimum score
 
@@ -292,7 +292,7 @@ def identify_outsider_reparable(runner_data: dict[str, Any]) -> bool:
         return False
 
     recent_performances = parsed_musique.get("recent_performances_numeric", [])
-    
+
     # Needs at least 2 recent performances
     if len(recent_performances) < 2:
         return False
@@ -300,7 +300,7 @@ def identify_outsider_reparable(runner_data: dict[str, Any]) -> bool:
     # Check if the last 2 performances are both <= 3
     if recent_performances[0] <= 3 and recent_performances[1] <= 3:
         return True
-    
+
     return False
 
 
@@ -320,16 +320,16 @@ def identify_profil_oublie(runner_data: dict[str, Any]) -> bool:
 
     regularity_score = parsed_musique.get("regularity_score", 10.0)
     num_races_in_musique = parsed_musique.get("num_races_in_musique", 0)
-    
+
     # Check "régulier ≤4e sur 3 dernières"
     # Assuming regularity_score <= 4.0 means average placing is 4th or better
     # And needs at least 3 performances
     is_regular_top4_recent = (regularity_score <= 4.0) and (num_races_in_musique >= 3)
-    
+
     if not is_regular_top4_recent:
         return False
 
     # Check "peu cité" (not a strong favorite, e.g., implied probability < 10%)
     is_peu_cite = p_place < 0.10 # Threshold for "peu cité"
-    
+
     return is_peu_cite

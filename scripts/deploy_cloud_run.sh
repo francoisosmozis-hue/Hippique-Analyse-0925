@@ -178,25 +178,18 @@ fi
 echo ""
 echo "☁️  Déploiement sur Cloud Run..."
 
-# Construire la liste des variables d'environnement connues à l'avance
-# OIDC_AUDIENCE et CLOUD_RUN_URL seront ajoutées dans une étape ultérieure
+# Générer une clé secrète si elle n'est pas déjà dans l'environnement
+INTERNAL_API_SECRET="${INTERNAL_API_SECRET:-$(openssl rand -hex 16)}"
+
+# Construire les variables d'environnement
 ENV_VARS="PROJECT_ID=$PROJECT_ID"
-ENV_VARS+=",REGION=$REGION"
-ENV_VARS+=",SERVICE_NAME=$SERVICE_NAME"
-ENV_VARS+=",QUEUE_ID=${QUEUE_ID:-hippique-tasks-v2}"
-ENV_VARS+=",SERVICE_ACCOUNT_EMAIL=$SERVICE_ACCOUNT_EMAIL"
-ENV_VARS+=",TZ=Europe/Paris"
-ENV_VARS+=",USE_FIRESTORE=True"
-ENV_VARS+=",USE_GCS=True"
-ENV_VARS+=",REQUIRE_AUTH=True"
-ENV_VARS+=",DEBUG=True"
-ENV_VARS+=",BUDGET_TOTAL=5"
+ENV_VARS+=",LOCATION=$REGION"
+ENV_VARS+=",BUCKET_NAME=${GCS_BUCKET:-}"
+ENV_VARS+=",TASK_QUEUE=${QUEUE_ID:-hippique-tasks-v2}"
+ENV_VARS+=",FIRESTORE_COLLECTION=${FIRESTORE_COLLECTION:-races-prod}"
+ENV_VARS+=",INTERNAL_API_SECRET=${INTERNAL_API_SECRET}"
 
-if [ -n "$GCS_BUCKET" ]; then
-    ENV_VARS+=",GCS_BUCKET=$GCS_BUCKET,GCS_PREFIX=$GCS_PREFIX"
-fi
-
-# Déployer le service avec les variables d'environnement initiales
+# Déployer le service en mode public avec la clé secrète
 gcloud run deploy "$SERVICE_NAME" \
     --image="$IMAGE_TAG" \
     --platform=managed \
@@ -212,72 +205,22 @@ gcloud run deploy "$SERVICE_NAME" \
     --set-env-vars="$ENV_VARS" \
     --quiet
 
-echo "✅ Déploiement initial terminé."
-
-# ============================================
-# Mise à jour avec l'URL Canonique
-# ============================================
-
-echo ""
-echo "🔗 Récupération de l'URL canonique et mise à jour de l'audience OIDC..."
-
-# Attendre un court instant pour s'assurer que l'état du service est propagé
-sleep 5
-
-# Récupérer l'URL canonique (status.url), qui est la seule audience valide pour OIDC
-CANONICAL_SERVICE_URL=$(gcloud run services describe "$SERVICE_NAME" \
-    --region="$REGION" \
-    --project="$PROJECT_ID" \
-    --format="value(status.url)")
-
-if [ -z "$CANONICAL_SERVICE_URL" ]; then
-    echo "❌ Échec de la récupération de l'URL canonique du service. Abandon."
-    exit 1
-fi
-
-echo "  - URL Canonique (Audience OIDC): $CANONICAL_SERVICE_URL"
-
-# Mettre à jour le service avec les variables d'environnement dépendantes de l'URL
-gcloud run services update "$SERVICE_NAME" \
-    --region="$REGION" \
-    --project="$PROJECT_ID" \
-    --update-env-vars="OIDC_AUDIENCE=$CANONICAL_SERVICE_URL,CLOUD_RUN_URL=$CANONICAL_SERVICE_URL" \
-    --quiet
-
-echo "✅ Variables d'environnement OIDC_AUDIENCE et CLOUD_RUN_URL mises à jour."
-
-# ============================================
-# Configurer IAM
-# ============================================
-
-echo ""
-echo "🔐 Configuration IAM..."
-
-# Permettre au compte de service d'invoquer le service (pour Cloud Tasks)
-gcloud run services add-iam-policy-binding "$SERVICE_NAME" \
-    --region="$REGION" \
-    --project="$PROJECT_ID" \
-    --member="serviceAccount:$SERVICE_ACCOUNT_EMAIL" \
-    --role="roles/run.invoker" --quiet > /dev/null
-
-echo "✅ Rôle roles/run.invoker ajouté pour le compte de service."
+echo "✅ Déploiement terminé."
 
 # ============================================
 # Finalisation
 # ============================================
 
+SERVICE_URL=$(gcloud run services describe "$SERVICE_NAME" --region="$REGION" --project="$PROJECT_ID" --format="value(status.url)")
+
 echo ""
 echo "🎉 Déploiement terminé avec succès!"
 echo "================================================"
-echo "Service URL: $CANONICAL_SERVICE_URL"
+echo "Service URL: $SERVICE_URL"
+echo "Clé API interne: ${INTERNAL_API_SECRET}"
 echo ""
 echo "📝 Prochaines étapes:"
-echo "1. (Optionnel) Mettre à jour .env avec OIDC_AUDIENCE=$CANONICAL_SERVICE_URL"
-echo "2. Créer le job Cloud Scheduler si ce n'est pas déjà fait:"
-echo "   ./scripts/create_scheduler_0900.sh"
-echo "3. Tester la création de tâches via le endpoint /schedule:"
-echo "   curl -H \"Authorization: Bearer \$(gcloud auth print-identity-token --impersonate-service-account=$SERVICE_ACCOUNT_EMAIL --audiences=$CANONICAL_SERVICE_URL)\" \\"
-echo "     -X POST \"$CANONICAL_SERVICE_URL/schedule\" \\"
-echo "     -H \"Content-Type: application/json\" \\"
-echo "     -d '{\"date\":\"today\",\"mode\":\"tasks\"}'"
+echo "1. Mettre à jour le Cloud Scheduler pour inclure la clé secrète dans les appels."
+echo "2. Tester la création de tâches via le endpoint /schedule:"
+echo "   curl -X POST \"${SERVICE_URL}/schedule\" -H \"X-API-KEY: ${INTERNAL_API_SECRET}\" -H \"Content-Type: application/json\" -d '{\"force\": true}'"
 echo ""

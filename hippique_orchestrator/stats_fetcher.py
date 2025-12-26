@@ -137,19 +137,19 @@ def collect_stats(
     # 3. Assemble and save the final stats payload
     # Recalculate coverage based on all fetched stats types
     total_runners = len(runners) if runners else 1 # Avoid division by zero
-    
+
     # A more sophisticated coverage could be average of individual coverages,
     # or minimum of all coverages, but for now, we'll sum up positive fetches.
     # This needs refinement to accurately reflect *all* required stats.
     # For now, let's just indicate if we got *any* stats beyond basic runner info.
-    
+
     # Simple coverage for now: count how many runners have at least one of the advanced stats
     covered_runners_count = sum(
         1 for r_stats in stat_rows
         if r_stats.get("last_3_chrono") or r_stats.get("j_rate") or r_stats.get("e_rate")
     )
     coverage = covered_runners_count / total_runners
-    
+
     stats_payload = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "race_doc_id": race_doc_id,

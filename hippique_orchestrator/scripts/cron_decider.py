@@ -19,7 +19,7 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
-from hippique_orchestrator.config import get_config
+from hippique_orchestrator import config
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
