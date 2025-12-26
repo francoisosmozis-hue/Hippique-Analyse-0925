@@ -4,6 +4,7 @@ import hashlib
 import json
 import logging
 import time
+import traceback
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
