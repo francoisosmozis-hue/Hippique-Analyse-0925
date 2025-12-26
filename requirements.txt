@@ -55,5 +55,6 @@ lightgbm>=4.0.0
 google-cloud-firestore==2.15.0
 httpx
 gunicorn
+python-dotenv
 
 gcsfs
