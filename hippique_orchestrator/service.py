@@ -270,12 +270,30 @@ class RaceTaskPayload(BaseModel):
     course_url: str
     phase: str
     date: str
+    # Robust identifiers (preferred over URL parsing)
+    r_label: str | None = None
+    c_label: str | None = None
+    doc_id: str | None = None
+    # Robust identifiers (preferred over URL parsing)
+    r_label: str | None = None
+    c_label: str | None = None
+    doc_id: str | None = None
 
 @app.post("/tasks/run-phase", tags=["Tasks"])
 async def run_phase_worker(payload: RaceTaskPayload):
     logger.info("Received task to run phase.", extra={"payload": payload.dict()})
 
-    doc_id = firestore_client.get_doc_id_from_url(payload.course_url, payload.date)
+    # Prefer explicit doc_id, then (date + r_label/c_label), then URL parsing as last resort.
+    doc_id = payload.doc_id
+    if not doc_id and payload.r_label and payload.c_label:
+        doc_id = f"{payload.date}_{payload.r_label}{payload.c_label}"
+    if not doc_id:
+        # Prefer explicit doc_id, then (date + r_label/c_label), then URL parsing as last resort.
+    doc_id = payload.doc_id
+    if not doc_id and payload.r_label and payload.c_label:
+        doc_id = f"{payload.date}_{payload.r_label}{payload.c_label}"
+    if not doc_id:
+        doc_id = firestore_client.get_doc_id_from_url(payload.course_url, payload.date)
     if not doc_id:
         msg = f"Could not extract doc_id from URL: {payload.course_url}"
         logger.error(msg)
@@ -287,7 +305,8 @@ async def run_phase_worker(payload: RaceTaskPayload):
         analysis_result = await analysis_pipeline.run_analysis_for_phase(
             course_url=payload.course_url,
             phase=payload.phase,
-            date=payload.date
+            date=payload.date,
+            race_doc_id=doc_id,
         )
         
         # The pipeline is responsible for creating the full document to save

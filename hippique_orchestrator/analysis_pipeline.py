@@ -18,12 +18,13 @@ from .fetch_je_stats import collect_stats
 
 logger = logging.getLogger(__name__)
 
-async def run_analysis_for_phase(course_url: str, phase: str, date: str) -> dict[str, Any]:
+async def run_analysis_for_phase(course_url: str, phase: str, date: str, race_doc_id: str | None = None) -> dict[str, Any]:
     """
     Main entry point for processing a single course analysis triggered by a task.
     Orchestrates snapshot creation, enrichment, and ticket generation.
     """
-    race_doc_id = firestore_client.get_doc_id_from_url(course_url, date)
+    race_doc_id = race_doc_id or firestore_client.get_doc_id_from_url(course_url, date)
+
     if not race_doc_id:
         raise ValueError(f"Could not determine race_doc_id from URL {course_url}")
 
