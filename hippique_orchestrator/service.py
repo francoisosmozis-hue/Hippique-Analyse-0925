@@ -182,49 +182,45 @@ async def get_pronostics_data(date: str | None = None, if_none_match: str | None
     return JSONResponse(content=response_content, headers={"ETag": etag})
 
 
-@app.post("/schedule", tags=["Orchestration"], dependencies=[Depends(check_api_key)])
-async def schedule_day_races(request: ScheduleRequest):
-    logger.info(f"Received request to schedule day races. "
-                f"Force: {request.force}, Dry Run: {request.dry_run}")
+import traceback
+from .schemas import ScheduleRequest, ScheduleResponse
+
+@app.post("/schedule", tags=["Orchestration"], response_model=ScheduleResponse)
+async def schedule_day_races(request: ScheduleRequest, api_key: str = Security(check_api_key)):
+    logger.info(f"Received request to schedule day races. Force: {request.force}, Dry Run: {request.dry_run}")
     try:
         date_str = request.date or datetime.now(ZoneInfo(config.TIMEZONE)).strftime("%Y-%m-%d")
-    except ValueError:
-        raise HTTPException(status_code=422, detail="Invalid date format. Use YYYY-MM-DD.")
+        datetime.strptime(date_str, "%Y-%m-%d") # Validate format
 
-    # When forcing, we still need today's plan to find the race URLs.
-    plan_date = date_str
-    daily_plan = await plan.build_plan_async(plan_date)
-    
-    if not daily_plan:
-        msg = f"No races found in plan for {plan_date}. Nothing to schedule."
-        logger.warning(msg)
-        return {"message": msg, "races_found": 0, "tasks_scheduled": 0}
+        plan_date = date_str
+        daily_plan = await plan.build_plan_async(plan_date)
 
-    logger.info(f"Built plan with {len(daily_plan)} races. "
-                f"Passing to scheduler (force={request.force}, dry_run={request.dry_run})...")
-    
-    results = scheduler.schedule_all_races(
-        plan=daily_plan, 
-        force=request.force, 
-        dry_run=request.dry_run
-    )
+        if not daily_plan:
+            msg = f"No races found in plan for {plan_date}. Nothing to schedule."
+            logger.warning(msg)
+            return ScheduleResponse(message=msg, races_in_plan=0, details=[])
 
-    if request.dry_run:
-        return {
-            "message": f"Dry run complete for {date_str}. No tasks were created.",
-            "races_in_plan": len(daily_plan),
-            **results
-        }
+        logger.info(f"Built plan with {len(daily_plan)} races. Passing to scheduler...")
+        
+        schedule_results = scheduler.schedule_all_races(
+            plan=daily_plan, 
+            force=request.force, 
+            dry_run=request.dry_run
+        )
+        
+        return ScheduleResponse(
+            message=f"Scheduling process complete for {date_str}.",
+            races_in_plan=len(daily_plan),
+            details=schedule_results
+        )
 
-    success_count = sum(1 for r in results if r["ok"])
-    
-    return {
-        "message": f"Scheduling complete for {date_str}. Forced: {request.force}",
-        "races_in_plan": len(daily_plan),
-        "tasks_scheduled": success_count,
-        "details": results,
-        "correlation_id": correlation_id_var.get(),
-    }
+    except ValueError as e:
+        logger.warning(f"Invalid date format provided: {e}")
+        raise HTTPException(status_code=422, detail=f"Invalid date format: {e}")
+    except Exception as e:
+        tb_str = traceback.format_exc()
+        logger.error(f"UNHANDLED EXCEPTION in /schedule endpoint: {e}\nTRACEBACK:\n{tb_str}")
+        raise HTTPException(status_code=500, detail=f"An internal error occurred: {e}")
 
 @app.get("/ops/status", tags=["Operations"])
 async def get_ops_status(date: str | None = None):
