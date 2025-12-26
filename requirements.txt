@@ -52,7 +52,8 @@ scipy>=1.10.0
 lightgbm>=4.0.0
 
 # Browser Simulation
-httpx
 google-cloud-firestore==2.15.0
+httpx
+gunicorn
 
 gcsfs
