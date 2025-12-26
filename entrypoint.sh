@@ -8,4 +8,4 @@ PORT=${PORT:-8080}
 # This is a more robust setup for production environments.
 # Gunicorn manages the worker processes, handling signals and restarts.
 # The number of workers is a starting point and can be tuned.
-exec gunicorn -w 2 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:"$PORT" main_debug:app
+exec gunicorn -c gunicorn_conf.py hippique_orchestrator.service:app
