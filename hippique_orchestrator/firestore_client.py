@@ -65,7 +65,7 @@ def get_races_for_date(date_str: str) -> list[firestore.DocumentSnapshot]:
 
 def get_doc_id_from_url(url: str, date: str) -> str | None:
     """Extracts a race ID (e.g., R1C2) from a URL and prefixes it with the date."""
-    rc_match = re.search(r'-(r\dc\d+)-', url, re.IGNORECASE)
+    rc_match = re.search(r"(?i)(?:^|[\/-])(r\d+c\d+)(?:[\/-]|$)", url)
     if not rc_match:
         return None
     rc_str = rc_match.group(1).upper()
