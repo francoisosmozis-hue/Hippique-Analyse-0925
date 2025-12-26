@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import time
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -24,7 +25,8 @@ from .logging_utils import (
     trace_id_var,
 )
 from .schemas import ScheduleRequest
-from .auth import check_api_key
+from starlette.middleware.base import BaseHTTPMiddleware
+from .logging_middleware import logging_middleware
 
 # --- Configuration & Initialization ---
 setup_logging(log_level=config.LOG_LEVEL)
@@ -39,29 +41,11 @@ async def lifespan(app: FastAPI):
 BASE_DIR = Path(__file__).resolve().parent.parent
 app = FastAPI(title="Hippique Orchestrator", version=__version__, lifespan=lifespan, redoc_url=None)
 
+# --- Middlewares ---
+app.add_middleware(BaseHTTPMiddleware, dispatch=logging_middleware)
+
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
-
-# --- Middlewares ---
-@app.middleware("http")
-async def logging_context_middleware(request: Request, call_next):
-    """
-    Sets logging context (correlation and trace IDs) for each request.
-    """
-    correlation_id = str(uuid.uuid4())
-    
-    # Extract GCP trace context if available
-    trace_header = request.headers.get("X-Cloud-Trace-Context")
-    trace_id = None
-    if trace_header:
-        trace_id = trace_header.split('/')[0]
-
-    correlation_id_var.set(correlation_id)
-    trace_id_var.set(trace_id)
-
-    response = await call_next(request)
-    response.headers['X-Correlation-ID'] = correlation_id
-    return response
 
 
 # --- UI Endpoints ---

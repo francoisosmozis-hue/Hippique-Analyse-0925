@@ -28,7 +28,8 @@ def update_race_document(document_id: str, data: dict[str, Any]) -> None:
 
     try:
         doc_ref = db.collection(config.FIRESTORE_COLLECTION).document(document_id)
-        doc_ref.set(data, merge=True)
+        logger.debug(f"Attempting to save document {document_id} in collection '{collection}'. Data keys: {list(data.keys())}.")
+        doc_ref.set(data)
         logger.info(f"Document {document_id} updated successfully.")
     except Exception as e:
         logger.error(f"Failed to update document {document_id}: {e}", exc_info=e)
