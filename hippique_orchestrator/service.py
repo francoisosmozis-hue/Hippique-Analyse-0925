@@ -274,31 +274,16 @@ class RaceTaskPayload(BaseModel):
     r_label: str | None = None
     c_label: str | None = None
     doc_id: str | None = None
-    # Robust identifiers (preferred over URL parsing)
-    r_label: str | None = None
-    c_label: str | None = None
-    doc_id: str | None = None
 
 @app.post("/tasks/run-phase", tags=["Tasks"])
 async def run_phase_worker(payload: RaceTaskPayload):
     logger.info("Received task to run phase.", extra={"payload": payload.dict()})
-
     # Prefer explicit doc_id, then (date + r_label/c_label), then URL parsing as last resort.
     doc_id = payload.doc_id
     if not doc_id and payload.r_label and payload.c_label:
         doc_id = f"{payload.date}_{payload.r_label}{payload.c_label}"
     if not doc_id:
-        # Prefer explicit doc_id, then (date + r_label/c_label), then URL parsing as last resort.
-    doc_id = payload.doc_id
-    if not doc_id and payload.r_label and payload.c_label:
-        doc_id = f"{payload.date}_{payload.r_label}{payload.c_label}"
-    if not doc_id:
         doc_id = firestore_client.get_doc_id_from_url(payload.course_url, payload.date)
-    if not doc_id:
-        msg = f"Could not extract doc_id from URL: {payload.course_url}"
-        logger.error(msg)
-        # Raise exception to allow Cloud Tasks to retry or move to dead-letter queue
-        raise HTTPException(status_code=422, detail=msg)
 
     try:
         # This is the actual call to the analysis pipeline
