@@ -28,9 +28,16 @@ def update_race_document(document_id: str, data: dict[str, Any]) -> None:
 
     try:
         doc_ref = db.collection(config.FIRESTORE_COLLECTION).document(document_id)
-        logger.debug(f"Attempting to save document {document_id} in collection '{collection}'. Data keys: {list(data.keys())}.")
-        doc_ref.set(data)
-        logger.info(f"Document {document_id} updated successfully.")
+        logger.info(
+            "Updating Firestore document",
+            extra={
+                "firestore_collection": config.FIRESTORE_COLLECTION,
+                "document_id": document_id,
+                "data_keys": list(data.keys()),
+            }
+        )
+        doc_ref.set(data, merge=True)  # Use merge=True to be non-destructive
+        logger.debug(f"Document {document_id} updated successfully.")
     except Exception as e:
         logger.error(f"Failed to update document {document_id}: {e}", exc_info=e)
 
@@ -46,7 +53,10 @@ def get_races_for_date(date_str: str) -> list[firestore.DocumentSnapshot]:
         # Firestore __name__ queries require this format
         query = races_ref.order_by("__name__").start_at([date_str]).end_at([date_str + "\uf8ff"])
         docs = list(query.stream())
-        logger.info(f"Found {len(docs)} races in Firestore for date {date_str}.")
+        logger.info(
+            "Queried races from Firestore",
+            extra={"date_queried": date_str, "num_docs_found": len(docs)},
+        )
         return docs
     except Exception as e:
         logger.error(f"Failed to query races by date {date_str}: {e}", exc_info=e)

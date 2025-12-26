@@ -6,6 +6,7 @@ from typing import Any
 
 import google.auth
 from google.cloud import tasks_v2
+from google.api_core import exceptions as gexc
 from google.protobuf import timestamp_pb2
 
 from hippique_orchestrator import config
@@ -96,11 +97,22 @@ def enqueue_run_task(
             http_request["oidc_token"] = oidc_token
 
         task = {"http_request": http_request, "schedule_time": timestamp}
+        
+        logger.info(
+            "Enqueuing Cloud Task",
+            extra={
+                "task_payload": payload,
+                "target_url": target_url,
+                "schedule_time_utc": schedule_time_utc.isoformat(),
+                "oidc_enabled": "oidc_token" in http_request,
+            },
+        )
+        
         response = client.create_task(parent=parent_path, task=task)
         logger.info(f"Task created: {response.name}")
         return True, response.name
 
-    except tasks_v2.exceptions.PermissionDenied as e:
+    except gexc.PermissionDenied as e:
         sa_email = config.TASK_OIDC_SA_EMAIL or "the service account of this Cloud Run service"
         error_msg = (
             f"Permission denied to create Cloud Task. "

@@ -43,6 +43,15 @@ async def run_analysis_for_phase(course_url: str, phase: str, date: str) -> dict
         if not snapshot_data or not snapshot_data.get("runners"):
             raise ValueError("Failed to fetch valid snapshot data or runners list is empty.")
         
+        logger.info(
+            "Snapshot fetched successfully.",
+            extra={
+                **log_extra,
+                "race_name": snapshot_data.get("race_name"),
+                "num_runners": len(snapshot_data.get("runners", [])),
+            }
+        )
+        
         snapshot_id = f"{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}_{phase}"
         gcs_path = f"data/{race_doc_id}/snapshots/{snapshot_id}.json"
         
@@ -91,12 +100,23 @@ async def run_analysis_for_phase(course_url: str, phase: str, date: str) -> dict
             gpi_config=gpi_config,
         )
 
-        analysis_content["tickets_analysis"] = tickets_analysis;
-        analysis_content["gpi_decision"] = tickets_analysis.get("gpi_decision", "error_in_analysis")
+        analysis_content["tickets_analysis"] = tickets_analysis
+        gpi_decision = tickets_analysis.get("gpi_decision", "error_in_analysis")
+        analysis_content["gpi_decision"] = gpi_decision
         analysis_content["status"] = "analyzed"
-        
-        logger.info(f"Step 3: Analysis complete. GPI Decision: {analysis_content['gpi_decision']}", extra=log_extra)
-        
+
+        logger.info(
+            "Analysis and ticket generation complete.",
+            extra={
+                **log_extra,
+                "gpi_decision": gpi_decision,
+                "num_tickets": len(tickets_analysis.get("final_tickets", [])),
+                "total_ev_gpi": tickets_analysis.get("total_ev_gpi"),
+                "total_mise": tickets_analysis.get("total_mise"),
+                "abstention_raisons": tickets_analysis.get("abstention_raisons", []),
+            },
+        )
+
         return analysis_content
 
     except Exception as e:
