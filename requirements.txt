@@ -56,5 +56,6 @@ google-cloud-firestore==2.15.0
 httpx
 gunicorn
 python-dotenv
+google-cloud-logging
 
 gcsfs

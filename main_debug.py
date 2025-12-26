@@ -1,22 +1,25 @@
 import logging
-from fastapi import FastAPI
 import sys
+from fastapi import FastAPI
+import google.cloud.logging
 
-# Setup basic logging to ensure we see something
-logging.basicConfig(stream=sys.stdout, level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-logger = logging.getLogger(__name__)
+# Instantiates a client
+client = google.cloud.logging.Client()
+
+# Retrieves a Cloud Logging handler and sets it up as the default handler
+# This is the recommended way to log from GKE, GCF, and Cloud Run
+client.setup_logging()
 
 app = FastAPI()
 
 @app.on_event("startup")
 async def startup_event():
-    logger.info("--- Debug App Startup ---")
-    logger.info("This is a minimal application for debugging purposes.")
-    logger.info("If you see this log, the basic server (Gunicorn/Uvicorn) is working.")
+    logging.info("--- Debug App with Google Cloud Logging Startup ---")
+    logging.info("If you see this, the new logging configuration is working.")
 
 @app.get("/health")
 def health_check():
-    logger.info("Health check endpoint was called successfully.")
+    logging.info("Health check endpoint was called successfully (via google-cloud-logging).")
     return {"status": "ok from debug"}
 
-logger.info("--- main_debug.py has been loaded ---")
+logging.info("--- main_debug.py with google-cloud-logging has been loaded ---")
