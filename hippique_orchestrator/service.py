@@ -17,14 +17,15 @@ from fastapi.templating import Jinja2Templates
 
 
 from pydantic import BaseModel
+from .schemas import ScheduleRequest, ScheduleResponse
 
 from . import __version__, config, firestore_client, plan, scheduler, analysis_pipeline
+from .auth import check_api_key
 from .logging_utils import (
     correlation_id_var,
     setup_logging,
     trace_id_var,
 )
-from .schemas import ScheduleRequest
 from starlette.middleware.base import BaseHTTPMiddleware
 from .logging_middleware import logging_middleware
 
@@ -54,6 +55,7 @@ async def root_redirect():
     return RedirectResponse(url="/pronostics")
 
 @app.get("/pronostics", response_class=HTMLResponse, tags=["UI"])
+@app.get("/pronostics/", response_class=HTMLResponse, tags=["UI"])
 async def get_pronostics_page(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
@@ -166,8 +168,6 @@ async def get_pronostics_data(date: str | None = None, if_none_match: str | None
     return JSONResponse(content=response_content, headers={"ETag": etag})
 
 
-import traceback
-from .schemas import ScheduleRequest, ScheduleResponse
 
 @app.post("/schedule", tags=["Orchestration"], response_model=ScheduleResponse)
 async def schedule_day_races(request: ScheduleRequest, api_key: str = Security(check_api_key)):
