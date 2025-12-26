@@ -92,23 +92,22 @@ def enqueue_run_task(
             
         target_url = f"{service_url}/tasks/run-phase"
 
-        http_request = {
-            "http_method": tasks_v2.HttpMethod.POST,
-            "url": target_url,
-            "headers": {"Content-Type": "application/json"},
-            "body": json.dumps(payload).encode(),
-        }
+        http_request = tasks_v2.HttpRequest(
+            http_method=tasks_v2.HttpMethod.POST,
+            url=target_url,
+            headers={"Content-Type": "application/json"},
+            body=json.dumps(payload).encode("utf-8"),
+        )
 
         if config.REQUIRE_AUTH:
             if not config.TASK_OIDC_SA_EMAIL:
                 raise ValueError("TASK_OIDC_SA_EMAIL must be set when REQUIRE_AUTH is True.")
-            oidc_token = {
-                "service_account_email": config.TASK_OIDC_SA_EMAIL,
-                "audience": service_url,
-            }
-            http_request["oidc_token"] = oidc_token
+            http_request.oidc_token = tasks_v2.OidcToken(
+                service_account_email=config.TASK_OIDC_SA_EMAIL,
+                audience=service_url,
+            )
 
-        task = {"http_request": http_request, "schedule_time": timestamp}
+        task = tasks_v2.Task(http_request=http_request, schedule_time=timestamp)
         
         logger.info(
             "Enqueuing Cloud Task",
