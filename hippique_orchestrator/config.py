@@ -11,7 +11,7 @@ LOCATION = os.getenv("LOCATION", "europe-west1")
 BUCKET_NAME = os.getenv("BUCKET_NAME")
 
 # Cloud Tasks Configuration
-TASK_QUEUE = os.getenv("TASK_QUEUE", "hippique-tasks-queue")
+TASK_QUEUE = os.getenv("TASK_QUEUE", os.getenv("CLOUD_TASKS_QUEUE", "hippique-tasks-queue"))
 TASK_HANDLER_URL = os.getenv("TASK_HANDLER_URL")
 # Service Account pour signer les jetons OIDC (doit avoir le rôle 'Service Account Token Creator')
 TASK_OIDC_SA_EMAIL = os.getenv("TASK_OIDC_SA_EMAIL")
