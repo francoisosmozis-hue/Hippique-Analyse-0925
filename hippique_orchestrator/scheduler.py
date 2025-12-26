@@ -73,7 +73,17 @@ def enqueue_run_task(
         timestamp = timestamp_pb2.Timestamp()
         timestamp.FromDatetime(schedule_time_utc)
 
-        payload = {"course_url": course_url, "phase": phase, "date": date}
+        doc_id = None
+        if r_label and c_label:
+            doc_id = f"{date}_{r_label}{c_label}"
+        payload = {
+            "course_url": course_url,
+            "phase": phase,
+            "date": date,
+            "r_label": r_label,
+            "c_label": c_label,
+            "doc_id": doc_id,
+        }
         service_url = config.get_service_url()
         if not service_url:
             return False, "Service URL is not configured. Cannot create task."
@@ -139,6 +149,8 @@ def schedule_all_races(
         for phase in ["H30", "H5"]:
             task_info = {
                 "race": f"{race_plan['r_label']}{race_plan['c_label']}",
+                    "r_label": race_plan["r_label"],
+                    "c_label": race_plan["c_label"],
                 "phase": phase,
                 "course_url": race_plan["course_url"],
                 "date": race_plan["date"],
@@ -192,6 +204,8 @@ def schedule_all_races(
             phase=task["phase"],
             date=task["date"],
             schedule_time_utc=task["schedule_time_utc"],
+            r_label=task.get("r_label"),
+            c_label=task.get("c_label"),
         )
         results.append({
             "race": task["race"],
