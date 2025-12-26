@@ -1611,7 +1611,11 @@ def fetch_race_snapshot_full(
         fetch_kwargs.pop("course_url", None)
 
     if course_url is not None:
-        fetch_kwargs.setdefault("url", course_url)
+        # When an explicit course_url is provided, parse it directly.
+        # The legacy snapshot function does NOT accept 'url='.
+        snapshot_mode = "H-5" if phase_norm == "H5" else "H-30"
+        raw_snapshot = parse_course_page(course_url, snapshot=snapshot_mode)
+    else:
 
     sources_config = fetch_kwargs.get("sources")
     if not isinstance(sources_config, Mapping):
@@ -1623,12 +1627,12 @@ def fetch_race_snapshot_full(
         else:
             fetch_kwargs.setdefault("sources", sources_config)
 
-    raw_snapshot = _fetch_race_snapshot_v50(
-        reunion_arg,
-        course_arg,
-        phase=phase_norm,
-        **fetch_kwargs,
-    )
+            raw_snapshot = _fetch_race_snapshot_v50(
+                reunion_arg,
+                course_arg,
+                phase=phase_norm,
+                **fetch_kwargs,
+            )
 
     return _normalise_snapshot_result(
         raw_snapshot,
