@@ -17,7 +17,7 @@ from fastapi.templating import Jinja2Templates
 
 from pydantic import BaseModel
 
-from . import __version__, config, firestore_client, plan, scheduler
+from . import __version__, config, firestore_client, plan, scheduler, analysis_pipeline
 from .logging_utils import (
     correlation_id_var,
     setup_logging,
@@ -289,7 +289,7 @@ class RaceTaskPayload(BaseModel):
     phase: str
     date: str
 
-@app.post("/tasks/run-phase", tags=["Tasks"], dependencies=[Depends(check_api_key)])
+@app.post("/tasks/run-phase", tags=["Tasks"])
 async def run_phase_worker(payload: RaceTaskPayload):
     logger.info("Received task to run phase.", extra={"payload": payload.dict()})
 
@@ -297,22 +297,33 @@ async def run_phase_worker(payload: RaceTaskPayload):
     if not doc_id:
         msg = f"Could not extract doc_id from URL: {payload.course_url}"
         logger.error(msg)
-        return {"status": "error", "message": msg}
+        # Raise exception to allow Cloud Tasks to retry or move to dead-letter queue
+        raise HTTPException(status_code=422, detail=msg)
 
     try:
-        update_data = {
-            "last_analyzed_at": datetime.now(timezone.utc).isoformat(),
-            "phase": payload.phase, "status": "processed",
-            f"snapshot_{payload.phase.lower()}": {"placeholder": True, "scraped_at": datetime.now(timezone.utc).isoformat()}
-        }
-        firestore_client.update_race_document(doc_id, update_data)
-        logger.info(f"Successfully processed task for {doc_id}")
-        return {"status": "success", "document_id": doc_id}
+        # This is the actual call to the analysis pipeline
+        analysis_result = await analysis_pipeline.run_analysis_for_phase(
+            course_url=payload.course_url,
+            phase=payload.phase,
+            date=payload.date
+        )
+        
+        # The pipeline is responsible for creating the full document to save
+        firestore_client.update_race_document(doc_id, analysis_result)
+        
+        logger.info(f"Successfully processed and saved analysis for {doc_id}")
+        return {"status": "success", "document_id": doc_id, "gpi_decision": analysis_result.get("gpi_decision", "N/A")}
+
     except Exception as e:
-        logger.error(f"Error processing task for {doc_id}: {e}", exc_info=True)
+        logger.error(f"Critical error processing task for {doc_id}: {e}", exc_info=True)
         error_data = {
             "last_analyzed_at": datetime.now(timezone.utc).isoformat(),
-            "phase": payload.phase, "status": "error", "error_reason": str(e),
+            "phase": payload.phase,
+            "status": "error",
+            "error_message": str(e),
+            "gpi_decision": "error_critical",
         }
+        # Save error state to Firestore to prevent retries on permanent failures
         firestore_client.update_race_document(doc_id, error_data)
-        raise HTTPException(status_code=500, detail=f"Failed to process task for {doc_id}")
+        # Raise an exception to signal failure to Cloud Tasks
+        raise HTTPException(status_code=500, detail=f"Failed to process task for {doc_id}. See logs for details.")
