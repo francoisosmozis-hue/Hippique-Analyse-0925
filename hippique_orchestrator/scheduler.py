@@ -58,6 +58,8 @@ def enqueue_run_task(
     phase: str,
     date: str,
     schedule_time_utc: datetime,
+    r_label: str | None = None,
+    c_label: str | None = None,
 ) -> tuple[bool, str | None]:
     """
     Crée une Cloud Task et retourne un tuple (succès, résultat).
