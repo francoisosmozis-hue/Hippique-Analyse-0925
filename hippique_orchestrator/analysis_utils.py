@@ -108,15 +108,14 @@ def parse_musique(musique_str: str) -> dict[str, Any]:
     # Keep numbers, D (disqualifié), A (arrêté/absent/tombé).
     # Regex will be more robust for parsing.
 
-    # Clean up parenthesized years/race numbers, convert common special codes
-    cleaned_musique = re.sub(r'\(\d{2,4}\)', '', musique_str).upper()
-    cleaned_musique = cleaned_musique.replace('P', '').replace('H', '').replace('C', '') # Remove common placings/types
+    # Remove parenthesized years like (23) to clean up the string
+    cleaned_musique = re.sub(r'\(\d{2,4}\)', '', musique_str)
 
-    # Regex to find individual placings or special indicators.
-    # Matches: numbers (0-9), 'D' (Disqualifié), 'A' (Arrêté/Absent), 'T' (Tombé), 'R' (Retiré)
-    # This pattern assumes each char or digit is a placing.
-    placing_pattern = re.compile(r'([0-9DATR]){1}')
-
+    # Regex to find multi-digit numbers (placings) or single letters for special events.
+    # \d+ matches one or more digits (e.g., "1", "10", "12").
+    # [DATRI] matches a single character D, A, T, R, or I (Disqualifié, Arrêté, Tombé, Retiré, etc.).
+    placing_pattern = re.compile(r'(\d+|[DATRI])')
+    
     placings_raw = placing_pattern.findall(cleaned_musique)
 
     placings_numeric = []

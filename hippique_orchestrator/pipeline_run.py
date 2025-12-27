@@ -244,9 +244,13 @@ def _initialize_and_validate(
     if not runners:
         raise ValueError("No runners found")
 
+    budget_val = gpi_config.get("budget") or gpi_config.get("budget_cap_eur")
+    if not budget_val:
+        raise ValueError("Configuration file is missing 'budget' or 'budget_cap_eur'")
+
     try:
         config = {
-            "budget": gpi_config["budget"],
+            "budget": budget_val,
             "max_vol_per_horse": gpi_config.get("max_vol_per_horse", 0.6),
             "je_stats": gpi_config.get("je_stats"),
             "h30_snapshot_data": gpi_config.get("h30_snapshot_data"),
@@ -254,7 +258,7 @@ def _initialize_and_validate(
             "exotics_config": gpi_config["tickets"]["exotics"],
             "chrono_config": gpi_config.get("adjustments", {}).get("chrono", {}),
             "drift_config": gpi_config.get("adjustments", {}).get("drift", {}),
-            "adjustments": gpi_config.get("adjustments", {}), # For other adjustments
+            "adjustments": gpi_config.get("adjustments", {}),  # For other adjustments
             "roi_min_global": gpi_config["roi_min_global"],
             "roi_min_sp": gpi_config["roi_min_sp"],
             "weights": gpi_config["weights"],
@@ -389,7 +393,7 @@ def _generate_sp_dutching_tickets(
         if odds is None or not isinstance(odds, (int, float)) or odds <= 1.0:
             continue
 
-        prob_for_roi = r.get("p_unnormalized_for_roi", 0)
+        prob_for_roi = r.get("p_finale", 0)
 
         # Apply the general odds range for consideration in SP and exotics
         if odds >= sp_config["odds_range"][0] and odds <= sp_config["odds_range"][1]:
@@ -512,7 +516,7 @@ def _generate_exotic_tickets(
     adjustments = config.get("adjustments", {})
     min_sp_candidates_global = adjustments.get("exotics", {}).get("min_sp_candidates", 3)
 
-    exotics_allowed_by_overround = snapshot_data.get("market", {}).get("overround_place", 0.0) <= overround_max
+    exotics_allowed_by_overround = config.get("market", {}).get("overround_place", 999.0) <= overround_max
     if not exotics_allowed_by_overround:
         analysis_messages.append("Exotics forbidden due to high overround.")
         return final_tickets, analysis_messages
