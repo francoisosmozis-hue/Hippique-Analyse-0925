@@ -13,7 +13,6 @@ from hippique_orchestrator.logging_utils import get_logger
 logger = get_logger(__name__)
 
 _gcs_client = None
-config = get_config()
 
 
 def _get_gcs_client():

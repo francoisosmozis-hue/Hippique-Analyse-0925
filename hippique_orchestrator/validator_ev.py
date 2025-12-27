@@ -10,6 +10,7 @@ import sys
 from collections.abc import Callable
 from functools import partial
 from pathlib import Path
+import yaml
 
 from hippique_orchestrator import config
 
