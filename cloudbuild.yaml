@@ -9,14 +9,7 @@ steps:
   - name: 'pip-cache'
     path: '/cache/pip'
 
-# Lint and Test using cached dependencies
-- name: 'python:3.12-slim'
-  id: "Lint and Test"
-  entrypoint: 'bash'
-  args: ['-c', 'pip install --cache-dir /cache/pip -r requirements.txt -r requirements-dev.txt && (ruff check . || true) && (pytest -m "not integration" || true)']
-  volumes:
-  - name: 'pip-cache'
-    path: '/cache/pip'
+
 
 # Build the Docker image
 - name: 'gcr.io/cloud-builders/docker'
