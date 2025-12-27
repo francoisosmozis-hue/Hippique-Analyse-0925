@@ -31,7 +31,7 @@ steps:
     - '--platform=managed'
     - '--no-allow-unauthenticated'
     - '--service-account=${_SERVICE_ACCOUNT_EMAIL}'
-    - '--update-env-vars=PROJECT_ID=${PROJECT_ID},LOCATION=${_REGION},BUCKET_NAME=${_BUCKET_NAME},TASK_QUEUE=${_TASK_QUEUE},TASK_OIDC_SA_EMAIL=${_SERVICE_ACCOUNT_EMAIL},REQUIRE_AUTH=true,FIRESTORE_COLLECTION=races,SERVICE_URL=https://hippique-orchestrator-1084663881709.europe-west1.run.app'
+    - '--update-env-vars=PROJECT_ID=${PROJECT_ID},LOCATION=${_REGION},BUCKET_NAME=${_BUCKET_NAME},TASK_QUEUE=${_TASK_QUEUE},TASK_OIDC_SA_EMAIL=${_SERVICE_ACCOUNT_EMAIL},REQUIRE_AUTH=true,FIRESTORE_COLLECTION=races'
     - '--quiet'
 
 images:
