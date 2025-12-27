@@ -4,10 +4,7 @@ steps:
 - name: 'python:3.12-slim'
   id: "Install Dependencies"
   entrypoint: 'bash'
-  args: ['-c', 'pip install --cache-dir /cache/pip -r requirements.txt -r requirements-dev.txt']
-  volumes:
-  - name: 'pip-cache'
-    path: '/cache/pip'
+  args: ['-c', 'pip install -r requirements.txt -r requirements-dev.txt']
 
 
 
