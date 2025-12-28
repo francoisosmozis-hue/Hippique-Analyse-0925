@@ -215,9 +215,9 @@ def calculate_volatility(musique_data: dict[str, Any]) -> str:
     volatility = "NEUTRE"  # Default value
 
     # Rule 1: High disqualification count -> VOLATIL
-    if (
-        disqualified_count >= 1 and num_races_in_musique > MIN_RACES_FOR_DAI_VOLATILITY
-    ) or (is_dai and num_races_in_musique > 0):
+    if (disqualified_count >= 1 and num_races_in_musique > MIN_RACES_FOR_DAI_VOLATILITY) or (
+        is_dai and num_races_in_musique > 0
+    ):
         volatility = "VOLATIL"
     # Rule 2: Based on regularity score and consistency
     elif num_races_in_musique > 0:
@@ -226,9 +226,8 @@ def calculate_volatility(musique_data: dict[str, Any]) -> str:
             min_perf = min(recent_performances_numeric)
             max_perf = max(recent_performances_numeric)
             if (
-                (max_perf - min_perf) > PERFORMANCE_SPREAD_THRESHOLD
-                and max_perf > MAX_PERF_FOR_SPREAD_VOLATILITY
-            ):
+                max_perf - min_perf
+            ) > PERFORMANCE_SPREAD_THRESHOLD and max_perf > MAX_PERF_FOR_SPREAD_VOLATILITY:
                 volatility = "VOLATIL"
 
         # Consistent good results -> SÛR

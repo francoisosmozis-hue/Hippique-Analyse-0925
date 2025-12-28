@@ -476,13 +476,9 @@ def _process_single_ticket(
         legs_for_sim = legs_for_probability
         if legs_for_sim is not None:
             if config.simulate_fn is None:
-                raise ValueError(
-                    "simulate_fn must be provided when tickets include 'legs'"
-                )
+                raise ValueError("simulate_fn must be provided when tickets include 'legs'")
             if config.cache_simulations:
-                key: tuple[Any, ...] = tuple(
-                    _make_hashable(leg) for leg in legs_for_sim
-                )
+                key: tuple[Any, ...] = tuple(_make_hashable(leg) for leg in legs_for_sim)
                 p = cache.get(key)
                 if p is None:
                     p = config.simulate_fn(legs_for_sim)
@@ -506,10 +502,7 @@ def _process_single_ticket(
         t["clv"] = clv
 
     kelly_stake = _kelly_fraction(p, odds) * config.budget
-    max_stake = (
-        calculate_kelly_fraction(p, odds, lam=config.kelly_cap, cap=1.0)
-        * config.budget
-    )
+    max_stake = calculate_kelly_fraction(p, odds, lam=config.kelly_cap, cap=1.0) * config.budget
     stake_input = t.get("stake", kelly_stake)
     capped = stake_input > max_stake
     stake = min(stake_input, max_stake)
@@ -721,9 +714,7 @@ class FinalMetricsConfig:
 def _calculate_final_metrics(config: FinalMetricsConfig) -> dict[str, Any]:
     """Calculates the final metrics and returns the result dictionary."""
     roi_total = (
-        config.total_ev / config.total_stake_normalized
-        if config.total_stake_normalized
-        else 0.0
+        config.total_ev / config.total_stake_normalized if config.total_stake_normalized else 0.0
     )
     ev_ratio = config.total_ev / config.budget if config.budget else 0.0
     ruin_risk = risk_of_ruin(

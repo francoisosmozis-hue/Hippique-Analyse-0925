@@ -119,14 +119,10 @@ class BoturfersFetcher:
         for reunion_tab in reunion_tabs:
             reunion_title_tag = reunion_tab.select_one("h3.reu-title")
             reunion_id_match = (
-                re.search(r"^(R\d+)", reunion_title_tag.text.strip())
-                if reunion_title_tag
-                else None
+                re.search(r"^(R\d+)", reunion_title_tag.text.strip()) if reunion_title_tag else None
             )
             reunion_id = (
-                reunion_id_match.group(1)
-                if reunion_id_match
-                else reunion_tab.get("id", "").upper()
+                reunion_id_match.group(1) if reunion_id_match else reunion_tab.get("id", "").upper()
             )
 
             race_table = reunion_tab.select_one("table.table.data.prgm")
@@ -162,9 +158,7 @@ class BoturfersFetcher:
 
         distance_tag = self.soup.select_one("span.distance")
         if distance_tag:
-            distance_match = re.search(
-                r"(\d{3,4})\s*m", distance_tag.text, re.IGNORECASE
-            )
+            distance_match = re.search(r"(\d{3,4})\s*m", distance_tag.text, re.IGNORECASE)
             if distance_match:
                 return int(distance_match.group(1))
         return None
@@ -206,9 +200,7 @@ class BoturfersFetcher:
             else:
                 snippet_start = text_content.find("conditions")
                 if snippet_start != -1:
-                    metadata["conditions"] = (
-                        text_content[snippet_start:].split("\n")[0].strip()
-                    )
+                    metadata["conditions"] = text_content[snippet_start:].split("\n")[0].strip()
 
         if not metadata:
             logger.warning(
@@ -273,9 +265,7 @@ async def fetch_boturfers_programme(
             )
             return {}
         logger.info(
-            (
-                "Scraping du programme Boturfers réussi. %s courses trouvées."
-            ),
+            ("Scraping du programme Boturfers réussi. %s courses trouvées."),
             len(raw_snapshot.get("races", [])),
             extra=log_extra,
         )
@@ -320,10 +310,7 @@ async def fetch_boturfers_race_details(
         return raw_snapshot
     except Exception as e:
         logger.exception(
-            (
-                "Une erreur inattendue est survenue lors du scraping des détails de "
-                "%s: %s"
-            ),
+            ("Une erreur inattendue est survenue lors du scraping des détails de %s: %s"),
             url,
             e,
             extra=log_extra,

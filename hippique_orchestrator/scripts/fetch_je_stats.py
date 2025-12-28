@@ -363,14 +363,11 @@ def collect_stats(config: CollectStatsConfig) -> str:
 def main():
     ap = argparse.ArgumentParser(
         description=(
-            "Génère je_stats.csv (+cheval stats) via Geny (cheval → jockey/entraîneur) "
-            "avec cache."
+            "Génère je_stats.csv (+cheval stats) via Geny (cheval → jockey/entraîneur) avec cache."
         )
     )
     ap.add_argument("--h5", required=True, help="Fichier JSON H-5")
-    ap.add_argument(
-        "--out", default=None, help="Fichier CSV sortie (défaut: <h5_stem>_je.csv)"
-    )
+    ap.add_argument("--out", default=None, help="Fichier CSV sortie (défaut: <h5_stem>_je.csv)")
     ap.add_argument("--timeout", type=float, default=TIMEOUT)
     ap.add_argument("--delay", type=float, default=DELAY)
     ap.add_argument("--retries", type=int, default=RETRIES)
@@ -398,10 +395,7 @@ def main():
 def enrich_from_snapshot(snapshot_path: str, reunion: str = "", course: str = "") -> str:
     h5 = Path(snapshot_path)
     out = h5.parent / f"{h5.stem}_je.csv"
-    cmd = (
-        f'python fetch_je_stats.py --h5 "{h5}" --out "{out}" --cache '
-        f"--ttl-seconds 86400"
-    )
+    cmd = f'python fetch_je_stats.py --h5 "{h5}" --out "{out}" --cache --ttl-seconds 86400'
     subprocess.run(shlex.split(cmd), check=True)
     return str(out)
 

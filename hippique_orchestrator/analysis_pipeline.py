@@ -21,10 +21,9 @@ from .pipeline_run import generate_tickets
 logger = logging.getLogger(__name__)
 
 
-
-
-
-def _run_gpi_pipeline(snapshot_data: dict[str, Any], snapshot_gcs_path: str, log_extra: dict) -> dict[str, Any]:
+def _run_gpi_pipeline(
+    snapshot_data: dict[str, Any], snapshot_gcs_path: str, log_extra: dict
+) -> dict[str, Any]:
     """Loads configs and stats, then runs the GPI ticket generation pipeline."""
     logger.info("Preparing to run GPI ticket generation.", extra=log_extra)
 

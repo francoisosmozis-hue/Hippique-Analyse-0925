@@ -226,9 +226,7 @@ async def schedule_day_races(
     except Exception as e:
         tb_str = traceback.format_exc()
         logger.error(f"UNHANDLED EXCEPTION in /schedule endpoint: {e}\nTRACEBACK:\n{tb_str}")
-        raise HTTPException(
-            status_code=500, detail=f"An internal error occurred: {e}"
-        ) from e
+        raise HTTPException(status_code=500, detail=f"An internal error occurred: {e}") from e
 
 
 @app.get("/ops/status", tags=["Operations"])
@@ -290,8 +288,7 @@ async def get_next_scheduled_tasks():
     return {
         "ok": False,
         "message": (
-            "La fonctionnalité de consultation des tâches futures n'est pas encore "
-            "implémentée."
+            "La fonctionnalité de consultation des tâches futures n'est pas encore implémentée."
         ),
         "tasks": [],
     }

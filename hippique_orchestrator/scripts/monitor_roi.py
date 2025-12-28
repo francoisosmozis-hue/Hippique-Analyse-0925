@@ -140,9 +140,7 @@ def _process_analysis(item: dict[str, Any]) -> dict[str, Any]:
     data["expected_roi"] = validation.get("roi_global_est", 0) or 0
 
     ev_section = analysis.get("ev", {})
-    data["ev_ratio"] = (
-        ev_section.get("ev_ratio", 0) or ev_section.get("ev_global", 0) or 0
-    )
+    data["ev_ratio"] = ev_section.get("ev_ratio", 0) or ev_section.get("ev_global", 0) or 0
 
     flags = analysis.get("flags", {})
     if flags.get("ALERTE_VALUE"):
