@@ -12,14 +12,22 @@ from hippique_orchestrator.analysis_utils import (  # Added score_musique_form
 from hippique_orchestrator.kelly import calculate_kelly_fraction
 from hippique_orchestrator.simulate_wrapper import evaluate_combo
 
- # New import
+# --- Constants ---
+REAL_FAVORITE_PLACE_THRESHOLD = 0.25
+SP_DUTCHING_ODDS_LOWER_BOUND = 2.5
+SP_DUTCHING_ODDS_UPPER_BOUND = 7.0
+MIN_SP_DUTCHING_CANDIDATES = 2
+MID_RANGE_ODDS_LOWER_BOUND = 4.0
+MID_RANGE_ODDS_UPPER_BOUND = 7.0
+MAX_SP_DUTCHING_CANDIDATES = 3
+
 
 # --- Logging ---
 logger = logging.getLogger(__name__)
 
-CALIB_PATH = pathlib.Path(__file__).resolve().parent / "config" / "payout_calibration.yaml"
-
-
+CALIB_PATH = (
+    pathlib.Path(__file__).resolve().parent / "config" / "payout_calibration.yaml"
+)
 
 
 # ==============================================================================
@@ -45,8 +53,13 @@ def _normalize_probs(probs: list[float]) -> list[float]:
 # ==============================================================================
 
 
-def _apply_base_stat_adjustment(runners: list[dict], je_stats: dict, weights: dict, config: dict) -> list[float]:
-    """Applies JE, Horse Stats, Musique/Form, and Volatility adjustments. Returns UNNORMALIZED probabilities."""
+def _apply_base_stat_adjustment(
+    runners: list[dict], je_stats: dict, weights: dict, config: dict
+) -> list[float]:
+    """Applies JE, Horse Stats, Musique/Form, and Volatility adjustments.
+
+    Returns UNNORMALIZED probabilities.
+    """
 
     def get_je_factor(runner_stats: dict, je_weights: dict) -> float:
         je_bonus = je_weights.get("je_bonus", 1.0)
@@ -94,7 +107,7 @@ def _apply_base_stat_adjustment(runners: list[dict], je_stats: dict, weights: di
             musique_score = score_musique_form(parsed_musique)
             musique_score_weight = volatility_config.get("musique_score_weight", 0.0)
             # Apply a small linear adjustment based on score
-            factor *= (1 + musique_score * musique_score_weight)
+            factor *= 1 + musique_score * musique_score_weight
 
         # This logic can be expanded as per GPI spec for short_form_place, etc.
         return factor
@@ -102,7 +115,9 @@ def _apply_base_stat_adjustment(runners: list[dict], je_stats: dict, weights: di
     adjusted_probs = []
     je_weights = weights.get("base", {})
     horse_weights = weights.get("horse_stats", {})
-    volatility_config = config.get("adjustments", {}).get("volatility", {}) # Retrieve volatility config
+    volatility_config = config.get("adjustments", {}).get(
+        "volatility", {}
+    )  # Retrieve volatility config
 
     for runner in runners:
         p_base = runner["p_base"]
@@ -111,7 +126,9 @@ def _apply_base_stat_adjustment(runners: list[dict], je_stats: dict, weights: di
 
         factor = 1.0
         factor *= get_je_factor(runner_je_stats, je_weights)
-        factor *= get_horse_stats_factor(runner, horse_weights, volatility_config) # Pass runner and volatility_config
+        factor *= get_horse_stats_factor(
+            runner, horse_weights, volatility_config
+        )  # Pass runner and volatility_config
 
         adjusted_probs.append(p_base * factor)
 
@@ -273,6 +290,59 @@ def _initialize_and_validate(
     return runners, config
 
 
+def _detect_real_favorites(
+    runners: list[dict[str, Any]], threshold: float
+) -> list[str]:
+    """Detects real favorites based on place probability."""
+    real_favorites_place = []
+    for runner in runners:
+        is_real_favorite_place = runner.get("p_place", 0.0) > threshold
+        runner["is_real_favorite_place"] = is_real_favorite_place
+        if is_real_favorite_place:
+            real_favorites_place.append(runner.get("nom", f"N°{runner.get('num')}"))
+    return real_favorites_place
+
+
+def _apply_drift_factors(
+    runners: list[dict[str, Any]],
+    p_adjusted_chrono: list[float],
+    h30_snapshot_data: dict[str, Any],
+    drift_config: dict[str, Any],
+) -> tuple[list[float], list[str]]:
+    """Applies drift factors to probabilities and returns updated probabilities and messages."""
+    analysis_messages = []
+    p_unnormalized = p_adjusted_chrono
+
+    if not h30_snapshot_data:
+        return p_unnormalized, analysis_messages
+
+    h30_runners = h30_snapshot_data.get("runners", [])
+    h30_odds_map = {
+        r.get("num"): r.get("odds_place")
+        for r in h30_runners
+        if r.get("num") and r.get("odds_place")
+    }
+
+    if h30_odds_map:
+        drift_factors = _apply_drift_adjustment(runners, h30_odds_map, drift_config)
+        p_unnormalized = [
+            p * f for p, f in zip(p_adjusted_chrono, drift_factors, strict=False)
+        ]
+        analysis_messages.append("Drift adjustment applied.")
+
+        # New: Collect significant steam/drift messages for reporting
+        for runner in runners:
+            if runner.get("drift_status") in ["Steam", "Drift"]:
+                runner_name_display = runner.get("nom", f"N°{runner.get('num')}")
+                analysis_messages.append(
+                    f"{runner_name_display}: {runner['drift_status']} de "
+                    f"{runner['drift_percent']:.2f}% "
+                    f"(cote H-30 {runner['odds_30']:.2f} -> H-5 "
+                    f"{runner['odds_place']:.2f})"
+                )
+    return p_unnormalized, analysis_messages
+
+
 def _calculate_adjusted_probabilities(
     runners: list[dict[str, Any]], config: dict[str, Any]
 ) -> tuple[list[dict[str, Any]], list[str]]:
@@ -293,33 +363,39 @@ def _calculate_adjusted_probabilities(
         place_odds = runner.get("odds_place")
 
         win_odds_list.append(float(win_odds) if win_odds and win_odds > 0 else 0.0)
-        place_odds_list.append(float(place_odds) if place_odds and place_odds > 0 else 0.0)
+        place_odds_list.append(
+            float(place_odds) if place_odds and place_odds > 0 else 0.0
+        )
 
     # Calculate implied probabilities and overrounds
-    implied_win_probs, overround_win = convert_odds_to_implied_probabilities(win_odds_list)
-    implied_place_probs, overround_place = convert_odds_to_implied_probabilities(place_odds_list)
+    implied_win_probs, overround_win = convert_odds_to_implied_probabilities(
+        win_odds_list
+    )
+    implied_place_probs, overround_place = convert_odds_to_implied_probabilities(
+        place_odds_list
+    )
 
     # Add overround to config['market'] for later use (e.g., in _generate_exotic_tickets)
-    if 'market' not in config:
-        config['market'] = {}
-    config['market']['overround_win'] = overround_win
-    config['market']['overround_place'] = overround_place
+    if "market" not in config:
+        config["market"] = {}
+    config["market"]["overround_win"] = overround_win
+    config["market"]["overround_place"] = overround_place
 
     # Assign calculated probabilities back to runners
     for i, runner in enumerate(runners):
-        runner["p_no_vig"] = implied_win_probs[i] if i < len(implied_win_probs) else 0.0
-        runner["p_place"] = implied_place_probs[i] if i < len(implied_place_probs) else 0.0
+        runner["p_no_vig"] = (
+            implied_win_probs[i] if i < len(implied_win_probs) else 0.0
+        )
+        runner["p_place"] = (
+            implied_place_probs[i] if i < len(implied_place_probs) else 0.0
+        )
 
     # --- Detect "Favori Réel" ---
-    real_favorites_place = []
-    for runner in runners:
-        is_real_favorite_place = runner.get("p_place", 0.0) > 0.25 # Implicit probability > 25%
-        runner["is_real_favorite_place"] = is_real_favorite_place
-        if is_real_favorite_place:
-            real_favorites_place.append(runner.get("nom", f"N°{runner.get('num')}"))
-
-    if real_favorites_place:
-        analysis_messages.append(f"Favori(s) réel(s) (Place > 25%): {', '.join(real_favorites_place)}.")
+    real_favorites = _detect_real_favorites(runners, 0.25)
+    if real_favorites:
+        analysis_messages.append(
+            f"Favori(s) réel(s) (Place > 25%): {', '.join(real_favorites)}."
+        )
     # --- End Favori Réel Detection ---
 
     # --- End New Section ---
@@ -327,43 +403,35 @@ def _calculate_adjusted_probabilities(
     p_bases = []
     for runner in runners:
         # Now p_no_vig and p_place are guaranteed to be present if odds were valid
-        # Prioritize p_place for base probability for placed tickets, as per SP Dutching in methodology
+        # Prioritize p_place for base probability for placed tickets, as per SP
+        # Dutching in methodology
         p_base = runner.get("p_place")
-        if p_base is None or p_base == 0.0: # Check for 0.0 as well, indicating invalid odds
+        if (
+            p_base is None or p_base == 0.0
+        ):  # Check for 0.0 as well, indicating invalid odds
             # Fallback if place odds were invalid or missing, try win odds
             p_base = runner.get("p_no_vig")
 
         if p_base is None or p_base == 0.0:
-            raise ValueError(f"Missing valid base probabilities for runner {runner.get('num')}")
+            raise ValueError(
+                f"Missing valid base probabilities for runner {runner.get('num')}"
+            )
 
         runner["p_base"] = p_base
         p_bases.append(p_base)
 
-    p_adjusted_stat = _apply_base_stat_adjustment(runners, je_stats, weights, config) # Pass config here
+    p_adjusted_stat = _apply_base_stat_adjustment(
+        runners, je_stats, weights, config
+    )  # Pass config here
     chrono_factors = _apply_chrono_adjustment(runners, je_stats, chrono_config)
-    p_adjusted_chrono = [p * f for p, f in zip(p_adjusted_stat, chrono_factors, strict=False)]
+    p_adjusted_chrono = [
+        p * f for p, f in zip(p_adjusted_stat, chrono_factors, strict=False)
+    ]
 
-    p_unnormalized = p_adjusted_chrono
-    if h30_snapshot_data:
-        h30_runners = h30_snapshot_data.get("runners", [])
-        h30_odds_map = {
-            r.get("num"): r.get("odds_place")
-            for r in h30_runners
-            if r.get("num") and r.get("odds_place")
-        }
-        if h30_odds_map:
-            drift_factors = _apply_drift_adjustment(runners, h30_odds_map, drift_config)
-            p_unnormalized = [p * f for p, f in zip(p_adjusted_chrono, drift_factors, strict=False)]
-            analysis_messages.append("Drift adjustment applied.")
-
-            # New: Collect significant steam/drift messages for reporting
-            for runner in runners:
-                if runner.get("drift_status") in ["Steam", "Drift"]:
-                    runner_name_display = runner.get('nom', f"N°{runner.get('num')}")
-                    analysis_messages.append(
-                        f"{runner_name_display}: {runner['drift_status']} de {runner['drift_percent']:.2f}% "
-                        f"(cote H-30 {runner['odds_30']:.2f} -> H-5 {runner['odds_place']:.2f})"
-                    )
+    p_unnormalized, drift_messages = _apply_drift_factors(
+        runners, p_adjusted_chrono, h30_snapshot_data, drift_config
+    )
+    analysis_messages.extend(drift_messages)
 
     p_finale_list = _normalize_probs(p_unnormalized)
     for i, runner in enumerate(runners):
@@ -371,6 +439,38 @@ def _calculate_adjusted_probabilities(
         runner["p_finale"] = p_finale_list[i]
 
     return runners, analysis_messages
+
+
+def _select_sp_dutching_candidates(
+    dutching_pool: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Selects the final candidates for SP dutching based on the rules."""
+    sp_dutching_final_selection = []
+    mid_range_horse_found = False
+
+    for candidate in dutching_pool:
+        if len(sp_dutching_final_selection) < MIN_SP_DUTCHING_CANDIDATES:
+            sp_dutching_final_selection.append(candidate)
+            if (
+                MID_RANGE_ODDS_LOWER_BOUND
+                <= candidate["odds"]
+                <= MID_RANGE_ODDS_UPPER_BOUND
+            ):
+                mid_range_horse_found = True
+        elif len(sp_dutching_final_selection) == MIN_SP_DUTCHING_CANDIDATES:
+            if (
+                not mid_range_horse_found
+                and MID_RANGE_ODDS_LOWER_BOUND
+                <= candidate["odds"]
+                <= MID_RANGE_ODDS_UPPER_BOUND
+            ):
+                sp_dutching_final_selection.append(candidate)
+                mid_range_horse_found = True
+            elif len(sp_dutching_final_selection) < MAX_SP_DUTCHING_CANDIDATES:
+                sp_dutching_final_selection.append(candidate)
+        else:
+            break
+    return sp_dutching_final_selection[:MAX_SP_DUTCHING_CANDIDATES]
 
 
 def _generate_sp_dutching_tickets(
@@ -385,8 +485,6 @@ def _generate_sp_dutching_tickets(
 
     sp_budget = budget * sp_config["budget_ratio"]
 
-    # --- Step 1: Generate a pool of all profitable SP candidates within odds range ---
-    # This pool will be used for both SP Dutching and as candidates for exotic bets.
     all_profitable_sp_candidates = []
     for r in runners:
         odds = r.get("odds_place")
@@ -395,7 +493,6 @@ def _generate_sp_dutching_tickets(
 
         prob_for_roi = r.get("p_finale", 0)
 
-        # Apply the general odds range for consideration in SP and exotics
         if odds >= sp_config["odds_range"][0] and odds <= sp_config["odds_range"][1]:
             roi = prob_for_roi * (odds - 1) - (1 - prob_for_roi)
             if roi >= roi_min_sp:
@@ -409,39 +506,19 @@ def _generate_sp_dutching_tickets(
                     }
                 )
 
-    # Sort candidates by ROI in descending order
     all_profitable_sp_candidates.sort(key=lambda x: x["roi"], reverse=True)
 
-    # The `sp_candidates` returned by this function should be the ones that can also form exotic tickets.
-    # This list should be a broader pool of promising horses.
-    # For now, let's use all of them, possibly limited by a max number.
-    sp_candidates_for_exotics = all_profitable_sp_candidates[:sp_config["legs_max"] + 2] # Allow a few more for exotics
+    sp_candidates_for_exotics = all_profitable_sp_candidates[
+        : sp_config["legs_max"] + 2
+    ]
 
-    # --- Step 2: Generate the actual SP Dutching Ticket (applying "2-3 horses" and "4-7 odds preference") ---
-    sp_dutching_final_selection = []
-    mid_range_horse_found = False
+    dutching_pool = [
+        c
+        for c in all_profitable_sp_candidates
+        if SP_DUTCHING_ODDS_LOWER_BOUND <= c["odds"] <= SP_DUTCHING_ODDS_UPPER_BOUND
+    ]
 
-    # Filter `all_profitable_sp_candidates` by the specific odds range [2.5, 7.0] for Dutching SP ticket
-    dutching_pool = [c for c in all_profitable_sp_candidates if c["odds"] >= 2.5 and c["odds"] <= 7.0]
-
-    # Try to select up to 3 horses for the SP Dutching ticket
-    for candidate in dutching_pool:
-        if len(sp_dutching_final_selection) < 2: # Always try to get at least 2 best ROI candidates
-            sp_dutching_final_selection.append(candidate)
-            if candidate["odds"] >= 4.0 and candidate["odds"] <= 7.0:
-                mid_range_horse_found = True
-        elif len(sp_dutching_final_selection) == 2:
-            # If no mid-range horse yet and current candidate is mid-range, add it.
-            if not mid_range_horse_found and candidate["odds"] >= 4.0 and candidate["odds"] <= 7.0:
-                sp_dutching_final_selection.append(candidate)
-                mid_range_horse_found = True
-            elif len(sp_dutching_final_selection) < 3: # If already have 2, and maybe mid-range or not, add 3rd best ROI
-                sp_dutching_final_selection.append(candidate)
-        else: # Already have 3 candidates, stop.
-            break
-
-    # Ensure a maximum of 3 candidates for the SP Dutching ticket
-    sp_dutching_final_selection = sp_dutching_final_selection[:3]
+    sp_dutching_final_selection = _select_sp_dutching_candidates(dutching_pool)
 
     if len(sp_dutching_final_selection) >= sp_config["legs_min"]:
         kelly_frac = sp_config["kelly_frac"]
@@ -449,7 +526,9 @@ def _generate_sp_dutching_tickets(
         stakes = {}
         total_kelly_frac = 0
         for cand in sp_dutching_final_selection:
-            frac = calculate_kelly_fraction(cand["prob"], cand["odds"], lam=kelly_frac, cap=max_vol_per_horse_cap)
+            frac = calculate_kelly_fraction(
+                cand["prob"], cand["odds"], lam=kelly_frac, cap=max_vol_per_horse_cap
+            )
             if frac > 0:
                 stakes[cand["num"]] = frac
                 total_kelly_frac += frac
@@ -480,16 +559,21 @@ def _generate_sp_dutching_tickets(
                     "details": final_stakes,
                 }
             )
-            analysis_messages.append(f"SP Dutching ticket created with {len(final_stakes)} horses.")
+            analysis_messages.append(
+                f"SP Dutching ticket created with {len(final_stakes)} horses."
+            )
     else:
-        analysis_messages.append("Dutching SP: Less than 2 suitable candidates found in odds range [2.5, 7.0] with sufficient ROI.")
+        analysis_messages.append(
+            "Dutching SP: Less than 2 suitable candidates found in odds range "
+            "[2.5, 7.0] with sufficient ROI."
+        )
 
     return sp_candidates_for_exotics, final_tickets, analysis_messages
 
 
 def _get_legs_for_exotic_type(exotic_type: str) -> int:
     """Returns the number of horses required for a given exotic bet type."""
-    if exotic_type in ["COUPLE", "COUPLE_PLACE", "ZE234"]: # Assuming ZE234 is a 2-horse bet
+    if exotic_type in ["COUPLE", "COUPLE_PLACE", "ZE234"]:  # Assuming ZE234 is a 2-horse bet
         return 2
     if exotic_type == "TRIO":
         return 3
@@ -513,10 +597,10 @@ def _generate_exotic_tickets(
     sp_config = config["sp_config"]
     ev_min_combo = config["ev_min_combo"]
     payout_min_combo = config["payout_min_combo"]
-    adjustments = config.get("adjustments", {})
-    min_sp_candidates_global = adjustments.get("exotics", {}).get("min_sp_candidates", 3)
 
-    exotics_allowed_by_overround = config.get("market", {}).get("overround_place", 999.0) <= overround_max
+    exotics_allowed_by_overround = (
+        config.get("market", {}).get("overround_place", 999.0) <= overround_max
+    )
     if not exotics_allowed_by_overround:
         analysis_messages.append("Exotics forbidden due to high overround.")
         return final_tickets, analysis_messages
@@ -561,7 +645,10 @@ def _generate_exotic_tickets(
                         "payout": combo_eval_result.get("payout_expected"),
                     }
 
-                    if best_combo_overall is None or current_combo_details["roi"] > best_combo_overall["roi"]:
+                    if (
+                        best_combo_overall is None
+                        or current_combo_details["roi"] > best_combo_overall["roi"]
+                    ):
                         best_combo_overall = current_combo_details
 
     if best_combo_overall:
@@ -574,7 +661,9 @@ def _generate_exotic_tickets(
                 "horses": best_combo_overall["legs"],
             }
         )
-        analysis_messages.append(f"Profitable {best_combo_overall['type']} combo found: {best_combo_overall['legs']}.")
+        analysis_messages.append(
+            f"Profitable {best_combo_overall['type']} combo found: {best_combo_overall['legs']}."
+        )
 
     return final_tickets, analysis_messages
 
@@ -642,36 +731,42 @@ def generate_tickets(snapshot_data: dict[str, Any], gpi_config: dict[str, Any]) 
         final_tickets,
         analysis_messages,
     )
-    analysis_result = _finalize_and_decide(final_tickets, config["roi_min_global"], analysis_messages)
+    analysis_result = _finalize_and_decide(
+        final_tickets, config["roi_min_global"], analysis_messages
+    )
 
     # --- New: Add Top 5 Pronostic ---
     # Sort runners by p_finale in descending order
     sorted_runners = sorted(runners, key=lambda r: r.get("p_finale", 0.0), reverse=True)
 
     top5_pronostic = []
-    for i, runner in enumerate(sorted_runners[:5]): # Take top 5
-        top5_pronostic.append({
-            "rank": i + 1,
-            "num": runner.get("num"),
-            "nom": runner.get("nom"),
-            "p_finale": runner.get("p_finale"),
-            "odds_place": runner.get("odds_place"),
-        })
+    for i, runner in enumerate(sorted_runners[:5]):  # Take top 5
+        top5_pronostic.append(
+            {
+                "rank": i + 1,
+                "num": runner.get("num"),
+                "nom": runner.get("nom"),
+                "p_finale": runner.get("p_finale"),
+                "odds_place": runner.get("odds_place"),
+            }
+        )
     analysis_result["top5_pronostic"] = top5_pronostic
 
     # --- New: Add Implied Odds + Steam/Drift Table ---
     market_analysis_table = []
     for runner in runners:
-        market_analysis_table.append({
-            "num": runner.get("num"),
-            "nom": runner.get("nom"),
-            "odds_win": runner.get("odds_win"),
-            "odds_place": runner.get("odds_place"),
-            "p_no_vig": runner.get("p_no_vig"),
-            "p_place": runner.get("p_place"),
-            "drift_percent": runner.get("drift_percent"),
-            "drift_status": runner.get("drift_status"),
-        })
+        market_analysis_table.append(
+            {
+                "num": runner.get("num"),
+                "nom": runner.get("nom"),
+                "odds_win": runner.get("odds_win"),
+                "odds_place": runner.get("odds_place"),
+                "p_no_vig": runner.get("p_no_vig"),
+                "p_place": runner.get("p_place"),
+                "drift_percent": runner.get("drift_percent"),
+                "drift_status": runner.get("drift_status"),
+            }
+        )
     analysis_result["market_analysis_table"] = market_analysis_table
     # --- End Implied Odds + Steam/Drift Table ---
 

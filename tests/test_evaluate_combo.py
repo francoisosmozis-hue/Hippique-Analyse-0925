@@ -30,7 +30,7 @@ def test_env_path_missing(mocker, tmp_path):
         "hippique_orchestrator.simulate_wrapper._default_payout_calibration_path",
         return_value=calib,
     )
-    
+
     res = evaluate_combo(TICKETS, bankroll=10.0)
     assert res["status"] == "insufficient_data"
     assert str(calib) in res["requirements"]

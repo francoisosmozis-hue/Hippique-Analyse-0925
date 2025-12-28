@@ -13,7 +13,6 @@ from hippique_orchestrator.scripts.drive_sync import (
     download_file,
 )
 
-
 BUCKET_ENV = "GCS_BUCKET"
 PREFIX_ENV = "GCS_PREFIX"
 

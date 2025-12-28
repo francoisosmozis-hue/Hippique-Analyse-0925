@@ -40,7 +40,11 @@ def main():
 
     except Exception as e:
         logger.error(
-            f"Une erreur est survenue lors de l'initialisation ou de l'utilisation du client Tasks : {e}",
+            (
+                "Une erreur est survenue lors de l'initialisation ou de "
+                "l'utilisation du client Tasks : %s"
+            ),
+            e,
             exc_info=True,
         )
         print(f"PRINT: Une erreur est survenue : {e}")

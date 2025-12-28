@@ -1,8 +1,8 @@
 """Firestore client for saving and retrieving race data."""
+
 from __future__ import annotations
 
 import re
-from datetime import datetime
 from typing import Any
 
 from google.cloud import firestore
@@ -34,7 +34,7 @@ def update_race_document(document_id: str, data: dict[str, Any]) -> None:
                 "firestore_collection": config.FIRESTORE_COLLECTION,
                 "document_id": document_id,
                 "data_keys": list(data.keys()),
-            }
+            },
         )
         doc_ref.set(data, merge=True)  # Use merge=True to be non-destructive
         logger.debug(f"Document {document_id} updated successfully.")
@@ -90,10 +90,10 @@ def get_processing_status_for_date(date_str: str, daily_plan: list[dict]) -> dic
         rc_label = race.get("c_label")
         if not rc_label or not race.get("r_label"):
             continue
-        
+
         rc_key = f"{race.get('r_label')}{rc_label}"
         db_data = db_races_map.get(rc_key)
-        
+
         status_entry = {
             "rc": rc_key,
             "name": race.get("name"),
@@ -108,7 +108,7 @@ def get_processing_status_for_date(date_str: str, daily_plan: list[dict]) -> dic
             decision = analysis.get("gpi_decision", "Unknown")
             status_entry["firestore_status"] = decision
             status_entry["last_analyzed_at"] = db_data.get("last_analyzed_at")
-            
+
             if "play" in decision.lower():
                 summary["playable"] += 1
             elif "abstain" in decision.lower():

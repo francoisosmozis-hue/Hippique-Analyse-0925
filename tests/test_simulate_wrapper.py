@@ -175,7 +175,7 @@ def test_correlation_penalty_reduces_probability_and_ev(
     payout = tmp_path / "payout_calibration.yaml"
     mocker.patch(
         "hippique_orchestrator.simulate_wrapper._default_payout_calibration_path",
-        return_value=payout
+        return_value=payout,
     )
     monkeypatch.setattr(sw, "_correlation_settings", {})
     monkeypatch.setattr(sw, "_correlation_mtime", 0.0)

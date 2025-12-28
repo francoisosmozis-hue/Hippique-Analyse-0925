@@ -25,6 +25,7 @@ from zoneinfo import ZoneInfo
 import yaml
 
 from hippique_orchestrator import config
+
 _RC_COMBINED_RE = re.compile(r"R?\s*(\d+)\s*C\s*(\d+)", re.IGNORECASE)
 _COURSE_ID_PATTERN = re.compile(r"/(\d{4}-\d{2}-\d{2}/R\d+C\d+)")
 

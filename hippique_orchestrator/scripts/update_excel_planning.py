@@ -38,8 +38,6 @@ PLANNING_HEADERS: Sequence[str] = (
 )
 
 
-
-
 @lru_cache(maxsize=1)
 def _env_timezone() -> dt.tzinfo | None:
     """Return the timezone configured via ``$TZ`` when available."""

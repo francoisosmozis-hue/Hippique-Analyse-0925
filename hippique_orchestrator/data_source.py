@@ -9,6 +9,9 @@ from __future__ import annotations
 
 import logging
 from typing import Any
+from urllib.parse import urlparse
+
+from hippique_orchestrator.scrapers.zeturf import fetch_zeturf_race_details
 
 from .scrapers import boturfers
 
@@ -42,25 +45,27 @@ async def fetch_programme(
 
 
 async def fetch_race_details(
-    race_url: str, correlation_id: str | None = None, trace_id: str | None = None
+    race_url: str,
+    *,
+    phase: str = "H30",
+    date: str | None = None,
+    correlation_id: str | None = None,
+    trace_id: str | None = None,
 ) -> dict[str, Any]:
-    """
-    Fetches the details for a single race from the configured data source.
+    """Fetches race details and returns a normalized snapshot dict.
 
-    Args:
-        race_url (str): The URL of the specific race.
-        correlation_id (str, optional): Correlation ID for logging.
-        trace_id (str, optional): Trace ID for logging.
-
-    Returns:
-        dict[str, Any]: The parsed race details (snapshot data).
+    Routes by domain:
+      - zeturf.* -> ZEturf scraper (no /partant)
+      - default  -> Boturfers scraper (existing behavior)
     """
-    # Delegates to the boturfers scraper.
+    host = (urlparse(race_url).netloc or "").lower()
     logger.info(
         "Fetching race details from data source via URL: %s",
         race_url,
         extra={"correlation_id": correlation_id, "trace_id": trace_id},
     )
+    if "zeturf" in host:
+        return await fetch_zeturf_race_details(race_url, phase=phase, date=date)
     return await boturfers.fetch_boturfers_race_details(
         race_url, correlation_id=correlation_id, trace_id=trace_id
     )

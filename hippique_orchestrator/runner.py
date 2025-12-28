@@ -8,12 +8,9 @@ import logging
 import re
 from typing import Any
 
-logger = logging.getLogger(__name__)
-
-# Import the refactored, Firestore-native analysis pipeline
-# Assuming analyse_courses_du_jour_enrichie is at the root level and is importable.
-# This might need adjustment based on final project structure.
 from hippique_orchestrator import analysis_pipeline, config
+
+logger = logging.getLogger(__name__)
 
 
 def _extract_rc_from_url(course_url: str) -> tuple[str, str]:

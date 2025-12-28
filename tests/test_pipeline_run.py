@@ -23,7 +23,7 @@ def mock_gpi_config() -> dict:
             "sp_dutching": {
                 "budget_ratio": 0.6,
                 "legs_min": 2,
-                "legs_max": 3, # Added legs_max
+                "legs_max": 3,  # Added legs_max
                 "odds_range": [1.1, 999],
                 "kelly_frac": 0.25,
             },
@@ -42,7 +42,7 @@ def test_generate_tickets_abstains_when_roi_is_low(mocker: MockerFixture, mock_g
         "hippique_orchestrator.pipeline_run.evaluate_combo",
         return_value={"status": "error"},
     )
-    mock_gpi_config["roi_min_sp"] = 0.60 # Set a higher threshold to ensure abstention
+    mock_gpi_config["roi_min_sp"] = 0.60  # Set a higher threshold to ensure abstention
     snapshot_data = {
         "runners": [
             {"num": 1, "nom": "Cheval1", "p_no_vig": 0.3, "odds_place": 3.0},

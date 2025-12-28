@@ -10,6 +10,7 @@ import sys
 from collections.abc import Callable
 from functools import partial
 from pathlib import Path
+
 import yaml
 
 from hippique_orchestrator import config
@@ -159,10 +160,10 @@ def validate(h30: dict, h5: dict, allow_je_na: bool) -> bool:
                     raise ValueError(
                         f"Cote invalide {label} pour {r.get('name', r.get('id'))}: {r['odds']}"
                     )
-            except Exception:
+            except Exception as e:
                 raise ValueError(
                     f"Cote non numérique {label} pour {r.get('name', r.get('id'))}: {r.get('odds')}"
-                )
+                ) from e
     if not allow_je_na:
         for r in h5.get("runners", []):
             je = r.get("je_stats", {})

@@ -49,6 +49,8 @@ async def test_fetch_boturfers_race_details_success(mocker):
     runner = result["runners"][0]
     assert runner["nom"] == "Test Horse"
     assert runner["odds_place"] == 1.5
+
+
 @pytest.mark.asyncio
 async def test_fetch_boturfers_race_details_fails(mocker):
     """
@@ -56,7 +58,9 @@ async def test_fetch_boturfers_race_details_fails(mocker):
     """
     # Mock the async client to raise an exception
     mock_async_client = MagicMock()
-    mock_async_client.__aenter__.return_value.get.side_effect = httpx.RequestError("Mocked connection error")
+    mock_async_client.__aenter__.return_value.get.side_effect = httpx.RequestError(
+        "Mocked connection error"
+    )
     mocker.patch("httpx.AsyncClient", return_value=mock_async_client)
 
     logger_mock = mocker.patch("hippique_orchestrator.scrapers.boturfers.logger")
@@ -65,5 +69,6 @@ async def test_fetch_boturfers_race_details_fails(mocker):
 
     assert result == {}
     logger_mock.error.assert_any_call(
-        "Le scraping des détails a échoué.", extra={'correlation_id': None, 'trace_id': None, 'url': 'http://dummy.url'}
+        "Le scraping des détails a échoué.",
+        extra={'correlation_id': None, 'trace_id': None, 'url': 'http://dummy.url'},
     )

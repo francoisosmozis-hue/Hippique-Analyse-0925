@@ -183,7 +183,8 @@ def main(argv: list[str] | None = None) -> int:
     _emit(warning_level, file_path, diagnostics.warnings)
 
     print(
-        f"Résumé: {len(diagnostics.errors)} erreur(s), {len(diagnostics.warnings)} avertissement(s).",
+        f"Résumé: {len(diagnostics.errors)} erreur(s), "
+        f"{len(diagnostics.warnings)} avertissement(s)."
     )
 
     return diagnostics.exit_code(args.warn_only)

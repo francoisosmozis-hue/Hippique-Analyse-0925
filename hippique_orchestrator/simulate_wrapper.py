@@ -66,8 +66,6 @@ def _default_payout_calibration_path() -> Path:
     return Path("calibration/payout_calibration.yaml")
 
 
-
-
 # Maximum number of entries to keep in the calibration cache.  When the limit
 # is exceeded, least recently used keys are discarded.  This prevents
 # unbounded growth when many unique combinations are requested.

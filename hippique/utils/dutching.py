@@ -4,6 +4,10 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
+CHRONO_CORRELATION_THRESHOLD = 0.4
+MID_ODDS_LOWER_BOUND = 4.0
+MID_ODDS_UPPER_BOUND = 7.0
+
 
 def equal_profit_stakes(odds_list: Iterable[float], total_stake: float) -> list[float]:
     """Return equal-profit stakes for the provided decimal odds."""
@@ -34,7 +38,7 @@ def diversify_guard(horses_meta: Iterable[dict]) -> bool:
             chrono_curr = horse.get("chrono_last")
             if chrono_prev is None or chrono_curr is None:
                 continue
-            if abs(float(chrono_curr) - float(chrono_prev)) < 0.4:
+            if abs(float(chrono_curr) - float(chrono_prev)) < CHRONO_CORRELATION_THRESHOLD:
                 return False
         else:
             seen[key] = horse
@@ -48,6 +52,6 @@ def require_mid_odds(horses_meta: Iterable[dict]) -> bool:
         odds = horse.get("odds")
         if odds is None:
             continue
-        if 4.0 <= float(odds) <= 7.0:
+        if MID_ODDS_LOWER_BOUND <= float(odds) <= MID_ODDS_UPPER_BOUND:
             return True
     return False

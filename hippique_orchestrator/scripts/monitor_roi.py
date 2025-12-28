@@ -99,86 +99,85 @@ def collect_analyses(data_dir: Path, date: str | None = None) -> list[dict[str, 
     return analyses
 
 
-def compute_statistics(analyses: list[dict[str, Any]]) -> dict[str, Any]:
-    """Compute aggregate statistics from analyses."""
+def _process_analysis(item: dict[str, Any]) -> dict[str, Any]:
+    """Process a single analysis item."""
+    analysis = item["analysis"]
+    metrics = item["metrics"]
+    data = {
+        "stake": 0.0,
+        "gain": 0.0,
+        "expected_roi": 0.0,
+        "ev_ratio": 0.0,
+        "clv": None,
+        "sharpe": None,
+        "ror": None,
+        "is_played": False,
+        "is_alerte": False,
+        "by_type": defaultdict(lambda: {"stake": 0, "gain": 0, "count": 0, "wins": 0}),
+    }
 
-    total_stake = 0.0
-    total_gain = 0.0
-    total_expected_roi = 0.0
-    total_ev_ratio = 0.0
+    if analysis.get("abstain"):
+        return data
 
-    count_races = len(analyses)
-    count_played = 0
-    count_abstain = 0
-    count_alerte = 0
+    data["is_played"] = True
+
+    tickets = analysis.get("tickets", [])
+    for ticket in tickets:
+        bet_type = ticket.get("type", "unknown")
+        stake = float(ticket.get("stake", 0) or ticket.get("mise", 0) or 0)
+        gain = float(ticket.get("gain_reel", 0) or ticket.get("gain", 0) or 0)
+
+        data["stake"] += stake
+        data["gain"] += gain
+        data["by_type"][bet_type]["stake"] += stake
+        data["by_type"][bet_type]["gain"] += gain
+        data["by_type"][bet_type]["count"] += 1
+
+        if gain > stake:
+            data["by_type"][bet_type]["wins"] += 1
+
+    validation = analysis.get("validation", {})
+    data["expected_roi"] = validation.get("roi_global_est", 0) or 0
+
+    ev_section = analysis.get("ev", {})
+    data["ev_ratio"] = (
+        ev_section.get("ev_ratio", 0) or ev_section.get("ev_global", 0) or 0
+    )
+
+    flags = analysis.get("flags", {})
+    if flags.get("ALERTE_VALUE"):
+        data["is_alerte"] = True
+
+    if metrics:
+        data["clv"] = metrics.get("clv_moyen", 0) or metrics.get("clv_median_30", 0)
+        data["sharpe"] = metrics.get("sharpe", 0)
+        data["ror"] = metrics.get("risk_of_ruin", 0)
+
+    return data
+
+
+def _aggregate_results(processed_analyses: list[dict[str, Any]]) -> dict[str, Any]:
+    """Aggregate results from processed analyses."""
+    total_stake = sum(p["stake"] for p in processed_analyses)
+    total_gain = sum(p["gain"] for p in processed_analyses)
+    total_expected_roi = sum(p["expected_roi"] for p in processed_analyses)
+    total_ev_ratio = sum(p["ev_ratio"] for p in processed_analyses)
+
+    count_played = sum(1 for p in processed_analyses if p["is_played"])
+    count_alerte = sum(1 for p in processed_analyses if p["is_alerte"])
+
+    clv_values = [p["clv"] for p in processed_analyses if p["clv"] is not None]
+    sharpe_values = [p["sharpe"] for p in processed_analyses if p["sharpe"] is not None]
+    ror_values = [p["ror"] for p in processed_analyses if p["ror"] is not None]
 
     by_type = defaultdict(lambda: {"stake": 0, "gain": 0, "count": 0, "wins": 0})
+    for p in processed_analyses:
+        for bet_type, data in p["by_type"].items():
+            by_type[bet_type]["stake"] += data["stake"]
+            by_type[bet_type]["gain"] += data["gain"]
+            by_type[bet_type]["count"] += data["count"]
+            by_type[bet_type]["wins"] += data["wins"]
 
-    clv_values = []
-    sharpe_values = []
-    ror_values = []
-
-    for item in analyses:
-        analysis = item["analysis"]
-        metrics = item["metrics"]
-
-        # Meta
-        analysis.get("meta", {})
-
-        # Abstain check
-        if analysis.get("abstain"):
-            count_abstain += 1
-            continue
-
-        count_played += 1
-
-        # Tickets
-        tickets = analysis.get("tickets", [])
-        for ticket in tickets:
-            bet_type = ticket.get("type", "unknown")
-            stake = float(ticket.get("stake", 0) or ticket.get("mise", 0) or 0)
-            gain = float(ticket.get("gain_reel", 0) or ticket.get("gain", 0) or 0)
-
-            total_stake += stake
-            total_gain += gain
-
-            by_type[bet_type]["stake"] += stake
-            by_type[bet_type]["gain"] += gain
-            by_type[bet_type]["count"] += 1
-
-            if gain > stake:
-                by_type[bet_type]["wins"] += 1
-
-        # Validation metrics
-        validation = analysis.get("validation", {})
-        roi_global = validation.get("roi_global_est", 0) or 0
-        total_expected_roi += roi_global
-
-        # EV ratio
-        ev_section = analysis.get("ev", {})
-        ev_ratio = ev_section.get("ev_ratio", 0) or ev_section.get("ev_global", 0) or 0
-        total_ev_ratio += ev_ratio
-
-        # Alerts
-        flags = analysis.get("flags", {})
-        if flags.get("ALERTE_VALUE"):
-            count_alerte += 1
-
-        # Metrics
-        if metrics:
-            clv = metrics.get("clv_moyen", 0) or metrics.get("clv_median_30", 0)
-            if clv:
-                clv_values.append(clv)
-
-            sharpe = metrics.get("sharpe", 0)
-            if sharpe:
-                sharpe_values.append(sharpe)
-
-            ror = metrics.get("risk_of_ruin", 0)
-            if ror:
-                ror_values.append(ror)
-
-    # Compute aggregates
     real_roi = (total_gain - total_stake) / total_stake if total_stake > 0 else 0
     expected_roi_avg = total_expected_roi / count_played if count_played > 0 else 0
     ev_ratio_avg = total_ev_ratio / count_played if count_played > 0 else 0
@@ -188,9 +187,7 @@ def compute_statistics(analyses: list[dict[str, Any]]) -> dict[str, Any]:
     ror_avg = sum(ror_values) / len(ror_values) if ror_values else 0
 
     return {
-        "total_races": count_races,
         "races_played": count_played,
-        "races_abstain": count_abstain,
         "races_alerte": count_alerte,
         "total_stake": round(total_stake, 2),
         "total_gain": round(total_gain, 2),
@@ -204,6 +201,15 @@ def compute_statistics(analyses: list[dict[str, Any]]) -> dict[str, Any]:
         "ror_avg": round(ror_avg, 6),
         "by_type": dict(by_type),
     }
+
+
+def compute_statistics(analyses: list[dict[str, Any]]) -> dict[str, Any]:
+    """Compute aggregate statistics from analyses."""
+    processed_analyses = [_process_analysis(item) for item in analyses]
+    stats = _aggregate_results(processed_analyses)
+    stats["total_races"] = len(analyses)
+    stats["races_abstain"] = len(analyses) - stats["races_played"]
+    return stats
 
 
 def print_report(stats: dict[str, Any], detail: bool = False):

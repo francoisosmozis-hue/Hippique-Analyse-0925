@@ -26,6 +26,9 @@ import yaml
 
 from scripts import online_fetch_zeturf as ofz
 
+EXPECTED_TIME_FORMAT_LENGTH = 5
+EXPECTED_TIME_FORMAT_SEPARATOR_INDEX = 2
+
 
 def _flatten(meetings: Iterable[dict[str, Any]]) -> list[dict[str, str]]:
     """Flatten raw meeting data into ``reunion``/``course``/``time`` records."""
@@ -43,7 +46,11 @@ def _flatten(meetings: Iterable[dict[str, Any]]) -> list[dict[str, str]]:
             )
             if not (r_label and c_label and time):
                 continue
-            if date and len(str(time)) == 5 and str(time)[2] == ":":
+            if (
+                date
+                and len(str(time)) == EXPECTED_TIME_FORMAT_LENGTH
+                and str(time)[EXPECTED_TIME_FORMAT_SEPARATOR_INDEX] == ":"
+            ):
                 time = f"{date}T{time}"
             entries.append({"reunion": str(r_label), "course": str(c_label), "time": str(time)})
     return entries

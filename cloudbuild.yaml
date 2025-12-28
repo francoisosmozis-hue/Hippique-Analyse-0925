@@ -6,7 +6,17 @@ steps:
   entrypoint: 'bash'
   args: ['-c', 'pip install -r requirements.txt -r requirements-dev.txt']
 
+# Lint the code
+- name: 'python:3.12-slim'
+  id: "Lint"
+  entrypoint: 'bash'
+  args: ['-c', 'pip install ruff && ruff check . --fix']
 
+# Check formatting
+- name: 'python:3.12-slim'
+  id: "Format Check"
+  entrypoint: 'bash'
+  args: ['-c', 'pip install ruff && ruff format . --check']
 
 # Build the Docker image
 - name: 'gcr.io/cloud-builders/docker'

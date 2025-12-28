@@ -55,7 +55,11 @@ if docs_found == 0:
     )
 elif tickets_found == 0:
     logger.warning(
-        f"No race documents found with tickets for {date_prefix}. Check ticket generation/saving logic."
+        (
+            "No race documents found with tickets for %s. Check ticket "
+            "generation/saving logic."
+        ),
+        date_prefix,
     )
 else:
     logger.info(

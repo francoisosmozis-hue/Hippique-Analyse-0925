@@ -60,16 +60,23 @@ def get_env(
         if required:
             # Instead of raising, log a critical error.
             # This allows the app to start so we can debug config via the API.
-            logger.critical("Missing required environment variable '%s'. App may not function correctly.", name)
+            logger.critical(
+                "Missing required environment variable '%s'. App may not function correctly.", name
+            )
         else:
             logger.warning("Environment variable %s not set; using default %r", name, default)
-        
+
         return default
 
     try:
         value = cast(raw_value)
-    except Exception as exc:  # pragma: no cover - defensive
-        logger.error("Invalid value for environment variable '%s': %r. Returning default.", name, raw_value, exc_info=True)
+    except Exception:  # pragma: no cover - defensive
+        logger.error(
+            "Invalid value for environment variable '%s': %r. Returning default.",
+            name,
+            raw_value,
+            exc_info=True,
+        )
         # In case of casting error on a required var, it's better to return default
         # to avoid a crash, and let the debug endpoint reveal the problem.
         return default

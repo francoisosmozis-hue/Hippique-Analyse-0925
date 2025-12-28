@@ -12,10 +12,10 @@ from hippique_orchestrator.logging_utils import get_logger
 
 logger = get_logger(__name__)
 
-_gcs_client = None
+_gcs_client: storage.Client | None = None
 
 
-def _get_gcs_client():
+def _get_gcs_client() -> storage.Client | None:
     """Returns a GCS client, initializing it if necessary."""
     global _gcs_client
     if _gcs_client is None:

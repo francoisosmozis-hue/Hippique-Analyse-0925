@@ -86,9 +86,13 @@ def resolve_horse_id(horse_name: str, session: requests.Session, max_pages: int 
     ID_CACHE[normalized_name] = None  # Cache failure to avoid retries
     return None
 
+
 PERSON_ID_CACHE: dict[str, str | None] = {}
 
-def resolve_person_id(person_name: str, person_type: str, session: requests.Session, max_pages: int = 20) -> str | None:
+
+def resolve_person_id(
+    person_name: str, person_type: str, session: requests.Session, max_pages: int = 20
+) -> str | None:
     """
     Finds the Zone-Turf ID for a jockey or trainer by scraping alphabetical search pages.
     Uses a cache to avoid repeated lookups.
@@ -107,7 +111,9 @@ def resolve_person_id(person_name: str, person_type: str, session: requests.Sess
         PERSON_ID_CACHE[cache_key] = None
         return None
 
-    logger.info(f"Resolving Zone-Turf ID for '{person_name}' ({person_type}) via alphabetical pages...")
+    logger.info(
+        f"Resolving Zone-Turf ID for '{person_name}' ({person_type}) via alphabetical pages..."
+    )
     for page_num in range(1, max_pages + 1):
         # Adjust URL path based on person_type
         url = f"{BASE_URL}/{person_type}/lettre-{first_letter}.html?p={page_num}"
@@ -135,7 +141,9 @@ def resolve_person_id(person_name: str, person_type: str, session: requests.Sess
             )
             break
 
-    logger.warning(f"Could not find Zone-Turf ID for '{person_name}' ({person_type}) after searching pages.")
+    logger.warning(
+        f"Could not find Zone-Turf ID for '{person_name}' ({person_type}) after searching pages."
+    )
     PERSON_ID_CACHE[cache_key] = None
     return None
 
@@ -211,6 +219,7 @@ def fetch_chrono_from_html(html_content: str) -> dict[str, Any] | None:
 
     return {'record_attele': record_attele, 'last_3_chrono': last_3_chronos}
 
+
 def fetch_person_stats_from_html(html_content: str, person_type: str) -> dict[str, Any] | None:
     """
     Parses the HTML content of a Zone-Turf jockey/trainer page to extract performance data.
@@ -228,12 +237,20 @@ def fetch_person_stats_from_html(html_content: str, person_type: str) -> dict[st
 
     if stats_block:
         # Example: Try to find "Taux de réussite" or "Pourcentage"
-        success_rate_match = re.search(r'(taux\s+de\s+réussite|pourcentage)\s*:\s*(\d+(\.\d+)?)\s*%', stats_block.get_text(), re.IGNORECASE)
+        success_rate_match = re.search(
+            r'(taux\s+de\s+réussite|pourcentage)\s*:\s*(\d+(\.\d+)?)\s*%',
+            stats_block.get_text(),
+            re.IGNORECASE,
+        )
         if success_rate_match:
-            stats['win_rate'] = float(success_rate_match.group(2)) # Assuming 'win_rate' for now
+            stats['win_rate'] = float(success_rate_match.group(2))  # Assuming 'win_rate' for now
 
         # Example: Try to find "Taux de réussite Place" or similar
-        place_rate_match = re.search(r'(taux\s+de\s+réussite\s+place|pourcentage\s+placé)\s*:\s*(\d+(\.\d+)?)\s*%', stats_block.get_text(), re.IGNORECASE)
+        place_rate_match = re.search(
+            r'(taux\s+de\s+réussite\s+place|pourcentage\s+placé)\s*:\s*(\d+(\.\d+)?)\s*%',
+            stats_block.get_text(),
+            re.IGNORECASE,
+        )
         if place_rate_match:
             stats['place_rate'] = float(place_rate_match.group(2))
 
@@ -246,14 +263,22 @@ def fetch_person_stats_from_html(html_content: str, person_type: str) -> dict[st
             for row in rows:
                 cols = row.find_all('td')
                 if len(cols) == len(headers):
-                    row_data = {headers[i]: cols[i].get_text(" ", strip=True) for i in range(len(headers))}
+                    row_data = {
+                        headers[i]: cols[i].get_text(" ", strip=True) for i in range(len(headers))
+                    }
                     # Look for specific stats like 'nb courses', 'nb victoires', 'nb places'
                     if 'Courses' in row_data:
-                        stats['num_races'] = int(row_data['Courses']) if row_data['Courses'].isdigit() else 0
+                        stats['num_races'] = (
+                            int(row_data['Courses']) if row_data['Courses'].isdigit() else 0
+                        )
                     if 'Victoires' in row_data:
-                        stats['num_wins'] = int(row_data['Victoires']) if row_data['Victoires'].isdigit() else 0
+                        stats['num_wins'] = (
+                            int(row_data['Victoires']) if row_data['Victoires'].isdigit() else 0
+                        )
                     if 'Places' in row_data:
-                        stats['num_places'] = int(row_data['Places']) if row_data['Places'].isdigit() else 0
+                        stats['num_places'] = (
+                            int(row_data['Places']) if row_data['Places'].isdigit() else 0
+                        )
 
     if not stats:
         logger.warning(f"Could not extract any stats for {person_type} from HTML content.")
@@ -307,7 +332,10 @@ def get_chrono_stats(horse_name: str, horse_id: str | None = None) -> dict[str, 
 
 PERSON_STATS_CACHE: dict[str, dict[str, Any] | None] = {}
 
-def get_jockey_trainer_stats(person_name: str, person_type: str, person_id: str | None = None) -> dict[str, Any] | None:
+
+def get_jockey_trainer_stats(
+    person_name: str, person_type: str, person_id: str | None = None
+) -> dict[str, Any] | None:
     """
     Orchestrator function to get performance stats for a jockey or trainer.
     Resolves ID if not provided, then scrapes the page. Caches results.

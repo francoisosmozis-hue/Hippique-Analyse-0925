@@ -5,8 +5,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import google.auth
-from google.cloud import tasks_v2
 from google.api_core import exceptions as gexc
+from google.cloud import tasks_v2
 from google.protobuf import timestamp_pb2
 
 from hippique_orchestrator import config
@@ -58,6 +58,7 @@ def enqueue_run_task(
     phase: str,
     date: str,
     schedule_time_utc: datetime,
+    service_url: str,
     r_label: str | None = None,
     c_label: str | None = None,
 ) -> tuple[bool, str | None]:
@@ -86,10 +87,9 @@ def enqueue_run_task(
             "c_label": c_label,
             "doc_id": doc_id,
         }
-        service_url = config.get_service_url()
         if not service_url:
             return False, "Service URL is not configured. Cannot create task."
-            
+
         target_url = f"{service_url}/tasks/run-phase"
 
         http_request = tasks_v2.HttpRequest(
@@ -108,7 +108,7 @@ def enqueue_run_task(
             )
 
         task = tasks_v2.Task(http_request=http_request, schedule_time=timestamp)
-        
+
         logger.info(
             "Enqueuing Cloud Task",
             extra={
@@ -118,7 +118,7 @@ def enqueue_run_task(
                 "oidc_enabled": "oidc_token" in http_request,
             },
         )
-        
+
         response = client.create_task(parent=parent_path, task=task)
         logger.info(f"Task created: {response.name}")
         return True, response.name
@@ -139,7 +139,7 @@ def enqueue_run_task(
 
 
 def schedule_all_races(
-    plan: list[dict], force: bool = False, dry_run: bool = False
+    plan: list[dict], service_url: str, force: bool = False, dry_run: bool = False
 ) -> list[dict[str, Any]]:
     logger.info(f"--- Starting schedule_all_races (Force: {force}, Dry Run: {dry_run}) ---")
 
@@ -150,8 +150,8 @@ def schedule_all_races(
         for phase in ["H30", "H5"]:
             task_info = {
                 "race": f"{race_plan['r_label']}{race_plan['c_label']}",
-                    "r_label": race_plan["r_label"],
-                    "c_label": race_plan["c_label"],
+                "r_label": race_plan["r_label"],
+                "c_label": race_plan["c_label"],
                 "phase": phase,
                 "course_url": race_plan["course_url"],
                 "date": race_plan["date"],
@@ -167,23 +167,40 @@ def schedule_all_races(
             if task_info["status"] == "candidate":
                 candidate_tasks.append(task_info)
             else:
-                results.append({
-                    "race": task_info["race"],
-                    "phase": task_info["phase"],
-                    "task_name": None,
-                    "ok": False,
-                    "reason": task_info.get("reason"),
-                })
-    
-    logger.info(f"Calculation complete. Candidates: {len(candidate_tasks)}, Skipped: {len(results)}")
+                results.append(
+                    {
+                        "race": task_info["race"],
+                        "phase": task_info["phase"],
+                        "task_name": None,
+                        "ok": False,
+                        "reason": task_info.get("reason"),
+                    }
+                )
+
+    logger.info(
+        f"Calculation complete. Candidates: {len(candidate_tasks)}, Skipped: {len(results)}"
+    )
 
     if dry_run:
         logger.info("--- Dry run complete. Returning calculated tasks. ---")
         # For dry run, we just show what would be scheduled
         return [
-            {**task, "ok": True, "task_name": "dry_run_candidate"}
-            for task in candidate_tasks
+            {**task, "ok": True, "task_name": "dry_run_candidate"} for task in candidate_tasks
         ] + results
+
+    if not service_url and not dry_run:
+        logger.critical("Cannot execute real run without a service_url.")
+        for task in candidate_tasks:
+            results.append(
+                {
+                    "race": task["race"],
+                    "phase": task["phase"],
+                    "task_name": None,
+                    "ok": False,
+                    "reason": "Service URL was not provided for a real run.",
+                }
+            )
+        return results
 
     logger.info("--- Executing real run. Initializing Cloud Tasks client. ---")
     try:
@@ -192,10 +209,15 @@ def schedule_all_races(
         logger.critical(f"Failed to initialize Cloud Tasks client: {e}", exc_info=True)
         # If client fails, all candidates fail
         for task in candidate_tasks:
-            results.append({
-                "race": task["race"], "phase": task["phase"], "task_name": None,
-                "ok": False, "reason": f"Failed to init CloudTasks client: {e}",
-            })
+            results.append(
+                {
+                    "race": task["race"],
+                    "phase": task["phase"],
+                    "task_name": None,
+                    "ok": False,
+                    "reason": f"Failed to init CloudTasks client: {e}",
+                }
+            )
         return results
 
     for task in candidate_tasks:
@@ -205,16 +227,19 @@ def schedule_all_races(
             phase=task["phase"],
             date=task["date"],
             schedule_time_utc=task["schedule_time_utc"],
+            service_url=service_url,
             r_label=task.get("r_label"),
             c_label=task.get("c_label"),
         )
-        results.append({
-            "race": task["race"],
-            "phase": task["phase"],
-            "task_name": result if success else None,
-            "ok": success,
-            "reason": None if success else result,
-        })
+        results.append(
+            {
+                "race": task["race"],
+                "phase": task["phase"],
+                "task_name": result if success else None,
+                "ok": success,
+                "reason": None if success else result,
+            }
+        )
 
     logger.info("--- schedule_all_races complete. ---")
     # Sort results to have a consistent order

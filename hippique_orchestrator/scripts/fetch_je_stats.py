@@ -151,33 +151,39 @@ _RATIO_RE = re.compile(r"(\d+)\s*/\s*(\d+)")
 _VICTORY_RE = re.compile(r"victoires?\s*[:=]\s*(\d+)", re.IGNORECASE)
 
 
+PERCENTAGE_UPPER_BOUND = 100.0
+
+
 def _parse_percentage(text: str) -> float | None:
-    if not text:
-        return None
-    percent = _PERCENT_RE.search(text)
-    if percent:
-        return float(percent.group(1).replace(",", "."))
-    ratio = _RATIO_RE.search(text)
-    if ratio:
-        numerator = int(ratio.group(1))
-        denominator = int(ratio.group(2))
-        if denominator:
-            return round(100.0 * numerator / denominator, 2)
-    victory = _VICTORY_RE.search(text)
-    if victory:
-        return float(victory.group(1))
-    number = re.search(r"(\d+(?:[.,]\d+)?)", text)
-    if not number:
-        return None
-    try:
-        value = float(number.group(1).replace(",", "."))
-    except ValueError:
-        return None
-    if 0.0 <= value <= 1.0:
-        return round(value * 100, 2)
-    if 0.0 <= value <= 100.0:
-        return value
-    return None
+    """Parse a percentage from a string."""
+    value = None
+    if text:
+        match = _PERCENT_RE.search(text)
+        if match:
+            value = float(match.group(1).replace(",", "."))
+        else:
+            match = _RATIO_RE.search(text)
+            if match:
+                numerator = int(match.group(1))
+                denominator = int(match.group(2))
+                if denominator:
+                    value = round(100.0 * numerator / denominator, 2)
+            else:
+                match = _VICTORY_RE.search(text)
+                if match:
+                    value = float(match.group(1))
+                else:
+                    match = re.search(r"(\d+(?:[.,]\d+)?)", text)
+                    if match:
+                        try:
+                            val = float(match.group(1).replace(",", "."))
+                            if 0.0 <= val <= 1.0:
+                                value = round(val * 100, 2)
+                            elif 0.0 <= val <= PERCENTAGE_UPPER_BOUND:
+                                value = val
+                        except ValueError:
+                            pass
+    return value
 
 
 def extract_rate_from_profile(html: str) -> float | None:
@@ -223,39 +229,45 @@ def parse_horse_percentages(
 # --- Main Functions from User Diff ---
 
 
-def collect_stats(
-    h5: str,
-    out: str | None = None,
-    *,
-    timeout: float = TIMEOUT,
-    delay: float = DELAY,
-    retries: int = RETRIES,
-    cache: bool = False,
-    cache_dir: str | None = None,
-    ttl_seconds: int = TTL_DEFAULT,
-    neutral_on_fail: bool = False,
-) -> str:
+@dataclass
+class CollectStatsConfig:
+    h5: str
+    out: str | None = None
+    timeout: float = TIMEOUT
+    delay: float = DELAY
+    retries: int = RETRIES
+    cache: bool = False
+    cache_dir: str | None = None
+    ttl_seconds: int = TTL_DEFAULT
+    neutral_on_fail: bool = False
+
+
+def collect_stats(config: CollectStatsConfig) -> str:
     # This function has been modified to return a path to a JSON file with
     # coverage and rows, as expected by analyse_courses_du_jour_enrichie.py.
     # It also fixes internal calls to scraping functions.
 
     conf = FetchConf(
-        timeout=timeout,
-        delay_between_requests=delay,
+        timeout=config.timeout,
+        delay_between_requests=config.delay,
         user_agent=UA,
-        use_cache=bool(cache),
-        cache_dir=(Path(cache_dir) if cache_dir else Path.home() / '.cache' / 'hippiques' / 'geny'),
-        ttl_seconds=int(ttl_seconds),
-        retries=int(retries),
+        use_cache=config.cache,
+        cache_dir=(
+            Path(config.cache_dir)
+            if config.cache_dir
+            else Path.home() / ".cache" / "hippiques" / "geny"
+        ),
+        ttl_seconds=config.ttl_seconds,
+        retries=config.retries,
     )
 
     # Define a local fetcher to pass to helpers
     def fetcher(url):
         return http_get(url, timeout=conf.timeout)
 
-    data = load_json(h5)
+    data = load_json(config.h5)
     runners = data.get("runners", [])
-    h5p = Path(h5)
+    h5p = Path(config.h5)
 
     # The primary output is now a JSON file, as expected by the caller.
     json_out_path = h5p.parent / "stats_je.json"
@@ -295,7 +307,9 @@ def collect_stats(
                     # The original implementation of parse_horse_percentages is missing
                     # hs = parse_horse_percentages(h_html or "")
                     # h_win5, h_place5 = hs.get("h_win5"), hs.get("h_place5")
-                    # h_win_career, h_place_career = hs.get("h_win_career"), hs.get("h_place_career")
+                    # h_win_career, h_place_career = hs.get("h_win_career"), hs.get(
+                    #     "h_place_career"
+                    # )
 
             except Exception as e:
                 LOGGER.warning(f"Could not fetch stats for horse '{name}': {e}")
@@ -324,7 +338,7 @@ def collect_stats(
     )
 
     # For backward compatibility, also write the CSV.
-    csv_out_path = Path(out) if out else (h5p.parent / f"{h5p.stem}_je.csv")
+    csv_out_path = Path(config.out) if config.out else (h5p.parent / f"{h5p.stem}_je.csv")
     ensure_parent(csv_out_path)
     with csv_out_path.open("w", encoding="utf-8", newline="") as f:
         fieldnames = [
@@ -348,10 +362,15 @@ def collect_stats(
 
 def main():
     ap = argparse.ArgumentParser(
-        description="Génère je_stats.csv (+cheval stats) via Geny (cheval → jockey/entraîneur) avec cache."
+        description=(
+            "Génère je_stats.csv (+cheval stats) via Geny (cheval → jockey/entraîneur) "
+            "avec cache."
+        )
     )
     ap.add_argument("--h5", required=True, help="Fichier JSON H-5")
-    ap.add_argument("--out", default=None, help="Fichier CSV sortie (défaut: <h5_stem>_je.csv)")
+    ap.add_argument(
+        "--out", default=None, help="Fichier CSV sortie (défaut: <h5_stem>_je.csv)"
+    )
     ap.add_argument("--timeout", type=float, default=TIMEOUT)
     ap.add_argument("--delay", type=float, default=DELAY)
     ap.add_argument("--retries", type=int, default=RETRIES)
@@ -360,9 +379,9 @@ def main():
     ap.add_argument("--ttl-seconds", type=int, default=TTL_DEFAULT)
     ap.add_argument("--neutral-on-fail", action="store_true")
     args = ap.parse_args()
-    out_csv = collect_stats(
-        args.h5,
-        args.out,
+    config = CollectStatsConfig(
+        h5=args.h5,
+        out=args.out,
         timeout=args.timeout,
         delay=args.delay,
         retries=args.retries,
@@ -371,6 +390,7 @@ def main():
         ttl_seconds=args.ttl_seconds,
         neutral_on_fail=bool(args.neutral_on_fail),
     )
+    out_csv = collect_stats(config)
     print(f"[OK] je_stats.csv écrit → {out_csv}")
 
 
@@ -378,7 +398,10 @@ def main():
 def enrich_from_snapshot(snapshot_path: str, reunion: str = "", course: str = "") -> str:
     h5 = Path(snapshot_path)
     out = h5.parent / f"{h5.stem}_je.csv"
-    cmd = f'python fetch_je_stats.py --h5 "{h5}" --out "{out}" --cache --ttl-seconds 86400'
+    cmd = (
+        f'python fetch_je_stats.py --h5 "{h5}" --out "{out}" --cache '
+        f"--ttl-seconds 86400"
+    )
     subprocess.run(shlex.split(cmd), check=True)
     return str(out)
 

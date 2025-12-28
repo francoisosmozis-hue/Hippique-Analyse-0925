@@ -8,6 +8,7 @@ QUEUE_ID = "hippique-tasks-v2"
 # Cible inoffensive pour le test
 TARGET_URL = "https://hippique-orchestrator-1084663881709.europe-west1.run.app/health"
 
+
 def main():
     """Tente de créer une unique tâche Cloud Task."""
     try:
@@ -34,6 +35,7 @@ def main():
         print("--- ÉCHEC avec une autre erreur ---")
         print(f"Type d'erreur: {type(e).__name__}")
         print(f"Détails de l'erreur: {e}")
+
 
 if __name__ == "__main__":
     main()
