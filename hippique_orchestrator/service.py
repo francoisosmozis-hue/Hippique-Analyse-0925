@@ -241,21 +241,23 @@ async def get_ops_status(date: str | None = None):
 
 
 @app.get("/debug/config", tags=["Debug"])
-async def debug_config(request: Request):
-    """Returns non-sensitive configuration values to help debug environment issues."""
-    base_url = f"{request.url.scheme}://{request.url.netloc}"
+async def debug_config():
+    """
+    DEBUGGING ENDPOINT.
+    Returns non-sensitive configuration values, including auth status,
+    to help debug environment issues.
+    """
     return {
+        "require_auth": config.REQUIRE_AUTH,
+        "internal_api_secret_is_set": bool(config.INTERNAL_API_SECRET),
+        "internal_api_secret_first_chars": config.INTERNAL_API_SECRET[:4]
+        if config.INTERNAL_API_SECRET
+        else None,
         "project_id": config.PROJECT_ID,
         "bucket_name": config.BUCKET_NAME,
         "task_queue": config.TASK_QUEUE,
         "log_level": config.LOG_LEVEL,
         "timezone": config.TIMEZONE,
-        "require_auth": config.REQUIRE_AUTH,
-        "service_url_from_request": base_url,
-        "note": (
-            "The 'service_url' for task scheduling is now derived from the incoming "
-            "request to /schedule."
-        ),
         "version": __version__,
     }
 
