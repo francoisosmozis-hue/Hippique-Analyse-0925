@@ -200,7 +200,7 @@ async def schedule_day_races(
             return ScheduleResponse(message=msg, races_in_plan=0, details=[])
 
         # Deduce service URL from the incoming request
-        service_url = f"{request.url.scheme}://{request.url.netloc}"
+        service_url = f"https://{request.url.netloc}"
         logger.info(
             "Built plan with %d races. Passing to scheduler with service_url: %s",
             len(daily_plan),
