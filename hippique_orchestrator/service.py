@@ -17,7 +17,7 @@ from pydantic import BaseModel
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from . import __version__, analysis_pipeline, config, firestore_client, plan, scheduler
-from .auth import check_api_key
+from .auth import check_api_key, verify_oidc_token
 from .logging_middleware import logging_middleware
 from .logging_utils import (
     setup_logging,
@@ -306,7 +306,9 @@ class RaceTaskPayload(BaseModel):
 
 
 @app.post("/tasks/run-phase", tags=["Tasks"])
-async def run_phase_worker(payload: RaceTaskPayload):
+async def run_phase_worker(
+    payload: RaceTaskPayload, token_claims: dict = Security(verify_oidc_token)
+):
     logger.info("Received task to run phase.", extra={"payload": payload.dict()})
     # Prefer explicit doc_id, then (date + r_label/c_label), then URL parsing as last resort.
     doc_id = payload.doc_id
