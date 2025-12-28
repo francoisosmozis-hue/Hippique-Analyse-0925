@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 
 
-def _run_gpi_pipeline(snapshot_data: dict[str, Any], log_extra: dict) -> dict[str, Any]:
+def _run_gpi_pipeline(snapshot_data: dict[str, Any], snapshot_gcs_path: str, log_extra: dict) -> dict[str, Any]:
     """Loads configs and stats, then runs the GPI ticket generation pipeline."""
     logger.info("Preparing to run GPI ticket generation.", extra=log_extra)
 
@@ -36,7 +36,7 @@ def _run_gpi_pipeline(snapshot_data: dict[str, Any], log_extra: dict) -> dict[st
     calibration_data = yaml.safe_load(calibration_content) if calibration_content else {}
 
     # Fetch stats
-    stats_h5_path = collect_stats(h5=snapshot_data)
+    stats_h5_path = collect_stats(h5=snapshot_gcs_path)
     stats_content = gcs_client.read_file_from_gcs(stats_h5_path)
     stats_data = json.loads(stats_content) if stats_content else {}
 
@@ -145,7 +145,7 @@ async def run_analysis_for_phase(
 
         _enrich_snapshot(snapshot_data)
 
-        tickets_analysis = _run_gpi_pipeline(snapshot_data, log_extra)
+        tickets_analysis = _run_gpi_pipeline(snapshot_data, gcs_path, log_extra)
 
         analysis_content["tickets_analysis"] = tickets_analysis
         gpi_decision = tickets_analysis.get("gpi_decision", "error_in_analysis")
