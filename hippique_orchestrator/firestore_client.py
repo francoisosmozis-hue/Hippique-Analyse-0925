@@ -12,12 +12,11 @@ from hippique_orchestrator.logging_utils import get_logger
 
 logger = get_logger(__name__)
 
-try:
-    db = firestore.Client(project=config.PROJECT_ID)
-    logger.info(f"Firestore client initialized for project '{config.PROJECT_ID}'.")
-except Exception as e:
-    db = None
-    logger.error(f"Failed to initialize Firestore client: {e}", exc_info=True)
+# Initialize the Firestore client globally.
+# Let it raise an exception if configuration (e.g., project ID, credentials) is wrong.
+# The application should fail to start if it cannot connect to the database.
+db = firestore.Client(project=config.PROJECT_ID)
+logger.info(f"Firestore client initialized for project '{config.PROJECT_ID}'.")
 
 
 def update_race_document(document_id: str, data: dict[str, Any]) -> None:
@@ -73,54 +72,77 @@ def get_doc_id_from_url(url: str, date: str) -> str | None:
 
 
 def get_processing_status_for_date(date_str: str, daily_plan: list[dict]) -> dict[str, Any]:
-    """Aggregates processing status from Firestore for the /ops/status endpoint."""
+    """
+    Aggregates processing status from Firestore and system config for the /ops/status endpoint.
+    """
+    if not db:
+        return {
+            "error": "Firestore client is not available.",
+            "reason_if_empty": "FIRESTORE_CONNECTION_FAILED",
+        }
+
     races_from_db = get_races_for_date(date_str)
     db_races_map = {doc.id.split('_')[-1]: doc.to_dict() for doc in races_from_db}
 
-    race_statuses = []
-    summary = {
-        "total_in_plan": len(daily_plan),
-        "total_processed": len(db_races_map),
-        "playable": 0,
-        "abstain": 0,
-        "errors": 0,
+    # --- Config Info ---
+    config_info = {
+        "project_id": config.PROJECT_ID,
+        "firestore_collection": config.FIRESTORE_COLLECTION,
+        "require_auth": config.REQUIRE_AUTH,
+        "plan_source": "boturfers",  # Hardcoded for now
     }
 
-    for race in daily_plan:
-        rc_label = race.get("c_label")
-        if not rc_label or not race.get("r_label"):
-            continue
+    # --- Firestore Metadata ---
+    docs_count = len(races_from_db)
+    last_doc_id = None
+    last_update_ts = None
+    if races_from_db:
+        last_doc = max(races_from_db, key=lambda doc: doc.update_time)
+        last_doc_id = last_doc.id
+        last_update_ts = last_doc.update_time.isoformat()
 
-        rc_key = f"{race.get('r_label')}{rc_label}"
-        db_data = db_races_map.get(rc_key)
+    firestore_meta = {
+        "docs_count_for_date": docs_count,
+        "last_doc_id": last_doc_id,
+        "last_update_ts": last_update_ts,
+    }
 
-        status_entry = {
-            "rc": rc_key,
-            "name": race.get("name"),
-            "time": race.get("time_local"),
-            "firestore_status": "Not Processed",
-            "last_analyzed_at": None,
-            "error_reason": None,
-        }
+    # --- Counts & Status ---
+    counts = {
+        "total_in_plan": len(daily_plan),
+        "total_processed": len(db_races_map),
+        "total_playable": 0,
+        "total_abstain": 0,
+        "total_error": 0,
+    }
+    counts["total_pending"] = counts["total_in_plan"] - counts["total_processed"]
 
-        if db_data:
-            analysis = db_data.get("tickets_analysis", {})
-            decision = analysis.get("gpi_decision", "Unknown")
-            status_entry["firestore_status"] = decision
-            status_entry["last_analyzed_at"] = db_data.get("last_analyzed_at")
+    for rc_key, db_data in db_races_map.items():
+        decision = db_data.get("tickets_analysis", {}).get("gpi_decision", "Unknown").lower()
+        if "play" in decision:
+            counts["total_playable"] += 1
+        elif "abstain" in decision:
+            counts["total_abstain"] += 1
+        elif "error" in decision:
+            counts["total_error"] += 1
 
-            if "play" in decision.lower():
-                summary["playable"] += 1
-            elif "abstain" in decision.lower():
-                summary["abstain"] += 1
-            elif "error" in decision.lower():
-                summary["errors"] += 1
-                status_entry["error_reason"] = analysis.get("reason")
-
-        race_statuses.append(status_entry)
+    # --- Determine Reason if Empty ---
+    reason_if_empty = None
+    if counts["total_in_plan"] > 0 and counts["total_processed"] == 0:
+        # This is the key state to diagnose. More reasons can be added.
+        if not firestore_meta["last_update_ts"]:
+            reason_if_empty = "NO_TASKS_PROCESSED_OR_FIRESTORE_EMPTY"
+        else:
+            reason_if_empty = "PROCESSING_STALLED"
+    elif counts["total_in_plan"] == 0:
+        reason_if_empty = "PLAN_SCRAPING_FAILED_OR_NO_RACES_TODAY"
 
     return {
         "date": date_str,
-        "summary": summary,
-        "races": race_statuses,
+        "config": config_info,
+        "counts": counts,
+        "firestore_metadata": firestore_meta,
+        "reason_if_empty": reason_if_empty,
+        "last_task_attempt": None,  # Placeholder
+        "last_error": None,  # Placeholder
     }

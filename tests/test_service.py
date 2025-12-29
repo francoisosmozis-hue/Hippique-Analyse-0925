@@ -28,10 +28,9 @@ def mock_plan(monkeypatch):
 def mock_firestore(monkeypatch):
     """Fixture to mock firestore_client functions."""
     mock_get_races = MagicMock()
-    mock_get_status = MagicMock()
+    # We still return a tuple to match test unpacking, but the second value is unused
     monkeypatch.setattr(firestore_client, "get_races_for_date", mock_get_races)
-    monkeypatch.setattr(firestore_client, "get_processing_status_for_date", mock_get_status)
-    return mock_get_races, mock_get_status
+    return mock_get_races, MagicMock()
 
 
 def test_get_pronostics_page():
@@ -47,9 +46,8 @@ def test_get_pronostics_data_empty_case(mock_plan, mock_firestore):
     Test /api/pronostics when no races are in the plan or DB.
     It should return a valid "empty" response, not an error.
     """
-    mock_build_plan, _ = mock_plan, mock_firestore
-    mock_build_plan.return_value = []
     mock_get_races, _ = mock_firestore
+    mock_plan.return_value = []
     mock_get_races.return_value = []
 
     response = client.get("/api/pronostics?date=2025-01-01")
@@ -77,12 +75,12 @@ def test_get_pronostics_data_with_data(mock_plan, mock_firestore):
     """
     Test /api/pronostics with data from both the plan and Firestore.
     """
-    mock_build_plan, (mock_get_races, _) = mock_plan, mock_firestore
+    mock_get_races, _ = mock_firestore
 
     # Mock plan returns two races
-    mock_build_plan.return_value = [
-        {"rc_label": "R1C1", "name": "Prix d'Amerique"},
-        {"rc_label": "R1C2", "name": "Prix de l'Arc"},
+    mock_plan.return_value = [
+        {"r_label": "R1", "c_label": "C1", "name": "Prix d'Amerique"},
+        {"r_label": "R1", "c_label": "C2", "name": "Prix de l'Arc"},
     ]
 
     # Mock firestore returns one processed race
@@ -121,20 +119,19 @@ def test_get_pronostics_data_with_data(mock_plan, mock_firestore):
 
 
 def test_get_ops_status(mock_plan, mock_firestore):
-    """Test the /api/ops/status endpoint."""
-    _, (_, mock_get_status) = mock_plan, mock_firestore
+    """Test the /ops/status endpoint with a standard scenario."""
+    mock_get_races, _ = mock_firestore
 
-    mock_get_status.return_value = {
-        "date": "2025-01-01",
-        "summary": {
-            "total_in_plan": 1,
-            "total_processed": 0,
-            "playable": 0,
-            "abstain": 0,
-            "errors": 0,
-        },
-        "races": [{"rc": "R1C1", "name": "Prix de Test", "status": "Not Processed"}],
+    mock_plan.return_value = [{"r_label": "R1", "c_label": "C1"}]
+
+    mock_doc = MagicMock()
+    mock_doc.id = "2025-01-01_R1C1"
+    mock_doc.update_time = datetime.now()
+    mock_doc.to_dict.return_value = {
+        "rc": "R1C1",
+        "tickets_analysis": {"gpi_decision": "play_gpi"},
     }
+    mock_get_races.return_value = [mock_doc]
 
     response = client.get("/ops/status?date=2025-01-01")
 
@@ -142,8 +139,32 @@ def test_get_ops_status(mock_plan, mock_firestore):
     data = response.json()
 
     assert data["date"] == "2025-01-01"
-    assert data["summary"]["total_in_plan"] == 1
-    assert len(data["races"]) == 1
+    assert data["config"]["firestore_collection"] == "races-test"
+    assert data["counts"]["total_in_plan"] == 1
+    assert data["counts"]["total_processed"] == 1
+    assert data["counts"]["total_playable"] == 1
+    assert data["firestore_metadata"]["docs_count_for_date"] == 1
+    assert data["reason_if_empty"] is None
+
+
+def test_get_ops_status_reason_if_empty(mock_plan, mock_firestore):
+    """Test that /ops/status provides a reason when no races are processed."""
+    mock_get_races, _ = mock_firestore
+
+    # Plan has races, but firestore is empty
+    mock_plan.return_value = [{"r_label": "R1", "c_label": "C1"}]
+    mock_get_races.return_value = []
+
+    response = client.get("/ops/status?date=2025-01-01")
+
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["counts"]["total_in_plan"] == 1
+    assert data["counts"]["total_processed"] == 0
+    assert data["reason_if_empty"] == "NO_TASKS_PROCESSED_OR_FIRESTORE_EMPTY"
+
+
 
 
 def test_health_check():
@@ -153,3 +174,49 @@ def test_health_check():
     data = response.json()
     assert data["status"] == "healthy"
     assert "version" in data
+
+
+def test_legacy_redirects():
+    """Test that old /ui paths correctly redirect."""
+    # Test UI redirect
+    response_ui = client.get("/pronostics/ui", follow_redirects=False)
+    assert response_ui.status_code == 307
+    assert response_ui.headers["location"] == "/pronostics"
+
+    # Test API redirect
+    response_api = client.get("/api/pronostics/ui", follow_redirects=False)
+    assert response_api.status_code == 307
+    assert response_api.headers["location"] == "/api/pronostics"
+
+
+def test_post_ops_run_success(monkeypatch, mock_plan):
+    """Test the POST /ops/run endpoint for a successful manual trigger."""
+    # Mock dependencies
+    mock_run_analysis = AsyncMock(return_value={"gpi_decision": "play_manual"})
+    monkeypatch.setattr(
+        "hippique_orchestrator.analysis_pipeline.run_analysis_for_phase", mock_run_analysis
+    )
+    mock_update_db = MagicMock()
+    monkeypatch.setattr("hippique_orchestrator.firestore_client.update_race_document", mock_update_db)
+
+    # Setup mock plan to return the target race
+    mock_plan.return_value = [
+        {"r_label": "R1", "c_label": "C1", "name": "Prix d'Amerique", "url": "http://example.com/r1c1"}
+    ]
+
+    # Make the request with a valid API key
+    response = client.post("/ops/run?rc=R1C1", headers={"X-API-Key": "test-secret"})
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["gpi_decision"] == "play_manual"
+
+    # Verify that the pipeline and DB update were called
+    mock_run_analysis.assert_called_once()
+    mock_update_db.assert_called_once()
+    
+    # Check that the doc_id passed to update_race_document is correct
+    call_args, _ = mock_update_db.call_args
+    assert call_args[0].endswith("_R1C1")  # doc_id is the first positional arg
+    assert call_args[1]["gpi_decision"] == "play_manual"

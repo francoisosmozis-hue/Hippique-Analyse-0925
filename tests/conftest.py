@@ -76,15 +76,10 @@ def mock_config_values(mocker):
     mocker.patch("hippique_orchestrator.config.TASK_OIDC_SA_EMAIL", "test-sa@example.com")
     mocker.patch("hippique_orchestrator.config.REQUIRE_AUTH", False)  # Disable auth for most tests
     mocker.patch("hippique_orchestrator.config.FIRESTORE_COLLECTION", "races-test")
+    mocker.patch("hippique_orchestrator.config.INTERNAL_API_SECRET", "test-secret")
 
-    # Mock get_service_url to prevent it from failing in test environments
-    mocker.patch(
-        "hippique_orchestrator.config.get_service_url",
-        return_value="https://test-service.a.run.app",
-    )
-
-    # Mock the firestore client initialization to prevent it from trying to connect
-    mocker.patch("hippique_orchestrator.firestore_client.db", None)
+    # Mock the firestore client at the source to prevent real connections during import
+    mocker.patch("google.cloud.firestore.Client", return_value=mocker.MagicMock())
 
 
 @pytest.fixture(scope="function")

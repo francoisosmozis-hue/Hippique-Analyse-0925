@@ -58,6 +58,18 @@ async def get_pronostics_page(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
 
+@app.get("/pronostics/ui", include_in_schema=False)
+async def redirect_legacy_ui():
+    """Redirects old UI path to the new one."""
+    return RedirectResponse(url="/pronostics", status_code=307)
+
+
+@app.get("/api/pronostics/ui", include_in_schema=False)
+async def redirect_legacy_api_ui():
+    """Redirects old API UI path to the new one."""
+    return RedirectResponse(url="/api/pronostics", status_code=307)
+
+
 # --- API Endpoints ---
 @app.get("/api/pronostics", tags=["API"])
 async def get_pronostics_data(date: str | None = None, if_none_match: str | None = Header(None)):
@@ -238,6 +250,55 @@ async def get_ops_status(date: str | None = None):
 
     daily_plan = await plan.build_plan_async(date_str)
     return firestore_client.get_processing_status_for_date(date_str, daily_plan)
+
+
+@app.post("/ops/run", tags=["Operations"])
+async def run_single_race(rc: str, api_key: str = Security(check_api_key)):
+    """Manually triggers the analysis pipeline for a single race."""
+    date_str = datetime.now(ZoneInfo(config.TIMEZONE)).strftime("%Y-%m-%d")
+    logger.info(f"Manual run triggered for race {rc} on {date_str}")
+
+    daily_plan = await plan.build_plan_async(date_str)
+    target_race = next((r for r in daily_plan if f"{r.get('r_label')}{r.get('c_label')}" == rc), None)
+
+    if not target_race:
+        raise HTTPException(status_code=404, detail=f"Race {rc} not found in plan for {date_str}")
+
+    doc_id = f"{date_str}_{rc}"
+    course_url = target_race.get("url")
+    if not course_url:
+        raise HTTPException(status_code=400, detail=f"Race {rc} is missing a URL in the plan.")
+
+    try:
+        # Using H-5 as the default phase for a manual run
+        analysis_result = await analysis_pipeline.run_analysis_for_phase(
+            course_url=course_url,
+            phase="H-5",
+            date=date_str,
+            race_doc_id=doc_id,
+        )
+        firestore_client.update_race_document(doc_id, analysis_result)
+        logger.info(f"Successfully processed and saved manual run for {doc_id}")
+        return {
+            "status": "success",
+            "document_id": doc_id,
+            "gpi_decision": analysis_result.get("gpi_decision", "N/A"),
+        }
+    except Exception as e:
+        logger.error(f"Critical error during manual run for {doc_id}: {e}", exc_info=True)
+        error_data = {
+            "last_analyzed_at": datetime.now(timezone.utc).isoformat(),
+            "phase": "H-5-manual",
+            "status": "error",
+            "error_message": str(e),
+            "gpi_decision": "error_manual_run",
+        }
+        firestore_client.update_race_document(doc_id, error_data)
+        raise HTTPException(
+            status_code=500, detail=f"Failed to process manual run for {doc_id}."
+        ) from e
+
+
 
 
 @app.get("/debug/config", tags=["Debug"])
