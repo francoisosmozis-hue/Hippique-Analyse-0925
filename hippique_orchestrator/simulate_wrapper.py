@@ -51,12 +51,6 @@ CALIBRATION_PATH = Path("config/probabilities.yaml")
 def _default_payout_calibration_path() -> Path:
     """Return the payout calibration path configured via ``CALIB_PATH``."""
 
-    env_path = config.PAYOUT_CALIBRATION_PATH
-    if env_path:
-        try:
-            return Path(env_path)
-        except TypeError:  # pragma: no cover - defensive
-            pass
     config_candidate = Path("config/payout_calibration.yaml")
     if config_candidate.exists():
         return config_candidate

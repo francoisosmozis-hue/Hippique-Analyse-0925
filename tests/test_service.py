@@ -13,7 +13,7 @@ firestore_client.db = MagicMock()
 
 from hippique_orchestrator.service import app  # noqa: E402
 
-client = TestClient(app)
+
 
 
 @pytest.fixture
@@ -33,7 +33,7 @@ def mock_firestore(monkeypatch):
     return mock_get_races, MagicMock()
 
 
-def test_get_pronostics_page():
+def test_get_pronostics_page(client):
     """Test that the main UI page loads."""
     response = client.get("/pronostics")
     assert response.status_code == 200
@@ -41,7 +41,7 @@ def test_get_pronostics_page():
     assert "<title>Hippique Orchestrator - Pronostics</title>" in response.text
 
 
-def test_get_pronostics_data_empty_case(mock_plan, mock_firestore):
+def test_get_pronostics_data_empty_case(client, mock_plan, mock_firestore):
     """
     Test /api/pronostics when no races are in the plan or DB.
     It should return a valid "empty" response, not an error.
@@ -71,7 +71,7 @@ def test_get_pronostics_data_empty_case(mock_plan, mock_firestore):
         pytest.fail("last_updated is not a valid ISO 8601 string")
 
 
-def test_get_pronostics_data_with_data(mock_plan, mock_firestore):
+def test_get_pronostics_data_with_data(client, mock_plan, mock_firestore):
     """
     Test /api/pronostics with data from both the plan and Firestore.
     """
@@ -118,7 +118,7 @@ def test_get_pronostics_data_with_data(mock_plan, mock_firestore):
     assert u_race["status"] == "pending"
 
 
-def test_get_ops_status(mock_plan, mock_firestore):
+def test_get_ops_status(client, mock_plan, mock_firestore):
     """Test the /ops/status endpoint with a standard scenario."""
     mock_get_races, _ = mock_firestore
 
@@ -147,7 +147,7 @@ def test_get_ops_status(mock_plan, mock_firestore):
     assert data["reason_if_empty"] is None
 
 
-def test_get_ops_status_reason_if_empty(mock_plan, mock_firestore):
+def test_get_ops_status_reason_if_empty(client, mock_plan, mock_firestore):
     """Test that /ops/status provides a reason when no races are processed."""
     mock_get_races, _ = mock_firestore
 
@@ -167,7 +167,7 @@ def test_get_ops_status_reason_if_empty(mock_plan, mock_firestore):
 
 
 
-def test_health_check():
+def test_health_check(client):
     """Test the /health endpoint."""
     response = client.get("/health")
     assert response.status_code == 200
@@ -176,7 +176,7 @@ def test_health_check():
     assert "version" in data
 
 
-def test_legacy_redirects():
+def test_legacy_redirects(client):
     """Test that old /ui paths correctly redirect."""
     # Test UI redirect
     response_ui = client.get("/pronostics/ui", follow_redirects=False)
@@ -189,7 +189,7 @@ def test_legacy_redirects():
     assert response_api.headers["location"] == "/api/pronostics"
 
 
-def test_post_ops_run_success(monkeypatch, mock_plan):
+def test_post_ops_run_success(client, monkeypatch, mock_plan):
     """Test the POST /ops/run endpoint for a successful manual trigger."""
     # Mock dependencies
     mock_run_analysis = AsyncMock(return_value={"gpi_decision": "play_manual"})
@@ -220,3 +220,41 @@ def test_post_ops_run_success(monkeypatch, mock_plan):
     call_args, _ = mock_update_db.call_args
     assert call_args[0].endswith("_R1C1")  # doc_id is the first positional arg
     assert call_args[1]["gpi_decision"] == "play_manual"
+
+
+def test_pronostics_api_security(mocker, mock_plan, mock_firestore):
+    """
+    Tests that the /api/pronostics endpoint is properly secured with an API key.
+    This test creates its own client to ensure dependency overrides don't leak.
+    """
+    # Enable auth for this specific test, overriding the default test config
+    mocker.patch("hippique_orchestrator.config.REQUIRE_AUTH", True)
+
+    # Re-import the app and create a new client AFTER patching the config
+    from hippique_orchestrator.service import app
+    from fastapi.testclient import TestClient
+    
+    with TestClient(app) as client:
+        # Mock the underlying functions to isolate the auth logic
+        mock_get_races, _ = mock_firestore
+        mock_plan.return_value = []
+        mock_get_races.return_value = []
+
+        # 1. Test without API key -> should fail (403 Forbidden)
+        response_no_key = client.get("/api/pronostics?date=2025-01-01")
+        assert response_no_key.status_code == 403
+        assert "Invalid or missing API Key" in response_no_key.json()["detail"]
+
+        # 2. Test with incorrect API key -> should fail (403 Forbidden)
+        response_wrong_key = client.get(
+            "/api/pronostics?date=2025-01-01", headers={"X-API-Key": "wrong-secret"}
+        )
+        assert response_wrong_key.status_code == 403
+        assert "Invalid or missing API Key" in response_wrong_key.json()["detail"]
+
+        # 3. Test with correct API key -> should succeed (200 OK)
+        response_good_key = client.get(
+            "/api/pronostics?date=2025-01-01", headers={"X-API-Key": "test-secret"}
+        )
+        assert response_good_key.status_code == 200
+

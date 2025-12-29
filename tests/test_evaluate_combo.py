@@ -16,8 +16,7 @@ def test_default_config_path_missing(monkeypatch, tmp_path):
     assert res["status"] == "insufficient_data"
     assert res["calibration_used"] is False
     assert "Calibration" in res["message"]
-    assert str(config.PAYOUT_CALIBRATION_PATH) in res["requirements"]
-    assert str(Path("config/payout_calibration.yaml")) in res["requirements"]
+    assert "calibration/payout_calibration.yaml" in res["requirements"]
 
 
 def test_env_path_missing(mocker, tmp_path):

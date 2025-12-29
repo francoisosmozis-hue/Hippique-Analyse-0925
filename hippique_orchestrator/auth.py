@@ -21,6 +21,9 @@ oidc_token_scheme = APIKeyHeader(
 
 async def check_api_key(api_key_header: str = Security(api_key_header_scheme)):
     """Dependency to verify the internal API key."""
+    if not config.REQUIRE_AUTH:
+        return True
+        
     if not config.INTERNAL_API_SECRET:
         # This is a server misconfiguration, should not happen in prod
         raise HTTPException(status_code=500, detail="Internal API secret not configured on server.")
@@ -44,8 +47,8 @@ async def verify_oidc_token(
 
     try:
         # The audience should be the full URL of the service.
-        # We derive it from the request headers.
-        audience = f"{request.url.scheme}://{request.url.netloc}/"
+        # We derive it from the request headers, ensuring no trailing slash.
+        audience = f"{request.url.scheme}://{request.url.netloc}"
 
         # Validate the token
         # This checks signature, expiration, issuer, and audience.

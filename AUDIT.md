@@ -1,29 +1,32 @@
-# AUDIT.md - Rapport d'audit hippique-orchestrator
+# Audit Rapide - hippique-orchestrator
 
-## Causes racines probables (par ordre d'impact)
+Ce document résume les conclusions de l'audit de code (Phase 1). Les problèmes sont classés par ordre d'impact décroissant.
 
-1.  **(Impact Élevé)** **Échec Silencieux de la Connexion Firestore.**
-    - **Description :** Dans `hippique_orchestrator/firestore_client.py`, l'initialisation du client Firestore est entourée d'un `try...except` trop large. Si une exception survient (très probablement un manque de permission IAM `roles/datastore.user` pour le service account), la variable globale `db` est assignée à `None`.
-    - **Conséquence :** Toutes les fonctions de lecture/écriture (`get_races_for_date`, `update_race_document`) retournent des valeurs vides ou ne font rien, sans jamais lever d'erreur. Le reste de l'application fonctionne "normalement", mais sans persistance, ce qui explique parfaitement `total_processed=0`.
+### Synthèse
+Le système souffre de deux problèmes critiques qui empêchent le fonctionnement nominal : une authentification OIDC cassée pour les tâches asynchrones et une logique métier de "drift" non implémentée. Un problème de scraping en amont est la cause la plus probable de l'absence de données (`total_races=0`). Le reste du code semble globalement robuste mais pourrait être simplifié.
 
-2.  **(Impact Moyen)** **Logique de Planification Trop Stricte.**
-    - **Description :** Dans `hippique_orchestrator/scheduler.py`, la fonction `_calculate_task_schedule` écarte la création d'une tâche Cloud Task si son heure de déclenchement calculée (ex: H-30) est déjà dans le passé.
-    - **Conséquence :** Si le job Cloud Scheduler qui appelle `/schedule` s'exécute avec quelques minutes de retard, aucune tâche n'est créée pour les courses imminentes, et donc aucun traitement n'est lancé. L'échec est silencieux.
+### Causes Racines Probables (par ordre d'impact)
 
-3.  **(Impact Faible)** **Routes UI Legacy Non Enregistrées.**
-    - **Description :** Les routes `GET /pronostics/ui` et `GET /api/pronostics/ui` ne sont pas déclarées dans le routeur FastAPI de `hippique_orchestrator/service.py`.
-    - **Conséquence :** Provoque les erreurs 404 observées.
+| Impact | Problème | Fichiers Clés | Cause Racine |
+| :--- | :--- | :--- | :--- |
+| **CRITIQUE** | **Auth Cloud Tasks (OIDC) échoue** | `service.py`, `auth.py` | Incohérence de l'audience : `https://host` à la création vs `https://host/` (avec slash final) à la validation. La validation OIDC échoue, bloquant toute analyse asynchrone (H-30, H-5). |
+| **CRITIQUE** | **Logique de Drift (H-30/H-5) inactive** | `analysis_pipeline.py`, `pipeline_run.py` | Le snapshot H-30 n'est jamais rechargé. Un dictionnaire vide (`{}`) est passé au moteur d'analyse (`pipeline_run.py`), qui est pourtant prêt à l'utiliser. Le statut de drift est donc toujours "Stable". |
+| **ÉLEVÉ** | **Aucune course affichée (`total_races=0`)** | `plan.py`, `scrapers/boturfers.py` | L'endpoint API (`/api/pronostics`) est fonctionnel, mais il dépend du scraping du programme du jour (`plan.build_plan_async`). Si ce scraping échoue ou ne trouve rien, l'API renvoie 0 course. Le problème est en amont. |
+| **MOYEN** | **Dépendances externes multiples** | `scrapers/boturfers.py`, `fetch_je_stats.py` | Le système dépend de deux sites externes (`boturfers.fr`, `geny.com`), ce qui le rend fragile et potentiellement lent. `fetch_je_stats.py` est particulièrement lent (plusieurs requêtes séquentielles par course). |
+| **FAIBLE** | **Code mort et complexité inutile** | `api/tasks.py`, `fetch_je_stats.py` | Le fichier `api/tasks.py` n'est pas utilisé. La fonction `enrich_from_snapshot` dans `fetch_je_stats.py` qui s'appelle elle-même en sous-processus est du code mort. |
 
-## Fichiers Impliqués
+### Schéma du chemin de données
+1.  **Planification (`/schedule`)**: `service.py` appelle `plan.py` -> `scrapers/boturfers.py` pour lister les courses du jour.
+2.  **Création des tâches**: `service.py` appelle `scheduler.py` pour créer des tâches Cloud Tasks (une pour H-30, une pour H-5) pour chaque course. **L'audience OIDC est mal configurée ici.**
+3.  **Exécution de la tâche (`/tasks/run-phase`)**: Cloud Tasks appelle ce endpoint. **L'authentification OIDC échoue ici.**
+4.  **Pipeline d'analyse**: Si l'auth passait, `service.py` appellerait `analysis_pipeline.run_analysis_for_phase`.
+    a.  **Snapshot**: Le scraping est ré-exécuté et le résultat est sauvé sur GCS (ex: `.../R1C1/snapshots/xxx_H-5.json`).
+    b.  **Enrichissement JE**: `fetch_je_stats.py` est appelé, scrape `geny.com` et sauve `stats_je.json` sur GCS.
+    c.  **Moteur GPI**: `pipeline_run.py` est appelé. **Il ne reçoit pas les données H-30.**
+5.  **Persistance**: Le résultat de l'analyse est écrit dans un document Firestore (ex: `YYYY-MM-DD_R1C1`).
+6.  **Lecture (UI)**: `GET /api/pronostics` lit les documents Firestore et le plan du jour pour construire la réponse JSON.
 
--   `hippique_orchestrator/firestore_client.py`: **Point central de l'échec silencieux.**
--   `hippique_orchestrator/scheduler.py`: Logique de création des tâches qui peut échouer silencieusement.
--   `hippique_orchestrator/service.py`: Déclaration des routes, où manquent les redirections legacy.
--   `hippique_orchestrator/plan.py`: Fournit le plan de courses initial, qui est correct, mais dont les statuts ne sont jamais mis à jour.
-
-## "Proof Points" (Points de Vérification)
-
--   **Variable `db`:** La variable globale `db` dans `firestore_client.py` ne devrait jamais être `None` après l'initialisation. Un log critique est nécessaire si l'instanciation échoue.
--   **Logs de Démarrage :** Le service devrait loguer une erreur fatale et s'arrêter s'il ne peut pas se connecter à Firestore. Actuellement, il démarre silencieusement.
--   **Endpoint `/ops/status` (à créer) :** Doit exposer le nombre de documents dans Firestore. Si ce nombre est 0 alors que `total_in_plan > 0`, le problème de connexion est confirmé.
--   **Endpoint `/schedule` :** Devrait loguer explicitement le nombre de tâches créées. Si ce nombre est 0, cela pointe vers un problème de timing dans la planification.
+### Dépendances fantômes
+- La seule dépendance fantôme majeure identifiée est l'incohérence OIDC qui est une erreur de configuration logique plutôt qu'un module manquant.
+- Les variables d'environnement semblent correctement gérées via `config.py`.
+- Le code mort (`api/tasks.py`, `enrich_from_snapshot`) devrait être supprimé pour éviter toute confusion future.

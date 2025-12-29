@@ -137,10 +137,10 @@ def test_api_pronostics_rich_response_structure(client, mocker):
     ]
     # We have 3 docs in DB, but let's say the plan has 4 races.
     plan_races = [
-        {"rc_label": "R1C1"},
-        {"rc_label": "R1C2"},
-        {"rc_label": "R1C3"},
-        {"rc_label": "R1C4"},
+        {"r_label": "R1", "c_label": "C1"},
+        {"r_label": "R1", "c_label": "C2"},
+        {"r_label": "R1", "c_label": "C3"},
+        {"r_label": "R1", "c_label": "C4"},
     ]
     mocker.patch("hippique_orchestrator.plan.build_plan_async", return_value=plan_races)
     mocker.patch("hippique_orchestrator.firestore_client.get_races_for_date", return_value=docs)

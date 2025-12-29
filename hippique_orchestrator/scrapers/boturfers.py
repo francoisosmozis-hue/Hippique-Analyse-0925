@@ -210,6 +210,54 @@ class BoturfersFetcher:
             )
         return metadata
 
+    def _parse_race_runners_from_details_page(self) -> list[dict[str, Any]]:
+        """Parses the runners from the race details page."""
+        if not self.soup:
+            return []
+
+        runners = []
+        runners_table = self.soup.select_one("table.data")
+        if not runners_table:
+            logger.warning("Could not find runners table ('table.data') on the page.", extra=self.log_extra)
+            return []
+
+        for row in runners_table.select("tbody tr"):
+            try:
+                num = row.select_one("th.num").text.strip()
+                nom = row.select_one("td.tl > a.link").text.strip()
+                
+                links = row.select("td.tl a.link")
+                jockey = links[1].text.strip() if len(links) > 1 else None
+                trainer = links[2].text.strip() if len(links) > 2 else None
+
+                odds_win_tag = row.select_one("td.cote-gagnant span.c")
+                odds_win = float(odds_win_tag.text.replace(",", ".")) if odds_win_tag else None
+
+                odds_place_tag = row.select_one("td.cote-place span.c")
+                odds_place = float(odds_place_tag.text.replace(",", ".")) if odds_place_tag else None
+                
+                musique_tag = row.select_one("td.musique")
+                musique = musique_tag.text.strip() if musique_tag else None
+                
+                gains_tag = row.select_one("td.gains")
+                gains = gains_tag.text.strip().replace(" ", "") if gains_tag else None
+
+                runners.append({
+                    "num": num,
+                    "nom": nom,
+                    "jockey": jockey,
+                    "entraineur": trainer,
+                    "odds_win": odds_win,
+                    "odds_place": odds_place,
+                    "musique": musique,
+                    "gains": gains,
+                })
+            except (AttributeError, ValueError, IndexError) as e:
+                logger.warning(f"Failed to parse a runner row: {e}. Row skipped.", extra=self.log_extra)
+                continue
+        
+        return runners
+
     async def get_snapshot(self) -> dict[str, Any]:
         """Orchestre le scraping du programme et retourne la liste des courses."""
         if not await self._fetch_html():
@@ -232,7 +280,7 @@ class BoturfersFetcher:
         if not await self._fetch_html():
             return {"error": "Failed to fetch HTML"}
         race_metadata = self._parse_race_metadata()
-        runners = self._parse_race_runners()
+        runners = self._parse_race_runners_from_details_page()
         if not runners:
             logger.error(
                 "Aucun partant n'a pu être extrait de %s.", self.race_url, extra=self.log_extra

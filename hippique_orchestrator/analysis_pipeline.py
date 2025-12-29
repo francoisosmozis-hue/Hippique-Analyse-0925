@@ -21,8 +21,41 @@ from .pipeline_run import generate_tickets
 logger = logging.getLogger(__name__)
 
 
+def _find_and_load_h30_snapshot(race_doc_id: str, log_extra: dict) -> dict[str, Any]:
+    """Finds the latest H-30 snapshot for a given race and loads it."""
+    snapshot_dir = f"data/{race_doc_id}/snapshots/"
+    try:
+        all_snapshots = gcs_client.list_files(snapshot_dir)
+        if not all_snapshots:
+            logger.warning("No snapshots found in directory.", extra={**log_extra, "dir": snapshot_dir})
+            return {}
+
+        # Filter for H-30 snapshots and get the most recent one
+        h30_snapshots = sorted(
+            [s for s in all_snapshots if "_H-30.json" in s],
+            reverse=True,
+        )
+        if not h30_snapshots:
+            logger.warning("No H-30 snapshot found for drift calculation.", extra=log_extra)
+            return {}
+
+        latest_h30_path = h30_snapshots[0]
+        logger.info(f"Found latest H-30 snapshot: {latest_h30_path}", extra=log_extra)
+
+        h30_content = gcs_client.read_file_from_gcs(latest_h30_path)
+        return json.loads(h30_content) if h30_content else {}
+
+    except Exception as e:
+        logger.error(f"Failed to find or load H-30 snapshot: {e}", extra=log_extra)
+        return {}
+
+
 def _run_gpi_pipeline(
-    snapshot_data: dict[str, Any], snapshot_gcs_path: str, log_extra: dict
+    snapshot_data: dict[str, Any],
+    snapshot_gcs_path: str,
+    race_doc_id: str,
+    phase: str,
+    log_extra: dict,
 ) -> dict[str, Any]:
     """Loads configs and stats, then runs the GPI ticket generation pipeline."""
     logger.info("Preparing to run GPI ticket generation.", extra=log_extra)
@@ -43,7 +76,14 @@ def _run_gpi_pipeline(
     gpi_config["budget"] = config.BUDGET_CAP_EUR
     gpi_config["calibration_data"] = calibration_data
     gpi_config["je_stats"] = stats_data
-    gpi_config["h30_snapshot_data"] = {}  # Placeholder for drift, to be implemented
+    
+    # --- DRIFT LOGIC IMPLEMENTATION ---
+    h30_snapshot_data = {}
+    if phase == "H-5":
+        logger.info("H-5 phase: attempting to load H-30 snapshot for drift.", extra=log_extra)
+        h30_snapshot_data = _find_and_load_h30_snapshot(race_doc_id, log_extra)
+    gpi_config["h30_snapshot_data"] = h30_snapshot_data
+    # --- END DRIFT LOGIC ---
 
     logger.info("Calling generate_tickets.", extra=log_extra)
     tickets_analysis = generate_tickets(
@@ -51,6 +91,7 @@ def _run_gpi_pipeline(
         gpi_config=gpi_config,
     )
     return tickets_analysis
+
 
 
 def _enrich_snapshot(snapshot_data: dict[str, Any]):
@@ -144,7 +185,9 @@ async def run_analysis_for_phase(
 
         _enrich_snapshot(snapshot_data)
 
-        tickets_analysis = _run_gpi_pipeline(snapshot_data, gcs_path, log_extra)
+        tickets_analysis = _run_gpi_pipeline(
+            snapshot_data, gcs_path, race_doc_id, phase, log_extra
+        )
 
         analysis_content["tickets_analysis"] = tickets_analysis
         gpi_decision = tickets_analysis.get("gpi_decision", "error_in_analysis")
