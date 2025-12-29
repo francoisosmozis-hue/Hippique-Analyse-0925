@@ -1,65 +1,93 @@
-# TEST_PLAN.md
+# Plan de Test - Hippique Orchestrator
 
-Ce document fournit une série de commandes `curl` pour effectuer un "smoke test" de base sur l'application `hippique-orchestrator` une fois déployée.
+Ce document décrit les procédures pour exécuter les suites de tests automatisés du projet, à la fois localement et contre l'environnement de production.
 
-**Prérequis :**
-- Remplacez `<YOUR_CLOUD_RUN_URL>` par l'URL de base de votre service Cloud Run (ex: `https://hippique-orchestrator-xxxx-ew.a.run.app`).
-- Remplacez `<YOUR_API_KEY>` par la valeur de la variable d'environnement `INTERNAL_API_SECRET`.
-- Remplacez `<YYYY-MM-DD>` par une date valide pour laquelle vous attendez des courses (ex: `$(date +%F)` pour aujourd'hui).
+## 1. Validation Locale Complète
 
----
+Cette suite exécute l'ensemble des tests unitaires et d'intégration. Elle est conçue pour être exécutée avant chaque commit afin de garantir la non-régression et la qualité du code. Les dépendances externes (services Google Cloud, requêtes réseau) sont intégralement mockées pour assurer des tests rapides et déterministes.
 
-### 1. Test de Santé (Health Check)
-**Objectif :** Vérifier que le service est en ligne et répond.
-**Commande :**
+### Pré-requis
+
+- Un environnement Python avec les dépendances du projet installées (via `requirements.txt` et `requirements-dev.txt`).
+- Être à la racine du projet.
+
+### Exécution
+
+Pour lancer la suite de tests complète, exécutez la commande suivante :
+
 ```bash
-curl -s <YOUR_CLOUD_RUN_URL>/health | jq .
+pytest
 ```
-**Résultat Attendu :**
-- **Code HTTP :** 200 OK
-- **JSON :**
-```json
-{
-  "status": "healthy",
-  "version": "1.0.0"
-}
-```
-*(La version peut varier)*
 
----
+Pour une sortie plus concise, utilisez l'option `-q` :
 
-### 2. Test de l'API Pronostics (sans authentification)
-**Objectif :** Vérifier que l'endpoint est bien protégé.
-**Commande :**
 ```bash
-curl -s -o /dev/null -w "%{http_code}" <YOUR_CLOUD_RUN_URL>/api/pronostics?date=<YYYY-MM-DD>
+pytest -q
 ```
-**Résultat Attendu :**
-- **Code HTTP :** 403 Forbidden
-*(Note : si `REQUIRE_AUTH` est à `False` en production, ce test retournera 200. Le comportement attendu en production est 403).*
 
----
+### Résultat Attendu
 
-### 3. Test de l'API Pronostics (avec authentification)
-**Objectif :** Vérifier que l'API renvoie des données de pronostics pour une date donnée.
-**Commande :**
+Un passage réussi de la suite de tests se termine par un message indiquant `XXX passed in XX.XXs`, où `XXX` est le nombre total de tests. Aucun `failed` ou `error` ne doit être présent.
+
+**Exemple de sortie en cas de succès :**
+```
+============================= 250 passed in 15.00s =============================
+```
+
+**Exemple de sortie en cas d'échec :**
+```
+=================================== FAILURES ===================================
+... (détails des tests échoués) ...
+=========================== short test summary info ============================
+FAILED tests/test_example.py::test_failing - AssertionError: assert False
+===================== 1 failed, 249 passed in 15.00s =====================
+```
+
+## 2. Smoke Tests en Production
+
+Ce script exécute une série de tests de santé (smoke tests) directement sur l'URL du service en production. Il valide que les endpoints critiques sont accessibles, renvoient les codes HTTP et les types de contenu attendus, et que les mécanismes de sécurité (clé API) sont actifs.
+
+### Pré-requis
+
+- Les outils `curl` et `jq` doivent être installés sur votre système.
+- Pour le test complet de l'endpoint `/schedule`, la variable d'environnement `HIPPIQUE_INTERNAL_API_KEY` doit être exportée et contenir la clé API valide pour la production.
+
+### Exécution
+
+Pour lancer les smoke tests, exécutez le script suivant depuis la racine du projet :
+
 ```bash
-curl -s -H "X-API-Key: <YOUR_API_KEY>" "<YOUR_CLOUD_RUN_URL>/api/pronostics?date=<YYYY-MM-DD>" | jq .
-```
-**Résultat Attendu :**
-- **Code HTTP :** 200 OK
-- **JSON (Structure) :** Un JSON valide contenant les clés `"ok": true`, `"date"`, `"counts"` et `"pronostics"`. La valeur de `"counts.total_in_plan"` devrait être supérieure à 0 si des courses sont prévues pour la date.
+# Si la clé API est nécessaire pour le test complet
+export HIPPIQUE_INTERNAL_API_KEY="votre_cle_api_ici"
 
----
-
-### 4. Test de Déclenchement de la Planification (Scheduling)
-**Objectif :** Vérifier que l'endpoint de planification des tâches fonctionne.
-**Commande :**
-```bash
-curl -s -X POST -H "Content-Type: application/json" -H "X-API-Key: <YOUR_API_KEY>" \
--d '{"date": "<YYYY-MM-DD>", "dry_run": true}' \
-"<YOUR_CLOUD_RUN_URL>/schedule" | jq .
+bash scripts/smoke_prod.sh
 ```
-**Résultat Attendu :**
-- **Code HTTP :** 200 OK
-- **JSON (Structure) :** Un JSON valide contenant les clés `"message"`, `"races_in_plan"`, et `"details"`. `races_in_plan` doit être supérieur à 0 et `details` doit contenir une liste des tâches qui seraient planifiées.
+
+### Résultat Attendu
+
+Un passage réussi de tous les tests affichera un résumé final vert indiquant le nombre de tests passés.
+
+**Exemple de sortie en cas de succès :**
+```
+--- Running Smoke Tests against: https://hippique-orchestrator-1084663881709.europe-west1.run.app ---
+[OK] GET /pronostics: 200 text/html
+[OK] GET /api/pronostics: 200 application/json with 'ok:true'
+[OK] GET /pronostics/ui: Redirects successfully
+[OK] POST /schedule (no key): 403 Forbidden
+[OK] POST /schedule (with key): 200 OK
+--- Smoke Tests Complete ---
+
+Result: All 5 smoke tests passed.
+```
+
+**Exemple de sortie en cas d'échec :**
+```
+--- Running Smoke Tests against: https://hippique-orchestrator-1084663881709.europe-west1.run.app ---
+[OK] GET /pronostics: 200 text/html
+[FAIL] GET /api/pronostics: Expected 200 application/json, got 500:text/html
+...
+--- Smoke Tests Complete ---
+
+Result: 1 failed, 4 passed.
+```
+Dans ce cas, le script se terminera avec un code de sortie non nul.

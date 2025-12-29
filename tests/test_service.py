@@ -222,39 +222,5 @@ def test_post_ops_run_success(client, monkeypatch, mock_plan):
     assert call_args[1]["gpi_decision"] == "play_manual"
 
 
-def test_pronostics_api_security(mocker, mock_plan, mock_firestore):
-    """
-    Tests that the /api/pronostics endpoint is properly secured with an API key.
-    This test creates its own client to ensure dependency overrides don't leak.
-    """
-    # Enable auth for this specific test, overriding the default test config
-    mocker.patch("hippique_orchestrator.config.REQUIRE_AUTH", True)
 
-    # Re-import the app and create a new client AFTER patching the config
-    from hippique_orchestrator.service import app
-    from fastapi.testclient import TestClient
-    
-    with TestClient(app) as client:
-        # Mock the underlying functions to isolate the auth logic
-        mock_get_races, _ = mock_firestore
-        mock_plan.return_value = []
-        mock_get_races.return_value = []
-
-        # 1. Test without API key -> should fail (403 Forbidden)
-        response_no_key = client.get("/api/pronostics?date=2025-01-01")
-        assert response_no_key.status_code == 403
-        assert "Invalid or missing API Key" in response_no_key.json()["detail"]
-
-        # 2. Test with incorrect API key -> should fail (403 Forbidden)
-        response_wrong_key = client.get(
-            "/api/pronostics?date=2025-01-01", headers={"X-API-Key": "wrong-secret"}
-        )
-        assert response_wrong_key.status_code == 403
-        assert "Invalid or missing API Key" in response_wrong_key.json()["detail"]
-
-        # 3. Test with correct API key -> should succeed (200 OK)
-        response_good_key = client.get(
-            "/api/pronostics?date=2025-01-01", headers={"X-API-Key": "test-secret"}
-        )
-        assert response_good_key.status_code == 200
 

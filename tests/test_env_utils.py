@@ -13,10 +13,13 @@ def test_get_env_missing_warns(monkeypatch, caplog):
     assert "FOO" in caplog.text
 
 
-def test_get_env_required_missing_raises(monkeypatch):
+def test_get_env_required_missing_logs_critical(monkeypatch, caplog):
     monkeypatch.delenv("BAR", raising=False)
-    with pytest.raises(RuntimeError, match="BAR"):
-        get_env("BAR", required=True)
+    with caplog.at_level(logging.CRITICAL):
+        val = get_env("BAR", required=True)
+    
+    assert val is None # It should return the default, which is None
+    assert "Missing required environment variable 'BAR'" in caplog.text
 
 
 def test_get_env_alias_support(monkeypatch, caplog):

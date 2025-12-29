@@ -924,9 +924,44 @@ def compute_ev_roi(
         total_stake_normalized *= scale
         total_expected_payout *= scale
 
+    ev_individual = total_ev
+    # Make a copy of the individual metrics before any optimization
+    ticket_metrics_individual = [dict(m) for m in ticket_metrics]
+    calibrated_expected_payout_individual = total_expected_payout
+
     if cfg["optimize"]:
-        # ... (optimization logic remains the same)
-        pass
+        optimized_stakes_list = optimize_stake_allocation(
+            tickets, total_stake_normalized, cfg["kelly_cap"]
+        )
+
+        # Update stakes in 'processed' and 'tickets' with the optimized values
+        for i, d in enumerate(processed):
+            new_stake = optimized_stakes_list[i]
+            d["stake"] = new_stake
+            tickets[i]["stake"] = new_stake
+
+        # Recalculate all metrics based on the new stakes
+        (
+            total_ev,
+            total_variance_naive,
+            total_expected_payout,
+            combined_expected_payout,
+            ticket_metrics,
+            covariance_inputs,
+        ) = _calculate_ticket_metrics(processed)
+
+        total_stake_normalized = sum(d["stake"] for d in processed)
+
+        # Recalculate covariance as it depends on stakes (via win/loss values)
+        if covariance_inputs:
+            covariance_adjustment, covariance_details = compute_joint_moments(
+                covariance_inputs,
+                simulate_fn=simulate_fn,
+                cache=joint_cache,
+            )
+            total_variance = max(0.0, total_variance_naive + covariance_adjustment)
+        else:
+            total_variance = total_variance_naive
 
     final_metrics_config = FinalMetricsConfig(
         total_ev=total_ev,
@@ -948,7 +983,15 @@ def compute_ev_roi(
         ticket_metrics=ticket_metrics,
         total_expected_payout=total_expected_payout,
     )
-    return _calculate_final_metrics(final_metrics_config)
+    result = _calculate_final_metrics(final_metrics_config)
+
+    if cfg["optimize"]:
+        result["optimized_stakes"] = [t["stake"] for t in tickets]
+        result["ev_individual"] = ev_individual
+        result["ticket_metrics_individual"] = ticket_metrics_individual
+        result["calibrated_expected_payout_individual"] = calibrated_expected_payout_individual
+
+    return result
 
 
 __all__ = ["compute_ev_roi", "risk_of_ruin", "optimize_stake_allocation"]
