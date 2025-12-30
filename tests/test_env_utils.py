@@ -1,7 +1,7 @@
 import logging
-
+import os # Needed for testing os.getenv
 import pytest
-
+from unittest.mock import MagicMock # For mocking cast
 from config.env_utils import get_env
 
 
@@ -31,3 +31,20 @@ def test_get_env_alias_support(monkeypatch, caplog):
 
     assert val == 42
     assert "FOO_ALIAS" in caplog.text
+
+def test_get_env_casting_error_returns_default(monkeypatch, caplog):
+    """Tests that a casting error logs an error and returns the default value."""
+    monkeypatch.setenv("BAD_INT", "not_an_integer")
+    with caplog.at_level(logging.ERROR):
+        val = get_env("BAD_INT", 123, cast=int)
+    assert val == 123
+    assert "Invalid value for environment variable 'BAD_INT'" in caplog.text
+
+def test_get_env_value_equals_default_no_override_log(monkeypatch, caplog):
+    """Tests that when a fetched value equals the default, no override log occurs."""
+    monkeypatch.setenv("MATCHING_VAR", "same_value")
+    with caplog.at_level(logging.INFO):
+        val = get_env("MATCHING_VAR", "same_value")
+    assert val == "same_value"
+    # Assert that the "overrides default" log message is NOT present
+    assert "overrides default" not in caplog.text

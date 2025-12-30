@@ -32,7 +32,7 @@ def _extract_rc_from_url(course_url: str) -> tuple[str, str]:
     raise ValueError(f"Cannot extract R/C from URL: {course_url}")
 
 
-def run_course(
+async def run_course(
     course_url: str,
     phase: str,
     date: str,
@@ -65,15 +65,14 @@ def run_course(
 
     try:
         # Get budget from the central configuration
-        budget = config.BUDGET_TOTAL
+        budget = config.BUDGET_CAP_EUR
 
         # Delegate directly to the refactored analysis function
-        result = analysis_pipeline.process_single_course_analysis(
-            reunion=reunion,
-            course=course,
+        result = await analysis_pipeline.run_analysis_for_phase(
+            course_url=course_url,
             phase=phase_clean,
             date=date,
-            budget=budget,
+            # race_doc_id is handled internally by run_analysis_for_phase
             correlation_id=correlation_id,
             trace_id=trace_id,
         )

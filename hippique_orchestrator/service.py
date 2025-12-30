@@ -17,6 +17,7 @@ from pydantic import BaseModel
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from . import __version__, analysis_pipeline, config, firestore_client, plan, scheduler
+from .api import tasks # Import the tasks router
 from .auth import check_api_key, verify_oidc_token
 from .logging_middleware import logging_middleware
 from .logging_utils import (
@@ -38,6 +39,9 @@ async def lifespan(app: FastAPI):
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 app = FastAPI(title="Hippique Orchestrator", version=__version__, lifespan=lifespan, redoc_url=None)
+
+# --- Include Routers ---
+app.include_router(tasks.router) # Include the tasks router
 
 # --- Middlewares ---
 app.add_middleware(BaseHTTPMiddleware, dispatch=logging_middleware)
@@ -370,8 +374,9 @@ class RaceTaskPayload(BaseModel):
 
 @app.post("/tasks/run-phase", tags=["Tasks"])
 async def run_phase_worker(
-    payload: RaceTaskPayload, token_claims: dict = Security(verify_oidc_token)
+    payload: RaceTaskPayload, request: Request, token_claims: dict = Security(verify_oidc_token)
 ):
+    correlation_id = getattr(request.state, "correlation_id", "N/A")
     logger.info("Received task to run phase.", extra={"payload": payload.dict()})
     # Prefer explicit doc_id, then (date + r_label/c_label), then URL parsing as last resort.
     doc_id = payload.doc_id
@@ -387,6 +392,7 @@ async def run_phase_worker(
             phase=payload.phase,
             date=payload.date,
             race_doc_id=doc_id,
+            correlation_id=correlation_id,
         )
 
         # The pipeline is responsible for creating the full document to save

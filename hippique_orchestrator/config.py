@@ -1,5 +1,6 @@
 # hippique_orchestrator/config.py
 import os
+from datetime import timedelta
 
 # GCP Configuration
 PROJECT_ID = os.getenv("PROJECT_ID")
@@ -26,3 +27,8 @@ INTERNAL_API_SECRET = os.getenv("INTERNAL_API_SECRET")
 REQUIRE_AUTH = os.getenv("REQUIRE_AUTH", "False").lower() in ("true", "1", "t")
 BUDGET_CAP_EUR = float(os.getenv("BUDGET_CAP_EUR", "5.0"))
 FIRESTORE_COLLECTION = os.getenv("FIRESTORE_COLLECTION", "races-dev")
+
+# Task Scheduling Offsets
+h30_offset = timedelta(minutes=30)
+h5_offset = timedelta(minutes=5)
+

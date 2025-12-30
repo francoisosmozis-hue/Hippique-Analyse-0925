@@ -17,6 +17,7 @@ async def logging_middleware(request: Request, call_next):
     # Generate a unique ID for this request and set it in the context variable
     request_id = str(uuid.uuid4())
     correlation_id_var.set(request_id)
+    request.state.correlation_id = request_id
 
     logger.info(
         "Request started",

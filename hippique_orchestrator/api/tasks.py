@@ -4,18 +4,17 @@ src/api/tasks.py - FastAPI Router pour les tâches internes d'orchestration.
 
 from datetime import datetime
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status, Security
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from hippique_orchestrator.config import get_config
+from hippique_orchestrator import config
+from hippique_orchestrator.auth import verify_oidc_token # Added import for security
 from hippique_orchestrator.logging_utils import get_logger
 from hippique_orchestrator.plan import build_plan_async
 from hippique_orchestrator.runner import run_course
 from hippique_orchestrator.scheduler import enqueue_run_task
 from hippique_orchestrator.snapshot_manager import write_snapshot_for_day
-
-config = get_config()
 
 
 router = APIRouter(prefix="/tasks", tags=["Tasks"])
@@ -70,7 +69,8 @@ class BootstrapDayRequest(BaseModel):
 
 @router.post("/snapshot-9h", status_code=status.HTTP_202_ACCEPTED)
 async def snapshot_9h_task(
-    request: Request, body: Snapshot9hRequest, background_tasks: BackgroundTasks
+    request: Request, body: Snapshot9hRequest, background_tasks: BackgroundTasks,
+    token_claims: dict = Security(verify_oidc_token) # Added security dependency
 ):
     """
     Triggers the 'H9' snapshot for all French races of the day.
@@ -161,7 +161,9 @@ async def run_phase_task(request: Request, body: RunPhaseRequest):
 
 
 @router.post("/bootstrap-day", status_code=status.HTTP_202_ACCEPTED)
-async def bootstrap_day_task(request: Request, body: BootstrapDayRequest):
+async def bootstrap_day_task(request: Request, body: BootstrapDayRequest,
+    token_claims: dict = Security(verify_oidc_token) # Added security dependency
+):
     """
     Reads the day's plan, and for each race, creates two Cloud Tasks (H-30, H-5)
     to call /tasks/run-phase at the appropriate times.

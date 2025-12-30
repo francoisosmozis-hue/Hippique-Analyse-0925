@@ -6,3 +6,4 @@ ruff
 coverage
 freezegun
 pytest-timeout
+pytest-repeat

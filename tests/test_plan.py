@@ -130,27 +130,63 @@ async def test_build_plan_empty_enriched_plan(mock_fetch_programme):
     assert result_plan == []
 
 
+
+@pytest.mark.asyncio
+@patch("hippique_orchestrator.data_source.fetch_programme", new_callable=AsyncMock)
+async def test_build_plan_handles_compact_rc_format(mock_fetch_programme):
+    """
+    Tests that RC format without space (e.g., "R1C1") is correctly parsed.
+    """
+    # Arrange
+    mock_fetch_programme.return_value = {
+        "races": [{"rc": "R1C1", "name": "Compact RC", "start_time": "10:00", "url": "http://example.com/r1c1"}]
+    }
+
+    # Act
+    result_plan = await plan.build_plan_async("2025-12-20")
+
+    # Assert
+    assert len(result_plan) == 1
+    assert result_plan[0]["r_label"] == "R1"
+    assert result_plan[0]["c_label"] == "C1"
+
+
 def test_build_plan_sync_wrapper():
     """
     Tests the synchronous wrapper `build_plan`.
     """
     with patch("hippique_orchestrator.plan.build_plan_async", new_callable=AsyncMock) as mock_async:
         mock_async.return_value = ["mock_result"]
-        
+
         result = plan.build_plan("2025-12-20")
-        
+
         assert result == ["mock_result"]
         mock_async.assert_called_once_with("2025-12-20")
 
+
 def test_build_plan_sync_raises_in_event_loop():
     """
-    Tests that the synchronous wrapper raises a RuntimeError if called from within an existing event loop.
+    Tests that the synchronous wrapper raises a specific RuntimeError if called from within an existing event loop.
+    This covers lines 104-107.
     """
-    async def main():
+    # Arrange: Mock asyncio.run to raise the specific error the code is looking for
+    with patch("asyncio.run", side_effect=RuntimeError("cannot run loop while another is running")):
+
+        # Act & Assert
         with pytest.raises(RuntimeError) as excinfo:
             plan.build_plan("2025-12-20")
-        assert "cannot be called from a running event loop" in str(excinfo.value)
+        # Assert on the exception message explicitly for robustness
+        assert "Use build_plan_async() in async context" in str(excinfo.value)
 
-    # To test this, we need to run our test function inside a running event loop
-    with patch("hippique_orchestrator.plan.build_plan_async", new_callable=AsyncMock):
-        asyncio.run(main())
+
+def test_build_plan_sync_reraises_other_runtime_errors():
+    """
+    Tests that the synchronous wrapper re-raises other RuntimeErrors it doesn't specifically handle.
+    This covers line 108.
+    """
+    # Arrange: Mock asyncio.run to raise a generic RuntimeError
+    with patch("asyncio.run", side_effect=RuntimeError("A different runtime error")):
+        
+        # Act & Assert
+        with pytest.raises(RuntimeError, match="A different runtime error"):
+            plan.build_plan("2025-12-20")

@@ -11,7 +11,7 @@ from google.oauth2 import id_token
 
 from hippique_orchestrator import config
 
-api_key_header_scheme = APIKeyHeader(name="X-API-KEY", auto_error=True)
+api_key_header_scheme = APIKeyHeader(name="X-API-KEY", auto_error=False)
 oidc_token_scheme = APIKeyHeader(
     name="Authorization",
     description="Bearer token from a Google-issued OIDC ID token.",
@@ -19,16 +19,16 @@ oidc_token_scheme = APIKeyHeader(
 )
 
 
-async def check_api_key(api_key_header: str = Security(api_key_header_scheme)):
+async def check_api_key(api_key_header: str | None = Security(api_key_header_scheme)):
     """Dependency to verify the internal API key."""
     if not config.REQUIRE_AUTH:
         return True
-        
+
     if not config.INTERNAL_API_SECRET:
         # This is a server misconfiguration, should not happen in prod
         raise HTTPException(status_code=500, detail="Internal API secret not configured on server.")
 
-    if api_key_header != config.INTERNAL_API_SECRET:
+    if api_key_header is None or api_key_header != config.INTERNAL_API_SECRET:
         raise HTTPException(status_code=403, detail="Invalid or missing API Key.")
     return True
 

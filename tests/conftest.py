@@ -15,40 +15,36 @@ from hippique_orchestrator.service import app
 @pytest.fixture(scope="session")
 def mock_network_calls(session_mocker):
     """
-    Session-scoped fixture to automatically mock all network calls made with `requests` and `httpx`.
+    Session-scoped fixture to automatically mock all network calls.
     This prevents any real HTTP requests during the entire test session.
     """
     try:
+        # This will be the default response for all httpx GET requests
         html_content = (
-            Path(__file__).parent / "fixtures" / "boturfers_programme.html"
+            Path(__file__).parent.parent / "boturfers_programme.html"
         ).read_bytes()
     except FileNotFoundError:
-        html_content = b"<html><body>Default Mock</body></html>"
+        html_content = b"<html><body>Default Mock Content</body></html>"
 
-    # Mock for 'requests' library
+    # --- Mock for 'httpx' library (robust version) ---
+    mock_httpx_response = session_mocker.Mock()
+    mock_httpx_response.status_code = 200
+    mock_httpx_response.content = html_content
+    mock_httpx_response.text = html_content.decode('utf-8')
+    mock_httpx_response.raise_for_status.return_value = None
+
+    # This correctly mocks the async context manager
+    mock_async_client = session_mocker.MagicMock()
+    mock_async_client.__aenter__.return_value.get.return_value = mock_httpx_response
+    session_mocker.patch("httpx.AsyncClient", return_value=mock_async_client)
+    
+    # --- Legacy mock for 'requests' library ---
     mock_requests_response = session_mocker.Mock()
     mock_requests_response.content = html_content
     mock_requests_response.raise_for_status.return_value = None
     session_mocker.patch(
-        "hippique_orchestrator.scrapers.boturfers.requests.get", return_value=mock_requests_response
+        "hippique_orchestrator.scrapers.boturfers.requests.get", return_value=mock_requests_response, create=True
     )
-
-    # Mock for 'httpx' library
-    mock_httpx_response = session_mocker.Mock()
-    mock_httpx_response.status_code = 200
-    mock_httpx_response.content = html_content
-    mock_httpx_response.text = html_content.decode()
-    mock_httpx_response.raise_for_status.return_value = None
-
-    # Mock the async client context manager
-    async def mock_async_context_manager(*args, **kwargs):
-        return mock_httpx_response
-
-    mock_async_client = session_mocker.AsyncMock()
-    mock_async_client.get = session_mocker.AsyncMock(return_value=mock_httpx_response)
-
-    # Patch the AsyncClient context manager
-    session_mocker.patch("httpx.AsyncClient", return_value=mock_async_client)
 
 
 @pytest.fixture(scope="session")

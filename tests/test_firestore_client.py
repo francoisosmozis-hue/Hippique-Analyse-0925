@@ -1,6 +1,7 @@
 
 import pytest
 from unittest.mock import MagicMock, patch
+from datetime import datetime
 from google.cloud.firestore import DocumentSnapshot
 
 # We need to patch the client at the source, where it's looked up.
@@ -115,4 +116,137 @@ def test_get_doc_id_from_url(url, date, expected):
     """Test `get_doc_id_from_url` correctly parses various URL formats."""
     from hippique_orchestrator import firestore_client
     assert firestore_client.get_doc_id_from_url(url, date) == expected
+
+
+def create_mock_doc(doc_id, update_time_str, data=None):
+    """Helper to create a mock DocumentSnapshot."""
+    mock_doc = MagicMock(spec=DocumentSnapshot)
+    mock_doc.id = doc_id
+    mock_doc.update_time = datetime.fromisoformat(update_time_str)
+    mock_doc.to_dict.return_value = data if data is not None else {}
+    return mock_doc
+
+
+def test_get_processing_status_for_date_success(mock_db):
+    """Test `get_processing_status_for_date` for a nominal case with processed data."""
+    from hippique_orchestrator import firestore_client
+
+    date_str = "2025-12-30"
+    daily_plan = [
+        {"rc": "R1C1", "time": "10:00"},
+        {"rc": "R1C2", "time": "10:30"},
+        {"rc": "R1C3", "time": "11:00"},
+    ]
+
+    # Mock Firestore documents
+    mock_docs = [
+        create_mock_doc("2025-12-30_R1C1", "2025-12-30T10:05:00+00:00", {"tickets_analysis": {"gpi_decision": "play"}}),
+        create_mock_doc("2025-12-30_R1C2", "2025-12-30T10:35:00+00:00", {"tickets_analysis": {"gpi_decision": "abstain"}}),
+    ]
+    mock_query = MagicMock()
+    mock_query.stream.return_value = mock_docs
+    mock_db.collection.return_value.order_by.return_value.start_at.return_value.end_at.return_value = mock_query
+
+    status = firestore_client.get_processing_status_for_date(date_str, daily_plan)
+
+    assert status["date"] == date_str
+    assert status["config"]["project_id"] == "test-project"
+    assert status["counts"]["total_in_plan"] == 3
+    assert status["counts"]["total_processed"] == 2
+    assert status["counts"]["total_playable"] == 1
+    assert status["counts"]["total_abstain"] == 1
+    assert status["counts"]["total_error"] == 0
+    assert status["counts"]["total_pending"] == 1
+    assert status["firestore_metadata"]["docs_count_for_date"] == 2
+    assert status["firestore_metadata"]["last_doc_id"] == "2025-12-30_R1C2"
+    assert status["firestore_metadata"]["last_update_ts"] == "2025-12-30T10:35:00+00:00"
+    assert status["reason_if_empty"] is None
+
+
+def test_get_processing_status_for_date_db_not_available(mock_db):
+    """Test `get_processing_status_for_date` when Firestore client is None."""
+    from hippique_orchestrator import firestore_client
+    
+    # Mock db to be None
+    with patch("hippique_orchestrator.firestore_client.db", None):
+        status = firestore_client.get_processing_status_for_date("2025-12-30", [])
+        assert status["error"] == "Firestore client is not available."
+        assert status["reason_if_empty"] == "FIRESTORE_CONNECTION_FAILED"
+
+
+def test_get_processing_status_for_date_empty_daily_plan(mock_db):
+    """Test `get_processing_status_for_date` with an empty daily plan."""
+    from hippique_orchestrator import firestore_client
+
+    date_str = "2025-12-30"
+    daily_plan = []
+
+    mock_query = MagicMock()
+    mock_query.stream.return_value = [] # No races in DB
+    mock_db.collection.return_value.order_by.return_value.start_at.return_value.end_at.return_value = mock_query
+
+    status = firestore_client.get_processing_status_for_date(date_str, daily_plan)
+    assert status["counts"]["total_in_plan"] == 0
+    assert status["counts"]["total_processed"] == 0
+    assert status["reason_if_empty"] == "PLAN_SCRAPING_FAILED_OR_NO_RACES_TODAY"
+
+
+def test_get_processing_status_for_date_unprocessed_races(mock_db):
+    """Test `get_processing_status_for_date` when daily plan has races but none are processed."""
+    from hippique_orchestrator import firestore_client
+
+    date_str = "2025-12-30"
+    daily_plan = [
+        {"rc": "R1C1", "time": "10:00"},
+        {"rc": "R1C2", "time": "10:30"},
+    ]
+
+    mock_query = MagicMock()
+    mock_query.stream.return_value = [] # No races in DB
+    mock_db.collection.return_value.order_by.return_value.start_at.return_value.end_at.return_value = mock_query
+
+    status = firestore_client.get_processing_status_for_date(date_str, daily_plan)
+    assert status["counts"]["total_in_plan"] == 2
+    assert status["counts"]["total_processed"] == 0
+    assert status["reason_if_empty"] == "NO_TASKS_PROCESSED_OR_FIRESTORE_EMPTY"
+
+
+def test_get_processing_status_for_date_error_decision(mock_db):
+    """Test `get_processing_status_for_date` correctly counts error decisions."""
+    from hippique_orchestrator import firestore_client
+
+    date_str = "2025-12-30"
+    daily_plan = [ {"rc": "R1C1", "time": "10:00"} ]
+    mock_docs = [
+        create_mock_doc("2025-12-30_R1C1", "2025-12-30T10:05:00+00:00", {"tickets_analysis": {"gpi_decision": "error"}}),
+    ]
+    mock_query = MagicMock()
+    mock_query.stream.return_value = mock_docs
+    mock_db.collection.return_value.order_by.return_value.start_at.return_value.end_at.return_value = mock_query
+
+    status = firestore_client.get_processing_status_for_date(date_str, daily_plan)
+    assert status["counts"]["total_error"] == 1
+    assert status["counts"]["total_playable"] == 0
+    assert status["counts"]["total_abstain"] == 0
+
+
+def test_get_processing_status_for_date_unknown_decision(mock_db):
+    """Test `get_processing_status_for_date` correctly handles unknown decisions (not counted in specific buckets)."""
+    from hippique_orchestrator import firestore_client
+
+    date_str = "2025-12-30"
+    daily_plan = [ {"rc": "R1C1", "time": "10:00"} ]
+    mock_docs = [
+        create_mock_doc("2025-12-30_R1C1", "2025-12-30T10:05:00+00:00", {"tickets_analysis": {"gpi_decision": "unknown_decision"}}),
+    ]
+    mock_query = MagicMock()
+    mock_query.stream.return_value = mock_docs
+    mock_db.collection.return_value.order_by.return_value.start_at.return_value.end_at.return_value = mock_query
+
+    status = firestore_client.get_processing_status_for_date(date_str, daily_plan)
+    assert status["counts"]["total_error"] == 0
+    assert status["counts"]["total_playable"] == 0
+    assert status["counts"]["total_abstain"] == 0
+    assert status["counts"]["total_processed"] == 1 # Still processed
+
 
