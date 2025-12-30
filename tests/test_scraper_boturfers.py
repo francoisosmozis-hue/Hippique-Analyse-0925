@@ -1,4 +1,5 @@
 from unittest.mock import MagicMock
+from pathlib import Path
 
 import httpx
 import pytest
@@ -35,6 +36,7 @@ async def test_fetch_boturfers_race_details_success(mocker):
     mock_response = MagicMock()
     mock_response.status_code = 200
     mock_response.content = html_string.encode('utf-8')
+    mock_response.text = html_string  # Add text attribute for consistency
     mock_response.raise_for_status.return_value = None
 
     # Mock the async client's get method
@@ -72,3 +74,45 @@ async def test_fetch_boturfers_race_details_fails(mocker):
         "Le scraping des détails a échoué.",
         extra={'correlation_id': None, 'trace_id': None, 'url': 'http://dummy.url'},
     )
+
+
+@pytest.mark.asyncio
+async def test_fetch_boturfers_programme_success(mocker):
+    """
+    Tests that `fetch_boturfers_programme` correctly parses the programme
+    from a local HTML fixture.
+    """
+    # 1. Load HTML fixture
+    html_content = (Path(__file__).parent.parent / "boturfers_programme.html").read_bytes()
+
+    # 2. Mock the response and client, similar to other tests in this file
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.content = html_content
+    mock_response.text = html_content.decode('utf-8')
+    mock_response.raise_for_status.return_value = None
+
+    mock_async_client = MagicMock()
+    mock_async_client.__aenter__.return_value.get.return_value = mock_response
+    mocker.patch("httpx.AsyncClient", return_value=mock_async_client)
+
+    # 3. Call the function
+    result = await boturfers.fetch_boturfers_programme("http://dummy.url/programme-pmu-du-jour")
+
+    # 4. Assertions
+    assert "races" in result
+    assert len(result["races"]) == 24  # R1 has 8, R2 has 8, R4 has 8
+
+    # Check details of the first race to ensure parsing is correct
+    first_race = result["races"][0]
+    assert first_race["rc"] == "R1 C1"
+    assert first_race["reunion"] == "R1"
+    assert first_race["name"] == "Prix De La Vesubie"
+    assert first_race["runners_count"] == 10
+    assert first_race["start_time"] == "11:30"
+
+    # Check details of the last race
+    last_race = result["races"][-1]
+    assert last_race["rc"] == "R4 C8"
+    assert last_race["reunion"] == "R4"
+    assert last_race["name"] == "Prix De L'Elevage Du Centre"

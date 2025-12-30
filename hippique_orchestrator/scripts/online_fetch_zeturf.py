@@ -415,9 +415,14 @@ def _fallback_parse_html(html: Any) -> dict[str, Any]:
             partants = None
 
     discipline: str | None = None
-    discipline_match = _DISCIPLINE_RE.search(html)
-    if discipline_match:
-        discipline = _clean_text(discipline_match.group(1), lowercase=True, strip_accents=True)
+    infos_paragraph_match = re.search(r'<p class="infos">\s*(Attelé|Plat|Monté|Trot|Obstacles?)\s*-', html, re.IGNORECASE)
+    if infos_paragraph_match:
+        discipline = _clean_text(infos_paragraph_match.group(1), lowercase=True, strip_accents=False) # Changed to False
+    else:
+        # Fallback to the general _DISCIPLINE_RE if the specific infos paragraph is not found
+        discipline_match = _DISCIPLINE_RE.search(html)
+        if discipline_match:
+            discipline = _clean_text(discipline_match.group(1), lowercase=True, strip_accents=False) # Changed to False
 
     meeting: str | None = None
     meeting_match = _MEETING_RE.search(html)
@@ -513,16 +518,12 @@ def _double_extract(
             fallback_data = _fallback_parse_html(html)
         return fallback_data
 
-    parse_fn = parse_course_page
     snapshot_mode = "H-30" if str(snapshot).upper().replace("-", "") == "H30" else "H-5"
-    if callable(parse_fn):
-        try:
-            parsed = parse_fn(url, snapshot=snapshot_mode)
-        except Exception as exc:  # pragma: no cover - defensive logging
-            logger.warning("parse_course_page a échoué (%s) pour %s", exc, url)
-        else:
-            if isinstance(parsed, Mapping):
-                data = {str(k): v for k, v in parsed.items()}
+    # The original implementation called parse_course_page recursively,
+    # causing a crash. This was likely a copy-paste error during refactoring.
+    # The logic is simplified to directly attempt a fallback parse.
+    data = None
+    logger.debug("[ZEturf] Skipping primary parser due to recursion bug, using fallback.")
 
     if not data or not data.get("runners"):
         fallback = _ensure_fallback()
@@ -736,11 +737,8 @@ _RUNNER_PLACE_RE = re.compile(
     re.IGNORECASE,
 )
 _PARTANTS_RE = re.compile(r"(?:\b|\D)(\d{1,2})\s+partant(?:e?s?)?\b", re.IGNORECASE)
-_DISCIPLINE_RE = re.compile(r"(trot|plat|obstacles?|mont[ée])", re.IGNORECASE)
-_MEETING_RE = re.compile(
-    r"(?:data-)?(?:meeting|hippodrome)[-_]?name\s*[=:]\s*['\"]([^'\"]+)",
-    re.IGNORECASE,
-)
+_DISCIPLINE_RE = re.compile(r"(trot|plat|obstacles?|mont[ée]|attelé)", re.IGNORECASE)
+_MEETING_RE = re.compile(r'<span class="hippodrome[^>]*>([^<]+?)\s*-?\s*</span>', re.IGNORECASE)
 _DATE_RE = re.compile(r"(20\d{2}-\d{2}-\d{2})")
 _SUSPICIOUS_HTML_PATTERNS = (
     "too many requests",
