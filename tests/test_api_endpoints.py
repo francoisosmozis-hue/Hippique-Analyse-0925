@@ -1,8 +1,10 @@
 from datetime import datetime
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 from zoneinfo import ZoneInfo
+import re
 
 import pytest
+from bs4 import BeautifulSoup
 
 
 # Mock DocumentSnapshot class to simulate Firestore documents
@@ -34,11 +36,40 @@ def test_health_check_endpoint(client):
 
 
 def test_pronostics_ui_endpoint(client):
-    """Tests that /pronostics returns the main HTML page."""
+    """Tests that /pronostics returns the main HTML page and checks for specific content."""
     response = client.get("/pronostics")
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]
-    assert "Pronostics Hippiques" in response.text
+    assert "Hippique Orchestrator - Pronostics" in response.text # Check title tag
+
+    # Further checks for specific HTML structure
+    soup = BeautifulSoup(response.text, "html.parser")
+
+    # Check for the main layout elements
+    assert soup.find("header") is not None, "Should find a header tag"
+    assert soup.find("h1", string="Pronostics Hippiques") is not None, "Should find the main H1 title"
+    assert soup.find("main") is not None, "Should find a main tag"
+
+    # Check for core sections and their IDs
+    assert soup.find("div", id="error-container") is not None, "Should find the error container"
+    assert soup.find("section", id="controls-section") is not None, "Should find the controls section"
+    assert soup.find("input", id="date-picker") is not None, "Should find the date picker input"
+    assert soup.find("section", id="stats-section") is not None, "Should find the stats section"
+    assert soup.find("strong", id="api-status-message") is not None, "Should find the API status message"
+    assert soup.find("section", id="races-section") is not None, "Should find the races section"
+    assert soup.find("table", id="races-table") is not None, "Should find the races table"
+    assert soup.find("tbody", id="races-tbody") is not None, "Should find the races table body"
+    
+    # Check for a script tag that references the API endpoint
+    all_script_text = ""
+    for script_tag in soup.find_all("script"):
+        if script_tag.string:
+            all_script_text += script_tag.string
+        elif script_tag.text:
+            all_script_text += script_tag.text
+
+    assert all_script_text, "Should have captured script text"
+    assert "document.addEventListener('DOMContentLoaded'" in all_script_text, "Should find core JS functionality"
 
 
 def test_root_redirect(client):
@@ -107,34 +138,49 @@ def test_api_pronostics_etag_304_not_modified(client, mock_firestore_client, moc
 def test_api_pronostics_rich_response_structure(client, mocker):
     """
     Tests that the API returns the new, rich JSON structure with correct status aggregation.
+    Also validates the basic structure of the JSON response.
     """
     now_iso = datetime.now(ZoneInfo("UTC")).isoformat()
     docs = [
-        MockDocumentSnapshot(
-            "2025-01-01_R1C1",
-            {
-                "rc": "R1C1",
-                "last_analyzed_at": now_iso,
-                "tickets_analysis": {"gpi_decision": "Play"},
-            },
-        ),
-        MockDocumentSnapshot(
-            "2025-01-01_R1C2",
-            {
-                "rc": "R1C2",
-                "last_analyzed_at": now_iso,
-                "tickets_analysis": {"gpi_decision": "Abstain"},
-            },
-        ),
-        MockDocumentSnapshot(
-            "2025-01-01_R1C3",
-            {
-                "rc": "R1C3",
-                "last_analyzed_at": now_iso,
-                "tickets_analysis": {"gpi_decision": "ERROR"},
-            },
-        ),
-    ]
+                    MockDocumentSnapshot(
+                        "2025-01-01_R1C1",
+                        {
+                            "r_label": "R1",
+                            "c_label": "C1",
+                            "rc": "R1C1",
+                            "reunion": "R1", # Added for consistency
+                            "num": "C1",     # Added for consistency
+                            "nom": "Course 1", # Added for consistency
+                            "last_analyzed_at": now_iso,
+                            "tickets_analysis": {"gpi_decision": "Play"},
+                        },
+                    ),
+                    MockDocumentSnapshot(
+                        "2025-01-01_R1C2",
+                        {
+                            "r_label": "R1",
+                            "c_label": "C2",
+                            "rc": "R1C2",
+                            "reunion": "R1", # Added for consistency
+                            "num": "C2",     # Added for consistency
+                            "nom": "Course 2", # Added for consistency
+                            "last_analyzed_at": now_iso,
+                            "tickets_analysis": {"gpi_decision": "Abstain"},
+                        },
+                    ),
+                    MockDocumentSnapshot(
+                        "2025-01-01_R1C3",
+                        {
+                            "r_label": "R1",
+                            "c_label": "C3",
+                            "rc": "R1C3",
+                            "reunion": "R1", # Added for consistency
+                            "num": "C3",     # Added for consistency
+                            "nom": "Course 3", # Added for consistency
+                            "last_analyzed_at": now_iso,
+                            "tickets_analysis": {"gpi_decision": "ERROR"},
+                        },
+                    ),    ]
     # We have 3 docs in DB, but let's say the plan has 4 races.
     plan_races = [
         {"r_label": "R1", "c_label": "C1"},
@@ -148,6 +194,27 @@ def test_api_pronostics_rich_response_structure(client, mocker):
     response = client.get("/api/pronostics?date=2025-01-01")
     assert response.status_code == 200
     data = response.json()
+
+    # Basic structural validation
+    assert isinstance(data, dict)
+    assert "ok" in data and isinstance(data["ok"], bool)
+    assert "date" in data and isinstance(data["date"], str)
+    assert "source" in data and isinstance(data["source"], str)
+    assert "reason_if_empty" in data # Can be None
+    assert "status_message" in data and isinstance(data["status_message"], str)
+    assert "last_updated" in data and isinstance(data["last_updated"], str)
+    assert "counts" in data and isinstance(data["counts"], dict)
+    assert "pronostics" in data and isinstance(data["pronostics"], list)
+    
+    # Validate each pronostic item structure
+    for pronostic in data["pronostics"]:
+        assert isinstance(pronostic, dict)
+        assert "rc" in pronostic and isinstance(pronostic["rc"], str)
+        assert "status" in pronostic and isinstance(pronostic["status"], str)
+        # Check for 'reunion' and 'num' as they are always present for fetched/pending races.
+        assert "reunion" in pronostic # Can be None for processed races without it
+        assert "num" in pronostic # Can be None for processed races without it
+        # No direct assert for "gpi_decision", "details_url", "analysis_summary" as they vary
 
     # Use a set for keys that might not be in the exact order in some Python versions
     expected_counts_keys = {
