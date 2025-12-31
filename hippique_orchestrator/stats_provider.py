@@ -38,7 +38,7 @@ def _slugify(text: str) -> str:
     text = re.sub(r'[ç]', 'c', text)
     text = re.sub(r'[^a-z0-9\s-]', '', text).strip()
     text = re.sub(r'[\s-]+', '-', text)
-    return text
+    return text.strip('-')
 
 
 # ============================================

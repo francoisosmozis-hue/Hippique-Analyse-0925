@@ -1,93 +1,86 @@
-# Plan de Test - Hippique Orchestrator
+# Test Plan - Hippique Orchestrator
 
-Ce document décrit les procédures pour exécuter les suites de tests automatisés du projet, à la fois localement et contre l'environnement de production.
+This document outlines the commands for running the test suite and performing smoke tests on the production environment.
 
-## 1. Validation Locale Complète
+## Local Testing
 
-Cette suite exécute l'ensemble des tests unitaires et d'intégration. Elle est conçue pour être exécutée avant chaque commit afin de garantir la non-régression et la qualité du code. Les dépendances externes (services Google Cloud, requêtes réseau) sont intégralement mockées pour assurer des tests rapides et déterministes.
+### 1. Full Test Suite
 
-### Pré-requis
-
-- Un environnement Python avec les dépendances du projet installées (via `requirements.txt` et `requirements-dev.txt`).
-- Être à la racine du projet.
-
-### Exécution
-
-Pour lancer la suite de tests complète, exécutez la commande suivante :
-
-```bash
-pytest
-```
-
-Pour une sortie plus concise, utilisez l'option `-q` :
+This command runs the complete test suite using `pytest`.
 
 ```bash
 pytest -q
 ```
 
-### Résultat Attendu
+### 2. Anti-Flaky Test
 
-Un passage réussi de la suite de tests se termine par un message indiquant `XXX passed in XX.XXs`, où `XXX` est le nombre total de tests. Aucun `failed` ou `error` ne doit être présent.
-
-**Exemple de sortie en cas de succès :**
-```
-============================= 250 passed in 15.00s =============================
-```
-
-**Exemple de sortie en cas d'échec :**
-```
-=================================== FAILURES ===================================
-... (détails des tests échoués) ...
-=========================== short test summary info ============================
-FAILED tests/test_example.py::test_failing - AssertionError: assert False
-===================== 1 failed, 249 passed in 15.00s =====================
-```
-
-## 2. Smoke Tests en Production
-
-Ce script exécute une série de tests de santé (smoke tests) directement sur l'URL du service en production. Il valide que les endpoints critiques sont accessibles, renvoient les codes HTTP et les types de contenu attendus, et que les mécanismes de sécurité (clé API) sont actifs.
-
-### Pré-requis
-
-- Les outils `curl` et `jq` doivent être installés sur votre système.
-- Pour le test complet de l'endpoint `/schedule`, la variable d'environnement `HIPPIQUE_INTERNAL_API_KEY` doit être exportée et contenir la clé API valide pour la production.
-
-### Exécution
-
-Pour lancer les smoke tests, exécutez le script suivant depuis la racine du projet :
+This command runs the test suite 10 times to ensure there are no flaky tests.
 
 ```bash
-# Si la clé API est nécessaire pour le test complet
-export HIPPIQUE_INTERNAL_API_KEY="votre_cle_api_ici"
-
-bash scripts/smoke_prod.sh
+for i in $(seq 1 10); do pytest -q --disable-warnings; done
 ```
 
-### Résultat Attendu
+### 3. Coverage Report
 
-Un passage réussi de tous les tests affichera un résumé final vert indiquant le nombre de tests passés.
+This command runs the test suite and generates a coverage report.
 
-**Exemple de sortie en cas de succès :**
-```
---- Running Smoke Tests against: https://hippique-orchestrator-1084663881709.europe-west1.run.app ---
-[OK] GET /pronostics: 200 text/html
-[OK] GET /api/pronostics: 200 application/json with 'ok:true'
-[OK] GET /pronostics/ui: Redirects successfully
-[OK] POST /schedule (no key): 403 Forbidden
-[OK] POST /schedule (with key): 200 OK
---- Smoke Tests Complete ---
-
-Result: All 5 smoke tests passed.
+```bash
+pytest --cov=. --cov-report=term-missing
 ```
 
-**Exemple de sortie en cas d'échec :**
-```
---- Running Smoke Tests against: https://hippique-orchestrator-1084663881709.europe-west1.run.app ---
-[OK] GET /pronostics: 200 text/html
-[FAIL] GET /api/pronostics: Expected 200 application/json, got 500:text/html
-...
---- Smoke Tests Complete ---
+## Production Smoke Test
 
-Result: 1 failed, 4 passed.
+This script performs a smoke test on the production environment. It requires the `HIPPIQUE_INTERNAL_API_KEY` and `PROD_URL` environment variables to be set.
+
+### Script: `scripts/smoke_prod.sh`
+
+```bash
+#!/bin/bash
+
+# Exit immediately if a command exits with a non-zero status.
+set -e
+
+# Check for required environment variables
+if [ -z "$PROD_URL" ]; then
+    echo "Error: PROD_URL environment variable is not set."
+    exit 1
+fi
+
+if [ -z "$HIPPIQUE_INTERNAL_API_KEY" ]; then
+    echo "Error: HIPPIQUE_INTERNAL_API_KEY environment variable is not set."
+    exit 1
+fi
+
+echo "### Running smoke tests on $PROD_URL ###"
+
+# Test /pronostics endpoint
+echo -n "Testing /pronostics... "
+curl -s -f "$PROD_URL/pronostics" > /dev/null
+echo "OK"
+
+# Test /api/pronostics endpoint
+echo -n "Testing /api/pronostics... "
+curl -s -f "$PROD_URL/api/pronostics?date=$(date +%F)" | jq . > /dev/null
+echo "OK"
+
+# Test /schedule endpoint without API key (should fail)
+echo -n "Testing /schedule without API key (expecting 403)... "
+if curl -s -o /dev/null -w "%{http_code}" "$PROD_URL/schedule" -X POST | grep -q "403"; then
+    echo "OK"
+else
+    echo "Failed! Expected 403, but got a different status code."
+    exit 1
+fi
+
+# Test /schedule endpoint with API key (should succeed)
+echo -n "Testing /schedule with API key... "
+if curl -s -f -X POST -H "X-API-KEY: $HIPPIQUE_INTERNAL_API_KEY" "$PROD_URL/schedule" > /dev/null; then
+    echo "OK"
+else
+    echo "Failed! The request with a valid API key failed."
+    exit 1
+fi
+
+echo "### Smoke tests passed successfully! ###"
+
 ```
-Dans ce cas, le script se terminera avec un code de sortie non nul.

@@ -352,8 +352,9 @@ def _exp_backoff_sleep(attempt: int, *, base: float = 1.0, cap: float = 5.0) -> 
         time.sleep(delay)
 
 
+from bs4 import BeautifulSoup
 def _fallback_parse_html(html: Any) -> dict[str, Any]:
-    """Extract a minimal snapshot payload using regex heuristics."""
+    """Extract a minimal snapshot payload using BeautifulSoup."""
 
     if isinstance(html, bytes):
         try:
@@ -363,6 +364,8 @@ def _fallback_parse_html(html: Any) -> dict[str, Any]:
     if not isinstance(html, str):
         html = str(html or "")
 
+    soup = BeautifulSoup(html, "lxml")
+    
     def _clean_text(
         value: str | None, *, lowercase: bool = False, strip_accents: bool = False
     ) -> str | None:
@@ -381,30 +384,44 @@ def _fallback_parse_html(html: Any) -> dict[str, Any]:
         return text
 
     runners: list[dict[str, Any]] = []
-    numbers = _RUNNER_NUM_RE.findall(html)
-    names = _RUNNER_NAME_RE.findall(html)
-    odds = _RUNNER_ODDS_RE.findall(html)
-    place_odds = _RUNNER_PLACE_RE.findall(html)
+    
+    # Find the main table of runners
+    table = soup.find("table", class_="table-runners")
+    if table:
+        for row in table.find("tbody").find_all("tr"):
+            runner_data = {}
+            num_cell = row.find("td", class_="numero")
+            if num_cell:
+                runner_data["num"] = _clean_text(num_cell.text)
+            
+            name_cell = row.find("td", class_="cheval")
+            if name_cell:
+                name_anchor = name_cell.find("a", class_="horse-name")
+                if name_anchor:
+                    runner_data["name"] = _clean_text(name_anchor.get("title"))
 
-    for idx, number in enumerate(numbers):
-        runner: dict[str, Any] = {"num": str(number)}
-        if idx < len(names):
-            runner_name = _clean_text(names[idx])
-            if runner_name:
-                runner["name"] = runner_name
-            else:
-                runner["name"] = names[idx].strip()
-        if idx < len(odds):
-            try:
-                runner["cote"] = float(odds[idx].replace(",", "."))
-            except Exception:  # pragma: no cover - defensive conversion
-                runner["cote"] = None
-        if idx < len(place_odds):
-            try:
-                runner["odds_place"] = float(place_odds[idx].replace(",", "."))
-            except Exception:  # pragma: no cover - defensive conversion
-                runner["odds_place"] = None
-        runners.append(runner)
+            odds_cell = row.find("td", class_="cotes")
+            if odds_cell:
+                odds_span = odds_cell.find("span", class_="cote")
+                if odds_span:
+                    runner_data["cote"] = _clean_text(odds_span.text)
+            
+            # This data is in a script tag, so we need to find it and parse it.
+            cotes_infos_script = soup.find("script", string=re.compile("cotesInfos"))
+            if cotes_infos_script:
+                cotes_infos_str = re.search(r'cotesInfos: (\{.*\})', cotes_infos_script.string)
+                if cotes_infos_str:
+                    cotes_infos = json.loads(cotes_infos_str.group(1))
+                    if runner_data.get("num") in cotes_infos:
+                        odds_data = cotes_infos[runner_data["num"]].get("odds", {})
+                        if odds_data.get("SG"):
+                            runner_data["cote"] = odds_data["SG"]
+                        if odds_data.get("SPMin") and odds_data.get("SPMax"):
+                             runner_data["odds_place"] = (odds_data["SPMin"] + odds_data["SPMax"]) / 2
+
+            if runner_data:
+                 runners.append(runner_data)
+
 
     partants: int | None = None
     partants_match = _PARTANTS_RE.search(html)

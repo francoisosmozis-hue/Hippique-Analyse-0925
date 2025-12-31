@@ -21,6 +21,22 @@ def test_api_key_required_and_missing(client: TestClient, mocker):
     assert "Invalid or missing API Key" in response_wrong_key.text
 
 
+def test_ops_run_endpoint_security(client: TestClient, mocker):
+    """
+    Given authentication is required,
+    When the X-API-KEY header is missing or incorrect for the /ops/run endpoint,
+    Then the request should be denied with a 403 error.
+    """
+    mocker.patch("hippique_orchestrator.config.REQUIRE_AUTH", True)
+    
+    response_no_header = client.post("/ops/run?rc=R1C1")
+    assert response_no_header.status_code == 403
+    assert "Invalid or missing API Key" in response_no_header.text
+    
+    response_wrong_key = client.post("/ops/run?rc=R1C1", headers={"X-API-KEY": "wrong-key"})
+    assert response_wrong_key.status_code == 403
+    assert "Invalid or missing API Key" in response_wrong_key.text
+
 
 def test_api_key_not_required(client: TestClient, mocker):
     """
@@ -44,7 +60,7 @@ def test_task_worker_endpoint_security(client: TestClient, mocker): # Added mock
     is mocked or provided.
     """
     # Mocking downstream calls to isolate security test
-    mocker.patch("hippique_orchestrator.api.tasks.run_course", return_value={"ok": False, "error": "security_test"}) # Mock for run_course
+    mocker.patch("hippique_orchestrator.api.tasks.run_course", new_callable=mocker.AsyncMock, return_value=mocker.MagicMock(**{"ok": False, "error": "security_test"})) # Mock for run_course
     payload = {
         "course_url": "http://example.com/2025-12-25/R1C1-test", # Updated URL to be parseable
         "phase": "H-5",
@@ -53,7 +69,6 @@ def test_task_worker_endpoint_security(client: TestClient, mocker): # Added mock
     }
     response = client.post("/tasks/run-phase", json=payload)
     
-    # The default behavior without a valid token mock should be a failure.
     assert response.status_code == 403
     assert "Not authenticated" in response.text
 
@@ -81,7 +96,7 @@ def test_task_worker_google_auth_fails(client: TestClient, mocker):
     """
     mocker.patch("google.oauth2.id_token.verify_oauth2_token", side_effect=ValueError("Token expired"))
     # Mocking downstream calls to isolate security test
-    mocker.patch("hippique_orchestrator.api.tasks.run_course", return_value={"ok": False, "error": "security_test"}) # Mock for run_course
+    mocker.patch("hippique_orchestrator.api.tasks.run_course", new_callable=mocker.AsyncMock, return_value=mocker.MagicMock(**{"ok": False, "error": "security_test"})) # Mock for run_course
     
     headers = {"Authorization": "Bearer expired-token"}
     payload = { "course_url": "http://example.com/2025-01-01/R1C1-test", "phase": "H-5", "date": "2025-01-01" } # Updated URL
@@ -97,7 +112,7 @@ def test_task_worker_invalid_token_scheme(client: TestClient, mocker): # Added m
     Given a token with an invalid scheme (not 'Bearer'), the endpoint should return 401.
     """
     # Mocking downstream calls to isolate security test
-    mocker.patch("hippique_orchestrator.api.tasks.run_course", return_value={"ok": False, "error": "security_test"}) # Mock for run_course
+    mocker.patch("hippique_orchestrator.api.tasks.run_course", new_callable=mocker.AsyncMock, return_value=mocker.MagicMock(**{"ok": False, "error": "security_test"})) # Mock for run_course
     headers = {"Authorization": "Basic fake-token"}
     payload = { "course_url": "http://example.com/2025-01-01/R1C1-test", "phase": "H-5", "date": "2025-01-01" } # Updated URL
 
