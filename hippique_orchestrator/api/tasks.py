@@ -8,12 +8,14 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status, 
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from hippique_orchestrator import config
-from hippique_orchestrator.auth import verify_oidc_token # Added import for security
+from hippique_orchestrator import config, firestore_client # Added firestore_client import
+from hippique_orchestrator.auth import verify_oidc_token
 from hippique_orchestrator.logging_utils import get_logger
 from hippique_orchestrator.plan import build_plan_async
 from hippique_orchestrator.runner import run_course
 from hippique_orchestrator.scheduler import enqueue_run_task
+from hippique_orchestrator.schemas import BootstrapDayRequest, RunPhaseRequest, Snapshot9HRequest
+from hippique_orchestrator.snapshot_manager import write_snapshot_for_day_async # Added this import
 from hippique_orchestrator.snapshot_manager import write_snapshot_for_day
 
 
@@ -21,90 +23,15 @@ router = APIRouter(prefix="/tasks", tags=["Tasks"])
 
 logger = get_logger(__name__)
 
-# ============================================
-# Request Models (as per specification)
-# ============================================
-
-
-class Snapshot9hRequest(BaseModel):
-    """Request body for POST /tasks/snapshot-9h"""
-
-    date: str | None = Field(
-        default=None,
-        description="Date in YYYY-MM-DD format. Defaults to today.",
-        example="2025-11-22",
-    )
-    meeting_urls: list[str] | None = Field(
-        default=None,
-        description="Optional list of specific meeting URLs to snapshot.",
-    )
-
-
-class RunPhaseRequest(BaseModel):
-    """Request body for POST /tasks/run-phase"""
-
-    course_url: str = Field(
-        ...,
-        description="Full ZEturf course URL",
-        example="https://www.zeturf.fr/fr/course/2025-11-22/R1C1-prix-de-la-ville",
-    )
-    phase: str = Field(..., description="Analysis phase: 'H9', 'H30', or 'H5'", example="H30")
-    date: str = Field(..., description="Race date in YYYY-MM-DD format", example="2025-11-22")
-
-
-class BootstrapDayRequest(BaseModel):
-    """Request body for POST /tasks/bootstrap-day"""
-
-    date: str | None = Field(
-        default=None,
-        description="Date in YYYY-MM-DD format. Defaults to today.",
-        example="2025-11-22",
-    )
-
-
-# ============================================
-# Endpoints
-# ============================================
-
-
-@router.post("/snapshot-9h", status_code=status.HTTP_202_ACCEPTED)
-async def snapshot_9h_task(
-    request: Request, body: Snapshot9hRequest, background_tasks: BackgroundTasks,
-    token_claims: dict = Security(verify_oidc_token) # Added security dependency
-):
-    """
-    Triggers the 'H9' snapshot for all French races of the day.
-    This is intended to be called by Cloud Scheduler at 9 AM.
-    """
-    correlation_id = getattr(request.state, "correlation_id", "N/A")
-
-    target_date_str = body.date if body.date else datetime.now().strftime("%Y-%m-%d")
-
-    logger.info(
-        f"Received request for H9 snapshot for {target_date_str}",
-        extra={"correlation_id": correlation_id, "date": target_date_str},
-    )
-
-    # The actual snapshot logic runs in the background to avoid HTTP timeouts
-    background_tasks.add_task(
-        write_snapshot_for_day,
-        date_str=target_date_str,
-        race_urls=body.meeting_urls,  # Pass meeting_urls if provided
-        rc_labels=None,  # rc_labels cannot be easily derived if meeting_urls are provided
-        phase="H9",
-        correlation_id=correlation_id,
-    )
-
-    return {
-        "ok": True,
-        "message": f"H9 snapshot for {target_date_str} initiated in background.",
-        "date": target_date_str,
-        "correlation_id": correlation_id,
-    }
+# ... (rest of the file remains the same until run_phase_task)
 
 
 @router.post("/run-phase", status_code=status.HTTP_200_OK)
-async def run_phase_task(request: Request, body: RunPhaseRequest):
+async def run_phase_task(
+    request: Request,
+    body: RunPhaseRequest,
+    token_claims: dict = Security(verify_oidc_token),
+):
     """
     Executes the analysis for a single race for a given phase (H9, H30, H5).
     This endpoint is the target for Cloud Tasks.
@@ -120,33 +47,40 @@ async def run_phase_task(request: Request, body: RunPhaseRequest):
             "date": body.date,
         },
     )
+    doc_id = firestore_client.get_doc_id_from_url(body.course_url, body.date) # Added doc_id extraction here
 
     try:
         # Re-using the existing run_course function from the project's core logic
-        result = run_course(
+        analysis_result = await run_course( # Renamed result to analysis_result for clarity
             course_url=body.course_url,
             phase=body.phase,
             date=body.date,
             correlation_id=correlation_id,
         )
-        result["correlation_id"] = correlation_id
+        # Ensure analysis_result is a mutable dictionary to add correlation_id
+        final_result = dict(analysis_result)
+        final_result["correlation_id"] = correlation_id
 
-        if not result.get("ok"):
+
+        if not final_result.get("ok"):
             logger.error(
                 f"Run phase failed for {body.course_url} (phase: {body.phase})",
-                extra={"correlation_id": correlation_id, "error": result.get("error")},
+                extra={"correlation_id": correlation_id, "error": final_result.get("error")},
             )
             # Return a 500 error but with the structured error message from the runner
             return JSONResponse(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                content=result,
+                content=final_result,
             )
+        
+        # Save analysis result to Firestore only if successful
+        firestore_client.update_race_document(doc_id, final_result)
 
         logger.info(
             (f"Run phase completed successfully for {body.course_url} (phase: {body.phase})"),
             extra={"correlation_id": correlation_id},
         )
-        return result
+        return final_result
 
     except Exception as e:
         logger.error(
@@ -160,7 +94,56 @@ async def run_phase_task(request: Request, body: RunPhaseRequest):
         ) from e
 
 
-@router.post("/bootstrap-day", status_code=status.HTTP_202_ACCEPTED)
+@router.post("/snapshot-9h", status_code=status.HTTP_200_OK)
+async def snapshot_9h_task(
+    request: Request,
+    body: Snapshot9HRequest,  # Now using the specific Snapshot9HRequest
+    token_claims: dict = Security(verify_oidc_token),
+):
+    """
+    Triggers an H9 snapshot for the specified date and meeting URLs.
+    """
+    correlation_id = getattr(request.state, "correlation_id", "N/A")
+    target_date_str = body.date if body.date else datetime.now().strftime("%Y-%m-%d")
+
+    logger.info(
+        f"Received snapshot-9h request for {target_date_str} with URLs: {body.meeting_urls}, RC Labels: {body.rc_labels}",
+        extra={"correlation_id": correlation_id, "date": target_date_str, "meeting_urls": body.meeting_urls, "rc_labels": body.rc_labels},
+    )
+
+    try:
+        # Call the existing snapshot writing logic
+        await write_snapshot_for_day_async(
+            date_str=target_date_str,
+            phase="H9",  # Explicitly passing the phase
+            race_urls=body.meeting_urls,
+            rc_labels=body.rc_labels,
+            correlation_id=correlation_id
+        )
+
+        logger.info(
+            f"Snapshot-9h completed successfully for {target_date_str}.",
+            extra={"correlation_id": correlation_id, "date": target_date_str},
+        )
+        return {
+            "ok": True,
+            "message": f"Snapshot-9h for {target_date_str} initiated.",
+            "date": target_date_str,
+            "correlation_id": correlation_id,
+        }
+    except Exception as e:
+        logger.error(
+            f"Exception during snapshot-9h for {target_date_str}: {e}",
+            exc_info=True,
+            extra={"correlation_id": correlation_id},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Internal server error during snapshot-9h: {e}",
+        ) from e
+
+
+@router.post("/bootstrap-day", status_code=status.HTTP_200_OK)
 async def bootstrap_day_task(request: Request, body: BootstrapDayRequest,
     token_claims: dict = Security(verify_oidc_token) # Added security dependency
 ):

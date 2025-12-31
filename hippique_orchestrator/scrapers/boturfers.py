@@ -13,8 +13,11 @@ from urllib.parse import urljoin, urlparse
 
 import httpx
 from bs4 import BeautifulSoup
+from hippique_orchestrator.logging_utils import correlation_id_var, get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
+
+
 
 HTTP_HEADERS = {
     "User-Agent": (
@@ -49,10 +52,8 @@ class BoturfersFetcher:
                 response.raise_for_status()
             self.soup = BeautifulSoup(response.content, "lxml")
             return True
-        except httpx.RequestError as e:
-            logger.error(
-                f"Erreur HTTP lors du téléchargement de {self.race_url}: {e}", extra=self.log_extra
-            )
+        except httpx.HTTPStatusError as e:
+            logger.error(f"Erreur HTTP lors du téléchargement de {self.race_url}: {e.response.status_code}", extra={"correlation_id": correlation_id_var.get()})
             return False
         except Exception as e:
             logger.exception(
@@ -227,8 +228,8 @@ class BoturfersFetcher:
                 nom = row.select_one("td.tl > a.link").text.strip()
                 
                 links = row.select("td.tl a.link")
-                jockey = links[1].text.strip() if len(links) > 1 else None
-                trainer = links[2].text.strip() if len(links) > 2 else None
+                jockey = links[1].text.strip()
+                trainer = links[2].text.strip()
 
                 odds_win_tag = row.select_one("td.cote-gagnant span.c")
                 odds_win = float(odds_win_tag.text.replace(",", ".")) if odds_win_tag else None

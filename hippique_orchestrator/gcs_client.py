@@ -4,6 +4,7 @@ Utilities for interacting with Google Cloud Storage (GCS).
 
 import logging
 from functools import cache
+from typing import Any
 
 import gcsfs
 from google.cloud import storage
@@ -79,6 +80,23 @@ class GCSManager:
         """
         return self.fs.exists(gcs_path)
 
+    def save_json_to_gcs(self, gcs_path: str, data: dict[str, Any]):
+        """
+        Saves a dictionary as a JSON file to GCS.
+
+        Args:
+            gcs_path (str): The full GCS path (e.g., 'gs://bucket/path/to/file.json').
+            data (dict): The dictionary to save as JSON.
+        """
+        logger.info(f"Saving JSON to GCS: {gcs_path}")
+        try:
+            with self.fs.open(gcs_path, 'w') as f:
+                json.dump(data, f)
+            logger.info(f"Successfully saved JSON to {gcs_path}")
+        except Exception as e:
+            logger.error(f"Failed to save JSON to GCS at {gcs_path}: {e}", exc_info=True)
+            raise
+
 
 @cache
 def get_gcs_manager() -> GCSManager | None:
@@ -117,3 +135,14 @@ def build_gcs_path(relative_path):
         return manager.get_gcs_path(relative_path)
     logger.error("GCSManager is not initialized. Cannot build GCS path.")
     return None
+
+
+def save_json_to_gcs(gcs_path: str, data: dict[str, Any]):
+    """
+    Saves a dictionary as a JSON file to GCS using the GCSManager.
+    """
+    manager = get_gcs_manager()
+    if not manager:
+        logger.error(f"GCSManager not initialized. Cannot save JSON to {gcs_path}.")
+        raise RuntimeError("GCSManager not initialized.")
+    manager.save_json_to_gcs(gcs_path, data)

@@ -1,86 +1,75 @@
-# Test Plan - Hippique Orchestrator
+# Plan de Test - hippique-orchestrator
 
-This document outlines the commands for running the test suite and performing smoke tests on the production environment.
+Ce document décrit les procédures pour valider le bon fonctionnement de l'application, que ce soit localement ou en production.
 
-## Local Testing
+## 1. Validation Locale
 
-### 1. Full Test Suite
+La validation locale repose sur la suite de tests `pytest`. Elle doit être exécutée avant toute intégration de code.
 
-This command runs the complete test suite using `pytest`.
+### 1.1. Exécution simple et rapide
 
-```bash
-pytest -q
-```
-
-### 2. Anti-Flaky Test
-
-This command runs the test suite 10 times to ensure there are no flaky tests.
+Pour lancer tous les tests en mode silencieux. Utile pour une vérification rapide.
 
 ```bash
-for i in $(seq 1 10); do pytest -q --disable-warnings; done
+python3 -m pytest -q
 ```
+**Résultat attendu :** `OK` et un résumé des tests passés.
 
-### 3. Coverage Report
+### 1.2. Exécution avec rapport de couverture
 
-This command runs the test suite and generates a coverage report.
+Pour analyser la couverture de code des modules de l'application.
 
 ```bash
-pytest --cov=. --cov-report=term-missing
+python3 -m pytest --cov=hippique_orchestrator
 ```
+**Résultat attendu :** Un tableau détaillé affichant le pourcentage de couverture pour chaque fichier du module `hippique_orchestrator`.
 
-## Production Smoke Test
+### 1.3. Vérification de la stabilité (Anti-Flaky)
 
-This script performs a smoke test on the production environment. It requires the `HIPPIQUE_INTERNAL_API_KEY` and `PROD_URL` environment variables to be set.
-
-### Script: `scripts/smoke_prod.sh`
+Pour s'assurer qu'aucun test n'est instable, la suite est exécutée 10 fois consécutivement. Le moindre échec interrompt le processus.
 
 ```bash
-#!/bin/bash
-
-# Exit immediately if a command exits with a non-zero status.
-set -e
-
-# Check for required environment variables
-if [ -z "$PROD_URL" ]; then
-    echo "Error: PROD_URL environment variable is not set."
-    exit 1
-fi
-
-if [ -z "$HIPPIQUE_INTERNAL_API_KEY" ]; then
-    echo "Error: HIPPIQUE_INTERNAL_API_KEY environment variable is not set."
-    exit 1
-fi
-
-echo "### Running smoke tests on $PROD_URL ###"
-
-# Test /pronostics endpoint
-echo -n "Testing /pronostics... "
-curl -s -f "$PROD_URL/pronostics" > /dev/null
-echo "OK"
-
-# Test /api/pronostics endpoint
-echo -n "Testing /api/pronostics... "
-curl -s -f "$PROD_URL/api/pronostics?date=$(date +%F)" | jq . > /dev/null
-echo "OK"
-
-# Test /schedule endpoint without API key (should fail)
-echo -n "Testing /schedule without API key (expecting 403)... "
-if curl -s -o /dev/null -w "%{http_code}" "$PROD_URL/schedule" -X POST | grep -q "403"; then
-    echo "OK"
-else
-    echo "Failed! Expected 403, but got a different status code."
-    exit 1
-fi
-
-# Test /schedule endpoint with API key (should succeed)
-echo -n "Testing /schedule with API key... "
-if curl -s -f -X POST -H "X-API-KEY: $HIPPIQUE_INTERNAL_API_KEY" "$PROD_URL/schedule" > /dev/null; then
-    echo "OK"
-else
-    echo "Failed! The request with a valid API key failed."
-    exit 1
-fi
-
-echo "### Smoke tests passed successfully! ###"
-
+for i in $(seq 1 10); do \
+  echo "--- Exécution anti-flaky $i/10 ---"; \
+  python3 -m pytest -q || { echo "ERREUR : Un test instable a été détecté à l'exécution $i." >&2; exit 1; }; \
+done && echo "Tests stables sur 10 exécutions."
 ```
+**Résultat attendu :** Le message final `Tests stables sur 10 exécutions.` sans aucune interruption.
+
+## 2. Validation en Production (Smoke Test)
+
+Un script de "smoke test" est fourni pour effectuer des vérifications de base sur un environnement de production. Il ne se substitue pas aux tests locaux mais agit comme un gardien de la santé de l'application déployée.
+
+**Emplacement du script :** `scripts/smoke_prod.sh`
+
+### 2.1. Prérequis
+
+Le script nécessite deux variables d'environnement :
+- `BASE_URL`: L'URL de base de l'application déployée (ex: `https://hippique-orchestrator-xxxx.run.app`).
+- `HIPPIQUE_INTERNAL_API_KEY`: La clé API secrète pour accéder aux endpoints protégés. **Cette clé ne doit jamais être affichée ni stockée dans le code.**
+
+### 2.2. Actions du script
+
+Le script `smoke_prod.sh` effectue les vérifications suivantes :
+
+1.  **Endpoint de santé (`/health`)** : Vérifie que l'application est en ligne et répond `200 OK`.
+2.  **Endpoint UI (`/pronostics`)** : Vérifie que l'interface utilisateur se charge correctement (`200 OK`).
+3.  **Endpoint API (`/api/pronostics`)** : Vérifie que l'API de pronostics répond correctement (`200 OK`) avec une structure JSON valide.
+4.  **Sécurité de l'ordonnancement (`/schedule`)** :
+    - Lance un appel **sans** la clé API et s'attend à recevoir une erreur `403 Forbidden`.
+    - Lance un appel **avec** la clé `HIPPIQUE_INTERNAL_API_KEY` et s'attend à recevoir une réponse `200 OK`, confirmant que la planification (en `dry_run`) a été déclenchée avec succès.
+
+### 2.3. Exécution
+
+```bash
+# S'assurer que le script est exécutable
+chmod +x scripts/smoke_prod.sh
+
+# Exporter les variables requises
+export BASE_URL="URL_DE_PROD"
+export HIPPIQUE_INTERNAL_API_KEY="VOTRE_CLE_API_SECRETE"
+
+# Lancer le script
+./scripts/smoke_prod.sh
+```
+**Résultat attendu :** Une sortie indiquant le succès de chaque étape. Toute erreur entraînera la sortie du script avec un code non nul.

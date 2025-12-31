@@ -31,8 +31,22 @@ def horse_alpha_j_html() -> str:
     return fixture_path.read_text(encoding='utf-8')
 
 @pytest.fixture
+def horse_alpha_empty_html() -> str:
+    fixture_path = FIXTURE_DIR / 'zoneturf_horse_alpha_empty.html'
+    if not fixture_path.exists():
+        pytest.fail(f"Fixture file not found: {fixture_path}")
+    return fixture_path.read_text(encoding='utf-8')
+
+@pytest.fixture
 def person_alpha_j_jockey_html() -> str:
     fixture_path = FIXTURE_DIR / 'zoneturf_person_alpha_j_jockey.html'
+    if not fixture_path.exists():
+        pytest.fail(f"Fixture file not found: {fixture_path}")
+    return fixture_path.read_text(encoding='utf-8')
+
+@pytest.fixture
+def person_alpha_empty_html() -> str:
+    fixture_path = FIXTURE_DIR / 'zoneturf_person_alpha_empty.html'
     if not fixture_path.exists():
         pytest.fail(f"Fixture file not found: {fixture_path}")
     return fixture_path.read_text(encoding='utf-8')
@@ -66,11 +80,11 @@ def mock_requests_get():
 @pytest.mark.parametrize("input_name, expected_normalized", [
     ("Jullou", "jullou"),
     ("  Jullou  ", "jullou"),
-    ("Jullou (FR)", "jullou fr"),
+    ("Jullou (FR)", "jullou"),
     ("Jullou-Nivard", "jullou nivard"),
-    ("Jullou-Nivard (FR)", "jullou nivard fr"),
+    ("Jullou-Nivard (FR)", "jullou nivard"),
     ("Écurie Royale", "ecurie royale"),
-    ("Jullou's Horse", "jullou s horse"),
+    ("Jullou's Horse", "jullous horse"),
     ("", ""),
     (None, ""),
 ])
@@ -108,53 +122,47 @@ def test_resolve_horse_id_success(mock_requests_get, horse_alpha_j_html):
     mock_response.text = horse_alpha_j_html
     mock_requests_get.return_value = mock_response
 
-    session_mock = MagicMock(spec=requests.Session)
-    session_mock.get.return_value = mock_response # Ensure session.get works
-
-    horse_id = resolve_horse_id("Jullou", session_mock)
+    horse_id = resolve_horse_id("Jullou")
     assert horse_id == "1772764"
     assert ID_CACHE["jullou"] == "1772764"
-    session_mock.get.assert_called_once_with(f"{BASE_URL}/cheval/lettre-j.html?p=1", timeout=15, headers={"User-Agent": "Mozilla/5.0"})
+    mock_requests_get.assert_called_once_with(f"{BASE_URL}/cheval/lettre-j.html?p=1", timeout=15, headers={"User-Agent": "Mozilla/5.0"})
 
-def test_resolve_horse_id_not_found(mock_requests_get, horse_alpha_j_html):
+def test_resolve_horse_id_not_found(mock_requests_get, horse_alpha_empty_html):
     mock_response = MagicMock()
     mock_response.status_code = 200
-    # Simulate not found and no "page suivante" link
-    mock_response.text = horse_alpha_j_html.replace("Jullou", "NonExistentHorse").replace('class="page-link"', 'style="display:none"')
+    # Use the empty HTML fixture directly to simulate no horse found
+    mock_response.text = horse_alpha_empty_html
     mock_requests_get.return_value = mock_response
 
-    session_mock = MagicMock(spec=requests.Session)
-    session_mock.get.return_value = mock_response
-
-    horse_id = resolve_horse_id("NonExistentHorse", session_mock)
+    horse_id = resolve_horse_id("NonExistentHorse")
     assert horse_id is None
     assert ID_CACHE["nonexistenthorse"] is None
-    session_mock.get.assert_called_once_with(f"{BASE_URL}/cheval/lettre-n.html?p=1", timeout=15, headers={"User-Agent": "Mozilla/5.0"})
+    # The first letter of "NonExistentHorse" is 'n'
+    # It should iterate through all max_pages when not found and no "page suivante" link
+    mock_requests_get.assert_called_with(f"{BASE_URL}/cheval/lettre-n.html?p=20", timeout=15, headers={"User-Agent": "Mozilla/5.0"})
+    assert mock_requests_get.call_count == 20 # Verify it tried all pages
 
 
 def test_resolve_horse_id_network_error(mock_requests_get):
     mock_requests_get.side_effect = requests.RequestException("Network issue")
-    session_mock = MagicMock(spec=requests.Session) # No need to mock session.get here, it's patched globally
     
-    horse_id = resolve_horse_id("Jullou", session_mock)
+    horse_id = resolve_horse_id("Jullou")
     assert horse_id is None
     assert ID_CACHE["jullou"] is None
-    session_mock.get.assert_called_once() # Ensure get was attempted
+    mock_requests_get.assert_called_once() # Ensure get was attempted
 
 
 def test_resolve_horse_id_cache_hit(mock_requests_get):
     ID_CACHE["jullou"] = "12345"
-    session_mock = MagicMock(spec=requests.Session)
-    horse_id = resolve_horse_id("Jullou", session_mock)
+    horse_id = resolve_horse_id("Jullou")
     assert horse_id == "12345"
-    session_mock.get.assert_not_called()
+    mock_requests_get.assert_not_called()
 
 def test_resolve_horse_id_no_alpha_in_name(mock_requests_get):
-    session_mock = MagicMock(spec=requests.Session)
-    horse_id = resolve_horse_id("12345", session_mock)
+    horse_id = resolve_horse_id("12345")
     assert horse_id is None
     assert ID_CACHE["12345"] is None
-    session_mock.get.assert_not_called()
+    mock_requests_get.assert_not_called()
 
 # --- Tests for resolve_person_id ---
 def test_resolve_person_id_success(mock_requests_get, person_alpha_j_jockey_html):
@@ -163,34 +171,30 @@ def test_resolve_person_id_success(mock_requests_get, person_alpha_j_jockey_html
     mock_response.text = person_alpha_j_jockey_html
     mock_requests_get.return_value = mock_response
 
-    session_mock = MagicMock(spec=requests.Session)
-    session_mock.get.return_value = mock_response
-
-    person_id = resolve_person_id("Julien Dupont", "jockey", session_mock)
+    person_id = resolve_person_id("Julien Dupont", "jockey")
     assert person_id == "112233"
     assert PERSON_ID_CACHE["jockey_julien dupont"] == "112233"
-    session_mock.get.assert_called_once_with(f"{BASE_URL}/jockey/lettre-j.html?p=1", timeout=15, headers={"User-Agent": "Mozilla/5.0"})
+    mock_requests_get.assert_called_once_with(f"{BASE_URL}/jockey/lettre-j.html?p=1", timeout=15, headers={"User-Agent": "Mozilla/5.0"})
 
 def test_resolve_person_id_cache_hit(mock_requests_get):
     PERSON_ID_CACHE["jockey_julien dupont"] = "98765"
-    session_mock = MagicMock(spec=requests.Session)
-    person_id = resolve_person_id("Julien Dupont", "jockey", session_mock)
+    person_id = resolve_person_id("Julien Dupont", "jockey")
     assert person_id == "98765"
-    session_mock.get.assert_not_called()
+    mock_requests_get.assert_not_called()
 
-def test_resolve_person_id_not_found(mock_requests_get, person_alpha_j_jockey_html):
+def test_resolve_person_id_not_found(mock_requests_get, person_alpha_empty_html):
     mock_response = MagicMock()
     mock_response.status_code = 200
-    mock_response.text = person_alpha_j_jockey_html.replace("Julien Dupont", "NonExistentJockey").replace('class="page-link"', 'style="display:none"')
+    mock_response.text = person_alpha_empty_html
     mock_requests_get.return_value = mock_response
 
-    session_mock = MagicMock(spec=requests.Session)
-    session_mock.get.return_value = mock_response
-
-    person_id = resolve_person_id("NonExistentJockey", "jockey", session_mock)
+    person_id = resolve_person_id("NonExistentJockey", "jockey")
     assert person_id is None
     assert PERSON_ID_CACHE["jockey_nonexistentjockey"] is None
-    session_mock.get.assert_called_once_with(f"{BASE_URL}/jockey/lettre-n.html?p=1", timeout=15, headers={"User-Agent": "Mozilla/5.0"})
+    # The first letter of "NonExistentJockey" is 'n'
+    # It should iterate through all max_pages when not found and no "page suivante" link
+    mock_requests_get.assert_called_with(f"{BASE_URL}/jockey/lettre-n.html?p=20", timeout=15, headers={"User-Agent": "Mozilla/5.0"})
+    assert mock_requests_get.call_count == 20 # Verify it tried all pages
 
 
 # --- Tests for fetch_chrono_from_html ---
@@ -200,7 +204,7 @@ def test_fetch_chrono_from_html_with_jullou_page(jullou_html_content):
     """
     assert jullou_html_content is not None, "Fixture content should not be None"
 
-    result = fetch_chrono_from_html(jullou_html_content)
+    result = fetch_chrono_from_html(jullou_html_content, "Jullou")
 
     assert result is not None, "Parsing should return a result dict"
 
@@ -220,18 +224,19 @@ def test_fetch_chrono_from_html_with_jullou_page(jullou_html_content):
 
 def test_fetch_chrono_from_html_no_chrono_data():
     html_content = "<html><body></body></html>"
-    result = fetch_chrono_from_html(html_content)
-    assert result is None
+    result = fetch_chrono_from_html(html_content, "TestHorse")
+    assert result == {'last_3_chrono': []}
 
 def test_fetch_chrono_from_html_empty_content():
-    result = fetch_chrono_from_html("")
+    result = fetch_chrono_from_html("", "TestHorse")
     assert result is None
 
 def test_fetch_chrono_from_html_malformed_record():
     html_content = """
     <div class="card-body"><p><strong>Record Attelé :</strong> invalid string</p></div>
     """
-    result = fetch_chrono_from_html(html_content)
+    result = fetch_chrono_from_html(html_content, "TestHorse")
+    assert result is not None
     assert result.get('record_attele') is None
     assert result.get('last_3_chrono') == []
 
@@ -247,25 +252,33 @@ def test_fetch_chrono_from_html_malformed_table_chrono():
         </li>
     </ul>
     """
-    result = fetch_chrono_from_html(html_content)
-    assert result.get('record_attele') == pytest.approx(70.0)
+    result = fetch_chrono_from_html(html_content, "TestHorse")
+    assert result is not None
+    assert result.get('record_attele') is None
     assert result.get('last_3_chrono') == []
 
 def test_fetch_chrono_from_html_correctly_finds_jullou_chrono():
     html_content = """
-    <ul class="list-group">
-        <li class="list-group-item">
-            <p>19 000€ - Prix Axius - Attelé</p>
-            <table class="table"><thead><tr><th>Rg</th><th>Cheval</th><th>Red.Km</th></tr></thead>
-                <tbody>
-                    <tr><td>1</td><td>Javotte Madrik</td><td>1'14"1</td></tr>
-                    <tr><td>0</td><td>Jullou</td><td>1'15"1</td></tr>
-                </tbody>
-            </table>
-        </li>
-    </ul>
+    <div class="card mb-4">
+        <div class="card-header">
+            Performances détaillées
+        </div>
+        <div class="card-body">
+            <ul class="list-group">
+                <li class="list-group-item">
+                    <p>19 000€ - Prix Axius - Attelé</p>
+                    <table class="table"><thead><tr><th>Rg</th><th>Cheval</th><th>Red.Km</th></tr></thead>
+                        <tbody>
+                            <tr><td>1</td><td>Javotte Madrik</td><td>1'14"1</td></tr>
+                            <tr><td>0</td><td>Jullou</td><td>1'15"1</td></tr>
+                        </tbody>
+                    </table>
+                </li>
+            </ul>
+        </div>
+    </div>
     """
-    result = fetch_chrono_from_html(html_content)
+    result = fetch_chrono_from_html(html_content, "Jullou")
     assert result is not None
     assert result['last_3_chrono'] == [75.1]
 

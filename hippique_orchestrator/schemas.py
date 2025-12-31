@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class AnalyseGPIRequest(BaseModel):
@@ -11,6 +11,12 @@ class AnalyseGPIRequest(BaseModel):
 class BootstrapDayRequest(BaseModel):
     date: str
     mode: str = "tasks"
+
+
+class Snapshot9HRequest(BaseModel):
+    date: str | None = None
+    meeting_urls: list[str] | None = Field(default_factory=list)
+    rc_labels: list[str] | None = Field(default_factory=list)
 
 
 class RunPhaseRequest(BaseModel):

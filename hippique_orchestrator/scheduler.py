@@ -88,7 +88,9 @@ def enqueue_run_task(
             "doc_id": doc_id,
         }
         if not service_url:
-            return False, "Service URL is not configured. Cannot create task."
+            error_msg = "Service URL is not configured. Cannot create task."
+            logger.error(error_msg)
+            return False, error_msg
 
         target_url = f"{service_url}/tasks/run-phase"
 
