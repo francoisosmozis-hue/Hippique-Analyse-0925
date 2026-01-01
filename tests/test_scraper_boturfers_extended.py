@@ -147,6 +147,47 @@ async def test_parse_programme_empty_race_table(mock_httpx_and_soup, caplog):
     # No specific warning is logged for this case, it just results in an empty list.
 
 
+@pytest.mark.asyncio
+async def test_parse_programme_malformed_reunion_title(mock_httpx_and_soup):
+    """Test _parse_programme extracts reunion ID from id attribute if title is malformed."""
+    _, mock_beautiful_soup = mock_httpx_and_soup
+    mock_soup_instance = MagicMock()
+    mock_reunion_tab = MagicMock()
+    mock_race_table = MagicMock()
+
+    # Simulate a reunion_tab that has an ID and a malformed title tag
+    mock_reunion_tab.select_one.side_effect = [
+        MagicMock(text="Reunion Test Malformed"),  # Malformed reunion_title_tag
+        mock_race_table,  # race_table is found
+    ]
+    mock_reunion_tab.get.return_value = "r1_tab" # reunion_tab.get("id") returns "r1_tab"
+    mock_row_valid_in_program = MagicMock()
+    mock_rc_tag = MagicMock(text="R1 C1")
+    mock_name_tag = MagicMock(text="Race Name")
+    mock_name_tag.get.return_value = "/course/123" # Simulate href attribute
+    mock_time_tag = MagicMock(text="14h30")
+    mock_runners_count_tag = MagicMock(text="10")
+
+    mock_row_valid_in_program.select_one.side_effect = [
+        mock_rc_tag,
+        mock_name_tag,
+        mock_time_tag,
+        mock_runners_count_tag,
+    ]
+
+    mock_race_table.select.return_value = [mock_row_valid_in_program] # One valid row
+
+    mock_soup_instance.select.return_value = [mock_reunion_tab]
+    mock_beautiful_soup.return_value = mock_soup_instance
+
+    fetcher = BoturfersFetcher(race_url="http://programme.url")
+    fetcher.soup = mock_soup_instance
+    races = fetcher._parse_programme()
+
+    assert len(races) > 0
+    assert races[0]["reunion"] == "R1_TAB" # Should use the ID attribute in uppercase
+
+
 # Tests pour _parse_distance
 @pytest.mark.asyncio
 async def test_parse_distance_not_found(mock_httpx_and_soup):
