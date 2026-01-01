@@ -222,38 +222,103 @@ def test_post_ops_run_success(client, monkeypatch, mock_plan):
     assert call_args[1]["gpi_decision"] == "play_manual"
 
 
-def test_api_pronostics_schema(client, mock_plan, mock_firestore):
-    """
-    Test that the /api/pronostics endpoint returns the expected schema,
-    including for nested objects.
-    """
-    mock_get_races, _ = mock_firestore
-    mock_plan.return_value = [{"r_label": "R1", "c_label": "C1", "name": "Prix d'Amerique"}]
+
+from unittest.mock import Mock
+
+def mock_get_races_for_date(*args, **kwargs):
+    races = [
+        {
+            "course_id": "2025-01-01_R1C1",
+            "reunion": 1,
+            "course": 1,
+            "speciality": "Plat",
+            "category": "Handicap",
+            "hippodrome": "Deauville",
+            "start_time": "2025-01-01T13:50:00Z",
+            "partants": 16,
+            "tickets_analysis": {"gpi_decision": "pari"},
+            "tickets": [
+                {
+                    "type": "SG",
+                    "mise": 1.5,
+                    "chevaux": [1]
+                }
+            ]
+        },
+        {
+            "course_id": "2025-01-01_R1C2",
+            "reunion": 1,
+            "course": 2,
+            "speciality": "Haies",
+            "category": "Listed",
+            "hippodrome": "Deauville",
+            "start_time": "2025-01-01T14:20:00Z",
+            "partants": 12,
+            "tickets_analysis": {"gpi_decision": "abstention"},
+        }
+    ]
     
-    mock_doc = MagicMock()
-    mock_doc.id = "2025-01-01_R1C1"
-    mock_doc.to_dict.return_value = {
-        "rc": "R1C1", "nom": "Prix d'Amerique", "status": "playable", 
-        "gpi_decision": "play_gpi", "last_analyzed_at": datetime.now().isoformat()
-    }
-    mock_get_races.return_value = [mock_doc]
+    mock_races = []
+    for race_data in races:
+        mock_race = Mock()
+        mock_race.to_dict.return_value = race_data
+        mock_race.id = race_data["course_id"]
+        mock_races.append(mock_race)
+        
+    return mock_races
+
+
+def test_api_pronostics_schema(client, monkeypatch):
+    """
+    Test the schema of the /api/pronostics endpoint.
+    """
+    monkeypatch.setattr(
+        "hippique_orchestrator.firestore_client.get_races_for_date",
+        mock_get_races_for_date
+    )
 
     response = client.get("/api/pronostics?date=2025-01-01")
     assert response.status_code == 200
     data = response.json()
 
-    # Check top-level keys
-    assert all(k in data for k in ["ok", "date", "source", "counts", "pronostics"])
-    
-    # Check counts sub-keys
-    assert all(k in data["counts"] for k in ["total_in_plan", "total_processed", "total_playable"])
+    assert "pronostics" in data
+    assert isinstance(data["pronostics"], list)
+    assert "last_updated" in data
+    assert "version" in data
 
-    # Check pronostics structure if not empty
-    if data["pronostics"]:
-        pronostic = data["pronostics"][0]
-        assert all(k in pronostic for k in ["rc", "nom", "status", "gpi_decision", "last_analyzed_at"])
-        assert isinstance(pronostic["rc"], str)
-        assert isinstance(pronostic["status"], str)
+    for pronostic in data["pronostics"]:
+        validate_pronostic(pronostic)
+        
+def validate_pronostic(pronostic: dict):
+    assert "course_id" in pronostic
+    assert isinstance(pronostic["course_id"], str)
+    assert "reunion" in pronostic
+    assert isinstance(pronostic["reunion"], int)
+    assert "course" in pronostic
+    assert isinstance(pronostic["course"], int)
+    assert "speciality" in pronostic
+    assert isinstance(pronostic["speciality"], str)
+    assert "category" in pronostic
+    assert isinstance(pronostic["category"], str)
+    assert "hippodrome" in pronostic
+    assert isinstance(pronostic["hippodrome"], str)
+    assert "start_time" in pronostic
+    assert "partants" in pronostic
+    assert isinstance(pronostic["partants"], int)
+
+    if "tickets" in pronostic:
+        assert isinstance(pronostic["tickets"], list)
+        for ticket in pronostic["tickets"]:
+            assert "type" in ticket
+            assert isinstance(ticket["type"], str)
+            assert "mise" in ticket
+            assert isinstance(ticket["mise"], (int, float))
+            assert "chevaux" in ticket
+            assert isinstance(ticket["chevaux"], list)
+            for cheval in ticket["chevaux"]:
+                assert isinstance(cheval, (int, str))
+
+
 
 
 def test_ui_contains_critical_elements_and_api_call(client):

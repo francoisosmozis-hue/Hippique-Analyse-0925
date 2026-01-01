@@ -1,75 +1,122 @@
-# Test Plan - Projet Hippique Orchestrator
+# Plan de Test - Hippique Orchestrator
 
-Ce document décrit les procédures de validation pour le projet, incluant les tests locaux et les scripts de vérification en production ("smoke tests").
+Ce document décrit les procédures de test à exécuter pour valider la qualité et la non-régression du projet.
 
-## 1. Validation Locale
+## 1. Tests Unitaires et d'Intégration Locaux
 
-La validation locale est la pierre angulaire de l'assurance qualité pour ce projet. Elle doit être exécutée avant tout déploiement.
+Ces tests constituent la base de la validation et doivent être exécutés avant chaque commit.
 
-### 1.1. Installation des dépendances
+### Commande d'Exécution Complète
 
-Assurez-vous que toutes les dépendances de développement sont installées :
-
-```bash
-pip install -r requirements.txt -r requirements-dev.txt
-```
-
-### 1.2. Exécution de la suite de tests complète
-
-Pour lancer tous les tests unitaires et d'intégration, utilisez la commande suivante. Cela garantit que toutes les fonctionnalités existantes sont intactes.
+Cette commande exécute l'intégralité de la suite de tests, génère un rapport de couverture et effectue 10 passes pour détecter les tests instables (flaky).
 
 ```bash
-pytest -q
-```
-
-**Résultat attendu :** Tous les tests doivent passer (`OK`). Aucun échec (`FAILED`) ou erreur (`ERROR`) n'est acceptable.
-
-### 1.3. Génération du rapport de couverture
-
-Pour vérifier que les modules critiques restent bien couverts, générez le rapport de couverture :
-
-```bash
-pytest --cov=. --cov-report=term-missing
-```
-
-**Résultat attendu :** Le rapport s'affichera dans le terminal. Les modules critiques ciblés doivent maintenir une couverture élevée :
-- `hippique_orchestrator/plan.py`: > 80%
-- `hippique_orchestrator/firestore_client.py`: > 80%
-- `hippique_orchestrator/analysis_pipeline.py`: > 80%
-- `hippique_orchestrator/scrapers/boturfers.py`: > 80%
-- `hippique_orchestrator/gcs_utils.py`: > 80%
-
-### 1.4. Vérification de la stabilité (Anti-Flaky)
-
-Pour s'assurer qu'aucun test n'est intermittent ("flaky"), exécutez la suite de tests en boucle. Un échec sur l'une des itérations signale une instabilité à corriger.
-
-```bash
-for i in $(seq 1 10); do \
-  echo "Run $i/10..."; \
-  pytest -q --disable-warnings || (echo "Flaky test detected on run $i!" && exit 1); \
+pytest --cov -q --cov-report=term-missing -n auto && \
+for i in {1..10}; do \
+  echo "---\nRUN $i/10 ---"; \
+  pytest -q -n auto || exit 1; \
 done
 ```
 
-**Résultat attendu :** La boucle doit se terminer avec succès après 10 itérations.
+**Résultat Attendu :**
+- `100% passed` pour chaque exécution.
+- Aucune erreur ou échec.
+- La couverture doit rester stable ou augmenter.
 
-## 2. Validation en Production (Smoke Tests)
+### Commande de Couverture Uniquement
 
-Après un déploiement réussi, une série de vérifications rapides doit être effectuée pour s'assurer que le service est opérationnel.
-
-### 2.1. Prérequis
-
-Le script de smoke test requiert deux variables d'environnement :
-- `SERVICE_URL`: L'URL de base du service déployé (ex: `https://mon-service-prod.run.app`).
-- `HIPPIQUE_INTERNAL_API_KEY`: La clé API requise pour les endpoints sécurisés comme `/schedule`.
-
-**NE JAMAIS HARCODER LA CLÉ DANS LE SCRIPT.**
-
-### 2.2. Exécution du script
+Pour une analyse rapide de la couverture de code :
 
 ```bash
-export SERVICE_URL="https://your-service-url.run.app"
-export HIPPIQUE_INTERNAL_API_KEY="your-secret-api-key"
-bash scripts/smoke_prod.sh
+pytest --cov
 ```
 
-**Résultat attendu :** Le script affichera `OK` pour chaque endpoint testé. Toute autre sortie indique un problème en production.
+**Résultat Attendu :**
+- Un rapport tabulaire indiquant la couverture par fichier.
+- L'objectif est de maintenir ou d'augmenter la couverture sur les modules critiques (>80%).
+
+## 2. Validation Manuelle des Endpoints Sensibles
+
+Ces tests ne doivent **pas** être automatisés dans la suite de tests CI pour éviter de stocker des secrets. Ils doivent être exécutés manuellement dans un environnement de pré-production ou de production.
+
+### Endpoint `/schedule`
+
+1.  **Test sans clé API :**
+    ```bash
+    curl -X POST "https://<URL_PROD>/schedule" -H "Content-Type: application/json" -d '{"date": "2025-01-01"}'
+    ```
+    **Résultat Attendu :**
+    - Code de statut HTTP `401` ou `403`.
+    - Réponse JSON : `{"detail":"Not authenticated"}` ou similaire.
+
+2.  **Test avec clé API (via variable d'environnement) :**
+    ```bash
+    export HIPPIQUE_INTERNAL_API_KEY="votre_cle_api"
+    curl -X POST "https://<URL_PROD>/schedule" -H "Content-Type: application/json" -H "X-API-Key: $HIPPIQUE_INTERNAL_API_KEY" -d '{"date": "2025-01-01"}'
+    unset HIPPIQUE_INTERNAL_API_KEY
+    ```
+    **Résultat Attendu :**
+    - Code de statut HTTP `200`.
+    - Une réponse JSON indiquant le succès de la planification.
+
+## 3. Smoke Tests de Production
+
+Un script `smoke_prod.sh` est disponible pour effectuer une vérification de santé rapide sur l'environnement de production.
+
+### Contenu de `scripts/smoke_prod.sh`
+
+```bash
+#!/bin/bash
+set -e
+
+# Vérifier que l'URL de production est fournie
+if [ -z "$1" ]; then
+  echo "Usage: $0 <production_url>"
+  exit 1
+fi
+URL=$1
+
+echo "### Smoke Test - Health Check ###"
+curl -fL "$URL/health" | grep '"status":"healthy"'
+
+echo -e "\n### Smoke Test - API Pronostics (JSON) ###"
+curl -fL "$URL/api/pronostics" | grep '"ok":true'
+
+echo -e "\n### Smoke Test - UI Pronostics (HTML) ###"
+curl -fL "$URL/pronostics" | grep '<title>Hippique Orchestrator - Pronostics</title>'
+
+echo -e "\n### Smoke Test - /schedule (sans API Key) ###"
+# Nous attendons un code 403, donc nous ne voulons pas que -f échoue le script
+response_code=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$URL/schedule" -H "Content-Type: application/json" -d '{"date": "2025-01-01"}')
+if [ "$response_code" -eq 403 ]; then
+  echo "OK: Received expected 403 Forbidden"
+else
+  echo "FAIL: Expected 403, but received $response_code"
+  exit 1
+fi
+
+if [ -z "$HIPPIQUE_INTERNAL_API_KEY" ]; then
+  echo -e "\n### SKIP: /schedule (avec API Key) - HIPPIQUE_INTERNAL_API_KEY non définie ###"
+else
+  echo -e "\n### Smoke Test - /schedule (avec API Key) ###"
+  curl -f -X POST "$URL/schedule" -H "Content-Type: application/json" -H "X-API-Key: $HIPPIQUE_INTERNAL_API_KEY" -d '{"date": "2025-01-01"}' | grep '"ok":true'
+fi
+
+echo -e "\n### Tous les smoke tests ont réussi ! ###"
+```
+
+### Exécution des Smoke Tests
+
+```bash
+# Exécuter sans la clé API pour les tests publics
+bash scripts/smoke_prod.sh https://<URL_PROD>
+
+# Exécuter avec la clé API pour le test complet
+export HIPPIQUE_INTERNAL_API_KEY="votre_cle_api"
+bash scripts/smoke_prod.sh https://<URL_PROD>
+unset HIPPIQUE_INTERNAL_API_KEY
+```
+
+**Résultat Attendu :**
+- Le script doit se terminer avec le message "Tous les smoke tests ont réussi !".
+- Aucun code de sortie d'erreur.

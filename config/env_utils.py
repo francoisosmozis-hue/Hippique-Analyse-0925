@@ -28,7 +28,6 @@ def get_env(
     cast: Callable[[str], T] = lambda x: x,  # type: ignore[assignment]
     required: bool = False,
     aliases: Sequence[str] | None = None,
-    is_prod: bool = False,
 ) -> T | None:
     """Fetch an environment variable and coerce it to the desired type.
 
@@ -44,9 +43,8 @@ def get_env(
         When ``True``, logs a critical error if the variable is missing.
     aliases:
         Optional iterable of alternative environment variable names.
-    is_prod:
-        When ``True`` and a required variable is missing, exits the application.
     """
+    is_prod = os.getenv("PROD", "false").lower() == "true"
 
     raw_value: str | None = None
     source = name

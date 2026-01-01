@@ -180,6 +180,7 @@ async def get_pronostics_data(date: str | None = None, if_none_match: str | None
         "reason_if_empty": reason_if_empty,
         "status_message": status_message,
         "last_updated": (last_updated_from_db or server_timestamp).isoformat(),
+        "version": __version__,
         "counts": counts,
         "pronostics": pronostics,
     }
