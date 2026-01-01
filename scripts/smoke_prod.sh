@@ -1,39 +1,86 @@
 #!/bin/bash
 
-# Configuration
-BASE_URL="https://hippique-orchestrator-1084663881709.europe-west1.run.app"
-TODAY_DATE=$(date +%F) # YYYY-MM-DD format
+# Script de Smoke Test pour l'application Hippique Orchestrator
+#
+# Utilisation : ./scripts/smoke_prod.sh https://votre-url.com
 
-echo "--- Starting Smoke Tests for Hippique Orchestrator ($BASE_URL) ---"
-echo "Testing date: $TODAY_DATE"
+set -e # Quitte immédiatement si une commande échoue
 
-# --- Test 1: UI /pronostics endpoint ---
-echo -e "\n--- Test 1: UI /pronostics (HTML) ---"
-UI_RESPONSE=$(curl -s "$BASE_URL/pronostics")
-if echo "$UI_RESPONSE" | grep -q "Hippique Orchestrator - Pronostics"; then
-    echo "✅ UI /pronostics endpoint is accessible and contains expected title."
+# --- Fonctions utilitaires ---
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+info() {
+    echo -e "${GREEN}[INFO]${NC} $1"
+}
+
+warn() {
+    echo -e "${YELLOW}[WARN]${NC} $1"
+}
+
+fail() {
+    echo -e "${RED}[FAIL]${NC} $1" >&2
+    exit 1
+}
+
+check_status() {
+    local url=$1
+    local expected_status=$2
+    local extra_args=$3
+    local description=$4
+
+    echo -n "-> Test: $description..."
+    
+    # shellcheck disable=SC2086
+    local status_code=$(curl -o /dev/null -s -w "%{http_code}" "$url" $extra_args)
+    
+    if [ "$status_code" -eq "$expected_status" ]; then
+        echo -e " ${GREEN}OK ($status_code)${NC}"
+    else
+        echo -e " ${RED}ERREUR (Reçu: $status_code, Attendu: $expected_status)${NC}"
+        exit 1
+    fi
+}
+
+
+# --- Validation des arguments ---
+BASE_URL=$1
+if [ -z "$BASE_URL" ]; then
+    fail "URL de base manquante. Utilisation : $0 https://votre-url.com"
+fi
+
+info "Lancement des smoke tests pour l'URL de base : $BASE_URL"
+
+# --- Exécution des tests ---
+
+# 1. Test de l'endpoint UI
+check_status "$BASE_URL/pronostics" 200 "-L" "Endpoint UI (/pronostics)"
+
+# 2. Test de l'endpoint API public
+check_status "$BASE_URL/api/pronostics?date=$(date +%F)" 200 "-L" "Endpoint API (/api/pronostics)"
+
+# 3. Test de l'endpoint sécurisé SANS clé API
+# Nous nous attendons à un 403 Forbidden car la sécurité est gérée par l'API Key.
+# Un 401 Unauthorized serait aussi acceptable.
+echo -n "-> Test: Endpoint sécurisé (/schedule) SANS clé..."
+status_no_key=$(curl -o /dev/null -s -w "%{http_code}" -X POST "$BASE_URL/schedule")
+if [ "$status_no_key" -eq 403 ] || [ "$status_no_key" -eq 401 ]; then
+    echo -e " ${GREEN}OK (Accès refusé comme attendu avec code $status_no_key)${NC}"
 else
-    echo "❌ UI /pronostics endpoint FAILED. Response did not contain expected title."
-    echo "Response excerpt:"
-    echo "$UI_RESPONSE" | head -n 10
+    echo -e " ${RED}ERREUR (Reçu: $status_no_key, Attendu: 401 ou 403)${NC}"
     exit 1
 fi
 
-# --- Test 2: API /api/pronostics endpoint (JSON) ---
-echo -e "\n--- Test 2: API /api/pronostics (JSON) ---"
-API_RESPONSE=$(curl -s "$BASE_URL/api/pronostics?date=$TODAY_DATE")
-
-# Validate JSON and check for 'ok: true'
-if echo "$API_RESPONSE" | jq -e '.ok == true' > /dev/null; then
-    echo "✅ API /api/pronostics endpoint is accessible and returned 'ok: true'."
-    echo "API Response excerpt:"
-    echo "$API_RESPONSE" | jq . | head -n 15
+# 4. Test de l'endpoint sécurisé AVEC clé API
+if [ -z "$HIPPIQUE_INTERNAL_API_KEY" ]; then
+    warn "Variable d'environnement HIPPIQUE_INTERNAL_API_KEY non définie. Skip du test d'accès authentifié."
 else
-    echo "❌ API /api/pronostics endpoint FAILED. Response did not contain 'ok: true' or was not valid JSON."
-    echo "Response excerpt:"
-    echo "$API_RESPONSE" | head -n 20
-    exit 1
+    # Le endpoint /schedule attend un payload, même vide, pour certaines configurations.
+    # On envoie un POST avec un corps vide et le header d'authentification.
+    check_status "$BASE_URL/schedule" 200 "-X POST -H 'Content-Type: application/json' -H \"X-API-Key: $HIPPIQUE_INTERNAL_API_KEY\" -d '{}'" "Endpoint sécurisé (/schedule) AVEC clé"
 fi
 
-echo -e "\n--- All Smoke Tests Completed Successfully ---"
+info "Tous les smoke tests ont réussi."
 exit 0

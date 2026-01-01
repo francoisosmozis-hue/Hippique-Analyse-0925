@@ -1,7 +1,7 @@
 import logging
 import os # Needed for testing os.getenv
 import pytest
-from unittest.mock import MagicMock # For mocking cast
+from unittest.mock import MagicMock, patch # For mocking cast
 from config.env_utils import get_env
 
 
@@ -16,10 +16,25 @@ def test_get_env_missing_warns(monkeypatch, caplog):
 def test_get_env_required_missing_logs_critical(monkeypatch, caplog):
     monkeypatch.delenv("BAR", raising=False)
     with caplog.at_level(logging.CRITICAL):
-        val = get_env("BAR", required=True)
+        # is_prod=False is the default, so this tests the non-blocking behavior
+        val = get_env("BAR", required=True, is_prod=False)
     
     assert val is None # It should return the default, which is None
     assert "Missing required environment variable 'BAR'" in caplog.text
+
+
+def test_get_env_required_missing_in_prod_exits(monkeypatch, caplog):
+    monkeypatch.delenv("PROD_VAR", raising=False)
+    
+    # Mock sys.exit to prevent the test runner from exiting
+    with patch("sys.exit") as mock_exit:
+        with caplog.at_level(logging.CRITICAL):
+            get_env("PROD_VAR", required=True, is_prod=True)
+
+    # Assert that sys.exit was called with the correct exit code
+    mock_exit.assert_called_once_with(1)
+    assert "Missing required environment variable 'PROD_VAR'" in caplog.text
+    assert "IS_PROD=True. Exiting." in caplog.text
 
 
 def test_get_env_alias_support(monkeypatch, caplog):

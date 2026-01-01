@@ -28,6 +28,7 @@ def get_env(
     cast: Callable[[str], T] = lambda x: x,  # type: ignore[assignment]
     required: bool = False,
     aliases: Sequence[str] | None = None,
+    is_prod: bool = False,
 ) -> T | None:
     """Fetch an environment variable and coerce it to the desired type.
 
@@ -41,9 +42,10 @@ def get_env(
         Callable used to convert the raw string value to ``T``.
     required:
         When ``True``, logs a critical error if the variable is missing.
-
     aliases:
         Optional iterable of alternative environment variable names.
+    is_prod:
+        When ``True`` and a required variable is missing, exits the application.
     """
 
     raw_value: str | None = None
@@ -58,11 +60,14 @@ def get_env(
 
     if raw_value is None:
         if required:
-            # Instead of raising, log a critical error.
-            # This allows the app to start so we can debug config via the API.
             logger.critical(
                 "Missing required environment variable '%s'. App may not function correctly.", name
             )
+            if is_prod:
+                import sys
+
+                logger.critical("IS_PROD=True. Exiting.")
+                sys.exit(1)
         else:
             logger.warning("Environment variable %s not set; using default %r", name, default)
 

@@ -1,75 +1,71 @@
-# Plan de Test - hippique-orchestrator
+# Plan de Test - Hippique Orchestrator
 
-Ce document décrit les procédures pour valider le bon fonctionnement de l'application, que ce soit localement ou en production.
+Ce document décrit les commandes et procédures pour valider la qualité et la non-régression du projet.
 
-## 1. Validation Locale
+## 1. Validation Locale (Harnais de Test `pytest`)
 
-La validation locale repose sur la suite de tests `pytest`. Elle doit être exécutée avant toute intégration de code.
+L'ensemble des tests unitaires et d'intégration sont exécutés avec `pytest`. En raison d'une instabilité détectée avec l'exécuteur parallèle `pytest-xdist`, **toutes les commandes de test doivent être exécutées en mode séquentiel** en utilisant l'option `-n 0`.
 
-### 1.1. Exécution simple et rapide
+### a. Exécution Rapide
 
-Pour lancer tous les tests en mode silencieux. Utile pour une vérification rapide.
-
-```bash
-python3 -m pytest -q
-```
-**Résultat attendu :** `OK` et un résumé des tests passés.
-
-### 1.2. Exécution avec rapport de couverture
-
-Pour analyser la couverture de code des modules de l'application.
+Pour une vérification rapide de la non-régression.
 
 ```bash
-python3 -m pytest --cov=hippique_orchestrator
+pytest -q -n 0
 ```
-**Résultat attendu :** Un tableau détaillé affichant le pourcentage de couverture pour chaque fichier du module `hippique_orchestrator`.
+**Résultat Attendu :** Tous les tests doivent passer.
 
-### 1.3. Vérification de la stabilité (Anti-Flaky)
+### b. Exécution avec Couverture de Code
 
-Pour s'assurer qu'aucun test n'est instable, la suite est exécutée 10 fois consécutivement. Le moindre échec interrompt le processus.
+Pour générer le rapport de couverture et identifier les zones non testées.
 
 ```bash
-for i in $(seq 1 10); do \
-  echo "--- Exécution anti-flaky $i/10 ---"; \
-  python3 -m pytest -q || { echo "ERREUR : Un test instable a été détecté à l'exécution $i." >&2; exit 1; }; \
-done && echo "Tests stables sur 10 exécutions."
+pytest -n 0 --cov=hippique_orchestrator --cov=config --cov-report=term-missing
 ```
-**Résultat attendu :** Le message final `Tests stables sur 10 exécutions.` sans aucune interruption.
+**Résultat Attendu :** Tous les tests passent et un rapport de couverture s'affiche dans le terminal, indiquant le pourcentage de couverture pour chaque module.
 
-## 2. Validation en Production (Smoke Test)
+### c. Validation Anti-Flaky (Stabilité)
 
-Un script de "smoke test" est fourni pour effectuer des vérifications de base sur un environnement de production. Il ne se substitue pas aux tests locaux mais agit comme un gardien de la santé de l'application déployée.
-
-**Emplacement du script :** `scripts/smoke_prod.sh`
-
-### 2.1. Prérequis
-
-Le script nécessite deux variables d'environnement :
-- `BASE_URL`: L'URL de base de l'application déployée (ex: `https://hippique-orchestrator-xxxx.run.app`).
-- `HIPPIQUE_INTERNAL_API_KEY`: La clé API secrète pour accéder aux endpoints protégés. **Cette clé ne doit jamais être affichée ni stockée dans le code.**
-
-### 2.2. Actions du script
-
-Le script `smoke_prod.sh` effectue les vérifications suivantes :
-
-1.  **Endpoint de santé (`/health`)** : Vérifie que l'application est en ligne et répond `200 OK`.
-2.  **Endpoint UI (`/pronostics`)** : Vérifie que l'interface utilisateur se charge correctement (`200 OK`).
-3.  **Endpoint API (`/api/pronostics`)** : Vérifie que l'API de pronostics répond correctement (`200 OK`) avec une structure JSON valide.
-4.  **Sécurité de l'ordonnancement (`/schedule`)** :
-    - Lance un appel **sans** la clé API et s'attend à recevoir une erreur `403 Forbidden`.
-    - Lance un appel **avec** la clé `HIPPIQUE_INTERNAL_API_KEY` et s'attend à recevoir une réponse `200 OK`, confirmant que la planification (en `dry_run`) a été déclenchée avec succès.
-
-### 2.3. Exécution
+Pour garantir que les tests sont déterministes, cette commande les exécute 10 fois de suite. Tout échec interrompt le processus.
 
 ```bash
-# S'assurer que le script est exécutable
-chmod +x scripts/smoke_prod.sh
+for i in $(seq 1 10); do
+  echo "--- Passe de test anti-flaky : $i/10 ---"
+  pytest -q -n 0
+  if [ $? -ne 0 ]; then
+    echo "ERREUR : La suite de tests a échoué à la passe $i. Test non déterministe détecté."
+    exit 1
+  fi
+done
 
-# Exporter les variables requises
-export BASE_URL="URL_DE_PROD"
-export HIPPIQUE_INTERNAL_API_KEY="VOTRE_CLE_API_SECRETE"
-
-# Lancer le script
-./scripts/smoke_prod.sh
+echo "SUCCÈS : Les 10 passes de test ont réussi. Aucun test flaky détecté."
 ```
-**Résultat attendu :** Une sortie indiquant le succès de chaque étape. Toute erreur entraînera la sortie du script avec un code non nul.
+**Résultat Attendu :** Le script se termine avec le message de succès.
+
+## 2. Validation de Production (Smoke Test)
+
+Un script de "smoke test" est fourni pour valider les fonctionnalités de base d'un environnement déployé (Staging, Production). Il ne valide pas la logique métier mais la disponibilité et la sécurité des endpoints critiques.
+
+### Prérequis
+
+1.  L'URL de base de l'environnement doit être connue (ex: `https://mon-app.run.app`).
+2.  Si l'endpoint `/schedule` est sécurisé, la clé API doit être exportée dans une variable d'environnement :
+    ```bash
+    export HIPPIQUE_INTERNAL_API_KEY="votre-cle-api-secrete"
+    ```
+
+### Commande d'Exécution
+
+Le script se trouve dans `scripts/smoke_prod.sh`.
+
+```bash
+./scripts/smoke_prod.sh https://votre-url-de-production.com
+```
+
+### Scénarios de Test du Smoke Script
+
+Le script exécute les vérifications suivantes :
+1.  **Endpoint UI (`/pronostics`) :** Vérifie que la page principale retourne un code HTTP 200.
+2.  **Endpoint API (`/api/pronostics`) :** Vérifie que l'API de données retourne un code HTTP 200.
+3.  **Endpoint Sécurisé (`/schedule` - Sans Clé) :** Vérifie que l'accès sans clé API est bien rejeté (code HTTP 401 ou 403 attendu).
+4.  **Endpoint Sécurisé (`/schedule` - Avec Clé) :** Si la variable `HIPPIQUE_INTERNAL_API_KEY` est définie, vérifie que l'accès avec la clé est autorisé (code HTTP 200 attendu). La clé elle-même n'est jamais affichée.

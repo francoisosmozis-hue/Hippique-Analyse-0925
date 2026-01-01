@@ -222,5 +222,56 @@ def test_post_ops_run_success(client, monkeypatch, mock_plan):
     assert call_args[1]["gpi_decision"] == "play_manual"
 
 
+def test_api_pronostics_schema(client, mock_plan, mock_firestore):
+    """
+    Test that the /api/pronostics endpoint returns the expected schema,
+    including for nested objects.
+    """
+    mock_get_races, _ = mock_firestore
+    mock_plan.return_value = [{"r_label": "R1", "c_label": "C1", "name": "Prix d'Amerique"}]
+    
+    mock_doc = MagicMock()
+    mock_doc.id = "2025-01-01_R1C1"
+    mock_doc.to_dict.return_value = {
+        "rc": "R1C1", "nom": "Prix d'Amerique", "status": "playable", 
+        "gpi_decision": "play_gpi", "last_analyzed_at": datetime.now().isoformat()
+    }
+    mock_get_races.return_value = [mock_doc]
+
+    response = client.get("/api/pronostics?date=2025-01-01")
+    assert response.status_code == 200
+    data = response.json()
+
+    # Check top-level keys
+    assert all(k in data for k in ["ok", "date", "source", "counts", "pronostics"])
+    
+    # Check counts sub-keys
+    assert all(k in data["counts"] for k in ["total_in_plan", "total_processed", "total_playable"])
+
+    # Check pronostics structure if not empty
+    if data["pronostics"]:
+        pronostic = data["pronostics"][0]
+        assert all(k in pronostic for k in ["rc", "nom", "status", "gpi_decision", "last_analyzed_at"])
+        assert isinstance(pronostic["rc"], str)
+        assert isinstance(pronostic["status"], str)
+
+
+def test_ui_contains_critical_elements_and_api_call(client):
+    """
+    Test that the main UI page contains critical HTML elements and the correct
+    JavaScript fetch call to the API endpoint.
+    """
+    response = client.get("/pronostics")
+    assert response.status_code == 200
+    html = response.text
+
+    # Check for critical structural elements
+    assert '<table id="races-table">' in html
+    assert '<tbody id="races-tbody">' in html
+
+    # Check that the JavaScript contains the specific fetch call
+    assert 'fetch(`/api/pronostics?date=${date}`)' in html
+
+
 
 
