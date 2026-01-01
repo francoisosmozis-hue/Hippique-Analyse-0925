@@ -101,6 +101,18 @@ def test_get_races_for_date_handles_exception(mock_db, caplog):
     assert results == []
 
 
+@patch(FIRESTORE_CLIENT_PATH, None)
+def test_get_races_for_date_skips_if_db_not_available(caplog):
+    """Test that `get_races_for_date` skips if the db client is None."""
+    from hippique_orchestrator import firestore_client
+    
+    date_str = "2025-12-30"
+    results = firestore_client.get_races_for_date(date_str)
+    
+    assert "Firestore is not available, cannot query races." in caplog.text
+    assert results == []
+
+
 @pytest.mark.parametrize(
     "url, date, expected",
     [
@@ -189,6 +201,22 @@ def test_get_processing_status_for_date_empty_daily_plan(mock_db):
     assert status["counts"]["total_in_plan"] == 0
     assert status["counts"]["total_processed"] == 0
     assert status["reason_if_empty"] == "PLAN_SCRAPING_FAILED_OR_NO_RACES_TODAY"
+
+
+def test_get_processing_status_for_date_explicit_empty_plan_reason(mock_db):
+    """Test `get_processing_status_for_date` explicitly covers the empty plan reason."""
+    from hippique_orchestrator import firestore_client
+
+    date_str = "2025-01-01"
+    daily_plan = []
+
+    mock_query = MagicMock()
+    mock_query.stream.return_value = []
+    mock_db.collection.return_value.order_by.return_value.start_at.return_value.end_at.return_value = mock_query
+
+    status = firestore_client.get_processing_status_for_date(date_str, daily_plan)
+    assert status["reason_if_empty"] == "PLAN_SCRAPING_FAILED_OR_NO_RACES_TODAY"
+
 
 
 def test_get_processing_status_for_date_unprocessed_races(mock_db):

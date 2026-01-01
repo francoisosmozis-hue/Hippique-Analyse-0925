@@ -11,11 +11,20 @@ MID_ODDS_UPPER_BOUND = 7.0
 
 def equal_profit_stakes(odds_list: Iterable[float], total_stake: float) -> list[float]:
     """Return equal-profit stakes for the provided decimal odds."""
+    if not odds_list:
+        raise ValueError("Odds list cannot be empty")
 
-    inv_sum = sum(1.0 / float(o) for o in odds_list)
+    processed_odds = []
+    for o in odds_list:
+        odd_float = float(o)
+        if odd_float <= 1.0: # Odds must be > 1.0 for a profit to be possible in theory
+            raise ValueError("Odds must be greater than 1.0")
+        processed_odds.append(odd_float)
+
+    inv_sum = sum(1.0 / o for o in processed_odds)
     if inv_sum <= 0:
-        raise ValueError("Invalid odds list")
-    return [(total_stake / float(o)) / inv_sum for o in odds_list]
+        raise ValueError("Invalid odds list resulting in non-positive inverse sum")
+    return [(total_stake / o) / inv_sum for o in processed_odds]
 
 
 def diversify_guard(horses_meta: Iterable[dict]) -> bool:
@@ -52,6 +61,11 @@ def require_mid_odds(horses_meta: Iterable[dict]) -> bool:
         odds = horse.get("odds")
         if odds is None:
             continue
-        if MID_ODDS_LOWER_BOUND <= float(odds) <= MID_ODDS_UPPER_BOUND:
+        try:
+            odds_float = float(odds)
+        except ValueError:
+            continue # Ignore non-numeric odds
+        
+        if MID_ODDS_LOWER_BOUND <= odds_float <= MID_ODDS_UPPER_BOUND:
             return True
     return False

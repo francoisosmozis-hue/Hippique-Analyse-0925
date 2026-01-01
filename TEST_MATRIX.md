@@ -1,14 +1,85 @@
-# Matrice de Tests - Hippique Orchestrator
+# Matrice de Tests et Couverture de Code - hippique-orchestrator
 
-Ce document détaille la stratégie de test pour chaque composant majeur du projet, en identifiant les risques, les tests existants, les tests manquants et les indicateurs de performance clés (KPIs).
+## Objectif
 
-| Composant | Risque Principal | Tests Existants (Résumé) | Tests Manquants Critiques | KPI de Qualité | Effort | Priorité |
-|---|---|---|---|---|---|---|
-| **API Publique (/api/pronostics)** | - Contrat de données instable<br>- Régression sur le format de sortie | - `test_api_pronostics_date_validation`<br>- `test_api_pronostics_default_date_is_today`<br>- `test_api_pronostics_empty_response`<br>- `test_api_pronostics_rich_response_structure`<br>- `test_api_pronostics_etag_304_not_modified` | - **Validation de schéma JSON stricte** sur la réponse pour détecter toute régression. | - 100% de conformité au schéma | Faible | **5** |
-| **UI (/pronostics)** | - Dépendance forte à l'API<br>- Erreur JS non interceptée | - `test_pronostics_ui_endpoint`<br>- `test_ui_contains_critical_elements_and_api_call` | - Test d'intégration qui mock l'API et vérifie l'affichage correct des données (succès, échec, vide). | - Taux d'erreur JS < 0.1% | Moyen | 3 |
-| **Endpoints Sensibles (ops/\*)** | - Accès non autorisé (contournement API Key/OIDC) | - `test_api_key_required_and_missing`<br>- `test_ops_run_endpoint_security`<br>- `test_task_worker_endpoint_security` | - Test de charge simple pour valider la robustesse de l'authentification (non-fonctionnel).<br>- Test de non-régression sur le header `X-API-KEY`. | - 100% des endpoints sensibles audités et testés contre les accès non authentifiés | Faible | **5** |
-| **Pipeline d'Analyse** | - Décision erronée sur data invalide<br>- Effet de bord entre les phases (H30/H5) | - Couverture > 99% sur `analysis_pipeline.py`<br>- Tests unitaires robustes sur `analysis_utils.py` | - Test d'intégration avec un snapshot de course de bout en bout (de `load_snapshot` à `generate_tickets`). | - > 98% de couverture | Moyen | 4 |
-| **Persistance (Firestore)** | - Mauvais format de doc_id<br>- Gestion des collections vides ou absentes | - `firestore_client.py` couvert à 95% (CRUD de base) | - Tests sur les cas limites : document non trouvé, erreur de connexion, pagination. | - 100% des écritures/lectures critiques testées unitairement | Faible | 2 |
-| **Scrapers (Boturfers, Geny)** | - Changement de structure HTML<br>- Parsing de données incorrect (NaN, None) | - Tests de parsing basés sur des fixtures HTML locales.<br>- `test_fallback_parse_html_extracts_data` | - **Test "Canary"** : script non-versionné pour lancer les scrapers sur les URL live et détecter les changements de structure (alerte si 0 course trouvée).<br>- Fixtures HTML pour les cas d'erreur (page 404, course annulée). | - > 90% de couverture<br>- Alerte Canary fonctionnelle | Moyen | 3 |
-| **Scheduler (Cloud Tasks)** | - Tâche non créée ou dupliquée<br>- Mauvais calcul de l'heure de planification | - Couverture de 100% avec mocks (`test_scheduler.py`) | - Test d'intégration en `DRY_RUN` qui vérifie le `task_id` unique et l'`eta` calculé. | - 0 duplication de tâche en simulation | Faible | 4 |
-| **Gestion de l'Environnement** | - Variable critique manquante en prod (silent fail) | - `test_get_env_required_missing_in_prod_exits` | - **Test explicite du mode "fail-fast"** en production si une variable requise est absente. | - Démarrage de l'application impossible si `PROD` et variable requise manquante | Faible | 5 |
+Cette matrice évalue l'état actuel de la couverture de code, identifie les zones à risque et propose une priorisation pour le renforcement des tests, conformément aux objectifs de fiabilité du projet hippique-orchestrator.
+
+## Critères d'Évaluation
+
+-   **Composant**: Nom du module Python ou du script.
+-   **Risque**: Évaluation du risque en production si le composant contient des bugs (Critique, Élevé, Moyen, Faible).
+-   **Tests existants**: Description succincte des tests déjà en place.
+-   **% Couverture (actuelle)**: Pourcentage de couverture du code par les tests unitaires/d'intégration.
+-   **Tests manquants/améliorations**: Brève description des lacunes ou opportunités.
+-   **KPI Cible**: Objectif de couverture de code ou autre métrique pertinente.
+-   **Effort**: Estimation de la charge de travail (Élevé, Moyen, Faible).
+-   **Priorité**: Ordre d'importance pour l'amélioration (P1, P2, P3).
+
+---
+
+## Matrice
+
+| Composant                                                                   | Risque    | Tests existants                                           | % Couverture (actuelle) | Tests manquants/améliorations                                                                                     | KPI Cible | Effort | Priorité |
+| :-------------------------------------------------------------------------- | :-------- | :-------------------------------------------------------- | :---------------------- | :---------------------------------------------------------------------------------------------------------------- | :-------- | :----- | :------- |
+| `hippique_orchestrator/runner.py`                                           | Critique  | Partiel, couvre certains flux d'exécution.                | 66%                     | Cas limites, gestion des erreurs, scénarios d'abstention.                                                         | \>85%     | Moyen  | P1       |
+| `hippique_orchestrator/pipeline_run.py`                                     | Critique  | Bon, couvre la majorité du pipeline d'analyse.            | 80%                     | Cas d'erreurs rares, combinaisons de paramètres.                                                                  | \>90%     | Faible | P2       |
+| `hippique_orchestrator/ev_calculator.py`                                    | Critique  | Très bon, couvre les calculs financiers.                  | 91%                     | Cas d'arrondis, valeurs extrêmes.                                                                                 | \>95%     | Faible | P2       |
+| `hippique_orchestrator/firestore_client.py`                                 | Critique  | Très bon, couvre les opérations CRUD.                     | 95%                     | Gestion des permissions (mockées), comportements de latence.                                                       | \>98%     | Faible | P2       |
+| `hippique_orchestrator/scheduler.py`                                        | Élevé     | Couverture complète pour la planification de tâches.      | 100%                    | N/A                                                                                                               | 100%      | N/A    | N/A      |
+| `hippique_orchestrator/plan.py`                                             | Élevé     | Couverture complète pour la construction du plan de courses. | 100%                    | N/A                                                                                                               | 100%      | N/A    | N/A      |
+| `hippique_orchestrator/scrapers/boturfers.py`                               | Élevé     | Très bon, couvre l'extraction de données.                 | 92%                     | Changements structurels du site, cas de données manquantes/malformées.                                            | \>95%     | Moyen  | P1       |
+| `hippique_orchestrator/scrapers/geny.py`                                    | Moyen     | Très bon, couvre l'extraction de données.                 | 96%                     | Changements structurels du site, cas de données manquantes/malformées.                                            | \>98%     | Faible | P2       |
+| `hippique_orchestrator/scrapers/zeturf.py`                                  | Bas       | Couverture complète, mais scraper obsolète.             | 100%                    | N/A (à supprimer/archiver)                                                                                        | 100%      | N/A    | N/A      |
+| `hippique/utils/dutching.py`                                                | Critique  | Très faible.                                              | 23%                     | Tests unitaires approfondis pour tous les scénarios de dutching, cas limites, zéros, valeurs négatives.           | \>90%     | Élevé  | P1       |
+| `hippique_orchestrator/service.py`                                          | Élevé     | Couvre les endpoints principaux (health, pronostics).     | 76%                     | Tous les endpoints, validation des requêtes/réponses, gestion des erreurs, tests de sécurité (auth, rate limiting). | \>90%     | Moyen  | P1       |
+| `hippique_orchestrator/logging_io.py`                                       | Moyen     | Couverture faible.                                        | 47%                     | Tests des formats de log, des destinations, des niveaux de gravité.                                               | \>80%     | Moyen  | P3       |
+| `hippique_orchestrator/snapshot_manager.py`                                 | Élevé     | Très faible.                                              | 24%                     | Gestion des versions de snapshots, restauration, intégrité des données.                                           | \>85%     | Élevé  | P1       |
+| `hippique_orchestrator/stats_provider.py`                                   | Critique  | Couverture moyenne.                                       | 60%                     | Fiabilité de la récupération des stats, gestion des IDs, formats de données.                                      | \>90%     | Moyen  | P1       |
+| `hippique_orchestrator/validator_ev.py`                                     | Critique  | Couverture moyenne, mais cruciale.                        | 58%                     | Tous les critères de validation, combinaisons de filtres, seuils dynamiques.                                      | \>95%     | Élevé  | P1       |
+| `config/env_utils.py`                                                       | Élevé     | Très bon, mais un cas spécifique demandé.                 | 96%                     | Test spécifique pour `get_env` avec comportement `fail-fast` en prod.                                             | \>98%     | Faible | P2       |
+| `hippique_orchestrator/scripts/online_fetch_zeturf.py`                      | Moyen     | Partiel.                                                  | 49%                     | `online_fetch_zeturf` doit être considéré comme obsolète ou être mis à jour pour Boturfers.                       | \>90%     | Élevé  | P3       |
+| `hippique_orchestrator/scripts/simulate_ev.py`                              | Critique  | Partiel.                                                  | 71%                     | Intégration avec `ev_calculator`, cas d'erreurs, performance.                                                     | \>90%     | Moyen  | P1       |
+| `hippique_orchestrator/scripts/simulate_wrapper.py`                         | Critique  | Bon.                                                      | 79%                     | Cas limites, gestion des exceptions, intégrité du cache.                                                          | \>90%     | Moyen  | P1       |
+| `hippique_orchestrator/scripts/snapshot_enricher.py`                        | Élevé     | Aucun.                                                    | 0%                      | Tests complets d'enrichissement, validation des données, cas d'erreurs.                                           | \>90%     | Élevé  | P1       |
+| `hippique_orchestrator/scripts/update_excel_planning.py`                    | Élevé     | Très bon, mais doit gérer les nouvelles structures.       | 86%                     | Tests des mises à jour de toutes les colonnes, formats de date/heure, cas d'erreurs d'écriture.                  | \>95%     | Moyen  | P2       |
+
+---
+
+### Scripts utilitaires / Fichiers non-critiques (couverture non prioritaire)
+
+Les fichiers suivants ont une couverture faible ou nulle, mais sont considérés comme des scripts utilitaires, des configurations, ou des modules non directement liés à la logique métier critique pour la production. Leur couverture n'est pas une priorité immédiate sauf si des problèmes spécifiques sont identifiés.
+
+-   `_backup_conflicts/*`: Fichiers de backup, non pertinents pour la couverture active.
+-   `check_firestore_data.py` (0%)
+-   `debug_task_client.py` (0%)
+-   `gunicorn_conf.py` (0%)
+-   `main_debug.py` (0%)
+-   `setup.py` (0%)
+-   `sklearn/*` (0%) - Semble être des restes ou des modules tiers, à confirmer.
+-   `trigger_schedule.py` (0%)
+-   `hippique_orchestrator/utils/probabilities.py` (78%) - Faible risque.
+-   `hippique_orchestrator/api/tasks.py` (88%) - Faible risque.
+-   `hippique_orchestrator/auth.py` (83%) - Faible risque.
+-   `hippique_orchestrator/data_source.py` (61%) - Risque faible.
+-   `hippique_orchestrator/kelly.py` (83%) - Risque faible.
+-   `hippique_orchestrator/logging_middleware.py` (82%) - Risque faible.
+-   `hippique_orchestrator/logging_utils.py` (89%) - Risque faible.
+-   `hippique_orchestrator/post_course_payload.py` (93%) - Risque faible.
+-   `hippique_orchestrator/time_utils.py` (69%) - Risque faible.
+-   `hippique_orchestrator/scripts/concat_je_month.py` (0%)
+-   `hippique_orchestrator/scripts/cron_decider.py` (0%)
+-   `hippique_orchestrator/scripts/drive_sync.py` (0%)
+-   `hippique_orchestrator/scripts/enrich_requirements.py` (0%)
+-   `hippique_orchestrator/scripts/fetch_je_chrono.py` (0%)
+-   `hippique_orchestrator/scripts/fetch_je_stats.py` (0%)
+-   `hippique_orchestrator/scripts/gcs_utils.py` (0%)
+-   `hippique_orchestrator/scripts/guardrails.py` (100%)
+-   `hippique_orchestrator/scripts/lint_sources.py` (0%)
+-   `hippique_orchestrator/scripts/merge_all_data.py` (0%)
+-   `hippique_orchestrator/scripts/monitor_roi.py` (0%)
+-   `hippique_orchestrator/scripts/resolve_course_id.py` (59%)
+-   `hippique_orchestrator/scripts/restore_from_drive.py` (0%)
+-   `hippique_orchestrator/scripts/snapshot_enricher.py` (0%)
+-   `hippique_orchestrator/scripts/update_excel_with_results.py` (0%)
+-   `hippique_orchestrator/stats_fetcher.py` (0%)
+-   `hippique_orchestrator/scripts/p_finale_export.py` (56%)

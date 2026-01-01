@@ -97,28 +97,37 @@ async def test_parse_programme_no_race_table_in_reunion(mock_httpx_and_soup, cap
 
 @pytest.mark.asyncio
 async def test_parse_programme_reunion_id_from_id_attribute(mock_httpx_and_soup, caplog):
-    """Test _parse_programme extracts reunion ID from id attribute if title is malformed."""
+    """Test _parse_programme extracts reunion ID from id attribute if title is malformed or missing."""
     _, mock_beautiful_soup = mock_httpx_and_soup
-    mock_soup_instance = MagicMock()
-    mock_reunion_tab = MagicMock()
     
-    # Simulate a reunion_tab that has an ID but no title tag with text
-    mock_reunion_tab.select_one.side_effect = [
-        None, # No reunion_title_tag
-        None,  # No race table, so select_one("table.table.data.prgm") returns None
-    ]
-    mock_reunion_tab.get.return_value = "r1_tab" # reunion_tab.get("id") returns "r1_tab"
-    
-    mock_soup_instance.select.return_value = [mock_reunion_tab] # Select returns this reunion_tab
+    html_content = """
+    <div class="tab-content">
+        <div class="tab-pane" id="r1_tab">
+            <!-- No h3.reu-title here, or a malformed one -->
+            <table class="table data prgm">
+                <tbody>
+                    <tr>
+                        <th class="num"><span class="rxcx">R1C1</span></th>
+                        <td class="crs"><a class="link" href="/course/123">Race Name</a></td>
+                        <td class="hour">14h30</td>
+                        <td class="nb">10</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    """
+    mock_soup_instance = BeautifulSoup(html_content, "lxml")
     mock_beautiful_soup.return_value = mock_soup_instance
 
     fetcher = BoturfersFetcher(race_url="http://programme.url")
     fetcher.soup = mock_soup_instance
     races = fetcher._parse_programme()
 
-    assert races == [] # Should still return empty because no races were parsed
-    # Check that a warning for missing table in reunion is logged
-    assert "Tableau des courses ('table.table.data.prgm') introuvable pour la réunion R1_TAB." in caplog.text
+    assert len(races) == 1
+    assert races[0]["reunion"] == "R1_TAB"
+    # Ensure no warning about missing table, as it exists
+    assert "Tableau des courses ('table.table.data.prgm') introuvable pour la réunion R1_TAB." not in caplog.text
 
 
 @pytest.mark.asyncio
@@ -223,6 +232,32 @@ async def test_parse_distance_from_span_tag(mock_httpx_and_soup):
     assert distance == 2875
 
 
+@pytest.mark.asyncio
+async def test_parse_distance_from_span_tag_fallback_after_info_block_no_distance(mock_httpx_and_soup):
+    """Test _parse_distance extracts distance from span.distance when info-race block is present but has no distance."""
+    _, mock_beautiful_soup = mock_httpx_and_soup
+    mock_soup_instance = MagicMock()
+    
+    mock_info_race_block_no_distance = MagicMock()
+    mock_info_race_block_no_distance.get_text.return_value = "type attelé sans distance en mètres"
+
+    mock_distance_span_tag = MagicMock()
+    mock_distance_span_tag.text = "2100 m"
+
+    # Configure select_one to return the info_race_block first, then the distance_span_tag
+    mock_soup_instance.select_one.side_effect = [
+        mock_info_race_block_no_distance, # First call: div.info-race
+        mock_distance_span_tag,          # Second call: span.distance
+    ]
+    mock_beautiful_soup.return_value = mock_soup_instance
+
+    fetcher = BoturfersFetcher(race_url="http://race.url")
+    fetcher.soup = mock_soup_instance
+    distance = fetcher._parse_distance()
+
+    assert distance == 2100
+
+
 # Tests pour _parse_race_metadata
 @pytest.mark.asyncio
 async def test_parse_race_metadata_no_info_block(mock_httpx_and_soup, caplog):
@@ -273,6 +308,49 @@ async def test_parse_race_metadata_no_conditions_tag_and_no_conditions_text(mock
 
     assert "conditions" not in metadata
     assert metadata["distance"] == 1200
+
+
+@pytest.mark.asyncio
+async def test_parse_race_metadata_conditions_from_text_snippet(mock_httpx_and_soup):
+    """Test _parse_race_metadata extracts conditions from text snippet when conditions-course tag is missing."""
+    _, mock_beautiful_soup = mock_httpx_and_soup
+    mock_soup_instance = MagicMock()
+    
+    mock_info_race_block = MagicMock()
+    mock_info_race_block.get_text.return_value = "type attelé conditions du l'épreuve 2025" # Text with "conditions" keyword
+
+    mock_soup_instance.select_one.side_effect = [
+        None, # for _parse_distance: div.info-race (not found to ensure it falls through)
+        None, # for _parse_distance: span.distance (not found)
+        mock_info_race_block, # for _parse_race_metadata: div.info-race
+        None, # for _parse_race_metadata: div.conditions-course (missing)
+    ]
+    mock_beautiful_soup.return_value = mock_soup_instance
+
+    fetcher = BoturfersFetcher(race_url="http://race.url")
+    fetcher.soup = mock_soup_instance
+    metadata = fetcher._parse_race_metadata()
+
+    assert "type_course" in metadata and metadata["type_course"] == "Attelé"
+    assert metadata["conditions"] == "conditions du l'épreuve 2025"
+
+
+@pytest.mark.asyncio
+async def test_parse_race_metadata_empty_metadata_logs_warning(mock_httpx_and_soup, caplog):
+    """Test _parse_race_metadata logs a warning if no metadata can be extracted."""
+    caplog.set_level("WARNING")
+    _, mock_beautiful_soup = mock_httpx_and_soup
+    mock_soup_instance = MagicMock()
+    
+    # All selects return None, ensuring no metadata is extracted
+    mock_soup_instance.select_one.return_value = None 
+
+    fetcher = BoturfersFetcher(race_url="http://race.url")
+    fetcher.soup = mock_soup_instance
+    metadata = fetcher._parse_race_metadata()
+
+    assert metadata == {}
+    assert "Aucune métadonnée de course n'a pu être extraite de http://race.url." in caplog.text
 
 
 # Tests pour _parse_race_runners_from_details_page
@@ -404,6 +482,28 @@ async def test_parse_race_runners_missing_musique_gains(mock_httpx_and_soup):
     assert runners[0]["gains"] is None # Should be None from missing tag
 
 
+# Tests pour _parse_race_row
+@pytest.mark.asyncio
+async def test_parse_race_row_runners_count_non_digit(mock_httpx_and_soup):
+    """Test _parse_race_row when runners_count is not a digit."""
+    _, mock_beautiful_soup = mock_httpx_and_soup
+    fetcher = BoturfersFetcher(race_url="http://base.url")
+
+    mock_row = MagicMock()
+    mock_rc_tag = MagicMock(text="R1C1")
+    mock_name_tag = MagicMock(text="Race Name")
+    mock_name_tag.get.return_value = "/course/123"
+    mock_time_tag = MagicMock(text="14h30")
+    mock_runners_count_tag = MagicMock(text="10 absents") # Non-digit text
+
+    mock_row.select_one.side_effect = [
+        mock_rc_tag, mock_name_tag, mock_time_tag, mock_runners_count_tag
+    ]
+    
+    result = fetcher._parse_race_row(mock_row, "http://base.url")
+    assert result["runners_count"] is None
+
+
 @pytest.mark.asyncio
 async def test_fetcher_parse_race_row_missing_url(mock_httpx_and_soup, caplog):
     """Test _parse_race_row returns None if the race link has no href attribute."""
@@ -434,6 +534,97 @@ async def test_fetcher_parse_race_row_no_name_tag(mock_httpx_and_soup, caplog):
 
     result = fetcher._parse_race_row(mock_row, "http://base.url")
     assert result is None
+
+
+# New test: _parse_race_row when runners_count_tag is missing
+@pytest.mark.asyncio
+async def test_parse_race_row_missing_runners_count_tag(mock_httpx_and_soup):
+    """Test _parse_race_row when runners_count_tag is missing."""
+    _, mock_beautiful_soup = mock_httpx_and_soup
+    fetcher = BoturfersFetcher(race_url="http://base.url")
+
+    mock_row = MagicMock()
+    mock_rc_tag = MagicMock(text="R1C1")
+    mock_name_tag = MagicMock(text="Race Name")
+    mock_name_tag.get.return_value = "/course/123"
+    mock_time_tag = MagicMock(text="14h30")
+    # runners_count_tag is None
+
+    mock_row.select_one.side_effect = [
+        mock_rc_tag, mock_name_tag, mock_time_tag, None # No runners_count_tag
+    ]
+    
+    result = fetcher._parse_race_row(mock_row, "http://base.url")
+    assert result["runners_count"] is None
+
+
+# New test: _parse_race_metadata to cover all type_course and corde options
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "text_content, expected_type, expected_corde",
+    [
+        ("type attelé", "Attelé", "N/A"),
+        ("type monté corde à gauche", "Monté", "Gauche"),
+        ("type plat corde à droite", "Plat", "Droite"),
+        ("type obstacle", "Obstacle", "N/A"),
+        ("type inconnu", None, "N/A"), # No matching type_course
+    ]
+)
+async def test_parse_race_metadata_course_type_and_corde(mock_httpx_and_soup, text_content, expected_type, expected_corde):
+    """Test _parse_race_metadata correctly extracts course type and corde."""
+    _, mock_beautiful_soup = mock_httpx_and_soup
+    mock_soup_instance = MagicMock()
+    
+    mock_info_race_block = MagicMock()
+    mock_info_race_block.get_text.return_value = text_content
+
+    mock_soup_instance.select_one.side_effect = [
+        None, # _parse_distance div.info-race
+        None, # _parse_distance span.distance
+        mock_info_race_block, # _parse_race_metadata div.info-race
+        None, # _parse_race_metadata div.conditions-course
+    ]
+    mock_beautiful_soup.return_value = mock_soup_instance
+
+    fetcher = BoturfersFetcher(race_url="http://race.url")
+    fetcher.soup = mock_soup_instance
+    metadata = fetcher._parse_race_metadata()
+
+    if expected_type:
+        assert metadata["type_course"] == expected_type
+    else:
+        assert "type_course" not in metadata
+    assert metadata["corde"] == expected_corde
+
+
+# New test: _parse_race_runners_from_details_page with odds_place
+@pytest.mark.asyncio
+async def test_parse_race_runners_with_odds_place(mock_httpx_and_soup):
+    """Test runner parsing successfully extracts odds_place."""
+    _, mock_beautiful_soup = mock_httpx_and_soup
+    html_row = """
+    <tr>
+        <th class="num">1</th>
+        <td class="tl">
+            <a class="link">Cheval C</a>
+            <div class="size-s"><a class="link">J. Dupont</a></div>
+            <a class="link lg">E. Trainer</a>
+        </td>
+        <td class="cote-gagnant"><span class="c">2,5</span></td>
+        <td class="cote-place"><span class="c">1,3</span></td>
+        <td class="musique"></td>
+        <td class="gains"></td>
+    </tr>
+    """
+    mock_soup_instance = BeautifulSoup(f'<table class="table data"><tbody>{html_row}</tbody></table>', "lxml")
+    mock_beautiful_soup.return_value = mock_soup_instance
+
+    fetcher = BoturfersFetcher(race_url="http://race.url")
+    fetcher.soup = mock_soup_instance
+    runners = fetcher._parse_race_runners_from_details_page()
+    
+    assert len(runners) == 1
+    assert runners[0]["odds_place"] == 1.3
 
 
 # Tests pour get_snapshot et get_race_snapshot
