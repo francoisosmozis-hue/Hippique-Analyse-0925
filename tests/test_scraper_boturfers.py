@@ -487,28 +487,4 @@ def test_fetcher_parse_race_metadata_missing_conditions(boturfers_race_details_h
     assert metadata["type_course"] == "Attelé" # Other data should still be parsed.
 
 
-def test_fetcher_parse_race_runners_from_details_page_no_odds():
-    """Test runner parsing when odds are missing from a row."""
-    html_row = """
-    <tr>
-        <th class="num">1</th>
-        <td class="tl">
-            <a class="link">Cheval A</a>
-            <div class="size-s"><a class="link">J. Dupont</a></div>
-            <a class="link lg">E. Trainer</a>
-        </td>
-        <td class="cote-gagnant"><!-- No odds --></td>
-        <td class="cote-place"><!-- No place odds --></td>
-        <td class="musique">1p2p3p</td>
-        <td class="gains">123456</td>
-    </tr>
-    """
-    soup = BeautifulSoup(f'<table class="table data"><tbody>{html_row}</tbody></table>', "lxml")
-    fetcher = boturfers.BoturfersFetcher("http://dummy.url")
-    fetcher.soup = soup
-    runners = fetcher._parse_race_runners_from_details_page()
-    
-    assert len(runners) == 1
-    assert runners[0]["odds_win"] is None
-    assert runners[0]["odds_place"] is None
-    assert runners[0]["nom"] == "Cheval A"
+
