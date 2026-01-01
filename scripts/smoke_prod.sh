@@ -1,86 +1,82 @@
 #!/bin/bash
-
-# Script de Smoke Test pour l'application Hippique Orchestrator
 #
-# Utilisation : ./scripts/smoke_prod.sh https://votre-url.com
+# Smoke Test pour le service Hippique Orchestrator en production.
+#
+# Ce script vérifie que les endpoints critiques sont en ligne et se comportent
+# comme attendu après un déploiement.
+#
+# Prérequis :
+#   - Les variables d'environnement SERVICE_URL et HIPPIQUE_INTERNAL_API_KEY doivent être définies.
+#   - Les outils `curl` et `jq` doivent être installés.
 
 set -e # Quitte immédiatement si une commande échoue
 
 # --- Fonctions utilitaires ---
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
-
-info() {
-    echo -e "${GREEN}[INFO]${NC} $1"
-}
-
-warn() {
-    echo -e "${YELLOW}[WARN]${NC} $1"
-}
-
-fail() {
-    echo -e "${RED}[FAIL]${NC} $1" >&2
-    exit 1
-}
-
-check_status() {
-    local url=$1
-    local expected_status=$2
-    local extra_args=$3
-    local description=$4
-
-    echo -n "-> Test: $description..."
-    
-    # shellcheck disable=SC2086
-    local status_code=$(curl -o /dev/null -s -w "%{http_code}" "$url" $extra_args)
-    
-    if [ "$status_code" -eq "$expected_status" ]; then
-        echo -e " ${GREEN}OK ($status_code)${NC}"
+print_status() {
+    GREEN='\033[0;32m'
+    RED='\033[0;31m'
+    NC='\033[0m' # No Color
+    if [ "$2" -eq 0 ]; then
+        echo -e "[ ${GREEN}OK${NC} ] $1"
     else
-        echo -e " ${RED}ERREUR (Reçu: $status_code, Attendu: $expected_status)${NC}"
+        echo -e "[ ${RED}FAIL${NC} ] $1"
+    fi
+}
+
+check_var() {
+    if [ -z "${!1}" ]; then
+        echo "Erreur : La variable d'environnement $1 n'est pas définie."
         exit 1
     fi
 }
 
+# --- Vérification des prérequis ---
+check_var "SERVICE_URL"
+check_var "HIPPIQUE_INTERNAL_API_KEY"
 
-# --- Validation des arguments ---
-BASE_URL=$1
-if [ -z "$BASE_URL" ]; then
-    fail "URL de base manquante. Utilisation : $0 https://votre-url.com"
-fi
+echo "--- Début des Smoke Tests pour ${SERVICE_URL} ---"
 
-info "Lancement des smoke tests pour l'URL de base : $BASE_URL"
-
-# --- Exécution des tests ---
-
-# 1. Test de l'endpoint UI
-check_status "$BASE_URL/pronostics" 200 "-L" "Endpoint UI (/pronostics)"
-
-# 2. Test de l'endpoint API public
-check_status "$BASE_URL/api/pronostics?date=$(date +%F)" 200 "-L" "Endpoint API (/api/pronostics)"
-
-# 3. Test de l'endpoint sécurisé SANS clé API
-# Nous nous attendons à un 403 Forbidden car la sécurité est gérée par l'API Key.
-# Un 401 Unauthorized serait aussi acceptable.
-echo -n "-> Test: Endpoint sécurisé (/schedule) SANS clé..."
-status_no_key=$(curl -o /dev/null -s -w "%{http_code}" -X POST "$BASE_URL/schedule")
-if [ "$status_no_key" -eq 403 ] || [ "$status_no_key" -eq 401 ]; then
-    echo -e " ${GREEN}OK (Accès refusé comme attendu avec code $status_no_key)${NC}"
+# --- Test 1: Endpoint /health ---
+echo -n "1. Test /health ... "
+status_code=$(curl --silent --output /dev/null --write-out "%{{http_code}}" "${{SERVICE_URL}}/health")
+if [ "$status_code" -eq 200 ]; then
+    print_status "/health" 0
 else
-    echo -e " ${RED}ERREUR (Reçu: $status_no_key, Attendu: 401 ou 403)${NC}"
+    print_status "/health (Code: ${status_code})" 1
     exit 1
 fi
 
-# 4. Test de l'endpoint sécurisé AVEC clé API
-if [ -z "$HIPPIQUE_INTERNAL_API_KEY" ]; then
-    warn "Variable d'environnement HIPPIQUE_INTERNAL_API_KEY non définie. Skip du test d'accès authentifié."
+# --- Test 2: Endpoint /api/pronostics ---
+echo -n "2. Test /api/pronostics ... "
+response=$(curl --silent -H "Accept: application/json" "${{SERVICE_URL}}/api/pronostics")
+ok_status=$(echo "$response" | jq -r .ok)
+if [ "$ok_status" == "true" ]; then
+    print_status "/api/pronostics" 0
 else
-    # Le endpoint /schedule attend un payload, même vide, pour certaines configurations.
-    # On envoie un POST avec un corps vide et le header d'authentification.
-    check_status "$BASE_URL/schedule" 200 "-X POST -H 'Content-Type: application/json' -H \"X-API-Key: $HIPPIQUE_INTERNAL_API_KEY\" -d '{}'" "Endpoint sécurisé (/schedule) AVEC clé"
+    print_status "/api/pronostics (Réponse invalide)" 1
+    echo "Réponse reçue :"
+    echo "$response" | jq
+    exit 1
 fi
 
-info "Tous les smoke tests ont réussi."
-exit 0
+# --- Test 3: Endpoint /schedule (sans authentification) ---
+echo -n "3. Test /schedule (403 Forbidden attendu) ... "
+schedule_status_403=$(curl --silent --output /dev/null --write-out "%{{http_code}}" -X POST "${{SERVICE_URL}}/schedule")
+if [ "$schedule_status_403" -eq 403 ]; then
+    print_status "/schedule sans clé" 0
+else
+    print_status "/schedule sans clé (Code: ${schedule_status_403})" 1
+    exit 1
+fi
+
+# --- Test 4: Endpoint /schedule (avec authentification) ---
+echo -n "4. Test /schedule (200 OK attendu) ... "
+schedule_status_200=$(curl --silent --output /dev/null --write-out "%{{http_code}}" -X POST -H "X-API-Key: ${{HIPPIQUE_INTERNAL_API_KEY}}" "${{SERVICE_URL}}/schedule?dry_run=true")
+if [ "$schedule_status_200" -eq 200 ]; then
+    print_status "/schedule avec clé" 0
+else
+    print_status "/schedule avec clé (Code: ${schedule_status_200})" 1
+    exit 1
+fi
+
+echo -e "\n${GREEN}--- Tous les smoke tests ont réussi ---${NC}"

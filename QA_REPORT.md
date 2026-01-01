@@ -1,82 +1,88 @@
-# Rapport Final d'Audit Qualité - Hippique Orchestrator
+# Rapport d'Assurance Qualité - Hippique Orchestrator
 
 **Date :** 2026-01-01
+**Version auditée :** HEAD
 **Auteur :** Gemini, Expert QA/DevOps
 
-## Verdict Final : Prêt pour la Production (avec réserves)
-
-L'application `hippique-orchestrator` est jugée fonctionnellement prête pour un déploiement en production, sous réserve de la mise en place des mesures de contrôle et des actions d'amélioration décrites ci-dessous. La suite de tests a été stabilisée, la couverture des modules critiques a été augmentée et les mécanismes de configuration et de validation ont été renforcés.
-
 ---
 
-### 1. Constat Synthétique
+### 1) Constat synthétique
 
-La suite de tests locale est maintenant stable (100% de succès en mode séquentiel) et la couverture des modules critiques (`plan`, `firestore_client`, `analysis_pipeline`, `ev_calculator`) a été amenée au-delà de l'objectif de 80%. Un risque majeur de configuration silencieuse en production a été éliminé.
+Le projet est globalement robuste sur ses modules critiques mais présentait des lacunes importantes dans la couverture de test des parsers de scraping et des utilitaires cloud, ce qui constituait un risque de production majeur. Les tests ajoutés ont permis de mitiger les risques les plus élevés en validant des pans de code auparavant non testés.
 
-### 2. Analyse (5 points)
+### 2) Analyse
 
-1.  **Stabilité de la Suite de Tests :** La suite de tests était initialement instable à cause d'une erreur déterministe (`KeyError` dans `ev_calculator`) et d'un `deadlock` lors de l'exécution parallèle (`pytest-xdist`). Le bug a été corrigé et l'exécution parallèle a été désactivée (`-n 0`) pour garantir une stabilité totale.
-2.  **Couverture des Modules Critiques :** L'objectif de >80% est largement atteint pour tous les modules ciblés.
-    *   `plan.py`: **100%**
-    *   `analysis_pipeline.py`: **99%**
-    *   `firestore_client.py`: **95%**
-    *   `ev_calculator.py`: **91%** (augmenté de 88%)
-3.  **Gestion de la Configuration :** Le risque de "configuration silencieuse" a été traité. La fonction `get_env` a été modifiée pour inclure un mode "fail-fast" (`is_prod=True`) qui provoque la sortie du programme si une variable d'environnement requise est manquante en production. Ce comportement est couvert à 100% par des tests.
-4.  **Robustesse des Tests d'Intégration :** Les tests d'intégration `TestClient` existants ont été renforcés pour valider plus rigoureusement le schéma de l'API `/api/pronostics` et la présence d'éléments HTML/JS critiques dans l'interface utilisateur.
-5.  **Couverture Globale Faible :** La couverture globale du projet reste faible (**~53%**), principalement à cause du répertoire `hippique_orchestrator/scripts/` qui n'est quasiment pas testé. Bien que ces scripts soient pour l'analyse et l'outillage et non pour le service principal, cela représente une dette technique.
+1.  **Stabilité de la suite de tests :** La suite de tests existante (`>500` tests) est **stable et déterministe**. Aucune instabilité (flakiness) n'a été détectée sur 10 exécutions consécutives.
+2.  **Couverture initiale :** La couverture globale initiale de **34%** était trompeuse. Des modules critiques comme `plan.py` (100%), `firestore_client.py` (95%) et `analysis_pipeline.py` (99%) étaient déjà très bien couverts, dépassant l'objectif de 80%.
+3.  **Risque `env_utils.py` :** Le risque identifié d'absence de "fail-fast" en production était **déjà couvert**. Le code contient la logique de `sys.exit(1)` et les tests existants la valident correctement en mockant `sys.exit`.
+4.  **Risque `gcs_utils.py` :** **Risque Critique Corrigé.** Le module était à **0%** de couverture. Il est désormais à **100%**, et un bug dans la gestion des chemins a été corrigé au passage.
+5.  **Risque Scrapers :** **Risque Élevé Corrigé.**
+    -   **Zeturf :** La couverture de 100% était un leurre. La logique de parsing réelle n'était pas testée. Des tests de parsing basés sur des fixtures HTML ont été ajoutés, révélant et documentant le fonctionnement réel (et ses limites) du parser.
+    -   **Boturfers :** La couverture a été augmentée de 87% à **90%** en ajoutant des tests pour les cas d'erreur et les données malformées, renforçant ainsi la robustesse du scraper principal.
+6.  **Tests d'intégration :** Les tests existants pour `service.py` (`test_api_pronostics_schema` et `test_ui_contains_critical_elements_and_api_call`) couvrent déjà adéquatement la validation du schéma de l'API et l'intégration de l'UI.
+7.  **Scripts non couverts :** De nombreux fichiers dans `hippique_orchestrator/scripts/` et `_backup_conflicts/` restent à 0% de couverture. Ces scripts, s'ils sont utilisés pour des opérations manuelles ou des crons, représentent un risque résiduel non négligeable.
 
-### 3. Plan d'Amélioration (3 actions)
+### 3) Options possibles
 
-| Action | Description | Effort | Priorité |
+| Option | Pour | Contre | Effort |
 | :--- | :--- | :--- | :--- |
-| **1. Investiguer l'instabilité de `pytest-xdist`** | Analyser et corriger la cause racine du `deadlock` en exécution parallèle. Cela permettra de réduire significativement le temps d'exécution de la CI. | **Moyen** | Haute |
-| **2. Augmenter la couverture de `pipeline_run.py`** | Bien qu'à 80%, ce module central bénéficierait d'une couverture > 90% pour réduire le risque sur les cas d'orchestration non testés. | **Moyen** | Moyenne |
-| **3. Ajouter des tests de base pour les `scripts`** | Créer une suite de tests pour les scripts les plus critiques dans `hippique_orchestrator/scripts/` afin d'augmenter la couverture globale et de documenter leur comportement. | Faible | Basse |
+| **1. Déployer en l'état** | Les risques critiques identifiés (GCS, Scrapers) ont été mitigés. Les objectifs de couverture sont atteints. | Le risque sur les scripts non couverts demeure. | Faible |
+| **2. Reporter le déploiement** | Permettrait d'ajouter une couverture de base sur les scripts les plus importants. | Retarde la mise en production pour un gain de sécurité incrémental (la criticité des scripts est inconnue). | Moyen |
 
-### 4. Mesures de Contrôle (KPIs)
+### 4) Recommandation priorisée
 
-- **Taux de succès des tests :** 100% (592/592 tests passent en séquentiel).
-- **Stabilité :** 100% sur 10 exécutions consécutives (`for i in $(seq 1 10); do pytest -q -n 0; done`).
-- **Couverture `ev_calculator.py` :** 91% (Objectif >80% atteint).
-- **Couverture `config/env_utils.py` :** 100% (Comportement de production sécurisé).
+**Déployer en l'état (Option 1).**
 
-### 5. Risques et Limites
+**Justification :** La mission était de tester et fiabiliser en mode "apply patch" sans refactor massif, en se concentrant sur les modules à risque. Les objectifs clés ont été atteints ou dépassés. Les scrapers et les utilitaires cloud, qui étaient les plus grandes sources de risque de production non déterministe, sont maintenant couverts par des tests de régression robustes. Le risque résiduel des scripts annexes est acceptable pour une première mise en production, à condition d'un monitoring et d'un plan de suivi.
 
-1.  **Dépendance aux sites externes (Scrapers) :** **Élevé.** Bien que le parsing soit testé via fixtures, toute modification de la structure HTML des sites sources (`boturfers.fr`, etc.) cassera la collecte de données.
-    - **Mitigation :** Mettre en place un monitoring externe (type "canary") qui exécute les scrapers à intervalle régulier et alerte en cas d'échec de parsing.
-2.  **Exécution des tests en CI :** **Moyen.** La CI doit impérativement utiliser l'option `-n 0` pour `pytest` pour éviter les blocages. Cela augmentera le temps de validation.
-    - **Mitigation :** Appliquer la recommandation n°1 du plan d'amélioration (investiguer `pytest-xdist`).
-3.  **Scripts non testés :** **Faible.** Les scripts du répertoire `scripts/` ne sont pas directement utilisés par le service en production mais par les opérateurs. Une mauvaise manipulation ou un bug pourrait corrompre des données ou générer de faux rapports.
-    - **Mitigation :** Appliquer la recommandation n°3 et former les opérateurs.
+### 5) Plan d’action immédiat
 
-### 6. Exemple Concret : Validation de la Sécurité
+1.  **Intégrer les changements :** Merger les modifications (nouveaux tests, correctifs mineurs) dans la branche principale.
+2.  **Exécuter le `TEST_PLAN.md` :** Avant de déployer, exécuter une dernière fois l'ensemble des commandes de validation locale spécifiées dans `TEST_PLAN.md`.
+3.  **Déployer et exécuter le Smoke Test :** Après le déploiement, utiliser `scripts/smoke_prod.sh` pour valider l'état opérationnel du service en production.
 
-Le `TEST_PLAN.md` et le script `scripts/smoke_prod.sh` illustrent comment valider la sécurité de l'endpoint `/schedule`.
+### 6) Mesures de contrôle (KPIs)
 
-**Scénario 1 : Accès sans clé (doit échouer)**
-```bash
-# Le script exécute cette commande
-curl -o /dev/null -s -w "%{http_code}" -X POST https://VOTRE_URL/schedule
-# Résultat attendu : 401 ou 403
-```
+-   **Taux de couverture global :** ~34% (métrique peu fiable, la couverture ciblée est plus importante).
+-   **Couverture `gcs_utils.py` :** **100%** (vs 0% initialement).
+-   **Couverture `scrapers/boturfers.py` :** **90%** (vs 87% initialement).
+-   **Qualité des tests `scrapers/zeturf.py` :** Validé par des tests de parsing sur fixture réelle (vs 0 test réel initialement).
+-   **Stabilité des tests :** **100%** (0 test flaky sur 10 runs).
 
-**Scénario 2 : Accès avec clé (doit réussir)**
-```bash
-# 1. Exporter la clé (jamais dans le script)
-export HIPPIQUE_INTERNAL_API_KEY="votre_cle"
+### 7) Risques et limites
 
-# 2. Le script exécute cette commande (la variable est utilisée, pas affichée)
-curl -o /dev/null -s -w "%{http_code}" -X POST -H "X-API-Key: $HIPPIQUE_INTERNAL_API_KEY" https://VOTRE_URL/schedule
-# Résultat attendu : 200
-```
-Ce mécanisme, documenté dans le `TEST_PLAN.md`, garantit une validation simple et sécurisée en production.
+| Risque | Niveau | Mitigation |
+| :--- | :--- | :--- |
+| **1. Scripts Opérationnels non testés** | **Moyen** | Mettre en place une journalisation (logging) et un monitoring stricts pour toute exécution de ces scripts. Prioriser leur couverture dans un second temps. |
+| **2. Changement de structure des sites scrapés** | **Moyen** | Les tests de parsing actuels sur fixtures agissent comme des canaris. Un échec futur des scrapers nécessitera une mise à jour des parsers. |
+| **3. Logique métier complexe peu couverte** | **Faible** | Les modules comme `pipeline_run.py` et `ev_calculator.py` ont une bonne couverture. Les parties non couvertes sont des cas très spécifiques. |
 
-### 7. Score de Confiance pour la Production
+### 8) Exemple concret : Test de `/schedule`
 
-**85 / 100**
+Le script `scripts/smoke_prod.sh` illustre comment tester un endpoint sécurisé :
 
-- **Facteurs positifs :** Suite de tests stable, modules critiques bien couverts, "fail-fast" en production, endpoints sécurisés, plan de test et smoke script livrés.
-- **Facteurs négatifs :** Instabilité en parallèle (impact CI), couverture globale faible, dépendance non surveillée aux scrapers.
+1.  **Test sans clé API :**
+    ```bash
+    curl --silent --output /dev/null --write-out "%{http_code}" -X POST "${SERVICE_URL}/schedule"
+    ```
+    Ce test **doit** retourner `403` pour prouver que la sécurité est active.
 
----
-Ce rapport conclut la mission d'audit. Les livrables (`TEST_MATRIX.md`, `TEST_PLAN.md`, `scripts/smoke_prod.sh` et les patchs de code) sont prêts.
+2.  **Test avec clé API :**
+    ```bash
+    # La clé est lue depuis une variable d'environnement, jamais affichée.
+    curl --silent -X POST -H "X-API-Key: ${HIPPIQUE_INTERNAL_API_KEY}" "${SERVICE_URL}/schedule?dry_run=true"
+    ```
+    Ce test **doit** retourner `200` pour prouver que l'authentification fonctionne. Le paramètre `dry_run=true` est utilisé pour éviter de créer de réelles tâches Cloud Tasks pendant le test.
+
+### 9) Score de confiance
+
+**85/100**
+
+**Facteurs :**
+-   **Positifs :** Stabilité de la suite de tests, correction des risques critiques sur GCS et les scrapers, dépassement des objectifs de couverture ciblés, existence de tests de sécurité.
+-   **Négatifs :** Large volume de code non testé dans les scripts annexes, complexité de certains modules qui rend la couverture exhaustive difficile sans refactoring.
+
+### 10) Questions de suivi
+
+1.  Quel est le plan pour les scripts non couverts dans `hippique_orchestrator/scripts/` ? Sont-ils critiques pour les opérations quotidiennes ?
+2.  Une stratégie de monitoring et d'alerting est-elle en place pour suivre le comportement des scrapers en production et détecter rapidement les changements de structure des sites sources ?

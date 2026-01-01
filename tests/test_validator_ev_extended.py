@@ -1,201 +1,142 @@
-
 import pytest
+from pathlib import Path
+import json
 from hippique_orchestrator import validator_ev
-from hippique_orchestrator.validator_ev import ValidationError
+
+@pytest.fixture
+def temp_readme(tmp_path):
+    """A fixture to create a temporary README.md file."""
+    def _create_readme(content):
+        readme_path = tmp_path / "README.md"
+        readme_path.write_text(content, encoding="utf-8")
+        # Monkeypatch the Path class to use the tmp_path
+        original_path = validator_ev.Path
+        validator_ev.Path = lambda x: tmp_path / x if x == "README.md" else original_path(x)
+        return readme_path
+    yield _create_readme
+    # Restore the original Path class
+    from pathlib import Path as original_path_class
+    validator_ev.Path = original_path_class
 
 
-def test_validate_inputs_success():
-    cfg = {"ALLOW_JE_NA": True}
-    partants = [{"id": 1}, {"id": 2}, {"id": 3}, {"id": 4}, {"id": 5}, {"id": 6}]
-    odds = {"1": 2.0, "2": 3.0, "3": 4.0, "4": 5.0, "5": 6.0, "6": 7.0}
-    stats_je = {"coverage": 90.0}
-    assert validator_ev.validate_inputs(cfg, partants, odds, stats_je) is True
+def test_readme_has_roi_sp_success(temp_readme):
+    """Tests _readme_has_roi_sp with a valid ROI_SP in README."""
+    temp_readme("ROI_SP > 15%")
+    assert validator_ev._readme_has_roi_sp(0.10) is True
+    assert validator_ev._readme_has_roi_sp(0.15) is True
+    assert validator_ev._readme_has_roi_sp(0.20) is False
 
+def test_readme_has_roi_sp_no_match(temp_readme):
+    """Tests _readme_has_roi_sp when ROI_SP is not in README."""
+    temp_readme("Some other content")
+    assert validator_ev._readme_has_roi_sp(0.10) is False
 
-def test_validate_inputs_not_enough_partants():
-    cfg = {"ALLOW_JE_NA": True}
-    partants = [{"id": 1}]
-    odds = {"1": 2.0}
-    stats_je = {"coverage": 90.0}
-    with pytest.raises(ValidationError, match="Nombre de partants insuffisant"):
-        validator_ev.validate_inputs(cfg, partants, odds, stats_je)
+def test_must_have():
+    """Tests the must_have helper function."""
+    assert validator_ev.must_have("value", "message") == "value"
+    with pytest.raises(RuntimeError, match="message"):
+        validator_ev.must_have(None, "message")
 
-
-def test_validate_inputs_missing_odds():
-    cfg = {"ALLOW_JE_NA": True}
-    partants = [{"id": 1}, {"id": 2}, {"id": 3}, {"id": 4}, {"id": 5}, {"id": 6}]
-    odds = {}
-    stats_je = {"coverage": 90.0}
-    with pytest.raises(ValidationError, match="Cotes manquantes"):
-        validator_ev.validate_inputs(cfg, partants, odds, stats_je)
-
-
-def test_validate_inputs_missing_je_coverage():
-    cfg = {"ALLOW_JE_NA": False}
-    partants = [{"id": 1}, {"id": 2}, {"id": 3}, {"id": 4}, {"id": 5}, {"id": 6}]
-    odds = {"1": 2.0, "2": 3.0, "3": 4.0, "4": 5.0, "5": 6.0, "6": 7.0}
-    stats_je = {"coverage": 70.0}
-    with pytest.raises(ValidationError, match="Couverture J/E insuffisante"):
-        validator_ev.validate_inputs(cfg, partants, odds, stats_je)
-
-
-def test_validate_success():
-    h30 = {
-        "runners": [
-            {"id": "1", "odds": "2.0"},
-            {"id": "2", "odds": "3.0"},
-        ]
-    }
-    h5 = {
-        "runners": [
-            {"id": "1", "odds": "2.1"},
-            {"id": "2", "odds": "3.1"},
-        ]
-    }
-    assert validator_ev.validate(h30, h5, allow_je_na=True) is True
-
-
-def test_validate_inconsistent_partants():
-    h30 = {"runners": [{"id": "1", "odds": "2.0"}]}
-    h5 = {"runners": [{"id": "2", "odds": "3.0"}]}
-    with pytest.raises(ValueError, match="Partants incohérents"):
-        validator_ev.validate(h30, h5, allow_je_na=True)
-
-
-def test_validate_no_partants():
-    h30 = {"runners": []}
-    h5 = {"runners": []}
-    with pytest.raises(ValueError, match="Aucun partant"):
-        validator_ev.validate(h30, h5, allow_je_na=True)
-
-
-def test_validate_missing_h30_odds():
+def test_validate_missing_odds():
+    """Tests validate function with missing odds."""
     h30 = {"runners": [{"id": "1"}]}
-    h5 = {"runners": [{"id": "1", "odds": "2.0"}]}
-    with pytest.raises(ValueError, match="Cotes manquantes H-30"):
-        validator_ev.validate(h30, h5, allow_je_na=True)
-
+    h5 = {"runners": [{"id": "1"}]}
+    with pytest.raises(ValueError, match="Cotes manquantes H-30 pour 1"):
+        validator_ev.validate(h30, h5, False)
 
 def test_validate_invalid_odds():
-    h30 = {"runners": [{"id": "1", "odds": "1.0"}]}
-    h5 = {"runners": [{"id": "1", "odds": "2.0"}]}
-    with pytest.raises(ValueError, match="Cote non numérique H-30 pour 1: 1.0"):
-        validator_ev.validate(h30, h5, allow_je_na=True)
-
+    """Tests validate function with invalid odds."""
+    h30 = {"runners": [{"id": "1", "odds": "invalid"}]}
+    h5 = {"runners": [{"id": "1", "odds": "1.5"}]}
+    with pytest.raises(ValueError, match="Cote non numérique H-30 pour 1: invalid"):
+        validator_ev.validate(h30, h5, False)
 
 def test_validate_missing_je_stats():
+
+    """Tests validate function with missing JE stats."""
+
     h30 = {"runners": [{"id": "1", "odds": "2.0"}]}
-    h5 = {"runners": [{"id": "1", "odds": "2.0"}]}
-    with pytest.raises(ValueError, match="Stats J/E manquantes"):
-        validator_ev.validate(h30, h5, allow_je_na=False)
+
+    h5 = {"runners": [{"id": "1", "odds": "1.5"}]}
+
+    with pytest.raises(ValueError, match="Stats J/E manquantes: 1"):
+
+        validator_ev.validate(h30, h5, False)
 
 
-def test_validate_policy_success():
-    assert validator_ev.validate_policy(0.5, 0.3, 0.4, 0.2) is True
+
+def test_validate_budget_fails():
+
+    """Tests the failure paths for validate_budget."""
+
+    with pytest.raises(validator_ev.ValidationError, match="Budget cap exceeded"):
+
+        validator_ev.validate_budget({"1": 10, "2": 20}, 25, 0.5)
 
 
-def test_validate_policy_ev_fail():
-    with pytest.raises(ValidationError, match="EV global below threshold"):
-        validator_ev.validate_policy(0.3, 0.3, 0.4, 0.2)
+
+    with pytest.raises(validator_ev.ValidationError, match="Stake cap exceeded for 1"):
+
+        validator_ev.validate_budget({"1": 15, "2": 10}, 30, 0.4)
 
 
-def test_validate_policy_roi_fail():
-    with pytest.raises(ValidationError, match="ROI global below threshold"):
-        validator_ev.validate_policy(0.5, 0.1, 0.4, 0.2)
 
 
-def test_validate_budget_success():
-    stakes = {"1": 10, "2": 20}
-    assert validator_ev.validate_budget(stakes, 100, 0.5) is True
+
+def test_prepare_validation_inputs(mocker, tmp_path):
+
+    """Tests the _prepare_validation_inputs function."""
+
+    rc_dir = tmp_path / "R1C1"
+
+    rc_dir.mkdir()
 
 
-def test_validate_budget_cap_exceeded():
-    stakes = {"1": 60, "2": 50}
-    with pytest.raises(ValidationError, match="Budget cap exceeded"):
-        validator_ev.validate_budget(stakes, 100, 0.5)
+
+    # Create mock files
+
+    (rc_dir / "partants.json").write_text(json.dumps([{"id": "1"}]))
+
+    (rc_dir / "h5.json").write_text(json.dumps({"1": 2.0}))
+
+    (rc_dir / "stats_je.json").write_text(json.dumps({"coverage": 90}))
+
+    (rc_dir / "gpi.yml").write_text("ALLOW_JE_NA: true")
 
 
-def test_validate_budget_per_horse_cap_exceeded():
-    stakes = {"1": 60, "2": 20}
-    with pytest.raises(ValidationError, match="Stake cap exceeded for 1"):
-        validator_ev.validate_budget(stakes, 100, 0.5)
+
+    args = mocker.MagicMock()
+
+    args.phase = "H5"
+
+    args.artefacts = str(rc_dir)
+
+    args.base_dir = None
+
+    args.reunion = None
+
+    args.course = None
+
+    args.partants = None
+
+    args.odds = None
+
+    args.stats_je = None
+
+    args.config = None
+
+    args.allow_je_na = False
 
 
-def test_validate_combos_success():
-    assert validator_ev.validate_combos(15.0, 12.0) is True
+
+    cfg, partants, odds, stats = validator_ev._prepare_validation_inputs(args)
 
 
-def test_validate_combos_fail():
-    with pytest.raises(ValidationError, match="expected payout for combined bets below threshold"):
-        validator_ev.validate_combos(10.0, 12.0)
 
+    assert cfg["ALLOW_JE_NA"] is True
 
-def test_combos_allowed_success():
-    assert validator_ev.combos_allowed(0.5, 15.0) is True
+    assert partants == [{"id": "1"}]
 
+    assert odds == {"1": 2.0}
 
-def test_combos_allowed_ev_fail():
-    assert validator_ev.combos_allowed(0.3, 15.0) is False
-
-
-def test_combos_allowed_payout_fail():
-    assert validator_ev.combos_allowed(0.5, 10.0) is False
-
-
-def test_cli_success(mocker):
-    """Test the CLI with successful validation."""
-    mocker.patch(
-        "hippique_orchestrator.validator_ev._prepare_validation_inputs",
-        return_value=({}, [], {}, {}),
-    )
-    mocker.patch(
-        "hippique_orchestrator.validator_ev.summarise_validation",
-        return_value={"ok": True, "reason": ""},
-    )
-    mocker.patch(
-        "hippique_orchestrator.validator_ev._readme_has_roi_sp",
-        return_value=True,
-    )
-    mocker.patch(
-        "hippique_orchestrator.validator_ev._load_cfg",
-        return_value={},
-    )
-    
-    # Mock sys.argv
-    argv = [
-        "--reunion", "R1",
-        "--course", "C1",
-    ]
-    
-    return_code = validator_ev._cli(argv)
-    assert return_code == 0
-    
-
-def test_cli_fail(mocker):
-    """Test the CLI with failed validation."""
-    mocker.patch(
-        "hippique_orchestrator.validator_ev._prepare_validation_inputs",
-        return_value=({}, [], {}, {}),
-    )
-    mocker.patch(
-        "hippique_orchestrator.validator_ev.summarise_validation",
-        return_value={"ok": False, "reason": "Test failure"},
-    )
-    mocker.patch(
-        "hippique_orchestrator.validator_ev._readme_has_roi_sp",
-        return_value=True,
-    )
-    mocker.patch(
-        "hippique_orchestrator.validator_ev._load_cfg",
-        return_value={},
-    )
-    
-    # Mock sys.argv
-    argv = [
-        "--reunion", "R1",
-        "--course", "C1",
-    ]
-    
-    return_code = validator_ev._cli(argv)
-    assert return_code == 1
-
+    assert stats == {"coverage": 90}

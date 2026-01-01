@@ -1,3 +1,5 @@
+import re
+import re
 from unittest.mock import MagicMock, patch
 from pathlib import Path
 import httpx
@@ -452,3 +454,61 @@ async def test_fetch_boturfers_race_details_general_exception(mocker, mock_async
     result = await boturfers.fetch_boturfers_race_details("http://dummy.url")
     assert result == {}
     mock_logger.exception.assert_called_once()
+
+
+def test_fetcher_parse_race_row_missing_link():
+    """Test parsing a race row where the link tag is missing."""
+    html_row = """
+    <tr>
+        <th class="num"><span class="rxcx">R1 C1</span></th>
+        <td class="crs">Race Name Without Link</td>
+        <td class="hour">14h30</td>
+        <td class="nb">10</td>
+    </tr>
+    """
+    soup_row = BeautifulSoup(html_row, 'lxml').find('tr')
+    fetcher = boturfers.BoturfersFetcher("http://dummy.url")
+    result = fetcher._parse_race_row(soup_row, "http://dummy.url")
+    assert result is None, "Parser should fail gracefully if the race link is missing."
+
+
+def test_fetcher_parse_race_metadata_missing_conditions(boturfers_race_details_html):
+    """Test metadata parsing when the 'conditions' list item is absent."""
+    soup = BeautifulSoup(boturfers_race_details_html, 'lxml')
+    # Find and remove the conditions div to simulate its absence
+    if conditions_div := soup.find("div", class_="conditions-course"):
+        conditions_div.extract()
+
+    fetcher = boturfers.BoturfersFetcher("http://dummy.url")
+    fetcher.soup = soup
+    metadata = fetcher._parse_race_metadata()
+
+    assert "conditions" not in metadata, "Conditions should not be in metadata if the div is missing."
+    assert metadata["type_course"] == "Attelé" # Other data should still be parsed.
+
+
+def test_fetcher_parse_race_runners_from_details_page_no_odds():
+    """Test runner parsing when odds are missing from a row."""
+    html_row = """
+    <tr>
+        <th class="num">1</th>
+        <td class="tl">
+            <a class="link">Cheval A</a>
+            <div class="size-s"><a class="link">J. Dupont</a></div>
+            <a class="link lg">E. Trainer</a>
+        </td>
+        <td class="cote-gagnant"><!-- No odds --></td>
+        <td class="cote-place"><!-- No place odds --></td>
+        <td class="musique">1p2p3p</td>
+        <td class="gains">123456</td>
+    </tr>
+    """
+    soup = BeautifulSoup(f'<table class="table data"><tbody>{html_row}</tbody></table>', "lxml")
+    fetcher = boturfers.BoturfersFetcher("http://dummy.url")
+    fetcher.soup = soup
+    runners = fetcher._parse_race_runners_from_details_page()
+    
+    assert len(runners) == 1
+    assert runners[0]["odds_win"] is None
+    assert runners[0]["odds_place"] is None
+    assert runners[0]["nom"] == "Cheval A"

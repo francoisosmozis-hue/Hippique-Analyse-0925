@@ -125,10 +125,11 @@ def parse_musique(musique_str: str) -> dict[str, Any]:
             "top3_count": 0,
             "top5_count": 0,
             "disqualified_count": 0,
-            "recent_performances": [],  # Numeric placings only
+            "recent_performances_numeric": [],
             "is_dai": False,
-            "regularity_score": 0.0,
+            "regularity_score": DEFAULT_BAD_PLACING_SCORE,
             "last_race_placing": None,
+            "num_races_in_musique": 0,
         }
 
     # Normalize the string to handle various separators and formats
@@ -306,7 +307,7 @@ def score_musique_form(musique_data: dict[str, Any]) -> float:
     score += top3_count * 2.0  # Each top 3 finish is significant
 
     # Reward for top 5 finishes (less impactful)
-    top5_count_only = musique_data.get("top5_count", 0) - top3_count
+    top5_count_only = max(0, musique_data.get("top5_count", 0) - top3_count)
     score += top5_count_only * 1.0
 
     # Penalize for poor regularity (higher regularity_score means worse average placing)

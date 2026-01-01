@@ -71,7 +71,11 @@ def upload_file(local_path: str | os.PathLike[str]) -> None:
             try:
                 start_index = parts.index("snapshots")
             except ValueError:
-                start_index = parts.index("analyses")
+                try:
+                    start_index = parts.index("analyses")
+                except ValueError:
+                    # If none of the known folders are found, use the whole path
+                    start_index = 0
         gcs_path_parts = parts[start_index:]
 
         # Construct the GCS path using the configured prefix

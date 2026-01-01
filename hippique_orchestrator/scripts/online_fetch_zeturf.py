@@ -886,7 +886,13 @@ def _coerce_runner_entry(entry: Mapping[str, Any]) -> dict[str, Any] | None:
             return None
 
     for odds_key in ("cote", "odds", "odd", "cote_dec", "price"):
-        odds_val = _coerce_float(entry.get(odds_key))
+        odds_candidate = entry.get(odds_key)
+        if isinstance(odds_candidate, Mapping):
+            gagnant_val = _coerce_float(odds_candidate.get("gagnant"))
+            if gagnant_val is not None:
+                runner.setdefault("cote", gagnant_val)
+                break
+        odds_val = _coerce_float(odds_candidate)
         if odds_val is not None:
             runner.setdefault("cote", odds_val)
             break
@@ -910,9 +916,11 @@ def _coerce_runner_entry(entry: Mapping[str, Any]) -> dict[str, Any] | None:
             break
 
     if "odds" not in runner and entry.get("odds") not in (None, ""):
-        odds_val = _coerce_float(entry.get("odds"))
-        if odds_val is not None:
-            runner["odds"] = odds_val
+        odds_val = entry.get("odds")
+        if not isinstance(odds_val, Mapping):
+            coerced_odds = _coerce_float(odds_val)
+            if coerced_odds is not None:
+                runner["odds"] = coerced_odds
 
     if "odds_place" not in runner:
         odds_block = entry.get("odds") if isinstance(entry.get("odds"), Mapping) else None

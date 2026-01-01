@@ -1,71 +1,75 @@
-# Plan de Test - Hippique Orchestrator
+# Test Plan - Projet Hippique Orchestrator
 
-Ce document décrit les commandes et procédures pour valider la qualité et la non-régression du projet.
+Ce document décrit les procédures de validation pour le projet, incluant les tests locaux et les scripts de vérification en production ("smoke tests").
 
-## 1. Validation Locale (Harnais de Test `pytest`)
+## 1. Validation Locale
 
-L'ensemble des tests unitaires et d'intégration sont exécutés avec `pytest`. En raison d'une instabilité détectée avec l'exécuteur parallèle `pytest-xdist`, **toutes les commandes de test doivent être exécutées en mode séquentiel** en utilisant l'option `-n 0`.
+La validation locale est la pierre angulaire de l'assurance qualité pour ce projet. Elle doit être exécutée avant tout déploiement.
 
-### a. Exécution Rapide
+### 1.1. Installation des dépendances
 
-Pour une vérification rapide de la non-régression.
+Assurez-vous que toutes les dépendances de développement sont installées :
 
 ```bash
-pytest -q -n 0
+pip install -r requirements.txt -r requirements-dev.txt
 ```
-**Résultat Attendu :** Tous les tests doivent passer.
 
-### b. Exécution avec Couverture de Code
+### 1.2. Exécution de la suite de tests complète
 
-Pour générer le rapport de couverture et identifier les zones non testées.
+Pour lancer tous les tests unitaires et d'intégration, utilisez la commande suivante. Cela garantit que toutes les fonctionnalités existantes sont intactes.
 
 ```bash
-pytest -n 0 --cov=hippique_orchestrator --cov=config --cov-report=term-missing
+pytest -q
 ```
-**Résultat Attendu :** Tous les tests passent et un rapport de couverture s'affiche dans le terminal, indiquant le pourcentage de couverture pour chaque module.
 
-### c. Validation Anti-Flaky (Stabilité)
+**Résultat attendu :** Tous les tests doivent passer (`OK`). Aucun échec (`FAILED`) ou erreur (`ERROR`) n'est acceptable.
 
-Pour garantir que les tests sont déterministes, cette commande les exécute 10 fois de suite. Tout échec interrompt le processus.
+### 1.3. Génération du rapport de couverture
+
+Pour vérifier que les modules critiques restent bien couverts, générez le rapport de couverture :
 
 ```bash
-for i in $(seq 1 10); do
-  echo "--- Passe de test anti-flaky : $i/10 ---"
-  pytest -q -n 0
-  if [ $? -ne 0 ]; then
-    echo "ERREUR : La suite de tests a échoué à la passe $i. Test non déterministe détecté."
-    exit 1
-  fi
+pytest --cov=. --cov-report=term-missing
+```
+
+**Résultat attendu :** Le rapport s'affichera dans le terminal. Les modules critiques ciblés doivent maintenir une couverture élevée :
+- `hippique_orchestrator/plan.py`: > 80%
+- `hippique_orchestrator/firestore_client.py`: > 80%
+- `hippique_orchestrator/analysis_pipeline.py`: > 80%
+- `hippique_orchestrator/scrapers/boturfers.py`: > 80%
+- `hippique_orchestrator/gcs_utils.py`: > 80%
+
+### 1.4. Vérification de la stabilité (Anti-Flaky)
+
+Pour s'assurer qu'aucun test n'est intermittent ("flaky"), exécutez la suite de tests en boucle. Un échec sur l'une des itérations signale une instabilité à corriger.
+
+```bash
+for i in $(seq 1 10); do \
+  echo "Run $i/10..."; \
+  pytest -q --disable-warnings || (echo "Flaky test detected on run $i!" && exit 1); \
 done
-
-echo "SUCCÈS : Les 10 passes de test ont réussi. Aucun test flaky détecté."
 ```
-**Résultat Attendu :** Le script se termine avec le message de succès.
 
-## 2. Validation de Production (Smoke Test)
+**Résultat attendu :** La boucle doit se terminer avec succès après 10 itérations.
 
-Un script de "smoke test" est fourni pour valider les fonctionnalités de base d'un environnement déployé (Staging, Production). Il ne valide pas la logique métier mais la disponibilité et la sécurité des endpoints critiques.
+## 2. Validation en Production (Smoke Tests)
 
-### Prérequis
+Après un déploiement réussi, une série de vérifications rapides doit être effectuée pour s'assurer que le service est opérationnel.
 
-1.  L'URL de base de l'environnement doit être connue (ex: `https://mon-app.run.app`).
-2.  Si l'endpoint `/schedule` est sécurisé, la clé API doit être exportée dans une variable d'environnement :
-    ```bash
-    export HIPPIQUE_INTERNAL_API_KEY="votre-cle-api-secrete"
-    ```
+### 2.1. Prérequis
 
-### Commande d'Exécution
+Le script de smoke test requiert deux variables d'environnement :
+- `SERVICE_URL`: L'URL de base du service déployé (ex: `https://mon-service-prod.run.app`).
+- `HIPPIQUE_INTERNAL_API_KEY`: La clé API requise pour les endpoints sécurisés comme `/schedule`.
 
-Le script se trouve dans `scripts/smoke_prod.sh`.
+**NE JAMAIS HARCODER LA CLÉ DANS LE SCRIPT.**
+
+### 2.2. Exécution du script
 
 ```bash
-./scripts/smoke_prod.sh https://votre-url-de-production.com
+export SERVICE_URL="https://your-service-url.run.app"
+export HIPPIQUE_INTERNAL_API_KEY="your-secret-api-key"
+bash scripts/smoke_prod.sh
 ```
 
-### Scénarios de Test du Smoke Script
-
-Le script exécute les vérifications suivantes :
-1.  **Endpoint UI (`/pronostics`) :** Vérifie que la page principale retourne un code HTTP 200.
-2.  **Endpoint API (`/api/pronostics`) :** Vérifie que l'API de données retourne un code HTTP 200.
-3.  **Endpoint Sécurisé (`/schedule` - Sans Clé) :** Vérifie que l'accès sans clé API est bien rejeté (code HTTP 401 ou 403 attendu).
-4.  **Endpoint Sécurisé (`/schedule` - Avec Clé) :** Si la variable `HIPPIQUE_INTERNAL_API_KEY` est définie, vérifie que l'accès avec la clé est autorisé (code HTTP 200 attendu). La clé elle-même n'est jamais affichée.
+**Résultat attendu :** Le script affichera `OK` pour chaque endpoint testé. Toute autre sortie indique un problème en production.
