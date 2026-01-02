@@ -1,122 +1,52 @@
-# Plan de Test - Hippique Orchestrator
+# Plan de Tests Hippique Orchestrator
 
-Ce document décrit les procédures de test à exécuter pour valider la qualité et la non-régression du projet.
+Ce document décrit les procédures de test locales et de validation en environnement de production (smoke tests) pour le projet Hippique Orchestrator.
 
-## 1. Tests Unitaires et d'Intégration Locaux
+## Commandes de Tests Locaux
 
-Ces tests constituent la base de la validation et doivent être exécutés avant chaque commit.
+Pour exécuter la suite complète de tests locaux, y compris la génération de rapport de couverture et la vérification de l'absence de tests instables (flaky tests) :
 
-### Commande d'Exécution Complète
-
-Cette commande exécute l'intégralité de la suite de tests, génère un rapport de couverture et effectue 10 passes pour détecter les tests instables (flaky).
-
-```bash
-pytest --cov -q --cov-report=term-missing -n auto && \
-for i in {1..10}; do \
-  echo "---\nRUN $i/10 ---"; \
-  pytest -q -n auto || exit 1; \
-done
-```
-
-**Résultat Attendu :**
-- `100% passed` pour chaque exécution.
-- Aucune erreur ou échec.
-- La couverture doit rester stable ou augmenter.
-
-### Commande de Couverture Uniquement
-
-Pour une analyse rapide de la couverture de code :
-
-```bash
-pytest --cov
-```
-
-**Résultat Attendu :**
-- Un rapport tabulaire indiquant la couverture par fichier.
-- L'objectif est de maintenir ou d'augmenter la couverture sur les modules critiques (>80%).
-
-## 2. Validation Manuelle des Endpoints Sensibles
-
-Ces tests ne doivent **pas** être automatisés dans la suite de tests CI pour éviter de stocker des secrets. Ils doivent être exécutés manuellement dans un environnement de pré-production ou de production.
-
-### Endpoint `/schedule`
-
-1.  **Test sans clé API :**
+1.  **Exécuter tous les tests (mode silencieux) :**
     ```bash
-    curl -X POST "https://<URL_PROD>/schedule" -H "Content-Type: application/json" -d '{"date": "2025-01-01"}'
+    pytest -q
     ```
-    **Résultat Attendu :**
-    - Code de statut HTTP `401` ou `403`.
-    - Réponse JSON : `{"detail":"Not authenticated"}` ou similaire.
+    *Résultat attendu :* Tous les tests doivent passer (`xxx passed`).
 
-2.  **Test avec clé API (via variable d'environnement) :**
+2.  **Exécuter les tests avec rapport de couverture détaillé :**
     ```bash
-    export HIPPIQUE_INTERNAL_API_KEY="votre_cle_api"
-    curl -X POST "https://<URL_PROD>/schedule" -H "Content-Type: application/json" -H "X-API-Key: $HIPPIQUE_INTERNAL_API_KEY" -d '{"date": "2025-01-01"}'
-    unset HIPPIQUE_INTERNAL_API_KEY
+    pytest --cov=hippique_orchestrator --cov-report=term-missing
     ```
-    **Résultat Attendu :**
-    - Code de statut HTTP `200`.
-    - Une réponse JSON indiquant le succès de la planification.
+    *Résultat attendu :* Un rapport de couverture affichant les pourcentages de couverture par module, incluant les lignes manquantes.
 
-## 3. Smoke Tests de Production
+3.  **Vérification anti-flaky (10 exécutions consécutives) :**
+    ```bash
+    for i in $(seq 1 10); do echo "--- Anti-flaky run $i/10 ---"; pytest -q || (echo "FAILURE: Flaky test detected on run $i" && exit 1); done && echo "SUCCESS: No flaky tests detected in 10 runs."
+    ```
+    *Résultat attendu :* Le message "SUCCESS: No flaky tests detected in 10 runs." s'affiche, confirmant la stabilité de la suite de tests.
 
-Un script `smoke_prod.sh` est disponible pour effectuer une vérification de santé rapide sur l'environnement de production.
+## Scripts de Smoke Test en Production
 
-### Contenu de `scripts/smoke_prod.sh`
+Ce script est destiné à être exécuté en environnement de production (ex: Cloud Run) pour valider le bon fonctionnement des endpoints critiques.
 
-```bash
-#!/bin/bash
-set -e
+**Prérequis :** L'URL de base du service doit être fournie par l'utilisateur (par exemple, via la variable d'environnement `SERVICE_URL`). Pour les tests d'authentification, la clé `HIPPIQUE_INTERNAL_API_KEY` doit être définie.
 
-# Vérifier que l'URL de production est fournie
-if [ -z "$1" ]; then
-  echo "Usage: $0 <production_url>"
-  exit 1
-fi
-URL=$1
-
-echo "### Smoke Test - Health Check ###"
-curl -fL "$URL/health" | grep '"status":"healthy"'
-
-echo -e "\n### Smoke Test - API Pronostics (JSON) ###"
-curl -fL "$URL/api/pronostics" | grep '"ok":true'
-
-echo -e "\n### Smoke Test - UI Pronostics (HTML) ###"
-curl -fL "$URL/pronostics" | grep '<title>Hippique Orchestrator - Pronostics</title>'
-
-echo -e "\n### Smoke Test - /schedule (sans API Key) ###"
-# Nous attendons un code 403, donc nous ne voulons pas que -f échoue le script
-response_code=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$URL/schedule" -H "Content-Type: application/json" -d '{"date": "2025-01-01"}')
-if [ "$response_code" -eq 403 ]; then
-  echo "OK: Received expected 403 Forbidden"
-else
-  echo "FAIL: Expected 403, but received $response_code"
-  exit 1
-fi
-
-if [ -z "$HIPPIQUE_INTERNAL_API_KEY" ]; then
-  echo -e "\n### SKIP: /schedule (avec API Key) - HIPPIQUE_INTERNAL_API_KEY non définie ###"
-else
-  echo -e "\n### Smoke Test - /schedule (avec API Key) ###"
-  curl -f -X POST "$URL/schedule" -H "Content-Type: application/json" -H "X-API-Key: $HIPPIQUE_INTERNAL_API_KEY" -d '{"date": "2025-01-01"}' | grep '"ok":true'
-fi
-
-echo -e "\n### Tous les smoke tests ont réussi ! ###"
-```
-
-### Exécution des Smoke Tests
+### Commande d'exécution du Smoke Test
 
 ```bash
-# Exécuter sans la clé API pour les tests publics
-bash scripts/smoke_prod.sh https://<URL_PROD>
-
-# Exécuter avec la clé API pour le test complet
-export HIPPIQUE_INTERNAL_API_KEY="votre_cle_api"
-bash scripts/smoke_prod.sh https://<URL_PROD>
-unset HIPPIQUE_INTERNAL_API_KEY
+scripts/smoke_prod.sh <SERVICE_URL>
 ```
 
-**Résultat Attendu :**
-- Le script doit se terminer avec le message "Tous les smoke tests ont réussi !".
-- Aucun code de sortie d'erreur.
+### Détail du Script `scripts/smoke_prod.sh` (à créer)
+
+Le script effectuera les vérifications suivantes :
+
+1.  **`GET /pronostics` (UI Frontend) :** Vérifie que la page HTML principale se charge et contient des marqueurs spécifiques.
+    *   *Attendu :* Statut HTTP 200, contenu HTML.
+2.  **`GET /api/pronostics` (API principale) :** Vérifie que l'API retourne une réponse JSON valide.
+    *   *Attendu :* Statut HTTP 200, JSON non vide.
+3.  **`POST /schedule` sans clé API :** Vérifie que l'endpoint protégé renvoie une erreur 403.
+    *   *Attendu :* Statut HTTP 403.
+4.  **`POST /schedule` avec clé API valide :** Vérifie que l'endpoint protégé fonctionne avec une clé valide (simule un appel de Cloud Tasks).
+    *   *Attendu :* Statut HTTP 200.
+
+**NOTE :** Les clés API sensibles ne doivent jamais être affichées dans les logs ou le script lui-même. La clé sera lue depuis la variable d'environnement `HIPPIQUE_INTERNAL_API_KEY`.

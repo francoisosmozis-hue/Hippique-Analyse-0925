@@ -333,10 +333,12 @@ class ZoneTurfProvider:
                         if chrono_val:
                             last3_rk.append(chrono_val)
 
-            chrono_data["last3_rk_sec"] = last3_rk
+            # Add last3_rk_sec if it has data
             if last3_rk:
+                chrono_data["last3_rk_sec"] = last3_rk
                 chrono_data["rk_best3_sec"] = min(last3_rk)
 
+            # If no records were found and no recent Rks, we have no data.
             if not chrono_data:
                 logger.warning(f"No chrono data found for horse '{horse_name}' at {url_path}")
                 return None

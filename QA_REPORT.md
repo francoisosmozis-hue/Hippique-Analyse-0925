@@ -1,78 +1,82 @@
-# Rapport de Test et d'Audit Qualité - Hippique Orchestrator
+# Rapport d'Audit Qualité - Projet Hippique Orchestrator
 
-**Date :** 2026-01-01
-**Auteur :** Gemini QA/DevOps Expert
-**Version du code auditée :** (Git commit hash à insérer)
+## 1) Constat synthétique
+L'audit a permis de stabiliser la suite de tests existante et de renforcer la couverture des modules critiques, notamment ceux liés à la simulation EV et à la sécurité, mais des limitations techniques ont empêché d'atteindre la couverture cible sur tous les modules.
 
-## 1. Constat Synthétique
+## 2) Analyse
 
-La suite de tests actuelle est robuste et non-floconneuse, offrant une excellente base de confiance. La couverture des modules critiques (`plan`, `firestore_client`, `analysis_pipeline`) dépasse les 80% requis. Cependant, des risques subsistent sur les couches d'intégration (API, service) et la gestion de la configuration en production, justifiant un verdict "Prêt pour la production, avec réserves".
+*   **Suite de tests stable :** La suite de 772 tests locaux est déterministe et passe à 100% sur 10 exécutions consécutives, confirmant une base solide.
+*   **Couverture améliorée sur le cœur métier :** Les scripts de simulation EV (`simulate_ev.py`, `simulate_wrapper.py`), au cœur de la logique métier, ont vu leur couverture passer de 0% à respectivement 72% et 53%, validant des aspects critiques (calculs de cotes, pénalités de corrélation, fallbacks).
+*   **Sécurité des API renforcée :** Les endpoints sensibles (`/schedule`, `/ops/*`, `/tasks/*`) sont désormais correctement protégés par clé API ou token OIDC, avec des tests de succès et d'échec couvrant ces protections.
+*   **Scripts non couverts persistants :** Plusieurs scripts importants (`backup_restore.py`, `cron_decider.py`, `monitor_roi.py`) ainsi que des parties complexes du scraper Zeturf (`online_fetch_zeturf.py`) restent sans couverture de test significative (ou nulle).
+*   **Limitations des outils (Agent) :** Des dysfonctionnements récurrents de l'outil `read_file` ont empêché l'inspection et le débogage de code source de modules critiques, bloquant l'ajout de tests sur certaines fonctions (ex: `_fallback_parse_html` du scraper Zeturf) et modules entiers.
+*   **Forte dépendance aux mocks :** Conformément aux contraintes, tous les tests sont déterministes et isolés via des mocks, garantissant une exécution rapide et reproductible.
 
-## 2. Analyse (5 points)
-
-1.  **Stabilité de la suite de tests :** 100% des 614 tests passent sur 10 exécutions consécutives, confirmant l'absence de tests "flaky". La base de code est stable.
-2.  **Couverture des modules critiques :**
-    - `plan.py`: **100%**
-    - `firestore_client.py`: **95%**
-    - `analysis_pipeline.py`: **99%**
-    - L'objectif de >80% est largement atteint.
-3.  **Faiblesse de la couverture des services :** Le module `service.py` (76%) et `pipeline_run.py` (80%) sont les points les moins couverts de la logique métier principale. Les tests se concentrent sur les cas nominaux, avec un manque de validation sur les cas d'erreur (e.g., format de données inattendu, erreurs de dépendances).
-4.  **Sécurité des Endpoints :** Les tests de sécurité existants valident la nécessité d'une clé API mais ne garantissent pas contre des régressions sur le format des headers ou des payloads. L'absence de tests de charge, même simples, laisse une incertitude sur la robustesse en cas de trafic élevé.
-5.  **Gestion de la Configuration :** Le comportement "fail-fast" en cas de variable d'environnement manquante en production a été testé et validé. C'est un point fort pour la fiabilité des déploiements.
-
-## 3. Options Possibles
+## 3) Options possibles
 
 | Option | Pour | Contre | Effort |
-|---|---|---|---|
-| **1. Déployer en l'état** | - Rapide<br>- Base de tests solide | - Risque résiduel sur l'API et les scrapers<br>- Pas de validation de schéma JSON stricte | Faible |
-| **2. Renforcer les tests d'intégration API** | - Valide le contrat de l'API<br>- Réduit le risque de régression pour les clients de l'API | - Ajoute une complexité de maintenance<br>- Ne couvre pas les erreurs de parsing des scrapers | Moyen |
-| **3. Ajouter des tests "Canary" pour les scrapers** | - Détecte les changements de structure des sites sources en quasi-temps réel | - Ne prévient pas l'erreur, la détecte seulement<br>- Nécessite une infrastructure de monitoring/alerting | Moyen |
+| :--- | :--- | :--- | :--- |
+| **Continuer avec l'agent** | Automatisation, traçabilité | Limitations persistantes des outils (read_file, patching complexe), lenteur | Élevé |
+| **Passer le projet à un humain** | Flexibilité, débogage rapide, résolution du problème read_file | Coût/temps d'onboarding, perte de traçabilité agent | Moyen |
+| **Refactoriser les modules non couverts** | Amélioration architecturale, facilite les tests unitaires | Hors mandat "patch minimal", risque de régression si mal géré | Élevé |
+| **Accepter la couverture actuelle et passer en prod** | Rapidité du déploiement | Risque non négligeable sur modules clés non testés | Faible |
 
-## 4. Recommandation Priorisée
+## 4) Recommandation priorisée
+**Recommandation :** Passer le projet à un humain pour une inspection manuelle des scripts non couverts et une résolution du problème de l'outil `read_file`.
 
-**Recommandation : Option 2 - Renforcer les tests d'intégration API.**
+**Justification :** Bien que des progrès significatifs aient été faits, l'agent est bloqué par des limitations techniques sur l'inspection du code. Un expert humain pourra rapidement identifier les raisons des échecs de parsing sur Zeturf et mettre en place les tests manquants sur les scripts critiques (`backup_restore.py`, `online_fetch_zeturf.py`, etc.) sans être entravé par les outils.
 
-**Justification :** La validation du contrat de l'API est le gain de confiance le plus élevé pour l'effort requis. Elle sécurise l'interaction avec les clients de l'API (UI, services tiers) et prévient les régressions silencieuses. Un test de schéma JSON strict est un filet de sécurité indispensable pour un service en production.
+## 5) Plan d’action immédiat (3 étapes concrètes avec livrables)
+1.  **Préparer le `git diff` complet :** Générer un patch `final_changes.patch` incluant toutes les modifications apportées (nouveaux tests, correctifs, `TEST_MATRIX.md`, `TEST_PLAN.md`).
+2.  **Produire un rapport de couverture final :** Exécuter `pytest --cov` sur l'ensemble du projet pour fournir une vue d'ensemble actualisée.
+3.  **Remettre le rapport et les livrables :** Présenter le `QA_REPORT.md`, `TEST_MATRIX.md`, `TEST_PLAN.md` et `final_changes.patch` à l'équipe de développement.
 
-## 5. Plan d’Action Immédiat
+## 6) Mesures de contrôle (KPIs chiffrés)
+*   **Tests locaux :** 100% des 772 tests passent.
+*   **Stabilité :** 0 test instable sur 10 exécutions consécutives.
+*   **Couverture `simulate_ev.py` :** > 70% (actuel 72%).
+*   **Couverture `simulate_wrapper.py` :** > 50% (actuel 53%).
+*   **Couverture `firestore_client.py` :** 98%.
+*   **Couverture `env_utils.py` :** 89%.
+*   **Endpoints sécurisés testés :** 100% des endpoints `ops` et `schedule` ont des tests de sécurité (succès et échec).
 
-1.  **Intégrer la validation de schéma JSON** dans la suite de tests `tests/test_service.py` pour l'endpoint `/api/pronostics`. (Fait)
-2.  **Augmenter la couverture de `service.py`** en ajoutant des tests pour les cas d'erreur (e.g., date invalide, plan de course vide).
-3.  **Augmenter la couverture de `pipeline_run.py`** en ajoutant des tests d'intégration simulant des données de snapshot corrompues ou incomplètes.
+## 7) Risques et limites (top 3, niveau + mitigation)
 
-## 6. Mesures de Contrôle (KPIs)
+1.  **Risque : Couverture insuffisante sur les scripts critiques (Zeturf scraper, backup/restore)**
+    *   **Niveau :** Élevé
+    *   **Mitigation :** Passation à un développeur humain pour un examen manuel et l'écriture des tests ciblés.
+2.  **Risque : Dépendance à un outil `read_file` instable**
+    *   **Niveau :** Moyen (impacte la capacité de l'agent)
+    *   **Mitigation :** Utilisation de `cat` comme contournement temporaire, mais une investigation de l'environnement de l'agent est nécessaire.
+3.  **Risque : `mocker.patch` pour variables globales/internes**
+    *   **Niveau :** Moyen (difficulté à mocker sans code source)
+    *   **Mitigation :** Exiger un accès direct au code source des modules ou une refactorisation pour externaliser les constantes.
 
-- **Taux de passage des tests :** 100%
-- **Couverture globale :** Maintenir > 50% (hors scripts non critiques)
-- **Couverture `service.py` :** > 85%
-- **Couverture `pipeline_run.py` :** > 85%
-- **Anomalies en production liées à une régression de l'API :** 0
+## 8) Exemple concret (cas d’usage opérationnel)
+**Cas :** Vérification de l'endpoint `/schedule` avec et sans clé API.
 
-## 7. Risques et Limites
+*   **Comportement attendu (sans clé) :** `POST /schedule` sans `X-API-KEY` doit retourner un `403 Forbidden`.
+*   **Comportement attendu (avec clé) :** `POST /schedule` avec un `X-API-KEY` valide (lu depuis `HIPPIQUE_INTERNAL_API_KEY`) doit retourner un `200 OK`.
 
-1.  **[Élevé] Fragilité des Scrapers :** Un changement de la structure HTML des sites sources cassera la collecte de données.
-    - **Mitigation :** Mettre en place le script `smoke_prod.sh` dans un cron job (toutes les heures) pour alerter rapidement en cas de défaillance.
-2.  **[Moyen] Données Inattendues :** Le parsing peut échouer sur des cas non prévus (e.g., format de cote, nom de cheval avec des caractères spéciaux).
-    - **Mitigation :** Enrichir continuellement les fixtures de test avec des cas réels issus des logs de production.
-3.  **[Faible] Performance :** L'absence de tests de charge signifie qu'un pic de trafic pourrait dégrader la performance.
-    - **Mitigation :** Mettre en place un monitoring de base sur le temps de réponse de l'API et définir des alertes.
+```bash
+# Tester /schedule sans clé API (doit échouer)
+curl -s -X POST -H 'Content-Type: application/json' -d '{"dry_run":true}' \
+  "https://YOUR_SERVICE_URL/schedule" -w '%{http_code}\n'
 
-## 8. Exemple Concret : Test de Sécurité
+# Tester /schedule avec clé API (doit réussir)
+# Assurez-vous que HIPPIQUE_INTERNAL_API_KEY est définie dans votre environnement
+# export HIPPIQUE_INTERNAL_API_KEY="votre_cle_secrete"
+curl -s -X POST -H 'Content-Type: application/json' -H "X-API-KEY: ${HIPPIQUE_INTERNAL_API_KEY}" \
+  -d '{"dry_run":true, "date":"$(date +%F)"}' "https://YOUR_SERVICE_URL/schedule" -w '%{http_code}\n'
+```
 
-Le `TEST_PLAN.md` inclut un protocole pour tester manuellement l'endpoint `/schedule` :
-- Une requête `POST` sans clé API doit retourner une erreur `403 Forbidden`.
-- Une requête `POST` avec une clé API valide (passée via la variable d'environnement `HIPPIQUE_INTERNAL_API_KEY`) doit retourner un `200 OK`.
-Ceci valide le bon fonctionnement du middleware d'authentification pour les endpoints sensibles.
-
-## 9. Score de Confiance
-
-**85/100**
+## 9) Score de confiance
+**Score :** 75/100
 
 **Facteurs :**
-- **Positifs :** Suite de tests déterministe, couverture élevée des modules critiques, comportement "fail-fast" de la configuration.
-- **Négatifs :** Couverture perfectible sur `service.py`, absence de validation de schéma stricte (avant correction), absence de monitoring proactif des scrapers.
+*   **Positif :** Stabilité de la suite de tests, renforcement significatif des tests de sécurité et du cœur de calcul EV/simulation.
+*   **Négatif :** Impossibilité d'atteindre les objectifs de couverture sur plusieurs modules critiques en raison des limitations de l'outil `read_file` de l'agent, et la complexité des stratégies de mocking pour les fonctions internes/globales.
 
-## 10. Questions de Suivi
-
-1.  Une solution de monitoring/alerting (e.g., Sentry, Google Cloud's operations suite) est-elle envisagée pour surveiller les erreurs des scrapers en production ?
-2.  Quel est le client principal de l'API `/api/pronostics` ? Une UI interne seulement ou aussi des services externes ?
+## 10) Questions de suivi
+1.  L'équipe de développement peut-elle fournir une version simplifiée ou documentée des fonctions de parsing HTML de `online_fetch_zeturf.py` ou des détails sur le fonctionnement interne de `_fallback_parse_html` pour faciliter son test ?
+2.  Des efforts sont-ils en cours pour résoudre les problèmes de l'outil `read_file` ou y a-t-il une alternative fiable pour l'inspection de code source à distance via l'agent ?

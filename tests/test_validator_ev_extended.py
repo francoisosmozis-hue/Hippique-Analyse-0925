@@ -140,3 +140,19 @@ def test_prepare_validation_inputs(mocker, tmp_path):
     assert odds == {"1": 2.0}
 
     assert stats == {"coverage": 90}
+
+
+def test_validate_inconsistent_runners():
+    """Tests validate function with inconsistent runners between snapshots."""
+    h30 = {"runners": [{"id": "1", "odds": "2.0"}]}
+    h5 = {"runners": [{"id": "2", "odds": "2.5"}]} # Different runner ID
+    with pytest.raises(ValueError, match="Partants incohérents"):
+        validator_ev.validate(h30, h5, True)
+
+
+def test_validate_low_odds():
+    """Tests validate function with odds <= 1.01."""
+    h30 = {"runners": [{"id": "1", "odds": "1.01"}]}
+    h5 = {"runners": [{"id": "1", "odds": "1.5"}]}
+    with pytest.raises(ValueError, match="Cote invalide H-30"):
+        validator_ev.validate(h30, h5, True)

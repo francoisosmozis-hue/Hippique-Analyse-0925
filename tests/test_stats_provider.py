@@ -165,5 +165,30 @@ class TestZoneTurfIdResolution:
 
     def test_resolve_entity_id_not_found(self, zt_provider: ZoneTurfProvider, mocker):
         """Tests the case where an entity is not found after scraping all pages."""
-        # TODO: Add mock HTML and test the not found case
-        pass
+        mocker.patch.object(zt_provider, '_get_id_from_cache', return_value=None)
+        
+        mock_response = mocker.Mock()
+        mock_response.text = "<html><body><p>No links here</p></body></html>"
+        mock_response.raise_for_status = mocker.Mock()
+        mocker.patch.object(zt_provider.client, 'get', return_value=mock_response)
+
+        entity_id = zt_provider._resolve_entity_id("horse", "Unknown Horse")
+        assert entity_id is None
+        # Should be called once for the first page, then stop as there are no links.
+        zt_provider.client.get.assert_called_once()
+
+    def test_resolve_entity_id_pagination_limit(self, zt_provider: ZoneTurfProvider, mocker):
+        """Tests that pagination stops after MAX_PAGES_TO_SCRAPE."""
+        zt_provider.MAX_PAGES_TO_SCRAPE = 3  # Use a small number for testing
+        mocker.patch.object(zt_provider, '_get_id_from_cache', return_value=None)
+
+        # Mock response that always contains non-matching links
+        mock_response = mocker.Mock()
+        mock_response.text = '<html><body><ul class="list-chevaux"><li><a href="/cheval/other-1">Other</a></li></ul></body></html>'
+        mock_response.raise_for_status = mocker.Mock()
+        mock_http_get = mocker.patch.object(zt_provider.client, 'get', return_value=mock_response)
+
+        entity_id = zt_provider._resolve_entity_id("horse", "My Horse")
+
+        assert entity_id is None
+        assert mock_http_get.call_count == zt_provider.MAX_PAGES_TO_SCRAPE

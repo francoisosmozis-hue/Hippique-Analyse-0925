@@ -156,14 +156,16 @@ def validate(h30: dict, h5: dict, allow_je_na: bool) -> bool:
             if "odds" not in r or r["odds"] in (None, ""):
                 raise ValueError(f"Cotes manquantes {label} pour {r.get('name', r.get('id'))}.")
             try:
-                if float(r["odds"]) <= 1.01:
-                    raise ValueError(
-                        f"Cote invalide {label} pour {r.get('name', r.get('id'))}: {r['odds']}"
-                    )
-            except Exception as e:
+                odds_float = float(r["odds"])
+            except (TypeError, ValueError) as e:
                 raise ValueError(
                     f"Cote non numérique {label} pour {r.get('name', r.get('id'))}: {r.get('odds')}"
                 ) from e
+
+            if odds_float <= 1.01:
+                raise ValueError(
+                    f"Cote invalide {label} pour {r.get('name', r.get('id'))}: {r['odds']}"
+                )
     if not allow_je_na:
         for r in h5.get("runners", []):
             je = r.get("je_stats", {})
