@@ -8,12 +8,12 @@ import logging
 from datetime import datetime, timezone
 from typing import Any
 
-from . import storage, zoneturf_client
+from . import gcs_client, zoneturf_client
 
 LOGGER = logging.getLogger(__name__)
 
 
-def collect_stats(
+async def collect_stats(
     race_doc_id: str,
     phase: str,
     date: str,  # Keep for potential future use
@@ -31,7 +31,7 @@ def collect_stats(
     # 1. Get the list of runners from the main race document
     # We need the snapshot data, not the race doc itself, to get runner names.
     # Let's get the latest snapshot metadata for the current phase.
-    latest_snapshot_meta = storage.get_latest_snapshot_metadata(
+    latest_snapshot_meta = await gcs_client.get_latest_snapshot_metadata(
         race_doc_id, phase, correlation_id, trace_id
     )
     if not (latest_snapshot_meta and latest_snapshot_meta.get("gcs_snapshot_path")):
@@ -43,7 +43,7 @@ def collect_stats(
         return "dummy_gcs_path_for_stats"
 
     snapshot_path = latest_snapshot_meta["gcs_snapshot_path"]
-    snapshot_data = storage.load_snapshot_from_gcs(snapshot_path, correlation_id, trace_id)
+    snapshot_data = await gcs_client.load_snapshot_from_gcs(snapshot_path, correlation_id, trace_id)
     runners = snapshot_data.get("runners", [])
     if not runners:
         LOGGER.warning(
@@ -71,7 +71,7 @@ def collect_stats(
 
         # --- a. Fetch Chrono Stats ---
         try:
-            chrono_data = zoneturf_client.get_chrono_stats(horse_name=runner_name)
+            chrono_data = await zoneturf_client.get_chrono_stats(horse_name=runner_name)
             if chrono_data:
                 runner_stats.update(chrono_data)
                 LOGGER.info(f"Successfully fetched chrono stats for {runner_name}", extra=log_extra)
@@ -90,7 +90,7 @@ def collect_stats(
         runner_stats["j_rate"] = None  # Initialize
         if jockey_name:
             try:
-                jockey_stats = zoneturf_client.get_jockey_trainer_stats(jockey_name, "jockey")
+                jockey_stats = await zoneturf_client.get_jockey_trainer_stats(jockey_name, "jockey")
                 if jockey_stats and "win_rate" in jockey_stats:
                     runner_stats["j_rate"] = jockey_stats["win_rate"]
                     successful_jockey_fetches += 1
@@ -115,7 +115,7 @@ def collect_stats(
         runner_stats["e_rate"] = None  # Initialize
         if trainer_name:
             try:
-                trainer_stats = zoneturf_client.get_jockey_trainer_stats(trainer_name, "entraineur")
+                trainer_stats = await zoneturf_client.get_jockey_trainer_stats(trainer_name, "entraineur")
                 if trainer_stats and "win_rate" in trainer_stats:
                     runner_stats["e_rate"] = trainer_stats["win_rate"]
                     successful_trainer_fetches += 1
@@ -169,7 +169,7 @@ def collect_stats(
     stats_id = f"{timestamp}_{phase}_stats"
 
     try:
-        stats_gcs_path = storage.save_snapshot(
+        stats_gcs_path = await gcs_client.save_snapshot(
             race_doc_id, "stats", stats_id, stats_payload, correlation_id, trace_id
         )
         LOGGER.info(f"Successfully saved aggregated stats to {stats_gcs_path}", extra=log_extra)

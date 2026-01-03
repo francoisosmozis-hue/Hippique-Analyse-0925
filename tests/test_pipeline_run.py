@@ -14,7 +14,7 @@ def mock_gpi_config() -> dict:
         "h30_snapshot_data": None,
         "roi_min_sp": 0.20,
         "roi_min_global": 0.25,
-        "overround_max_exotics": 1.30,
+        "overround_max_exotics": 1.30, # Explicitly added here
         "ev_min_combo": 0.40,
         "payout_min_combo": 10.0,
         "weights": {"base": {}, "horse_stats": {}},
@@ -23,7 +23,7 @@ def mock_gpi_config() -> dict:
             "sp_dutching": {
                 "budget_ratio": 0.6,
                 "legs_min": 2,
-                "legs_max": 3,  # Added legs_max
+                "legs_max": 3,
                 "odds_range": [1.1, 999],
                 "kelly_frac": 0.25,
             },

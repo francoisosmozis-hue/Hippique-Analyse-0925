@@ -75,6 +75,7 @@ async def build_plan_async(date: str) -> list[dict[str, Any]]:
                     "time_local": race_source["start_time"],
                     "course_url": race_source["url"],
                     "reunion_url": None,  # L'URL de la réunion n'est plus disponible
+                    "partants": int(race_source.get("runners_count")) if race_source.get("runners_count") and str(race_source.get("runners_count")).isdigit() else None,
                 }
             )
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock
 
@@ -222,6 +223,95 @@ def test_post_ops_run_success(client, monkeypatch, mock_plan):
     assert call_args[1]["gpi_decision"] == "play_manual"
 
 
+@pytest.mark.asyncio
+async def test_run_single_race_missing_course_url(client, monkeypatch, mock_plan):
+    """
+    Test POST /ops/run when the target race in the plan is missing a course_url.
+    """
+    # Setup mock plan to return a race without a URL
+    mock_plan.return_value = [
+        {"r_label": "R1", "c_label": "C1", "name": "Prix d'Amerique", "url": None}
+    ]
+
+    # Make the request with a valid API key
+    response = client.post("/ops/run?rc=R1C1", headers={"X-API-Key": "test-secret"})
+
+    assert response.status_code == 400
+    assert "Race R1C1 is missing a URL in the plan." in response.json()["detail"]
+    mock_plan.assert_called_once()
+    
+    # Ensure analysis pipeline or firestore update were NOT called
+    # We need to set these up as mocks even if not called to ensure the asserts pass
+    mock_run_analysis = AsyncMock()
+    monkeypatch.setattr(
+        "hippique_orchestrator.analysis_pipeline.run_analysis_for_phase", mock_run_analysis
+    )
+    mock_update_db = MagicMock()
+    monkeypatch.setattr("hippique_orchestrator.firestore_client.update_race_document", mock_update_db)
+    mock_get_doc_id = MagicMock()
+    monkeypatch.setattr(
+        "hippique_orchestrator.firestore_client.get_doc_id_from_url", mock_get_doc_id
+    )
+    assert not mock_run_analysis.called
+    assert not mock_update_db.called
+    assert not mock_get_doc_id.called
+
+
+@pytest.mark.asyncio
+async def test_run_single_race_unhandled_exception(client, monkeypatch, mock_plan):
+    """
+    Test POST /ops/run for an unhandled exception during the analysis pipeline.
+    """
+    # Setup mock plan to return the target race
+    mock_plan.return_value = [
+        {"r_label": "R1", "c_label": "C1", "name": "Prix d'Amerique", "url": "http://example.com/r1c1"}
+    ]
+
+    # Simulate an unexpected error in analysis_pipeline.run_analysis_for_phase
+    mock_run_analysis = AsyncMock(side_effect=Exception("Simulated pipeline error"))
+    monkeypatch.setattr(
+        "hippique_orchestrator.analysis_pipeline.run_analysis_for_phase", mock_run_analysis
+    )
+    mock_update_db = MagicMock()
+    monkeypatch.setattr("hippique_orchestrator.firestore_client.update_race_document", mock_update_db)
+
+    response = client.post("/ops/run?rc=R1C1", headers={"X-API-Key": "test-secret"})
+
+    assert response.status_code == 500
+    assert "Failed to process manual run for" in response.json()["detail"]
+    mock_run_analysis.assert_called_once()
+    mock_update_db.assert_called_once() # Should be called to save error state
+    
+    # Verify error data saved
+    call_args, _ = mock_update_db.call_args
+    error_data = call_args[1] # second positional arg is error_data
+    assert error_data["status"] == "error"
+    assert error_data["gpi_decision"] == "error_manual_run"
+    assert "Simulated pipeline error" in error_data["error_message"]
+
+
+@pytest.mark.asyncio
+async def test_schedule_day_races_unhandled_exception(client, monkeypatch, mock_plan, caplog):
+    """
+    Test POST /schedule for an unhandled exception during processing.
+    """
+    # Simulate an unexpected error in build_plan_async
+    mock_plan.side_effect = Exception("Simulated unhandled error")
+
+    with caplog.at_level(logging.ERROR):
+        response = client.post(
+            "/schedule",
+            json={"force": False, "dry_run": True, "date": "2025-01-01"},
+            headers={"X-API-Key": "test-secret"}
+        )
+
+    assert response.status_code == 500
+    assert "An internal error occurred" in response.json()["detail"]
+    assert "UNHANDLED EXCEPTION in /schedule endpoint" in caplog.text
+    mock_plan.assert_called_once()
+
+
+
 
 from unittest.mock import Mock
 
@@ -336,6 +426,24 @@ def test_ui_contains_critical_elements_and_api_call(client):
 
     # Check that the JavaScript contains the specific fetch call
     assert 'fetch(`/api/pronostics?date=${date}`)' in html
+
+
+def test_get_daily_plan_invalid_date_format(client):
+    """
+    Test /api/plan with an invalid date format to trigger ValueError.
+    """
+    response = client.get("/api/plan?date=not-a-date")
+    assert response.status_code == 422
+    assert "Invalid date format. Please use YYYY-MM-DD." in response.json()["detail"]
+
+
+def test_get_ops_status_invalid_date_format(client):
+    """
+    Test /ops/status with an invalid date format to trigger ValueError.
+    """
+    response = client.get("/ops/status?date=not-a-date")
+    assert response.status_code == 422
+    assert "Invalid date format. Use YYYY-MM-DD." in response.json()["detail"]
 
 
 

@@ -94,12 +94,22 @@ def get_processing_status_for_date(date_str: str, daily_plan: list[dict]) -> dic
 
     # --- Firestore Metadata ---
     docs_count = len(races_from_db)
-    last_doc_id = None
     last_update_ts = None
     if races_from_db:
         last_doc = max(races_from_db, key=lambda doc: doc.update_time)
         last_doc_id = last_doc.id
         last_update_ts = last_doc.update_time.isoformat()
+    else:
+        # If no docs for today, check for the latest doc in the entire collection
+        # to differentiate between a stalled and an empty system.
+        latest_doc_query = db.collection(config.FIRESTORE_COLLECTION).order_by("update_time", direction=firestore.Query.DESCENDING).limit(1)
+        latest_docs = list(latest_doc_query.stream())
+        if latest_docs:
+            last_doc_id = latest_docs[0].id
+            last_update_ts = latest_docs[0].update_time.isoformat()
+        else:
+            last_doc_id = None
+
 
     firestore_meta = {
         "docs_count_for_date": docs_count,

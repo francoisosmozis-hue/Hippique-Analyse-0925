@@ -1,98 +1,50 @@
 #!/bin/bash
-# scripts/smoke_prod.sh
 
-# --- Configuration ---
-SERVICE_URL="$1"
-API_KEY="${HIPPIQUE_INTERNAL_API_KEY}" # Read from environment variable
+# Configuration
+URL_PROD="${URL_PROD:-""}"
+API_KEY="${HIPPIQUE_INTERNAL_API_KEY:-""}"
 
-# --- ANSI Colors for Output ---
-GREEN='\033[0;32m'
-RED='\033[0;31m'
-YELLOW='\033[0;33m'
-NC='\033[0m' # No Color
+# Fonctions de test
+assert_status() {
+    local url=$1
+    local expected_status=$2
+    local extra_args=$3
+    local description=$4
 
-# --- Helper Functions ---
-function run_test {
-    local name="$1"
-    local command="$2"
-    local expected_status="$3"
-    local allow_other_status="${4:-false}" # New parameter for allowing other status codes
+    # shellcheck disable=SC2086
+    local status_code=$(curl -s -o /dev/null -w "%{http_code}" $extra_args "$url")
 
-    echo -e "${YELLOW}--- Running Test: ${name} ---
-${NC}"
-    echo -e "Command: ${command}"
-
-    # Execute command, capture status code and output
-    HTTP_STATUS=$(eval "$command" | head -n 1 | awk '{print $2}')
-    OUTPUT=$(eval "$command" | tail -n +2)
-
-    if [[ "$HTTP_STATUS" == "$expected_status" ]]; then
-        echo -e "${GREEN}SUCCESS: ${name} returned ${HTTP_STATUS} (expected ${expected_status}).${NC}"
-        RESULT=0
-    elif [[ "$allow_other_status" == "true" ]]; then
-        echo -e "${GREEN}SUCCESS: ${name} returned ${HTTP_STATUS} (expected ${expected_status} or other allowed status).${NC}"
-        RESULT=0
+    if [ "$status_code" -eq "$expected_status" ]; then
+        echo "[OK] $description (Status: $status_code)"
     else
-        echo -e "${RED}FAILURE: ${name} returned ${HTTP_STATUS} (expected ${expected_status}).${NC}"
-        echo -e "${RED}Output:${NC}\n${OUTPUT}"
-        RESULT=1
+        echo "[FAIL] $description (Expected: $expected_status, Got: $status_code)"
+        exit 1
     fi
-    echo ""
-    return $RESULT
 }
 
-# --- Main Logic ---
+# --- Début des Tests ---
 
-if [ -z "$SERVICE_URL" ]; then
-    echo -e "${RED}Error: SERVICE_URL not provided.${NC}"
-    echo "Usage: $0 <YOUR_CLOUD_RUN_SERVICE_URL>"
+if [ -z "$URL_PROD" ]; then
+    echo "[FAIL] La variable d'environnement URL_PROD n'est pas définie."
     exit 1
 fi
 
+echo "--- Démarrage des Smoke Tests sur $URL_PROD ---"
+
+# 1. Test de l'endpoint public /api/pronostics
+assert_status "${URL_PROD}/api/pronostics?date=$(date +%F)" 200 "" "Endpoint /api/pronostics"
+
+# 2. Test de l'interface utilisateur /pronostics
+assert_status "${URL_PROD}/pronostics" 200 "" "Endpoint /pronostics UI"
+
+# 3. Test de /schedule sans clé API (accès refusé)
+assert_status "${URL_PROD}/schedule" 403 "-X POST" "/schedule (sans API Key)"
+
+# 4. Test de /schedule avec clé API (accès autorisé)
 if [ -z "$API_KEY" ]; then
-    echo -e "${YELLOW}Warning: HIPPIQUE_INTERNAL_API_KEY is not set. Skipping authenticated tests.${NC}"
-    SKIP_AUTH_TESTS=true
+    echo "[SKIP] HIPPIQUE_INTERNAL_API_KEY non définie. Le test /schedule avec authentification est sauté."
 else
-    SKIP_AUTH_TESTS=false
+    assert_status "${URL_PROD}/schedule" 200 "-X POST -H \"X-API-KEY: ${API_KEY}\"" "/schedule (avec API Key)"
 fi
 
-echo -e "${GREEN}Starting Smoke Tests for ${SERVICE_URL}${NC}\n"
-
-ALL_TESTS_PASSED=true
-
-# 1. Test GET /pronostics (UI Frontend)
-run_test "UI Frontend /pronostics" \
-         "curl -s -o /dev/null -w '%{http_code} %{content_type}' '${SERVICE_URL}/pronostics'" \
-         "200"
-if [ $? -ne 0 ]; then ALL_TESTS_PASSED=false; fi
-
-# 2. Test GET /api/pronostics (Main API)
-run_test "API /api/pronostics" \
-         "curl -s -w '%{http_code}\n' '${SERVICE_URL}/api/pronostics?date=$(date +%F)' | jq ." \
-         "200"
-if [ $? -ne 0 ]; then ALL_TESTS_PASSED=false; fi
-
-# 3. Test POST /schedule without API key (Expected 403)
-run_test "API /schedule (no API key)" \
-         "curl -s -X POST -H 'Content-Type: application/json' -d '{\"dry_run\":true}' -w '%{http_code}\n' '${SERVICE_URL}/schedule'" \
-         "403"
-if [ $? -ne 0 ]; then ALL_TESTS_PASSED=false; fi
-
-# 4. Test POST /schedule with valid API key (Expected 200)
-if [ "$SKIP_AUTH_TESTS" = false ]; then
-    run_test "API /schedule (with valid API key)" \
-             "curl -s -X POST -H 'Content-Type: application/json' -H 'X-API-KEY: ${API_KEY}' -d '{\"dry_run\":true, \"date\":\"$(date +%F)\"}' -w '%{http_code}\n' '${SERVICE_URL}/schedule'" \
-             "200"
-    if [ $? -ne 0 ]; then ALL_TESTS_PASSED=false; fi
-else
-    echo -e "${YELLOW}Skipping authenticated /schedule test: HIPPIQUE_INTERNAL_API_KEY not set.${NC}\n"
-fi
-
-echo -e "${GREEN}Smoke Tests Complete.${NC}"
-if [ "$ALL_TESTS_PASSED" = true ]; then
-    echo -e "${GREEN}All critical smoke tests passed!${NC}"
-    exit 0
-else
-    echo -e "${RED}Some smoke tests failed. Please check the logs above.${NC}"
-    exit 1
-fi
+echo "--- Smoke Tests terminés avec succès ---"

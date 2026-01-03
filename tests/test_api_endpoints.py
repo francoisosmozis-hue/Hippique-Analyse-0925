@@ -70,6 +70,7 @@ def test_pronostics_ui_endpoint(client):
 
     assert all_script_text, "Should have captured script text"
     assert "document.addEventListener('DOMContentLoaded'" in all_script_text, "Should find core JS functionality"
+    assert "/api/pronostics" in all_script_text, "Should find reference to /api/pronostics endpoint in JS/scripts"
 
 
 def test_root_redirect(client):

@@ -1,52 +1,120 @@
-# Plan de Tests Hippique Orchestrator
+# Plan de Test (TEST_PLAN.md)
 
-Ce document décrit les procédures de test locales et de validation en environnement de production (smoke tests) pour le projet Hippique Orchestrator.
+Ce document décrit les procédures pour valider le projet `hippique-orchestrator`.
 
-## Commandes de Tests Locaux
+## 1. Validation Locale Complète
 
-Pour exécuter la suite complète de tests locaux, y compris la génération de rapport de couverture et la vérification de l'absence de tests instables (flaky tests) :
+### 1.1. Exécution de la Suite de Tests Unitaires
 
-1.  **Exécuter tous les tests (mode silencieux) :**
-    ```bash
-    pytest -q
-    ```
-    *Résultat attendu :* Tous les tests doivent passer (`xxx passed`).
+Cette commande exécute l'intégralité des tests unitaires et d'intégration mockés.
 
-2.  **Exécuter les tests avec rapport de couverture détaillé :**
-    ```bash
-    pytest --cov=hippique_orchestrator --cov-report=term-missing
-    ```
-    *Résultat attendu :* Un rapport de couverture affichant les pourcentages de couverture par module, incluant les lignes manquantes.
-
-3.  **Vérification anti-flaky (10 exécutions consécutives) :**
-    ```bash
-    for i in $(seq 1 10); do echo "--- Anti-flaky run $i/10 ---"; pytest -q || (echo "FAILURE: Flaky test detected on run $i" && exit 1); done && echo "SUCCESS: No flaky tests detected in 10 runs."
-    ```
-    *Résultat attendu :* Le message "SUCCESS: No flaky tests detected in 10 runs." s'affiche, confirmant la stabilité de la suite de tests.
-
-## Scripts de Smoke Test en Production
-
-Ce script est destiné à être exécuté en environnement de production (ex: Cloud Run) pour valider le bon fonctionnement des endpoints critiques.
-
-**Prérequis :** L'URL de base du service doit être fournie par l'utilisateur (par exemple, via la variable d'environnement `SERVICE_URL`). Pour les tests d'authentification, la clé `HIPPIQUE_INTERNAL_API_KEY` doit être définie.
-
-### Commande d'exécution du Smoke Test
-
+**Commande :**
 ```bash
-scripts/smoke_prod.sh <SERVICE_URL>
+pytest -q
 ```
 
-### Détail du Script `scripts/smoke_prod.sh` (à créer)
+**Résultat Attendu :**
+- `786 passed`
+- Aucun échec (`failed`) ou erreur (`error`).
 
-Le script effectuera les vérifications suivantes :
+### 1.2. Vérification de la Couverture de Code
 
-1.  **`GET /pronostics` (UI Frontend) :** Vérifie que la page HTML principale se charge et contient des marqueurs spécifiques.
-    *   *Attendu :* Statut HTTP 200, contenu HTML.
-2.  **`GET /api/pronostics` (API principale) :** Vérifie que l'API retourne une réponse JSON valide.
-    *   *Attendu :* Statut HTTP 200, JSON non vide.
-3.  **`POST /schedule` sans clé API :** Vérifie que l'endpoint protégé renvoie une erreur 403.
-    *   *Attendu :* Statut HTTP 403.
-4.  **`POST /schedule` avec clé API valide :** Vérifie que l'endpoint protégé fonctionne avec une clé valide (simule un appel de Cloud Tasks).
-    *   *Attendu :* Statut HTTP 200.
+Cette commande génère un rapport de couverture détaillé pour identifier les zones non testées.
 
-**NOTE :** Les clés API sensibles ne doivent jamais être affichées dans les logs ou le script lui-même. La clé sera lue depuis la variable d'environnement `HIPPIQUE_INTERNAL_API_KEY`.
+**Commande :**
+```bash
+pytest --cov=hippique_orchestrator
+```
+
+**Résultat Attendu :**
+- Un rapport tabulaire affichant le pourcentage de couverture par fichier.
+- **Objectif :** Atteindre >80% sur `plan.py`, `firestore_client.py`, et `analysis_pipeline.py`.
+
+### 1.3. Détection des Tests Instables (Flaky Tests)
+
+Cette commande exécute la suite de tests 10 fois consécutivement pour détecter toute instabilité.
+
+**Commande :**
+```bash
+pytest -q --count=10
+```
+
+**Résultat Attendu :**
+- `7860 passed` (786 tests * 10 runs).
+- Aucun échec. Si un test échoue ne serait-ce qu'une fois, il est considéré comme "flaky" et doit être corrigé.
+
+## 2. Validation en Production (Smoke Tests)
+
+Ces tests sont à exécuter manuellement après un déploiement pour s'assurer que les services critiques sont opérationnels.
+
+### 2.1. Script de Smoke Test
+
+Le script `scripts/smoke_prod.sh` automatise les vérifications de base sur un environnement déployé.
+
+**Prérequis :**
+- `URL_PROD` : Variable d'environnement contenant l'URL de base du service (ex: `https://<service-url>.run.app`).
+- `HIPPIQUE_INTERNAL_API_KEY` : Variable d'environnement contenant la clé API pour les endpoints protégés.
+
+**Commande :**
+```bash
+./scripts/smoke_prod.sh
+```
+
+**Résultat Attendu :**
+- Chaque test affiche `[OK]` ou `[FAIL]`.
+- Tous les tests doivent afficher `[OK]`.
+
+### 2.2. Contenu du Script `smoke_prod.sh`
+
+```bash
+#!/bin/bash
+
+# Configuration
+URL_PROD="${URL_PROD:-""}"
+API_KEY="${HIPPIQUE_INTERNAL_API_KEY:-""}"
+
+# Fonctions de test
+assert_status() {
+    local url=$1
+    local expected_status=$2
+    local extra_args=$3
+    local description=$4
+
+    # shellcheck disable=SC2086
+    local status_code=$(curl -s -o /dev/null -w "%{{http_code}}" $extra_args "$url")
+
+    if [ "$status_code" -eq "$expected_status" ]; then
+        echo "[OK] $description (Status: $status_code)"
+    else
+        echo "[FAIL] $description (Expected: $expected_status, Got: $status_code)"
+        exit 1
+    fi
+}
+
+# --- Début des Tests ---
+
+if [ -z "$URL_PROD" ]; then
+    echo "[FAIL] La variable d'environnement URL_PROD n'est pas définie."
+    exit 1
+fi
+
+echo "--- Démarrage des Smoke Tests sur $URL_PROD ---"
+
+# 1. Test de l'endpoint public /api/pronostics
+assert_status "${URL_PROD}/api/pronostics?date=$(date +%F)" 200 "" "Endpoint /api/pronostics"
+
+# 2. Test de l'interface utilisateur /pronostics
+assert_status "${URL_PROD}/pronostics" 200 "" "Endpoint /pronostics UI"
+
+# 3. Test de /schedule sans clé API (accès refusé)
+assert_status "${URL_PROD}/schedule" 403 "-X POST" "/schedule (sans API Key)"
+
+# 4. Test de /schedule avec clé API (accès autorisé)
+if [ -z "$API_KEY" ]; then
+    echo "[SKIP] HIPPIQUE_INTERNAL_API_KEY non définie. Le test /schedule avec authentification est sauté."
+else
+    assert_status "${URL_PROD}/schedule" 200 "-X POST -H \"X-API-KEY: ${API_KEY}\"" "/schedule (avec API Key)"
+fi
+
+echo "--- Smoke Tests terminés avec succès ---"
+```

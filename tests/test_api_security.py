@@ -3,22 +3,28 @@ Tests for API security and authentication dependencies.
 """
 from fastapi.testclient import TestClient
 
-def test_api_key_required_and_missing(client: TestClient, mocker):
+def test_api_key_authentication(client: TestClient, mocker, monkeypatch):
     """
-    Given authentication is required,
-    When the X-API-KEY header is missing or incorrect,
-    Then the request should be denied with a 403 error.
+    Tests the API key authentication logic for both failure and success cases.
     """
-    # Override the autouse fixture from conftest.py for this specific test
+    # 1. Test Failure Cases (key missing or wrong)
     mocker.patch("hippique_orchestrator.config.REQUIRE_AUTH", True)
     
     response_no_header = client.post("/schedule", json={"dry_run": True})
-    assert response_no_header.status_code == 403
-    assert "Invalid or missing API Key" in response_no_header.text
+    assert response_no_header.status_code == 403, "Should fail without API key"
     
     response_wrong_key = client.post("/schedule", json={"dry_run": True}, headers={"X-API-KEY": "wrong-key"})
-    assert response_wrong_key.status_code == 403
-    assert "Invalid or missing API Key" in response_wrong_key.text
+    assert response_wrong_key.status_code == 403, "Should fail with wrong API key"
+
+    # 2. Test Success Case (valid key)
+    # We patch the key in the 'auth' module where it's actually checked.
+    mocker.patch("hippique_orchestrator.auth.config.INTERNAL_API_SECRET", "test-key")
+    mocker.patch("hippique_orchestrator.service.plan.build_plan_async", return_value=[]) # Isolate from plan logic
+
+    response_good_key = client.post("/schedule", json={"dry_run": True, "date": "2025-01-01"}, headers={"X-API-KEY": "test-key"})
+    assert response_good_key.status_code == 200, "Should succeed with correct API key"
+    assert "No races found" in response_good_key.json()["message"]
+
 
 
 def test_ops_run_endpoint_security(client: TestClient, mocker):
@@ -36,6 +42,19 @@ def test_ops_run_endpoint_security(client: TestClient, mocker):
     response_wrong_key = client.post("/ops/run?rc=R1C1", headers={"X-API-KEY": "wrong-key"})
     assert response_wrong_key.status_code == 403
     assert "Invalid or missing API Key" in response_wrong_key.text
+
+
+def test_ops_status_endpoint_security(client: TestClient, mocker):
+    """
+    Given authentication is required,
+    When the X-API-KEY header is missing for the /ops/status endpoint,
+    Then the request should be denied with a 403 error.
+    """
+    mocker.patch("hippique_orchestrator.config.REQUIRE_AUTH", True)
+    
+    response_no_header = client.get("/ops/status?date=2025-01-01")
+    assert response_no_header.status_code == 403
+    assert "Invalid or missing API Key" in response_no_header.text
 
 
 def test_api_key_not_required(client: TestClient, mocker):

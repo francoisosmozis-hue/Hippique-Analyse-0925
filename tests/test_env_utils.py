@@ -56,3 +56,19 @@ def test_get_env_value_equals_default_no_override_log(monkeypatch, caplog):
         val = get_env("MY_VAR", default="default_value")
     assert val == "default_value"
     assert "overrides default" not in caplog.text
+
+
+def test_get_env_required_missing_non_prod_logs_critical_no_exit(monkeypatch, caplog):
+    """
+    Test that get_env logs a critical error but does not exit if a required
+    variable is missing in a non-production environment.
+    """
+    monkeypatch.setenv("PROD", "false")  # Explicitly set PROD to false
+    monkeypatch.delenv("NON_PROD_REQUIRED", raising=False)  # Ensure the variable is not set
+
+    with caplog.at_level(logging.CRITICAL):
+        val = get_env("NON_PROD_REQUIRED", required=True)
+    
+    assert "Missing required environment variable 'NON_PROD_REQUIRED'" in caplog.text
+    assert val is None
+    assert "IS_PROD=True. Exiting." not in caplog.text

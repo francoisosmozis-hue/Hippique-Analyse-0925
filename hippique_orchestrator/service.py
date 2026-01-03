@@ -247,9 +247,10 @@ async def schedule_day_races(
 
 
 @app.get("/ops/status", tags=["Operations"])
-async def get_ops_status(date: str | None = None):
+async def get_ops_status(date: str | None = None, api_key: str = Security(check_api_key)):
     try:
         date_str = date or datetime.now(ZoneInfo(config.TIMEZONE)).strftime("%Y-%m-%d")
+        datetime.strptime(date_str, "%Y-%m-%d")  # Validate format
     except ValueError as e:
         raise HTTPException(status_code=422, detail="Invalid date format. Use YYYY-MM-DD.") from e
 

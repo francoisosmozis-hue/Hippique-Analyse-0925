@@ -5,7 +5,7 @@ rootdir: /home/francoisosmozis/hippique-orchestrator
 configfile: pytest.ini
 testpaths: tests
 plugins: anyio-3.7.1, rerunfailures-16.1, cov-7.0.0, mock-3.14.0, timeout-2.4.0, xdist-3.8.0, env-1.1.3, asyncio-0.23.7, repeat-0.9.4
-timeout: 60.0s
+timeout: 300.0s
 timeout method: signal
 timeout func_only: False
 asyncio: mode=Mode.STRICT
@@ -20,7 +20,7 @@ tests/scripts/test_online_fetch_zeturf.py::test_coerce_runner_entry PASSED [  0%
 tests/scripts/test_online_fetch_zeturf.py::test_build_snapshot_payload PASSED [  1%]
 tests/scripts/test_online_fetch_zeturf.py::test_fetch_race_snapshot_cli 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:34 [INFO] [CLI] snapshot chargé depuis snapshot.json
+2026-01-01 12:04:12 [INFO] [CLI] snapshot chargé depuis snapshot.json
 PASSED                                                                   [  1%]
 tests/scripts/test_online_fetch_zeturf_extended.py::test_fallback_parse_html_no_runners_table PASSED [  1%]
 tests/scripts/test_online_fetch_zeturf_extended.py::test_fallback_parse_html_runner_missing_data PASSED [  1%]
@@ -36,34 +36,34 @@ tests/scripts/test_online_fetch_zeturf_extended.py::test_coerce_runner_entry_var
 tests/scripts/test_online_fetch_zeturf_extended.py::test_coerce_runner_entry_variations[raw9-expected9] PASSED [  3%]
 tests/scripts/test_online_fetch_zeturf_parsing.py::test_double_extract_parses_real_html_fixture 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:34 [WARNING] [ZEturf] Extraction fallback utilisée pour https://www.zeturf.fr/fr/course/2025-11-20/R1C1 (snapshot=H-30)
-2026-01-01 11:52:34 [INFO] [ZEturf] phase=H30 url=https://www.zeturf.fr/fr/course/2025-11-20/R1C1-saint-galmier partants=12
+2026-01-01 12:04:13 [WARNING] [ZEturf] Extraction fallback utilisée pour https://www.zeturf.fr/fr/course/2025-11-20/R1C1 (snapshot=H-30)
+2026-01-01 12:04:13 [INFO] [ZEturf] phase=H30 url=https://www.zeturf.fr/fr/course/2025-11-20/R1C1-saint-galmier partants=12
 PASSED                                                                   [  3%]
 tests/scripts/test_online_fetch_zeturf_parsing.py::test_fallback_parse_no_runners_table_finds_no_runners PASSED [  3%]
 tests/scripts/test_online_fetch_zeturf_parsing.py::test_fallback_parse_no_script_finds_no_odds PASSED [  3%]
 tests/scripts/test_online_fetch_zeturf_parsing.py::test_fallback_parse_no_data_finds_nothing PASSED [  3%]
 tests/test_analysis_drift.py::test_drift_is_detected_and_applied 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:36 [INFO] Starting analysis pipeline for phase.
-2026-01-01 11:52:36 [INFO] Fetching race details from data source.
-2026-01-01 11:52:36 [INFO] Snapshot fetched successfully.
-2026-01-01 11:52:36 [INFO] Snapshot saved to GCS at data/2025-01-01_R1C1/snapshots/20260101_105236_H-5.json
-2026-01-01 11:52:36 [INFO] Preparing to run GPI ticket generation.
-2026-01-01 11:52:36 [INFO] H-5 phase: attempting to load H-30 snapshot for drift.
-2026-01-01 11:52:36 [INFO] Found latest H-30 snapshot: data/R1C1/snapshots/20250101_120000_H-30.json
-2026-01-01 11:52:36 [INFO] Calling generate_tickets.
-2026-01-01 11:52:36 [INFO] Analysis and ticket generation complete.
+2026-01-01 12:04:15 [INFO] Starting analysis pipeline for phase.
+2026-01-01 12:04:15 [INFO] Fetching race details from data source.
+2026-01-01 12:04:15 [INFO] Snapshot fetched successfully.
+2026-01-01 12:04:15 [INFO] Snapshot saved to GCS at data/2025-01-01_R1C1/snapshots/20260101_110415_H-5.json
+2026-01-01 12:04:15 [INFO] Preparing to run GPI ticket generation.
+2026-01-01 12:04:15 [INFO] H-5 phase: attempting to load H-30 snapshot for drift.
+2026-01-01 12:04:15 [INFO] Found latest H-30 snapshot: data/R1C1/snapshots/20250101_120000_H-30.json
+2026-01-01 12:04:15 [INFO] Calling generate_tickets.
+2026-01-01 12:04:15 [INFO] Analysis and ticket generation complete.
 PASSED                                                                   [  4%]
 tests/test_analysis_drift.py::test_pipeline_raises_if_doc_id_missing PASSED [  4%]
 tests/test_analysis_drift.py::test_pipeline_abstains_if_snapshot_is_empty 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:36 [INFO] Starting analysis pipeline for phase.
-2026-01-01 11:52:36 [WARNING] Snapshot invalid or runners empty -> abstention.
+2026-01-01 12:04:15 [INFO] Starting analysis pipeline for phase.
+2026-01-01 12:04:15 [WARNING] Snapshot invalid or runners empty -> abstention.
 PASSED                                                                   [  4%]
 tests/test_analysis_drift.py::test_pipeline_handles_generic_exception 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:36 [INFO] Starting analysis pipeline for phase.
-2026-01-01 11:52:36 [ERROR] Analysis pipeline failed: Unexpected GCS error
+2026-01-01 12:04:15 [INFO] Starting analysis pipeline for phase.
+2026-01-01 12:04:15 [ERROR] Analysis pipeline failed: Unexpected GCS error
 Traceback (most recent call last):
   File "/home/francoisosmozis/hippique-orchestrator/hippique_orchestrator/analysis_pipeline.py", line 156, in run_analysis_for_phase
     snapshot_data, gcs_path = await _fetch_and_save_snapshot(
@@ -75,31 +75,31 @@ Exception: Unexpected GCS error
 PASSED                                                                   [  4%]
 tests/test_analysis_pipeline_extended.py::test_find_and_load_h30_snapshot_no_snapshots_found 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:36 [WARNING] No snapshots found in directory.
+2026-01-01 12:04:15 [WARNING] No snapshots found in directory.
 PASSED                                                                   [  4%]
 tests/test_analysis_pipeline_extended.py::test_find_and_load_h30_snapshot_no_h30_snapshots_found 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:36 [WARNING] No H-30 snapshot found for drift calculation.
+2026-01-01 12:04:15 [WARNING] No H-30 snapshot found for drift calculation.
 PASSED                                                                   [  4%]
 tests/test_analysis_pipeline_extended.py::test_find_and_load_h30_snapshot_list_files_exception 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:36 [ERROR] Failed to find or load H-30 snapshot: GCS List Error
+2026-01-01 12:04:15 [ERROR] Failed to find or load H-30 snapshot: GCS List Error
 PASSED                                                                   [  5%]
 tests/test_analysis_pipeline_extended.py::test_find_and_load_h30_snapshot_read_file_exception 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:36 [ERROR] Failed to find or load H-30 snapshot: GCS Read Error
+2026-01-01 12:04:15 [ERROR] Failed to find or load H-30 snapshot: GCS Read Error
 PASSED                                                                   [  5%]
 tests/test_analysis_pipeline_extended.py::test_run_analysis_for_phase_abstains_on_empty_snapshot_from_data_source 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:36 [INFO] Starting analysis pipeline for phase.
-2026-01-01 11:52:36 [INFO] Fetching race details from data source.
-2026-01-01 11:52:36 [WARNING] Snapshot invalid or runners empty -> abstention.
+2026-01-01 12:04:15 [INFO] Starting analysis pipeline for phase.
+2026-01-01 12:04:15 [INFO] Fetching race details from data source.
+2026-01-01 12:04:15 [WARNING] Snapshot invalid or runners empty -> abstention.
 PASSED                                                                   [  5%]
 tests/test_analysis_pipeline_extended.py::test_run_analysis_for_phase_abstains_on_snapshot_with_no_runners 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:36 [INFO] Starting analysis pipeline for phase.
-2026-01-01 11:52:36 [INFO] Fetching race details from data source.
-2026-01-01 11:52:36 [WARNING] Snapshot invalid or runners empty -> abstention.
+2026-01-01 12:04:15 [INFO] Starting analysis pipeline for phase.
+2026-01-01 12:04:15 [INFO] Fetching race details from data source.
+2026-01-01 12:04:15 [WARNING] Snapshot invalid or runners empty -> abstention.
 PASSED                                                                   [  5%]
 tests/test_analysis_utils.py::test_normalise_text[None-] PASSED          [  5%]
 tests/test_analysis_utils.py::test_normalise_text[  \xc9curie Sp\xe9ciale  -ecurie speciale] PASSED [  5%]
@@ -148,181 +148,181 @@ tests/test_analysis_utils_extended.py::test_score_musique_form[musique_data1-exp
 tests/test_analysis_utils_extended.py::test_score_musique_form[musique_data2-0.0] PASSED [ 12%]
 tests/test_api_endpoints.py::test_health_check_endpoint 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:37 [INFO] Request started
-2026-01-01 11:52:37 [INFO] Request finished
-2026-01-01 11:52:37 [INFO] HTTP Request: GET http://testserver/health "HTTP/1.1 200 OK"
+2026-01-01 12:04:15 [INFO] Request started
+2026-01-01 12:04:15 [INFO] Request finished
+2026-01-01 12:04:15 [INFO] HTTP Request: GET http://testserver/health "HTTP/1.1 200 OK"
 PASSED                                                                   [ 13%]
 tests/test_api_endpoints.py::test_pronostics_ui_endpoint 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:37 [INFO] Request started
-2026-01-01 11:52:37 [INFO] Request finished
-2026-01-01 11:52:37 [INFO] HTTP Request: GET http://testserver/pronostics "HTTP/1.1 200 OK"
+2026-01-01 12:04:15 [INFO] Request started
+2026-01-01 12:04:15 [INFO] Request finished
+2026-01-01 12:04:15 [INFO] HTTP Request: GET http://testserver/pronostics "HTTP/1.1 200 OK"
 PASSED                                                                   [ 13%]
 tests/test_api_endpoints.py::test_root_redirect 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:37 [INFO] Request started
-2026-01-01 11:52:37 [INFO] Request finished
-2026-01-01 11:52:37 [INFO] HTTP Request: GET http://testserver/ "HTTP/1.1 307 Temporary Redirect"
+2026-01-01 12:04:15 [INFO] Request started
+2026-01-01 12:04:15 [INFO] Request finished
+2026-01-01 12:04:15 [INFO] HTTP Request: GET http://testserver/ "HTTP/1.1 307 Temporary Redirect"
 PASSED                                                                   [ 13%]
 tests/test_api_endpoints.py::test_api_pronostics_date_validation 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:37 [INFO] Request started
-2026-01-01 11:52:37 [INFO] Request finished
-2026-01-01 11:52:37 [INFO] HTTP Request: GET http://testserver/api/pronostics?date=not-a-real-date "HTTP/1.1 422 Unprocessable Entity"
+2026-01-01 12:04:15 [INFO] Request started
+2026-01-01 12:04:15 [INFO] Request finished
+2026-01-01 12:04:15 [INFO] HTTP Request: GET http://testserver/api/pronostics?date=not-a-real-date "HTTP/1.1 422 Unprocessable Entity"
 PASSED                                                                   [ 13%]
 tests/test_api_endpoints.py::test_api_pronostics_default_date_is_today 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:37 [INFO] Request started
-2026-01-01 11:52:37 [INFO] Building plan for 2025-07-15 using Boturfers as the single source.
-2026-01-01 11:52:37 [INFO] Fetching programme from data source via URL: https://www.boturfers.fr/courses/2025-07-15
-2026-01-01 11:52:37 [INFO] Début du scraping du programme Boturfers.
-2026-01-01 11:52:37 [INFO] HTTP Request: GET https://www.boturfers.fr/courses/2025-07-15 "HTTP/1.1 404 Not Found"
-2026-01-01 11:52:37 [ERROR] Erreur HTTP lors du téléchargement de https://www.boturfers.fr/courses/2025-07-15: 404
-2026-01-01 11:52:37 [ERROR] Le scraping du programme a échoué ou n'a retourné aucune course.
-2026-01-01 11:52:37 [WARNING] Failed to fetch programme from Boturfers or it was empty.
-2026-01-01 11:52:37 [INFO] Request finished
-2026-01-01 11:52:37 [INFO] HTTP Request: GET http://testserver/api/pronostics "HTTP/1.1 200 OK"
+2026-01-01 12:04:15 [INFO] Request started
+2026-01-01 12:04:15 [INFO] Building plan for 2025-07-15 using Boturfers as the single source.
+2026-01-01 12:04:15 [INFO] Fetching programme from data source via URL: https://www.boturfers.fr/courses/2025-07-15
+2026-01-01 12:04:15 [INFO] Début du scraping du programme Boturfers.
+2026-01-01 12:04:16 [INFO] HTTP Request: GET https://www.boturfers.fr/courses/2025-07-15 "HTTP/1.1 404 Not Found"
+2026-01-01 12:04:16 [ERROR] Erreur HTTP lors du téléchargement de https://www.boturfers.fr/courses/2025-07-15: 404
+2026-01-01 12:04:16 [ERROR] Le scraping du programme a échoué ou n'a retourné aucune course.
+2026-01-01 12:04:16 [WARNING] Failed to fetch programme from Boturfers or it was empty.
+2026-01-01 12:04:16 [INFO] Request finished
+2026-01-01 12:04:16 [INFO] HTTP Request: GET http://testserver/api/pronostics "HTTP/1.1 200 OK"
 PASSED                                                                   [ 13%]
 tests/test_api_endpoints.py::test_api_pronostics_empty_response 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:37 [INFO] Request started
-2026-01-01 11:52:37 [INFO] Building plan for 2025-01-01 using Boturfers as the single source.
-2026-01-01 11:52:37 [INFO] Fetching programme from data source via URL: https://www.boturfers.fr/courses/2025-01-01
-2026-01-01 11:52:37 [INFO] Début du scraping du programme Boturfers.
-2026-01-01 11:52:37 [INFO] HTTP Request: GET https://www.boturfers.fr/courses/2025-01-01 "HTTP/1.1 404 Not Found"
-2026-01-01 11:52:37 [ERROR] Erreur HTTP lors du téléchargement de https://www.boturfers.fr/courses/2025-01-01: 404
-2026-01-01 11:52:37 [ERROR] Le scraping du programme a échoué ou n'a retourné aucune course.
-2026-01-01 11:52:37 [WARNING] Failed to fetch programme from Boturfers or it was empty.
-2026-01-01 11:52:37 [INFO] Request finished
-2026-01-01 11:52:37 [INFO] HTTP Request: GET http://testserver/api/pronostics?date=2025-01-01 "HTTP/1.1 200 OK"
+2026-01-01 12:04:16 [INFO] Request started
+2026-01-01 12:04:16 [INFO] Building plan for 2025-01-01 using Boturfers as the single source.
+2026-01-01 12:04:16 [INFO] Fetching programme from data source via URL: https://www.boturfers.fr/courses/2025-01-01
+2026-01-01 12:04:16 [INFO] Début du scraping du programme Boturfers.
+2026-01-01 12:04:16 [INFO] HTTP Request: GET https://www.boturfers.fr/courses/2025-01-01 "HTTP/1.1 404 Not Found"
+2026-01-01 12:04:16 [ERROR] Erreur HTTP lors du téléchargement de https://www.boturfers.fr/courses/2025-01-01: 404
+2026-01-01 12:04:16 [ERROR] Le scraping du programme a échoué ou n'a retourné aucune course.
+2026-01-01 12:04:16 [WARNING] Failed to fetch programme from Boturfers or it was empty.
+2026-01-01 12:04:16 [INFO] Request finished
+2026-01-01 12:04:16 [INFO] HTTP Request: GET http://testserver/api/pronostics?date=2025-01-01 "HTTP/1.1 200 OK"
 PASSED                                                                   [ 13%]
 tests/test_api_endpoints.py::test_api_pronostics_etag_304_not_modified 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:37 [INFO] Request started
-2026-01-01 11:52:37 [INFO] Building plan for 2025-01-01 using Boturfers as the single source.
-2026-01-01 11:52:37 [INFO] Fetching programme from data source via URL: https://www.boturfers.fr/courses/2025-01-01
-2026-01-01 11:52:37 [INFO] Début du scraping du programme Boturfers.
-2026-01-01 11:52:38 [INFO] HTTP Request: GET https://www.boturfers.fr/courses/2025-01-01 "HTTP/1.1 404 Not Found"
-2026-01-01 11:52:38 [ERROR] Erreur HTTP lors du téléchargement de https://www.boturfers.fr/courses/2025-01-01: 404
-2026-01-01 11:52:38 [ERROR] Le scraping du programme a échoué ou n'a retourné aucune course.
-2026-01-01 11:52:38 [WARNING] Failed to fetch programme from Boturfers or it was empty.
-2026-01-01 11:52:38 [INFO] Request finished
-2026-01-01 11:52:38 [INFO] HTTP Request: GET http://testserver/api/pronostics?date=2025-01-01 "HTTP/1.1 200 OK"
-2026-01-01 11:52:38 [INFO] Request started
-2026-01-01 11:52:38 [INFO] Building plan for 2025-01-01 using Boturfers as the single source.
-2026-01-01 11:52:38 [INFO] Fetching programme from data source via URL: https://www.boturfers.fr/courses/2025-01-01
-2026-01-01 11:52:38 [INFO] Début du scraping du programme Boturfers.
-2026-01-01 11:52:38 [INFO] HTTP Request: GET https://www.boturfers.fr/courses/2025-01-01 "HTTP/1.1 404 Not Found"
-2026-01-01 11:52:38 [ERROR] Erreur HTTP lors du téléchargement de https://www.boturfers.fr/courses/2025-01-01: 404
-2026-01-01 11:52:38 [ERROR] Le scraping du programme a échoué ou n'a retourné aucune course.
-2026-01-01 11:52:38 [WARNING] Failed to fetch programme from Boturfers or it was empty.
-2026-01-01 11:52:38 [INFO] Request finished
-2026-01-01 11:52:38 [INFO] HTTP Request: GET http://testserver/api/pronostics?date=2025-01-01 "HTTP/1.1 304 Not Modified"
+2026-01-01 12:04:16 [INFO] Request started
+2026-01-01 12:04:16 [INFO] Building plan for 2025-01-01 using Boturfers as the single source.
+2026-01-01 12:04:16 [INFO] Fetching programme from data source via URL: https://www.boturfers.fr/courses/2025-01-01
+2026-01-01 12:04:16 [INFO] Début du scraping du programme Boturfers.
+2026-01-01 12:04:16 [INFO] HTTP Request: GET https://www.boturfers.fr/courses/2025-01-01 "HTTP/1.1 404 Not Found"
+2026-01-01 12:04:16 [ERROR] Erreur HTTP lors du téléchargement de https://www.boturfers.fr/courses/2025-01-01: 404
+2026-01-01 12:04:16 [ERROR] Le scraping du programme a échoué ou n'a retourné aucune course.
+2026-01-01 12:04:16 [WARNING] Failed to fetch programme from Boturfers or it was empty.
+2026-01-01 12:04:16 [INFO] Request finished
+2026-01-01 12:04:16 [INFO] HTTP Request: GET http://testserver/api/pronostics?date=2025-01-01 "HTTP/1.1 200 OK"
+2026-01-01 12:04:16 [INFO] Request started
+2026-01-01 12:04:16 [INFO] Building plan for 2025-01-01 using Boturfers as the single source.
+2026-01-01 12:04:16 [INFO] Fetching programme from data source via URL: https://www.boturfers.fr/courses/2025-01-01
+2026-01-01 12:04:16 [INFO] Début du scraping du programme Boturfers.
+2026-01-01 12:04:16 [INFO] HTTP Request: GET https://www.boturfers.fr/courses/2025-01-01 "HTTP/1.1 404 Not Found"
+2026-01-01 12:04:16 [ERROR] Erreur HTTP lors du téléchargement de https://www.boturfers.fr/courses/2025-01-01: 404
+2026-01-01 12:04:16 [ERROR] Le scraping du programme a échoué ou n'a retourné aucune course.
+2026-01-01 12:04:16 [WARNING] Failed to fetch programme from Boturfers or it was empty.
+2026-01-01 12:04:16 [INFO] Request finished
+2026-01-01 12:04:16 [INFO] HTTP Request: GET http://testserver/api/pronostics?date=2025-01-01 "HTTP/1.1 304 Not Modified"
 PASSED                                                                   [ 14%]
 tests/test_api_endpoints.py::test_api_pronostics_rich_response_structure 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:38 [INFO] Request started
-2026-01-01 11:52:38 [INFO] Request finished
-2026-01-01 11:52:38 [INFO] HTTP Request: GET http://testserver/api/pronostics?date=2025-01-01 "HTTP/1.1 200 OK"
+2026-01-01 12:04:16 [INFO] Request started
+2026-01-01 12:04:16 [INFO] Request finished
+2026-01-01 12:04:16 [INFO] HTTP Request: GET http://testserver/api/pronostics?date=2025-01-01 "HTTP/1.1 200 OK"
 PASSED                                                                   [ 14%]
 tests/test_api_security.py::test_api_key_required_and_missing 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:38 [INFO] Request started
-2026-01-01 11:52:38 [INFO] Request finished
-2026-01-01 11:52:38 [INFO] HTTP Request: POST http://testserver/schedule "HTTP/1.1 403 Forbidden"
-2026-01-01 11:52:38 [INFO] Request started
-2026-01-01 11:52:38 [INFO] Request finished
-2026-01-01 11:52:38 [INFO] HTTP Request: POST http://testserver/schedule "HTTP/1.1 403 Forbidden"
+2026-01-01 12:04:16 [INFO] Request started
+2026-01-01 12:04:16 [INFO] Request finished
+2026-01-01 12:04:16 [INFO] HTTP Request: POST http://testserver/schedule "HTTP/1.1 403 Forbidden"
+2026-01-01 12:04:16 [INFO] Request started
+2026-01-01 12:04:16 [INFO] Request finished
+2026-01-01 12:04:16 [INFO] HTTP Request: POST http://testserver/schedule "HTTP/1.1 403 Forbidden"
 PASSED                                                                   [ 14%]
 tests/test_api_security.py::test_ops_run_endpoint_security 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:38 [INFO] Request started
-2026-01-01 11:52:38 [INFO] Request finished
-2026-01-01 11:52:38 [INFO] HTTP Request: POST http://testserver/ops/run?rc=R1C1 "HTTP/1.1 403 Forbidden"
-2026-01-01 11:52:38 [INFO] Request started
-2026-01-01 11:52:38 [INFO] Request finished
-2026-01-01 11:52:38 [INFO] HTTP Request: POST http://testserver/ops/run?rc=R1C1 "HTTP/1.1 403 Forbidden"
+2026-01-01 12:04:16 [INFO] Request started
+2026-01-01 12:04:16 [INFO] Request finished
+2026-01-01 12:04:16 [INFO] HTTP Request: POST http://testserver/ops/run?rc=R1C1 "HTTP/1.1 403 Forbidden"
+2026-01-01 12:04:16 [INFO] Request started
+2026-01-01 12:04:16 [INFO] Request finished
+2026-01-01 12:04:16 [INFO] HTTP Request: POST http://testserver/ops/run?rc=R1C1 "HTTP/1.1 403 Forbidden"
 PASSED                                                                   [ 14%]
 tests/test_api_security.py::test_api_key_not_required 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:38 [INFO] Request started
-2026-01-01 11:52:38 [INFO] Received request to schedule day races. Force: False, Dry Run: True
-2026-01-01 11:52:38 [WARNING] No races found in plan for 2025-01-01. Nothing to schedule.
-2026-01-01 11:52:38 [INFO] Request finished
-2026-01-01 11:52:38 [INFO] HTTP Request: POST http://testserver/schedule "HTTP/1.1 200 OK"
+2026-01-01 12:04:16 [INFO] Request started
+2026-01-01 12:04:16 [INFO] Received request to schedule day races. Force: False, Dry Run: True
+2026-01-01 12:04:16 [WARNING] No races found in plan for 2025-01-01. Nothing to schedule.
+2026-01-01 12:04:16 [INFO] Request finished
+2026-01-01 12:04:16 [INFO] HTTP Request: POST http://testserver/schedule "HTTP/1.1 200 OK"
 PASSED                                                                   [ 14%]
 tests/test_api_security.py::test_task_worker_endpoint_security 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:38 [INFO] Request started
-2026-01-01 11:52:38 [INFO] Request finished
-2026-01-01 11:52:38 [INFO] HTTP Request: POST http://testserver/tasks/run-phase "HTTP/1.1 403 Forbidden"
+2026-01-01 12:04:16 [INFO] Request started
+2026-01-01 12:04:16 [INFO] Request finished
+2026-01-01 12:04:16 [INFO] HTTP Request: POST http://testserver/tasks/run-phase "HTTP/1.1 403 Forbidden"
 PASSED                                                                   [ 14%]
 tests/test_api_security.py::test_task_worker_valid_token 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:38 [INFO] Request started
-2026-01-01 11:52:38 [INFO] Received run-phase request for http://example.com/2025-01-01/R1C1-test (phase: H-5)
-2026-01-01 11:52:38 [INFO] Updating Firestore document
-2026-01-01 11:52:38 [INFO] Run phase completed successfully for http://example.com/2025-01-01/R1C1-test (phase: H-5)
-2026-01-01 11:52:38 [INFO] Request finished
-2026-01-01 11:52:38 [INFO] HTTP Request: POST http://testserver/tasks/run-phase "HTTP/1.1 200 OK"
+2026-01-01 12:04:16 [INFO] Request started
+2026-01-01 12:04:16 [INFO] Received run-phase request for http://example.com/2025-01-01/R1C1-test (phase: H-5)
+2026-01-01 12:04:16 [INFO] Updating Firestore document
+2026-01-01 12:04:16 [INFO] Run phase completed successfully for http://example.com/2025-01-01/R1C1-test (phase: H-5)
+2026-01-01 12:04:16 [INFO] Request finished
+2026-01-01 12:04:16 [INFO] HTTP Request: POST http://testserver/tasks/run-phase "HTTP/1.1 200 OK"
 PASSED                                                                   [ 14%]
 tests/test_api_security.py::test_task_worker_google_auth_fails 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:38 [INFO] Request started
-2026-01-01 11:52:38 [INFO] Request finished
-2026-01-01 11:52:38 [INFO] HTTP Request: POST http://testserver/tasks/run-phase "HTTP/1.1 401 Unauthorized"
+2026-01-01 12:04:16 [INFO] Request started
+2026-01-01 12:04:16 [INFO] Request finished
+2026-01-01 12:04:16 [INFO] HTTP Request: POST http://testserver/tasks/run-phase "HTTP/1.1 401 Unauthorized"
 PASSED                                                                   [ 15%]
 tests/test_api_security.py::test_task_worker_invalid_token_scheme 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:38 [INFO] Request started
-2026-01-01 11:52:38 [INFO] Request finished
-2026-01-01 11:52:38 [INFO] HTTP Request: POST http://testserver/tasks/run-phase "HTTP/1.1 401 Unauthorized"
+2026-01-01 12:04:16 [INFO] Request started
+2026-01-01 12:04:16 [INFO] Request finished
+2026-01-01 12:04:16 [INFO] HTTP Request: POST http://testserver/tasks/run-phase "HTTP/1.1 401 Unauthorized"
 PASSED                                                                   [ 15%]
 tests/test_api_security.py::test_snapshot_9h_endpoint_security 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:38 [INFO] Request started
-2026-01-01 11:52:38 [INFO] Request finished
-2026-01-01 11:52:38 [INFO] HTTP Request: POST http://testserver/tasks/snapshot-9h "HTTP/1.1 403 Forbidden"
+2026-01-01 12:04:16 [INFO] Request started
+2026-01-01 12:04:16 [INFO] Request finished
+2026-01-01 12:04:17 [INFO] HTTP Request: POST http://testserver/tasks/snapshot-9h "HTTP/1.1 403 Forbidden"
 PASSED                                                                   [ 15%]
 tests/test_api_security.py::test_bootstrap_day_endpoint_security 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:38 [INFO] Request started
-2026-01-01 11:52:38 [INFO] Request finished
-2026-01-01 11:52:38 [INFO] HTTP Request: POST http://testserver/tasks/bootstrap-day "HTTP/1.1 403 Forbidden"
+2026-01-01 12:04:17 [INFO] Request started
+2026-01-01 12:04:17 [INFO] Request finished
+2026-01-01 12:04:17 [INFO] HTTP Request: POST http://testserver/tasks/bootstrap-day "HTTP/1.1 403 Forbidden"
 PASSED                                                                   [ 15%]
 tests/test_api_tasks.py::test_snapshot_9h_task_success 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:38 [INFO] Request started
-2026-01-01 11:52:38 [INFO] Received snapshot-9h request for 2026-01-01 with URLs: [], RC Labels: []
-2026-01-01 11:52:38 [INFO] Snapshot-9h completed successfully for 2026-01-01.
-2026-01-01 11:52:38 [INFO] Request finished
-2026-01-01 11:52:38 [INFO] HTTP Request: POST http://testserver/tasks/snapshot-9h "HTTP/1.1 200 OK"
+2026-01-01 12:04:17 [INFO] Request started
+2026-01-01 12:04:17 [INFO] Received snapshot-9h request for 2026-01-01 with URLs: [], RC Labels: []
+2026-01-01 12:04:17 [INFO] Snapshot-9h completed successfully for 2026-01-01.
+2026-01-01 12:04:17 [INFO] Request finished
+2026-01-01 12:04:17 [INFO] HTTP Request: POST http://testserver/tasks/snapshot-9h "HTTP/1.1 200 OK"
 PASSED                                                                   [ 15%]
 tests/test_api_tasks.py::test_snapshot_9h_task_with_specific_date_and_urls 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:38 [INFO] Request started
-2026-01-01 11:52:38 [INFO] Received snapshot-9h request for 2025-10-26 with URLs: ['http://example.com/r1c1', 'http://example.com/r1c2'], RC Labels: []
-2026-01-01 11:52:38 [INFO] Snapshot-9h completed successfully for 2025-10-26.
-2026-01-01 11:52:38 [INFO] Request finished
-2026-01-01 11:52:38 [INFO] HTTP Request: POST http://testserver/tasks/snapshot-9h "HTTP/1.1 200 OK"
+2026-01-01 12:04:17 [INFO] Request started
+2026-01-01 12:04:17 [INFO] Received snapshot-9h request for 2025-10-26 with URLs: ['http://example.com/r1c1', 'http://example.com/r1c2'], RC Labels: []
+2026-01-01 12:04:17 [INFO] Snapshot-9h completed successfully for 2025-10-26.
+2026-01-01 12:04:17 [INFO] Request finished
+2026-01-01 12:04:17 [INFO] HTTP Request: POST http://testserver/tasks/snapshot-9h "HTTP/1.1 200 OK"
 PASSED                                                                   [ 15%]
 tests/test_api_tasks.py::test_run_phase_task_success 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:38 [INFO] Request started
-2026-01-01 11:52:38 [INFO] Received run-phase request for http://example.com/race/2025-12-29_R1C1 (phase: H30)
-2026-01-01 11:52:38 [INFO] Starting Firestore-native course analysis
-2026-01-01 11:52:38 [INFO] Course analysis completed successfully.
-2026-01-01 11:52:38 [INFO] Updating Firestore document
-2026-01-01 11:52:38 [INFO] Run phase completed successfully for http://example.com/race/2025-12-29_R1C1 (phase: H30)
-2026-01-01 11:52:38 [INFO] Request finished
-2026-01-01 11:52:38 [INFO] HTTP Request: POST http://testserver/tasks/run-phase "HTTP/1.1 200 OK"
+2026-01-01 12:04:17 [INFO] Request started
+2026-01-01 12:04:17 [INFO] Received run-phase request for http://example.com/race/2025-12-29_R1C1 (phase: H30)
+2026-01-01 12:04:17 [INFO] Starting Firestore-native course analysis
+2026-01-01 12:04:17 [INFO] Course analysis completed successfully.
+2026-01-01 12:04:17 [INFO] Updating Firestore document
+2026-01-01 12:04:17 [INFO] Run phase completed successfully for http://example.com/race/2025-12-29_R1C1 (phase: H30)
+2026-01-01 12:04:17 [INFO] Request finished
+2026-01-01 12:04:17 [INFO] HTTP Request: POST http://testserver/tasks/run-phase "HTTP/1.1 200 OK"
 PASSED                                                                   [ 16%]
 tests/test_api_tasks.py::test_run_phase_task_run_course_fails 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:38 [INFO] Request started
-2026-01-01 11:52:38 [INFO] Received run-phase request for http://example.com/race/2025-12-29_R1C1 (phase: H30)
-2026-01-01 11:52:38 [INFO] Starting Firestore-native course analysis
-2026-01-01 11:52:38 [ERROR] An unexpected error occurred during course analysis.
+2026-01-01 12:04:17 [INFO] Request started
+2026-01-01 12:04:17 [INFO] Received run-phase request for http://example.com/race/2025-12-29_R1C1 (phase: H30)
+2026-01-01 12:04:17 [INFO] Starting Firestore-native course analysis
+2026-01-01 12:04:17 [ERROR] An unexpected error occurred during course analysis.
 Traceback (most recent call last):
   File "/home/francoisosmozis/hippique-orchestrator/hippique_orchestrator/runner.py", line 71, in run_course
     result = await analysis_pipeline.run_analysis_for_phase(
@@ -330,16 +330,16 @@ Traceback (most recent call last):
   File "/usr/lib/python3.12/unittest/mock.py", line 2262, in _execute_mock_call
     raise effect
 Exception: mock_error_from_analysis
-2026-01-01 11:52:38 [ERROR] Run phase failed for http://example.com/race/2025-12-29_R1C1 (phase: H30)
-2026-01-01 11:52:38 [INFO] Request finished
-2026-01-01 11:52:38 [INFO] HTTP Request: POST http://testserver/tasks/run-phase "HTTP/1.1 500 Internal Server Error"
+2026-01-01 12:04:17 [ERROR] Run phase failed for http://example.com/race/2025-12-29_R1C1 (phase: H30)
+2026-01-01 12:04:17 [INFO] Request finished
+2026-01-01 12:04:17 [INFO] HTTP Request: POST http://testserver/tasks/run-phase "HTTP/1.1 500 Internal Server Error"
 PASSED                                                                   [ 16%]
 tests/test_api_tasks.py::test_run_phase_task_exception_handling 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:38 [INFO] Request started
-2026-01-01 11:52:38 [INFO] Received run-phase request for http://example.com/race/2025-12-29_R1C1 (phase: H30)
-2026-01-01 11:52:38 [INFO] Starting Firestore-native course analysis
-2026-01-01 11:52:38 [ERROR] An unexpected error occurred during course analysis.
+2026-01-01 12:04:17 [INFO] Request started
+2026-01-01 12:04:17 [INFO] Received run-phase request for http://example.com/race/2025-12-29_R1C1 (phase: H30)
+2026-01-01 12:04:17 [INFO] Starting Firestore-native course analysis
+2026-01-01 12:04:17 [ERROR] An unexpected error occurred during course analysis.
 Traceback (most recent call last):
   File "/home/francoisosmozis/hippique-orchestrator/hippique_orchestrator/runner.py", line 71, in run_course
     result = await analysis_pipeline.run_analysis_for_phase(
@@ -347,50 +347,50 @@ Traceback (most recent call last):
   File "/usr/lib/python3.12/unittest/mock.py", line 2262, in _execute_mock_call
     raise effect
 Exception: unexpected_error
-2026-01-01 11:52:38 [ERROR] Run phase failed for http://example.com/race/2025-12-29_R1C1 (phase: H30)
-2026-01-01 11:52:38 [INFO] Request finished
-2026-01-01 11:52:38 [INFO] HTTP Request: POST http://testserver/tasks/run-phase "HTTP/1.1 500 Internal Server Error"
+2026-01-01 12:04:17 [ERROR] Run phase failed for http://example.com/race/2025-12-29_R1C1 (phase: H30)
+2026-01-01 12:04:17 [INFO] Request finished
+2026-01-01 12:04:17 [INFO] HTTP Request: POST http://testserver/tasks/run-phase "HTTP/1.1 500 Internal Server Error"
 PASSED                                                                   [ 16%]
 tests/test_api_tasks.py::test_bootstrap_day_task_success 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:38 [INFO] Request started
-2026-01-01 11:52:38 [INFO] Received request to bootstrap day 2026-01-01
-2026-01-01 11:52:38 [INFO] Building daily plan for 2026-01-01...
-2026-01-01 11:52:38 [INFO] Plan built: 2 races for 2026-01-01.
-2026-01-01 11:52:38 [INFO] Bootstrap day completed. Scheduled 3 tasks.
-2026-01-01 11:52:38 [INFO] Request finished
-2026-01-01 11:52:38 [INFO] HTTP Request: POST http://testserver/tasks/bootstrap-day "HTTP/1.1 200 OK"
+2026-01-01 12:04:17 [INFO] Request started
+2026-01-01 12:04:17 [INFO] Received request to bootstrap day 2026-01-01
+2026-01-01 12:04:17 [INFO] Building daily plan for 2026-01-01...
+2026-01-01 12:04:17 [INFO] Plan built: 2 races for 2026-01-01.
+2026-01-01 12:04:17 [INFO] Bootstrap day completed. Scheduled 3 tasks.
+2026-01-01 12:04:17 [INFO] Request finished
+2026-01-01 12:04:17 [INFO] HTTP Request: POST http://testserver/tasks/bootstrap-day "HTTP/1.1 200 OK"
 PASSED                                                                   [ 16%]
 tests/test_api_tasks.py::test_bootstrap_day_task_empty_plan 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:38 [INFO] Request started
-2026-01-01 11:52:38 [INFO] Received request to bootstrap day 2026-01-01
-2026-01-01 11:52:38 [INFO] Building daily plan for 2026-01-01...
-2026-01-01 11:52:38 [WARNING] Empty plan for 2026-01-01. No tasks to schedule.
-2026-01-01 11:52:38 [INFO] Request finished
-2026-01-01 11:52:38 [INFO] HTTP Request: POST http://testserver/tasks/bootstrap-day "HTTP/1.1 404 Not Found"
+2026-01-01 12:04:17 [INFO] Request started
+2026-01-01 12:04:17 [INFO] Received request to bootstrap day 2026-01-01
+2026-01-01 12:04:17 [INFO] Building daily plan for 2026-01-01...
+2026-01-01 12:04:17 [WARNING] Empty plan for 2026-01-01. No tasks to schedule.
+2026-01-01 12:04:17 [INFO] Request finished
+2026-01-01 12:04:17 [INFO] HTTP Request: POST http://testserver/tasks/bootstrap-day "HTTP/1.1 404 Not Found"
 PASSED                                                                   [ 16%]
 tests/test_dutching_allocation.py::test_equal_profit_stakes_sum PASSED   [ 16%]
 tests/test_env_utils.py::test_get_env_missing_warns 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:38 [WARNING] Environment variable MISSING_VAR not set; using default 'fallback'
+2026-01-01 12:04:17 [WARNING] Environment variable MISSING_VAR not set; using default 'fallback'
 PASSED                                                                   [ 17%]
 tests/test_env_utils.py::test_get_env_required_missing_logs_critical 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:38 [CRITICAL] Missing required environment variable 'REQUIRED_MISSING'. App may not function correctly.
+2026-01-01 12:04:17 [CRITICAL] Missing required environment variable 'REQUIRED_MISSING'. App may not function correctly.
 PASSED                                                                   [ 17%]
 tests/test_env_utils.py::test_get_env_required_missing_in_prod_exits 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:38 [CRITICAL] Missing required environment variable 'MY_VAR'. App may not function correctly.
-2026-01-01 11:52:38 [CRITICAL] IS_PROD=True. Exiting.
+2026-01-01 12:04:17 [CRITICAL] Missing required environment variable 'MY_VAR'. App may not function correctly.
+2026-01-01 12:04:17 [CRITICAL] IS_PROD=True. Exiting.
 PASSED                                                                   [ 17%]
 tests/test_env_utils.py::test_get_env_alias_support 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:38 [INFO] Environment variable ALIAS_VAR='alias_value' used as alias for PRIMARY_VAR
+2026-01-01 12:04:17 [INFO] Environment variable ALIAS_VAR='alias_value' used as alias for PRIMARY_VAR
 PASSED                                                                   [ 17%]
 tests/test_env_utils.py::test_get_env_casting_error_returns_default 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:38 [ERROR] Invalid value for environment variable 'INT_VAR': 'not-an-int'. Returning default.
+2026-01-01 12:04:17 [ERROR] Invalid value for environment variable 'INT_VAR': 'not-an-int'. Returning default.
 Traceback (most recent call last):
   File "/home/francoisosmozis/hippique-orchestrator/config/env_utils.py", line 75, in get_env
     value = cast(raw_value)
@@ -496,11 +496,11 @@ tests/test_ev_calculator.py::test_compute_ev_roi_with_optimize_true PASSED [ 33%
 tests/test_ev_calculator.py::test_compute_ev_roi_variance_capping PASSED [ 33%]
 tests/test_ev_thresholds.py::test_ev_sp_below_default_threshold 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:39 [INFO] [validate_ev] context {'p_success': None, 'payout_expected': None, 'stake': None, 'EV_ratio': None}
+2026-01-01 12:04:17 [INFO] [validate_ev] context {'p_success': None, 'payout_expected': None, 'stake': None, 'EV_ratio': None}
 PASSED                                                                   [ 33%]
 tests/test_ev_thresholds.py::test_ev_global_below_default_threshold 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:39 [INFO] [validate_ev] context {'p_success': None, 'payout_expected': None, 'stake': None, 'EV_ratio': None}
+2026-01-01 12:04:17 [INFO] [validate_ev] context {'p_success': None, 'payout_expected': None, 'stake': None, 'EV_ratio': None}
 PASSED                                                                   [ 33%]
 tests/test_ev_thresholds.py::test_validate_policy_roi_below_threshold PASSED [ 34%]
 tests/test_ev_thresholds.py::test_validate_policy_raises_on_low_roi_message PASSED [ 34%]
@@ -510,12 +510,12 @@ tests/test_evaluate_combo.py::test_env_path_present PASSED               [ 34%]
 tests/test_evaluate_combo.py::test_gates_when_calibration_missing PASSED [ 34%]
 tests/test_evaluate_combo.py::test_override_missing_calibration 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:39 [WARNING] [COMBO] allow_heuristic override ignored; payout calibration is mandatory for combo evaluation.
+2026-01-01 12:04:17 [WARNING] [COMBO] allow_heuristic override ignored; payout calibration is mandatory for combo evaluation.
 PASSED                                                                   [ 35%]
 tests/test_evaluate_combo.py::test_with_calibration PASSED               [ 35%]
 tests/test_evaluate_combo.py::test_marks_unreliable_probabilities 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:39 [WARNING] [COMBO] allow_heuristic override ignored; payout calibration is mandatory for combo evaluation.
+2026-01-01 12:04:17 [WARNING] [COMBO] allow_heuristic override ignored; payout calibration is mandatory for combo evaluation.
 PASSED                                                                   [ 35%]
 tests/test_fetch_je_stats.py::test_normalise_text[  Test String  -teststring] PASSED [ 35%]
 tests/test_fetch_je_stats.py::test_normalise_text[\xc9curie Sp\xe9ciale-ecuriespeciale] PASSED [ 35%]
@@ -534,21 +534,21 @@ tests/test_fetch_je_stats.py::test_extract_rate_from_profile PASSED      [ 37%]
 tests/test_fetch_je_stats.py::test_discover_horse_url_by_name PASSED     [ 37%]
 tests/test_fetch_je_stats.py::test_discover_horse_url_by_name_http_error 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:39 [WARNING] Failed to fetch Geny search results for Bold Eagle
+2026-01-01 12:04:18 [WARNING] Failed to fetch Geny search results for Bold Eagle
 PASSED                                                                   [ 37%]
 tests/test_fetch_je_stats.py::test_parse_horse_percentages_success PASSED [ 38%]
 tests/test_fetch_je_stats.py::test_parse_horse_percentages_handles_failures 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:39 [WARNING] Failed to fetch horse page http://horse.url
+2026-01-01 12:04:18 [WARNING] Failed to fetch horse page http://horse.url
 PASSED                                                                   [ 38%]
 tests/test_fetch_je_stats.py::test_collect_stats_integration PASSED      [ 38%]
 tests/test_firestore_client.py::test_update_race_document_success 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:39 [INFO] Updating Firestore document
+2026-01-01 12:04:18 [INFO] Updating Firestore document
 PASSED                                                                   [ 38%]
 tests/test_firestore_client.py::test_update_race_document_handles_exception 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:39 [ERROR] Failed to update document some_id: Firestore unavailable
+2026-01-01 12:04:18 [ERROR] Failed to update document some_id: Firestore unavailable
 Traceback (most recent call last):
   File "/home/francoisosmozis/hippique-orchestrator/hippique_orchestrator/firestore_client.py", line 29, in update_race_document
     doc_ref = db.collection(config.FIRESTORE_COLLECTION).document(document_id)
@@ -565,19 +565,19 @@ Exception: Firestore unavailable
 PASSED                                                                   [ 38%]
 tests/test_firestore_client.py::test_update_race_document_skips_if_db_not_available 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:39 [WARNING] Firestore is not available, skipping update.
+2026-01-01 12:04:18 [WARNING] Firestore is not available, skipping update.
 PASSED                                                                   [ 38%]
 tests/test_firestore_client.py::test_get_races_for_date_success 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:39 [INFO] Queried races from Firestore
+2026-01-01 12:04:18 [INFO] Queried races from Firestore
 PASSED                                                                   [ 39%]
 tests/test_firestore_client.py::test_get_races_for_date_empty 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:39 [INFO] Queried races from Firestore
+2026-01-01 12:04:18 [INFO] Queried races from Firestore
 PASSED                                                                   [ 39%]
 tests/test_firestore_client.py::test_get_races_for_date_handles_exception 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:39 [ERROR] Failed to query races by date 2025-12-30: Query failed
+2026-01-01 12:04:18 [ERROR] Failed to query races by date 2025-12-30: Query failed
 Traceback (most recent call last):
   File "/home/francoisosmozis/hippique-orchestrator/hippique_orchestrator/firestore_client.py", line 51, in get_races_for_date
     races_ref = db.collection(config.FIRESTORE_COLLECTION)
@@ -600,29 +600,29 @@ tests/test_firestore_client.py::test_get_doc_id_from_url[invalid-url-2025-12-25-
 tests/test_firestore_client.py::test_get_doc_id_from_url[-2025-12-25-None] PASSED [ 40%]
 tests/test_firestore_client.py::test_get_processing_status_for_date_success 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:39 [INFO] Queried races from Firestore
+2026-01-01 12:04:18 [INFO] Queried races from Firestore
 PASSED                                                                   [ 40%]
 tests/test_firestore_client.py::test_get_processing_status_for_date_db_not_available PASSED [ 40%]
 tests/test_firestore_client.py::test_get_processing_status_for_date_empty_daily_plan 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:39 [INFO] Queried races from Firestore
+2026-01-01 12:04:18 [INFO] Queried races from Firestore
 PASSED                                                                   [ 40%]
 tests/test_firestore_client.py::test_get_processing_status_for_date_unprocessed_races 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:39 [INFO] Queried races from Firestore
+2026-01-01 12:04:18 [INFO] Queried races from Firestore
 PASSED                                                                   [ 41%]
 tests/test_firestore_client.py::test_get_processing_status_for_date_error_decision 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:39 [INFO] Queried races from Firestore
+2026-01-01 12:04:18 [INFO] Queried races from Firestore
 PASSED                                                                   [ 41%]
 tests/test_firestore_client.py::test_get_processing_status_for_date_unknown_decision 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:39 [INFO] Queried races from Firestore
+2026-01-01 12:04:18 [INFO] Queried races from Firestore
 PASSED                                                                   [ 41%]
 tests/test_gcs_client_extended.py::test_gcs_manager_init PASSED          [ 41%]
 tests/test_gcs_client_extended.py::test_gcs_manager_init_no_bucket 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:39 [WARNING] GCS_BUCKET is not set in the configuration. GCS operations will fail.
+2026-01-01 12:04:18 [WARNING] GCS_BUCKET is not set in the configuration. GCS operations will fail.
 PASSED                                                                   [ 41%]
 tests/test_gcs_client_extended.py::test_gcs_manager_lazy_init PASSED     [ 41%]
 tests/test_gcs_client_extended.py::test_get_gcs_path PASSED              [ 42%]
@@ -630,19 +630,19 @@ tests/test_gcs_client_extended.py::test_file_exists PASSED               [ 42%]
 tests/test_gcs_client_extended.py::test_get_gcs_fs PASSED                [ 42%]
 tests/test_gcs_client_extended.py::test_get_gcs_manager_no_bucket 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:39 [INFO] GCS operations are disabled because BUCKET_NAME is not set.
+2026-01-01 12:04:18 [INFO] GCS operations are disabled because BUCKET_NAME is not set.
 PASSED                                                                   [ 42%]
 tests/test_gcs_client_extended.py::test_get_gcs_manager_singleton PASSED [ 42%]
 tests/test_gcs_client_extended.py::test_get_gcs_fs_no_manager 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:39 [INFO] GCS operations are disabled because BUCKET_NAME is not set.
-2026-01-01 11:52:39 [ERROR] GCSManager is not initialized. Cannot get filesystem.
+2026-01-01 12:04:18 [INFO] GCS operations are disabled because BUCKET_NAME is not set.
+2026-01-01 12:04:18 [ERROR] GCSManager is not initialized. Cannot get filesystem.
 PASSED                                                                   [ 42%]
 tests/test_gcs_client_extended.py::test_build_gcs_path PASSED            [ 42%]
 tests/test_gcs_client_extended.py::test_build_gcs_path_no_manager 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:39 [INFO] GCS operations are disabled because BUCKET_NAME is not set.
-2026-01-01 11:52:39 [ERROR] GCSManager is not initialized. Cannot build GCS path.
+2026-01-01 12:04:18 [INFO] GCS operations are disabled because BUCKET_NAME is not set.
+2026-01-01 12:04:18 [ERROR] GCSManager is not initialized. Cannot build GCS path.
 PASSED                                                                   [ 43%]
 tests/test_gcs_utils.py::test_is_gcs_enabled PASSED                      [ 43%]
 tests/test_gcs_utils.py::test_is_gcs_disabled PASSED                     [ 43%]
@@ -651,7 +651,7 @@ tests/test_gcs_utils.py::test_disabled_reason_when_enabled PASSED        [ 43%]
 tests/test_gcs_utils.py::test_get_gcs_client_initialization_success PASSED [ 43%]
 tests/test_gcs_utils.py::test_get_gcs_client_initialization_failure 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:39 [ERROR] Failed to initialize GCS client: Auth failure
+2026-01-01 12:04:18 [ERROR] Failed to initialize GCS client: Auth failure
 Traceback (most recent call last):
   File "/home/francoisosmozis/hippique-orchestrator/hippique_orchestrator/gcs_utils.py", line 23, in _get_gcs_client
     _gcs_client = storage.Client()
@@ -670,7 +670,7 @@ tests/test_gcs_utils.py::test_upload_file_gcs_disabled PASSED            [ 44%]
 tests/test_gcs_utils.py::test_upload_file_client_is_none PASSED          [ 44%]
 tests/test_gcs_utils.py::test_upload_file_local_file_not_found 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:39 [WARNING] Local file not found, cannot upload to GCS: nonexistent/file.json
+2026-01-01 12:04:18 [WARNING] Local file not found, cannot upload to GCS: nonexistent/file.json
 PASSED                                                                   [ 44%]
 tests/test_gcs_utils.py::test_upload_file_path_construction[data/snapshots/R1C1/file.json-prod/snapshots/R1C1/file.json] PASSED [ 44%]
 tests/test_gcs_utils.py::test_upload_file_path_construction[snapshots/R1C2/file.json-prod/snapshots/R1C2/file.json] PASSED [ 44%]
@@ -679,7 +679,7 @@ tests/test_gcs_utils.py::test_upload_file_path_construction[some/other/path/data
 tests/test_gcs_utils.py::test_upload_file_path_construction[unknown/path/file.json-prod/unknown/path/file.json] PASSED [ 45%]
 tests/test_gcs_utils.py::test_upload_file_gcs_api_error 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:39 [ERROR] Failed to upload data/snapshots/R1C1/file.json to GCS: 403 Permission denied
+2026-01-01 12:04:18 [ERROR] Failed to upload data/snapshots/R1C1/file.json to GCS: 403 Permission denied
 Traceback (most recent call last):
   File "/home/francoisosmozis/hippique-orchestrator/hippique_orchestrator/gcs_utils.py", line 85, in upload_file
     blob.upload_from_filename(str(local_file))
@@ -736,52 +736,52 @@ tests/test_pipeline_run.py::test_generate_tickets_abstains_when_global_roi_is_lo
 tests/test_pipeline_run.py::test_generate_tickets_creates_trio_ticket_with_best_roi PASSED [ 52%]
 tests/test_plan.py::test_build_plan_nominal_case 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:40 [INFO] Building plan for 2025-12-20 using Boturfers as the single source.
-2026-01-01 11:52:40 [INFO] Successfully fetched 2 races from Boturfers.
-2026-01-01 11:52:40 [INFO] Plan complete: 2 races with times
+2026-01-01 12:04:18 [INFO] Building plan for 2025-12-20 using Boturfers as the single source.
+2026-01-01 12:04:18 [INFO] Successfully fetched 2 races from Boturfers.
+2026-01-01 12:04:18 [INFO] Plan complete: 2 races with times
 PASSED                                                                   [ 52%]
 tests/test_plan.py::test_build_plan_scraper_fails 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:40 [INFO] Building plan for 2025-12-20 using Boturfers as the single source.
-2026-01-01 11:52:40 [WARNING] Failed to fetch programme from Boturfers or it was empty.
+2026-01-01 12:04:18 [INFO] Building plan for 2025-12-20 using Boturfers as the single source.
+2026-01-01 12:04:18 [WARNING] Failed to fetch programme from Boturfers or it was empty.
 PASSED                                                                   [ 52%]
 tests/test_plan.py::test_build_plan_handles_malformed_data 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:40 [INFO] Building plan for 2025-12-20 using Boturfers as the single source.
-2026-01-01 11:52:40 [INFO] Successfully fetched 3 races from Boturfers.
-2026-01-01 11:52:40 [WARNING] Could not parse R/C from 'invalid'. Skipping race.
-2026-01-01 11:52:40 [INFO] Plan complete: 1 races with times
+2026-01-01 12:04:18 [INFO] Building plan for 2025-12-20 using Boturfers as the single source.
+2026-01-01 12:04:18 [INFO] Successfully fetched 3 races from Boturfers.
+2026-01-01 12:04:18 [WARNING] Could not parse R/C from 'invalid'. Skipping race.
+2026-01-01 12:04:18 [INFO] Plan complete: 1 races with times
 PASSED                                                                   [ 52%]
 tests/test_plan.py::test_build_plan_today_string 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:40 [INFO] Building plan for 2026-01-01 using Boturfers as the single source.
-2026-01-01 11:52:40 [WARNING] Failed to fetch programme from Boturfers or it was empty.
+2026-01-01 12:04:18 [INFO] Building plan for 2026-01-01 using Boturfers as the single source.
+2026-01-01 12:04:18 [WARNING] Failed to fetch programme from Boturfers or it was empty.
 PASSED                                                                   [ 52%]
 tests/test_plan.py::test_build_plan_empty_enriched_plan 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:40 [INFO] Building plan for 2025-12-20 using Boturfers as the single source.
-2026-01-01 11:52:40 [INFO] Successfully fetched 1 races from Boturfers.
-2026-01-01 11:52:40 [WARNING] Could not parse R/C from 'invalid'. Skipping race.
-2026-01-01 11:52:40 [INFO] Plan complete: 0 races with times
+2026-01-01 12:04:18 [INFO] Building plan for 2025-12-20 using Boturfers as the single source.
+2026-01-01 12:04:18 [INFO] Successfully fetched 1 races from Boturfers.
+2026-01-01 12:04:18 [WARNING] Could not parse R/C from 'invalid'. Skipping race.
+2026-01-01 12:04:18 [INFO] Plan complete: 0 races with times
 PASSED                                                                   [ 53%]
 tests/test_plan.py::test_build_plan_handles_compact_rc_format 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:40 [INFO] Building plan for 2025-12-20 using Boturfers as the single source.
-2026-01-01 11:52:40 [INFO] Successfully fetched 1 races from Boturfers.
-2026-01-01 11:52:40 [INFO] Plan complete: 1 races with times
+2026-01-01 12:04:18 [INFO] Building plan for 2025-12-20 using Boturfers as the single source.
+2026-01-01 12:04:18 [INFO] Successfully fetched 1 races from Boturfers.
+2026-01-01 12:04:18 [INFO] Plan complete: 1 races with times
 PASSED                                                                   [ 53%]
 tests/test_plan.py::test_build_plan_sync_wrapper 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:40 [WARNING] build_plan() is deprecated, use build_plan_async() instead
+2026-01-01 12:04:18 [WARNING] build_plan() is deprecated, use build_plan_async() instead
 PASSED                                                                   [ 53%]
 tests/test_plan.py::test_build_plan_sync_raises_in_event_loop 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:40 [WARNING] build_plan() is deprecated, use build_plan_async() instead
-2026-01-01 11:52:40 [ERROR] Cannot use build_plan() from within event loop. Use build_plan_async() instead.
+2026-01-01 12:04:18 [WARNING] build_plan() is deprecated, use build_plan_async() instead
+2026-01-01 12:04:18 [ERROR] Cannot use build_plan() from within event loop. Use build_plan_async() instead.
 PASSED                                                                   [ 53%]
 tests/test_plan.py::test_build_plan_sync_reraises_other_runtime_errors 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:40 [WARNING] build_plan() is deprecated, use build_plan_async() instead
+2026-01-01 12:04:18 [WARNING] build_plan() is deprecated, use build_plan_async() instead
 PASSED                                                                   [ 53%]
 tests/test_resolve_course_id.py::test_resolve_course_context_with_fallback PASSED [ 53%]
 tests/test_resolve_course_id.py::test_resolve_course_context_picks_closest_future_entry PASSED [ 54%]
@@ -793,57 +793,57 @@ tests/test_roi_rebalancer.py::test_plan_serialisation_round_trip PASSED  [ 54%]
 tests/test_roi_rebalancer.py::test_allocation_plan_requires_positive_bankroll PASSED [ 55%]
 tests/test_scheduler.py::test_schedule_all_races_dry_run_no_force 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:40 [INFO] --- Starting schedule_all_races (Force: False, Dry Run: True) ---
-2026-01-01 11:52:40 [WARNING] Skipping task: Schedule time 2026-01-01T09:22:00+00:00 is in the past.
-2026-01-01 11:52:40 [WARNING] Skipping task: Schedule time 2026-01-01T09:47:00+00:00 is in the past.
-2026-01-01 11:52:40 [INFO] Calculation complete. Candidates: 2, Skipped: 2
-2026-01-01 11:52:40 [INFO] --- Dry run complete. Returning calculated tasks. ---
+2026-01-01 12:04:19 [INFO] --- Starting schedule_all_races (Force: False, Dry Run: True) ---
+2026-01-01 12:04:19 [WARNING] Skipping task: Schedule time 2026-01-01T09:34:00+00:00 is in the past.
+2026-01-01 12:04:19 [WARNING] Skipping task: Schedule time 2026-01-01T09:59:00+00:00 is in the past.
+2026-01-01 12:04:19 [INFO] Calculation complete. Candidates: 2, Skipped: 2
+2026-01-01 12:04:19 [INFO] --- Dry run complete. Returning calculated tasks. ---
 PASSED                                                                   [ 55%]
 tests/test_scheduler.py::test_schedule_all_races_dry_run_with_force 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:40 [INFO] --- Starting schedule_all_races (Force: True, Dry Run: True) ---
-2026-01-01 11:52:40 [INFO] [Force Mode] Forced schedule to now + 2 minutes: 2026-01-01T10:54:40.434357+00:00
-2026-01-01 11:52:40 [INFO] [Force Mode] Forced schedule to now + 2 minutes: 2026-01-01T10:54:40.434678+00:00
-2026-01-01 11:52:40 [INFO] [Force Mode] Forced schedule to now + 2 minutes: 2026-01-01T10:54:40.434919+00:00
-2026-01-01 11:52:40 [INFO] [Force Mode] Forced schedule to now + 2 minutes: 2026-01-01T10:54:40.435170+00:00
-2026-01-01 11:52:40 [INFO] Calculation complete. Candidates: 4, Skipped: 0
-2026-01-01 11:52:40 [INFO] --- Dry run complete. Returning calculated tasks. ---
+2026-01-01 12:04:19 [INFO] --- Starting schedule_all_races (Force: True, Dry Run: True) ---
+2026-01-01 12:04:19 [INFO] [Force Mode] Forced schedule to now + 2 minutes: 2026-01-01T11:06:19.084791+00:00
+2026-01-01 12:04:19 [INFO] [Force Mode] Forced schedule to now + 2 minutes: 2026-01-01T11:06:19.085241+00:00
+2026-01-01 12:04:19 [INFO] [Force Mode] Forced schedule to now + 2 minutes: 2026-01-01T11:06:19.085759+00:00
+2026-01-01 12:04:19 [INFO] [Force Mode] Forced schedule to now + 2 minutes: 2026-01-01T11:06:19.086266+00:00
+2026-01-01 12:04:19 [INFO] Calculation complete. Candidates: 4, Skipped: 0
+2026-01-01 12:04:19 [INFO] --- Dry run complete. Returning calculated tasks. ---
 PASSED                                                                   [ 55%]
 tests/test_scheduler.py::test_schedule_all_races_real_run_with_force 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:40 [INFO] --- Starting schedule_all_races (Force: True, Dry Run: False) ---
-2026-01-01 11:52:40 [INFO] [Force Mode] Forced schedule to now + 2 minutes: 2026-01-01T10:54:40.444708+00:00
-2026-01-01 11:52:40 [INFO] [Force Mode] Forced schedule to now + 2 minutes: 2026-01-01T10:54:40.445425+00:00
-2026-01-01 11:52:40 [INFO] [Force Mode] Forced schedule to now + 2 minutes: 2026-01-01T10:54:40.445873+00:00
-2026-01-01 11:52:40 [INFO] [Force Mode] Forced schedule to now + 2 minutes: 2026-01-01T10:54:40.446318+00:00
-2026-01-01 11:52:40 [INFO] Calculation complete. Candidates: 4, Skipped: 0
-2026-01-01 11:52:40 [INFO] --- Executing real run. Initializing Cloud Tasks client. ---
-2026-01-01 11:52:40 [INFO] Enqueuing Cloud Task
-2026-01-01 11:52:40 [INFO] Task created: <MagicMock name='projects/p/locations/l/queues/q/tasks/t.name' id='139887099462720'>
-2026-01-01 11:52:40 [INFO] Enqueuing Cloud Task
-2026-01-01 11:52:40 [INFO] Task created: <MagicMock name='projects/p/locations/l/queues/q/tasks/t.name' id='139887099462720'>
-2026-01-01 11:52:40 [INFO] Enqueuing Cloud Task
-2026-01-01 11:52:40 [INFO] Task created: <MagicMock name='projects/p/locations/l/queues/q/tasks/t.name' id='139887099462720'>
-2026-01-01 11:52:40 [INFO] Enqueuing Cloud Task
-2026-01-01 11:52:40 [INFO] Task created: <MagicMock name='projects/p/locations/l/queues/q/tasks/t.name' id='139887099462720'>
-2026-01-01 11:52:40 [INFO] --- schedule_all_races complete. ---
+2026-01-01 12:04:19 [INFO] --- Starting schedule_all_races (Force: True, Dry Run: False) ---
+2026-01-01 12:04:19 [INFO] [Force Mode] Forced schedule to now + 2 minutes: 2026-01-01T11:06:19.095244+00:00
+2026-01-01 12:04:19 [INFO] [Force Mode] Forced schedule to now + 2 minutes: 2026-01-01T11:06:19.095732+00:00
+2026-01-01 12:04:19 [INFO] [Force Mode] Forced schedule to now + 2 minutes: 2026-01-01T11:06:19.096040+00:00
+2026-01-01 12:04:19 [INFO] [Force Mode] Forced schedule to now + 2 minutes: 2026-01-01T11:06:19.096384+00:00
+2026-01-01 12:04:19 [INFO] Calculation complete. Candidates: 4, Skipped: 0
+2026-01-01 12:04:19 [INFO] --- Executing real run. Initializing Cloud Tasks client. ---
+2026-01-01 12:04:19 [INFO] Enqueuing Cloud Task
+2026-01-01 12:04:19 [INFO] Task created: <MagicMock name='projects/p/locations/l/queues/q/tasks/t.name' id='140236885502016'>
+2026-01-01 12:04:19 [INFO] Enqueuing Cloud Task
+2026-01-01 12:04:19 [INFO] Task created: <MagicMock name='projects/p/locations/l/queues/q/tasks/t.name' id='140236885502016'>
+2026-01-01 12:04:19 [INFO] Enqueuing Cloud Task
+2026-01-01 12:04:19 [INFO] Task created: <MagicMock name='projects/p/locations/l/queues/q/tasks/t.name' id='140236885502016'>
+2026-01-01 12:04:19 [INFO] Enqueuing Cloud Task
+2026-01-01 12:04:19 [INFO] Task created: <MagicMock name='projects/p/locations/l/queues/q/tasks/t.name' id='140236885502016'>
+2026-01-01 12:04:19 [INFO] --- schedule_all_races complete. ---
 PASSED                                                                   [ 55%]
 tests/test_scheduler.py::test_schedule_all_races_real_run_no_force 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:40 [INFO] --- Starting schedule_all_races (Force: False, Dry Run: False) ---
-2026-01-01 11:52:40 [WARNING] Skipping task: Schedule time 2026-01-01T09:22:00+00:00 is in the past.
-2026-01-01 11:52:40 [WARNING] Skipping task: Schedule time 2026-01-01T09:47:00+00:00 is in the past.
-2026-01-01 11:52:40 [INFO] Calculation complete. Candidates: 2, Skipped: 2
-2026-01-01 11:52:40 [INFO] --- Executing real run. Initializing Cloud Tasks client. ---
-2026-01-01 11:52:40 [INFO] Enqueuing Cloud Task
-2026-01-01 11:52:40 [INFO] Task created: <MagicMock name='projects/p/locations/l/queues/q/tasks/t.name' id='139887093053344'>
-2026-01-01 11:52:40 [INFO] Enqueuing Cloud Task
-2026-01-01 11:52:40 [INFO] Task created: <MagicMock name='projects/p/locations/l/queues/q/tasks/t.name' id='139887093053344'>
-2026-01-01 11:52:40 [INFO] --- schedule_all_races complete. ---
+2026-01-01 12:04:19 [INFO] --- Starting schedule_all_races (Force: False, Dry Run: False) ---
+2026-01-01 12:04:19 [WARNING] Skipping task: Schedule time 2026-01-01T09:34:00+00:00 is in the past.
+2026-01-01 12:04:19 [WARNING] Skipping task: Schedule time 2026-01-01T09:59:00+00:00 is in the past.
+2026-01-01 12:04:19 [INFO] Calculation complete. Candidates: 2, Skipped: 2
+2026-01-01 12:04:19 [INFO] --- Executing real run. Initializing Cloud Tasks client. ---
+2026-01-01 12:04:19 [INFO] Enqueuing Cloud Task
+2026-01-01 12:04:19 [INFO] Task created: <MagicMock name='projects/p/locations/l/queues/q/tasks/t.name' id='140236885476224'>
+2026-01-01 12:04:19 [INFO] Enqueuing Cloud Task
+2026-01-01 12:04:19 [INFO] Task created: <MagicMock name='projects/p/locations/l/queues/q/tasks/t.name' id='140236885476224'>
+2026-01-01 12:04:19 [INFO] --- schedule_all_races complete. ---
 PASSED                                                                   [ 55%]
 tests/test_scheduler_extended.py::test_calculate_task_schedule_invalid_phase_error 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:40 [ERROR] Error calculating schedule time: invalid literal for int() with base 10: 'NVALID'
+2026-01-01 12:04:19 [ERROR] Error calculating schedule time: invalid literal for int() with base 10: 'NVALID'
 Traceback (most recent call last):
   File "/home/francoisosmozis/hippique-orchestrator/hippique_orchestrator/scheduler.py", line 35, in _calculate_task_schedule
     phase_minutes = int(phase[1:])
@@ -852,7 +852,7 @@ ValueError: invalid literal for int() with base 10: 'NVALID'
 PASSED                                                                   [ 55%]
 tests/test_scheduler_extended.py::test_calculate_task_schedule_invalid_race_time_error 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:40 [ERROR] Error calculating schedule time: Invalid isoformat string: '2025-01-01Tnot-a-time'
+2026-01-01 12:04:19 [ERROR] Error calculating schedule time: Invalid isoformat string: '2025-01-01Tnot-a-time'
 Traceback (most recent call last):
   File "/home/francoisosmozis/hippique-orchestrator/hippique_orchestrator/scheduler.py", line 36, in _calculate_task_schedule
     race_datetime_local = datetime.fromisoformat(f"{date}T{race_time_local}")
@@ -861,11 +861,11 @@ ValueError: Invalid isoformat string: '2025-01-01Tnot-a-time'
 PASSED                                                                   [ 56%]
 tests/test_scheduler_extended.py::test_enqueue_run_task_no_service_url 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:40 [ERROR] Service URL is not configured. Cannot create task.
+2026-01-01 12:04:19 [ERROR] Service URL is not configured. Cannot create task.
 PASSED                                                                   [ 56%]
 tests/test_scheduler_extended.py::test_enqueue_run_task_oidc_config_missing 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:40 [ERROR] Failed to create task for http://example.com/race: TASK_OIDC_SA_EMAIL must be set when REQUIRE_AUTH is True.
+2026-01-01 12:04:19 [ERROR] Failed to create task for http://example.com/race: TASK_OIDC_SA_EMAIL must be set when REQUIRE_AUTH is True.
 Traceback (most recent call last):
   File "/home/francoisosmozis/hippique-orchestrator/hippique_orchestrator/scheduler.py", line 106, in enqueue_run_task
     raise ValueError("TASK_OIDC_SA_EMAIL must be set when REQUIRE_AUTH is True.")
@@ -873,11 +873,11 @@ ValueError: TASK_OIDC_SA_EMAIL must be set when REQUIRE_AUTH is True.
 PASSED                                                                   [ 56%]
 tests/test_scheduler_extended.py::test_enqueue_run_task_permission_denied 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:40 [CRITICAL] Permission denied to create Cloud Task. Please grant 'roles/cloudtasks.enqueuer' to 'sa@example.com'. Original error: 403 Forbidden by policy
+2026-01-01 12:04:19 [CRITICAL] Permission denied to create Cloud Task. Please grant 'roles/cloudtasks.enqueuer' to 'sa@example.com'. Original error: 403 Forbidden by policy
 PASSED                                                                   [ 56%]
 tests/test_scheduler_extended.py::test_enqueue_run_task_generic_exception 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:40 [ERROR] Failed to create task for http://example.com/race: Network error
+2026-01-01 12:04:19 [ERROR] Failed to create task for http://example.com/race: Network error
 Traceback (most recent call last):
   File "/home/francoisosmozis/hippique-orchestrator/hippique_orchestrator/scheduler.py", line 124, in enqueue_run_task
     response = client.create_task(parent=parent_path, task=task)
@@ -894,11 +894,11 @@ Exception: Network error
 PASSED                                                                   [ 56%]
 tests/test_scheduler_extended.py::test_schedule_all_races_real_run_no_service_url 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:40 [CRITICAL] Cannot execute real run without a service_url.
+2026-01-01 12:04:19 [CRITICAL] Cannot execute real run without a service_url.
 PASSED                                                                   [ 56%]
 tests/test_scheduler_extended.py::test_schedule_all_races_cloud_tasks_client_init_fails 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:40 [CRITICAL] Failed to initialize Cloud Tasks client: Client init failed
+2026-01-01 12:04:19 [CRITICAL] Failed to initialize Cloud Tasks client: Client init failed
 Traceback (most recent call last):
   File "/home/francoisosmozis/hippique-orchestrator/hippique_orchestrator/scheduler.py", line 209, in schedule_all_races
     client = tasks_v2.CloudTasksClient()
@@ -915,14 +915,14 @@ Exception: Client init failed
 PASSED                                                                   [ 57%]
 tests/test_scheduler_extended.py::test_schedule_all_races_results_are_sorted 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:40 [INFO] --- Starting schedule_all_races (Force: True, Dry Run: False) ---
-2026-01-01 11:52:40 [INFO] [Force Mode] Forced schedule to now + 2 minutes: 2026-01-01T10:54:40.584504+00:00
-2026-01-01 11:52:40 [INFO] [Force Mode] Forced schedule to now + 2 minutes: 2026-01-01T10:54:40.584792+00:00
-2026-01-01 11:52:40 [INFO] [Force Mode] Forced schedule to now + 2 minutes: 2026-01-01T10:54:40.585025+00:00
-2026-01-01 11:52:40 [INFO] [Force Mode] Forced schedule to now + 2 minutes: 2026-01-01T10:54:40.585288+00:00
-2026-01-01 11:52:40 [INFO] Calculation complete. Candidates: 4, Skipped: 0
-2026-01-01 11:52:40 [INFO] --- Executing real run. Initializing Cloud Tasks client. ---
-2026-01-01 11:52:40 [INFO] --- schedule_all_races complete. ---
+2026-01-01 12:04:19 [INFO] --- Starting schedule_all_races (Force: True, Dry Run: False) ---
+2026-01-01 12:04:19 [INFO] [Force Mode] Forced schedule to now + 2 minutes: 2026-01-01T11:06:19.230146+00:00
+2026-01-01 12:04:19 [INFO] [Force Mode] Forced schedule to now + 2 minutes: 2026-01-01T11:06:19.230499+00:00
+2026-01-01 12:04:19 [INFO] [Force Mode] Forced schedule to now + 2 minutes: 2026-01-01T11:06:19.230752+00:00
+2026-01-01 12:04:19 [INFO] [Force Mode] Forced schedule to now + 2 minutes: 2026-01-01T11:06:19.230988+00:00
+2026-01-01 12:04:19 [INFO] Calculation complete. Candidates: 4, Skipped: 0
+2026-01-01 12:04:19 [INFO] --- Executing real run. Initializing Cloud Tasks client. ---
+2026-01-01 12:04:19 [INFO] --- schedule_all_races complete. ---
 PASSED                                                                   [ 57%]
 tests/test_scraper_boturfers.py::test_boturfers_fetcher_init_success PASSED [ 57%]
 tests/test_scraper_boturfers.py::test_boturfers_fetcher_init_value_error PASSED [ 57%]
@@ -952,7 +952,7 @@ tests/test_scraper_boturfers.py::test_fetcher_parse_race_runners_from_details_pa
 tests/test_scraper_boturfers.py::test_fetcher_get_snapshot_success PASSED [ 61%]
 tests/test_scraper_boturfers.py::test_fetcher_get_snapshot_fetch_html_fails 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:41 [ERROR] Erreur inattendue lors du fetch HTML de http://programme.url: Mock error
+2026-01-01 12:04:19 [ERROR] Erreur inattendue lors du fetch HTML de http://programme.url: Mock error
 Traceback (most recent call last):
   File "/home/francoisosmozis/hippique-orchestrator/hippique_orchestrator/scrapers/boturfers.py", line 51, in _fetch_html
     response = await client.get(self.race_url, headers=HTTP_HEADERS, timeout=20)
@@ -964,7 +964,7 @@ PASSED                                                                   [ 61%]
 tests/test_scraper_boturfers.py::test_fetcher_get_race_snapshot_success PASSED [ 61%]
 tests/test_scraper_boturfers.py::test_fetcher_get_race_snapshot_fetch_html_fails 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:41 [ERROR] Erreur inattendue lors du fetch HTML de http://race.url: Mock error
+2026-01-01 12:04:20 [ERROR] Erreur inattendue lors du fetch HTML de http://race.url: Mock error
 Traceback (most recent call last):
   File "/home/francoisosmozis/hippique-orchestrator/hippique_orchestrator/scrapers/boturfers.py", line 51, in _fetch_html
     response = await client.get(self.race_url, headers=HTTP_HEADERS, timeout=20)
@@ -996,36 +996,36 @@ tests/test_scraper_geny.py::test_slugify[   -] PASSED                    [ 65%]
 tests/test_scraper_geny.py::test_slugify[  _!@# my string 123-my-string-123] PASSED [ 65%]
 tests/test_scraper_geny.py::test_fetch_geny_programme_success 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:42 [INFO] Discovered 2 meetings from Geny
+2026-01-01 12:04:20 [INFO] Discovered 2 meetings from Geny
 PASSED                                                                   [ 65%]
 tests/test_scraper_geny.py::test_fetch_geny_programme_no_races_container 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:42 [WARNING] No 'next-races-container' found on Geny page.
+2026-01-01 12:04:20 [WARNING] No 'next-races-container' found on Geny page.
 PASSED                                                                   [ 65%]
 tests/test_scraper_geny.py::test_fetch_geny_programme_empty_rows 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:42 [INFO] Discovered 0 meetings from Geny
+2026-01-01 12:04:20 [INFO] Discovered 0 meetings from Geny
 PASSED                                                                   [ 65%]
 tests/test_scraper_geny.py::test_fetch_geny_programme_malformed_row_elements 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:42 [WARNING] Could not find meeting element 'th.race-name' in a row. Skipping row.
-2026-01-01 11:52:42 [INFO] Discovered 0 meetings from Geny
+2026-01-01 12:04:20 [WARNING] Could not find meeting element 'th.race-name' in a row. Skipping row.
+2026-01-01 12:04:20 [INFO] Discovered 0 meetings from Geny
 PASSED                                                                   [ 65%]
 tests/test_scraper_geny.py::test_fetch_geny_programme_httpx_request_error 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:42 [ERROR] An error occurred while requesting 'http://mock.url': Mock request error
+2026-01-01 12:04:20 [ERROR] An error occurred while requesting 'http://mock.url': Mock request error
 PASSED                                                                   [ 66%]
 tests/test_scraper_geny.py::test_fetch_geny_programme_httpx_status_error 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:42 [ERROR] Error response 404 while requesting 'http://mock.url': Not Found
+2026-01-01 12:04:20 [ERROR] Error response 404 while requesting 'http://mock.url': Not Found
 PASSED                                                                   [ 66%]
 tests/test_scraper_geny.py::test_fetch_geny_programme_id_course_from_href_fallback 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:42 [INFO] Discovered 1 meetings from Geny
+2026-01-01 12:04:20 [INFO] Discovered 1 meetings from Geny
 PASSED                                                                   [ 66%]
 tests/test_scraper_zeturf.py::test_fetch_race_snapshot_full_success 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:42 [INFO] [ZEturf] phase=H30 url=https://www.zeturf.fr/fr/course/2025-11-20/R1C1-saint-galmier partants=12
+2026-01-01 12:04:20 [INFO] [ZEturf] phase=H30 url=https://www.zeturf.fr/fr/course/2025-11-20/R1C1-saint-galmier partants=12
 PASSED                                                                   [ 66%]
 tests/test_scraper_zeturf.py::test_phase_norm[H-30-H30] PASSED           [ 66%]
 tests/test_scraper_zeturf.py::test_phase_norm[H30-H30] PASSED            [ 66%]
@@ -1043,87 +1043,87 @@ tests/test_scraper_zeturf.py::test_fetch_zeturf_race_details_h5_phase_input PASS
 tests/test_scraper_zeturf.py::test_fetch_zeturf_race_details_various_rc_formats PASSED [ 68%]
 tests/test_service.py::test_get_pronostics_page 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:42 [INFO] Request started
-2026-01-01 11:52:42 [INFO] Request finished
-2026-01-01 11:52:42 [INFO] HTTP Request: GET http://testserver/pronostics "HTTP/1.1 200 OK"
+2026-01-01 12:04:20 [INFO] Request started
+2026-01-01 12:04:20 [INFO] Request finished
+2026-01-01 12:04:20 [INFO] HTTP Request: GET http://testserver/pronostics "HTTP/1.1 200 OK"
 PASSED                                                                   [ 69%]
 tests/test_service.py::test_get_pronostics_data_empty_case 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:42 [INFO] Request started
-2026-01-01 11:52:42 [INFO] Request finished
-2026-01-01 11:52:42 [INFO] HTTP Request: GET http://testserver/api/pronostics?date=2025-01-01 "HTTP/1.1 200 OK"
+2026-01-01 12:04:20 [INFO] Request started
+2026-01-01 12:04:20 [INFO] Request finished
+2026-01-01 12:04:20 [INFO] HTTP Request: GET http://testserver/api/pronostics?date=2025-01-01 "HTTP/1.1 200 OK"
 PASSED                                                                   [ 69%]
 tests/test_service.py::test_get_pronostics_data_with_data 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:42 [INFO] Request started
-2026-01-01 11:52:42 [INFO] Request finished
-2026-01-01 11:52:42 [INFO] HTTP Request: GET http://testserver/api/pronostics?date=2025-01-01 "HTTP/1.1 200 OK"
+2026-01-01 12:04:21 [INFO] Request started
+2026-01-01 12:04:21 [INFO] Request finished
+2026-01-01 12:04:21 [INFO] HTTP Request: GET http://testserver/api/pronostics?date=2025-01-01 "HTTP/1.1 200 OK"
 PASSED                                                                   [ 69%]
 tests/test_service.py::test_get_ops_status 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:42 [INFO] Request started
-2026-01-01 11:52:42 [INFO] Request finished
-2026-01-01 11:52:42 [INFO] HTTP Request: GET http://testserver/ops/status?date=2025-01-01 "HTTP/1.1 200 OK"
+2026-01-01 12:04:21 [INFO] Request started
+2026-01-01 12:04:21 [INFO] Request finished
+2026-01-01 12:04:21 [INFO] HTTP Request: GET http://testserver/ops/status?date=2025-01-01 "HTTP/1.1 200 OK"
 PASSED                                                                   [ 69%]
 tests/test_service.py::test_get_ops_status_reason_if_empty 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:42 [INFO] Request started
-2026-01-01 11:52:42 [INFO] Request finished
-2026-01-01 11:52:42 [INFO] HTTP Request: GET http://testserver/ops/status?date=2025-01-01 "HTTP/1.1 200 OK"
+2026-01-01 12:04:21 [INFO] Request started
+2026-01-01 12:04:21 [INFO] Request finished
+2026-01-01 12:04:21 [INFO] HTTP Request: GET http://testserver/ops/status?date=2025-01-01 "HTTP/1.1 200 OK"
 PASSED                                                                   [ 69%]
 tests/test_service.py::test_health_check 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:42 [INFO] Request started
-2026-01-01 11:52:42 [INFO] Request finished
-2026-01-01 11:52:42 [INFO] HTTP Request: GET http://testserver/health "HTTP/1.1 200 OK"
+2026-01-01 12:04:21 [INFO] Request started
+2026-01-01 12:04:21 [INFO] Request finished
+2026-01-01 12:04:21 [INFO] HTTP Request: GET http://testserver/health "HTTP/1.1 200 OK"
 PASSED                                                                   [ 69%]
 tests/test_service.py::test_legacy_redirects 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:42 [INFO] Request started
-2026-01-01 11:52:42 [INFO] Request finished
-2026-01-01 11:52:42 [INFO] HTTP Request: GET http://testserver/pronostics/ui "HTTP/1.1 307 Temporary Redirect"
-2026-01-01 11:52:42 [INFO] Request started
-2026-01-01 11:52:42 [INFO] Request finished
-2026-01-01 11:52:42 [INFO] HTTP Request: GET http://testserver/api/pronostics/ui "HTTP/1.1 307 Temporary Redirect"
+2026-01-01 12:04:21 [INFO] Request started
+2026-01-01 12:04:21 [INFO] Request finished
+2026-01-01 12:04:21 [INFO] HTTP Request: GET http://testserver/pronostics/ui "HTTP/1.1 307 Temporary Redirect"
+2026-01-01 12:04:21 [INFO] Request started
+2026-01-01 12:04:21 [INFO] Request finished
+2026-01-01 12:04:21 [INFO] HTTP Request: GET http://testserver/api/pronostics/ui "HTTP/1.1 307 Temporary Redirect"
 PASSED                                                                   [ 70%]
 tests/test_service.py::test_post_ops_run_success 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:42 [INFO] Request started
-2026-01-01 11:52:42 [INFO] Manual run triggered for race R1C1 on 2026-01-01
-2026-01-01 11:52:42 [INFO] Successfully processed and saved manual run for 2026-01-01_R1C1
-2026-01-01 11:52:42 [INFO] Request finished
-2026-01-01 11:52:42 [INFO] HTTP Request: POST http://testserver/ops/run?rc=R1C1 "HTTP/1.1 200 OK"
+2026-01-01 12:04:21 [INFO] Request started
+2026-01-01 12:04:21 [INFO] Manual run triggered for race R1C1 on 2026-01-01
+2026-01-01 12:04:21 [INFO] Successfully processed and saved manual run for 2026-01-01_R1C1
+2026-01-01 12:04:21 [INFO] Request finished
+2026-01-01 12:04:21 [INFO] HTTP Request: POST http://testserver/ops/run?rc=R1C1 "HTTP/1.1 200 OK"
 PASSED                                                                   [ 70%]
 tests/test_service.py::test_api_pronostics_schema 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:42 [INFO] Request started
-2026-01-01 11:52:42 [INFO] Building plan for 2025-01-01 using Boturfers as the single source.
-2026-01-01 11:52:42 [INFO] Fetching programme from data source via URL: https://www.boturfers.fr/courses/2025-01-01
-2026-01-01 11:52:42 [INFO] Début du scraping du programme Boturfers.
-2026-01-01 11:52:42 [INFO] HTTP Request: GET https://www.boturfers.fr/courses/2025-01-01 "HTTP/1.1 404 Not Found"
-2026-01-01 11:52:42 [ERROR] Erreur HTTP lors du téléchargement de https://www.boturfers.fr/courses/2025-01-01: 404
-2026-01-01 11:52:42 [ERROR] Le scraping du programme a échoué ou n'a retourné aucune course.
-2026-01-01 11:52:42 [WARNING] Failed to fetch programme from Boturfers or it was empty.
-2026-01-01 11:52:42 [INFO] Request finished
-2026-01-01 11:52:42 [INFO] HTTP Request: GET http://testserver/api/pronostics?date=2025-01-01 "HTTP/1.1 200 OK"
+2026-01-01 12:04:21 [INFO] Request started
+2026-01-01 12:04:21 [INFO] Building plan for 2025-01-01 using Boturfers as the single source.
+2026-01-01 12:04:21 [INFO] Fetching programme from data source via URL: https://www.boturfers.fr/courses/2025-01-01
+2026-01-01 12:04:21 [INFO] Début du scraping du programme Boturfers.
+2026-01-01 12:04:21 [INFO] HTTP Request: GET https://www.boturfers.fr/courses/2025-01-01 "HTTP/1.1 404 Not Found"
+2026-01-01 12:04:21 [ERROR] Erreur HTTP lors du téléchargement de https://www.boturfers.fr/courses/2025-01-01: 404
+2026-01-01 12:04:21 [ERROR] Le scraping du programme a échoué ou n'a retourné aucune course.
+2026-01-01 12:04:21 [WARNING] Failed to fetch programme from Boturfers or it was empty.
+2026-01-01 12:04:21 [INFO] Request finished
+2026-01-01 12:04:21 [INFO] HTTP Request: GET http://testserver/api/pronostics?date=2025-01-01 "HTTP/1.1 200 OK"
 PASSED                                                                   [ 70%]
 tests/test_service.py::test_ui_contains_critical_elements_and_api_call 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:42 [INFO] Request started
-2026-01-01 11:52:42 [INFO] Request finished
-2026-01-01 11:52:42 [INFO] HTTP Request: GET http://testserver/pronostics "HTTP/1.1 200 OK"
+2026-01-01 12:04:21 [INFO] Request started
+2026-01-01 12:04:21 [INFO] Request finished
+2026-01-01 12:04:21 [INFO] HTTP Request: GET http://testserver/pronostics "HTTP/1.1 200 OK"
 PASSED                                                                   [ 70%]
 tests/test_service_smoke.py::test_ping_endpoint 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:42 [INFO] Request started
-2026-01-01 11:52:42 [INFO] Request finished
-2026-01-01 11:52:42 [INFO] HTTP Request: GET http://testserver/health "HTTP/1.1 200 OK"
+2026-01-01 12:04:21 [INFO] Request started
+2026-01-01 12:04:21 [INFO] Request finished
+2026-01-01 12:04:21 [INFO] HTTP Request: GET http://testserver/health "HTTP/1.1 200 OK"
 PASSED                                                                   [ 70%]
 tests/test_service_smoke.py::test_pronostics_endpoint_returns_data 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:42 [INFO] Request started
-2026-01-01 11:52:42 [INFO] Request finished
-2026-01-01 11:52:42 [INFO] HTTP Request: GET http://testserver/api/pronostics?date=2025-01-10 "HTTP/1.1 200 OK"
+2026-01-01 12:04:21 [INFO] Request started
+2026-01-01 12:04:21 [INFO] Request finished
+2026-01-01 12:04:21 [INFO] HTTP Request: GET http://testserver/api/pronostics?date=2025-01-10 "HTTP/1.1 200 OK"
 PASSED                                                                   [ 70%]
 tests/test_simulate_ev_module.py::test_implied_probs_normalizes PASSED   [ 71%]
 tests/test_simulate_ev_module.py::test_normalize_overround_balances_dict PASSED [ 71%]
@@ -1147,74 +1147,74 @@ tests/test_simulate_wrapper.py::test_fallback_uses_implied_odds PASSED   [ 73%]
 tests/test_simulate_wrapper.py::test_correlation_penalty_reduces_probability_and_ev PASSED [ 74%]
 tests/test_stats_provider.py::TestZoneTurfProviderParsing::test_parse_chrono_to_seconds[1'11"6-71.6] 
 -------------------------------- live log setup --------------------------------
-2026-01-01 11:52:42 [INFO] ZoneTurfProvider initialized.
+2026-01-01 12:04:21 [INFO] ZoneTurfProvider initialized.
 PASSED                                                                   [ 74%]
 tests/test_stats_provider.py::TestZoneTurfProviderParsing::test_parse_chrono_to_seconds[1'12''3-72.3] 
 -------------------------------- live log setup --------------------------------
-2026-01-01 11:52:42 [INFO] ZoneTurfProvider initialized.
+2026-01-01 12:04:21 [INFO] ZoneTurfProvider initialized.
 PASSED                                                                   [ 74%]
 tests/test_stats_provider.py::TestZoneTurfProviderParsing::test_parse_chrono_to_seconds[1'10"-70.0] 
 -------------------------------- live log setup --------------------------------
-2026-01-01 11:52:42 [INFO] ZoneTurfProvider initialized.
+2026-01-01 12:04:21 [INFO] ZoneTurfProvider initialized.
 PASSED                                                                   [ 74%]
 tests/test_stats_provider.py::TestZoneTurfProviderParsing::test_parse_chrono_to_seconds[59"8-59.8] 
 -------------------------------- live log setup --------------------------------
-2026-01-01 11:52:43 [INFO] ZoneTurfProvider initialized.
+2026-01-01 12:04:21 [INFO] ZoneTurfProvider initialized.
 PASSED                                                                   [ 74%]
 tests/test_stats_provider.py::TestZoneTurfProviderParsing::test_parse_chrono_to_seconds[None-None] 
 -------------------------------- live log setup --------------------------------
-2026-01-01 11:52:43 [INFO] ZoneTurfProvider initialized.
+2026-01-01 12:04:21 [INFO] ZoneTurfProvider initialized.
 PASSED                                                                   [ 74%]
 tests/test_stats_provider.py::TestZoneTurfProviderParsing::test_parse_chrono_to_seconds[-None] 
 -------------------------------- live log setup --------------------------------
-2026-01-01 11:52:43 [INFO] ZoneTurfProvider initialized.
+2026-01-01 12:04:21 [INFO] ZoneTurfProvider initialized.
 PASSED                                                                   [ 75%]
 tests/test_stats_provider.py::TestZoneTurfProviderParsing::test_parse_chrono_to_seconds[invalid-None] 
 -------------------------------- live log setup --------------------------------
-2026-01-01 11:52:43 [INFO] ZoneTurfProvider initialized.
+2026-01-01 12:04:21 [INFO] ZoneTurfProvider initialized.
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:43 [WARNING] Could not parse chrono string: invalid
+2026-01-01 12:04:21 [WARNING] Could not parse chrono string: invalid
 PASSED                                                                   [ 75%]
 tests/test_stats_provider.py::TestZoneTurfProviderParsing::test_fetch_horse_chrono_parsing 
 -------------------------------- live log setup --------------------------------
-2026-01-01 11:52:43 [INFO] ZoneTurfProvider initialized.
+2026-01-01 12:04:21 [INFO] ZoneTurfProvider initialized.
 PASSED                                                                   [ 75%]
 tests/test_stats_provider.py::TestZoneTurfProviderParsing::test_fetch_jockey_stats_parsing 
 -------------------------------- live log setup --------------------------------
-2026-01-01 11:52:43 [INFO] ZoneTurfProvider initialized.
+2026-01-01 12:04:22 [INFO] ZoneTurfProvider initialized.
 PASSED                                                                   [ 75%]
 tests/test_stats_provider.py::TestZoneTurfProviderParsing::test_fetch_trainer_stats_parsing 
 -------------------------------- live log setup --------------------------------
-2026-01-01 11:52:43 [INFO] ZoneTurfProvider initialized.
+2026-01-01 12:04:22 [INFO] ZoneTurfProvider initialized.
 PASSED                                                                   [ 75%]
 tests/test_stats_provider.py::TestZoneTurfIdResolution::test_resolve_entity_id_cache_hit 
 -------------------------------- live log setup --------------------------------
-2026-01-01 11:52:43 [INFO] ZoneTurfProvider initialized.
+2026-01-01 12:04:22 [INFO] ZoneTurfProvider initialized.
 PASSED                                                                   [ 75%]
 tests/test_stats_provider.py::TestZoneTurfIdResolution::test_resolve_entity_id_scraping 
 -------------------------------- live log setup --------------------------------
-2026-01-01 11:52:43 [INFO] ZoneTurfProvider initialized.
+2026-01-01 12:04:22 [INFO] ZoneTurfProvider initialized.
 PASSED                                                                   [ 76%]
 tests/test_stats_provider.py::TestZoneTurfIdResolution::test_resolve_entity_id_not_found 
 -------------------------------- live log setup --------------------------------
-2026-01-01 11:52:43 [INFO] ZoneTurfProvider initialized.
+2026-01-01 12:04:22 [INFO] ZoneTurfProvider initialized.
 PASSED                                                                   [ 76%]
 tests/test_stats_provider_extended.py::test_slugify PASSED               [ 76%]
 tests/test_stats_provider_extended.py::test_normalize_name 
 -------------------------------- live log setup --------------------------------
-2026-01-01 11:52:43 [INFO] ZoneTurfProvider initialized.
+2026-01-01 12:04:22 [INFO] ZoneTurfProvider initialized.
 PASSED                                                                   [ 76%]
 tests/test_stats_provider_extended.py::test_fetch_horse_chrono_success 
 -------------------------------- live log setup --------------------------------
-2026-01-01 11:52:44 [INFO] ZoneTurfProvider initialized.
+2026-01-01 12:04:22 [INFO] ZoneTurfProvider initialized.
 PASSED                                                                   [ 76%]
 tests/test_stats_provider_extended.py::test_fetch_jockey_stats_success 
 -------------------------------- live log setup --------------------------------
-2026-01-01 11:52:44 [INFO] ZoneTurfProvider initialized.
+2026-01-01 12:04:22 [INFO] ZoneTurfProvider initialized.
 PASSED                                                                   [ 76%]
 tests/test_stats_provider_extended.py::test_fetch_trainer_stats_success 
 -------------------------------- live log setup --------------------------------
-2026-01-01 11:52:44 [INFO] ZoneTurfProvider initialized.
+2026-01-01 12:04:22 [INFO] ZoneTurfProvider initialized.
 PASSED                                                                   [ 77%]
 tests/test_tickets_store.py::test_client_returns_storage_client PASSED   [ 77%]
 tests/test_tickets_store.py::test_blob_path_constructs_correct_path PASSED [ 77%]
@@ -1234,9 +1234,9 @@ tests/test_tickets_store.py::test_load_ticket_html_success PASSED        [ 79%]
 tests/test_tickets_store.py::test_load_ticket_html_no_bucket_env_var_raises_error PASSED [ 79%]
 tests/test_ui.py::test_read_main 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:44 [INFO] Request started
-2026-01-01 11:52:44 [INFO] Request finished
-2026-01-01 11:52:44 [INFO] HTTP Request: GET http://testserver/pronostics "HTTP/1.1 200 OK"
+2026-01-01 12:04:22 [INFO] Request started
+2026-01-01 12:04:22 [INFO] Request finished
+2026-01-01 12:04:22 [INFO] HTTP Request: GET http://testserver/pronostics "HTTP/1.1 200 OK"
 PASSED                                                                   [ 79%]
 tests/test_update_excel_planning.py::test_cli_invalid_phase_raises_error PASSED [ 79%]
 tests/test_update_excel_planning.py::test_extract_common_meta_aliases[nb_partants-10-partants-10] PASSED [ 80%]
@@ -1274,31 +1274,31 @@ tests/test_update_excel_planning.py::test_cli_alias_and_dash_phase PASSED [ 85%]
 tests/test_update_excel_with_results.py::test_update_excel_records_observed_roi PASSED [ 85%]
 tests/test_validator_ev.py::test_validate_ev_passes_with_defaults 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:45 [INFO] [validate_ev] context {'p_success': None, 'payout_expected': None, 'stake': None, 'EV_ratio': None}
+2026-01-01 12:04:24 [INFO] [validate_ev] context {'p_success': None, 'payout_expected': None, 'stake': None, 'EV_ratio': None}
 PASSED                                                                   [ 85%]
 tests/test_validator_ev.py::test_validate_ev_sp_below_threshold 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:45 [INFO] [validate_ev] context {'p_success': None, 'payout_expected': None, 'stake': None, 'EV_ratio': None}
+2026-01-01 12:04:24 [INFO] [validate_ev] context {'p_success': None, 'payout_expected': None, 'stake': None, 'EV_ratio': None}
 PASSED                                                                   [ 85%]
 tests/test_validator_ev.py::test_validate_ev_combo_optional 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:45 [INFO] [validate_ev] context {'p_success': None, 'payout_expected': None, 'stake': None, 'EV_ratio': None}
+2026-01-01 12:04:24 [INFO] [validate_ev] context {'p_success': None, 'payout_expected': None, 'stake': None, 'EV_ratio': None}
 PASSED                                                                   [ 85%]
 tests/test_validator_ev.py::test_validate_ev_combo_required 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:45 [INFO] [validate_ev] context {'p_success': None, 'payout_expected': None, 'stake': None, 'EV_ratio': None}
+2026-01-01 12:04:24 [INFO] [validate_ev] context {'p_success': None, 'payout_expected': None, 'stake': None, 'EV_ratio': None}
 PASSED                                                                   [ 85%]
 tests/test_validator_ev.py::test_validate_ev_logs_context 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:45 [INFO] [validate_ev] context {'p_success': 0.45, 'payout_expected': 18.0, 'stake': 10.0, 'EV_ratio': 0.35}
+2026-01-01 12:04:24 [INFO] [validate_ev] context {'p_success': 0.45, 'payout_expected': 18.0, 'stake': 10.0, 'EV_ratio': 0.35}
 PASSED                                                                   [ 86%]
 tests/test_validator_ev.py::test_validate_ev_invalid_input_for_missing_probability 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:45 [INFO] [validate_ev] context {'p_success': None, 'payout_expected': 25.0, 'stake': None, 'EV_ratio': None}
+2026-01-01 12:04:24 [INFO] [validate_ev] context {'p_success': None, 'payout_expected': 25.0, 'stake': None, 'EV_ratio': None}
 PASSED                                                                   [ 86%]
 tests/test_validator_ev.py::test_validate_ev_invalid_input_for_missing_payout 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:45 [INFO] [validate_ev] context {'p_success': 0.45, 'payout_expected': None, 'stake': None, 'EV_ratio': None}
+2026-01-01 12:04:24 [INFO] [validate_ev] context {'p_success': 0.45, 'payout_expected': None, 'stake': None, 'EV_ratio': None}
 PASSED                                                                   [ 86%]
 tests/test_validator_ev.py::test_validate_policy_pass PASSED             [ 86%]
 tests/test_validator_ev.py::test_validate_policy_fail_ev PASSED          [ 86%]
@@ -1340,29 +1340,29 @@ tests/test_zoneturf_client.py::test_parse_rk_string[invalid-None] PASSED [ 92%]
 tests/test_zoneturf_client.py::test_parse_rk_string[1'11-None] PASSED    [ 92%]
 tests/test_zoneturf_client.py::test_resolve_horse_id_success 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:46 [INFO] Resolving Zone-Turf ID for 'Jullou' via alphabetical pages...
-2026-01-01 11:52:46 [INFO] Resolved 'Jullou' to ID: 1772764
+2026-01-01 12:04:24 [INFO] Resolving Zone-Turf ID for 'Jullou' via alphabetical pages...
+2026-01-01 12:04:24 [INFO] Resolved 'Jullou' to ID: 1772764
 PASSED                                                                   [ 92%]
 tests/test_zoneturf_client.py::test_resolve_horse_id_not_found 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:46 [INFO] Resolving Zone-Turf ID for 'NonExistentHorse' via alphabetical pages...
+2026-01-01 12:04:24 [INFO] Resolving Zone-Turf ID for 'NonExistentHorse' via alphabetical pages...
 PASSED                                                                   [ 92%]
 tests/test_zoneturf_client.py::test_resolve_horse_id_network_error 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:46 [INFO] Resolving Zone-Turf ID for 'Jullou' via alphabetical pages...
-2026-01-01 11:52:46 [WARNING] Failed to fetch page https://www.zone-turf.fr/cheval/lettre-j.html?p=1: Network issue
+2026-01-01 12:04:24 [INFO] Resolving Zone-Turf ID for 'Jullou' via alphabetical pages...
+2026-01-01 12:04:24 [WARNING] Failed to fetch page https://www.zone-turf.fr/cheval/lettre-j.html?p=1: Network issue
 PASSED                                                                   [ 93%]
 tests/test_zoneturf_client.py::test_resolve_horse_id_cache_hit PASSED    [ 93%]
 tests/test_zoneturf_client.py::test_resolve_horse_id_no_alpha_in_name PASSED [ 93%]
 tests/test_zoneturf_client.py::test_resolve_person_id_success 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:46 [INFO] Resolving Zone-Turf ID for 'Julien Dupont' (jockey) via alphabetical pages...
-2026-01-01 11:52:46 [INFO] Resolved 'Julien Dupont' to ID: 112233
+2026-01-01 12:04:24 [INFO] Resolving Zone-Turf ID for 'Julien Dupont' (jockey) via alphabetical pages...
+2026-01-01 12:04:24 [INFO] Resolved 'Julien Dupont' to ID: 112233
 PASSED                                                                   [ 93%]
 tests/test_zoneturf_client.py::test_resolve_person_id_cache_hit PASSED   [ 93%]
 tests/test_zoneturf_client.py::test_resolve_person_id_not_found 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:46 [INFO] Resolving Zone-Turf ID for 'NonExistentJockey' (jockey) via alphabetical pages...
+2026-01-01 12:04:24 [INFO] Resolving Zone-Turf ID for 'NonExistentJockey' (jockey) via alphabetical pages...
 PASSED                                                                   [ 93%]
 tests/test_zoneturf_client.py::test_fetch_chrono_from_html_with_jullou_page PASSED [ 94%]
 tests/test_zoneturf_client.py::test_fetch_chrono_from_html_no_chrono_data PASSED [ 94%]
@@ -1376,38 +1376,38 @@ tests/test_zoneturf_client.py::test_fetch_person_stats_from_html_empty_content P
 tests/test_zoneturf_client.py::test_get_chrono_stats_success PASSED      [ 95%]
 tests/test_zoneturf_client.py::test_get_chrono_stats_id_not_resolved 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:46 [WARNING] Could not get Zone-Turf ID for horse: Jullou
+2026-01-01 12:04:25 [WARNING] Could not get Zone-Turf ID for horse: Jullou
 PASSED                                                                   [ 95%]
 tests/test_zoneturf_client.py::test_get_chrono_stats_network_error_fetching_page 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:46 [WARNING] Failed to fetch Zone-Turf page for Jullou due to network error
+2026-01-01 12:04:25 [WARNING] Failed to fetch Zone-Turf page for Jullou due to network error
 PASSED                                                                   [ 95%]
 tests/test_zoneturf_client.py::test_get_chrono_stats_page_fetch_failed 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:46 [WARNING] Failed to fetch Zone-Turf page for Jullou (ID: 1772764) with status 404
+2026-01-01 12:04:25 [WARNING] Failed to fetch Zone-Turf page for Jullou (ID: 1772764) with status 404
 PASSED                                                                   [ 96%]
 tests/test_zoneturf_client.py::test_get_chrono_stats_cache_hit PASSED    [ 96%]
 tests/test_zoneturf_client.py::test_get_jockey_trainer_stats_success PASSED [ 96%]
 tests/test_zoneturf_client.py::test_get_jockey_trainer_stats_id_not_resolved 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:46 [WARNING] Could not get Zone-Turf ID for jockey: Julien Dupont
+2026-01-01 12:04:25 [WARNING] Could not get Zone-Turf ID for jockey: Julien Dupont
 PASSED                                                                   [ 96%]
 tests/test_zoneturf_client.py::test_get_jockey_trainer_stats_cache_hit PASSED [ 96%]
 tests/test_zoneturf_client.py::test_get_jockey_trainer_stats_network_error_fetching_page 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:46 [WARNING] Failed to fetch Zone-Turf page for jockey Julien Dupont due to network error
+2026-01-01 12:04:25 [WARNING] Failed to fetch Zone-Turf page for jockey Julien Dupont due to network error
 PASSED                                                                   [ 96%]
 tests/test_zoneturf_client.py::test_get_jockey_trainer_stats_page_fetch_failed 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:46 [WARNING] Failed to fetch Zone-Turf page for jockey Julien Dupont (ID: 112233) with status 404
+2026-01-01 12:04:25 [WARNING] Failed to fetch Zone-Turf page for jockey Julien Dupont (ID: 112233) with status 404
 PASSED                                                                   [ 97%]
 tests/test_zoneturf_client_extended.py::test_resolve_horse_id_non_200_status 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:46 [WARNING] Received non-200 status code 404 for URL: https://www.zone-turf.fr/cheval/lettre-t.html?p=1
+2026-01-01 12:04:25 [WARNING] Received non-200 status code 404 for URL: https://www.zone-turf.fr/cheval/lettre-t.html?p=1
 PASSED                                                                   [ 97%]
 tests/test_zoneturf_client_extended.py::test_resolve_horse_id_url_without_id 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:46 [INFO] Resolving Zone-Turf ID for 'Jullou' via alphabetical pages...
+2026-01-01 12:04:25 [INFO] Resolving Zone-Turf ID for 'Jullou' via alphabetical pages...
 PASSED                                                                   [ 97%]
 tests/test_zoneturf_client_extended.py::test_fetch_chrono_from_html_no_info_card PASSED [ 97%]
 tests/test_zoneturf_client_extended.py::test_fetch_chrono_from_html_no_performance_card PASSED [ 97%]
@@ -1421,11 +1421,11 @@ tests/test_zoneturf_client_extended.py::test_fetch_chrono_from_html_performance_
 tests/test_zoneturf_client_extended.py::test_fetch_chrono_from_html_multiple_attelle_sections PASSED [ 99%]
 tests/test_zoneturf_client_extended.py::test_resolve_person_id_non_200_status 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:47 [WARNING] Received non-200 status code 404 for URL: https://www.zone-turf.fr/jockey/lettre-t.html?p=1
+2026-01-01 12:04:25 [WARNING] Received non-200 status code 404 for URL: https://www.zone-turf.fr/jockey/lettre-t.html?p=1
 PASSED                                                                   [ 99%]
 tests/test_zoneturf_client_extended.py::test_resolve_person_id_url_without_id 
 -------------------------------- live log call ---------------------------------
-2026-01-01 11:52:47 [INFO] Resolving Zone-Turf ID for 'TestPerson' (jockey) via alphabetical pages...
+2026-01-01 12:04:25 [INFO] Resolving Zone-Turf ID for 'TestPerson' (jockey) via alphabetical pages...
 PASSED                                                                   [ 99%]
 tests/test_zoneturf_client_extended.py::test_fetch_person_stats_from_html_missing_rates PASSED [ 99%]
 tests/test_zoneturf_client_extended.py::test_fetch_person_stats_from_html_missing_table PASSED [ 99%]
@@ -1502,4 +1502,4 @@ hippique_orchestrator/zoneturf_client.py                       252     11    116
 TOTAL                                                         8315   3645   3248    421    54%
 Coverage HTML written to dir htmlcov
 Coverage XML written to file coverage.xml
-============================= 614 passed in 25.26s =============================
+============================= 614 passed in 29.43s =============================
