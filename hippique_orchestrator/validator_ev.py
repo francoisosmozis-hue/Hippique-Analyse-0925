@@ -31,7 +31,11 @@ def _load_cfg() -> dict:
     if not path.exists():
         return {}
     with path.open("r", encoding="utf-8") as handle:
-        data = yaml.safe_load(handle) or {}
+        try:
+            data = yaml.safe_load(handle) or {}
+        except yaml.YAMLError:
+            _LOG.warning("Invalid YAML in %s, returning empty config.", path)
+            return {}
     if not isinstance(data, dict):
         return {}
     return data
@@ -448,12 +452,20 @@ def _load_config(path: Path | None) -> dict:
     if path is None or not path.exists():
         return {}
     if path.suffix.lower() in {".yml", ".yaml"} and yaml is not None:
-        data = yaml.safe_load(path.read_text(encoding="utf-8"))
-        return data or {}
+        try:
+            data = yaml.safe_load(path.read_text(encoding="utf-8"))
+            return data or {}
+        except yaml.YAMLError:
+            _LOG.warning("Invalid YAML in %s, returning empty config.", path)
+            return {}
     if path.suffix.lower() in {".json"}:
-        payload = _load_json_payload(path)
-        if isinstance(payload, dict):
-            return payload
+        try:
+            payload = _load_json_payload(path)
+            if isinstance(payload, dict):
+                return payload
+        except json.JSONDecodeError:
+            _LOG.warning("Invalid JSON in %s, returning empty config.", path)
+            return {}
     return {}
 
 
