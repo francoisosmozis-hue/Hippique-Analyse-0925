@@ -64,14 +64,14 @@ def _normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
         if col not in df.columns:
             df[col] = np.nan
     # Clean date
-    df['date'] = pd.to_datetime(df['date'], errors='coerce').dt.date
-    # Standardize strings
+    df['date'] = pd.to_datetime(df['date'], errors='coerce')
+    # Standardize strings, preserving NaN
     for col in ['hippodrome', 'discipline', 'cheval', 'jockey', 'entraineur', 'source']:
         if col in df.columns:
-            df[col] = df[col].astype(str).str.strip()
-    # num as int where possible
+            df[col] = df[col].astype(str).replace('nan', pd.NA)
+    # num as nullable integer where possible
     if 'num' in df.columns:
-        df['num'] = pd.to_numeric(df['num'], errors='coerce').astype('Int64')
+        df['num'] = pd.to_numeric(df['num'], errors='coerce', downcast='integer').astype(pd.Int64Dtype())
     # rates numeric
     for col in ['j_rate', 'e_rate']:
         if col in df.columns:
@@ -193,12 +193,15 @@ def main():
     out_j = outdir / f"JE_{args.month}_summary_jockey.csv"
     out_e = outdir / f"JE_{args.month}_summary_entraineur.csv"
 
-    all_df.to_csv(outbase, index=False, encoding='utf-8')
-    j_sum, e_sum = summarize_month(all_df)
-    j_sum.to_csv(out_j, index=False, encoding='utf-8')
-    e_sum.to_csv(out_e, index=False, encoding='utf-8')
+    if not all_df.empty:
+        all_df.to_csv(outbase, index=False, encoding='utf-8')
+        j_sum, e_sum = summarize_month(all_df)
+        j_sum.to_csv(out_j, index=False, encoding='utf-8')
+        e_sum.to_csv(out_e, index=False, encoding='utf-8')
 
-    print(f"[OK] Écrits :\n - {outbase}\n - {out_j}\n - {out_e}")
+        print(f"[OK] Écrits :\n - {outbase}\n - {out_j}\n - {out_e}")
+    elif paths:
+        print(f"Aucune donnée pertinente trouvée pour le mois {args.month} parmi les fichiers trouvés.")
 
 
 if __name__ == '__main__':
