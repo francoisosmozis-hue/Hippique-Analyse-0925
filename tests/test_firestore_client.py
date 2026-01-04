@@ -279,5 +279,59 @@ def test_get_processing_status_for_date_unknown_decision(mock_db):
 
 
 
+def test_get_document_not_found(mock_db):
+    """Test get_document returns None when the document does not exist."""
+    from hippique_orchestrator import firestore_client
+
+    mock_doc = MagicMock()
+    mock_doc.exists = False
+    mock_db.collection.return_value.document.return_value.get.return_value = mock_doc
+
+    result = firestore_client.get_document("test_collection", "test_doc")
+
+    assert result is None
+    mock_db.collection.assert_called_with("test_collection")
+
+
+def test_get_document_exception(mock_db, caplog):
+    """Test get_document handles exceptions and returns None."""
+    from hippique_orchestrator import firestore_client
+
+    mock_db.collection.return_value.document.return_value.get.side_effect = Exception("Connection failed")
+
+    result = firestore_client.get_document("test_collection", "test_doc")
+
+    assert result is None
+    assert "Failed to get document 'test_doc'" in caplog.text
+
+
+def test_set_document_success(mock_db):
+    """Test set_document successfully calls the firestore client."""
+    from hippique_orchestrator import firestore_client
+
+    doc_ref_mock = MagicMock()
+    mock_db.collection.return_value.document.return_value = doc_ref_mock
+    
+    data = {"key": "value"}
+    firestore_client.set_document("test_collection", "test_doc", data)
+
+    mock_db.collection.assert_called_once_with("test_collection")
+    mock_db.collection.return_value.document.assert_called_once_with("test_doc")
+    doc_ref_mock.set.assert_called_once_with(data)
+
+
+def test_set_document_exception(mock_db, caplog):
+    """Test set_document handles exceptions during the set operation."""
+    from hippique_orchestrator import firestore_client
+    
+    mock_db.collection.return_value.document.return_value.set.side_effect = Exception("Permission denied")
+
+    firestore_client.set_document("test_collection", "test_doc", {"key": "value"})
+
+    assert "Failed to set document 'test_doc'" in caplog.text
+    assert "Permission denied" in caplog.text
+
+
+
 
 

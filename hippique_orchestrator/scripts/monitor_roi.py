@@ -102,7 +102,7 @@ def collect_analyses(data_dir: Path, date: str | None = None) -> list[dict[str, 
 def _process_analysis(item: dict[str, Any]) -> dict[str, Any]:
     """Process a single analysis item."""
     analysis = item["analysis"]
-    metrics = item["metrics"]
+    metrics = item.get("metrics", {})
     data = {
         "stake": 0.0,
         "gain": 0.0,

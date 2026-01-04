@@ -1,101 +1,63 @@
 #!/bin/bash
-
-# Smoke Test Script for Hippique Orchestrator
 #
-# This script performs basic health checks against a deployed instance of the service.
+# Smoke Test pour l'application Hippique Orchestrator
 #
-# Prerequisites:
-#   - `curl` and `jq` must be installed.
-#   - The environment variable `PROD_URL` must be set to the base URL of the service.
-#     (e.g., export PROD_URL="https://my-service-url.run.app")
-#   - For the authenticated endpoint test, `HIPPIQUE_INTERNAL_API_KEY` must be set.
+# Usage:
+#   export HIPPIQUE_INTERNAL_API_KEY="votre_cle_api"
+#   ./scripts/smoke_prod.sh https://votre-app-url.run.app
 
-set -e  # Exit immediately if a command exits with a non-zero status.
-set -o pipefail # Return the exit status of the last command in the pipe that failed.
+set -e # Quitte immédiatement si une commande échoue
 
-# --- Helper Functions ---
-print_info() {
-    echo "INFO: $1"
-}
+# --- Validation des entrées ---
 
-print_success() {
-    echo "  [OK] $1"
-}
-
-print_error() {
-    echo "ERROR: $1" >&2
+TARGET_URL=${1}
+if [ -z "${TARGET_URL}" ]; then
+    echo "❌ Erreur : L'URL de l'application doit être fournie en premier argument."
+    echo "   Usage: $0 https://votre-app-url.run.app"
     exit 1
-}
-
-# --- Pre-flight Checks ---
-if [ -z "$PROD_URL" ]; then
-    print_error "PROD_URL environment variable is not set. Please set it to the service's base URL."
 fi
 
-# Remove trailing slash if present
-PROD_URL=${PROD_URL%/}
+# Supprimer la barre oblique finale si présente
+TARGET_URL=${TARGET_URL%/}
+
+echo "✅ URL Cible : ${TARGET_URL}"
+echo "---"
 
 # --- Tests ---
 
-# 1. Test /health endpoint
-print_info "1. Testing /health endpoint..."
-health_response=$(curl -s -o /dev/null -w "%{http_code}" "${PROD_URL}/health")
-if [ "$health_response" -eq 200 ]; then
-    print_success "/health endpoint is healthy."
-else
-    print_error "/health endpoint returned status ${health_response}. Expected 200."
-fi
+echo "1. Test du Health Check [/health]..."
+curl -s -f -L "${TARGET_URL}/health" > /dev/null
+echo "   ✅ OK"
 
-# 2. Test /pronostics UI page
-print_info "2. Testing /pronostics UI page..."
-ui_response=$(curl -s -L -o /dev/null -w "%{http_code}" "${PROD_URL}/pronostics")
-if [ "$ui_response" -eq 200 ]; then
-    print_success "/pronostics UI page loads."
-else
-    print_error "/pronostics UI page returned status ${ui_response}. Expected 200."
-fi
+echo "2. Test de l'UI principale [/pronostics]..."
+curl -s -f -L "${TARGET_URL}/pronostics" | grep -q "<title>Hippique Orchestrator - Pronostics</title>"
+echo "   ✅ OK"
 
-# 3. Test /api/pronostics endpoint
-print_info "3. Testing /api/pronostics data endpoint..."
-api_response_code=$(curl -s -o /dev/null -w "%{http_code}" "${PROD_URL}/api/pronostics")
-if [ "$api_response_code" -eq 200 ]; then
-    # Additionally check if the response is valid JSON with an "ok" key
-    api_response_body=$(curl -s "${PROD_URL}/api/pronostics")
-    if echo "$api_response_body" | jq -e '.ok == true' > /dev/null; then
-        print_success "/api/pronostics returns data with 'ok: true'."
-    else
-        print_error "/api/pronostics did not return a valid JSON response with 'ok: true'."
-    fi
-else
-    print_error "/api/pronostics returned status ${api_response_code}. Expected 200."
-fi
+echo "3. Test de l'API des pronostics [/api/pronostics]..."
+curl -s -f -L "${TARGET_URL}/api/pronostics?date=$(date +%F)" | grep -q '"ok": true'
+echo "   ✅ OK"
 
-# 4. Test /schedule endpoint (unauthenticated)
-print_info "4. Testing /schedule endpoint without authentication..."
-unauth_schedule_response=$(curl -s -o /dev/null -w "%{http_code}" -X POST -H "Content-Type: application/json" -d '{"dry_run": true}' "${PROD_URL}/schedule")
-if [ "$unauth_schedule_response" -ge 400 ] && [ "$unauth_schedule_response" -lt 500 ]; then
-    print_success "/schedule rejects request without API key (status: ${unauth_schedule_response})."
-else
-    print_error "/schedule returned status ${unauth_schedule_response} without API key. Expected 4xx."
+echo "4. Test de sécurité sur /schedule (sans authentification)..."
+STATUS_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "${TARGET_URL}/schedule")
+if [ "${STATUS_CODE}" -ne 403 ]; then
+    echo "   ❌ ERREUR : Le statut HTTP attendu était 403, mais a reçu ${STATUS_CODE}"
+    exit 1
 fi
+echo "   ✅ OK (reçu ${STATUS_CODE} comme attendu)"
 
-# 5. Test /schedule endpoint (authenticated)
-print_info "5. Testing /schedule endpoint with authentication..."
-if [ -z "$HIPPIQUE_INTERNAL_API_KEY" ]; then
-    print_info "  -> SKIPPED: HIPPIQUE_INTERNAL_API_KEY is not set."
+echo "5. Test de sécurité sur /schedule (avec authentification)..."
+if [ -z "${HIPPIQUE_INTERNAL_API_KEY}" ]; then
+    echo "   ⚠️  ATTENTION : La variable d'environnement HIPPIQUE_INTERNAL_API_KEY n'est pas définie. Test sauté."
 else
-    auth_schedule_response=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+    # dry_run=true pour ne pas créer de vraies tâches
+    curl -s -f -X POST \
         -H "Content-Type: application/json" \
-        -H "X-API-KEY: ${HIPPIQUE_INTERNAL_API_KEY}" \
+        -H "X-API-Key: ${HIPPIQUE_INTERNAL_API_KEY}" \
         -d '{"dry_run": true}' \
-        "${PROD_URL}/schedule")
-    
-    if [ "$auth_schedule_response" -eq 200 ]; then
-        print_success "/schedule accepts request with valid API key."
-    else
-        print_error "/schedule returned status ${auth_schedule_response} with a valid API key. Expected 200."
-    fi
+        "${TARGET_URL}/schedule" > /dev/null
+    echo "   ✅ OK"
 fi
 
 echo ""
-print_success "All smoke tests passed!"
+echo "🎉 Tous les tests de smoke ont réussi !"
+exit 0

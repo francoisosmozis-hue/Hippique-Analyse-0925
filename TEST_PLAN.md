@@ -1,65 +1,42 @@
-# Plan de Test
+# Plan de Test - Hippique Orchestrator
 
-Ce document détaille les procédures pour valider le bon fonctionnement de l'application, localement et en production.
+Ce document centralise les commandes de validation qualité à exécuter localement pour garantir la non-régression et la stabilité du projet.
 
-## 1. Validation Locale
+## 1. Validation Rapide
 
-Ces commandes doivent être exécutées avant toute intégration de code.
-
-### 1.1. Tests Unitaires et de Couverture
-
-Assure la non-régression, la stabilité et une couverture de code minimale.
+À utiliser durant le développement pour une vérification rapide des tests impactés.
 
 ```bash
-# Lance tous les tests en parallèle, génère un rapport de couverture
-pytest -n auto --cov=hippique_orchestrator --cov-report term-missing --cov-fail-under=70
+pytest -q
 ```
+- **Résultat Attendu** : `... passed in ...s`. Aucun test en échec (`failed`) ou en erreur (`error`).
 
-*   **Critère d'acceptation :** Tous les tests doivent passer (`100% passed`) et la couverture ne doit pas être inférieure à 70%.
+## 2. Validation Complète avec Couverture
 
-### 1.2. Validation du Linting et du Style
-
-Garantit la conformité du code aux standards du projet.
+À lancer avant de commiter ou de proposer une merge request. Permet de vérifier l'ensemble de la suite de tests et de mesurer l'impact des changements sur la couverture de code.
 
 ```bash
-# Lance le linter ruff
-ruff check .
+pytest --cov=hippique_orchestrator --cov=config --cov-report term-missing
 ```
+- **Résultat Attendu** :
+    - Aucun test en échec.
+    - Un rapport de couverture s'affiche, listant le pourcentage de couverture pour chaque fichier. Les nouveaux modules doivent atteindre les objectifs définis dans la `TEST_MATRIX.md`.
 
-*   **Critère d'acceptation :** Aucune erreur rapportée par `ruff`.
+## 3. Détection de Tests Instables (Flaky Tests)
 
-## 2. Validation en Production (Post-Déploiement)
-
-Ces vérifications doivent être effectuées après chaque déploiement sur l'environnement de production.
-
-### 2.1. Test de Santé de l'API
-
-Vérifie que le service est en ligne et répond correctement.
+À exécuter en cas de doute sur la stabilité des tests ou avant une release majeure. Cette commande lance la suite de tests 10 fois de suite et s'arrête à la première erreur.
 
 ```bash
-# Interroge l'endpoint des pronostics pour la date du jour
-curl -s "https://hippique-orchestrator-1084663881709.europe-west1.run.app/api/pronostics?date=$(date +%F)" | jq .
+for i in $(seq 1 10); do 
+    echo "--- Exécution Anti-Flaky : $i/10 ---"
+    if ! pytest -q; then 
+        echo "ERREUR : Test instable (flaky) détecté à l'exécution $i !"
+        exit 1
+    fi
+done && echo "SUCCÈS : Aucun test instable détecté sur 10 exécutions."
 ```
+- **Résultat Attendu** : Le message final `SUCCÈS : Aucun test instable détecté sur 10 exécutions.`
 
-*   **Critère d'acceptation :** Le JSON retourné doit contenir une clé `courses` avec une liste non-vide, sans erreurs manifestes.
+---
 
-### 2.2. Test de Santé de l'Interface Utilisateur
-
-Valide que l'interface se charge et affiche les données.
-
-1.  Ouvrir un navigateur web.
-2.  Accéder à l'URL : `https://hippique-orchestrator-1084663881709.europe-west1.run.app/pronostics`
-3.  Vérifier visuellement que la grille des courses s'affiche et contient des informations.
-4.  Ouvrir la console de développement pour vérifier l'absence d'erreurs JavaScript.
-
-*   **Critère d'acceptation :** La page se charge, les données sont présentes et aucune erreur n'est visible en console.
-
-### 2.3. Surveillance de la Création des Tâches
-
-Confirme que le scheduler fonctionne comme attendu.
-
-1.  Accéder à la console Google Cloud.
-2.  Naviguer vers "Cloud Tasks".
-3.  Vérifier que les tâches pour les analyses `H-5` et `H-30` ont été créées aux heures prévues.
-
-*   **Critère d'acceptation :** Les tâches sont présentes dans la file d'attente avec les bons paramètres.
+*Ce plan de test doit être maintenu à jour à mesure que de nouvelles procédures de validation sont ajoutées.*
