@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 import httpx
 
-from hippique_orchestrator.stats_provider import ZoneTurfProvider
+from hippique_orchestrator.stats_provider import ZoneTurfProvider, _slugify
 from hippique_orchestrator import firestore_client
 
 # Mock config for the provider
@@ -45,7 +45,6 @@ class TestZoneTurfProviderHelpers:
     )
     def test_slugify(self, text, expected_slug):
         """Tests the _slugify utility."""
-        from hippique_orchestrator.stats_provider import _slugify
         assert _slugify(text) == expected_slug
 
     @pytest.mark.parametrize(
