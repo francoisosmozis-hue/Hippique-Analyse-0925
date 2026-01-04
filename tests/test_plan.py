@@ -56,10 +56,12 @@ async def test_build_plan_nominal_case(mock_fetch_programme):
     assert result_plan[0]["c_label"] == "C1"
     assert result_plan[0]["time_local"] == "13:50"
     assert result_plan[0]["date"] == test_date
+    assert result_plan[0]["meeting"] == "PRIX D'OUVERTURE" # New assertion for meeting
 
     assert result_plan[1]["c_label"] == "C2"
     assert result_plan[1]["time_local"] == "14:30"
     assert result_plan[1]["course_url"] == "http://example.com/r1c2"
+    assert result_plan[1]["meeting"] == "PRIX DE TEST" # New assertion for meeting
 
 
 @pytest.mark.asyncio
@@ -116,7 +118,7 @@ async def test_build_plan_today_string(mock_fetch_programme):
 
 @pytest.mark.asyncio
 @patch("hippique_orchestrator.data_source.fetch_programme", new_callable=AsyncMock)
-async def test_build_plan_empty_enriched_plan(mock_fetch_programme):
+async def test_build_plan_empty_enriched_plan(mock_fetch_programme, caplog):
     """
     Tests that sorting is skipped if the enriched plan is empty, covering the `if enriched_plan:` branch.
     """
@@ -128,6 +130,34 @@ async def test_build_plan_empty_enriched_plan(mock_fetch_programme):
     
     # Assert
     assert result_plan == []
+
+
+@pytest.mark.asyncio
+@patch("hippique_orchestrator.data_source.fetch_programme", new_callable=AsyncMock)
+async def test_build_plan_partants_non_digit_string(mock_fetch_programme):
+    """
+    Tests that `partants` is None when `runners_count` is a non-digit string.
+    """
+    # Arrange
+    mock_programme_data = {
+        "races": [
+            {
+                "rc": "R1 C1",
+                "name": "Test Race",
+                "start_time": "10:00",
+                "url": "http://example.com/r1c1",
+                "runners_count": "10 partants", # Non-digit string
+            }
+        ]
+    }
+    mock_fetch_programme.return_value = mock_programme_data
+
+    # Act
+    result_plan = await plan.build_plan_async("2025-12-20")
+
+    # Assert
+    assert len(result_plan) == 1
+    assert result_plan[0]["partants"] is None
 
 
 

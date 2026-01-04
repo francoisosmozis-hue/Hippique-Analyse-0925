@@ -150,6 +150,22 @@ def test_fetcher_parse_race_row_missing_elements(mock_logger, mocker):
     assert result is None
 
 
+def test_fetcher_parse_race_row_missing_name_tag(mock_logger):
+    """Test parsing a race row where the name tag (a.link) is missing."""
+    html_row = """
+    <tr>
+        <th class="num"><span class="rxcx">R1 C1</span></th>
+        <td class="crs"><span>Race Name Span</span></td>
+        <td class="hour">14h30</td>
+        <td class="nb">10</td>
+    </tr>
+    """
+    soup_row = BeautifulSoup(html_row, 'lxml').find('tr')
+    fetcher = boturfers.BoturfersFetcher("http://dummy.url")
+    result = fetcher._parse_race_row(soup_row, "http://dummy.url")
+    assert result is None, "Parser should return None if the name tag is missing."
+
+
 @pytest.mark.parametrize("time_text, expected_time", [
     ("14h30", "14:30"),
     ("9h05", "09:05"),

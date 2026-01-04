@@ -3,6 +3,7 @@ import pytest
 from unittest.mock import patch, MagicMock
 from hippique_orchestrator import gcs_client
 from hippique_orchestrator import config
+import logging
 
 @pytest.fixture
 def gcs_manager(monkeypatch):
@@ -19,10 +20,12 @@ def test_gcs_manager_init(monkeypatch):
     manager_with_arg = gcs_client.GCSManager(bucket_name="another-bucket")
     assert manager_with_arg.bucket_name == "another-bucket"
 
-def test_gcs_manager_init_no_bucket(monkeypatch):
+def test_gcs_manager_init_no_bucket(monkeypatch, caplog):
     monkeypatch.setattr(config, "BUCKET_NAME", None)
-    with pytest.raises(ValueError, match="GCS_BUCKET must be set"):
-        gcs_client.GCSManager()
+    with caplog.at_level(logging.WARNING):
+        with pytest.raises(ValueError, match="GCS_BUCKET must be set"):
+            gcs_client.GCSManager()
+    assert "GCS_BUCKET is not set in the configuration. GCS operations will fail." in caplog.text
 
 def test_gcs_manager_lazy_init(gcs_manager, mocker):
     mock_storage_client = mocker.patch("google.cloud.storage.Client")
@@ -82,7 +85,7 @@ def test_get_gcs_fs(gcs_manager, mocker):
 
 def test_get_gcs_fs_no_manager(monkeypatch):
     monkeypatch.setattr(config, "BUCKET_NAME", None)
-    gcs_client.get_gcs_manager.cache_clear()
+    gcs_client.get_gcs_manager.cache_clear() # Explicitly clear manager cache
     gcs_client.get_gcs_fs.cache_clear()
     assert gcs_client.get_gcs_fs() is None
 
@@ -91,5 +94,55 @@ def test_build_gcs_path(gcs_manager):
 
 def test_build_gcs_path_no_manager(monkeypatch):
     monkeypatch.setattr(config, "BUCKET_NAME", None)
-    gcs_client.get_gcs_manager.cache_clear()
+    gcs_client.get_gcs_manager.cache_clear() # Explicitly clear manager cache
     assert gcs_client.build_gcs_path("test/path") is None
+
+def test_gcs_manager_save_json_to_gcs_exception(gcs_manager, mocker):
+    mocker.patch("hippique_orchestrator.gcs_client.json.dump", side_effect=Exception("Mock GCS write error"))
+    mock_fs_open = mocker.patch.object(gcs_manager.fs, "open")
+
+    gcs_path = "gs://test-bucket/error.json"
+    data = {"key": "value"}
+
+    with pytest.raises(Exception, match="Mock GCS write error"):
+        gcs_manager.save_json_to_gcs(gcs_path, data)
+    
+def test_gcs_manager_save_json_to_gcs_success(gcs_manager, mocker, caplog):
+    mock_fs_open = mocker.patch.object(gcs_manager.fs, "open")
+    mock_json_dump = mocker.patch("hippique_orchestrator.gcs_client.json.dump")
+
+    gcs_path = "gs://test-bucket/test.json"
+    data = {"key": "value"}
+
+    with caplog.at_level(logging.INFO):
+        gcs_manager.save_json_to_gcs(gcs_path, data)
+    
+    mock_fs_open.assert_called_once_with(gcs_path, 'w')
+
+def test_global_save_json_to_gcs_success(monkeypatch, mocker):
+    monkeypatch.setattr(config, "BUCKET_NAME", "test-bucket")
+    gcs_client.get_gcs_manager.cache_clear()
+    gcs_client.get_gcs_fs.cache_clear()
+
+    mock_manager_save = mocker.patch.object(gcs_client.GCSManager, "save_json_to_gcs")
+
+    gcs_path = "gs://test-bucket/success.json"
+    data = {"another": "value"}
+
+    gcs_client.save_json_to_gcs(gcs_path, data)
+    
+    mock_manager_save.assert_called_once_with(gcs_path, data)
+
+def test_global_save_json_to_gcs_no_manager_raises_runtime_error(monkeypatch, caplog):
+    monkeypatch.setattr(config, "BUCKET_NAME", None)
+    gcs_client.get_gcs_manager.cache_clear()
+    
+    gcs_path = "gs://test-bucket/error.json"
+    data = {"key": "value"}
+
+    with caplog.at_level(logging.ERROR):
+        with pytest.raises(RuntimeError, match="GCSManager not initialized."):
+            gcs_client.save_json_to_gcs(gcs_path, data)
+    
+    assert "GCSManager not initialized. Cannot save JSON to" in caplog.text
+

@@ -22,12 +22,28 @@ def test_get_env_required_missing_logs_critical(caplog):
 
 
 def test_get_env_required_missing_in_prod_exits(monkeypatch):
-    """Test that get_env exits if a required variable is missing in production."""
+    """Test that get_env exits with code 1 if a required variable is missing in production."""
     monkeypatch.setenv("PROD", "true")
     monkeypatch.delenv("MY_VAR", raising=False)
 
-    with pytest.raises(SystemExit):
+    with pytest.raises(SystemExit) as excinfo:
         get_env("MY_VAR", required=True)
+
+    assert excinfo.value.code == 1
+
+
+@pytest.mark.parametrize("prod_value", ["true", "True", "1", "t", "yes", "y"])
+def test_get_env_required_missing_in_prod_exits_variations(monkeypatch, caplog, prod_value):
+    """Test that get_env exits for various 'true' values of PROD."""
+    monkeypatch.setenv("PROD", prod_value)
+    monkeypatch.delenv("MY_VAR", raising=False)
+
+    with pytest.raises(SystemExit) as excinfo:
+        get_env("MY_VAR", required=True)
+
+    assert excinfo.value.code == 1
+    assert "Missing required environment variable 'MY_VAR'" in caplog.text
+    assert "IS_PROD=True. Exiting." in caplog.text
 
 
 def test_get_env_alias_support(monkeypatch):

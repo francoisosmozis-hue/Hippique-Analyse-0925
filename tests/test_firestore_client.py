@@ -1,4 +1,5 @@
-
+import logging
+import logging
 import pytest
 from unittest.mock import MagicMock, patch
 from datetime import datetime
@@ -321,17 +322,37 @@ def test_set_document_success(mock_db):
 
 
 def test_set_document_exception(mock_db, caplog):
-    """Test set_document handles exceptions during the set operation."""
+    """Test that set_document handles exceptions."""
     from hippique_orchestrator import firestore_client
-    
-    mock_db.collection.return_value.document.return_value.set.side_effect = Exception("Permission denied")
-
-    firestore_client.set_document("test_collection", "test_doc", {"key": "value"})
-
-    assert "Failed to set document 'test_doc'" in caplog.text
-    assert "Permission denied" in caplog.text
+    mock_db.collection.side_effect = Exception("Permission denied")
+    with caplog.at_level(logging.ERROR):
+        firestore_client.set_document("test_collection", "test_doc", {"key": "value"})
+    assert "Failed to set document 'test_doc' in 'test_collection': Permission denied" in caplog.text
 
 
+@patch(FIRESTORE_CLIENT_PATH, None)
+def test_get_races_for_date_db_unavailable(caplog):
+    """Test get_races_for_date when the database is unavailable."""
+    from hippique_orchestrator import firestore_client
+    with caplog.at_level(logging.WARNING):
+        races = firestore_client.get_races_for_date("2025-12-30")
+    assert races == []
+    assert "Firestore is not available" in caplog.text
 
+@patch(FIRESTORE_CLIENT_PATH, None)
+def test_get_document_skips_if_db_not_available(caplog):
+    """Test that get_document skips if the db client is None."""
+    from hippique_orchestrator import firestore_client
+    with caplog.at_level(logging.WARNING):
+        result = firestore_client.get_document("test_collection", "test_doc")
+    assert result is None
+    assert "Firestore is not available, cannot get document." in caplog.text
 
-
+@patch(FIRESTORE_CLIENT_PATH, None)
+def test_set_document_skips_if_db_not_available(caplog):
+    """Test that set_document skips if the db client is None."""
+    from hippique_orchestrator import firestore_client
+    with caplog.at_level(logging.WARNING):
+        firestore_client.set_document("test_collection", "test_doc", {"key": "value"})
+    # No return value to assert, just check logs
+    assert "Firestore is not available, cannot set document." in caplog.text

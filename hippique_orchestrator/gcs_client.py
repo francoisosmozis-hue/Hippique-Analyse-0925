@@ -2,6 +2,7 @@
 Utilities for interacting with Google Cloud Storage (GCS).
 """
 
+import json
 import logging
 from functools import cache
 from typing import Any

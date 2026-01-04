@@ -44,7 +44,7 @@ def get_env(
     aliases:
         Optional iterable of alternative environment variable names.
     """
-    is_prod = os.getenv("PROD", "false").lower() == "true"
+    is_prod = os.getenv("PROD", "false").lower() in ("true", "1", "t", "yes", "y")
 
     raw_value: str | None = None
     source = name

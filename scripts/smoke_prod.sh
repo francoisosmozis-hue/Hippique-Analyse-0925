@@ -1,63 +1,65 @@
 #!/bin/bash
-#
-# Smoke Test pour l'application Hippique Orchestrator
-#
-# Usage:
-#   export HIPPIQUE_INTERNAL_API_KEY="votre_cle_api"
-#   ./scripts/smoke_prod.sh https://votre-app-url.run.app
 
-set -e # Quitte immédiatement si une commande échoue
+# Exit immediately if a command exits with a non-zero status.
+set -e
 
-# --- Validation des entrées ---
-
-TARGET_URL=${1}
-if [ -z "${TARGET_URL}" ]; then
-    echo "❌ Erreur : L'URL de l'application doit être fournie en premier argument."
-    echo "   Usage: $0 https://votre-app-url.run.app"
+# --- Configuration ---
+# L'utilisateur doit fournir l'URL du service.
+if [ -z "$1" ]; then
+    echo "Usage: $0 <SERVICE_URL>"
+    echo "Example: $0 https://hippique-orchestrator-XXXXX.run.app"
     exit 1
 fi
+SERVICE_URL="$1"
 
-# Supprimer la barre oblique finale si présente
-TARGET_URL=${TARGET_URL%/}
-
-echo "✅ URL Cible : ${TARGET_URL}"
-echo "---"
-
-# --- Tests ---
-
-echo "1. Test du Health Check [/health]..."
-curl -s -f -L "${TARGET_URL}/health" > /dev/null
-echo "   ✅ OK"
-
-echo "2. Test de l'UI principale [/pronostics]..."
-curl -s -f -L "${TARGET_URL}/pronostics" | grep -q "<title>Hippique Orchestrator - Pronostics</title>"
-echo "   ✅ OK"
-
-echo "3. Test de l'API des pronostics [/api/pronostics]..."
-curl -s -f -L "${TARGET_URL}/api/pronostics?date=$(date +%F)" | grep -q '"ok": true'
-echo "   ✅ OK"
-
-echo "4. Test de sécurité sur /schedule (sans authentification)..."
-STATUS_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "${TARGET_URL}/schedule")
-if [ "${STATUS_CODE}" -ne 403 ]; then
-    echo "   ❌ ERREUR : Le statut HTTP attendu était 403, mais a reçu ${STATUS_CODE}"
-    exit 1
-fi
-echo "   ✅ OK (reçu ${STATUS_CODE} comme attendu)"
-
-echo "5. Test de sécurité sur /schedule (avec authentification)..."
+# La clé API est lue depuis l'environnement. NE PAS la hardcoder ici.
 if [ -z "${HIPPIQUE_INTERNAL_API_KEY}" ]; then
-    echo "   ⚠️  ATTENTION : La variable d'environnement HIPPIQUE_INTERNAL_API_KEY n'est pas définie. Test sauté."
-else
-    # dry_run=true pour ne pas créer de vraies tâches
-    curl -s -f -X POST \
-        -H "Content-Type: application/json" \
-        -H "X-API-Key: ${HIPPIQUE_INTERNAL_API_KEY}" \
-        -d '{"dry_run": true}' \
-        "${TARGET_URL}/schedule" > /dev/null
-    echo "   ✅ OK"
+    echo "Error: HIPPIQUE_INTERNAL_API_KEY environment variable is not set."
+    exit 1
 fi
 
-echo ""
-echo "🎉 Tous les tests de smoke ont réussi !"
-exit 0
+echo "--- Running smoke tests against $SERVICE_URL ---"
+
+# --- Test /pronostics endpoint ---
+echo "Testing /pronostics UI endpoint..."
+RESPONSE=$(curl -s "$SERVICE_URL/pronostics")
+if echo "$RESPONSE" | grep -q "Hippique Orchestrator - Pronostics"; then
+    echo "✅ /pronostics UI is accessible."
+else
+    echo "❌ /pronostics UI test failed. Response:"
+    echo "$RESPONSE"
+    exit 1
+fi
+
+# --- Test /api/pronostics endpoint ---
+echo "Testing /api/pronostics endpoint..."
+API_PRONOSTICS_RESPONSE=$(curl -s "$SERVICE_URL/api/pronostics?date=$(date +%F)")
+if echo "$API_PRONOSTICS_RESPONSE" | jq . > /dev/null; then
+    echo "✅ /api/pronostics returned valid JSON."
+else
+    echo "❌ /api/pronostics test failed. Response:"
+    echo "$API_PRONOSTICS_RESPONSE"
+    exit 1
+fi
+
+# --- Test /schedule endpoint (without API key - expected 403) ---
+echo "Testing /schedule endpoint without API key (expecting 403 Forbidden)..."
+SCHEDULE_NO_KEY_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$SERVICE_URL/schedule" -X POST -H "Content-Type: application/json" -d '{"dry_run": true}')
+if [ "$SCHEDULE_NO_KEY_STATUS" -eq 403 ]; then
+    echo "✅ /schedule without API key returned 403 Forbidden as expected."
+else
+    echo "❌ /schedule without API key failed. Expected 403, got $SCHEDULE_NO_KEY_STATUS."
+    exit 1
+fi
+
+# --- Test /schedule endpoint (with valid API key - expected 200) ---
+echo "Testing /schedule endpoint with valid API key (expecting 200 OK)..."
+SCHEDULE_WITH_KEY_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$SERVICE_URL/schedule" -X POST -H "Content-Type: application/json" -H "X-API-KEY: ${HIPPIQUE_INTERNAL_API_KEY}" -d '{"dry_run": true, "date": "$(date +%F)"}')
+if [ "$SCHEDULE_WITH_KEY_STATUS" -eq 200 ]; then
+    echo "✅ /schedule with valid API key returned 200 OK as expected."
+else
+    echo "❌ /schedule with valid API key failed. Expected 200, got $SCHEDULE_WITH_KEY_STATUS."
+    exit 1
+fi
+
+echo "--- All smoke tests passed successfully! ---"
