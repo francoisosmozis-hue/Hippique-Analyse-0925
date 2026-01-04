@@ -388,7 +388,9 @@ def _fallback_parse_html(html: Any) -> dict[str, Any]:
     # Find the main table of runners
     table = soup.find("table", class_="table-runners")
     if table:
-        for row in table.find("tbody").find_all("tr"):
+        tbody = table.find("tbody")
+        rows = tbody.find_all("tr") if tbody else table.find_all("tr")
+        for row in rows:
             runner_data = {}
             num_cell = row.find("td", class_="numero")
             if num_cell:
@@ -842,6 +844,9 @@ def _normalise_phase_alias(value: str) -> str:
 
 def _coerce_runner_entry(entry: Mapping[str, Any]) -> dict[str, Any] | None:
     """Normalise a runner payload into the structure expected downstream."""
+
+    if not isinstance(entry, Mapping):
+        return None
 
     identifiers = (
         entry.get("num"),

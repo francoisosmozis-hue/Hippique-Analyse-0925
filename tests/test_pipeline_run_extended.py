@@ -1,8 +1,9 @@
-
 import pytest
 from pytest_mock import MockerFixture
 from unittest.mock import MagicMock
 from collections import defaultdict
+
+from hippique_orchestrator import pipeline_run
 
 from hippique_orchestrator.pipeline_run import (
     generate_tickets,
@@ -14,7 +15,6 @@ from hippique_orchestrator.pipeline_run import (
     _select_sp_dutching_candidates,
     _generate_sp_dutching_tickets,
     _get_legs_for_exotic_type,
-    _generate_exotic_tickets,
     _finalize_and_decide,
 )
 
@@ -465,11 +465,12 @@ def test_generate_exotic_tickets_no_profitable_combos(mocker: MockerFixture, moc
     sp_candidates = mock_snapshot_data["runners"][:3] # Use some candidates
     mock_gpi_config["exotics_config"]["allowed"] = ["TRIO"] # Ensure config allows exotics
     mock_gpi_config["market"] = {"overround_place": 1.10} # Add market for overround check
-    
+    mock_gpi_config["overround_max"] = mock_gpi_config["overround_max_exotics"]
+
     final_tickets = []
     analysis_messages = []
     
-    final_tickets, analysis_messages = _generate_exotic_tickets(
+    final_tickets, analysis_messages = pipeline_run._generate_exotic_tickets(
         sp_candidates, mock_snapshot_data, mock_gpi_config, final_tickets, analysis_messages
     )
     assert not final_tickets # No tickets should be added if evaluate_combo fails
@@ -479,11 +480,12 @@ def test_generate_exotic_tickets_overround_too_high(mock_snapshot_data, mock_gpi
     mock_gpi_config["overround_max_exotics"] = 1.0 # Set very low
     mock_gpi_config["market"] = {"overround_place": 1.5} # Higher than max
     mock_gpi_config["exotics_config"]["allowed"] = ["TRIO"] # Ensure allowed exotics
-    
+    mock_gpi_config["overround_max"] = mock_gpi_config["overround_max_exotics"]
+
     final_tickets = []
     analysis_messages = []
     
-    final_tickets, analysis_messages = _generate_exotic_tickets(
+    final_tickets, analysis_messages = pipeline_run._generate_exotic_tickets(
         [], mock_snapshot_data, mock_gpi_config, final_tickets, analysis_messages
     )
     assert not final_tickets
@@ -492,11 +494,12 @@ def test_generate_exotic_tickets_overround_too_high(mock_snapshot_data, mock_gpi
 def test_generate_exotic_tickets_no_allowed_types(mock_snapshot_data, mock_gpi_config):
     mock_gpi_config["exotics_config"]["allowed"] = [] # No allowed types
     mock_gpi_config["market"] = {"overround_place": 1.10} # Add market for overround check
+    mock_gpi_config["overround_max"] = mock_gpi_config["overround_max_exotics"]
     
     final_tickets = []
     analysis_messages = []
     
-    final_tickets, analysis_messages = _generate_exotic_tickets(
+    final_tickets, analysis_messages = pipeline_run._generate_exotic_tickets(
         mock_snapshot_data["runners"][:3], mock_snapshot_data, mock_gpi_config, final_tickets, analysis_messages
     )
     assert not final_tickets
@@ -505,11 +508,12 @@ def test_generate_exotic_tickets_no_allowed_types(mock_snapshot_data, mock_gpi_c
 def test_generate_exotic_tickets_not_enough_sp_candidates(mock_snapshot_data, mock_gpi_config):
     mock_gpi_config["exotics_config"]["allowed"] = ["TRIO"] # Set allowed exotic type
     mock_gpi_config["market"] = {"overround_place": 1.10} # Add market for overround check
+    mock_gpi_config["overround_max"] = mock_gpi_config["overround_max_exotics"]
     
     final_tickets = []
     analysis_messages = []
     
-    final_tickets, analysis_messages = _generate_exotic_tickets(
+    final_tickets, analysis_messages = pipeline_run._generate_exotic_tickets(
         mock_snapshot_data["runners"][:1], mock_snapshot_data, mock_gpi_config, final_tickets, analysis_messages # Only 1 candidate
     )
     assert not final_tickets

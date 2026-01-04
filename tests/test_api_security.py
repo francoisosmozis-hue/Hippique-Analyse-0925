@@ -160,3 +160,30 @@ def test_bootstrap_day_endpoint_security(client: TestClient):
     response = client.post("/tasks/bootstrap-day", json=payload)
     assert response.status_code == 403
     assert "Not authenticated" in response.text
+
+def test_ops_run_endpoint_accessible_when_auth_not_required(client: TestClient, mocker):
+    """
+    Given authentication is NOT required,
+    When no API key is provided for /ops/run,
+    Then the request should be successful.
+    """
+    # REQUIRE_AUTH is False by default in the test client fixture
+    mocker.patch("hippique_orchestrator.service.plan.build_plan_async", new_callable=mocker.AsyncMock, return_value=[{"r_label": "R1", "c_label": "C1", "url": "http://example.com"}])
+    mocker.patch("hippique_orchestrator.service.analysis_pipeline.run_analysis_for_phase", new_callable=mocker.AsyncMock, return_value={"status": "ok", "gpi_decision": "test"})
+    mocker.patch("hippique_orchestrator.service.firestore_client.update_race_document", return_value=None)
+    
+    response = client.post("/ops/run?rc=R1C1")
+    assert response.status_code == 200
+
+def test_ops_status_endpoint_accessible_when_auth_not_required(client: TestClient, mocker):
+    """
+    Given authentication is NOT required,
+    When no API key is provided for /ops/status,
+    Then the request should be successful.
+    """
+    # REQUIRE_AUTH is False by default in the test client fixture
+    mocker.patch("hippique_orchestrator.service.plan.build_plan_async", new_callable=mocker.AsyncMock, return_value=[])
+    mocker.patch("hippique_orchestrator.service.firestore_client.get_processing_status_for_date", return_value={"status": "ok"})
+    
+    response = client.get("/ops/status?date=2025-01-01")
+    assert response.status_code == 200

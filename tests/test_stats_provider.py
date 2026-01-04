@@ -3,6 +3,7 @@ Unit tests for the StatsProvider implementations.
 """
 
 from datetime import datetime
+from pathlib import Path
 
 import pytest
 
@@ -160,8 +161,27 @@ class TestZoneTurfIdResolution:
 
     def test_resolve_entity_id_scraping(self, zt_provider: ZoneTurfProvider, mocker):
         """Tests the successful scraping of an ID from the index."""
-        # TODO: Add mock HTML and test the scraping logic
-        pass
+        # 1. Setup mocks
+        mocker.patch.object(zt_provider, '_get_id_from_cache', return_value=None)
+        mock_set_to_cache = mocker.patch.object(zt_provider, '_set_id_to_cache')
+
+        fixture_path = Path(__file__).parent / "fixtures" / "zoneturf_index_page.html"
+        mock_html = fixture_path.read_text(encoding="utf-8")
+        
+        mock_response = mocker.Mock()
+        mock_response.text = mock_html
+        mock_response.raise_for_status = mocker.Mock()
+        mock_http_get = mocker.patch.object(zt_provider.client, 'get', return_value=mock_response)
+
+        # 2. Call the function
+        entity_id = zt_provider._resolve_entity_id("horse", "JULLOU")
+
+        # 3. Assertions
+        assert entity_id == "1772764"
+        zt_provider._get_id_from_cache.assert_called_once_with("horse", "JULLOU")
+        mock_http_get.assert_called_once_with("/cheval/lettre-j.html?p=1")
+        mock_set_to_cache.assert_called_once_with("horse", "JULLOU", "1772764")
+
 
     def test_resolve_entity_id_not_found(self, zt_provider: ZoneTurfProvider, mocker):
         """Tests the case where an entity is not found after scraping all pages."""

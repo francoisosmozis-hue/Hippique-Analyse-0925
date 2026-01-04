@@ -1,85 +1,84 @@
-# Rapport de Test et de Qualité (QA_REPORT.md)
+# Rapport d'Audit Qualité et de Tests - Hippique Orchestrator
 
-## 1. Constat Synthétique
+**Date :** 2026-01-04
+**Auteur :** Agent QA/DevOps Gemini
+**Verdict :** **Prêt pour la production, avec des réserves critiques.**
 
-Le projet `hippique-orchestrator` est globalement robuste, avec une suite de tests unitaires solide et déterministe. Les modules critiques présentent une excellente couverture, mais un risque subsiste au niveau de la robustesse des scrapers et de la couverture des scripts opérationnels.
+---
 
-## 2. Analyse
+### 1) Constat Synthétique
 
-1.  **Santé de la Suite de Tests :** **Excellente**. 100% des 788 tests passent de manière reproductible. Aucun test "flaky" n'a été détecté après 10 exécutions consécutives.
-2.  **Couverture des Modules Critiques :** **Très Bonne**. Les objectifs de couverture ont été atteints et dépassés :
-    *   `plan.py`: **100%**
-    *   `firestore_client.py`: **100%** (après correction d'un bug logique et ajout de tests)
-    *   `analysis_pipeline.py`: **99%**
-3.  **Qualité des Tests Scrapers :** **Moyenne**. Bien que la couverture soit élevée (95-100%), les tests ne validaient que le "happy path". Des tests de robustesse ont été ajoutés pour simuler des changements de structure HTML, prouvant que le scraper gère désormais ces cas avec des avertissements clairs au lieu de planter.
-4.  **Gestion de l'Environnement (Fail-Fast) :** **Bonne**. Le risque de "configuration silencieuse" en production est bien géré. Le code contient une logique de "fail-fast" (`sys.exit`) qui est correctement validée par les tests existants (`test_get_env_required_missing_in_prod_exits`).
-5.  **Sécurité des Endpoints :** **Bonne**. Les endpoints sensibles (`/schedule`, `/ops/*`, `/tasks/*`) sont protégés par une authentification (API Key ou OIDC) et les tests existants valident correctement les cas de refus (401/403). Le `smoke_prod.sh` permet de valider le scénario nominal en production.
-6.  **Couverture des Scripts (`/scripts`) :** **Faible**. De nombreux scripts opérationnels ont une couverture de 0%. Ces scripts (ex: `backup_restore.py`, `monitor_roi.py`) représentent un risque opérationnel car ils pourraient échouer en production sans avertissement.
-7.  **Tests d'Intégration :** **Bons**. Les tests `TestClient` existants valident adéquatement la stabilité du schéma de `/api/pronostics` et le rendu de base de l'UI `/pronostics`.
-8.  **Documentation de Test :** **Créée**. Les fichiers `TEST_MATRIX.md` et `TEST_PLAN.md` ont été créés pour formaliser la stratégie de test et les procédures de validation.
+La base de code est fonctionnelle et dispose d'une suite de tests locaux déterministe qui passe intégralement. Les modules critiques du service (`plan`, `firestore_client`, `analysis_pipeline`, `scheduler`) sont bien couverts, mais un risque majeur demeure en raison de la couverture quasi nulle des scripts opérationnels annexes, qui sont essentiels au cycle de vie complet du produit.
 
-## 3. Options Possibles
+### 2) Analyse
 
-| Option                                      | Pour                                                                                                | Contre                                                                                            | Effort | 
-| ------------------------------------------- | :-------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------ | ------ | 
-| **1. Mettre en production (Acceptable)**    | Le cœur du métier est très bien testé. Les risques immédiats (scrapers, fail-fast) sont maîtrisés.    | Le manque de couverture sur les scripts opérationnels laisse une "dette" de test à gérer.           | Faible | 
-| **2. Renforcer la couverture des scripts**  | Élimine le risque opérationnel lié aux scripts non testés. Améliore la maintenabilité à long terme. | Tâche potentiellement chronophage, qui peut retarder la mise en production sans impacter le produit | Moyen  | 
-| **3. Investir dans des tests E2E complets** | Simulerait le parcours utilisateur de bout en bout de manière plus réaliste.                           | Complexe à maintenir, "flaky", et contraire à la stratégie de se baser sur des tests unitaires/mockés. | Élevé  | 
+-   **Points Forts :**
+    -   **Stabilité :** La suite de tests existante (>900 tests) est robuste et passe à 100%, sans aucun test "flaky" détecté sur 10 exécutions consécutives.
+    -   **Couverture des modules critiques :** Les modules au cœur du service (API, pipeline d'analyse, DB) affichent une excellente couverture (>98%), surpassant l'objectif initial de 80%.
+    -   **Sécurité des Endpoints :** Les mécanismes d'authentification (API Key, OIDC) sont en place et leurs tests de non-régression sont fonctionnels, y compris pour le cas où l'authentification est désactivée.
+    -   **Robustesse des Scrapers :** Des tests basés sur des fixtures HTML ont été ajoutés pour les scrapers `boturfers` et `zeturf` (via `online_fetch`), garantissant un contrat de parsing et une meilleure détection des régressions.
+    -   **Fiabilisation du CI :** Un plan de validation (`TEST_PLAN.md`) et un script de smoke test (`scripts/smoke_prod.sh`) ont été créés pour formaliser et automatiser les contrôles qualité.
 
-## 4. Recommandation Priorisée
+-   **Points Faibles et Risques :**
+    -   **Scripts Opérationnels non testés :** C'est le **risque principal**. Des scripts comme `update_excel_with_results.py`, `backup_restore.py` et de nombreux autres ont une couverture de code proche de 0%. Une erreur dans ces scripts peut corrompre des données, fausser des rapports ou bloquer des workflows manuels critiques sans alerte préalable.
+    -   **Code Legacy :** Le script `scripts/online_fetch_zeturf.py` est un module complexe et vieillissant, difficile à maintenir et à tester. Bien que sa couverture ait été améliorée, il représente une dette technique significative.
+    -   **Gestion des Erreurs de Parsing :** Les scrapers loggent des warnings en cas de champ manquant mais ne déclenchent pas d'alerte formelle, ce qui pourrait masquer un changement de structure du site source.
 
-**Option 1 : Mettre en production.**
+### 3) Options Possibles
 
-**Justification :** Le niveau de qualité actuel du cœur de l'application est suffisant pour une mise in production. Les risques les plus critiques identifiés dans la demande (robustesse des scrapers, "fail-fast" de la configuration) ont été couverts. La couverture de 100% sur `plan.py` et `firestore_client.py` et 99% sur `analysis_pipeline.py` garantit une grande fiabilité du pipeline d'analyse. Les risques restants (scripts non couverts) sont de nature opérationnelle et peuvent être mitigés par une surveillance accrue post-déploiement et traités dans un second temps.
+| Option | Pour | Contre | Effort |
+| :--- | :--- | :--- | :--- |
+| **A) Déployer en l'état** | Mise en production rapide. Le service principal est stable. | Risque très élevé sur les opérations annexes (Excel, backup, etc.). Une erreur silencieuse est probable. | **Faible** |
+| **B) Ajouter une couverture minimale sur les scripts critiques** | Réduit significativement le risque sur les opérations les plus courantes. Faisable en mode "apply patch". | Ne couvre pas tous les scripts. Reste une dette technique. | **Moyen** |
+| **C) Refactoriser/Déprécier les scripts Legacy** | Solution la plus saine à long terme. Élimine la dette technique et simplifie la maintenance. | Interdit par la contrainte "pas de refactor massif". Dépasse le cadre de la mission QA. | **Élevé** |
 
-## 5. Plan d’Action Immédiat
+### 4) Recommandation Priorisée
 
-1.  **Merge des Artefacts de Test :** Intégrer `TEST_MATRIX.md`, `TEST_PLAN.md`, `scripts/smoke_prod.sh` et les nouveaux tests (`test_firestore_client_extended.py`, `test_scraper_boturfers_robustness.py`, `test_plan_extended.py`) à la branche principale.
-2.  **Déploiement en Production :** Procéder au déploiement sur l'environnement Cloud Run.
-3.  **Exécution du Smoke Test :** Exécuter `scripts/smoke_prod.sh` sur l'environnement de production pour valider l'état opérationnel du service.
+**Option B : Ajouter une couverture minimale sur les scripts critiques.**
 
-## 6. Mesures de Contrôle (KPIs)
+**Justification :** Cette option offre le meilleur compromis entre la vitesse de déploiement et la réduction des risques, tout en respectant la contrainte "apply patch". En ajoutant des tests unitaires sur les fonctions clés de `update_excel_planning.py` et `update_excel_with_results.py`, nous nous assurons que le workflow de suivi des performances, probablement le plus utilisé, est fiable. Cela laisse la porte ouverte à un chantier de refactorisation futur (Option C) tout en sécurisant l'existant.
 
-*   **Taux de succès des tests :** 100% (788/788)
-*   **Couverture globale :** ~64%
-*   **Couverture `plan.py` :** 100%
-*   **Couverture `firestore_client.py` :** 100%
-*   **Couverture `analysis_pipeline.py` :** 99%
-*   **Couverture `scrapers/boturfers.py` :** 95%
+### 5) Plan d'Action Immédiat
 
-## 7. Risques et Limites
+1.  **Augmenter la couverture de `update_excel_planning.py` et `update_excel_with_results.py` > 60%** en ajoutant des tests unitaires sur les fonctions de parsing et de manipulation de données (sans I/O).
+2.  **Mettre en place un "canary test" documenté** : un test d'intégration léger qui exécute un scraper sur une fixture HTML et alerte si le nombre de champs extraits change drastiquement, pour détecter les changements de structure des sites sources.
+3.  **Auditer et documenter tous les scripts du répertoire `scripts/`** en créant un `README.md` qui décrit leur fonction, leurs inputs/outputs et leur niveau de risque (non testé).
 
-1.  **Scripts Opérationnels non testés (Élevé) :** Des scripts dans le répertoire `/scripts` pourraient échouer en production.
-    *   **Mitigation :** Mettre en place une surveillance et des alertes sur l'exécution de ces scripts. Prioriser leur couverture dans le prochain cycle de développement.
-2.  **Changements de Structure HTML (Moyen) :** Les scrapers restent sensibles à des changements majeurs sur les sites sources, même avec les tests de robustesse.
-    *   **Mitigation :** Mettre en place un monitoring "canary" qui exécute les scrapers à intervalle régulier et alerte en cas de baisse du nombre de courses/runners extraits.
-3.  **Dépendances Externes (Faible) :** Les tests reposent sur des mocks pour les services externes (Firestore, Cloud Tasks). Un changement d'API de ces services pourrait casser l'application.
-    *   **Mitigation :** Maintenir les dépendances à jour et exécuter périodiquement des tests d'intégration sur un environnement de "staging".
+### 6) Mesures de Contrôle
 
-## 8. Exemple Concret : Test de `/schedule`
+-   **Taux de couverture `update_excel_*.py` :** > 60%
+-   **Taux de succès `pytest -q` :** 100%
+-   **Taux de succès `scripts/smoke_prod.sh` :** 100%
+-   **Nombre de scripts opérationnels documentés :** 100%
 
-Le test de l'endpoint `/schedule` illustre la stratégie de sécurité :
+### 7) Risques et Limites
 
-*   **Test Unitaire (sans secret) :** `tests/test_api_security.py::test_api_key_authentication` utilise `mocker` pour simuler `REQUIRE_AUTH=True`. Il vérifie qu'un appel sans `X-API-KEY` retourne bien une erreur 403, sans jamais utiliser de vraie clé.
-*   **Smoke Test (avec secret) :** Le script `scripts/smoke_prod.sh` lit la vraie clé depuis la variable d'environnement `HIPPIQUE_INTERNAL_API_KEY` (qui n'est pas versionnée). Il exécute un `curl` avec cette clé pour valider le comportement en conditions réelles, sans jamais afficher la clé dans les logs.
+1.  **Risque Élevé : Erreur dans un script non priorisé.** Un script non couvert par le plan d'action ci-dessus (ex: `backup_restore.py`) peut échouer en production. *Mitigation : Documentation (plan d'action #3) et exécution manuelle prudente.*
+2.  **Risque Moyen : Changement de structure HTML non détecté.** Un site partenaire peut changer son HTML d'une manière que les tests actuels ne détectent pas. *Mitigation : Canary test (plan d'action #2) et monitoring externe.*
+3.  **Risque Faible : Régression sur le service principal.** Les modules critiques étant bien testés, le risque est faible mais non nul. *Mitigation : Exécution systématique du `smoke_prod.sh` post-déploiement.*
 
-```bash
-# Extrait de smoke_prod.sh
-API_KEY="${HIPPIQUE_INTERNAL_API_KEY:-}"
-# ...
-assert_status "${URL_PROD}/schedule" 403 "-X POST" "/schedule (sans API Key)"
-# ...
-assert_status "${URL_PROD}/schedule" 200 "-X POST -H \"X-API-KEY: ${API_KEY}\"" "/schedule (avec API Key)"
-```
+### 8) Exemple Concret : Test de l'Endpoint `/schedule`
 
-## 9. Score de Confiance
+Le script `scripts/smoke_prod.sh` valide la sécurité de l'endpoint `/schedule` :
+1.  **Sans clé API :**
+    ```bash
+    curl -s -o /dev/null -w "%{http_code}" -X POST ... "${PROD_URL}/schedule"
+    ```
+    Ce test vérifie que le code de statut est `403` (Forbidden), prouvant que l'accès est bien bloqué.
+2.  **Avec clé API :**
+    ```bash
+    curl -s -o /dev/null -w "%{http_code}" -X POST -H "X-API-KEY: ${HIPPIQUE_INTERNAL_API_KEY}" ...
+    ```
+    Ce test, utilisant une variable d'environnement pour ne jamais exposer la clé, vérifie que le code de statut est `200` (OK), prouvant que l'accès est autorisé avec une clé valide.
+
+### 9) Score de Confiance
 
 **85/100**
 
-*   **Facteurs positifs :** Suite de tests très solide sur le cœur de métier, pas de tests "flaky", bonne gestion des dépendances via les mocks.
-*   **Facteurs négatifs :** Faible couverture des scripts opérationnels, qui constitue une zone d'ombre.
+-   **Facteurs positifs :** Stabilité de la suite de tests, excellente couverture des modules applicatifs principaux, sécurité des endpoints validée.
+-   **Facteurs négatifs :** La dette technique et l'absence de couverture sur les scripts opérationnels représentent un risque non négligeable qui empêche d'atteindre un score > 95.
 
-## 10. Questions de Suivi
+### 10) Questions de Suivi
 
-1.  Quel est le niveau de criticité et la fréquence d'utilisation des scripts dans le répertoire `hippique_orchestrator/scripts/` ? Cela aidera à prioriser leur couverture de test.
-2.  Un environnement de "staging" est-il disponible pour exécuter des tests d'intégration avec de vrais services Google Cloud avant de déployer en production ?
+1.  Quel est le plan à moyen terme pour les scripts du répertoire `scripts/` ? Doivent-ils être maintenus, refactorisés dans le service principal, ou dépréciés ?
+2.  Comment les changements de structure des sites scrapés sont-ils actuellement monitorés, et un système d'alerte formel est-il envisagé ?

@@ -11,6 +11,20 @@ def mock_logger(mocker):
     return mocker.patch("hippique_orchestrator.scrapers.boturfers.logger")
 
 @pytest.fixture
+def boturfers_programme_sample_html():
+    """Provides the HTML content of a sample Boturfers programme page."""
+    fixture_path = Path(__file__).parent / "fixtures" / "boturfers_programme_sample.html"
+    assert fixture_path.exists(), f"Fixture file not found: {fixture_path}"
+    return fixture_path.read_text(encoding='utf-8')
+
+@pytest.fixture
+def boturfers_racedetail_sample_html():
+    """Provides the HTML content of a sample Boturfers race detail page."""
+    fixture_path = Path(__file__).parent / "fixtures" / "boturfers_racedetail_sample.html"
+    assert fixture_path.exists(), f"Fixture file not found: {fixture_path}"
+    return fixture_path.read_text(encoding='utf-8')
+
+@pytest.fixture
 def boturfers_programme_broken_reunion_class_html():
     """Provides the HTML content of a broken Boturfers programme page."""
     fixture_path = Path(__file__).parent / "fixtures" / "boturfers_programme_broken_reunion_class.html"
@@ -42,3 +56,73 @@ def test_parse_programme_handles_missing_race_table(boturfers_programme_missing_
     fetcher.soup = BeautifulSoup(boturfers_programme_missing_table_html, 'lxml')
     races = fetcher._parse_programme()
     assert "Tableau des courses" in mock_logger.warning.call_args[0][0]
+
+def test_parse_programme_from_static_fixture(boturfers_programme_sample_html):
+    """
+    Tests that the scraper can correctly parse a programme from a static HTML fixture.
+    This acts as a contract for the expected HTML structure.
+    """
+    fetcher = boturfers.BoturfersFetcher("http://base.url")
+    fetcher.soup = BeautifulSoup(boturfers_programme_sample_html, 'lxml')
+    races = fetcher._parse_programme()
+
+    assert len(races) == 3
+    
+    # Test R1C1
+    assert races[0]["rc"] == "R1C1"
+    assert races[0]["name"] == "PRIX DE LA FIXTURE"
+    assert races[0]["reunion"] == "R1"
+    assert races[0]["start_time"] == "13:50"
+    assert races[0]["runners_count"] == 16
+    assert races[0]["url"] == "http://base.url/courses/2025-01-01/fictif/r1c1-prix-de-la-fixture"
+
+    # Test R1C2
+    assert races[1]["rc"] == "R1C2"
+    assert races[1]["name"] == "PRIX DU TEST UNITAIRE"
+    assert races[1]["reunion"] == "R1"
+    assert races[1]["start_time"] == "14:25"
+    assert races[1]["runners_count"] == 12
+
+    # Test R2C1
+    assert races[2]["rc"] == "R2C1"
+    assert races[2]["reunion"] == "R2"
+    assert races[2]["start_time"] == "16:00"
+    assert races[2]["runners_count"] == 10
+
+def test_parse_race_details_from_static_fixture(boturfers_racedetail_sample_html, mock_logger):
+    """
+    Tests that the scraper can correctly parse race details from a static HTML fixture,
+    ensuring robustness against malformed data.
+    """
+    fetcher = boturfers.BoturfersFetcher("http://race.url/partant")
+    fetcher.soup = BeautifulSoup(boturfers_racedetail_sample_html, 'lxml')
+    runners = fetcher._parse_race_runners_from_details_page()
+
+    # Should parse 2 valid runners and skip the malformed ones
+    assert len(runners) == 2
+    mock_logger.warning.assert_any_call("Failed to parse a runner row: list index out of range. Row skipped.", extra={'correlation_id': None, 'trace_id': None})
+
+
+    # Test Runner 1
+    assert runners[0]["num"] == "1"
+    assert runners[0]["nom"] == "AS DU TEST"
+    assert runners[0]["jockey"] == "J. Testeur"
+    assert runners[0]["entraineur"] == "E. Scripter"
+    assert runners[0]["odds_win"] == 4.5
+    assert runners[0]["odds_place"] == 1.8
+    assert runners[0]["musique"] == "1p 2p (23) 3p"
+    assert runners[0]["gains"] == "150000€"
+
+    # Test Runner 2
+    assert runners[1]["num"] == "2"
+    assert runners[1]["nom"] == "ROI DE LA QA"
+    assert runners[1]["jockey"] == "M. Coverage"
+    assert runners[1]["entraineur"] == "P. Integration"
+    assert runners[1]["odds_win"] == 8.0
+    assert runners[1]["odds_place"] == 2.5
+    
+    metadata = fetcher._parse_race_metadata()
+    assert metadata["distance"] == 2400
+    assert metadata["type_course"] == "Plat"
+    assert metadata["corde"] == "Gauche"
+    assert "pour chevaux entiers" in metadata["conditions"]

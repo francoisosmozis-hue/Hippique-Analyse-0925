@@ -80,6 +80,24 @@ def test_fallback_parse_no_data_finds_nothing(zeturf_page_content):
 
     assert len(result["runners"]) == 0
 
+def test_double_extract_uses_fallback(mocker):
+    """
+    Tests that _double_extract uses the fallback parser when the primary one fails.
+    """
+    html_content = "<html><body>Some content</body></html>"
+    mocker.patch(
+        "hippique_orchestrator.scripts.online_fetch_zeturf._http_get",
+        return_value=html_content,
+    )
+    fallback_mock = mocker.patch(
+        "hippique_orchestrator.scripts.online_fetch_zeturf._fallback_parse_html",
+        return_value={"runners": []},
+    )
+
+    online_fetch_zeturf._double_extract("http://example.com", snapshot="H-30")
+
+    fallback_mock.assert_called_once_with(html_content)
+
 
 
 

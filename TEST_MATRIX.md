@@ -1,15 +1,23 @@
-# Matrice de Tests - Hippique Orchestrator
+# Matrice de Tests - Projet Hippique Orchestrator
 
-Ce document détaille la stratégie de test pour chaque composant majeur du projet, en identifiant les risques, les tests existants, les tests manquants et les indicateurs de succès.
+Ce document détaille la stratégie de test par composant, en évaluant les risques et en identifiant les tests manquants.
 
-| Composant | Risque | Tests Existants (Couverture) | Tests Manquants | KPI de Qualité | Effort | Priorité |
+| Composant | Risque (1-5) | Tests Existants | Tests Manquants | KPI Cible | Effort (H/M/L) | Priorité (H/M/L) |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **API Publique (`/api/pronostics`)** | Moyen | `test_api_endpoints.py` (validation schéma, ETag, date) | - Test de charge/stress (non-scope) <br>- Test de performance (latence < 1s) <br>- Scénario "aucune course trouvée" vs "scraping échoué" | Stabilité schéma JSON (100% validation), Taux erreur < 0.1% | Faible | Moyenne |
-| **UI (`/pronostics`)** | Faible | `test_api_endpoints.py` (rendu HTML basique) | - Test de l'appel JS à l'API (via mock) <br>- Validation de l'affichage des données API | Le marqueur `data-api-endpoint` est présent et correct | Faible | Faible |
-| **Endpoints Sécurisés (`/schedule`, `/ops/*`)** | **Élevé** | `test_api_security.py` (mocks pour API Key/OIDC) | - **Test d'intégration (smoke test) avec une vraie clé API via env var** <br>- Test du mode `REQUIRE_AUTH=false` pour tous les endpoints | 401/403 si auth échoue (100%), 200 si succès | Moyen | **Élevée** |
-| **Pipeline d'Analyse (`pipeline_run.py`)** | **Élevé** | `test_pipeline_run.py` (80%) | - Cas limites (ex: `runners` vide, `partants` invalide) <br>- Comportement avec calibration ROI manquante/invalide <br>- Tests des portes de sécurité (overround, EV) avec données extrêmes | Couverture > 85% <br> 0 régression sur les cas nominaux | Moyen | **Élevée** |
-| **Validateur EV (`validator_ev.py`)** | **Critique** | `test_validator_ev.py` (59%) | - Validation de chaque "gate" (budget, JE stats) <br>- Test des cas où les données `je_feature` sont absentes <br>- Scénarios avec des cotes invalides ou manquantes | Couverture > 80% <br> Scénarios de rejet documentés et testés | **Élevé** | **Critique** |
-| **Persistance (Firestore/GCS)** | Faible | `test_firestore_client.py` (100%), `test_gcs_client.py` (75%) | - Test du format `doc_id` pour tous les cas <br>- Comportement sur collection vide/inexistante pour `get_races_for_date` | Couverture `gcs_client.py` > 85% | Faible | Moyenne |
-| **Scrapers (Boturfers, Geny, ZoneTurf)** | **Élevé** | `test_scraper_*.py` (parsing via fixtures HTML) | - **Ajouter des fixtures HTML pour les cas d'erreur** (page 404, structure modifiée, données manquantes) <br>- Test de résilience (ex: une course mal formée ne doit pas bloquer tout le programme) <br>- Protocole de monitoring "canary" (alerte si la structure change) | Couverture > 90% sur `stats_provider.py` | Moyen | **Élevée** |
-| **Scheduler (`scheduler.py`)** | Moyen | `test_scheduler.py` (100%, mock Cloud Tasks) | - Test du comportement si le plan de course est vide <br>- Test de la gestion des fuseaux horaires (calcul de l'heure de planification) | 0 tâche créée si plan vide, heures UTC correctes | Faible | Faible |
-| **Gestion de l'Environnement (`env_utils.py`)** | **Élevé** | `test_env_utils.py` (96%) | - **Ajouter un test pour le mode "fail-fast" en prod** si une variable requise est manquante | Le service ne démarre pas en prod si `REQUIRED` var manque | Faible | Moyenne |
+| **API Publique (/pronostics)** | 4 | Validation schéma JSON, ETag, cas vide. | - Test de charge simple (robustesse).<br>- Test sur les en-têtes de sécurité (CSP, HSTS). | Stabilité schéma à 100%. | L | M |
+| **UI (/pronostics)** | 3 | Présence d'éléments HTML clés, appel API mocké. | - Test de rendu sur une date sans plan.<br>- Validation de l'affichage d'un message d'erreur si l'API échoue. | Taux de régression visuelle < 5%. | L | L |
+| **Endpoints Sensibles (ops, tasks)** | 5 | Tests d'authentification (API Key, OIDC) via `TestClient`. | - Scénario `REQUIRE_AUTH=false` pour tous les endpoints.<br>- Test de non-régression sur l'authentification OIDC (Google). | 100% des endpoints sensibles couverts par un test d'auth. | M | H |
+| **Pipeline d'Analyse** | 3 | Couverture de 99% sur `analysis_pipeline.py`. Scénarios nominaux et d'erreurs (GCS, snapshot). | - Vérifier la pertinence des tests sur les cas limites (ex: partants > 20).<br>- Test d'intégration avec un `payout_calibration.yaml` vide ou malformé. | Couverture > 98%. | L | L |
+| **Persistance (Firestore/GCS)** | 4 | Couverture de 100% sur `firestore_client.py` (mocks). Tests sur `gcs_client.py`. | - Test de comportement "collection vide" ou "bucket vide".<br>- Test de gestion d'erreur fine (permissions, quota).<br>- **Augmenter couverture `gcs_client.py` à >80%.** | Couverture `gcs_client.py` > 80%. | M | M |
+| **Scrapers (Boturfers, Zeturf, Geny)** | 5 | Excellente couverture sur les parsers modernes (>95%). | - **Tests de parsing sur fixtures HTML statiques pour chaque scraper (contrat).**<br>- Détection de changement de structure (ex: un sélecteur clé disparaît).<br>- **Isoler et tester `scripts/online_fetch_zeturf.py` (60% cov).** | 100% des parsers validés par fixture. | H | H |
+| **Scheduler / Cloud Tasks** | 4 | Couverture de 100% sur `scheduler.py` avec mocks. | - Test du comportement si `SERVICE_URL` est manquant.<br>- Test de la logique de "skip" si une tâche est dans le passé. | Logique de scheduling 100% couverte. | L | M |
+| **Gestion de l'Environnement** | 5 | Tests sur `env_utils.py` (warn, required, fail-fast). | - **Formaliser un test qui prouve le fail-fast en PROD vs non-PROD.**<br>- Test du support des alias (ex: `GCP_PROJECT` vs `GOOGLE_CLOUD_PROJECT`). | Comportement "fail-fast" 100% déterministe. | M | H |
+| **Scripts Opérationnels** | 5 | Couverture quasi-nulle sur la plupart des scripts. | - **Ajouter des tests unitaires sur les fonctions critiques de `update_excel_planning.py` (>80% cov).**<br>- Ajouter un test de base (parsing args) pour les scripts les plus importants. | Couverture `update_excel_planning.py` > 80%. | H | H |
+
+---
+
+**Légende :**
+- **Risque :** 1 (faible) à 5 (critique).
+- **KPI Cible :** Métrique mesurable pour valider l'atteinte de l'objectif.
+- **Effort :** Estimation de la complexité de mise en place des tests manquants.
+- **Priorité :** Ordre dans lequel les tests doivent être développés.

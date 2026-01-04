@@ -95,10 +95,10 @@ def _invoke_runner(reunion: str, course: str, phase: str) -> None:
     subprocess.run(cmd, check=True, env=env)
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description="Trigger runner_chain phases based on timing")
     ap.add_argument("--meetings", default="meetings.json", help="Planning JSON file")
-    args = ap.parse_args()
+    args = ap.parse_args(argv)
 
     meetings_path = Path(args.meetings)
     if not meetings_path.exists():

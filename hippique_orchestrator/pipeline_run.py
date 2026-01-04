@@ -548,113 +548,87 @@ def _get_legs_for_exotic_type(exotic_type: str) -> int:
     return 3
 
 
-    def _get_legs_for_exotic_type(exotic_type: str) -> int:
-        """Returns the number of horses required for a given exotic bet type."""
-        if exotic_type in ["COUPLE", "COUPLE_PLACE", "ZE234"]:  # Assuming ZE234 is a 2-horse bet
-            return 2
-        if exotic_type == "TRIO":
-            return 3
-        if exotic_type == "ZE4":
-            return 4
-        # Add other types as needed
-        logger.warning(f"Unknown exotic type '{exotic_type}', assuming 3 legs.")
-        return 3
-    
-    
-    def _get_legs_for_exotic_type(exotic_type: str) -> int:
-        """Returns the number of horses required for a given exotic bet type."""
-        if exotic_type in ["COUPLE", "COUPLE_PLACE", "ZE234"]:  # Assuming ZE234 is a 2-horse bet
-            return 2
-        if exotic_type == "TRIO":
-            return 3
-        if exotic_type == "ZE4":
-            return 4
-        # Add other types as needed
-        logger.warning(f"Unknown exotic type '{exotic_type}', assuming 3 legs.")
-        return 3
-    
-    
-    def _generate_exotic_tickets(
-        sp_candidates: list[dict[str, Any]],
-        snapshot_data: dict[str, Any],
-        config: dict[str, Any],
-        final_tickets: list[dict[str, Any]],
-        analysis_messages: list[str],
-    ) -> tuple[list[dict[str, Any]], list[str]]:
-        exotics_config = config["exotics_config"]
-        overround_max = config["overround_max"]
-        budget = config["budget"]
-        sp_config = config["sp_config"]
-        ev_min_combo = config["ev_min_combo"]
-        payout_min_combo = config["payout_min_combo"]
-    
-        exotics_allowed_by_overround = (
-            config.get("market", {}).get("overround_place", 999.0) <= overround_max
-        )
-        if not exotics_allowed_by_overround:
-            analysis_messages.append("Exotics forbidden due to high overround.")
-            return final_tickets, analysis_messages
-    
-        allowed_exotic_types = exotics_config.get("allowed", [])
-        if not allowed_exotic_types:
-            return final_tickets, analysis_messages
-    
-        combo_budget = budget * (1 - sp_config["budget_ratio"])
-        best_combo_overall = None
-    
-        for exotic_type in allowed_exotic_types:
-            num_legs = _get_legs_for_exotic_type(exotic_type)
-            if len(sp_candidates) < num_legs:
+def _generate_exotic_tickets(
+    sp_candidates: list[dict[str, Any]],
+    snapshot_data: dict[str, Any],
+    config: dict[str, Any],
+    final_tickets: list[dict[str, Any]],
+    analysis_messages: list[str],
+) -> tuple[list[dict[str, Any]], list[str]]:
+    exotics_config = config["exotics_config"]
+    overround_max = config["overround_max"]
+    budget = config["budget"]
+    sp_config = config["sp_config"]
+    ev_min_combo = config["ev_min_combo"]
+    payout_min_combo = config["payout_min_combo"]
+
+    exotics_allowed_by_overround = (
+        config.get("market", {}).get("overround_place", 999.0) <= overround_max
+    )
+    if not exotics_allowed_by_overround:
+        analysis_messages.append("Exotics forbidden due to high overround.")
+        return final_tickets, analysis_messages
+
+    allowed_exotic_types = exotics_config.get("allowed", [])
+    if not allowed_exotic_types:
+        return final_tickets, analysis_messages
+
+    combo_budget = budget * (1 - sp_config["budget_ratio"])
+    best_combo_overall = None
+
+    for exotic_type in allowed_exotic_types:
+        num_legs = _get_legs_for_exotic_type(exotic_type)
+        if len(sp_candidates) < num_legs:
+            continue
+
+        exotic_combinations = list(combinations(sp_candidates, num_legs))
+
+        for combo in exotic_combinations:
+            combo_legs = list(combo)
+            try:
+                combo_odds_heuristic = math.prod(leg["odds"] for leg in combo_legs)
+            except (TypeError, KeyError):
                 continue
-    
-            exotic_combinations = list(combinations(sp_candidates, num_legs))
-    
-            for combo in exotic_combinations:
-                combo_legs = list(combo)
-                try:
-                    combo_odds_heuristic = math.prod(leg["odds"] for leg in combo_legs)
-                except (TypeError, KeyError):
-                    continue
-    
-                combo_eval_result = evaluate_combo(
-                    tickets=[{"type": exotic_type, "odds": combo_odds_heuristic, "legs": combo_legs}],
-                    bankroll=combo_budget,
-                    calibration=CALIB_PATH,
+
+            combo_eval_result = evaluate_combo(
+                tickets=[{"type": exotic_type, "odds": combo_odds_heuristic, "legs": combo_legs}],
+                bankroll=combo_budget,
+                calibration=CALIB_PATH,
+            )
+
+            if combo_eval_result.get("status") == "ok":
+                is_profitable = (
+                    combo_eval_result.get("roi", 0) >= ev_min_combo
+                    and combo_eval_result.get("payout_expected", 0) >= payout_min_combo
                 )
-    
-                if combo_eval_result.get("status") == "ok":
-                    is_profitable = (
-                        combo_eval_result.get("roi", 0) >= ev_min_combo
-                        and combo_eval_result.get("payout_expected", 0) >= payout_min_combo
-                    )
-                    if is_profitable:
-                        current_combo_details = {
-                            "type": exotic_type,
-                            "legs": [c["num"] for c in combo_legs],
-                            "roi": combo_eval_result.get("roi"),
-                            "payout": combo_eval_result.get("payout_expected"),
-                        }
-    
-                        if (
-                            best_combo_overall is None
-                            or current_combo_details["roi"] > best_combo_overall["roi"]
-                        ):
-                            best_combo_overall = current_combo_details
-    
-        if best_combo_overall:
-            final_tickets.append(
-                {
-                    "type": best_combo_overall["type"],
-                    "stake": combo_budget,
-                    "roi_est": best_combo_overall["roi"],
-                    "payout_est": best_combo_overall["payout"],
-                    "horses": best_combo_overall["legs"],
-                }
-            )
-            analysis_messages.append(
-                f"Profitable {best_combo_overall['type']} combo found: {best_combo_overall['legs']}."
-            )
-    
+                if is_profitable:
+                    current_combo_details = {
+                        "type": exotic_type,
+                        "legs": [c["num"] for c in combo_legs],
+                        "roi": combo_eval_result.get("roi"),
+                        "payout": combo_eval_result.get("payout_expected"),
+                    }
+
+                    if (
+                        best_combo_overall is None
+                        or current_combo_details["roi"] > best_combo_overall["roi"]
+                    ):
+                        best_combo_overall = current_combo_details
+
+    if best_combo_overall:
+        final_tickets.append(
+            {
+                "type": best_combo_overall["type"],
+                "stake": combo_budget,
+                "roi_est": best_combo_overall["roi"],
+                "payout_est": best_combo_overall["payout"],
+                "horses": best_combo_overall["legs"],
+            }
+        )
+        analysis_messages.append(
+            f"Profitable {best_combo_overall['type']} combo found: {best_combo_overall['legs']}."
+        )
+
     return final_tickets, analysis_messages
 
 

@@ -1,12 +1,14 @@
-# Plan de Test (TEST_PLAN.md)
+# Plan de Validation - Projet Hippique Orchestrator
 
-Ce document décrit les procédures pour valider le projet `hippique-orchestrator`.
+Ce document décrit les procédures de test à exécuter pour valider la qualité, la stabilité et la non-régression de l'application.
 
 ## 1. Validation Locale Complète
 
-### 1.1. Exécution de la Suite de Tests Unitaires
+Ces commandes doivent être exécutées depuis la racine du projet, avec l'environnement virtuel activé.
 
-Cette commande exécute l'intégralité des tests unitaires et d'intégration mockés.
+### 1.1. Exécution de la suite de tests de base
+
+Cette commande lance tous les tests unitaires et d'intégration. Elle doit s'exécuter sans aucune erreur.
 
 **Commande :**
 ```bash
@@ -14,107 +16,61 @@ pytest -q
 ```
 
 **Résultat Attendu :**
-- `786 passed`
-- Aucun échec (`failed`) ou erreur (`error`).
+-   Aucun test ne doit échouer (`... passed in ...`).
+-   Le statut de sortie doit être `0`.
 
-### 1.2. Vérification de la Couverture de Code
+### 1.2. Vérification de la couverture de code
 
-Cette commande génère un rapport de couverture détaillé pour identifier les zones non testées.
-
-**Commande :**
-```bash
-pytest --cov=hippique_orchestrator
-```
-
-**Résultat Attendu :**
-- Un rapport tabulaire affichant le pourcentage de couverture par fichier.
-- **Objectif :** Atteindre >80% sur `plan.py`, `firestore_client.py`, et `analysis_pipeline.py`.
-
-### 1.3. Détection des Tests Instables (Flaky Tests)
-
-Cette commande exécute la suite de tests 10 fois consécutivement pour détecter toute instabilité.
+Cette commande exécute les tests tout en mesurant la couverture de code sur les modules critiques.
 
 **Commande :**
 ```bash
-pytest -q --count=10
+pytest --cov=hippique_orchestrator --cov-report=term-missing
 ```
 
 **Résultat Attendu :**
-- `7860 passed` (786 tests * 10 runs).
-- Aucun échec. Si un test échoue ne serait-ce qu'une fois, il est considéré comme "flaky" et doit être corrigé.
+-   Tous les tests passent.
+-   La couverture globale doit être supérieure à 65%.
+-   La couverture pour les modules `plan.py`, `firestore_client.py`, et `analysis_pipeline.py` doit être supérieure à 80%.
 
-## 2. Validation en Production (Smoke Tests)
+### 1.3. Test de non-régression (Anti-Flaky)
 
-Ces tests sont à exécuter manuellement après un déploiement pour s'assurer que les services critiques sont opérationnels.
-
-### 2.1. Script de Smoke Test
-
-Le script `scripts/smoke_prod.sh` automatise les vérifications de base sur un environnement déployé.
-
-**Prérequis :**
-- `URL_PROD` : Variable d'environnement contenant l'URL de base du service (ex: `https://<service-url>.run.app`).
-- `HIPPIQUE_INTERNAL_API_KEY` : Variable d'environnement contenant la clé API pour les endpoints protégés.
+Cette commande exécute la suite de tests 10 fois consécutivement pour détecter les tests "flaky" (instables).
 
 **Commande :**
 ```bash
-./scripts/smoke_prod.sh
+for i in $(seq 1 10); do echo "--- Run $i/10 ---"; pytest -q || exit 1; done
 ```
 
 **Résultat Attendu :**
-- Chaque test affiche `[OK]` ou `[FAIL]`.
-- Tous les tests doivent afficher `[OK]`.
+-   Les 10 exécutions doivent se terminer sans aucune erreur.
+-   Aucun test ne doit échouer de manière intermittente.
 
-### 2.2. Contenu du Script `smoke_prod.sh`
+## 2. Validation en Production (Smoke Test)
 
+Cette procédure est destinée à être exécutée manuellement ou dans un pipeline de déploiement après une mise en production pour vérifier l'état de santé de base du service.
+
+### 2.1. Prérequis
+
+-   Le service doit être déployé et accessible via une URL.
+-   La variable d'environnement `PROD_URL` doit être définie avec l'URL de base du service (ex: `export PROD_URL="https://hippique-orchestrator-xxxx.run.app"`).
+-   Pour les tests d'endpoints sécurisés, la variable `HIPPIQUE_INTERNAL_API_KEY` doit être exportée avec une clé valide.
+
+### 2.2. Exécution du script
+
+Le script `smoke_prod.sh` automatise les vérifications de base.
+
+**Commande :**
 ```bash
-#!/bin/bash
-
-# Configuration
-URL_PROD="${URL_PROD:-""}"
-API_KEY="${HIPPIQUE_INTERNAL_API_KEY:-""}"
-
-# Fonctions de test
-assert_status() {
-    local url=$1
-    local expected_status=$2
-    local extra_args=$3
-    local description=$4
-
-    # shellcheck disable=SC2086
-    local status_code=$(curl -s -o /dev/null -w "%{{http_code}}" $extra_args "$url")
-
-    if [ "$status_code" -eq "$expected_status" ]; then
-        echo "[OK] $description (Status: $status_code)"
-    else
-        echo "[FAIL] $description (Expected: $expected_status, Got: $status_code)"
-        exit 1
-    fi
-}
-
-# --- Début des Tests ---
-
-if [ -z "$URL_PROD" ]; then
-    echo "[FAIL] La variable d'environnement URL_PROD n'est pas définie."
-    exit 1
-fi
-
-echo "--- Démarrage des Smoke Tests sur $URL_PROD ---"
-
-# 1. Test de l'endpoint public /api/pronostics
-assert_status "${URL_PROD}/api/pronostics?date=$(date +%F)" 200 "" "Endpoint /api/pronostics"
-
-# 2. Test de l'interface utilisateur /pronostics
-assert_status "${URL_PROD}/pronostics" 200 "" "Endpoint /pronostics UI"
-
-# 3. Test de /schedule sans clé API (accès refusé)
-assert_status "${URL_PROD}/schedule" 403 "-X POST" "/schedule (sans API Key)"
-
-# 4. Test de /schedule avec clé API (accès autorisé)
-if [ -z "$API_KEY" ]; then
-    echo "[SKIP] HIPPIQUE_INTERNAL_API_KEY non définie. Le test /schedule avec authentification est sauté."
-else
-    assert_status "${URL_PROD}/schedule" 200 "-X POST -H \"X-API-KEY: ${API_KEY}\"" "/schedule (avec API Key)"
-fi
-
-echo "--- Smoke Tests terminés avec succès ---"
+scripts/smoke_prod.sh
 ```
+
+**Résultat Attendu :**
+-   Le script doit se terminer avec un code de sortie `0`.
+-   Les logs du script doivent indiquer le succès de chaque étape :
+    -   `[OK] /health endpoint is healthy.`
+    -   `[OK] /pronostics UI page loads.`
+    -   `[OK] /api/pronostics returns data.`
+    -   `[OK] /schedule rejects request without API key.`
+    -   `[OK] /schedule accepts request with valid API key.`
+-   Aucune information sensible (comme la clé API) ne doit être affichée dans les logs.

@@ -115,8 +115,8 @@ def test_parse_start_hh_mm_no_date_hint():
 
 
 # --- Tests for _invoke_runner ---
-@patch("subprocess.run")
 @patch("hippique_orchestrator.scripts.cron_decider.os.environ", new_callable=lambda: os.environ.copy())
+@patch("subprocess.run")
 def test_invoke_runner(mock_subprocess_run, mock_os_environ):
     """Test _invoke_runner calls subprocess.run with correct arguments and environment."""
     reunion = "R1"
@@ -147,7 +147,7 @@ def test_invoke_runner(mock_subprocess_run, mock_os_environ):
 def test_main_meetings_file_not_found(fake_fs_cron_decider: FakeFilesystem, capsys):
     """Test main prints warning if meetings file is not found."""
     # meetings.json does not exist in the fake filesystem
-    main(argv=[])
+    main([])
     captured = capsys.readouterr()
     assert "[WARN] meetings file not found: meetings.json" in captured.out
 
@@ -176,7 +176,7 @@ def test_main_happy_path_h5(
         "meetings.json", contents=json.dumps(meetings_data)
     )
 
-    main(argv=["--meetings", "meetings.json"])
+    main(["--meetings", "meetings.json"])
     mock_invoke_runner.assert_called_once_with("R1", "C1", "H5")
 
 
@@ -204,7 +204,7 @@ def test_main_happy_path_h30(
         "meetings.json", contents=json.dumps(meetings_data)
     )
 
-    main()
+    main([])
     mock_invoke_runner.assert_called_once_with("R2", "C2", "H30")
 
 
@@ -232,7 +232,7 @@ def test_main_no_trigger_outside_window(
         "meetings.json", contents=json.dumps(meetings_data)
     )
 
-    main()
+    main([])
     mock_invoke_runner.assert_not_called()
 
 
@@ -256,5 +256,45 @@ def test_main_no_trigger_if_missing_info(
         "meetings.json", contents=json.dumps(meetings_data)
     )
 
-    main()
+    main([])
     mock_invoke_runner.assert_not_called()
+
+@patch("hippique_orchestrator.scripts.cron_decider._invoke_runner")
+def test_main_empty_meetings_file(mock_invoke_runner, fake_fs_cron_decider: FakeFilesystem):
+    """Test main handles an empty meetings file gracefully."""
+    fake_fs_cron_decider.create_file("meetings.json", contents="[]")
+    main(["--meetings", "meetings.json"])
+    mock_invoke_runner.assert_not_called()
+
+@patch("hippique_orchestrator.scripts.cron_decider.dt")
+@patch("hippique_orchestrator.scripts.cron_decider._invoke_runner")
+def test_main_trigger_at_window_edge(
+    mock_invoke_runner, mock_dt, fake_fs_cron_decider: FakeFilesystem
+):
+    """Test main triggers correctly at the exact window edges."""
+    race_start_time = dt.datetime(2026, 1, 3, 12, 0, 0, tzinfo=PARIS)
+    mock_dt.datetime.fromisoformat = dt.datetime.fromisoformat
+
+    meetings_data = {
+        "meetings": [
+            {
+                "label": "R1",
+                "date": "2026-01-03",
+                "courses": [{"num": "C1", "start": "12:00"}],
+            }
+        ]
+    }
+    fake_fs_cron_decider.create_file(
+        "meetings.json", contents=json.dumps(meetings_data)
+    )
+
+    # Test H30 lower edge
+    mock_dt.datetime.now.return_value = race_start_time - dt.timedelta(minutes=33)
+    main([])
+    mock_invoke_runner.assert_called_once_with("R1", "C1", "H30")
+    mock_invoke_runner.reset_mock()
+
+    # Test H5 upper edge
+    mock_dt.datetime.now.return_value = race_start_time - dt.timedelta(minutes=3)
+    main([])
+    mock_invoke_runner.assert_called_once_with("R1", "C1", "H5")

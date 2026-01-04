@@ -1,6 +1,7 @@
 import pytest
 from pathlib import Path
 import re
+import json
 
 from hippique_orchestrator.scripts import online_fetch_zeturf
 
@@ -95,4 +96,89 @@ def test_coerce_runner_entry_variations(raw, expected):
     """Tests _coerce_runner_entry with a variety of inputs."""
     coerced = online_fetch_zeturf._coerce_runner_entry(raw)
     assert coerced == expected
+
+def test_coerce_runner_entry_invalid_input():
+    """Tests that _coerce_runner_entry returns None for non-dict inputs."""
+    assert online_fetch_zeturf._coerce_runner_entry(None) is None
+    assert online_fetch_zeturf._coerce_runner_entry("a string") is None
+    assert online_fetch_zeturf._coerce_runner_entry(123) is None
+    assert online_fetch_zeturf._coerce_runner_entry([1, 2, 3]) is None
+
+def test_normalise_snapshot_result_merges_h30_odds(fs):
+    """
+    Tests that _normalise_snapshot_result correctly merges H30 odds into an H5 snapshot.
+    """
+    # Create a fake h30.json file
+    h30_data = {
+        "runners": [
+            {"num": "1", "odds_win_h30": 10.0, "odds_place_h30": 2.0},
+            {"num": "2", "odds_win_h30": 5.0, "odds_place_h30": 1.5},
+        ]
+    }
+    fs.create_file("data/R1C1/h30.json", contents=json.dumps(h30_data))
+
+    raw_snapshot = {
+        "runners": [
+            {"num": "1", "name": "HORSE A", "cote": 12.0},
+            {"num": "2", "name": "HORSE B", "cote": 6.0},
+        ]
+    }
+
+    result = online_fetch_zeturf._normalise_snapshot_result(
+        raw_snapshot,
+        reunion_hint="R1",
+        course_hint="C1",
+        phase_norm="H5",
+        sources_config={},
+    )
+
+    assert len(result["runners"]) == 2
+    runner1 = result["runners"][0]
+    assert runner1["odds_win_h30"] == 10.0
+    assert runner1["odds_place_h30"] == 2.0
+    runner2 = result["runners"][1]
+    assert runner2["odds_win_h30"] == 5.0
+    assert runner2["odds_place_h30"] == 1.5
+
+def test_normalise_snapshot_result_no_market():
+    """
+    Tests that _normalise_snapshot_result handles a raw snapshot without a 'market' dictionary.
+    """
+    raw_snapshot = {
+        "runners": [{"num": "1", "name": "HORSE A", "cote": 12.0}]
+    }
+
+    result = online_fetch_zeturf._normalise_snapshot_result(
+        raw_snapshot,
+        reunion_hint="R1",
+        course_hint="C1",
+        phase_norm="H5",
+        sources_config={},
+    )
+
+    assert "market" in result
+    assert result["market"] == {'slots_place': 3, 'overround_win': 0.0833, 'overround': 0.0833, 'overround_place': 0.0833}
+
+def test_http_get_raises_on_403(mocker):
+    """
+    Tests that _http_get raises a RuntimeError on a 403 status code.
+    """
+    mock_response = mocker.MagicMock()
+    mock_response.status_code = 403
+    mocker.patch("requests.get", return_value=mock_response)
+
+    with pytest.raises(RuntimeError, match="HTTP 403 returned by http://example.com"):
+        online_fetch_zeturf._http_get("http://example.com")
+
+def test_http_get_raises_on_suspicious_html(mocker):
+    """
+    Tests that _http_get raises a RuntimeError on suspicious HTML content.
+    """
+    mock_response = mocker.MagicMock()
+    mock_response.status_code = 200
+    mock_response.text = "<html><body>captcha</body></html>"
+    mocker.patch("requests.get", return_value=mock_response)
+
+    with pytest.raises(RuntimeError, match="Payload suspect reçu de http://example.com"):
+        online_fetch_zeturf._http_get("http://example.com")
 

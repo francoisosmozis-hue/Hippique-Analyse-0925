@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <title>Fixture de Test - Détail Course Boturfers</title>
+</head>
+<body>
+    <div class="info-race">
+        Plat - 2400m - Corde à gauche - Piste en herbe
+        <br>
+        Conditions : Pour chevaux entiers, hongres et juments de 4 ans.
+    </div>
+    <table class="data">
+        <thead>
+            <tr>
+                <th>N°</th>
+                <th>Cheval</th>
+                <th>Cote Gagnant</th>
+                <th>Cote Placé</th>
+                <th>Musique</th>
+                <th>Gains</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th class="num">1</th>
+                <td class="tl">
+                    <a href="/cheval/fictif/as-du-test" class="link">AS DU TEST</a>
+                    <br>
+                    <a href="/jockey/j-testeur" class="link">J. Testeur</a>
+                    /
+                    <a href="/entraineur/e-scripter" class="link">E. Scripter</a>
+                </td>
+                <td class="cote-gagnant"><span class="c">4,5</span></td>
+                <td class="cote-place"><span class="c">1,8</span></td>
+                <td class="musique">1p 2p (23) 3p</td>
+                <td class="gains">150 000 €</td>
+            </tr>
+            <tr>
+                <th class="num">2</th>
+                <td class="tl">
+                    <a href="/cheval/fictif/roi-de-la-qa" class="link">ROI DE LA QA</a>
+                    <br>
+                    <a href="/jockey/m-coverage" class="link">M. Coverage</a>
+                    /
+                    <a href="/entraineur/p-integration" class="link">P. Integration</a>
+                </td>
+                <td class="cote-gagnant"><span class="c">8,0</span></td>
+                <td class="cote-place"><span class="c">2,5</span></td>
+                <td class="musique">4h 5p 1p</td>
+                <td class="gains">95 000 €</td>
+            </tr>
+            <!-- Ligne malformée pour tester la robustesse -->
+            <tr>
+                <td colspan="6">Une ligne invalide</td>
+            </tr>
+            <tr>
+                <th class="num">3</th>
+                <td class="tl">
+                    <a href="/cheval/fictif/miss-mock" class="link">MISS MOCK</a>
+                    <br>
+                    <!-- Jockey manquant -->
+                    <a href="/entraineur/f-fixture" class="link">F. Fixture</a>
+                </td>
+                <td class="cote-gagnant"><span class="c">12,0</span></td>
+                <td class="cote-place"></td> <!-- Cote placée manquante -->
+                <td class="musique">Da</td>
+                <td class="gains">30 000 €</td>
+            </tr>
+        </tbody>
+    </table>
+</body>
+</html>
