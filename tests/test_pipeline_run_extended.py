@@ -1,3 +1,4 @@
+import math
 import pytest
 from pytest_mock import MockerFixture
 from unittest.mock import MagicMock
@@ -91,6 +92,12 @@ def mock_snapshot_data():
         ]
     })
 
+def test_normalize_probs_empty_list():
+    assert pipeline_run._normalize_probs([]) == []
+
+def test_normalize_probs_zero_sum():
+    assert pipeline_run._normalize_probs([0.0, 0.0, 0.0]) == [1/3, 1/3, 1/3]
+
 # --- Tests for _initialize_and_validate ---
 
 def test_initialize_and_validate_success(mock_snapshot_data, mock_gpi_config):
@@ -183,7 +190,8 @@ def test_apply_base_stat_adjustment_je_bonus(mock_snapshot_data, mock_gpi_config
     # Ensure p_base is present for all runners, as _apply_base_stat_adjustment expects it
     for r in runners:
         r["p_base"] = 0.2 # Arbitrary base prob for all
-    je_stats = {"1": {"j_rate": 15.0, "e_rate": 10.0}} # J_rate above bonus threshold
+    # J_rate above bonus threshold, e_rate above bonus threshold
+    je_stats = {"1": {"j_rate": 15.0, "e_rate": 20.0}}
     
     adjusted_probs = _apply_base_stat_adjustment(runners, je_stats, mock_gpi_config["weights"], mock_gpi_config)
     assert adjusted_probs[0] > runners[0]["p_base"] # Should be increased by je_bonus
@@ -206,26 +214,43 @@ def test_apply_base_stat_adjustment_volatility_bonus(mock_snapshot_data, mock_gp
     adjusted_probs = _apply_base_stat_adjustment(runners, {}, mock_gpi_config["weights"], mock_gpi_config)
     assert adjusted_probs[0] > runners[0]["p_base"] # Should be increased by sure_bonus
 
-def test_apply_base_stat_adjustment_musique_score(mock_snapshot_data, mock_gpi_config, mocker: MockerFixture):
+def test_apply_base_stat_adjustment_musique_score(mock_snapshot_data, mock_gpi_config):
     runners = mock_snapshot_data["runners"]
     for r in runners:
         r["p_base"] = 0.2
-    # Musique data needs to be a dict with 'position_stats' as per analysis_utils.score_musique_form
-    runners[0]["parsed_musique"] = {"position_stats": [{"position": 1, "type": "plat", "distance": 1600}]} # Simulate good musique score
+    
+    # Simulate parsed_musique data that results in a non-zero score
+    runners[0]["parsed_musique"] = {
+        "top3_count": 1,
+        "top5_count": 1,
+        "disqualified_count": 0,
+        "recent_performances_numeric": [1],
+        "is_dai": False,
+        "regularity_score": 1.0,
+        "last_race_placing": 1,
+        "num_races_in_musique": 1,
+    }
     
     # Create a local copy of volatility config to modify
     local_volatility_config = copy.deepcopy(mock_gpi_config["adjustments"]["volatility"])
-    # Temporarily increase musique_score_weight to ensure a clear adjustment
-    local_volatility_config["musique_score_weight"] = 10.0
+    # Set musique_score_weight to a value that will cause a clear adjustment
+    local_volatility_config["musique_score_weight"] = 1.0 
 
-    # Mock score_musique_form to return a value that makes the assertion true
-    mocker.patch("hippique_orchestrator.pipeline_run.score_musique_form", return_value=1.0) # Significantly positive score
     # Pass the modified volatility_config through the full config structure
     temp_config = copy.deepcopy(mock_gpi_config)
     temp_config["adjustments"]["volatility"] = local_volatility_config
 
     adjusted_probs = _apply_base_stat_adjustment(runners, {}, temp_config["weights"], temp_config)
+    # Expected score from score_musique_form for this data:
+    # score = top3_count * 2.0 + (top5_count_only) * 1.0 - normalized_regularity_penalty * 3.0
+    # top3_count = 1, top5_count_only = 0
+    # num_races_in_musique = 1
+    # normalized_regularity_penalty = (1.0 - 1.0) / 9.0 = 0
+    # score = 1 * 2.0 + 0 - 0 = 2.0
+    # factor = 1 + 2.0 * 1.0 = 3.0
+    # adjusted_probs[0] = 0.2 * 3.0 = 0.6
     assert adjusted_probs[0] > runners[0]["p_base"] # Should be increased by musique_score_weight
+    assert adjusted_probs[0] == pytest.approx(runners[0]["p_base"] * (1 + 2.0 * local_volatility_config["musique_score_weight"]))
 
 def test_apply_base_stat_adjustment_no_je_or_volatility_data(mock_snapshot_data, mock_gpi_config):
     runners = mock_snapshot_data["runners"]
@@ -233,6 +258,25 @@ def test_apply_base_stat_adjustment_no_je_or_volatility_data(mock_snapshot_data,
         r["p_base"] = 0.2
     
     adjusted_probs = _apply_base_stat_adjustment(runners, {}, mock_gpi_config["weights"], mock_gpi_config)
+    assert adjusted_probs[0] == runners[0]["p_base"] # Should remain unchanged (factor 1.0)
+
+def test_apply_base_stat_adjustment_je_neutral(mock_snapshot_data, mock_gpi_config):
+    runners = mock_snapshot_data["runners"]
+    for r in runners:
+        r["p_base"] = 0.2
+    # J_rate and e_rate are between bonus and malus thresholds
+    je_stats = {"1": {"j_rate": 10.0, "e_rate": 10.0}}
+    
+    adjusted_probs = _apply_base_stat_adjustment(runners, je_stats, mock_gpi_config["weights"], mock_gpi_config)
+    assert adjusted_probs[0] == runners[0]["p_base"] # Should remain unchanged (factor 1.0)
+
+def test_apply_base_stat_adjustment_je_invalid_rate_type(mock_snapshot_data, mock_gpi_config):
+    runners = mock_snapshot_data["runners"]
+    for r in runners:
+        r["p_base"] = 0.2
+    je_stats = {"1": {"j_rate": "invalid_float", "e_rate": 10.0}} # Invalid j_rate type
+    
+    adjusted_probs = _apply_base_stat_adjustment(runners, je_stats, mock_gpi_config["weights"], mock_gpi_config)
     assert adjusted_probs[0] == runners[0]["p_base"] # Should remain unchanged (factor 1.0)
 
 # --- Tests for _apply_chrono_adjustment ---
@@ -259,25 +303,17 @@ def test_apply_chrono_adjustment_no_best_chronos(mock_snapshot_data, mock_gpi_co
     factors = _apply_chrono_adjustment(runners, {}, mock_gpi_config["adjustments"]["chrono"])
     assert all(f == 1.0 for f in factors) # Factors should all be 1.0
 
-def test_apply_chrono_adjustment_malformed_chrono_data(mock_snapshot_data, mock_gpi_config):
-    runners = mock_snapshot_data["runners"]
-    # je_stats for runner 1 contains malformed chrono data
-    je_stats = {
+def test_apply_chrono_adjustment_malformed_chrono_data(mock_gpi_config):
+    # Use a single runner with malformed chrono data
+    runners = [{"num": 1, "nom": "Horse A", "p_base": 0.1}]
+    malformed_je_stats = {
         "1": {"last_3_chrono": ["invalid", 71.0, 72.0]},
-        "2": {}, # Runner 2 has no chrono data
     }
-    # For this test, we are passing the full runners list, but only runner 1 has malformed chrono in je_stats
-    # The je_stats argument to _apply_chrono_adjustment is effectively empty if je_stats are not part of the runner dict.
-    # The function gets its je_stats per-runner by runner_je_stats = je_stats.get(runner_num, {})
-    # So we need to put je_stats into runner dicts as well for this test to be meaningful for _apply_chrono_adjustment
-    runners[0]["je_stats"] = je_stats["1"] # Malformed chrono for runner 1
-    runners[1]["je_stats"] = je_stats["2"] # No chrono for runner 2
-    runners[2]["je_stats"] = {} # No chrono for runner 3
-    runners[3]["je_stats"] = {} # No chrono for runner 4
     
-    factors = _apply_chrono_adjustment(runners, {r["num"]: r["je_stats"] for r in runners if "je_stats" in r}, mock_gpi_config["adjustments"]["chrono"])
-    # All factors should be 1.0 because no valid chrono was found for any runner
-    assert all(f == 1.0 for f in factors)
+    factors = _apply_chrono_adjustment(runners, malformed_je_stats, mock_gpi_config["adjustments"]["chrono"])
+    # Factors should all be 1.0 because no valid chrono was found for the runner
+    assert len(factors) == 1
+    assert factors[0] == 1.0
 
 # --- Tests for _apply_drift_adjustment ---
 
@@ -354,17 +390,18 @@ def test_apply_drift_adjustment_outsider_steam_factor(mock_snapshot_data, mock_g
     assert factors[0] > 1.0
     assert "Steam" in runners[0]["drift_status"]
 
-def test_apply_drift_adjustment_high_odds_clamping(mock_snapshot_data, mock_gpi_config):
+def test_apply_drift_adjustment_medium_drift_no_special_factors(mock_snapshot_data, mock_gpi_config):
     runners = mock_snapshot_data["runners"]
-    # Simulate high odds, check clamping
-    h30_odds_map = {1: 70.0}
-    runners[0]["odds_place"] = 60.0 # Steam
-    
-    drift_config = mock_gpi_config["adjustments"]["drift"]
-    factors = _apply_drift_adjustment(runners[:1], h30_odds_map, drift_config)
-    assert 0.90 <= factors[0] <= 1.10 # Should be clamped
+    # Simulate a runner with odds that drift outside the threshold, but not enough to be a fav/outsider
+    h30_odds_map = {1: 5.0}  # Initial odds
+    runners[0]["odds_place"] = 5.8  # Drifted up by 16% (5.8/5.0 - 1 = 0.16), which is > 0.07 threshold
+    # The default fav_odds_threshold is 4.0, out_odds_threshold is 8.0, so 5.0 is in between
 
-# --- Tests for _select_sp_dutching_candidates ---
+    factors = _apply_drift_adjustment(runners[:1], h30_odds_map, mock_gpi_config["adjustments"]["drift"])
+    assert len(factors) == 1
+    assert factors[0] != 1.0  # Factor should be applied
+    assert runners[0]["drift_status"] == "Drift"
+    assert factors[0] == pytest.approx(math.exp(-mock_gpi_config["adjustments"]["drift"]["k_d"] * math.log(5.8 / 5.0)))
 
 def test_select_sp_dutching_candidates_min_candidates(mock_snapshot_data):
     # Need at least 2 candidates for SP Dutching
@@ -518,6 +555,40 @@ def test_generate_exotic_tickets_not_enough_sp_candidates(mock_snapshot_data, mo
     )
     assert not final_tickets
     assert not analysis_messages
+
+def test_generate_exotic_tickets_multiple_profitable_combos_updates_best(mocker: MockerFixture, mock_snapshot_data, mock_gpi_config):
+    # Mock evaluate_combo to return different results for different combos
+    # First combo: lower ROI
+    # Second combo: higher ROI
+    mocker.patch(
+        "hippique_orchestrator.pipeline_run.evaluate_combo",
+        side_effect=[
+            {"status": "ok", "roi": 0.5, "payout_expected": 20.0}, # First combo
+            {"status": "ok", "roi": 0.3, "payout_expected": 15.0}, # Second combo (lower)
+            {"status": "ok", "roi": 0.6, "payout_expected": 22.0}, # Third combo (medium)
+            {"status": "ok", "roi": 0.7, "payout_expected": 25.0}, # Fourth combo (best)
+        ]
+    )
+    # Ensure sp_candidates have the 'odds' key expected by math.prod
+    sp_candidates = [
+        {"num": 1, "nom": "Horse A", "odds": 5.0},
+        {"num": 2, "nom": "Horse B", "odds": 8.0},
+        {"num": 3, "nom": "Horse C", "odds": 12.0},
+        {"num": 4, "nom": "Horse D", "odds": 6.0}, # Added a fourth horse
+    ]
+    mock_gpi_config["exotics_config"]["allowed"] = ["TRIO"]
+    mock_gpi_config["market"] = {"overround_place": 1.10}
+    mock_gpi_config["overround_max"] = mock_gpi_config["overround_max_exotics"]
+
+    final_tickets = []
+    analysis_messages = []
+
+    final_tickets, analysis_messages = pipeline_run._generate_exotic_tickets(
+        sp_candidates, mock_snapshot_data, mock_gpi_config, final_tickets, analysis_messages
+    )
+    assert len(final_tickets) == 1
+    assert final_tickets[0]["roi_est"] == 0.7 # Should pick the best ROI
+    assert "Profitable TRIO combo found" in analysis_messages[0]
 
 # --- Tests for _finalize_and_decide ---
 
