@@ -139,6 +139,175 @@ def test_parse_horse_percentages_handles_failures(mocker):
     assert t_rate is None
 
 
+@pytest.mark.parametrize(
+    "h5_data, expected_coverage, expected_rows, expected_j_rate",
+    [
+        ({"runners": []}, 0, 0, None),
+        ({"runners": [{"num": 1}]}, 0, 1, ""),
+        ({"runners": [{"num": 1, "name": "Unknown Horse"}]}, 0, 1, ""),
+        (
+            {"runners": [{"num": 1, "name": "Partially Failing Horse"}]},
+            100,  # Successful if at least one stat is fetched
+            1,
+            "",  # Jockey rate should be empty
+        ),
+    ],
+)
+def test_collect_stats_edge_cases(
+    mocker,
+    tmp_path,
+    h5_data,
+    expected_coverage,
+    expected_rows,
+    expected_j_rate,
+    search_page_html,
+    horse_page_html,
+    profile_page_html,
+):
+    """Tests collect_stats with various edge cases like empty runners or partial failures."""
+    mocker.patch("hippique_orchestrator.fetch_je_stats.get_gcs_manager", return_value=None)
+    mocker.patch("time.sleep")
+
+    h5_path = tmp_path / "h5_snapshot.json"
+    h5_path.write_text(json.dumps(h5_data), encoding="utf-8")
+
+    def mock_fetcher(url, **kwargs):
+        if "recherche" in url:
+            if "Unknown" in url:
+                # Simulate horse not found
+                return "<html></html>"
+            return search_page_html
+        if "cheval" in url:
+            return horse_page_html
+        if "jockey" in url and "Partially" in h5_data["runners"][0].get("name", ""):
+            # Simulate jockey fetch failure
+            raise RuntimeError("Jockey fetch failed")
+        if "entraineur" in url:
+            return profile_page_html
+        return ""
+
+    mocker.patch("hippique_orchestrator.fetch_je_stats.http_get", side_effect=mock_fetcher)
+
+    json_output_path_str = fetch_je_stats.collect_stats(h5=str(h5_path))
+    stats_data = json.loads(Path(json_output_path_str).read_text())
+
+    assert stats_data["coverage"] == expected_coverage
+    assert len(stats_data["rows"]) == expected_rows
+    if expected_rows > 0 and expected_j_rate is not None:
+        assert stats_data["rows"][0]["j_rate"] == expected_j_rate
+
+
+def test_discover_horse_url_by_name_empty_name(mocker):
+    """Tests that an empty name returns None without making a request."""
+    mock_get = mocker.patch("hippique_orchestrator.fetch_je_stats.http_get")
+    url = fetch_je_stats.discover_horse_url_by_name("")
+    assert url is None
+    mock_get.assert_not_called()
+
+
+def test_extract_rate_from_profile_not_found():
+    """Tests that None is returned when no rate is found in the HTML."""
+    html = "<html><body>No relevant information here.</body></html>"
+    rate = fetch_je_stats.extract_rate_from_profile(html)
+    assert rate is None
+
+
+def test_main_function_calls_collect_stats(mocker):
+    """Tests that the main function parses args and calls collect_stats."""
+    mock_collect = mocker.patch("hippique_orchestrator.fetch_je_stats.collect_stats")
+    mocker.patch(
+        "argparse.ArgumentParser.parse_args",
+        return_value=mocker.MagicMock(
+            h5="test.json",
+            out="test.csv",
+            timeout=10,
+            delay=0.5,
+            retries=1,
+            cache=True,
+            cache_dir="/cache",
+            ttl_seconds=300,
+            neutral_on_fail=True,
+        ),
+    )
+
+    fetch_je_stats.main()
+
+    mock_collect.assert_called_once_with(
+        "test.json",
+        "test.csv",
+        timeout=10,
+        delay=0.5,
+        retries=1,
+        cache=True,
+        cache_dir="/cache",
+        ttl_seconds=300,
+        neutral_on_fail=True,
+    )
+
+
+def test_collect_stats_local_filesystem(
+    mocker, tmp_path, search_page_html, horse_page_html, profile_page_html
+):
+    """Tests that collect_stats writes to the local filesystem when GCS is not used."""
+    # Ensure GCS is disabled for this test
+    mocker.patch("hippique_orchestrator.fetch_je_stats.get_gcs_manager", return_value=None)
+
+    h5_path = tmp_path / "h5_snapshot.json"
+    h5_data = {"runners": [{"num": 1, "name": "HORSE A"}]}
+    h5_path.write_text(json.dumps(h5_data), encoding="utf-8")
+
+    def mock_fetcher(url, **kwargs):
+        if "recherche" in url:
+            return search_page_html
+        if "cheval" in url:
+            return horse_page_html
+        if "jockey" in url or "entraineur" in url:
+            return profile_page_html
+        return ""
+
+    mocker.patch("hippique_orchestrator.fetch_je_stats.http_get", side_effect=mock_fetcher)
+    mocker.patch("time.sleep")
+
+    json_output_path_str = fetch_je_stats.collect_stats(h5=str(h5_path))
+    
+    json_output_path = Path(json_output_path_str)
+    assert json_output_path.exists()
+    
+    with json_output_path.open("r") as f:
+        stats_data = json.load(f)
+
+    assert stats_data["coverage"] == 100.0
+    assert len(stats_data["rows"]) == 1
+    assert stats_data["rows"][0]["j_rate"] == "15.00"
+
+    csv_output_path = tmp_path / "h5_snapshot_je.csv"
+    assert csv_output_path.exists()
+    with csv_output_path.open("r") as f:
+        reader = csv.DictReader(f)
+        csv_rows = list(reader)
+        assert len(csv_rows) == 1
+        assert csv_rows[0]["j_rate"] == "15.00"
+
+def test_enrich_from_snapshot_calls_subprocess(mocker):
+    """Tests that enrich_from_snapshot calls the correct subprocess command."""
+    mock_run = mocker.patch("subprocess.run")
+    snapshot_path = "/data/R1C1/h5_snapshot.json"
+
+    result_path = fetch_je_stats.enrich_from_snapshot(snapshot_path)
+
+    expected_out_path = str(Path(snapshot_path).parent / "h5_snapshot_je.csv")
+    assert result_path == expected_out_path
+
+    mock_run.assert_called_once()
+    args, kwargs = mock_run.call_args
+    # Check the command passed to shlex.split
+    import shlex
+    expected_cmd = f'python -m hippique_orchestrator.fetch_je_stats --h5 "{snapshot_path}" --out "{expected_out_path}" --cache --ttl-seconds 86400'
+    assert args[0] == shlex.split(expected_cmd)
+    assert kwargs["check"] is True
+
+
+
 def test_collect_stats_integration(
     mocker, tmp_path, search_page_html, horse_page_html, profile_page_html
 ):

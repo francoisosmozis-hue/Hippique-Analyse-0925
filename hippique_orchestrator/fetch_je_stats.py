@@ -288,17 +288,23 @@ def collect_stats(
                     e_url = links.get("trainer")
 
                     if j_url:
-                        j_rate = extract_rate_from_profile(fetcher(j_url))
-                        time.sleep(conf.delay_between_requests)
-
+                        try:
+                            j_rate = extract_rate_from_profile(fetcher(j_url))
+                            time.sleep(conf.delay_between_requests)
+                        except Exception as e:
+                            LOGGER.warning(f"Failed to fetch jockey stats for '{name}' from {j_url}: {e}")
+                    
                     if e_url:
-                        e_rate = extract_rate_from_profile(fetcher(e_url))
-                        time.sleep(conf.delay_between_requests)
+                        try:
+                            e_rate = extract_rate_from_profile(fetcher(e_url))
+                            time.sleep(conf.delay_between_requests)
+                        except Exception as e:
+                            LOGGER.warning(f"Failed to fetch trainer stats for '{name}' from {e_url}: {e}")
 
                     if j_rate is not None or e_rate is not None:
                         successful_fetches += 1
             except Exception as e:
-                LOGGER.warning(f"Could not fetch stats for horse '{name}': {e}")
+                LOGGER.warning(f"Could not process horse '{name}': {e}")
 
         def _fmt(x):
             return f"{float(x):.2f}" if isinstance(x, (int, float)) else ""

@@ -18,7 +18,7 @@ def mock_dependencies():
     """Mocks external dependencies for api/tasks.py tests."""
     with (
         patch("hippique_orchestrator.api.tasks.write_snapshot_for_day_async", new_callable=AsyncMock) as mock_write_snapshot,
-        patch("hippique_orchestrator.service.analysis_pipeline.run_analysis_for_phase", new_callable=AsyncMock) as mock_run_analysis_for_phase,
+        patch("hippique_orchestrator.api.tasks.run_course", new_callable=AsyncMock) as mock_run_course,
         patch("hippique_orchestrator.api.tasks.build_plan_async", new_callable=AsyncMock) as mock_build_plan,
         patch("hippique_orchestrator.api.tasks.enqueue_run_task", new_callable=AsyncMock) as mock_enqueue_run_task,
         patch("hippique_orchestrator.api.tasks.config", autospec=True) as mock_config,
@@ -28,7 +28,8 @@ def mock_dependencies():
         mock_config.h5_offset = timedelta(minutes=5)
         yield {
             "mock_write_snapshot": mock_write_snapshot,
-            "mock_run_analysis_for_phase": mock_run_analysis_for_phase,            "mock_build_plan": mock_build_plan,
+            "mock_run_course": mock_run_course,
+            "mock_build_plan": mock_build_plan,
             "mock_enqueue_run_task": mock_enqueue_run_task,
             "mock_config": mock_config,
             "mock_verify_oidc_token": mock_verify_oidc_token,
@@ -98,94 +99,124 @@ async def test_run_phase_task_success(mock_dependencies, mock_get_correlation_id
     """
     Test successful run-phase task.
     """
-    # Mock OIDC token verification for authentication
-    mocker.patch("google.oauth2.id_token.verify_oauth2_token", return_value={"email": "test@example.com"})
     headers = {"Authorization": "Bearer fake-token"}
 
-    test_course_url = "http://example.com/race/2025-12-29_R1C1"
+    test_course_url = "http://example.com/race/2025-12-29/R1C1-prix-de-la-course"
     test_phase = "H30"
     test_date = "2025-12-29"
     test_doc_id = "2025-12-29_R1C1"
 
-    mock_run_analysis_for_phase = mock_dependencies["mock_run_analysis_for_phase"]
-    mock_run_analysis_for_phase.return_value = {"success": True, "race_doc_id": test_doc_id, "analysis_result": {"gpi_decision": "PLAY", "status": "success", "tickets_analysis": [], "document_id": test_doc_id}}
+    mock_run_course = mock_dependencies["mock_run_course"]
+    mock_run_course.return_value = {"ok": True, "gpi_decision": "PLAY", "status": "success"}
+
+    mock_update_doc = mocker.patch("hippique_orchestrator.api.tasks.firestore_client.update_race_document")
 
     response = client.post(
         "/tasks/run-phase",
-        json={"course_url": test_course_url, "phase": test_phase, "date": test_date, "doc_id": test_doc_id},
+        json={"course_url": test_course_url, "phase": test_phase, "date": test_date},
         headers=headers,
     )
+
     assert response.status_code == 200
-    assert response.json()["analysis"]["status"] == "success"
-    assert response.json()["analysis"]["document_id"] == test_doc_id
-    assert response.json()["analysis"]["gpi_decision"] == "PLAY"
+    response_data = response.json()
+    assert response_data["status"] == "success"
+    assert response_data["gpi_decision"] == "PLAY"
     
-    mock_run_analysis_for_phase.assert_called_once_with(
+    mock_run_course.assert_called_once_with(
         course_url=test_course_url,
         phase=test_phase,
         date=test_date,
         correlation_id="12345678-1234-5678-1234-567812345678",
-        trace_id=None,
     )
+    mock_update_doc.assert_called_once()
+    assert mock_update_doc.call_args[0][0] == test_doc_id
 
 @pytest.mark.asyncio
-async def test_run_phase_task_run_course_fails(mock_dependencies, mock_get_correlation_id, mocker):
+async def test_run_phase_task_runner_returns_error(mock_dependencies, mock_get_correlation_id, mocker):
     """
-    Test run-phase task when analysis_pipeline.run_analysis_for_phase returns an error.
+    Test run-phase when the runner returns a non-OK status.
     """
-    # Mock OIDC token verification for authentication
-    mocker.patch("google.oauth2.id_token.verify_oauth2_token", return_value={"email": "test@example.com"})
     headers = {"Authorization": "Bearer fake-token"}
-
-    mock_run_analysis_for_phase = mock_dependencies["mock_run_analysis_for_phase"]
-    # Mock the internal analysis pipeline to simulate a failure
-    mock_run_analysis_for_phase.side_effect = Exception("mock_error_from_analysis")
-
-    test_course_url = "http://example.com/race/2025-12-29_R1C1"
-    test_phase = "H30"
-    test_date = "2025-12-29"
-    test_doc_id = "2025-12-29_R1C1"
+    mock_run_course = mock_dependencies["mock_run_course"]
+    error_payload = {"ok": False, "error": "Runner failed"}
+    mock_run_course.return_value = error_payload
 
     response = client.post(
         "/tasks/run-phase",
-        json={"course_url": test_course_url, "phase": test_phase, "date": test_date, "doc_id": test_doc_id},
+        json={"course_url": "http://example.com/R1C1", "phase": "H5", "date": "date"},
         headers=headers,
     )
     assert response.status_code == 500
-    assert "An unexpected exception occurred: mock_error_from_analysis" in response.json()["error"]
-    
-    mock_run_analysis_for_phase.assert_called_once_with(
-        course_url=test_course_url,
-        phase=test_phase,
-        date=test_date,
-        correlation_id="12345678-1234-5678-1234-567812345678",
-        trace_id=None,
-    )
+    # The endpoint adds the correlation_id to the response
+    expected_response = {**error_payload, "correlation_id": "12345678-1234-5678-1234-567812345678"}
+    assert response.json() == expected_response
+
 
 @pytest.mark.asyncio
 async def test_run_phase_task_exception_handling(mock_dependencies, mock_get_correlation_id, mocker):
     """
     Test run-phase task when an unexpected exception occurs.
     """
-    # Mock OIDC token verification for authentication
-    mocker.patch("google.oauth2.id_token.verify_oauth2_token", return_value={"email": "test@example.com"})
     headers = {"Authorization": "Bearer fake-token"}
+    mock_run_course = mock_dependencies["mock_run_course"]
+    mock_run_course.side_effect = Exception("unexpected_error")
 
-    mock_run_analysis_for_phase = mock_dependencies["mock_run_analysis_for_phase"]
-    mock_run_analysis_for_phase.side_effect = Exception("unexpected_error")
-
-    test_course_url = "http://example.com/race/2025-12-29_R1C1"
-    test_phase = "H30"
-    test_date = "2025-12-29"
-    test_doc_id = "2025-12-29_R1C1"
+    mock_update_db = mocker.patch("hippique_orchestrator.api.tasks.firestore_client.update_race_document")
 
     response = client.post(
         "/tasks/run-phase",
-        json={"course_url": test_course_url, "phase": test_phase, "date": test_date, "doc_id": test_doc_id},
+        json={"course_url": "http://example.com/R1C1", "phase": "H5", "date": "date"},
         headers=headers,
     )
     assert response.status_code == 500
-    assert "An unexpected exception occurred: unexpected_error" in response.json()["error"]
+    assert "Internal server error: unexpected_error" in response.json()["detail"]
+    mock_update_db.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_snapshot_9h_task_exception(mock_dependencies, mock_get_correlation_id):
+    """Test exception handling in the snapshot-9h task."""
+    mock_dependencies["mock_write_snapshot"].side_effect = Exception("Storage error")
+    
+    headers = {"Authorization": "Bearer fake-token"}
+    response = client.post("/tasks/snapshot-9h", json={"date": "2025-10-26"}, headers=headers)
+    
+    assert response.status_code == 500
+    assert "Internal server error during snapshot-9h: Storage error" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_bootstrap_day_task_exception(mock_dependencies, mock_get_correlation_id):
+    """Test exception handling in the bootstrap-day task."""
+    mock_dependencies["mock_build_plan"].side_effect = Exception("Plan build failed")
+    
+    headers = {"Authorization": "Bearer fake-token"}
+    response = client.post("/tasks/bootstrap-day", json={"date": "2025-10-26"}, headers=headers)
+    
+    assert response.status_code == 500
+    assert "Internal server error during bootstrap: Plan build failed" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_run_phase_task_infers_doc_id(mock_dependencies, mock_get_correlation_id, mocker):
+    """Test that run-phase task correctly infers doc_id if not provided."""
+    headers = {"Authorization": "Bearer fake-token"}
+    mock_run_course = mock_dependencies["mock_run_course"]
+    mock_run_course.return_value = {"ok": True}
+    
+    # This mock is now inside the correct test
+    mock_update = mocker.patch("hippique_orchestrator.api.tasks.firestore_client.update_race_document")
+
+    response = client.post(
+        "/tasks/run-phase",
+        json={"course_url": "http://example.com/2025-01-01/R1C1-race", "phase": "H5", "date": "2025-01-01"},  # No doc_id
+        headers=headers,
+    )
+    
+    assert response.status_code == 200
+    mock_update.assert_called_once()
+    assert mock_update.call_args[0][0] == "2025-01-01_R1C1"
+
 
 # ============================================
 # /tasks/bootstrap-day Tests

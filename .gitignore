@@ -95,6 +95,9 @@ excel/
 
 # --- Cache divers ---
 .cache/
+.coverage
+coverage.xml
+htmlcov/
 
 # Fichiers de modèle générés
 

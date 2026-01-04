@@ -1,76 +1,65 @@
-# Plan de Validation - Projet Hippique Orchestrator
+# Plan de Test
 
-Ce document décrit les procédures de test à exécuter pour valider la qualité, la stabilité et la non-régression de l'application.
+Ce document détaille les procédures pour valider le bon fonctionnement de l'application, localement et en production.
 
-## 1. Validation Locale Complète
+## 1. Validation Locale
 
-Ces commandes doivent être exécutées depuis la racine du projet, avec l'environnement virtuel activé.
+Ces commandes doivent être exécutées avant toute intégration de code.
 
-### 1.1. Exécution de la suite de tests de base
+### 1.1. Tests Unitaires et de Couverture
 
-Cette commande lance tous les tests unitaires et d'intégration. Elle doit s'exécuter sans aucune erreur.
+Assure la non-régression, la stabilité et une couverture de code minimale.
 
-**Commande :**
 ```bash
-pytest -q
+# Lance tous les tests en parallèle, génère un rapport de couverture
+pytest -n auto --cov=hippique_orchestrator --cov-report term-missing --cov-fail-under=70
 ```
 
-**Résultat Attendu :**
--   Aucun test ne doit échouer (`... passed in ...`).
--   Le statut de sortie doit être `0`.
+*   **Critère d'acceptation :** Tous les tests doivent passer (`100% passed`) et la couverture ne doit pas être inférieure à 70%.
 
-### 1.2. Vérification de la couverture de code
+### 1.2. Validation du Linting et du Style
 
-Cette commande exécute les tests tout en mesurant la couverture de code sur les modules critiques.
+Garantit la conformité du code aux standards du projet.
 
-**Commande :**
 ```bash
-pytest --cov=hippique_orchestrator --cov-report=term-missing
+# Lance le linter ruff
+ruff check .
 ```
 
-**Résultat Attendu :**
--   Tous les tests passent.
--   La couverture globale doit être supérieure à 65%.
--   La couverture pour les modules `plan.py`, `firestore_client.py`, et `analysis_pipeline.py` doit être supérieure à 80%.
+*   **Critère d'acceptation :** Aucune erreur rapportée par `ruff`.
 
-### 1.3. Test de non-régression (Anti-Flaky)
+## 2. Validation en Production (Post-Déploiement)
 
-Cette commande exécute la suite de tests 10 fois consécutivement pour détecter les tests "flaky" (instables).
+Ces vérifications doivent être effectuées après chaque déploiement sur l'environnement de production.
 
-**Commande :**
+### 2.1. Test de Santé de l'API
+
+Vérifie que le service est en ligne et répond correctement.
+
 ```bash
-for i in $(seq 1 10); do echo "--- Run $i/10 ---"; pytest -q || exit 1; done
+# Interroge l'endpoint des pronostics pour la date du jour
+curl -s "https://hippique-orchestrator-1084663881709.europe-west1.run.app/api/pronostics?date=$(date +%F)" | jq .
 ```
 
-**Résultat Attendu :**
--   Les 10 exécutions doivent se terminer sans aucune erreur.
--   Aucun test ne doit échouer de manière intermittente.
+*   **Critère d'acceptation :** Le JSON retourné doit contenir une clé `courses` avec une liste non-vide, sans erreurs manifestes.
 
-## 2. Validation en Production (Smoke Test)
+### 2.2. Test de Santé de l'Interface Utilisateur
 
-Cette procédure est destinée à être exécutée manuellement ou dans un pipeline de déploiement après une mise en production pour vérifier l'état de santé de base du service.
+Valide que l'interface se charge et affiche les données.
 
-### 2.1. Prérequis
+1.  Ouvrir un navigateur web.
+2.  Accéder à l'URL : `https://hippique-orchestrator-1084663881709.europe-west1.run.app/pronostics`
+3.  Vérifier visuellement que la grille des courses s'affiche et contient des informations.
+4.  Ouvrir la console de développement pour vérifier l'absence d'erreurs JavaScript.
 
--   Le service doit être déployé et accessible via une URL.
--   La variable d'environnement `PROD_URL` doit être définie avec l'URL de base du service (ex: `export PROD_URL="https://hippique-orchestrator-xxxx.run.app"`).
--   Pour les tests d'endpoints sécurisés, la variable `HIPPIQUE_INTERNAL_API_KEY` doit être exportée avec une clé valide.
+*   **Critère d'acceptation :** La page se charge, les données sont présentes et aucune erreur n'est visible en console.
 
-### 2.2. Exécution du script
+### 2.3. Surveillance de la Création des Tâches
 
-Le script `smoke_prod.sh` automatise les vérifications de base.
+Confirme que le scheduler fonctionne comme attendu.
 
-**Commande :**
-```bash
-scripts/smoke_prod.sh
-```
+1.  Accéder à la console Google Cloud.
+2.  Naviguer vers "Cloud Tasks".
+3.  Vérifier que les tâches pour les analyses `H-5` et `H-30` ont été créées aux heures prévues.
 
-**Résultat Attendu :**
--   Le script doit se terminer avec un code de sortie `0`.
--   Les logs du script doivent indiquer le succès de chaque étape :
-    -   `[OK] /health endpoint is healthy.`
-    -   `[OK] /pronostics UI page loads.`
-    -   `[OK] /api/pronostics returns data.`
-    -   `[OK] /schedule rejects request without API key.`
-    -   `[OK] /schedule accepts request with valid API key.`
--   Aucune information sensible (comme la clé API) ne doit être affichée dans les logs.
+*   **Critère d'acceptation :** Les tâches sont présentes dans la file d'attente avec les bons paramètres.

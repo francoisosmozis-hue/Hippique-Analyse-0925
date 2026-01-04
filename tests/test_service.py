@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -70,6 +70,35 @@ def test_get_pronostics_data_empty_case(client, mock_plan, mock_firestore):
         datetime.fromisoformat(data["last_updated"])
     except (ValueError, TypeError):
         pytest.fail("last_updated is not a valid ISO 8601 string")
+
+
+def test_get_pronostics_data_etag_304_not_modified(client, mock_plan, mock_firestore, monkeypatch):
+    """
+    Test that the /api/pronostics endpoint returns a 304 Not Modified when the
+    ETag matches, indicating the client's cache is fresh.
+    """
+    mock_get_races, _ = mock_firestore
+    mock_plan.return_value = [{"r_label": "R1", "c_label": "C1"}]
+    mock_get_races.return_value = []
+
+    # Freeze time to ensure the ETag hash is the same
+    frozen_time = datetime.now(timezone.utc)
+    mock_datetime = MagicMock()
+    mock_datetime.now.return_value = frozen_time
+    monkeypatch.setattr("hippique_orchestrator.service.datetime", mock_datetime)
+
+
+    # First request to get the ETag
+    response1 = client.get("/api/pronostics?date=2025-01-01")
+    assert response1.status_code == 200
+    etag = response1.headers.get("etag")
+    assert etag is not None
+
+    # Second request with the ETag
+    response2 = client.get(
+        "/api/pronostics?date=2025-01-01", headers={"If-None-Match": etag}
+    )
+    assert response2.status_code == 304
 
 
 def test_get_pronostics_data_with_data(client, mock_plan, mock_firestore):
@@ -258,6 +287,60 @@ async def test_run_single_race_missing_course_url(client, monkeypatch, mock_plan
 
 
 @pytest.mark.asyncio
+async def test_schedule_day_races_success(client, monkeypatch, mock_plan):
+    """
+    Test a successful call to POST /schedule, verifying that the scheduler
+    is called with the correct parameters.
+    """
+    mock_scheduler = MagicMock(return_value=[
+        {"race": "R1C1", "phase": "H-5", "ok": True, "task_name": "task1", "reason": "Scheduled"}
+    ])
+    monkeypatch.setattr("hippique_orchestrator.scheduler.schedule_all_races", mock_scheduler)
+
+    mock_plan.return_value = [{"r_label": "R1", "c_label": "C1"}]
+
+    response = client.post(
+        "/schedule",
+        json={"force": True, "dry_run": True, "date": "2025-01-01"},
+        headers={"X-API-Key": "test-secret"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert "Scheduling process complete" in data["message"]
+    assert data["races_in_plan"] == 1
+    assert len(data["details"]) == 1
+
+    mock_plan.assert_called_once_with("2025-01-01")
+    mock_scheduler.assert_called_once()
+    
+    # Check that force and dry_run flags were passed correctly
+    _, kwargs = mock_scheduler.call_args
+    assert kwargs["force"] is True
+    assert kwargs["dry_run"] is True
+
+
+@pytest.mark.asyncio
+async def test_schedule_day_races_empty_plan(client, monkeypatch, mock_plan):
+    """
+    Test POST /schedule when the daily plan is empty.
+    """
+    mock_scheduler = MagicMock()
+    monkeypatch.setattr("hippique_orchestrator.scheduler.schedule_all_races", mock_scheduler)
+    mock_plan.return_value = []
+
+    response = client.post(
+        "/schedule",
+        json={"date": "2025-01-01"},
+        headers={"X-API-Key": "test-secret"},
+    )
+
+    assert response.status_code == 200
+    assert "No races found in plan" in response.json()["message"]
+    mock_scheduler.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_run_single_race_unhandled_exception(client, monkeypatch, mock_plan):
     """
     Test POST /ops/run for an unhandled exception during the analysis pipeline.
@@ -409,6 +492,51 @@ def validate_pronostic(pronostic: dict):
                 assert isinstance(cheval, (int, str))
 
 
+
+
+def test_run_single_race_not_found(client, mock_plan):
+    """Test POST /ops/run when the requested race is not in the plan."""
+    mock_plan.return_value = [
+        {"r_label": "R1", "c_label": "C2", "name": "Some Other Race"}
+    ]
+    response = client.post("/ops/run?rc=R1C1", headers={"X-API-Key": "test-secret"})
+    assert response.status_code == 404
+    assert "Race R1C1 not found" in response.json()["detail"]
+
+
+def test_get_daily_plan_success(client, mock_plan):
+    """Test a successful call to the /api/plan endpoint."""
+    mock_plan.return_value = [{"r_label": "R1", "c_label": "C1"}]
+    response = client.get("/api/plan?date=2025-01-01")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["ok"] is True
+    assert data["count"] == 1
+    assert data["races"][0]["r_label"] == "R1"
+
+
+def test_debug_config_endpoint(client):
+    """Test that the /debug/config endpoint returns key information."""
+    response = client.get("/debug/config")
+    assert response.status_code == 200
+    data = response.json()
+    assert "project_id" in data
+    assert "version" in data
+    assert "require_auth" in data
+
+
+def test_get_pronostics_data_defaults_to_today(client, mock_plan, mock_firestore):
+    """Test /api/pronostics defaults to the current date when none is provided."""
+    mock_get_races, _ = mock_firestore
+    mock_plan.return_value = []
+    mock_get_races.return_value = []
+    
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    
+    response = client.get("/api/pronostics")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["date"] == today_str
 
 
 def test_ui_contains_critical_elements_and_api_call(client):

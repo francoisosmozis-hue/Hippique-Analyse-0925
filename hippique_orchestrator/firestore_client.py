@@ -19,6 +19,37 @@ db = firestore.Client(project=config.PROJECT_ID)
 logger.info(f"Firestore client initialized for project '{config.PROJECT_ID}'.")
 
 
+def get_document(collection: str, document_id: str) -> dict[str, Any] | None:
+    """
+    Retrieves a single document from a specified collection.
+    """
+    if not db:
+        logger.warning("Firestore is not available, cannot get document.")
+        return None
+    try:
+        doc_ref = db.collection(collection).document(document_id)
+        doc = doc_ref.get()
+        if doc.exists:
+            return doc.to_dict()
+        return None
+    except Exception as e:
+        logger.error(f"Failed to get document '{document_id}' from '{collection}': {e}", exc_info=e)
+        return None
+
+def set_document(collection: str, document_id: str, data: dict[str, Any]) -> None:
+    """
+    Sets (overwrites) a document in a specified collection.
+    """
+    if not db:
+        logger.warning("Firestore is not available, cannot set document.")
+        return
+    try:
+        db.collection(collection).document(document_id).set(data)
+        logger.debug(f"Document {document_id} set successfully in {collection}.")
+    except Exception as e:
+        logger.error(f"Failed to set document '{document_id}' in '{collection}': {e}", exc_info=e)
+
+
 def update_race_document(document_id: str, data: dict[str, Any]) -> None:
     """Updates a document in the main races collection, merging data."""
     if not db:
