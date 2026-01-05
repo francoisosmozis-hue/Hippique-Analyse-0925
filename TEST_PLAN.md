@@ -1,70 +1,83 @@
-# Plan de Test
+# Test Plan for Hippique Orchestrator
 
-## Commandes locales
+This document outlines the testing strategy for the Hippique Orchestrator project, covering unit, integration, and smoke tests.
 
-### Exécution des tests unitaires
+## 1. Overview
+
+The testing strategy is divided into three main pillars to ensure code quality, component reliability, and production stability.
+
+1.  **Unit Tests:** Focused on individual modules and functions in isolation.
+2.  **Integration Tests:** Focused on the service's API endpoints, verifying that components work together correctly.
+3.  **Smoke Tests:** A minimal set of end-to-end checks to quickly validate a deployed environment.
+
+## 2. Running Tests
+
+### Prerequisites
+
+Ensure all development dependencies are installed:
 ```bash
-pytest -q
+pip install -r requirements-dev.txt
 ```
 
-### Exécution des tests avec couverture
-```bash
-pytest --cov=src
-```
+### Running the Full Test Suite
 
-### Vérification de l'absence de tests flaky (10 exécutions)
-```bash
-for i in {1..10}; do pytest -q || exit 1; done
-```
-
-## Smoke Tests en Production
-
-### Prérequis
-- L'URL du service en production doit être définie dans la variable d'environnement `PROD_URL`.
-- La clé d'API pour l'endpoint `/schedule` doit être définie dans la variable d'environnement `HIPPIQUE_INTERNAL_API_KEY`.
-
-### Script de smoke test
-Le script `scripts/smoke_prod.sh` exécute les tests suivants :
-- Vérification de la disponibilité de l'endpoint `/pronostics`.
-- Vérification de la disponibilité de l'endpoint `/api/pronostics`.
-- Vérification que l'endpoint `/schedule` renvoie une erreur 403 sans clé d'API.
-- Vérification que l'endpoint `/schedule` fonctionne avec une clé d'API valide.
+To run all unit and integration tests and generate a coverage report, use the following command from the project root:
 
 ```bash
-#!/bin/bash
-set -e
-
-# Vérification de la présence de l'URL de production
-if [ -z "$PROD_URL" ]; then
-  echo "PROD_URL n'est pas définie."
-  exit 1
-fi
-
-# Test de l'endpoint /pronostics
-curl -sf $PROD_URL/pronostics > /dev/null
-echo "/pronostics OK"
-
-# Test de l'endpoint /api/pronostics
-curl -sf $PROD_URL/api/pronostics > /dev/null
-echo "/api/pronostics OK"
-
-# Test de l'endpoint /schedule sans clé
-if [ $(curl -s -o /dev/null -w "%{http_code}" $PROD_URL/schedule) -eq 403 ]; then
-  echo "/schedule sans clé OK (403)"
-else
-  echo "/schedule sans clé KO"
-  exit 1
-fi
-
-# Test de l'endpoint /schedule avec clé
-if [ -z "$HIPPIQUE_INTERNAL_API_KEY" ]; then
-  echo "HIPPIQUE_INTERNAL_API_KEY n'est pas définie, skip du test /schedule avec clé."
-else
-  if [ $(curl -s -o /dev/null -w "%{http_code}" -H "X-API-KEY: $HIPPIQUE_INTERNAL_API_KEY" $PROD_URL/schedule) -eq 200 ]; then
-    echo "/schedule avec clé OK (200)"
-  else
-    echo "/schedule avec clé KO"
-    exit 1
-  fi
-fi
+pytest --cov=hippique_orchestrator
 ```
+
+### Running Specific Test Suites
+
+- **Unit Tests for Scripts:**
+  These tests validate the business logic within the `scripts/` directory.
+  ```bash
+  # Run all script tests
+  pytest tests/scripts/
+
+  # Run tests for a specific script
+  pytest tests/scripts/test_simulate_wrapper_script.py
+  pytest tests/scripts/test_update_excel_with_results_script.py
+  ```
+
+- **API Integration Tests:**
+  These tests validate the FastAPI service endpoints.
+  ```bash
+  pytest tests/test_api_integration.py
+  ```
+
+## 3. Test Categories
+
+### Unit Tests
+
+- **Location:** `tests/`
+- **Goal:** To verify that individual functions and classes behave as expected. Mocks and fixtures are used extensively to isolate components from external dependencies (like filesystems or cloud services).
+- **Key Modules Covered:**
+  - `hippique_orchestrator/scripts/simulate_wrapper.py`: Validates probability calculations, Monte Carlo simulations, and error handling.
+  - `hippique_orchestrator/scripts/update_excel_with_results.py`: Validates the creation and updating of Excel report files.
+
+### Integration Tests
+
+- **Location:** `tests/test_api_integration.py`
+- **Goal:** To verify that the API endpoints process requests correctly, interact with mocked services as expected, and return the correct data structures and status codes.
+- **Framework:** Uses FastAPI's `TestClient`.
+- **Key Endpoints Covered:**
+  - `/health`: Ensures the service is running.
+  - `/debug/config`: Verifies that the configuration is loaded.
+  - `/api/pronostics`: Verifies the core data aggregation logic by mocking the data sources (`plan` and `firestore_client`).
+
+### Smoke Tests
+
+- **Location:** `scripts/smoke_prod.sh`
+- **Goal:** To perform a quick, high-level check on a live, deployed environment (e.g., production or staging). This is not for detailed testing but to answer the question: "Is the service up and fundamentally working?"
+- **Usage:**
+  ```bash
+  # Ensure you have an API key set in your environment
+  export API_KEY="your-production-api-key"
+  
+  # Run the script against the production URL
+  bash scripts/smoke_prod.sh https://your-service-url.com
+  ```
+- **Checks Performed:**
+  1.  Hits the `/health` endpoint and confirms the status is "healthy".
+  2.  Hits the `/api/pronostics` endpoint and confirms it returns a successful response (`"ok": true`) and a non-empty list of `pronostics`.
