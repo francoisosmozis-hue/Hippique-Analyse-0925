@@ -1,40 +1,20 @@
-# TEST_MATRIX.md
+# Matrice de Tests
 
-Ce document décrit la matrice de tests pour le projet `hippique-orchestrator`, identifiant les composants clés, les risques associés, l'état actuel et manquant des tests, les KPIs pertinents, l'effort estimé et la priorité.
-
-| Composant                 | Risque                              | Tests existants                          | Tests manquants                                      | KPI (Couverture) | Effort | Priorité |
-| :------------------------ | :---------------------------------- | :--------------------------------------- | :--------------------------------------------------- | :--------------- | :----- | :------- |
-| **API Publique**          |                                     |                                          |                                                      |                  |        |          |
-| `/pronostics` (UI)        | Visibilité utilisateur, conformité API | Présence d'éléments clés (tests/test_service.py, tests/test_api_endpoints.py) | Vérification complète de la structure HTML et des liens JS, affichage des données dynamiques. | N/A              | Faible | Moyenne  |
-| `/api/pronostics`         | Données exposées, cohérence         | Validation date, ETag, structure réponse (tests/test_service.py, tests/test_api_endpoints.py) | Validation du schéma JSON, cas limites avec données complexes ou vides. | 88% (`service.py`) | Faible | Élevée   |
-| `/health`                 | Disponibilité, monitoring           | Réponse 200 OK (tests/test_service.py)   | Vérification plus approfondie de l'état des dépendances (Firestore, GCS si activé). | 88% (`service.py`) | Faible | Élevée   |
-| `/debug/config`           | Exposition infos sensibles          | Vérification de la structure (tests/test_service.py) | Vérification de l'absence de secrets réels (via mocks/conf), exhaustivité des infos. | 88% (`service.py`) | Faible | Moyenne  |
-| **Endpoints Sensibles**   |                                     |                                          |                                                      |                  |        |          |
-| `/schedule`               | Déclenchement tâches Cloud Tasks, sécurité | Authentification (403/200), dry-run, gestion erreurs (tests/test_api_security.py, tests/test_scheduler.py) | Scénarios de planification complexes (courses multiples, conflits), logs détaillés des échecs Cloud Tasks. | 100% (`scheduler.py`) | Moyenne | Élevée   |
-| `/ops/run`                | Déclenchement manuel, sécurité      | Authentification (403/200), gestion exceptions (tests/test_api_security.py, tests/test_service.py) | Validation des paramètres d'entrée, comportement avec IDs de courses invalides. | 88% (`service.py`) | Faible | Moyenne  |
-| `/tasks/run-phase`        | Exécution pipeline, sécurité        | Authentification (401/200), gestion erreurs pipeline (tests/test_api_security.py, tests/test_api_tasks.py) | Comportement avec payloads malformés, gestion des retours d'erreurs spécifiques du pipeline. | 99% (`api/tasks.py`) | Faible | Élevée   |
-| `/tasks/snapshot-9h`      | Création snapshot, sécurité         | Authentification (403/200), gestion erreurs (tests/test_api_security.py, tests/test_api_tasks.py) | Cas avec URLs ou labels RC manquants ou invalides, intégrité des données du snapshot. | 99% (`api/tasks.py`) | Faible | Moyenne  |
-| `/tasks/bootstrap-day`    | Initialisation jour, sécurité       | Authentification (403/200), gestion plan vide (tests/test_api_security.py, tests/test_api_tasks.py) | Scénarios d'échec de construction du plan, de planification des tâches Cloud Tasks. | 99% (`api/tasks.py`) | Faible | Moyenne  |
-| **Pipeline Analyse**      | Logique métier, intégrité données   | Cas nominaux, gestion erreurs GCS/snapshot vide (tests/test_analysis_drift.py, tests/test_analysis_pipeline_extended.py) | Tests unitaires sur les fonctions internes (`_fetch_and_save_snapshot`, `_find_and_load_h30_snapshot`), chaînage complet des étapes (pré-processing, calculs, post-processing). | 99% (`analysis_pipeline.py`) | Moyenne | Élevée   |
-| **Persistance**           |                                     |                                          |                                                      |                  |        |          |
-| `firestore_client.py`     | Intégrité des données, disponibilité | CRUD de base, gestion exceptions, db non dispo (tests/test_firestore_client.py) | Comportement avec des IDs de documents longs/spéciaux, performance des requêtes, atomicité. | 94%              | Faible | Élevée   |
-| `gcs_client.py`           | Sauvegarde/lecture GCS              | Initialisation, gestion erreurs GCS (tests/test_gcs_client_extended.py, tests/test_gcs_utils.py) | Cas limites (fichiers très grands, noms de fichiers spéciaux), gestion des versions GCS. | 75%              | Moyenne | Élevée   |
-| **Scrapers**              |                                     |                                          |                                                      |                  |        |          |
-| `boturfers.py`            | Extraction données, robustesse      | Parsing HTML (fixture), gestion erreurs HTTP, cas limites (tests/test_scraper_boturfers.py, _extended.py, _robustness.py) | Résilience aux changements de structure HTML, exhaustivité de l'extraction de toutes les métadonnées. | 95%              | Faible | Élevée   |
-| `zeturf.py`               | Extraction données (héritée)        | Parsing H-30/H-5, normalisation RC (tests/test_scraper_zeturf.py) | Couverture complète de tous les chemins d'extraction de données. | 100%             | Très Faible | Moyenne  |
-| `geny.py`                 | Extraction données (héritée)        | Slugification, gestion erreurs HTTP (tests/test_scraper_geny.py) | Couverture de tous les cas d'extraction de programme et de réunion. | 96%              | Faible | Moyenne  |
-| **Scheduler/Cloud Tasks** | Planification, fiabilité            | Dry-run, force, gestion erreurs tâches (tests/test_scheduler.py, _extended.py) | Scénarios de surcharge Cloud Tasks, traitement des doublons, gestion des fuseaux horaires. | 100%             | Moyenne | Élevée   |
-| **Gestion Env**           | Robustesse config, fail-fast        | Default, required, prod exit, casting (tests/test_env_utils.py) | Comportement avec des variables d'env non standard (espaces, chars spéciaux), tests d'intégration avec des valeurs réelles (mockées). | 96%              | Faible | Élevée   |
-| **Calculs Core**          |                                     |                                          |                                                      |                  |        |          |
-| `probabilities.py`        | Précision calculs proba             | Tests de base de normalisation et d'implied prob (tests/test_dutching_utils.py) | Couverture de tous les cas de calculs (ex: liste vide, zéros, valeurs négatives/nulles). | 78%              | Moyenne | Élevée   |
-| `ev_calculator.py`        | Calcul EV, ROI, staking             | Kelly, dutching, joint prob, ROR, optimize (tests/test_ev_calculator.py) | Couverture complète des chemins de code, tests des algorithmes avec des jeux de données variés. | 91%              | Moyenne | Élevée   |
-| `simulate_ev.py` (main)   | Simulation EV                       | Implied prob, dutching, gate (tests/test_simulate_ev_module.py) | Scénarios complexes avec de nombreux tickets, limites de budget, interaction avec simulate_wrapper. | 71%              | Moyenne | Élevée   |
-| `simulate_wrapper.py` (main)| Wrapper de simulation              | Calibration, cache, correlation penalty (tests/test_simulate_wrapper.py) | Validation de la logique de cache (hits/misses), impact des pénalités de corrélation. | 79%              | Moyenne | Élevée   |
-| **Utilitaires**           |                                     |                                          |                                                      |                  |        |          |
-| `time_utils.py`           | Manipulation temps/dates            | Normalisation des phases (tests/test_scraper_zeturf.py) | Cas limites (fuseaux horaires complexes, formats de date/heure non standards), conversions. | 69%              | Faible | Moyenne  |
-| **Scripts**               |                                     |                                          |                                                      |                  |        |          |
-| `resolve_course_id.py`    | Résolution ID courses               | Extraction RC depuis URL (tests/test_orchestrator_runner.py, tests/test_resolve_course_id.py) | Cas avec URLs non standards, IDs manquants, efficacité de la résolution. | 59%              | Faible | Moyenne  |
-| `p_finale_export.py`      | Exportation P-Finale                | Création CSV/Excel (tests/test_p_finale_export.py) | Validation de l'intégrité des données exportées, formats de sortie, gestion des chemins de fichiers. | 56%              | Faible | Basse    |
-| `update_excel_with_results.py` | Mise à jour Excel             | Enregistrement ROI (tests/test_update_excel_with_results.py) | Scénarios avec fichiers Excel vides/corrompus, gestion des colonnes manquantes, performance. | 37%              | Moyenne | Basse    |
-| `simulate_ev.py` (script) | Script de simulation EV             | Implied prob, dutching, gate (tests/test_simulate_ev_script.py) | Intégration avec d'autres modules, cas d'usage réels, validation des sorties. | 72%              | Moyenne | Basse    |
-| `simulate_wrapper.py` (script)| Script wrapper simulation        | Calibration, cache (tests/test_simulate_wrapper_script.py) | Cohérence avec le module principal, gestion des erreurs. | 53%              | Moyenne | Basse    |
+| Composant | Risque | Tests existants | Tests manquants | KPI | Effort | Priorité |
+|---|---|---|---|---|---|---|
+| **API Publique** | | | | | | |
+| `/api/pronostics` | Moyen | `test_api_endpoints.py` | Tests de charge, fuzzing sur les dates | Latence < 500ms | Moyen | 2 |
+| **UI** | | | | | | |
+| `/pronostics` | Faible | `test_service.py` | Tests e2e avec un vrai navigateur | Taux d'erreur JS < 0.1% | Elevé | 3 |
+| **Endpoints Sensibles** | | | | | | |
+| `/schedule` | Elevé | `test_api_security.py` | Test de non-régression sur l'authentification | 100% des accès non-authentifiés rejetés | Faible | 1 |
+| **Pipeline d'Analyse** | | | | | | |
+| `analysis_pipeline.py` | Faible | `test_analysis_pipeline_extended.py` | Tests sur des snapshots corrompus | >80% | Faible | 1 |
+| **Persistance** | | | | | | |
+| `firestore_client.py` | Faible | `test_firestore_client.py` | Tests sur les comportements "collection vide" | >80% | Faible | 1 |
+| **Scrapers** | | | | | | |
+| `scrapers/` | Moyen | `test_scraper_*.py` | Tests de parsing sur des fixtures HTML cassées | >80% | Moyen | 2 |
+| **Scheduler** | | | | | | |
+| `scheduler.py` | Moyen | `test_scheduler.py` | Scénarios de défaillance de Cloud Tasks | >80% | Moyen | 2 |
+| **Gestion de l'environnement** | | | | | | |
+| `config.py` | Elevé | `test_env_utils.py` | Test "fail-fast" en production | 100% | Faible | 1 |

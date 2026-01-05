@@ -25,6 +25,12 @@ def test_api_key_authentication(client: TestClient, mocker, monkeypatch):
     assert response_good_key.status_code == 200, "Should succeed with correct API key"
     assert "No races found" in response_good_key.json()["message"]
 
+    # 3. Test Invalid Key with Auth Required
+    response_invalid_key = client.post("/schedule", json={"dry_run": True}, headers={"X-API-KEY": "invalid-key"})
+    assert response_invalid_key.status_code == 403, "Should fail with an invalid API key"
+
+
+
 
 
 def test_ops_run_endpoint_security(client: TestClient, mocker):

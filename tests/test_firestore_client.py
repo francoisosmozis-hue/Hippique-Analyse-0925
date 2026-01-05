@@ -120,6 +120,7 @@ def test_get_races_for_date_skips_if_db_not_available(caplog):
         ("https://www.zeturf.fr/fr/course/2025-12-25/R1C2-test-pmu", "2025-12-25", "2025-12-25_R1C2"),
         ("https://turf.fr/R5C3/details", "2025-12-25", "2025-12-25_R5C3"),
         ("R3C8", "2025-12-25", "2025-12-25_R3C8"),
+        ("R1C1", "2025-12-25", "2025-12-25_R1C1"),
         ("some-string-r4c1-other", "2025-12-25", "2025-12-25_R4C1"),
         ("invalid-url", "2025-12-25", None),
         ("", "2025-12-25", None),

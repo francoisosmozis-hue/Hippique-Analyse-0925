@@ -45,6 +45,7 @@ def get_env(
         Optional iterable of alternative environment variable names.
     """
     is_prod = os.getenv("PROD", "false").lower() in ("true", "1", "t", "yes", "y")
+    fail_fast = os.getenv("FAIL_FAST_ON_CONFIG_ERROR", "false").lower() in ("true", "1", "t", "yes", "y")
 
     raw_value: str | None = None
     source = name
@@ -65,6 +66,11 @@ def get_env(
                 import sys
 
                 logger.critical("IS_PROD=True. Exiting.")
+                sys.exit(1)
+            if fail_fast:
+                import sys
+
+                logger.critical("FAIL_FAST_ON_CONFIG_ERROR is true. Exiting.")
                 sys.exit(1)
         else:
             logger.warning("Environment variable %s not set; using default %r", name, default)

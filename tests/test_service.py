@@ -574,5 +574,35 @@ def test_get_ops_status_invalid_date_format(client):
     assert "Invalid date format. Use YYYY-MM-DD." in response.json()["detail"]
 
 
+def test_api_pronostics_schema_and_ui_markers(client, monkeypatch):
+    """
+    Test the schema of /api/pronostics and that the UI contains critical markers.
+    """
+    # 1. Test API Schema
+    monkeypatch.setattr(
+        "hippique_orchestrator.firestore_client.get_races_for_date",
+        mock_get_races_for_date
+    )
+
+    api_response = client.get("/api/pronostics?date=2025-01-01")
+    assert api_response.status_code == 200
+    data = api_response.json()
+
+    assert "pronostics" in data and isinstance(data["pronostics"], list)
+    assert "last_updated" in data and "version" in data
+
+    for pronostic in data["pronostics"]:
+        validate_pronostic(pronostic)
+
+    # 2. Test UI Content
+    ui_response = client.get("/pronostics")
+    assert ui_response.status_code == 200
+    html = ui_response.text
+
+    assert '<table id="races-table">' in html
+    assert '<tbody id="races-tbody">' in html
+    assert 'fetch(`/api/pronostics?date=${date}`)' in html
+
+
 
 

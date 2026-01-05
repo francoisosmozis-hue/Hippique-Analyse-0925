@@ -88,3 +88,20 @@ def test_get_env_required_missing_non_prod_logs_critical_no_exit(monkeypatch, ca
     assert "Missing required environment variable 'NON_PROD_REQUIRED'" in caplog.text
     assert val is None
     assert "IS_PROD=True. Exiting." not in caplog.text
+
+
+def test_get_env_fail_fast_on_config_error(monkeypatch, caplog):
+    """
+    Test that get_env exits if a required variable is missing and FAIL_FAST_ON_CONFIG_ERROR is true,
+    even in a non-production environment.
+    """
+    monkeypatch.setenv("FAIL_FAST_ON_CONFIG_ERROR", "true")
+    monkeypatch.setenv("PROD", "false")
+    monkeypatch.delenv("MY_VAR", raising=False)
+
+    with pytest.raises(SystemExit) as excinfo:
+        get_env("MY_VAR", required=True)
+
+    assert excinfo.value.code == 1
+    assert "Missing required environment variable 'MY_VAR'" in caplog.text
+    assert "FAIL_FAST_ON_CONFIG_ERROR is true. Exiting." in caplog.text

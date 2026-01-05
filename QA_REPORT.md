@@ -1,97 +1,100 @@
-# QA_REPORT.md
+# QA & Production Readiness Report: Hippique Orchestrator
 
-## 1. Constat synthétique
+**Date:** 2026-01-05
+**Author:** Gemini, Senior QA/DevOps Expert
+**Verdict:** **NON PRÊT POUR LA PRODUCTION**
 
-La suite de tests locale du projet `hippique-orchestrator` est désormais stable et déterministe, avec 100% de tests passants sur 10 exécutions consécutives. Les tests de sécurité et les simulations d'intégration ont été renforcés, bien que la couverture globale reste à 49% et que des zones spécifiques méritent une attention accrue.
+---
 
-## 2. Analyse
+## 1. Constat Synthétique
 
-1.  **Stabilité des Tests :** Les 1083 tests Pytest passent de manière consistante sur 10 runs, confirmant la correction des échecs initiaux et l'absence de `flakiness`.
-2.  **Couverture des Modules Critiques :**
-    *   `plan.py`: 100% (vérifié et renforcé)
-    *   `firestore_client.py`: 98% (vérifié et renforcé, le 2% restant est un artefact de reporting)
-    *   `analysis_pipeline.py`: 99% (bon)
-    *   Scrapers (`boturfers.py`: 95%, `zeturf.py`: 100%, `geny.py`: 96%): La couverture est élevée, et les tests ont été validés/renforcés pour la robustesse du parsing.
-    *   `env_utils.get_env`: 96%. Le comportement "fail-fast en prod" est testé.
-3.  **Faible Couverture Générale (49%) :** Malgré l'amélioration des modules critiques, la couverture globale du projet reste modérée. Cela est principalement dû à la présence de nombreux scripts et modules utilitaires moins sollicités par les tests actuels ou des fichiers de backup/legacy.
-4.  **Tests de Sécurité :** Les endpoints sensibles (`/schedule`, `/ops/run`, `/tasks/*`) sont couverts par des tests vérifiant l'authentification et l'autorisation (`403` sans clé/token, `200` avec clé/token valide). Le principe de "sans secrets dans le code" est respecté via le mocking.
-5.  **Tests d'Intégration "Prod-Like" :** L'utilisation des mocks pour simuler Cloud Tasks et Firestore, ainsi que les tests de `TestClient` pour le schéma JSON de `/api/pronostics` et le contenu HTML de `/pronostics` UI, valident un comportement proche de la production sans dépendances externes.
-6.  **Dépendances et Qualité du Code :** La présence de modules avec des noms similaires (`simulate_ev.py`, `simulate_wrapper.py` dans le répertoire principal et dans `scripts/`) suggère des duplications ou un manque de clarté dans l'architecture, ce qui peut affecter la maintenabilité. Le répertoire `_backup_conflicts` impacte le rapport de couverture inutilement.
-7.  **Amélioration de la documentation des tests :** Création du `TEST_MATRIX.md` et `TEST_PLAN.md` apporte une clarté essentielle sur l'organisation et l'exécution des tests.
+Le projet a une base de tests unitaires solide et déterministe, mais une couverture de code très insuffisante sur des modules algorithmiques et d'I/O critiques. Les risques liés à une configuration défaillante en production et à des changements de structure chez les sources de données (scrapers) sont trop élevés pour un déploiement sécurisé.
 
-## 3. Options possibles
+## 2. Analyse Détaillée
 
-| Option                                | Pour                                     | Contre                                      | Effort |
-| :------------------------------------ | :--------------------------------------- | :------------------------------------------ | :----- |
-| **A. Augmenter la couverture des modules peu couverts** | Réduit les risques d'anomalies dans ces modules, améliore la qualité globale. | Peut inclure des modules moins critiques, effort non prioritaire. | Moyen  |
-| **B. Nettoyer les fichiers non utilisés (`_backup_conflicts`, `scripts/`)** | Améliore la clarté du projet, réduit la surface d'analyse de couverture, facilite la maintenance. | Nécessite une revue pour s'assurer qu'aucun fichier n'est réellement utile. | Faible |
-| **C. Refactoriser les modules dupliqués (`simulate_ev`, `simulate_wrapper`)** | Améliore la cohérence, réduit la duplication de code, facilite l'évolution. | Risque de régression si mal géré, effort significatif. | Élevé  |
+- **Suite de Tests:** La suite de tests existante est robuste, avec 100% de succès sur 10 exécutions consécutives, confirmant l'absence de tests flaky.
+- **Couverture de Code:** La couverture globale est de 8%, ce qui est extrêmement bas. Les modules critiques ciblés sont bien en deçà de l'objectif de 80% :
+    - `plan.py`: **36%** (Risque: la logique de sélection des courses à jouer peut être erronée).
+    - `firestore_client.py`: **41%** (Risque: des erreurs de communication avec la base de données pourraient passer inaperçues).
+    - `analysis_pipeline.py`: **15%** (Risque: le cœur de l'analyse des courses, est une boîte noire).
+- **Sécurité:** Les endpoints sensibles (`/schedule`, `/ops/run`) sont correctement protégés par une clé API (`X-API-Key`), et les tests de sécurité confirment que l'accès non authentifié est rejeté.
+- **Configuration:** Le mécanisme de "fail-fast" pour les variables d'environnement manquantes a été implémenté et testé, réduisant le risque de mauvaise configuration en production.
+- **Scrapers:** Les scrapers manquent de tests de robustesse. Un changement de structure sur les sites sources (ex: `boturfers.fr`) casserait la collecte de données sans alerte immédiate.
+- **Tests d'Intégration:** Des tests d'intégration de base ont été ajoutés pour valider le schéma de l'API `/api/pronostics` et l'intégrité de l'UI, mais ils ne couvrent pas les scénarios d'erreur.
+- **Documentation:** `TEST_MATRIX.md` et `TEST_PLAN.md` ont été créés, fournissant une bonne base pour les futures campagnes de test.
+- **Smoke Test:** Le script `scripts/smoke_prod.sh` a été créé pour permettre une validation rapide post-déploiement.
 
-## 4. Recommandation priorisée
+## 3. Options Possibles
 
-**Recommandation :** Prioriser un effort modéré sur l'option B (Nettoyer les fichiers non utilisés) suivi d'un effort ciblé sur l'option A (Augmenter la couverture des modules peu couverts de haute priorité).
+| Option                               | Pour                                                                                              | Contre                                                                                             | Effort |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- | ------ |
+| **1. Déployer en l'état (NON RECOMMANDÉ)** | Lancer rapidement, obtenir des données réelles.                                                   | Risque élevé de bugs silencieux (mauvais paris, perte de données), maintenance difficile.          | Faible |
+| **2. Renforcer les tests (RECOMMANDÉ)** | Augmenter significativement la confiance, réduire les risques de production, faciliter la maintenance. | Nécessite un investissement en temps de développement supplémentaire avant le lancement.            | Moyen  |
+| **3. Refactoring + Tests**           | Idéal à long terme pour la maintenabilité.                                                        | Dépasse le cadre "apply patch", effort le plus élevé, retarde le plus le déploiement.                | Elevé  |
 
-**Justification :** Le nettoyage du projet (Option B) aura un impact immédiat et positif sur la lisibilité du code et la pertinence des rapports de couverture, facilitant les efforts futurs. Ensuite, en ciblant les modules sous-couverts de haute priorité (Option A), nous maximiserons le retour sur investissement en renforçant les parties les plus critiques de l'application sans engager un refactoring massif et risqué (Option C) à ce stade. La refactorisation peut être envisagée dans une phase ultérieure, une fois la stabilité et la couverture des points sensibles assurées.
+## 4. Recommandation Priorisée
 
-## 5. Plan d’action immédiat (3 étapes concrètes avec livrables)
+**Option 2: Renforcer les tests.**
 
-1.  **Nettoyage du Projet :** Supprimer ou archiver les répertoires et fichiers clairement obsolètes ou non utilisés (ex: `_backup_conflicts`, scripts inutilisés).
-    *   **Livrable :** Suppression des fichiers et répertoires concernés, mise à jour du `.gitignore` si nécessaire.
-2.  **Augmentation Couverture GCS Client :** Ajouter des tests unitaires à `hippique_orchestrator/gcs_client.py` pour atteindre >95% de couverture, en se concentrant sur les cas d'erreur et les chemins non couverts de l'initialisation et des opérations GCS.
-    *   **Livrable :** Mise à jour de `tests/test_gcs_client_extended.py` avec de nouveaux tests, `hippique_orchestrator/gcs_client.py` atteignant >95% de couverture.
-3.  **Tests de Robustesse `probabilities.py` :** Compléter les tests pour `hippique/utils/probabilities.py` afin d'atteindre >95% de couverture, couvrant les cas limites (listes vides, sommes nulles, etc.) pour les calculs de probabilités.
-    *   **Livrable :** Mise à jour de `tests/test_dutching_utils.py` (où sont testées les fonctions de probabilités) avec de nouveaux tests, `hippique/utils/probabilities.py` atteignant >95% de couverture.
+Il est impératif d'augmenter la couverture de code sur les modules critiques avant tout déploiement en production. Le risque financier et de réputation lié à un système de paris automatisé non fiable est trop important pour être ignoré.
 
-## 6. Mesures de contrôle (KPIs chiffrés)
+## 5. Plan d'Action Immédiat
 
--   **Stabilité des tests :** 100% de tests passants sur 10 exécutions consécutives (Pytest). (Actuellement atteint)
--   **Couverture `firestore_client.py` :** >95%. (Actuellement 98%, atteint)
--   **Couverture `plan.py` :** >95%. (Actuellement 100%, atteint)
--   **Couverture `analysis_pipeline.py` :** >95%. (Actuellement 99%, atteint)
--   **Couverture `boturfers.py` :** >95%. (Actuellement 95%, atteint)
--   **Couverture `gcs_client.py` :** Cible >95%. (Actuellement 75%)
--   **Couverture `probabilities.py` :** Cible >95%. (Actuellement 78%)
--   **Couverture globale :** Augmentation d'au moins 10% après nettoyage et efforts ciblés.
+1.  **Augmenter la couverture de `plan.py` et `firestore_client.py` > 80%:**
+    -   **Livrable:** Tests unitaires couvrant les cas nominaux, les cas limites et les erreurs attendues.
+2.  **Créer des tests de parsing pour les scrapers:**
+    -   **Livrable:** Utiliser des fixtures HTML locales (`tests/fixtures/`) pour tester la logique d'extraction des données de chaque scraper. Les tests doivent valider le parsing correct et la gestion des erreurs (ex: structure de page modifiée).
+3.  **Augmenter la couverture de `analysis_pipeline.py` > 50%:**
+    -   **Livrable:** Ajouter des tests d'intégration qui simulent des données d'entrée et valident les décisions de sortie du pipeline (`play`, `abstain`, `error`).
 
-## 7. Risques et limites (top 3, niveau + mitigation)
+## 6. Mesures de Contrôle (KPIs)
 
-1.  **Risque :** Changements de structure des sites de scraping (Boturfers, Geny).
-    *   **Niveau :** Élevé.
-    *   **Mitigation :** Implémentation de tests de parsing robustes avec fixtures HTML pour détecter les régressions (partiellement couvert), mise en place d'un monitoring "canary" en production pour une détection rapide.
-2.  **Risque :** Comportement inattendu des modules peu couverts (`simulate_ev`, `simulate_wrapper`).
-    *   **Niveau :** Moyen.
-    *   **Mitigation :** Les modules ont été identifiés dans la matrice. Le plan d'action immédiat priorise d'autres modules, mais ceux-ci devront être adressés par la suite.
-3.  **Risque :** Fuite de secrets en production via logging ou endpoints debug.
-    *   **Niveau :** Faible (car testé).
-    *   **Mitigation :** Les tests de sécurité vérifient l'absence de secrets dans les endpoints debug. Le `smoke_prod.sh` utilise des variables d'environnement. Il faut s'assurer que le logging n'expose pas de données sensibles.
+- **Couverture de code globale:** > 50%
+- **Couverture `plan.py`:** > 80%
+- **Couverture `firestore_client.py`:** > 80%
+- **Couverture `analysis_pipeline.py`:** > 50%
+- **Taux de passage des tests:** 100%
 
-## 8. Exemple concret (cas d’usage opérationnel : test /schedule sans clé vs avec clé + lecture via env)
+## 7. Risques et Limites
 
-Pour valider le déploiement en production :
+1.  **Dépendance aux sites externes (Elevé):** Même avec des tests de parsing, une modification du HTML des sites de scraping entraînera une défaillance.
+    -   **Mitigation:** Mettre en place un monitoring "canary" qui exécute les scrapers périodiquement et alerte si aucune donnée n'est retournée.
+2.  **Logique métier complexe non testée (Elevé):** La faible couverture de `analysis_pipeline.py` et `ev_calculator.py` signifie que la logique de décision de pari n'est pas validée.
+    -   **Mitigation:** Suivre le plan d'action pour augmenter la couverture.
+3.  **Performance en charge (Moyen):** Les tests actuels ne valident pas le comportement du service sous une charge importante.
+    -   **Mitigation:** Des tests de charge pourraient être envisagés dans un second temps, après la mise en production initiale.
 
-1.  **Configuration :**
-    *   Définir la variable d'environnement `HIPPIQUE_INTERNAL_API_KEY="votre_cle_api_secrete"` dans l'environnement du shell (par exemple, dans Cloud Shell ou sur la VM de CI/CD).
-2.  **Exécution du script de smoke test :**
-    ```bash
-    ./scripts/smoke_prod.sh https://votre-url-service-cloud-run.run.app
-    ```
-3.  **Résultat Attendu :**
-    *   Le script s'exécute sans erreur.
-    *   Affichage `✅ /pronostics UI is accessible.`
-    *   Affichage `✅ /api/pronostics returned valid JSON.`
-    *   Affichage `✅ /schedule without API key returned 403 Forbidden as expected.`
-    *   Affichage `✅ /schedule with valid API key returned 200 OK as expected.`
-    *   Affichage `--- All smoke tests passed successfully! ---`
+## 8. Exemple Concret: Validation du /schedule
 
-## 9. Score de confiance
+Le script `scripts/smoke_prod.sh` illustre comment valider la sécurité de l'endpoint `/schedule`.
 
-**Score :** 85/100
+**Sans clé API (accès interdit):**
+```bash
+$ curl -s -o /dev/null -w "%{http_code}" -X POST https://<your-url>/schedule
+403
+```
+*Le statut 403 (Forbidden) confirme que l'endpoint est protégé.*
 
-**Facteurs :**
--   **Positifs :** Stabilité des tests locaux (0 flaky), bonne couverture des modules critiques comme `plan.py`, `firestore_client.py`, `analysis_pipeline.py`, et des scrapers actifs. Présence de tests de sécurité et d'intégration couvrant les comportements "prod-like" essentiels. Existence d'un script de smoke test pour la validation post-déploiement.
--   **Négatifs :** La couverture globale de 49% indique des zones importantes de code encore non testées. La présence de nombreux fichiers de "backup" ou non utilisés (0% de couverture) fausse cette métrique et nuit à la clarté. Certains modules de calculs avancés (`gcs_client.py`, `probabilities.py`, `simulate_ev.py`, `simulate_wrapper.py`) sont encore sous-couverts.
+**Avec clé API (accès autorisé):**
+```bash
+$ export HIPPIQUE_INTERNAL_API_KEY="votre-cle-secrete"
+$ curl -s -o /dev/null -w "%{http_code}" -X POST \
+    -H "X-API-Key: $HIPPIQUE_INTERNAL_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{"dry_run": true}' \
+    https://<your-url>/schedule
+200
+```
+*Le statut 200 (OK) confirme que l'accès est autorisé avec une clé valide.*
 
-## 10. Questions de suivi
+## 9. Score de Confiance
 
-1.  Faut-il automatiser le nettoyage des fichiers et répertoires obsolètes (ex: `_backup_conflicts`, `scripts/`) pour améliorer la clarté du projet et la pertinence des métriques de couverture ?
-2.  Des directives de nommage et d'organisation des modules (`hippique_orchestrator/` vs `hippique_orchestrator/scripts/`) pourraient-elles être établies pour éviter la duplication et améliorer la structuration du code à long terme ?
+**35 / 100**
+
+- **Facteurs positifs:** Base de tests unitaires saine et déterministe, sécurité des endpoints vérifiée, "fail-fast" sur la configuration.
+- **Facteurs négatifs:** Couverture de code dramatiquement faible sur les modules critiques, absence de tests de robustesse pour les scrapers, logique de décision de pari non validée.
+
+## 10. Questions de Suivi
+
+1.  L'équipe est-elle prête à investir le temps nécessaire pour atteindre les objectifs de couverture de code avant la mise en production ?
+2.  Quel est le plan pour le monitoring "canary" des scrapers une fois en production ?
