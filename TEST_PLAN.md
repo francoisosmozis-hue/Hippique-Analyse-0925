@@ -1,83 +1,85 @@
-# Test Plan for Hippique Orchestrator
+# Plan de Test - Hippique Orchestrator
 
-This document outlines the testing strategy for the Hippique Orchestrator project, covering unit, integration, and smoke tests.
+Ce document centralise les commandes et procédures pour valider l'application à différentes étapes du cycle de vie (développement, CI, production).
 
-## 1. Overview
+## 1. Validation Locale Complète
 
-The testing strategy is divided into three main pillars to ensure code quality, component reliability, and production stability.
+Ces commandes doivent être exécutées depuis la racine du projet.
 
-1.  **Unit Tests:** Focused on individual modules and functions in isolation.
-2.  **Integration Tests:** Focused on the service's API endpoints, verifying that components work together correctly.
-3.  **Smoke Tests:** A minimal set of end-to-end checks to quickly validate a deployed environment.
+### 1.1. Exécution de la suite de tests complète
 
-## 2. Running Tests
+Lance l'intégralité des tests unitaires et d'intégration avec un rapport de couverture.
 
-### Prerequisites
-
-Ensure all development dependencies are installed:
+**Commande :**
 ```bash
-pip install -r requirements-dev.txt
+pytest --cov=hippique_orchestrator --cov=config
 ```
 
-### Running the Full Test Suite
+**Résultat Attendu :**
+- `100% passed`
+- Aucun échec ou erreur.
+- Un rapport de couverture (`coverage report`) s'affiche dans le terminal.
 
-To run all unit and integration tests and generate a coverage report, use the following command from the project root:
+### 1.2. Vérification de non-régression (Anti-Flaky)
 
+Exécute la suite de tests 10 fois consécutivement pour détecter toute instabilité (tests "flaky").
+
+**Commande :**
 ```bash
-pytest --cov=hippique_orchestrator
+for i in $(seq 1 10); do \
+  echo "\n--- Validation Run $i/10 ---\n"; \
+  pytest -q; \
+  if [ $? -ne 0 ]; then \
+    echo "\nERREUR : Un test flaky a été détecté lors du run $i. Arrêt."; \
+    exit 1; \
+  fi; \
+done && echo "\nSUCCÈS : Tous les tests ont passé 10/10 runs."
 ```
 
-### Running Specific Test Suites
+**Résultat Attendu :**
+- Le script se termine avec le message : `SUCCÈS : Tous les tests ont passé 10/10 runs.`
 
-- **Unit Tests for Scripts:**
-  These tests validate the business logic within the `scripts/` directory.
-  ```bash
-  # Run all script tests
-  pytest tests/scripts/
+## 2. Smoke Tests en Production
 
-  # Run tests for a specific script
-  pytest tests/scripts/test_simulate_wrapper_script.py
-  pytest tests/scripts/test_update_excel_with_results_script.py
-  ```
+Ces tests sont conçus pour être lancés sur un environnement déployé (production ou pre-production). Ils ne dépendent que de `curl` et `jq`.
 
-- **API Integration Tests:**
-  These tests validate the FastAPI service endpoints.
-  ```bash
-  pytest tests/test_api_integration.py
-  ```
+### 2.1. Prérequis
 
-## 3. Test Categories
+1.  **URL de l'application :** La variable d'environnement `APP_URL` doit être définie.
+    ```bash
+    export APP_URL="https://hippique-orchestrator-xxxxxxxx-ew.a.run.app"
+    ```
+2.  **Clé API (si nécessaire) :** Pour les endpoints sécurisés, la variable d'environnement `HIPPIQUE_INTERNAL_API_KEY` doit être définie.
+    ```bash
+    export HIPPIQUE_INTERNAL_API_KEY="votre-cle-secrete"
+    ```
 
-### Unit Tests
+### 2.2. Script de Smoke Test
 
-- **Location:** `tests/`
-- **Goal:** To verify that individual functions and classes behave as expected. Mocks and fixtures are used extensively to isolate components from external dependencies (like filesystems or cloud services).
-- **Key Modules Covered:**
-  - `hippique_orchestrator/scripts/simulate_wrapper.py`: Validates probability calculations, Monte Carlo simulations, and error handling.
-  - `hippique_orchestrator/scripts/update_excel_with_results.py`: Validates the creation and updating of Excel report files.
+Le script `scripts/smoke_prod.sh` exécute les vérifications essentielles.
 
-### Integration Tests
+**Commande :**
+```bash
+bash scripts/smoke_prod.sh
+```
 
-- **Location:** `tests/test_api_integration.py`
-- **Goal:** To verify that the API endpoints process requests correctly, interact with mocked services as expected, and return the correct data structures and status codes.
-- **Framework:** Uses FastAPI's `TestClient`.
-- **Key Endpoints Covered:**
-  - `/health`: Ensures the service is running.
-  - `/debug/config`: Verifies that the configuration is loaded.
-  - `/api/pronostics`: Verifies the core data aggregation logic by mocking the data sources (`plan` and `firestore_client`).
+**Résultat Attendu :**
+- Le script affiche `OK` pour chaque test réussi.
+- Le script se termine avec le message `Smoke tests passed successfully.` et un code de sortie 0.
 
-### Smoke Tests
+## 3. Protocole "Canary" pour les Scrapers
 
-- **Location:** `scripts/smoke_prod.sh`
-- **Goal:** To perform a quick, high-level check on a live, deployed environment (e.g., production or staging). This is not for detailed testing but to answer the question: "Is the service up and fundamentally working?"
-- **Usage:**
-  ```bash
-  # Ensure you have an API key set in your environment
-  export API_KEY="your-production-api-key"
-  
-  # Run the script against the production URL
-  bash scripts/smoke_prod.sh https://your-service-url.com
-  ```
-- **Checks Performed:**
-  1.  Hits the `/health` endpoint and confirms the status is "healthy".
-  2.  Hits the `/api/pronostics` endpoint and confirms it returns a successful response (`"ok": true`) and a non-empty list of `pronostics`.
+Pour détecter les changements de structure des sites web scrapés, une validation manuelle ou semi-automatisée peut être effectuée.
+
+**Procédure :**
+
+1.  **Identifier les fixtures :** Les fichiers HTML de référence sont dans `tests/fixtures/`.
+2.  **Lancer les tests de robustesse :** Ces tests agissent comme des "canary tests" contre les fixtures.
+    ```bash
+    pytest tests/test_scraper_boturfers_robustness.py
+    ```
+3.  **En cas d'échec d'un scraper en production :**
+    a. Télécharger la nouvelle page HTML du site (ex: `wget -O new_programme.html <URL>`).
+    b. Remplacer la fixture correspondante par ce nouveau fichier.
+    c. Relancer le test de robustesse (`test_programme_fixture_has_expected_structure`).
+    d. Le test échouera en indiquant précisément le sélecteur CSS qui a changé, guidant ainsi la mise à jour du scraper.

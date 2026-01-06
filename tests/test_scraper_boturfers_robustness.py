@@ -126,3 +126,27 @@ def test_parse_race_details_from_static_fixture(boturfers_racedetail_sample_html
     assert metadata["type_course"] == "Plat"
     assert metadata["corde"] == "Gauche"
     assert "pour chevaux entiers" in metadata["conditions"]
+
+
+def test_programme_fixture_has_expected_structure(boturfers_programme_sample_html):
+    """
+    Acts as a contract test to ensure the scraper's critical HTML selectors are present.
+    If this fails, the live site has likely changed its structure.
+    """
+    soup = BeautifulSoup(boturfers_programme_sample_html, 'lxml')
+
+    # Assert critical containers exist
+    assert soup.select_one("div.tab-content") is not None, "Missing main tab content container."
+    assert soup.select("div.tab-pane[id^=r]"), "Missing reunion tab panes."
+    
+    # Assert table structure exists in the first reunion
+    first_reunion = soup.select_one("div.tab-pane[id^=r]")
+    assert first_reunion is not None
+    assert first_reunion.select_one("table.table.data.prgm") is not None, "Missing programme table."
+    assert first_reunion.select("tbody tr"), "Missing race rows in table."
+    
+    # Assert key data cells exist in the first row
+    first_race_row = first_reunion.select_one("tbody tr")
+    assert first_race_row is not None
+    assert first_race_row.select_one("td.crs") is not None, "Missing race name cell (td.crs)."
+    assert first_race_row.select_one("td.hour") is not None, "Missing start time cell."

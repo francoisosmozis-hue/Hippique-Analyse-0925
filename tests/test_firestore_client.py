@@ -281,6 +281,23 @@ def test_get_processing_status_for_date_unknown_decision(mock_db):
 
 
 
+def test_get_document_success(mock_db):
+    """Test get_document returns the document dictionary when it exists."""
+    from hippique_orchestrator import firestore_client
+
+    mock_doc = MagicMock()
+    mock_doc.exists = True
+    mock_doc.to_dict.return_value = {"foo": "bar"}
+    mock_db.collection.return_value.document.return_value.get.return_value = mock_doc
+
+    result = firestore_client.get_document("test_collection", "test_doc")
+
+    assert result == {"foo": "bar"}
+    mock_db.collection.assert_called_with("test_collection")
+    mock_db.collection.return_value.document.assert_called_with("test_doc")
+    mock_db.collection.return_value.document.return_value.get.assert_called_once()
+
+
 def test_get_document_not_found(mock_db):
     """Test get_document returns None when the document does not exist."""
     from hippique_orchestrator import firestore_client

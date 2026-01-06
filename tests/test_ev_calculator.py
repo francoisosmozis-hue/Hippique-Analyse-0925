@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import sys
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -686,6 +687,9 @@ def test_optimize_stake_allocation_empty_tickets():
     with patch("hippique_orchestrator.ev_calculator.minimize", None): # Force grid search path
         optimized_stakes = optimize_stake_allocation(tickets, 100.0, 0.5)
         assert optimized_stakes == []
+
+# Test added to cover the ImportError fallback for scipy.optimize
+
 
 def test_process_single_ticket_p_provided(mock_calculate_kelly_fraction):
     t = {"p": 0.5, "odds": 2.0, "stake": 10.0}

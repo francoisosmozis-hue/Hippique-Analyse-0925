@@ -77,18 +77,21 @@ class BoturfersFetcher:
             if not relative_url:
                 return None
             absolute_url = urljoin(base_url, relative_url)
+            
             time_tag = row.select_one("td.hour")
             start_time = None
             if time_tag and time_tag.text.strip():
                 time_match = re.search(r"(\d{1,2})[h:](\d{2})", time_tag.text.strip())
                 if time_match:
                     start_time = f"{time_match.group(1).zfill(2)}:{time_match.group(2)}"
+            
             runners_count_tag = row.select_one("td.nb")
             runners_count = (
                 int(runners_count_tag.text.strip())
                 if runners_count_tag and runners_count_tag.text.strip().isdigit()
                 else None
             )
+            
             return {
                 "rc": rc_text,
                 "name": race_name,
@@ -119,12 +122,7 @@ class BoturfersFetcher:
 
         for reunion_tab in reunion_tabs:
             reunion_title_tag = reunion_tab.select_one("h3.reu-title")
-            reunion_id_match = (
-                re.search(r"^(R\d+)", reunion_title_tag.text.strip()) if reunion_title_tag else None
-            )
-            reunion_id = (
-                reunion_id_match.group(1) if reunion_id_match else reunion_tab.get("id", "").upper()
-            )
+            reunion_id = reunion_tab.get("id", "").upper() # Directly use the tab ID
 
             race_table = reunion_tab.select_one("table.table.data.prgm")
             if not race_table:
@@ -295,7 +293,6 @@ class BoturfersFetcher:
             "runners": runners,
         }
 
-
 async def fetch_boturfers_programme(
     url: str, correlation_id: str | None = None, trace_id: str | None = None, *args, **kwargs
 ) -> dict:
@@ -340,7 +337,7 @@ async def fetch_boturfers_race_details(
         return {}
     host = urlparse(url).netloc.lower()
     # Boturfers: endpoint /partant ; ZEturf/autres: ne pas modifier l'URL
-    if 'boturfers' in host:
+    if 'boturfers.fr' in host:
         if not url.endswith('/partant'):
             url = url.rstrip('/') + '/partant'
     else:

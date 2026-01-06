@@ -3,6 +3,21 @@ Tests for API security and authentication dependencies.
 """
 from fastapi.testclient import TestClient
 
+
+def test_schedule_endpoint_is_protected_by_api_key(client: TestClient, mocker):
+    """
+    Given authentication is required,
+    When the X-API-KEY header is missing for the /schedule endpoint,
+    Then the request should be denied with a 403 error.
+    """
+    mocker.patch("hippique_orchestrator.config.REQUIRE_AUTH", True)
+    
+    response = client.post("/schedule", json={"dry_run": True})
+    
+    assert response.status_code == 403
+    assert "Invalid or missing API Key" in response.text
+
+
 def test_api_key_authentication(client: TestClient, mocker, monkeypatch):
     """
     Tests the API key authentication logic for both failure and success cases.
