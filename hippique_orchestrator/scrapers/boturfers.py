@@ -121,7 +121,6 @@ class BoturfersFetcher:
             return []
 
         for reunion_tab in reunion_tabs:
-            reunion_title_tag = reunion_tab.select_one("h3.reu-title")
             reunion_id = reunion_tab.get("id", "").upper() # Directly use the tab ID
 
             race_table = reunion_tab.select_one("table.table.data.prgm")

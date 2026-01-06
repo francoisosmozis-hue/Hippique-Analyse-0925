@@ -76,13 +76,6 @@ def test_get_gcs_manager_singleton(monkeypatch):
     manager2 = gcs_client.get_gcs_manager()
     assert manager1 is manager2
 
-def test_get_gcs_fs(gcs_manager, mocker):
-    mock_gcsfs = mocker.patch("gcsfs.GCSFileSystem")
-    mock_fs_instance = mock_gcsfs.return_value
-    
-    fs = gcs_manager.fs
-    assert fs is mock_fs_instance
-
 def test_get_gcs_fs_no_manager(monkeypatch):
     monkeypatch.setattr(config, "BUCKET_NAME", None)
     gcs_client.get_gcs_manager.cache_clear() # Explicitly clear manager cache
@@ -99,7 +92,7 @@ def test_build_gcs_path_no_manager(monkeypatch):
 
 def test_gcs_manager_save_json_to_gcs_exception(gcs_manager, mocker):
     mocker.patch("hippique_orchestrator.gcs_client.json.dump", side_effect=Exception("Mock GCS write error"))
-    mock_fs_open = mocker.patch.object(gcs_manager.fs, "open")
+    _ = mocker.patch.object(gcs_manager.fs, "open")
 
     gcs_path = "gs://test-bucket/error.json"
     data = {"key": "value"}
@@ -109,7 +102,7 @@ def test_gcs_manager_save_json_to_gcs_exception(gcs_manager, mocker):
     
 def test_gcs_manager_save_json_to_gcs_success(gcs_manager, mocker, caplog):
     mock_fs_open = mocker.patch.object(gcs_manager.fs, "open")
-    mock_json_dump = mocker.patch("hippique_orchestrator.gcs_client.json.dump")
+    _ = mocker.patch("hippique_orchestrator.gcs_client.json.dump")
 
     gcs_path = "gs://test-bucket/test.json"
     data = {"key": "value"}

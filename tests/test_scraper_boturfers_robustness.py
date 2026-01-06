@@ -54,7 +54,7 @@ def test_parse_programme_handles_missing_race_table(boturfers_programme_missing_
     """
     fetcher = boturfers.BoturfersFetcher("http://dummy.url")
     fetcher.soup = BeautifulSoup(boturfers_programme_missing_table_html, 'lxml')
-    races = fetcher._parse_programme()
+    _ = fetcher._parse_programme()
     assert "Tableau des courses" in mock_logger.warning.call_args[0][0]
 
 def test_parse_programme_from_static_fixture(boturfers_programme_sample_html):

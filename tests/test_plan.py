@@ -110,7 +110,6 @@ async def test_build_plan_today_string(mock_fetch_programme):
     Tests that passing "today" uses the correct URL for the current day's programme.
     """
     mock_fetch_programme.return_value = {"races": []}
-    today_str = datetime.now().strftime("%Y-%m-%d")
 
     await plan.build_plan_async("today")
 

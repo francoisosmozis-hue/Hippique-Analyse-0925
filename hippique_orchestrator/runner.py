@@ -65,7 +65,7 @@ async def run_course(
 
     try:
         # Get budget from the central configuration
-        budget = config.BUDGET_CAP_EUR
+        # budget = config.BUDGET_CAP_EUR
 
         # Delegate directly to the refactored analysis function
         result = await analysis_pipeline.run_analysis_for_phase(

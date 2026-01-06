@@ -90,7 +90,7 @@ async def test_fetcher_fetch_html_success(mock_async_client):
 async def test_fetcher_fetch_html_httpx_request_error(mock_async_client, mock_logger):
     mock_async_client.get.side_effect = httpx.RequestError("Mock error", request=MagicMock())
     fetcher = boturfers.BoturfersFetcher("http://valid.url")
-    result = await fetcher._fetch_html()
+    await fetcher._fetch_html()
 
 @pytest.mark.asyncio
 async def test_fetcher_fetch_html_httpx_status_error(mock_async_client, mock_logger):
