@@ -9,10 +9,9 @@ from fastapi.testclient import TestClient
 
 # Mock the firestore client before it's imported by the service
 from hippique_orchestrator import firestore_client
+from hippique_orchestrator.service import app  # Import app AFTER mocking firestore_client.db
 
 firestore_client.db = MagicMock()
-
-from hippique_orchestrator.service import app  # noqa: E402
 
 
 

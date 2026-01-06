@@ -5,7 +5,7 @@ from unittest.mock import patch, MagicMock
 import pytest
 import yaml
 
-# Functions to be tested
+from hippique_orchestrator.scripts import simulate_wrapper as sw
 from hippique_orchestrator.scripts.simulate_wrapper import (
     _load_calibration,
     _load_correlation_settings,
@@ -17,7 +17,7 @@ from hippique_orchestrator.scripts.simulate_wrapper import (
 @pytest.fixture
 def clear_caches():
     """Clear module-level caches before each test."""
-    from hippique_orchestrator.scripts import simulate_wrapper as sw
+
     sw._calibration_cache.clear()
     sw._calibration_mtime = 0.0
     sw._correlation_settings.clear()

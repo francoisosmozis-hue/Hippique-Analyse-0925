@@ -158,7 +158,7 @@ def get_processing_status_for_date(date_str: str, daily_plan: list[dict]) -> dic
     }
     counts["total_pending"] = counts["total_in_plan"] - counts["total_processed"]
 
-    for rc_key, db_data in db_races_map.items():
+    for _rc_key, db_data in db_races_map.items():
         decision = db_data.get("tickets_analysis", {}).get("gpi_decision", "Unknown").lower()
         if "play" in decision:
             counts["total_playable"] += 1

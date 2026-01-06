@@ -376,7 +376,7 @@ class RaceTaskPayload(BaseModel):
 
 @app.post("/tasks/run-phase", tags=["Tasks"])
 async def run_phase_worker(
-    payload: RaceTaskPayload, request: Request, token_claims: dict = Security(verify_oidc_token)
+    payload: RaceTaskPayload, request: Request, token_claims: dict = Depends(verify_oidc_token)
 ):
     correlation_id = getattr(request.state, "correlation_id", "N/A")
     logger.info("Received task to run phase.", extra={"payload": payload.dict()})

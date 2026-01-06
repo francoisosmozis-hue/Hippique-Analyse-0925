@@ -30,7 +30,7 @@ logger = get_logger(__name__)
 async def run_phase_task(
     request: Request,
     body: RunPhaseRequest,
-    token_claims: dict = Security(verify_oidc_token),
+    token_claims: dict = Depends(verify_oidc_token),
 ):
     """
     Executes the analysis for a single race for a given phase (H9, H30, H5).
@@ -98,7 +98,7 @@ async def run_phase_task(
 async def snapshot_9h_task(
     request: Request,
     body: Snapshot9HRequest,  # Now using the specific Snapshot9HRequest
-    token_claims: dict = Security(verify_oidc_token),
+    token_claims: dict = Depends(verify_oidc_token),
 ):
     """
     Triggers an H9 snapshot for the specified date and meeting URLs.
@@ -145,7 +145,7 @@ async def snapshot_9h_task(
 
 @router.post("/bootstrap-day", status_code=status.HTTP_200_OK)
 async def bootstrap_day_task(request: Request, body: BootstrapDayRequest,
-    token_claims: dict = Security(verify_oidc_token) # Added security dependency
+    token_claims: dict = Depends(verify_oidc_token) # Added security dependency
 ):
     """
     Reads the day's plan, and for each race, creates two Cloud Tasks (H-30, H-5)

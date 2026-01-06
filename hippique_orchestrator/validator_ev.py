@@ -422,9 +422,11 @@ def _load_odds(path: Path) -> dict[str, float]:
         else:
             for key, value in payload.items():
                 if isinstance(value, str):
-                    value = value.replace(",", ".")
+                    coerced_value = value.replace(",", ".")
+                else:
+                    coerced_value = value
                 try:
-                    odds_map[str(key)] = float(value)
+                    odds_map[str(key)] = float(coerced_value)
                 except (TypeError, ValueError):
                     continue
     elif isinstance(payload, list):

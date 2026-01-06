@@ -7,6 +7,7 @@ from hippique_orchestrator.scripts.online_fetch_zeturf import (
     _slugify_hippodrome,
     _normalize_decimal,
     _fallback_parse_html,
+    _coerce_runner_entry, # Moved import to top-level
 )
 
 @pytest.mark.parametrize("reunion, course, expected", [
@@ -4022,7 +4023,7 @@ def test_coerce_runner_entry_variations(raw, expected):
 
 
 
-    from hippique_orchestrator.scripts.online_fetch_zeturf import _coerce_runner_entry
+
 
 
 

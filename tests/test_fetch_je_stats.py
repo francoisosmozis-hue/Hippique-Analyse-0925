@@ -1,6 +1,7 @@
 import csv
 import json
 from pathlib import Path
+import shlex # Moved import to top-level
 
 import pytest
 from fsspec.implementations.memory import MemoryFileSystem
@@ -301,7 +302,7 @@ def test_enrich_from_snapshot_calls_subprocess(mocker):
     mock_run.assert_called_once()
     args, kwargs = mock_run.call_args
     # Check the command passed to shlex.split
-    import shlex
+
     expected_cmd = f'python -m hippique_orchestrator.fetch_je_stats --h5 "{snapshot_path}" --out "{expected_out_path}" --cache --ttl-seconds 86400'
     assert args[0] == shlex.split(expected_cmd)
     assert kwargs["check"] is True

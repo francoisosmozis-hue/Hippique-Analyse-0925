@@ -1,9 +1,9 @@
 import logging
-import logging
 import pytest
 from unittest.mock import MagicMock, patch
 from datetime import datetime
 from google.cloud.firestore import DocumentSnapshot
+from hippique_orchestrator import firestore_client
 
 # We need to patch the client at the source, where it's looked up.
 FIRESTORE_CLIENT_PATH = "hippique_orchestrator.firestore_client.db"

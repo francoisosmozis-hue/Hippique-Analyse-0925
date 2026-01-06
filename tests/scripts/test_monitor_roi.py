@@ -10,6 +10,7 @@ from hippique_orchestrator.scripts.monitor_roi import (
     compute_statistics,
     export_json,
     load_json_safe,
+    main,  # Moved import to top-level
     parse_tracking_csv,
     print_report,
 )
@@ -159,8 +160,6 @@ def test_export_json(tmp_path: Path):
 def test_main_run_once(fake_data_dir: Path, capsys):
     """Test the main function for a single run."""
     with patch.object(sys, "argv", ["monitor_roi.py", "--data-dir", str(fake_data_dir), "--detail"]):
-        # We need to import main inside the test to re-evaluate the module with patched argv
-        from hippique_orchestrator.scripts.monitor_roi import main
         main()
     
     captured = capsys.readouterr()

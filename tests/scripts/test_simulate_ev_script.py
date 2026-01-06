@@ -74,17 +74,6 @@ def test_implied_probs_with_invalid_odds():
     assert probs[3] == 0.0
     assert math.isclose(sum(probs), 1.0)
 
-def test_implied_probs_with_invalid_odds():
-    odds = [2.0, 1.0, 4.0, "abc"]
-    probs = implied_probs(odds)
-    total_prob = 1/2.0 + 1/4.0
-    assert len(probs) == 4
-    assert math.isclose(probs[0], (1/2.0) / total_prob)
-    assert probs[1] == 0.0
-    assert math.isclose(probs[2], (1/4.0) / total_prob)
-    assert probs[3] == 0.0
-    assert math.isclose(sum(probs), 1.0)
-
 @pytest.fixture
 def base_cfg():
     """Fournit une configuration de base pour les tests."""

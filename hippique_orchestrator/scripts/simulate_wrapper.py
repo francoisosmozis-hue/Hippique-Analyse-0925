@@ -322,7 +322,7 @@ def _find_correlation_groups(legs: Sequence[Any]) -> list[dict[str, Any]]:
 def _load_correlation_settings() -> None:
     """Reload correlation settings from :data:`PAYOUT_CALIBRATION_PATH`."""
 
-    global _correlation_settings, _correlation_mtime, PAYOUT_CALIBRATION_PATH
+    global _correlation_settings, _correlation_mtime
 
     try:
         mtime = PAYOUT_CALIBRATION_PATH.stat().st_mtime
