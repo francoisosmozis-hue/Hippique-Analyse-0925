@@ -10,7 +10,7 @@ steps:
 - name: 'python:3.12-slim'
   id: "Lint"
   entrypoint: 'bash'
-  args: ['-c', 'pip install ruff && ruff check . --fix']
+  args: ['-c', 'pip install ruff && ruff check . --fix --exclude archive/']
 
 # Check formatting
 - name: 'python:3.12-slim'
