@@ -278,7 +278,7 @@ async def test_collect_stats_get_chrono_stats_returns_none(mock_storage, mock_zo
     assert result == "path/to/stats.json"
     assert "Could not fetch chrono stats for Horse A" in caplog.text
     mock_zoneturf_client.get_chrono_stats.assert_called_once()
-    mock_zoneturf_client.get_jockey_trainer_stats.call_count == 2
+    assert mock_zoneturf_client.get_jockey_trainer_stats.call_count == 2
     mock_storage.save_snapshot.assert_called_once()
 
 @pytest.mark.asyncio

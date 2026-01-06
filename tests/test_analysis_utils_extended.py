@@ -121,7 +121,7 @@ def test_convert_odds_to_implied_probabilities(
     """Tests the convert_odds_to_implied_probabilities function."""
     probs, overround = analysis_utils.convert_odds_to_implied_probabilities(odds_list)
     assert overround == expected_overround
-    for p, e_p in zip(probs, expected_probs):
+    for p, e_p in zip(probs, expected_probs, strict=True):
         assert round(p, 4) == e_p
 
 @pytest.mark.parametrize(

@@ -4,7 +4,7 @@ src/api/tasks.py - FastAPI Router pour les tâches internes d'orchestration.
 
 from datetime import datetime
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status, Security
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status, Security
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 

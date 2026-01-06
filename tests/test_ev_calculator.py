@@ -91,6 +91,7 @@ def test_make_hashable_nested_structures():
 def test_make_hashable_unhashable_fallback():
     """Tests the fallback behavior of _make_hashable for unhashable types."""
     class Unhashable:
+        __hash__ = None # Explicitly mark as unhashable
         def __eq__(self, other):
             return False # Make it unhashable
         def __repr__(self):
@@ -438,7 +439,6 @@ def test_merge_legs_with_duplicates():
 def test_merge_legs_with_dict_duplicates():
     a = [{"id": 1}, {"id": 2}]
     b = [{"id": 2}, {"id": 3}]
-    expected = [{"id": 1}, {"id": 2}, {"id": 3}]
     result = _merge_legs(a, b)
     assert len(result) == 3
     assert {"id": 1} in result
