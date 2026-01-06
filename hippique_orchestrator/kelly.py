@@ -30,8 +30,8 @@ def calculate_kelly_fraction(p: float, odds: float, lam: float = 1.0, cap: float
     """
     p = _to_float(p)
     o = _to_float(odds)
-    lam = _to_float(lam, 1.0) or 1.0
-    cap = _to_float(cap, 1.0) or 1.0
+    lam: float = _to_float(lam, 1.0) or 1.0
+    cap: float = _to_float(cap, 1.0) or 1.0
 
     # Validation douce
     if p is None or o is None or not (0.0 < p < 1.0) or o <= 1.0:

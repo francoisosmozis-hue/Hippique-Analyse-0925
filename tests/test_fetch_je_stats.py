@@ -1,7 +1,7 @@
 import csv
 import json
-from pathlib import Path
 import shlex  # Moved import to top-level
+from pathlib import Path
 
 import pytest
 from fsspec.implementations.memory import MemoryFileSystem

@@ -1,11 +1,10 @@
 import pytest
+
 from hippique.utils.dutching import (
-    equal_profit_stakes,
-    diversify_guard,
-    require_mid_odds,
     CHRONO_CORRELATION_THRESHOLD,
-    MID_ODDS_LOWER_BOUND,
-    MID_ODDS_UPPER_BOUND,
+    diversify_guard,
+    equal_profit_stakes,
+    require_mid_odds,
 )
 
 

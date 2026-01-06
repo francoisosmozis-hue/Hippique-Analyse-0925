@@ -1,11 +1,10 @@
 # tests/scripts/test_update_excel_with_results.py
-import pytest
 from openpyxl import Workbook
+
 from hippique_orchestrator.scripts.update_excel_with_results import (
     _as_float,
     _normalise_notes,
     _upsert_row,
-    PREVISION_HEADERS,
 )
 
 

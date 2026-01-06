@@ -1,8 +1,8 @@
-import pytest
-from unittest.mock import patch, MagicMock
-from hippique_orchestrator import gcs_client
-from hippique_orchestrator import config
 import logging
+
+import pytest
+
+from hippique_orchestrator import config, gcs_client
 
 
 @pytest.fixture

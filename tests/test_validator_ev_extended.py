@@ -1,40 +1,34 @@
-# -*- coding: utf-8 -*-
 
 import json
-import os
-import sys
-from unittest.mock import patch, Mock
+from pathlib import Path
+from unittest.mock import Mock, patch
 
 import pytest
-import yaml
 
+from hippique_orchestrator import config
 from hippique_orchestrator.validator_ev import (
-    validate_inputs,
     ValidationError,
+    _find_first_existing,
+    _load_cfg,
+    _load_config,
+    _load_json_payload,
+    _load_odds,
+    _load_partants,
+    _normalise_phase,
+    _readme_has_roi_sp,
+    combos_allowed,
+    must_have,
+    summarise_validation,
     validate,
-    validate_ev,
-    validate_policy,
     validate_budget,
     validate_combos,
-    combos_allowed,
-    main as validator_main,
-    _load_cfg,
-    _readme_has_roi_sp,
-    summarise_validation,
-    _normalise_phase,
-    _load_json_payload,
-    _find_first_existing,
-    _load_partants,
-    _load_odds,
-    _load_stats,
-    _load_config,
-    _resolve_rc_directory,
-    _discover_file,
-    _prepare_validation_inputs,
-    must_have,
+    validate_ev,
+    validate_inputs,
+    validate_policy,
 )
-from hippique_orchestrator import config
-from pathlib import Path
+from hippique_orchestrator.validator_ev import (
+    main as validator_main,
+)
 
 
 def test_validate_inputs_happy_path():

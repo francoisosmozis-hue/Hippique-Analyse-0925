@@ -1,13 +1,9 @@
 from __future__ import annotations
 
-import json
-import asyncio
-import yaml
 import pytest
-from unittest.mock import MagicMock, patch
 from pytest import LogCaptureFixture
 
-from hippique_orchestrator import analysis_pipeline, firestore_client
+from hippique_orchestrator import analysis_pipeline
 
 # Minimal snapshot structure for H-5
 H5_SNAPSHOT = {

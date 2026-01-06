@@ -1,23 +1,23 @@
 import pathlib
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import MagicMock, patch, call
 import requests  # Needed to mock this
-from datetime import datetime  # Needed for tests
 
 from hippique_orchestrator.zoneturf_client import (
+    BASE_URL,  # To check URLs built
+    CHRONO_CACHE,
+    ID_CACHE,
+    PERSON_ID_CACHE,
+    PERSON_STATS_CACHE,
     _normalize_name,
     _parse_rk_string,
     fetch_chrono_from_html,
-    resolve_horse_id,
-    resolve_person_id,
     fetch_person_stats_from_html,
     get_chrono_stats,
     get_jockey_trainer_stats,
-    ID_CACHE,
-    CHRONO_CACHE,
-    PERSON_ID_CACHE,
-    PERSON_STATS_CACHE,
-    BASE_URL,  # To check URLs built
+    resolve_horse_id,
+    resolve_person_id,
 )
 
 FIXTURE_DIR = pathlib.Path(__file__).parent / 'fixtures'

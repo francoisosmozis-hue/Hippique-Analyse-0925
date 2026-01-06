@@ -1,18 +1,19 @@
-import pandas as pd
-import numpy as np
-import pytest
-from pathlib import Path
 from datetime import datetime
-from unittest.mock import patch, MagicMock
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+import numpy as np
+import pandas as pd
+import pytest
 
 from hippique_orchestrator.scripts.concat_je_month import (
-    _normalize_columns,
-    _infer_date_from_path,
-    load_and_filter,
-    summarize_month,
-    main,
-    STD_COLUMNS,
     CANDIDATES,
+    STD_COLUMNS,
+    _infer_date_from_path,
+    _normalize_columns,
+    load_and_filter,
+    main,
+    summarize_month,
 )
 
 

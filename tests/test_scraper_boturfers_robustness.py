@@ -1,6 +1,7 @@
 from pathlib import Path
-from bs4 import BeautifulSoup
+
 import pytest
+from bs4 import BeautifulSoup
 
 from hippique_orchestrator.scrapers import boturfers
 
@@ -113,14 +114,14 @@ def test_parse_race_details_from_static_fixture(boturfers_racedetail_sample_html
     runners = fetcher._parse_race_runners_from_details_page()
 
     # Should parse 2 valid runners and skip the malformed ones
-    assert len(runners) == 2
+    assert len(runners) == 3
     mock_logger.warning.assert_any_call(
-        "Failed to parse a runner row: list index out of range. Row skipped.",
+        "Failed to parse a runner row: 'NoneType' object has no attribute 'text'. Row skipped.",
         extra={'correlation_id': None, 'trace_id': None},
     )
 
     # Test Runner 1
-    assert runners[0]["num"] == "1"
+    assert runners[0]["num"] == 1
     assert runners[0]["nom"] == "AS DU TEST"
     assert runners[0]["jockey"] == "J. Testeur"
     assert runners[0]["entraineur"] == "E. Scripter"
@@ -130,12 +131,24 @@ def test_parse_race_details_from_static_fixture(boturfers_racedetail_sample_html
     assert runners[0]["gains"] == "150000€"
 
     # Test Runner 2
-    assert runners[1]["num"] == "2"
+    assert runners[1]["num"] == 2
     assert runners[1]["nom"] == "ROI DE LA QA"
     assert runners[1]["jockey"] == "M. Coverage"
     assert runners[1]["entraineur"] == "P. Integration"
     assert runners[1]["odds_win"] == 8.0
     assert runners[1]["odds_place"] == 2.5
+    assert runners[1]["musique"] == "4h 5p 1p"
+    assert runners[1]["gains"] == "95000€"
+
+    # Test Runner 3 (MISS MOCK) with corrected jockey/trainer parsing
+    assert runners[2]["num"] == 3
+    assert runners[2]["nom"] == "MISS MOCK"
+    assert runners[2]["jockey"] == "N/A"  # Jockey is missing in the fixture, so it should be N/A
+    assert runners[2]["entraineur"] == "F. Fixture"
+    assert runners[2]["odds_win"] == 12.0
+    assert runners[2]["odds_place"] is None  # Cote placée manquante
+    assert runners[2]["musique"] == "Da"
+    assert runners[2]["gains"] == "30000€"
 
     metadata = fetcher._parse_race_metadata()
     assert metadata["distance"] == 2400

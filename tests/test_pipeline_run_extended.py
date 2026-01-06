@@ -1,26 +1,23 @@
+# Re-use the mock_gpi_config from test_pipeline_run.py or define a more comprehensive one
+import copy
 import math
+
 import pytest
 from pytest_mock import MockerFixture
-from unittest.mock import MagicMock
-from collections import defaultdict
 
 from hippique_orchestrator import pipeline_run
-
 from hippique_orchestrator.pipeline_run import (
-    generate_tickets,
-    _initialize_and_validate,
-    _calculate_adjusted_probabilities,
     _apply_base_stat_adjustment,
     _apply_chrono_adjustment,
     _apply_drift_adjustment,
-    _select_sp_dutching_candidates,
+    _calculate_adjusted_probabilities,
+    _finalize_and_decide,
     _generate_sp_dutching_tickets,
     _get_legs_for_exotic_type,
-    _finalize_and_decide,
+    _initialize_and_validate,
+    _select_sp_dutching_candidates,
+    generate_tickets,
 )
-
-# Re-use the mock_gpi_config from test_pipeline_run.py or define a more comprehensive one
-import copy
 
 
 # Re-use the mock_gpi_config from test_pipeline_run.py or define a more comprehensive one

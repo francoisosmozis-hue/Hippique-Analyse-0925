@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 from bs4 import BeautifulSoup
+
 from hippique_orchestrator.scripts import online_fetch_zeturf
 
 

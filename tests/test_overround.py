@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import pytest
-from hippique_orchestrator.overround import compute_overround_place, adaptive_cap
+
+from hippique_orchestrator.overround import adaptive_cap, compute_overround_place
 
 
 def test_compute_overround_place_nominal():

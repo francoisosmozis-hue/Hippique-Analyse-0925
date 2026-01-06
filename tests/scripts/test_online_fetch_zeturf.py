@@ -1,9 +1,11 @@
 import json
-import pytest
-from pathlib import Path
 
 # This is a bit of a hack to import the script
 import sys
+from pathlib import Path
+
+import pytest
+
 from hippique_orchestrator.scripts import online_fetch_zeturf
 
 # Add the script's directory to the path to allow imports

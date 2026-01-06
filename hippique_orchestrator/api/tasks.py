@@ -4,9 +4,8 @@ src/api/tasks.py - FastAPI Router pour les tâches internes d'orchestration.
 
 from datetime import datetime
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status, Security
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
 
 from hippique_orchestrator import config, firestore_client  # Added firestore_client import
 from hippique_orchestrator.auth import verify_oidc_token
@@ -15,9 +14,9 @@ from hippique_orchestrator.plan import build_plan_async
 from hippique_orchestrator.runner import run_course
 from hippique_orchestrator.scheduler import enqueue_run_task
 from hippique_orchestrator.schemas import BootstrapDayRequest, RunPhaseRequest, Snapshot9HRequest
-from hippique_orchestrator.snapshot_manager import write_snapshot_for_day_async  # Added this import
-from hippique_orchestrator.snapshot_manager import write_snapshot_for_day
-
+from hippique_orchestrator.snapshot_manager import (
+    write_snapshot_for_day_async,  # Added this import
+)
 
 router = APIRouter(prefix="/tasks", tags=["Tasks"])
 

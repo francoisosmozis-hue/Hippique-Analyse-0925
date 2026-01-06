@@ -1,9 +1,9 @@
-from unittest.mock import AsyncMock, patch
+import uuid
 from datetime import datetime, timedelta
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
-import uuid
 
 from hippique_orchestrator.api.tasks import router
 from hippique_orchestrator.service import app

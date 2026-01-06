@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from google.api_core import exceptions
+
 from hippique_orchestrator import gcs_utils
 
 

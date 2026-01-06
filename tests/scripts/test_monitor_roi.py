@@ -1,9 +1,10 @@
 import json
 import sys
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 import pytest
+
 from hippique_orchestrator.scripts.monitor_roi import (
     collect_analyses,
     compute_statistics,

@@ -575,7 +575,7 @@ def _load_calibration() -> None:
         _calibration_cache = parsed
         while len(_calibration_cache) > MAX_CACHE_SIZE:
             _calibration_cache.popitem(last=False)
-    except (IOError, yaml.YAMLError, ValueError) as e:
+    except (OSError, yaml.YAMLError, ValueError) as e:
         logger.warning("Could not load or parse calibration file %s: %s", CALIBRATION_PATH, e)
         _calibration_cache = OrderedDict()
         _calibration_mtime = 0.0

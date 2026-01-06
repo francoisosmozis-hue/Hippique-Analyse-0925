@@ -2,12 +2,13 @@
 
 import pytest
 from bs4 import BeautifulSoup
+
 from hippique_orchestrator.scripts.online_fetch_zeturf import (
-    _normalise_rc_tag,
-    _slugify_hippodrome,
-    _normalize_decimal,
-    _fallback_parse_html,
     _coerce_runner_entry,  # Moved import to top-level
+    _fallback_parse_html,
+    _normalise_rc_tag,
+    _normalize_decimal,
+    _slugify_hippodrome,
 )
 
 

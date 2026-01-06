@@ -2,17 +2,19 @@
 hippique_orchestrator/scrapers/boturfers.py - Module de scraping pour Boturfers.fr.
 
 Ce module fournit les fonctionnalités pour scraper les données des courses
-depuis le site Boturfers.fr.
+despuis le site Boturfers.fr.
 """
+from __future__ import annotations
 
 import logging
 import re
 from datetime import datetime
-from typing import Any
+from typing import Any, TypedDict
 from urllib.parse import urljoin, urlparse
 
 import httpx
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup # type: ignore
+
 from hippique_orchestrator.logging_utils import correlation_id_var, get_logger
 
 logger = get_logger(__name__)
@@ -26,6 +28,25 @@ HTTP_HEADERS = {
     )
 }
 
+class Runner(TypedDict):
+    num: int
+    nom: str
+    jockey: str
+    entraineur: str
+    odds_win: float | None
+    odds_place: float | None
+    musique: str | None
+    gains: str | None
+
+
+class RaceProgramEntry(TypedDict):
+    rc: str
+    name: str
+    url: str
+    runners_count: int | None
+    start_time: str | None
+    reunion: str # Added reunion to the RaceProgramEntry
+
 
 class BoturfersFetcher:
     """
@@ -33,7 +54,10 @@ class BoturfersFetcher:
     """
 
     def __init__(
-        self, race_url: str, correlation_id: str | None = None, trace_id: str | None = None
+        self,
+        race_url: str,
+        correlation_id: str | None = None,
+        trace_id: str | None = None,
     ):
         if not race_url:
             raise ValueError("L'URL de la course ne peut pas être vide.")
@@ -64,7 +88,7 @@ class BoturfersFetcher:
             )
             return False
 
-    def _parse_race_row(self, row: Any, base_url: str) -> dict[str, Any] | None:
+    def _parse_race_row(self, row: Any, base_url: str) -> RaceProgramEntry | None:
         """Parses a single race row from the programme table."""
         try:
             rc_tag = row.select_one("th.num span.rxcx")
@@ -99,12 +123,13 @@ class BoturfersFetcher:
                 else None
             )
 
-            race_data = {
+            race_data: RaceProgramEntry = {
                 "rc": rc_text,
                 "name": race_name,
                 "url": absolute_url,
                 "runners_count": runners_count,
                 "start_time": start_time,
+                "reunion": "N/A" # Will be filled later
             }
             logger.debug(f"Parsed race data in _parse_race_row: {race_data}")
             return race_data
@@ -116,12 +141,12 @@ class BoturfersFetcher:
             )
             return None
 
-    def _parse_programme(self) -> list[dict[str, Any]]:
+    def _parse_programme(self) -> list[RaceProgramEntry]:
         """Analyse la page du programme pour extraire la liste de toutes les courses."""
         if not self.soup:
             return []
 
-        races = []
+        races: list[RaceProgramEntry] = []
         reunion_tabs = self.soup.select("div.tab-content div.tab-pane[id^='r']")
         if not reunion_tabs:
             logger.warning(
@@ -218,12 +243,12 @@ class BoturfersFetcher:
             )
         return metadata
 
-    def _parse_race_runners_from_details_page(self) -> list[dict[str, Any]]:
+    def _parse_race_runners_from_details_page(self) -> list[Runner]:
         """Parses the runners from the race details page."""
         if not self.soup:
             return []
 
-        runners = []
+        runners: list[Runner] = []
         runners_table = self.soup.select_one("table.data")
         if not runners_table:
             logger.warning(
@@ -233,12 +258,22 @@ class BoturfersFetcher:
 
         for row in runners_table.select("tbody tr"):
             try:
-                num = row.select_one("th.num").text.strip()
-                nom = row.select_one("td.tl > a.link").text.strip()
+                num = int(row.select_one("th.num").text.strip())
+                nom_tag = row.select_one("td.tl > a.link")
+                nom = nom_tag.text.strip()
 
-                links = row.select("td.tl a.link")
-                jockey = links[1].text.strip()
-                trainer = links[2].text.strip()
+                jockey = "N/A"
+                trainer = "N/A"
+
+                all_links_in_td_tl = row.select("td.tl a.link")
+                # The first link is always the horse name itself, so start from the second link
+                for link in all_links_in_td_tl[1:]:
+                    href = link.get("href", "")
+                    if "/jockey/" in href:
+                        jockey = link.text.strip()
+                    elif "/entraineur/" in href:
+                        trainer = link.text.strip()
+
 
                 odds_win_tag = row.select_one("td.cote-gagnant span.c")
                 odds_win = float(odds_win_tag.text.replace(",", ".")) if odds_win_tag else None
@@ -249,22 +284,22 @@ class BoturfersFetcher:
                 )
 
                 musique_tag = row.select_one("td.musique")
-                musique = musique_tag.text.strip() if musique_tag else None
+                musique = str(musique_tag.text.strip()) if musique_tag else None
 
                 gains_tag = row.select_one("td.gains")
-                gains = gains_tag.text.strip().replace(" ", "") if gains_tag else None
+                gains = str(gains_tag.text.strip().replace(" ", "")) if gains_tag else None
 
                 runners.append(
-                    {
-                        "num": num,
-                        "nom": nom,
-                        "jockey": jockey,
-                        "entraineur": trainer,
-                        "odds_win": odds_win,
-                        "odds_place": odds_place,
-                        "musique": musique,
-                        "gains": gains,
-                    }
+                    Runner(  # Explicitly use the TypedDict
+                        num=num,
+                        nom=nom,
+                        jockey=jockey,
+                        entraineur=trainer,
+                        odds_win=odds_win,
+                        odds_place=odds_place,
+                        musique=musique,
+                        gains=gains,
+                    )
                 )
             except (AttributeError, ValueError, IndexError) as e:
                 logger.warning(
@@ -312,7 +347,11 @@ class BoturfersFetcher:
 
 
 async def fetch_boturfers_programme(
-    url: str, correlation_id: str | None = None, trace_id: str | None = None, *args, **kwargs
+    url: str,
+    correlation_id: str | None = None,
+    trace_id: str | None = None,
+    *args,
+    **kwargs,
 ) -> dict:
     """Fonction principale pour scraper le programme des courses sur Boturfers."""
     log_extra = {"correlation_id": correlation_id, "trace_id": trace_id, "url": url}
@@ -345,7 +384,11 @@ async def fetch_boturfers_programme(
 
 
 async def fetch_boturfers_race_details(
-    url: str, correlation_id: str | None = None, trace_id: str | None = None, *args, **kwargs
+    url: str,
+    correlation_id: str | None = None,
+    trace_id: str | None = None,
+    *args,
+    **kwargs,
 ) -> dict:
     """Fonction principale pour scraper les détails d'une course sur Boturfers."""
     log_extra = {"correlation_id": correlation_id, "trace_id": trace_id, "url": url}

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import math
-import sys
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -9,9 +8,8 @@ import pytest
 from hippique_orchestrator import ev_calculator
 from hippique_orchestrator.ev_calculator import (
     DEFAULT_KELLY_CAP,
-    MIN_DUTCHING_GROUP_SIZE,
-    _approx_joint_probability,
     _apply_dutching,
+    _approx_joint_probability,
     _calculate_final_metrics,
     _calculate_ticket_metrics,
     _clone_leg,
@@ -33,7 +31,6 @@ from hippique_orchestrator.ev_calculator import (
     optimize_stake_allocation,
     risk_of_ruin,
 )
-from hippique_orchestrator.kelly import calculate_kelly_fraction
 
 
 # Fixtures for common mocks

@@ -1,16 +1,12 @@
 from __future__ import annotations
 
-import json
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
-import google.auth
 from google.api_core import exceptions as gexc
-from google.cloud import tasks_v2
 from pytest import LogCaptureFixture
 
 from hippique_orchestrator import config, scheduler
-from hippique_orchestrator.time_utils import convert_local_to_utc
 
 # A sample plan with one race in the past and one in the future, for today's date
 today_str = datetime.now().strftime("%Y-%m-%d")

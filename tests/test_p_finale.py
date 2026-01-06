@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import pytest
+
 from hippique_orchestrator.p_finale import (
+    F_DRIFT_FAV,
+    F_STEAM,
     apply_drift_steam,
     generate_p_finale_data,
-    F_STEAM,
-    F_DRIFT_FAV,
 )
 
 # --- Tests for apply_drift_steam ---

@@ -1,14 +1,15 @@
 # tests/scripts/test_simulate_ev_script.py
 
 import math
+
 import pytest
+
 from hippique_orchestrator.scripts.simulate_ev import (
-    implied_prob,
-    normalize_overround,
-    implied_probs,
     allocate_dutching_sp,
     gate_ev,
-    simulate_ev_batch,
+    implied_prob,
+    implied_probs,
+    normalize_overround,
 )
 
 

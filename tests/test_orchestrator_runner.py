@@ -1,5 +1,7 @@
-import pytest
 from unittest.mock import AsyncMock, patch
+
+import pytest
+
 from hippique_orchestrator.runner import _extract_rc_from_url, run_course
 
 

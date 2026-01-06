@@ -1,8 +1,10 @@
+from unittest.mock import MagicMock
+
+import httpx
 import pytest
+
 from hippique_orchestrator import stats_provider
 from hippique_orchestrator.stats_provider import Chrono, JEStats
-from unittest.mock import MagicMock
-import httpx
 
 
 @pytest.fixture

@@ -1,7 +1,6 @@
 from datetime import datetime
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 from zoneinfo import ZoneInfo
-import re
 
 import pytest
 from bs4 import BeautifulSoup

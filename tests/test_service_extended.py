@@ -1,5 +1,5 @@
-import pytest
 from fastapi.testclient import TestClient
+
 from hippique_orchestrator.service import app
 
 client = TestClient(app)

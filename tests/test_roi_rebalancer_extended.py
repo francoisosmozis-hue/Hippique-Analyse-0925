@@ -1,15 +1,17 @@
-import pytest
 import json
 from pathlib import Path
+
+import pytest
+
 from hippique.analytics.roi_rebalancer import (
-    compute_allocation_plan,
+    Allocation,
     AllocationPlan,
     RaceMetrics,
-    Allocation,
-    _score,
-    _scale_risk,
-    load_analysis_reports,
     _extract_metrics,
+    _scale_risk,
+    _score,
+    compute_allocation_plan,
+    load_analysis_reports,
 )
 
 

@@ -1,8 +1,10 @@
 import logging
-import pytest
-from unittest.mock import MagicMock, patch
 from datetime import datetime
+from unittest.mock import MagicMock, patch
+
+import pytest
 from google.cloud.firestore import DocumentSnapshot
+
 from hippique_orchestrator import firestore_client
 
 # We need to patch the client at the source, where it's looked up.
@@ -18,7 +20,6 @@ def mock_db():
 
 def test_update_race_document_success(mock_db):
     """Test that `update_race_document` calls firestore `set` with merge=True."""
-    from hippique_orchestrator import firestore_client
 
     doc_ref_mock = MagicMock()
     mock_db.collection.return_value.document.return_value = doc_ref_mock
@@ -34,7 +35,6 @@ def test_update_race_document_success(mock_db):
 
 def test_update_race_document_handles_exception(mock_db, caplog):
     """Test that exceptions during firestore update are logged as errors."""
-    from hippique_orchestrator import firestore_client
 
     mock_db.collection.side_effect = Exception("Firestore unavailable")
 
@@ -47,7 +47,6 @@ def test_update_race_document_handles_exception(mock_db, caplog):
 @patch(FIRESTORE_CLIENT_PATH, None)
 def test_update_race_document_skips_if_db_not_available(caplog):
     """Test that updates are skipped if the db client is None."""
-    from hippique_orchestrator import firestore_client
 
     firestore_client.update_race_document("any_id", {})
     assert "Firestore is not available, skipping update" in caplog.text
@@ -55,7 +54,6 @@ def test_update_race_document_skips_if_db_not_available(caplog):
 
 def test_get_races_for_date_success(mock_db):
     """Test `get_races_for_date` returns a list of document snapshots."""
-    from hippique_orchestrator import firestore_client
 
     # Create mock documents
     doc1_mock = MagicMock(spec=DocumentSnapshot)
@@ -77,7 +75,6 @@ def test_get_races_for_date_success(mock_db):
 
 def test_get_races_for_date_empty(mock_db):
     """Test `get_races_for_date` returns an empty list when no documents are found."""
-    from hippique_orchestrator import firestore_client
 
     mock_query = MagicMock()
     mock_query.stream.return_value = []
@@ -91,7 +88,6 @@ def test_get_races_for_date_empty(mock_db):
 
 def test_get_races_for_date_handles_exception(mock_db, caplog):
     """Test that exceptions during race query are logged and return an empty list."""
-    from hippique_orchestrator import firestore_client
 
     mock_db.collection.side_effect = Exception("Query failed")
 
@@ -105,7 +101,6 @@ def test_get_races_for_date_handles_exception(mock_db, caplog):
 @patch(FIRESTORE_CLIENT_PATH, None)
 def test_get_races_for_date_skips_if_db_not_available(caplog):
     """Test that `get_races_for_date` skips if the db client is None."""
-    from hippique_orchestrator import firestore_client
 
     date_str = "2025-12-30"
     results = firestore_client.get_races_for_date(date_str)
@@ -132,7 +127,6 @@ def test_get_races_for_date_skips_if_db_not_available(caplog):
 )
 def test_get_doc_id_from_url(url, date, expected):
     """Test `get_doc_id_from_url` correctly parses various URL formats."""
-    from hippique_orchestrator import firestore_client
 
     assert firestore_client.get_doc_id_from_url(url, date) == expected
 
@@ -148,7 +142,6 @@ def create_mock_doc(doc_id, update_time_str, data=None):
 
 def test_get_processing_status_for_date_success(mock_db):
     """Test `get_processing_status_for_date` for a nominal case with processed data."""
-    from hippique_orchestrator import firestore_client
 
     date_str = "2025-12-30"
     daily_plan = [
@@ -192,7 +185,6 @@ def test_get_processing_status_for_date_success(mock_db):
 
 def test_get_processing_status_for_date_db_not_available(mock_db):
     """Test `get_processing_status_for_date` when Firestore client is None."""
-    from hippique_orchestrator import firestore_client
 
     # Mock db to be None
     with patch("hippique_orchestrator.firestore_client.db", None):
@@ -203,7 +195,6 @@ def test_get_processing_status_for_date_db_not_available(mock_db):
 
 def test_get_processing_status_for_date_empty_daily_plan(mock_db):
     """Test `get_processing_status_for_date` with an empty daily plan."""
-    from hippique_orchestrator import firestore_client
 
     date_str = "2025-12-30"
     daily_plan = []
@@ -220,7 +211,6 @@ def test_get_processing_status_for_date_empty_daily_plan(mock_db):
 
 def test_get_processing_status_for_date_explicit_empty_plan_reason(mock_db):
     """Test `get_processing_status_for_date` explicitly covers the empty plan reason."""
-    from hippique_orchestrator import firestore_client
 
     date_str = "2025-01-01"
     daily_plan = []
@@ -235,7 +225,6 @@ def test_get_processing_status_for_date_explicit_empty_plan_reason(mock_db):
 
 def test_get_processing_status_for_date_unprocessed_races(mock_db):
     """Test `get_processing_status_for_date` when daily plan has races but none are processed."""
-    from hippique_orchestrator import firestore_client
 
     date_str = "2025-12-30"
     daily_plan = [
@@ -255,7 +244,6 @@ def test_get_processing_status_for_date_unprocessed_races(mock_db):
 
 def test_get_processing_status_for_date_error_decision(mock_db):
     """Test `get_processing_status_for_date` correctly counts error decisions."""
-    from hippique_orchestrator import firestore_client
 
     date_str = "2025-12-30"
     daily_plan = [{"rc": "R1C1", "time": "10:00"}]
@@ -278,7 +266,6 @@ def test_get_processing_status_for_date_error_decision(mock_db):
 
 def test_get_processing_status_for_date_unknown_decision(mock_db):
     """Test `get_processing_status_for_date` correctly handles unknown decisions (not counted in specific buckets)."""
-    from hippique_orchestrator import firestore_client
 
     date_str = "2025-12-30"
     daily_plan = [{"rc": "R1C1", "time": "10:00"}]
@@ -302,7 +289,6 @@ def test_get_processing_status_for_date_unknown_decision(mock_db):
 
 def test_get_document_success(mock_db):
     """Test get_document returns the document dictionary when it exists."""
-    from hippique_orchestrator import firestore_client
 
     mock_doc = MagicMock()
     mock_doc.exists = True
@@ -319,7 +305,6 @@ def test_get_document_success(mock_db):
 
 def test_get_document_not_found(mock_db):
     """Test get_document returns None when the document does not exist."""
-    from hippique_orchestrator import firestore_client
 
     mock_doc = MagicMock()
     mock_doc.exists = False
@@ -333,7 +318,6 @@ def test_get_document_not_found(mock_db):
 
 def test_get_document_exception(mock_db, caplog):
     """Test get_document handles exceptions and returns None."""
-    from hippique_orchestrator import firestore_client
 
     mock_db.collection.return_value.document.return_value.get.side_effect = Exception(
         "Connection failed"
@@ -347,7 +331,6 @@ def test_get_document_exception(mock_db, caplog):
 
 def test_set_document_success(mock_db):
     """Test set_document successfully calls the firestore client."""
-    from hippique_orchestrator import firestore_client
 
     doc_ref_mock = MagicMock()
     mock_db.collection.return_value.document.return_value = doc_ref_mock
@@ -362,7 +345,6 @@ def test_set_document_success(mock_db):
 
 def test_set_document_exception(mock_db, caplog):
     """Test that set_document handles exceptions."""
-    from hippique_orchestrator import firestore_client
 
     mock_db.collection.side_effect = Exception("Permission denied")
     with caplog.at_level(logging.ERROR):
@@ -375,7 +357,6 @@ def test_set_document_exception(mock_db, caplog):
 @patch(FIRESTORE_CLIENT_PATH, None)
 def test_get_races_for_date_db_unavailable(caplog):
     """Test get_races_for_date when the database is unavailable."""
-    from hippique_orchestrator import firestore_client
 
     with caplog.at_level(logging.WARNING):
         races = firestore_client.get_races_for_date("2025-12-30")
@@ -386,7 +367,6 @@ def test_get_races_for_date_db_unavailable(caplog):
 @patch(FIRESTORE_CLIENT_PATH, None)
 def test_get_document_skips_if_db_not_available(caplog):
     """Test that get_document skips if the db client is None."""
-    from hippique_orchestrator import firestore_client
 
     with caplog.at_level(logging.WARNING):
         result = firestore_client.get_document("test_collection", "test_doc")
@@ -397,7 +377,6 @@ def test_get_document_skips_if_db_not_available(caplog):
 @patch(FIRESTORE_CLIENT_PATH, None)
 def test_set_document_skips_if_db_not_available(caplog):
     """Test that set_document skips if the db client is None."""
-    from hippique_orchestrator import firestore_client
 
     with caplog.at_level(logging.WARNING):
         firestore_client.set_document("test_collection", "test_doc", {"key": "value"})

@@ -1,10 +1,9 @@
-import re
-import re
-from unittest.mock import MagicMock, patch
+from datetime import datetime
 from pathlib import Path
+from unittest.mock import MagicMock
+
 import httpx
 import pytest
-from datetime import datetime
 from bs4 import BeautifulSoup
 
 from hippique_orchestrator.scrapers import boturfers
@@ -321,12 +320,19 @@ def test_fetcher_parse_race_runners_from_details_page_malformed_row(
     fetcher = boturfers.BoturfersFetcher("http://dummy.url")
     fetcher.soup = BeautifulSoup(boturfers_race_details_malformed_html, 'lxml')
     runners = fetcher._parse_race_runners_from_details_page()
-    assert len(runners) == 0  # No runners should be successfully parsed and added
-    # Check that error was logged for runner row parsing
-    assert mock_logger.warning.call_count == 2
-    # Check for specific warning messages
+    assert len(runners) == 1
+    assert runners[0]["nom"] == "Cheval A"
+    assert runners[0]["jockey"] == "N/A"
+    assert runners[0]["entraineur"] == "N/A"
+    assert runners[0]["odds_win"] is None
+    assert runners[0]["odds_place"] is None
+    assert runners[0]["musique"] is None
+    assert runners[0]["gains"] is None
+
+    # Check that error was logged for runner row parsing (only for Cheval B)
+    assert mock_logger.warning.call_count == 1
     warning_messages = [call_args[0][0] for call_args in mock_logger.warning.call_args_list]
-    assert any("list index out of range" in msg for msg in warning_messages)  # For missing links
+    assert any("invalid literal for float(): 'invalid_float'" in msg for msg in warning_messages)
 
 
 @pytest.mark.asyncio

@@ -1,21 +1,20 @@
-# -*- coding: utf-8 -*-
 
-import json
 import datetime as dt
-from pathlib import Path
-from unittest.mock import patch, call
-import sys
+import json
 import os
+import sys
+from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from pyfakefs.fake_filesystem import FakeFilesystem
 
 from hippique_orchestrator.scripts.cron_decider import (
+    PARIS,
+    _invoke_runner,
     _load_meetings,
     _parse_start,
-    _invoke_runner,
     main,
-    PARIS,
 )
 
 

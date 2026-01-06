@@ -1,13 +1,14 @@
 import logging
-import pytest
 from unittest.mock import AsyncMock, patch
+
+import pytest
 from bs4 import BeautifulSoup
+
 from hippique_orchestrator.scrapers.boturfers import (
     BoturfersFetcher,
     fetch_boturfers_programme,
     fetch_boturfers_race_details,
 )
-import httpx
 
 
 @pytest.mark.asyncio

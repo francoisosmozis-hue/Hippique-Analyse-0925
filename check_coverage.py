@@ -2,7 +2,7 @@ import sys
 import xml.etree.ElementTree as ET
 
 try:
-    with open('coverage.xml', 'r') as f:
+    with open('coverage.xml') as f:
         file_content = f.read()
 except FileNotFoundError:
     print("Error: coverage.xml not found.")

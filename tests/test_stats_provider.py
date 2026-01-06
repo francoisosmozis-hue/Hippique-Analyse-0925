@@ -2,14 +2,14 @@
 Unit tests for the StatsProvider implementations.
 """
 
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-import pytest
 import httpx
+import pytest
 
-from hippique_orchestrator.stats_provider import ZoneTurfProvider, _slugify
 from hippique_orchestrator import firestore_client
+from hippique_orchestrator.stats_provider import ZoneTurfProvider, _slugify
 
 # Mock config for the provider
 MOCK_ZT_CONFIG = {

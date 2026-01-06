@@ -1,26 +1,21 @@
 from __future__ import annotations
 
 import pathlib
+from unittest.mock import MagicMock, call, patch
+
 import pytest
-from unittest.mock import MagicMock, patch, call
-import requests  # Needed to mock this
-from datetime import datetime  # Needed for tests
 from pytest import LogCaptureFixture
 
 from hippique_orchestrator.zoneturf_client import (
-    _normalize_name,
-    _parse_rk_string,
-    fetch_chrono_from_html,
-    resolve_horse_id,
-    resolve_person_id,
-    fetch_person_stats_from_html,
-    get_chrono_stats,
-    get_jockey_trainer_stats,
-    ID_CACHE,
+    BASE_URL,  # To check URLs built
     CHRONO_CACHE,
+    ID_CACHE,
     PERSON_ID_CACHE,
     PERSON_STATS_CACHE,
-    BASE_URL,  # To check URLs built
+    fetch_chrono_from_html,
+    fetch_person_stats_from_html,
+    resolve_horse_id,
+    resolve_person_id,
 )
 
 FIXTURE_DIR = pathlib.Path(__file__).parent / 'fixtures'

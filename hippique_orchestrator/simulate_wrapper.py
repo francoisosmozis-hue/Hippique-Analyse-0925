@@ -26,7 +26,6 @@ from typing import Any
 
 import yaml
 
-from hippique_orchestrator import config
 from hippique_orchestrator.ev_calculator import compute_ev_roi
 
 # Explicitly configure logging for this module for debugging purposes

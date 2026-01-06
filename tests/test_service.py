@@ -5,11 +5,9 @@ from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, Mock
 
 import pytest
-from fastapi.testclient import TestClient
 
 # Mock the firestore client before it's imported by the service
 from hippique_orchestrator import firestore_client
-from hippique_orchestrator.service import app  # Import app AFTER mocking firestore_client.db
 
 firestore_client.db = MagicMock()
 
@@ -410,7 +408,6 @@ async def test_schedule_day_races_unhandled_exception(client, monkeypatch, mock_
     mock_plan.assert_called_once()
 
 
-from unittest.mock import Mock
 
 
 def mock_get_races_for_date(*args, **kwargs):

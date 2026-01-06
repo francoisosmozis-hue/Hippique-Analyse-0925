@@ -1,9 +1,8 @@
-import pytest
-from unittest.mock import patch, MagicMock
 from datetime import datetime
+from unittest.mock import MagicMock, patch
+
 import httpx
-from bs4 import BeautifulSoup
-import os
+import pytest
 
 from hippique_orchestrator.scrapers import geny
 
@@ -11,7 +10,7 @@ from hippique_orchestrator.scrapers import geny
 # Fixture to read HTML content
 @pytest.fixture
 def geny_programme_html_success():
-    with open("tests/fixtures/geny_programme.html", "r") as f:
+    with open("tests/fixtures/geny_programme.html") as f:
         return f.read()
 
 

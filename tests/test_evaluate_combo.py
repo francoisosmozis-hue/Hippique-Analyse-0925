@@ -1,7 +1,5 @@
 from collections import OrderedDict
-from pathlib import Path
 
-from hippique_orchestrator import config
 from hippique_orchestrator import simulate_wrapper as sw
 from hippique_orchestrator.simulate_wrapper import evaluate_combo
 

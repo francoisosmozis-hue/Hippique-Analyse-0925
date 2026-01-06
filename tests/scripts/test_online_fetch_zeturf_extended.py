@@ -1,7 +1,8 @@
-import pytest
-from pathlib import Path
-import re
 import json
+import re
+from pathlib import Path
+
+import pytest
 
 from hippique_orchestrator.scripts import online_fetch_zeturf
 

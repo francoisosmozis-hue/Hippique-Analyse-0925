@@ -1,6 +1,6 @@
-from fsspec.implementations.memory import MemoryFileSystem
 import json
-import pytest
+
+from fsspec.implementations.memory import MemoryFileSystem
 
 from hippique_orchestrator.logging_io import CSV_HEADER, append_csv_line, append_json
 
@@ -42,7 +42,6 @@ def test_append_json_local_filesystem(tmp_path, mocker):
     path = tmp_path / "data.json"
     data = {"key": "value", "items": [1, 2]}
 
-    from hippique_orchestrator.logging_io import append_json
 
     append_json(path, data)
 
@@ -62,7 +61,6 @@ def test_append_json_gcs(mocker):
     path = "/gcs/bucket/data.json"
     data = {"key": "gcs_value"}
 
-    from hippique_orchestrator.logging_io import append_json
 
     append_json(path, data)
 

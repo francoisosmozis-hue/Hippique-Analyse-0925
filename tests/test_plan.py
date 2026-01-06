@@ -1,7 +1,6 @@
+from unittest.mock import AsyncMock, patch
+
 import pytest
-from unittest.mock import patch, AsyncMock, MagicMock
-import asyncio
-from datetime import datetime
 
 from hippique_orchestrator import plan
 

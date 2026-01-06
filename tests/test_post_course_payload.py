@@ -1,15 +1,16 @@
 from __future__ import annotations
 
 import pytest
+
 from hippique_orchestrator.post_course_payload import (
-    merge_meta,
-    compute_post_course_summary,
-    summarise_ticket_metrics,
+    PostCourseSummary,
     apply_summary_to_ticket_container,
     build_payload,
     build_payload_from_sources,
+    compute_post_course_summary,
     format_csv_line,
-    PostCourseSummary,
+    merge_meta,
+    summarise_ticket_metrics,
 )
 
 # --- Tests for merge_meta ---

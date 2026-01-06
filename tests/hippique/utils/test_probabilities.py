@@ -1,5 +1,6 @@
 import pytest
-from hippique.utils.probabilities import implied_prob_from_odds, no_vig_probs, expected_value_simple
+
+from hippique.utils.probabilities import expected_value_simple, implied_prob_from_odds, no_vig_probs
 
 
 # Tests for implied_prob_from_odds

@@ -8,7 +8,7 @@ import logging
 import re
 from typing import Any
 
-from hippique_orchestrator import analysis_pipeline, config
+from hippique_orchestrator import analysis_pipeline
 
 logger = logging.getLogger(__name__)
 

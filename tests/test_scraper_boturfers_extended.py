@@ -1,8 +1,8 @@
-import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
-from bs4 import BeautifulSoup
+from unittest.mock import MagicMock, patch
+
 import httpx
-from datetime import datetime
+import pytest
+from bs4 import BeautifulSoup
 
 from hippique_orchestrator.scrapers.boturfers import (
     BoturfersFetcher,
@@ -195,7 +195,7 @@ async def test_parse_programme_malformed_reunion_title(mock_httpx_and_soup):
     """
     mock_row_valid_in_program = BeautifulSoup(html_race_row, "lxml").find("tr")
     assert mock_row_valid_in_program is not None, "Mocked HTML row not found"
-    
+
     mock_race_table.select.return_value = [mock_row_valid_in_program]  # One valid row
     mock_soup_instance.select.return_value = [mock_reunion_tab]
     mock_beautiful_soup.return_value = mock_soup_instance
@@ -446,9 +446,14 @@ async def test_parse_race_runners_malformed_row(mock_httpx_and_soup, caplog):
     fetcher.soup = mock_soup_instance
     runners = fetcher._parse_race_runners_from_details_page()
 
-    assert len(runners) == 1
+    assert len(runners) == 2
     assert runners[0]["nom"] == "Nom Valide"
-    assert "Failed to parse a runner row: list index out of range. Row skipped." in caplog.text
+    assert runners[0]["jockey"] == "Jockey Valide"
+    assert runners[0]["entraineur"] == "Entraineur Valide"
+    assert runners[1]["nom"] == "Nom Malformé"
+    assert runners[1]["jockey"] == "N/A"
+    assert runners[1]["entraineur"] == "N/A"
+
 
 
 @pytest.mark.asyncio

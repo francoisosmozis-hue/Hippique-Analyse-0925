@@ -1,10 +1,10 @@
-from unittest.mock import MagicMock, patch
 from pathlib import Path
-import pytest
-import asyncio  # New import
+from unittest.mock import patch
 
-from hippique_orchestrator.scripts import online_fetch_zeturf
+import pytest
+
 from hippique_orchestrator.scrapers import zeturf as zeturf_scraper  # New import with alias
+from hippique_orchestrator.scripts import online_fetch_zeturf
 
 
 @pytest.fixture
