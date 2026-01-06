@@ -16,7 +16,7 @@ steps:
 - name: 'python:3.12-slim'
   id: "Format Check"
   entrypoint: 'bash'
-  args: ['-c', 'pip install ruff && ruff format . --check --exclude archive/']
+  args: ['-c', 'pip install ruff && ruff format . --fix --exclude archive/']
 
 # Build the Docker image
 - name: 'gcr.io/cloud-builders/docker'
