@@ -29,6 +29,8 @@ from .schemas import ScheduleRequest, ScheduleResponse
 setup_logging(log_level=config.LOG_LEVEL)
 logger = logging.getLogger(__name__)
 
+OIDC_TOKEN_DEPENDENCY = Depends(verify_oidc_token)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -376,7 +378,7 @@ class RaceTaskPayload(BaseModel):
 
 @app.post("/tasks/run-phase", tags=["Tasks"])
 async def run_phase_worker(
-    payload: RaceTaskPayload, request: Request, token_claims: dict = Depends(verify_oidc_token)
+    payload: RaceTaskPayload, request: Request, token_claims: dict = OIDC_TOKEN_DEPENDENCY
 ):
     correlation_id = getattr(request.state, "correlation_id", "N/A")
     logger.info("Received task to run phase.", extra={"payload": payload.dict()})

@@ -139,7 +139,7 @@ def test_monte_carlo_is_used_when_numpy_present(fs, clear_caches):
     Test that Monte Carlo simulation is used when numpy is available and rho is set.
     """
     # Guard the test: only run if numpy is installed
-    np = pytest.importorskip("numpy")
+    pytest.importorskip("numpy")
 
     payout_calib_path = Path("/etc/config/payout_calibration.yaml")
     fs.create_file(payout_calib_path)

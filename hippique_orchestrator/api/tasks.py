@@ -23,6 +23,8 @@ router = APIRouter(prefix="/tasks", tags=["Tasks"])
 
 logger = get_logger(__name__)
 
+OIDC_TOKEN_DEPENDENCY = Depends(verify_oidc_token)
+
 # ... (rest of the file remains the same until run_phase_task)
 
 
@@ -98,7 +100,7 @@ async def run_phase_task(
 async def snapshot_9h_task(
     request: Request,
     body: Snapshot9HRequest,  # Now using the specific Snapshot9HRequest
-    token_claims: dict = Depends(verify_oidc_token),
+    token_claims: dict = OIDC_TOKEN_DEPENDENCY,
 ):
     """
     Triggers an H9 snapshot for the specified date and meeting URLs.
@@ -145,7 +147,7 @@ async def snapshot_9h_task(
 
 @router.post("/bootstrap-day", status_code=status.HTTP_200_OK)
 async def bootstrap_day_task(request: Request, body: BootstrapDayRequest,
-    token_claims: dict = Depends(verify_oidc_token) # Added security dependency
+    token_claims: dict = OIDC_TOKEN_DEPENDENCY,
 ):
     """
     Reads the day's plan, and for each race, creates two Cloud Tasks (H-30, H-5)

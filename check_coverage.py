@@ -1,3 +1,4 @@
+import sys
 import xml.etree.ElementTree as ET
 
 try:
@@ -5,7 +6,7 @@ try:
         file_content = f.read()
 except FileNotFoundError:
     print("Error: coverage.xml not found.")
-    exit(1)
+    sys.exit(1)
 
 root = ET.fromstring(file_content)
 
