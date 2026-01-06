@@ -64,13 +64,9 @@ def get_env(
                 "Missing required environment variable '%s'. App may not function correctly.", name
             )
             if is_prod:
-                import sys
-
                 logger.critical("IS_PROD=True. Exiting.")
                 sys.exit(1)
             if fail_fast:
-                import sys
-
                 logger.critical("FAIL_FAST_ON_CONFIG_ERROR is true. Exiting.")
                 sys.exit(1)
         else:
