@@ -292,14 +292,18 @@ def collect_stats(
                             j_rate = extract_rate_from_profile(fetcher(j_url))
                             time.sleep(conf.delay_between_requests)
                         except Exception as e:
-                            LOGGER.warning(f"Failed to fetch jockey stats for '{name}' from {j_url}: {e}")
-                    
+                            LOGGER.warning(
+                                f"Failed to fetch jockey stats for '{name}' from {j_url}: {e}"
+                            )
+
                     if e_url:
                         try:
                             e_rate = extract_rate_from_profile(fetcher(e_url))
                             time.sleep(conf.delay_between_requests)
                         except Exception as e:
-                            LOGGER.warning(f"Failed to fetch trainer stats for '{name}' from {e_url}: {e}")
+                            LOGGER.warning(
+                                f"Failed to fetch trainer stats for '{name}' from {e_url}: {e}"
+                            )
 
                     if j_rate is not None or e_rate is not None:
                         successful_fetches += 1

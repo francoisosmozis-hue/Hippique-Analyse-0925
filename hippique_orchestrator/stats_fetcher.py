@@ -115,7 +115,9 @@ async def collect_stats(
         runner_stats["e_rate"] = None  # Initialize
         if trainer_name:
             try:
-                trainer_stats = await zoneturf_client.get_jockey_trainer_stats(trainer_name, "entraineur")
+                trainer_stats = await zoneturf_client.get_jockey_trainer_stats(
+                    trainer_name, "entraineur"
+                )
                 if trainer_stats and "win_rate" in trainer_stats:
                     runner_stats["e_rate"] = trainer_stats["win_rate"]
                     successful_trainer_fetches += 1

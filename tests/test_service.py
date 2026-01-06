@@ -14,8 +14,6 @@ from hippique_orchestrator.service import app  # Import app AFTER mocking firest
 firestore_client.db = MagicMock()
 
 
-
-
 @pytest.fixture
 def mock_plan(monkeypatch):
     """Fixture to mock plan.build_plan_async."""
@@ -86,7 +84,6 @@ def test_get_pronostics_data_etag_304_not_modified(client, mock_plan, mock_fires
     mock_datetime.now.return_value = frozen_time
     monkeypatch.setattr("hippique_orchestrator.service.datetime", mock_datetime)
 
-
     # First request to get the ETag
     response1 = client.get("/api/pronostics?date=2025-01-01")
     assert response1.status_code == 200
@@ -94,9 +91,7 @@ def test_get_pronostics_data_etag_304_not_modified(client, mock_plan, mock_fires
     assert etag is not None
 
     # Second request with the ETag
-    response2 = client.get(
-        "/api/pronostics?date=2025-01-01", headers={"If-None-Match": etag}
-    )
+    response2 = client.get("/api/pronostics?date=2025-01-01", headers={"If-None-Match": etag})
     assert response2.status_code == 304
 
 
@@ -194,8 +189,6 @@ def test_get_ops_status_reason_if_empty(client, mock_plan, mock_firestore):
     assert data["reason_if_empty"] == "NO_TASKS_PROCESSED_OR_FIRESTORE_EMPTY"
 
 
-
-
 def test_health_check(client):
     """Test the /health endpoint."""
     response = client.get("/health")
@@ -226,11 +219,18 @@ def test_post_ops_run_success(client, monkeypatch, mock_plan):
         "hippique_orchestrator.analysis_pipeline.run_analysis_for_phase", mock_run_analysis
     )
     mock_update_db = MagicMock()
-    monkeypatch.setattr("hippique_orchestrator.firestore_client.update_race_document", mock_update_db)
+    monkeypatch.setattr(
+        "hippique_orchestrator.firestore_client.update_race_document", mock_update_db
+    )
 
     # Setup mock plan to return the target race
     mock_plan.return_value = [
-        {"r_label": "R1", "c_label": "C1", "name": "Prix d'Amerique", "url": "http://example.com/r1c1"}
+        {
+            "r_label": "R1",
+            "c_label": "C1",
+            "name": "Prix d'Amerique",
+            "url": "http://example.com/r1c1",
+        }
     ]
 
     # Make the request with a valid API key
@@ -244,7 +244,7 @@ def test_post_ops_run_success(client, monkeypatch, mock_plan):
     # Verify that the pipeline and DB update were called
     mock_run_analysis.assert_called_once()
     mock_update_db.assert_called_once()
-    
+
     # Check that the doc_id passed to update_race_document is correct
     call_args, _ = mock_update_db.call_args
     assert call_args[0].endswith("_R1C1")  # doc_id is the first positional arg
@@ -267,7 +267,7 @@ async def test_run_single_race_missing_course_url(client, monkeypatch, mock_plan
     assert response.status_code == 400
     assert "Race R1C1 is missing a URL in the plan." in response.json()["detail"]
     mock_plan.assert_called_once()
-    
+
     # Ensure analysis pipeline or firestore update were NOT called
     # We need to set these up as mocks even if not called to ensure the asserts pass
     mock_run_analysis = AsyncMock()
@@ -275,7 +275,9 @@ async def test_run_single_race_missing_course_url(client, monkeypatch, mock_plan
         "hippique_orchestrator.analysis_pipeline.run_analysis_for_phase", mock_run_analysis
     )
     mock_update_db = MagicMock()
-    monkeypatch.setattr("hippique_orchestrator.firestore_client.update_race_document", mock_update_db)
+    monkeypatch.setattr(
+        "hippique_orchestrator.firestore_client.update_race_document", mock_update_db
+    )
     mock_get_doc_id = MagicMock()
     monkeypatch.setattr(
         "hippique_orchestrator.firestore_client.get_doc_id_from_url", mock_get_doc_id
@@ -291,9 +293,17 @@ async def test_schedule_day_races_success(client, monkeypatch, mock_plan):
     Test a successful call to POST /schedule, verifying that the scheduler
     is called with the correct parameters.
     """
-    mock_scheduler = MagicMock(return_value=[
-        {"race": "R1C1", "phase": "H-5", "ok": True, "task_name": "task1", "reason": "Scheduled"}
-    ])
+    mock_scheduler = MagicMock(
+        return_value=[
+            {
+                "race": "R1C1",
+                "phase": "H-5",
+                "ok": True,
+                "task_name": "task1",
+                "reason": "Scheduled",
+            }
+        ]
+    )
     monkeypatch.setattr("hippique_orchestrator.scheduler.schedule_all_races", mock_scheduler)
 
     mock_plan.return_value = [{"r_label": "R1", "c_label": "C1"}]
@@ -312,7 +322,7 @@ async def test_schedule_day_races_success(client, monkeypatch, mock_plan):
 
     mock_plan.assert_called_once_with("2025-01-01")
     mock_scheduler.assert_called_once()
-    
+
     # Check that force and dry_run flags were passed correctly
     _, kwargs = mock_scheduler.call_args
     assert kwargs["force"] is True
@@ -346,7 +356,12 @@ async def test_run_single_race_unhandled_exception(client, monkeypatch, mock_pla
     """
     # Setup mock plan to return the target race
     mock_plan.return_value = [
-        {"r_label": "R1", "c_label": "C1", "name": "Prix d'Amerique", "url": "http://example.com/r1c1"}
+        {
+            "r_label": "R1",
+            "c_label": "C1",
+            "name": "Prix d'Amerique",
+            "url": "http://example.com/r1c1",
+        }
     ]
 
     # Simulate an unexpected error in analysis_pipeline.run_analysis_for_phase
@@ -355,18 +370,20 @@ async def test_run_single_race_unhandled_exception(client, monkeypatch, mock_pla
         "hippique_orchestrator.analysis_pipeline.run_analysis_for_phase", mock_run_analysis
     )
     mock_update_db = MagicMock()
-    monkeypatch.setattr("hippique_orchestrator.firestore_client.update_race_document", mock_update_db)
+    monkeypatch.setattr(
+        "hippique_orchestrator.firestore_client.update_race_document", mock_update_db
+    )
 
     response = client.post("/ops/run?rc=R1C1", headers={"X-API-Key": "test-secret"})
 
     assert response.status_code == 500
     assert "Failed to process manual run for" in response.json()["detail"]
     mock_run_analysis.assert_called_once()
-    mock_update_db.assert_called_once() # Should be called to save error state
-    
+    mock_update_db.assert_called_once()  # Should be called to save error state
+
     # Verify error data saved
     call_args, _ = mock_update_db.call_args
-    error_data = call_args[1] # second positional arg is error_data
+    error_data = call_args[1]  # second positional arg is error_data
     assert error_data["status"] == "error"
     assert error_data["gpi_decision"] == "error_manual_run"
     assert "Simulated pipeline error" in error_data["error_message"]
@@ -384,7 +401,7 @@ async def test_schedule_day_races_unhandled_exception(client, monkeypatch, mock_
         response = client.post(
             "/schedule",
             json={"force": False, "dry_run": True, "date": "2025-01-01"},
-            headers={"X-API-Key": "test-secret"}
+            headers={"X-API-Key": "test-secret"},
         )
 
     assert response.status_code == 500
@@ -393,9 +410,8 @@ async def test_schedule_day_races_unhandled_exception(client, monkeypatch, mock_
     mock_plan.assert_called_once()
 
 
-
-
 from unittest.mock import Mock
+
 
 def mock_get_races_for_date(*args, **kwargs):
     races = [
@@ -409,13 +425,7 @@ def mock_get_races_for_date(*args, **kwargs):
             "start_time": "2025-01-01T13:50:00Z",
             "partants": 16,
             "tickets_analysis": {"gpi_decision": "pari"},
-            "tickets": [
-                {
-                    "type": "SG",
-                    "mise": 1.5,
-                    "chevaux": [1]
-                }
-            ]
+            "tickets": [{"type": "SG", "mise": 1.5, "chevaux": [1]}],
         },
         {
             "course_id": "2025-01-01_R1C2",
@@ -427,16 +437,16 @@ def mock_get_races_for_date(*args, **kwargs):
             "start_time": "2025-01-01T14:20:00Z",
             "partants": 12,
             "tickets_analysis": {"gpi_decision": "abstention"},
-        }
+        },
     ]
-    
+
     mock_races = []
     for race_data in races:
         mock_race = Mock()
         mock_race.to_dict.return_value = race_data
         mock_race.id = race_data["course_id"]
         mock_races.append(mock_race)
-        
+
     return mock_races
 
 
@@ -445,8 +455,7 @@ def test_api_pronostics_schema(client, monkeypatch):
     Test the schema of the /api/pronostics endpoint.
     """
     monkeypatch.setattr(
-        "hippique_orchestrator.firestore_client.get_races_for_date",
-        mock_get_races_for_date
+        "hippique_orchestrator.firestore_client.get_races_for_date", mock_get_races_for_date
     )
 
     response = client.get("/api/pronostics?date=2025-01-01")
@@ -460,7 +469,8 @@ def test_api_pronostics_schema(client, monkeypatch):
 
     for pronostic in data["pronostics"]:
         validate_pronostic(pronostic)
-        
+
+
 def validate_pronostic(pronostic: dict):
     assert "course_id" in pronostic
     assert isinstance(pronostic["course_id"], str)
@@ -491,13 +501,9 @@ def validate_pronostic(pronostic: dict):
                 assert isinstance(cheval, (int, str))
 
 
-
-
 def test_run_single_race_not_found(client, mock_plan):
     """Test POST /ops/run when the requested race is not in the plan."""
-    mock_plan.return_value = [
-        {"r_label": "R1", "c_label": "C2", "name": "Some Other Race"}
-    ]
+    mock_plan.return_value = [{"r_label": "R1", "c_label": "C2", "name": "Some Other Race"}]
     response = client.post("/ops/run?rc=R1C1", headers={"X-API-Key": "test-secret"})
     assert response.status_code == 404
     assert "Race R1C1 not found" in response.json()["detail"]
@@ -529,9 +535,9 @@ def test_get_pronostics_data_defaults_to_today(client, mock_plan, mock_firestore
     mock_get_races, _ = mock_firestore
     mock_plan.return_value = []
     mock_get_races.return_value = []
-    
+
     today_str = datetime.now().strftime("%Y-%m-%d")
-    
+
     response = client.get("/api/pronostics")
     assert response.status_code == 200
     data = response.json()
@@ -579,8 +585,7 @@ def test_api_pronostics_schema_and_ui_markers(client, monkeypatch):
     """
     # 1. Test API Schema
     monkeypatch.setattr(
-        "hippique_orchestrator.firestore_client.get_races_for_date",
-        mock_get_races_for_date
+        "hippique_orchestrator.firestore_client.get_races_for_date", mock_get_races_for_date
     )
 
     api_response = client.get("/api/pronostics?date=2025-01-01")
@@ -601,7 +606,3 @@ def test_api_pronostics_schema_and_ui_markers(client, monkeypatch):
     assert '<table id="races-table">' in html
     assert '<tbody id="races-tbody">' in html
     assert 'fetch(`/api/pronostics?date=${date}`)' in html
-
-
-
-

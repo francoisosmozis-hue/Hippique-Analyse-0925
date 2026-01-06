@@ -141,9 +141,6 @@ def fetch_race_snapshot(
     return normalised
 
 
-
-
-
 def _normalize_decimal(value: Any) -> float | None:
     """Return ``value`` as a positive float if possible."""
 
@@ -417,11 +414,12 @@ def _fallback_parse_html(html: Any) -> dict[str, Any]:
                         if odds_data.get("SG"):
                             runner_data["cote"] = odds_data["SG"]
                         if odds_data.get("SPMin") and odds_data.get("SPMax"):
-                             runner_data["odds_place"] = (odds_data["SPMin"] + odds_data["SPMax"]) / 2
+                            runner_data["odds_place"] = (
+                                odds_data["SPMin"] + odds_data["SPMax"]
+                            ) / 2
 
             if runner_data:
-                 runners.append(runner_data)
-
+                runners.append(runner_data)
 
     partants: int | None = None
     partants_match = _PARTANTS_RE.search(html)
@@ -432,14 +430,20 @@ def _fallback_parse_html(html: Any) -> dict[str, Any]:
             partants = None
 
     discipline: str | None = None
-    infos_paragraph_match = re.search(r'<p class="infos">\s*(Attelé|Plat|Monté|Trot|Obstacles?)\s*-', html, re.IGNORECASE)
+    infos_paragraph_match = re.search(
+        r'<p class="infos">\s*(Attelé|Plat|Monté|Trot|Obstacles?)\s*-', html, re.IGNORECASE
+    )
     if infos_paragraph_match:
-        discipline = _clean_text(infos_paragraph_match.group(1), lowercase=True, strip_accents=False) # Changed to False
+        discipline = _clean_text(
+            infos_paragraph_match.group(1), lowercase=True, strip_accents=False
+        )  # Changed to False
     else:
         # Fallback to the general _DISCIPLINE_RE if the specific infos paragraph is not found
         discipline_match = _DISCIPLINE_RE.search(html)
         if discipline_match:
-            discipline = _clean_text(discipline_match.group(1), lowercase=True, strip_accents=False) # Changed to False
+            discipline = _clean_text(
+                discipline_match.group(1), lowercase=True, strip_accents=False
+            )  # Changed to False
 
     meeting: str | None = None
     meeting_match = _MEETING_RE.search(html)

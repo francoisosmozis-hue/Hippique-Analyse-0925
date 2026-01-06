@@ -19,11 +19,11 @@ def apply_drift_steam(p_val, num, p5_map, p30_map, fav30):
     """
     if not p_val:
         return 0.0
-    
+
     # If either probability map is missing, do not apply drift/steam.
     if p5_map is None or p30_map is None:
         return p_val
-    
+
     try:
         p5v = float(p5_map.get(str(num), 0.0))
         p30v = float(p30_map.get(str(num), 0.0))

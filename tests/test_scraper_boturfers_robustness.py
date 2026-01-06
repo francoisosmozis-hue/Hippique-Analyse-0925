@@ -1,14 +1,15 @@
-
 from pathlib import Path
 from bs4 import BeautifulSoup
 import pytest
 
 from hippique_orchestrator.scrapers import boturfers
 
+
 @pytest.fixture
 def mock_logger(mocker):
     """Mocks the logger for capturing log messages."""
     return mocker.patch("hippique_orchestrator.scrapers.boturfers.logger")
+
 
 @pytest.fixture
 def boturfers_programme_sample_html():
@@ -17,6 +18,7 @@ def boturfers_programme_sample_html():
     assert fixture_path.exists(), f"Fixture file not found: {fixture_path}"
     return fixture_path.read_text(encoding='utf-8')
 
+
 @pytest.fixture
 def boturfers_racedetail_sample_html():
     """Provides the HTML content of a sample Boturfers race detail page."""
@@ -24,12 +26,16 @@ def boturfers_racedetail_sample_html():
     assert fixture_path.exists(), f"Fixture file not found: {fixture_path}"
     return fixture_path.read_text(encoding='utf-8')
 
+
 @pytest.fixture
 def boturfers_programme_broken_reunion_class_html():
     """Provides the HTML content of a broken Boturfers programme page."""
-    fixture_path = Path(__file__).parent / "fixtures" / "boturfers_programme_broken_reunion_class.html"
+    fixture_path = (
+        Path(__file__).parent / "fixtures" / "boturfers_programme_broken_reunion_class.html"
+    )
     assert fixture_path.exists(), f"Fixture file not found: {fixture_path}"
     return fixture_path.read_text(encoding='utf-8')
+
 
 @pytest.fixture
 def boturfers_programme_missing_table_html():
@@ -38,7 +44,10 @@ def boturfers_programme_missing_table_html():
     assert fixture_path.exists(), f"Fixture file not found: {fixture_path}"
     return fixture_path.read_text(encoding='utf-8')
 
-def test_parse_programme_handles_broken_reunion_class(boturfers_programme_broken_reunion_class_html, mock_logger):
+
+def test_parse_programme_handles_broken_reunion_class(
+    boturfers_programme_broken_reunion_class_html, mock_logger
+):
     """
     Tests that the scraper can handle a broken reunion class name.
     """
@@ -48,7 +57,10 @@ def test_parse_programme_handles_broken_reunion_class(boturfers_programme_broken
     assert races == []
     assert "Aucun onglet de réunion" in mock_logger.warning.call_args[0][0]
 
-def test_parse_programme_handles_missing_race_table(boturfers_programme_missing_table_html, mock_logger):
+
+def test_parse_programme_handles_missing_race_table(
+    boturfers_programme_missing_table_html, mock_logger
+):
     """
     Tests that the scraper can handle a missing race table in a reunion.
     """
@@ -56,6 +68,7 @@ def test_parse_programme_handles_missing_race_table(boturfers_programme_missing_
     fetcher.soup = BeautifulSoup(boturfers_programme_missing_table_html, 'lxml')
     _ = fetcher._parse_programme()
     assert "Tableau des courses" in mock_logger.warning.call_args[0][0]
+
 
 def test_parse_programme_from_static_fixture(boturfers_programme_sample_html):
     """
@@ -67,7 +80,7 @@ def test_parse_programme_from_static_fixture(boturfers_programme_sample_html):
     races = fetcher._parse_programme()
 
     assert len(races) == 3
-    
+
     # Test R1C1
     assert races[0]["rc"] == "R1C1"
     assert races[0]["name"] == "PRIX DE LA FIXTURE"
@@ -89,6 +102,7 @@ def test_parse_programme_from_static_fixture(boturfers_programme_sample_html):
     assert races[2]["start_time"] == "16:00"
     assert races[2]["runners_count"] == 10
 
+
 def test_parse_race_details_from_static_fixture(boturfers_racedetail_sample_html, mock_logger):
     """
     Tests that the scraper can correctly parse race details from a static HTML fixture,
@@ -100,8 +114,10 @@ def test_parse_race_details_from_static_fixture(boturfers_racedetail_sample_html
 
     # Should parse 2 valid runners and skip the malformed ones
     assert len(runners) == 2
-    mock_logger.warning.assert_any_call("Failed to parse a runner row: list index out of range. Row skipped.", extra={'correlation_id': None, 'trace_id': None})
-
+    mock_logger.warning.assert_any_call(
+        "Failed to parse a runner row: list index out of range. Row skipped.",
+        extra={'correlation_id': None, 'trace_id': None},
+    )
 
     # Test Runner 1
     assert runners[0]["num"] == "1"
@@ -120,7 +136,7 @@ def test_parse_race_details_from_static_fixture(boturfers_racedetail_sample_html
     assert runners[1]["entraineur"] == "P. Integration"
     assert runners[1]["odds_win"] == 8.0
     assert runners[1]["odds_place"] == 2.5
-    
+
     metadata = fetcher._parse_race_metadata()
     assert metadata["distance"] == 2400
     assert metadata["type_course"] == "Plat"
@@ -138,13 +154,13 @@ def test_programme_fixture_has_expected_structure(boturfers_programme_sample_htm
     # Assert critical containers exist
     assert soup.select_one("div.tab-content") is not None, "Missing main tab content container."
     assert soup.select("div.tab-pane[id^=r]"), "Missing reunion tab panes."
-    
+
     # Assert table structure exists in the first reunion
     first_reunion = soup.select_one("div.tab-pane[id^=r]")
     assert first_reunion is not None
     assert first_reunion.select_one("table.table.data.prgm") is not None, "Missing programme table."
     assert first_reunion.select("tbody tr"), "Missing race rows in table."
-    
+
     # Assert key data cells exist in the first row
     first_race_row = first_reunion.select_one("tbody tr")
     assert first_race_row is not None

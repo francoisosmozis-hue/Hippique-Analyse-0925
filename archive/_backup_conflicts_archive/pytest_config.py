@@ -27,7 +27,6 @@ markers =
 # tests/conftest.py - Fixtures pytest
 # ============================================================================
 
-
 # Imports depuis le projet
 import sys
 import tempfile
@@ -47,6 +46,7 @@ from hippique_orchestrator.logging_utils import setup_logger
 # Fixtures de configuration
 # ----------------------------------------------------------------------------
 
+
 @pytest.fixture
 def test_config():
     """Configuration de test"""
@@ -65,7 +65,7 @@ def test_config():
         RATE_LIMIT_DELAY=0.1,
         USER_AGENT="TestAgent/1.0",
         GPI_BUDGET_PER_RACE=5.0,
-        GPI_MIN_EV_PERCENT=40.0
+        GPI_MIN_EV_PERCENT=40.0,
     )
 
 
@@ -79,6 +79,7 @@ def test_logger():
 # Fixtures de données
 # ----------------------------------------------------------------------------
 
+
 @pytest.fixture
 def sample_plan():
     """Plan de test avec 3 courses"""
@@ -90,7 +91,7 @@ def sample_plan():
             "meeting": "VINCENNES",
             "time_local": "14:15",
             "course_url": "https://www.zeturf.fr/fr/course/2025-10-16/R1C1-vincennes",
-            "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-10-16/R1"
+            "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-10-16/R1",
         },
         {
             "date": "2025-10-16",
@@ -99,7 +100,7 @@ def sample_plan():
             "meeting": "VINCENNES",
             "time_local": "14:45",
             "course_url": "https://www.zeturf.fr/fr/course/2025-10-16/R1C2-vincennes",
-            "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-10-16/R1"
+            "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-10-16/R1",
         },
         {
             "date": "2025-10-16",
@@ -108,8 +109,8 @@ def sample_plan():
             "meeting": "LONGCHAMP",
             "time_local": "15:30",
             "course_url": "https://www.zeturf.fr/fr/course/2025-10-16/R2C1-longchamp",
-            "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-10-16/R2"
-        }
+            "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-10-16/R2",
+        },
     ]
 
 
@@ -154,6 +155,7 @@ def geny_html_sample():
 # Mocks GCP
 # ----------------------------------------------------------------------------
 
+
 @pytest.fixture
 def mock_tasks_client():
     """Mock du client Cloud Tasks"""
@@ -186,22 +188,20 @@ def mock_storage_client():
 # Fixtures HTTP
 # ----------------------------------------------------------------------------
 
+
 @pytest.fixture
 def mock_requests_session():
     """Mock de requests.Session"""
     with patch('requests.Session') as mock:
         session = mock.return_value
-        session.get.return_value = Mock(
-            status_code=200,
-            text="<html></html>",
-            json=lambda: {}
-        )
+        session.get.return_value = Mock(status_code=200, text="<html></html>", json=lambda: {})
         yield session
 
 
 # ----------------------------------------------------------------------------
 # Fixtures temporelles
 # ----------------------------------------------------------------------------
+
 
 @pytest.fixture
 def fixed_datetime():
@@ -217,6 +217,7 @@ def fixed_datetime():
 # Fixtures filesystem
 # ----------------------------------------------------------------------------
 
+
 @pytest.fixture
 def temp_data_dir():
     """Répertoire temporaire pour tests"""
@@ -230,7 +231,7 @@ def sample_gpi_output(temp_data_dir):
     files = {
         "p_finale.json": {"combos": [], "budget": 5.0},
         "results.csv": "horse,odds,prediction\nCheval1,3.5,0.85",
-        "report.xlsx": b"fake_excel_content"
+        "report.xlsx": b"fake_excel_content",
     }
 
     for filename, content in files.items():
@@ -239,6 +240,7 @@ def sample_gpi_output(temp_data_dir):
             filepath.write_bytes(content)
         elif isinstance(content, dict):
             import json
+
             filepath.write_text(json.dumps(content))
         else:
             filepath.write_text(content)
@@ -249,6 +251,7 @@ def sample_gpi_output(temp_data_dir):
 # ----------------------------------------------------------------------------
 # Fixtures FastAPI
 # ----------------------------------------------------------------------------
+
 
 @pytest.fixture
 def test_client():
@@ -267,6 +270,7 @@ def test_client():
 # Helpers
 # ----------------------------------------------------------------------------
 
+
 def assert_valid_plan(plan: list):
     """Valide la structure d'un plan"""
     assert isinstance(plan, list)
@@ -283,6 +287,7 @@ def assert_valid_plan(plan: list):
 def assert_valid_task_name(task_name: str):
     """Valide un nom de tâche Cloud Tasks"""
     import re
+
     # Format: run-YYYYMMDD-rXcY-h30|h5
     pattern = r"run-\d{8}-r\d+c\d+-(h30|h5)"
     assert re.match(pattern, task_name), f"Invalid task name: {task_name}"
@@ -292,20 +297,13 @@ def assert_valid_task_name(task_name: str):
 # Markers
 # ----------------------------------------------------------------------------
 
+
 def pytest_configure(config):
     """Configuration des markers"""
-    config.addinivalue_line(
-        "markers", "unit: Unit tests"
-    )
-    config.addinivalue_line(
-        "markers", "integration: Integration tests requiring external services"
-    )
-    config.addinivalue_line(
-        "markers", "slow: Tests that take > 1 second"
-    )
-    config.addinivalue_line(
-        "markers", "requires_gcp: Tests requiring GCP credentials/resources"
-    )
+    config.addinivalue_line("markers", "unit: Unit tests")
+    config.addinivalue_line("markers", "integration: Integration tests requiring external services")
+    config.addinivalue_line("markers", "slow: Tests that take > 1 second")
+    config.addinivalue_line("markers", "requires_gcp: Tests requiring GCP credentials/resources")
 
 
 # ============================================================================

@@ -49,6 +49,7 @@ def run_backtest_on_race(race_dir: Path) -> dict[str, Any]:
         print(f"[ERREUR] Le pipeline a échoué pour {race_dir}: {e}")
         return {"race": race_dir.name, "error": str(e)}
 
+
 def calculate_sp_profit(ticket: dict[str, Any], results: dict[str, Any]) -> float:
     """
     Calcule le gain/perte pour un ticket Simple Placé (SP).
@@ -59,6 +60,7 @@ def calculate_sp_profit(ticket: dict[str, Any], results: dict[str, Any]) -> floa
         if leg["horse"] in winning_horses:
             profit += leg["stake"] * leg["odds"]
     return profit
+
 
 def calculate_cp_profit(ticket: dict[str, Any], results: dict[str, Any]) -> float:
     """
@@ -80,6 +82,7 @@ def calculate_cp_profit(ticket: dict[str, Any], results: dict[str, Any]) -> floa
         profit += combo_results.get("payout_expected", 0)
 
     return profit
+
 
 def calculate_trio_profit(ticket: dict[str, Any], results: dict[str, Any]) -> float:
     """
@@ -125,9 +128,7 @@ def main() -> None:
         description="Framework de backtesting pour la stratégie d'analyse hippique."
     )
     parser.add_argument(
-        "--data-dir",
-        required=True,
-        help="Le dossier contenant les données historiques de courses."
+        "--data-dir", required=True, help="Le dossier contenant les données historiques de courses."
     )
     args = parser.parse_args()
 

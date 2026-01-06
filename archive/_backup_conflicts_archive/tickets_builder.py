@@ -61,6 +61,7 @@ def _is_homogeneous_field(runners: Iterable[Mapping[str, Any]]) -> bool:
     spread = max(top_four) - min(top_four)
     return spread < 8.0
 
+
 def allow_combo(
     ev_global: float,
     roi_global: float,
@@ -84,6 +85,7 @@ def allow_combo(
         Optional configuration mapping providing the thresholds used by the
         analysis pipeline.
     """
+
     def _resolve(value: float | None, default: float, keys: tuple[str, ...] = ()) -> float:
         if value is not None:
             return float(value)
@@ -111,6 +113,7 @@ def allow_combo(
     if payout_est < resolved_payout:
         return False
     return True
+
 
 def _normalise_legs(value: Any) -> list[str]:
     if value is None:
@@ -300,8 +303,7 @@ def _build_combo_candidates(
             context_sources.append(course_context)
         if context_sources:
             ticket["legs_details"] = [
-                _build_leg_details(leg_id, *context_sources)
-                for leg_id in legs
+                _build_leg_details(leg_id, *context_sources) for leg_id in legs
             ]
         if "p" in raw:
             try:
@@ -407,8 +409,12 @@ def apply_ticket_policy(
         return sp_tickets, [], info
 
     combo_budget = budget_total * float(cfg.get("COMBO_RATIO", COMBO_SHARE))
-    ev_threshold = float(cfg.get("EV_MIN_GLOBAL", EV_MIN_COMBO)) if ev_threshold is None else ev_threshold
-    roi_threshold = float(cfg.get("ROI_MIN_GLOBAL", 0.0)) if roi_threshold is None else roi_threshold
+    ev_threshold = (
+        float(cfg.get("EV_MIN_GLOBAL", EV_MIN_COMBO)) if ev_threshold is None else ev_threshold
+    )
+    roi_threshold = (
+        float(cfg.get("ROI_MIN_GLOBAL", 0.0)) if roi_threshold is None else roi_threshold
+    )
     payout_threshold = (
         float(cfg.get("MIN_PAYOUT_COMBOS", PAYOUT_MIN_COMBO))
         if payout_threshold is None
@@ -416,9 +422,8 @@ def apply_ticket_policy(
     )
     sharpe_threshold = float(cfg.get("SHARPE_MIN", 0.0))
 
-    calib_candidate = (
-        calibration
-        or os.environ.get("GPI_PAYOUT_CALIBRATION", "config/payout_calibration.yaml")
+    calib_candidate = calibration or os.environ.get(
+        "GPI_PAYOUT_CALIBRATION", "config/payout_calibration.yaml"
     )
     try:
         ok_calib = (
@@ -460,16 +465,13 @@ def apply_ticket_policy(
         leg_details = base.get("legs_details")
         if isinstance(leg_details, list):
             base["legs_details"] = [
-                dict(ld) if isinstance(ld, Mapping) else {"id": str(ld)}
-                for ld in leg_details
+                dict(ld) if isinstance(ld, Mapping) else {"id": str(ld)} for ld in leg_details
             ]
             base_legs = [_leg_lookup_key(ld) for ld in base["legs_details"]]
         else:
             base_legs = [_leg_lookup_key(leg) for leg in base.get("legs", [])]
             if base_legs:
-                base["legs_details"] = [
-                    {"id": leg_id} for leg_id in base_legs
-                ]
+                base["legs_details"] = [{"id": leg_id} for leg_id in base_legs]
         base["legs"] = list(base_legs)
         key = (
             str(base.get("type", "CP")),
@@ -501,16 +503,15 @@ def apply_ticket_policy(
             merged["legs"] = [_leg_lookup_key(ld) for ld in merged["legs_details"]]
         else:
             merged["legs"] = [
-                _leg_lookup_key(leg)
-                for leg in ticket.get("legs", merged.get("legs", []))
+                _leg_lookup_key(leg) for leg in ticket.get("legs", merged.get("legs", []))
             ]
         merged["ev_check"] = ticket.get("ev_check", {})
         if "flags" in ticket:
             merged["flags"] = list(ticket.get("flags", []))
         combo_tickets.append(merged)
 
-
     return sp_tickets, combo_tickets, info
+
 
 # Provide a convenient alias
 build_tickets = apply_ticket_policy

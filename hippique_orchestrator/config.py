@@ -31,4 +31,3 @@ FIRESTORE_COLLECTION = os.getenv("FIRESTORE_COLLECTION", "races-dev")
 # Task Scheduling Offsets
 h30_offset = timedelta(minutes=30)
 h5_offset = timedelta(minutes=5)
-

@@ -455,10 +455,10 @@ def _estimate_group_probability(
     # Fallback to simple penalty method
     if penalty is None:
         penalty = CORRELATION_PENALTY
-    
+
     base_prob = math.prod(probabilities)
     adjusted_prob = base_prob * penalty
-    
+
     return adjusted_prob, "penalty", float(penalty)
 
 
@@ -576,13 +576,11 @@ def _load_calibration() -> None:
         while len(_calibration_cache) > MAX_CACHE_SIZE:
             _calibration_cache.popitem(last=False)
     except (IOError, yaml.YAMLError, ValueError) as e:
-        logger.warning(
-            "Could not load or parse calibration file %s: %s", CALIBRATION_PATH, e
-        )
+        logger.warning("Could not load or parse calibration file %s: %s", CALIBRATION_PATH, e)
         _calibration_cache = OrderedDict()
         _calibration_mtime = 0.0
         _calibration_metadata = {}
-    
+
     _calibration_mtime = mtime
 
 

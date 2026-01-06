@@ -1,4 +1,3 @@
-
 import json
 import sys
 from pathlib import Path
@@ -60,6 +59,7 @@ def fake_data_dir(tmp_path: Path) -> Path:
 
     return tmp_path
 
+
 def test_load_json_safe_success(tmp_path: Path):
     """Test loading a valid JSON file."""
     path = tmp_path / "test.json"
@@ -75,6 +75,7 @@ def test_load_json_safe_failure(tmp_path: Path, capsys):
     assert "Warning: Failed to load" in capsys.readouterr().err
 
     assert load_json_safe(tmp_path / "nonexistent.json") is None
+
 
 def test_parse_tracking_csv_success(tmp_path: Path):
     """Test parsing a valid CSV file."""
@@ -93,12 +94,14 @@ def test_collect_analyses_no_date_filter(fake_data_dir: Path):
     rcs = {item["rc"] for item in analyses}
     assert rcs == {"R1C1", "R1C2", "R1C3"}
 
+
 def test_collect_analyses_with_date_filter(fake_data_dir: Path):
     """Test filtering analyses by a specific date."""
     analyses = collect_analyses(fake_data_dir, date="2025-12-25")
     assert len(analyses) == 2
     rcs = {item["rc"] for item in analyses}
     assert rcs == {"R1C1", "R1C2"}
+
 
 def test_compute_statistics(fake_data_dir: Path):
     """Test the main statistics computation logic."""
@@ -116,7 +119,7 @@ def test_compute_statistics(fake_data_dir: Path):
     assert stats["expected_roi_avg"] == round((0.3 + 0.2) / 2, 4)
     assert stats["ev_ratio_avg"] == round((0.4 + 0.25) / 2, 4)
     assert stats["clv_avg"] == 0.05
-    
+
     # Check by_type aggregation
     by_type = stats["by_type"]
     assert by_type["SG"]["stake"] == 10
@@ -125,6 +128,7 @@ def test_compute_statistics(fake_data_dir: Path):
     assert by_type["SG"]["count"] == 1
     assert by_type["SP"]["stake"] == 20
     assert by_type["SP"]["gain"] == 0
+
 
 def test_compute_statistics_no_races_played():
     """Test stats computation when no races are played."""
@@ -135,19 +139,32 @@ def test_compute_statistics_no_races_played():
     assert stats["real_roi"] == 0
     assert stats["expected_roi_avg"] == 0
 
+
 def test_print_report(capsys):
     """Test that the report printing function runs without errors."""
     stats = {
-        "total_races": 1, "races_played": 1, "races_abstain": 0, "races_alerte": 0,
-        "total_stake": 10, "total_gain": 15, "net_profit": 5, "real_roi": 0.5,
-        "expected_roi_avg": 0.4, "roi_variance": 0.1, "ev_ratio_avg": 0.45,
-        "clv_avg": 0.1, "sharpe_avg": 2.5, "ror_avg": 0.01, "by_type": {}
+        "total_races": 1,
+        "races_played": 1,
+        "races_abstain": 0,
+        "races_alerte": 0,
+        "total_stake": 10,
+        "total_gain": 15,
+        "net_profit": 5,
+        "real_roi": 0.5,
+        "expected_roi_avg": 0.4,
+        "roi_variance": 0.1,
+        "ev_ratio_avg": 0.45,
+        "clv_avg": 0.1,
+        "sharpe_avg": 2.5,
+        "ror_avg": 0.01,
+        "by_type": {},
     }
     print_report(stats, detail=True)
     captured = capsys.readouterr()
     assert "ROI MONITORING REPORT" in captured.out
     assert "Net Profit:         5.00 €" in captured.out
     assert "Real ROI:           50.00%" in captured.out
+
 
 def test_export_json(tmp_path: Path):
     """Test that the JSON export function writes a file."""
@@ -157,11 +174,14 @@ def test_export_json(tmp_path: Path):
     assert output_path.exists()
     assert output_path.read_text() == json.dumps(stats, indent=2)
 
+
 def test_main_run_once(fake_data_dir: Path, capsys):
     """Test the main function for a single run."""
-    with patch.object(sys, "argv", ["monitor_roi.py", "--data-dir", str(fake_data_dir), "--detail"]):
+    with patch.object(
+        sys, "argv", ["monitor_roi.py", "--data-dir", str(fake_data_dir), "--detail"]
+    ):
         main()
-    
+
     captured = capsys.readouterr()
     assert "Found 3 races" in captured.out
     assert "Net Profit:         20.00 €" in captured.out

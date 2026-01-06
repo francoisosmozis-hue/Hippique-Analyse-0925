@@ -5,6 +5,7 @@ Usage:
   python prompt_analyse.py --race "R1C3 Vincennes 2025-10-20 attelé 12" --budget 5 --out prompts/prompt_R1C3.txt
 Écrit un prompt GPI v5.1 simple dans --out.
 """
+
 import argparse
 import os
 from pathlib import Path
@@ -27,6 +28,7 @@ def main():
     Path(args.out).write_text(content, encoding="utf-8")
     print(f"[prompt_analyse] écrit → {args.out}")
 
+
 if __name__ == "__main__":
     main()
 
@@ -34,6 +36,7 @@ if __name__ == "__main__":
 # ---------------------------------------------------------------------------
 # Compatibilité API FastAPI (service.py)
 # ---------------------------------------------------------------------------
+
 
 def build_prompt(reunion: str, course: str, budget: float = 5.0, mode: str = "GPI_v5_1") -> str:
     """

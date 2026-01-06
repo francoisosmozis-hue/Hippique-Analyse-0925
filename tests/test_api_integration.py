@@ -26,7 +26,7 @@ def test_debug_config_returns_ok_and_has_expected_keys():
     response = client.get("/debug/config")
     assert response.status_code == 200
     json_response = response.json()
-    
+
     # Check for the presence of key configuration fields
     expected_keys = [
         "require_auth",
@@ -51,7 +51,7 @@ def test_get_pronostics_api_with_mocked_data(mock_get_races, mock_build_plan):
     """
     # 1. Setup Mock Data
     test_date = "2023-01-20"
-    
+
     # Mock for plan.build_plan_async
     mock_build_plan.return_value = [
         {"r_label": "R1", "c_label": "C1", "name": "Prix de Test"},
@@ -64,7 +64,7 @@ def test_get_pronostics_api_with_mocked_data(mock_get_races, mock_build_plan):
     mock_race_doc.to_dict.return_value = {
         "rc": "R1C1",
         "tickets_analysis": {"gpi_decision": "play_safe"},
-        "last_analyzed_at": "2023-01-20T10:00:00Z"
+        "last_analyzed_at": "2023-01-20T10:00:00Z",
     }
     mock_get_races.return_value = [mock_race_doc]
 
@@ -82,7 +82,7 @@ def test_get_pronostics_api_with_mocked_data(mock_get_races, mock_build_plan):
     assert data["counts"]["total_in_plan"] == 2
     assert data["counts"]["total_processed"] == 1
     assert data["counts"]["total_playable"] == 1
-    assert data["counts"]["total_pending"] == 1 # (total_in_plan - total_processed)
+    assert data["counts"]["total_pending"] == 1  # (total_in_plan - total_processed)
 
     pronostics = data["pronostics"]
     assert len(pronostics) == 2
@@ -90,7 +90,7 @@ def test_get_pronostics_api_with_mocked_data(mock_get_races, mock_build_plan):
     # Find the processed race and the pending race
     processed_race = next((p for p in pronostics if p["rc"] == "R1C1"), None)
     pending_race = next((p for p in pronostics if p["rc"] == "R1C2"), None)
-    
+
     assert processed_race is not None
     assert processed_race["status"] == "playable"
     assert processed_race["tickets_analysis"]["gpi_decision"] == "play_safe"

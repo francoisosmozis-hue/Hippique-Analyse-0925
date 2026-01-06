@@ -26,7 +26,10 @@ def test_extract_rc_from_url_no_match_raises_value_error():
 
 # Tests for run_course
 @pytest.mark.asyncio
-@patch("hippique_orchestrator.runner._extract_rc_from_url", side_effect=ValueError("Invalid URL format"))
+@patch(
+    "hippique_orchestrator.runner._extract_rc_from_url",
+    side_effect=ValueError("Invalid URL format"),
+)
 async def test_run_course_extract_rc_error(mock_extract_rc, caplog):
     caplog.set_level("ERROR")
     result = await run_course("http://invalid.url", "H-5", "2025-01-01")
@@ -40,10 +43,20 @@ async def test_run_course_extract_rc_error(mock_extract_rc, caplog):
 @patch("hippique_orchestrator.runner._extract_rc_from_url", return_value=("R1", "C1"))
 async def test_run_course_analysis_pipeline_success(mock_extract_rc, mock_run_analysis, caplog):
     caplog.set_level("INFO")
-    mock_run_analysis.return_value = {"success": True, "race_doc_id": "doc_id", "analysis_result": {"status": "GREEN"}}
-    
-    result = await run_course("http://valid.url/R1C1", "H-5", "2025-01-01", correlation_id="test-corr", trace_id="test-trace")
-    
+    mock_run_analysis.return_value = {
+        "success": True,
+        "race_doc_id": "doc_id",
+        "analysis_result": {"status": "GREEN"},
+    }
+
+    result = await run_course(
+        "http://valid.url/R1C1",
+        "H-5",
+        "2025-01-01",
+        correlation_id="test-corr",
+        trace_id="test-trace",
+    )
+
     mock_extract_rc.assert_called_once_with("http://valid.url/R1C1")
     mock_run_analysis.assert_called_once_with(
         course_url="http://valid.url/R1C1",
@@ -64,10 +77,20 @@ async def test_run_course_analysis_pipeline_success(mock_extract_rc, mock_run_an
 @patch("hippique_orchestrator.runner._extract_rc_from_url", return_value=("R1", "C1"))
 async def test_run_course_analysis_pipeline_failure(mock_extract_rc, mock_run_analysis, caplog):
     caplog.set_level("ERROR")
-    mock_run_analysis.return_value = {"success": False, "race_doc_id": "doc_id", "message": "Pipeline error"}
-    
-    result = await run_course("http://valid.url/R1C1", "H-5", "2025-01-01", correlation_id="test-corr", trace_id="test-trace")
-    
+    mock_run_analysis.return_value = {
+        "success": False,
+        "race_doc_id": "doc_id",
+        "message": "Pipeline error",
+    }
+
+    result = await run_course(
+        "http://valid.url/R1C1",
+        "H-5",
+        "2025-01-01",
+        correlation_id="test-corr",
+        trace_id="test-trace",
+    )
+
     assert not result["ok"]
     assert result["phase"] == "H5"
     assert "Pipeline error" in result["error"]
@@ -75,15 +98,24 @@ async def test_run_course_analysis_pipeline_failure(mock_extract_rc, mock_run_an
 
 
 @pytest.mark.asyncio
-@patch("hippique_orchestrator.analysis_pipeline.run_analysis_for_phase", side_effect=Exception("Unexpected error"))
+@patch(
+    "hippique_orchestrator.analysis_pipeline.run_analysis_for_phase",
+    side_effect=Exception("Unexpected error"),
+)
 @patch("hippique_orchestrator.runner._extract_rc_from_url", return_value=("R1", "C1"))
 async def test_run_course_unexpected_exception(mock_extract_rc, mock_run_analysis, caplog):
     caplog.set_level("ERROR")
-    
-    result = await run_course("http://valid.url/R1C1", "H-5", "2025-01-01", correlation_id="test-corr", trace_id="test-trace")
-    
+
+    result = await run_course(
+        "http://valid.url/R1C1",
+        "H-5",
+        "2025-01-01",
+        correlation_id="test-corr",
+        trace_id="test-trace",
+    )
+
     assert not result["ok"]
     assert result["phase"] == "H5"
     assert "An unexpected exception occurred: Unexpected error" in result["error"]
     assert "An unexpected error occurred during course analysis." in caplog.text
-    assert "Unexpected error" in caplog.text # Ensure exception message is logged
+    assert "Unexpected error" in caplog.text  # Ensure exception message is logged

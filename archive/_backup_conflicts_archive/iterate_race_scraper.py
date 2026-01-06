@@ -156,7 +156,9 @@ def _safe_float(value: str | None) -> float | None:
         return None
 
 
-async def scrape_meeting(meeting_url: str, csv_path: Path, delay_between_snapshots: int = 25 * 60) -> None:
+async def scrape_meeting(
+    meeting_url: str, csv_path: Path, delay_between_snapshots: int = 25 * 60
+) -> None:
     """
     Given a ZEturf meeting URL (e.g. a reunion page), scrape all races
     in that meeting by taking two snapshots for each race (H‑30 and H‑5) and
@@ -280,7 +282,9 @@ async def scrape_meeting(meeting_url: str, csv_path: Path, delay_between_snapsho
         await browser.close()
 
 
-def fetch_je_rates(meta: dict[str, any], runners: list[dict[str, any]]) -> dict[str, dict[str, float]]:
+def fetch_je_rates(
+    meta: dict[str, any], runners: list[dict[str, any]]
+) -> dict[str, dict[str, float]]:
     """
     Loads jockey and trainer statistics from previously provided JSON files
     and returns a mapping of runner number to their respective win rates.
@@ -329,12 +333,27 @@ def fetch_je_rates(meta: dict[str, any], runners: list[dict[str, any]]) -> dict[
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Scrape ZEturf meetings or races to build a dataset with odds drift and optional J/E rates.")
+    ap = argparse.ArgumentParser(
+        description="Scrape ZEturf meetings or races to build a dataset with odds drift and optional J/E rates."
+    )
     g = ap.add_mutually_exclusive_group(required=True)
-    g.add_argument("--meeting-url", help="URL of the ZEturf meeting (reunion) to scrape, e.g. https://www.zeturf.fr/fr/reunion/2025-09-06/R1-vincennes")
-    g.add_argument("--race-url", help="URL of a single ZEturf race to scrape, e.g. https://www.zeturf.fr/fr/course/2025-09-06/R1C2-vincennes")
-    ap.add_argument("--out-csv", default="races_dataset.csv", help="Destination CSV file to append the data.")
-    ap.add_argument("--delay", type=int, default=25 * 60, help="Delay in seconds between H-30 and H-5 snapshots (default: 25 minutes).")
+    g.add_argument(
+        "--meeting-url",
+        help="URL of the ZEturf meeting (reunion) to scrape, e.g. https://www.zeturf.fr/fr/reunion/2025-09-06/R1-vincennes",
+    )
+    g.add_argument(
+        "--race-url",
+        help="URL of a single ZEturf race to scrape, e.g. https://www.zeturf.fr/fr/course/2025-09-06/R1C2-vincennes",
+    )
+    ap.add_argument(
+        "--out-csv", default="races_dataset.csv", help="Destination CSV file to append the data."
+    )
+    ap.add_argument(
+        "--delay",
+        type=int,
+        default=25 * 60,
+        help="Delay in seconds between H-30 and H-5 snapshots (default: 25 minutes).",
+    )
     args = ap.parse_args()
 
     out_csv = Path(args.out_csv)
@@ -419,6 +438,7 @@ def main() -> None:
                     for row in rows:
                         writer.writerow(row)
                 await browser.close()
+
         asyncio.run(scrape_single())
 
 

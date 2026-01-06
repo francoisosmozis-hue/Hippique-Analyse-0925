@@ -2,7 +2,11 @@ import logging
 import pytest
 from unittest.mock import AsyncMock, patch
 from bs4 import BeautifulSoup
-from hippique_orchestrator.scrapers.boturfers import BoturfersFetcher, fetch_boturfers_programme, fetch_boturfers_race_details
+from hippique_orchestrator.scrapers.boturfers import (
+    BoturfersFetcher,
+    fetch_boturfers_programme,
+    fetch_boturfers_race_details,
+)
 import httpx
 
 
@@ -48,7 +52,10 @@ async def test_parse_race_metadata_no_metadata_logs_warning(caplog):
     with caplog.at_level(logging.WARNING):
         metadata = fetcher._parse_race_metadata()
         assert metadata == {}
-        assert "Aucune métadonnée de course n'a pu être extraite de http://example.com/race." in caplog.text
+        assert (
+            "Aucune métadonnée de course n'a pu être extraite de http://example.com/race."
+            in caplog.text
+        )
 
 
 @pytest.mark.asyncio
@@ -64,7 +71,10 @@ async def test_fetch_boturfers_programme_empty_url_logs_error(caplog):
 
 
 @pytest.mark.asyncio
-@patch("hippique_orchestrator.scrapers.boturfers.BoturfersFetcher._fetch_html", AsyncMock(side_effect=Exception("Mocked fetch error")))
+@patch(
+    "hippique_orchestrator.scrapers.boturfers.BoturfersFetcher._fetch_html",
+    AsyncMock(side_effect=Exception("Mocked fetch error")),
+)
 async def test_fetch_boturfers_programme_generic_exception(caplog):
     """
     Test fetch_boturfers_programme handles and logs generic exceptions.
@@ -73,7 +83,10 @@ async def test_fetch_boturfers_programme_generic_exception(caplog):
     with caplog.at_level(logging.ERROR):
         result = await fetch_boturfers_programme(url="http://example.com/programme")
         assert result == {}
-        assert "Une erreur inattendue est survenue lors du scraping de http://example.com/programme: Mocked fetch error" in caplog.text
+        assert (
+            "Une erreur inattendue est survenue lors du scraping de http://example.com/programme: Mocked fetch error"
+            in caplog.text
+        )
 
 
 @pytest.mark.asyncio
@@ -84,21 +97,22 @@ async def test_fetch_boturfers_race_details_non_boturfers_url_no_partant(caplog)
     """
     # Patch BoturfersFetcher class directly
     with patch("hippique_orchestrator.scrapers.boturfers.BoturfersFetcher") as MockBoturfersFetcher:
-        
         # Configure the mocked fetcher instance
         mock_fetcher_instance = MockBoturfersFetcher.return_value
-        mock_fetcher_instance.get_race_snapshot = AsyncMock(return_value={
-            "source": "boturfers",
-            "type": "race_details",
-            "url": "http://non-boturfers.com/race/123", # This should reflect what was actually passed to init
-            "scraped_at": "mock_time",
-            "race_metadata": {},
-            "runners": [{"nom": "Horse"}],
-        })
+        mock_fetcher_instance.get_race_snapshot = AsyncMock(
+            return_value={
+                "source": "boturfers",
+                "type": "race_details",
+                "url": "http://non-boturfers.com/race/123",  # This should reflect what was actually passed to init
+                "scraped_at": "mock_time",
+                "race_metadata": {},
+                "runners": [{"nom": "Horse"}],
+            }
+        )
 
         test_url = "http://non-boturfers.com/race/123"
         result = await fetch_boturfers_race_details(url=test_url)
-        
+
         # Assert that BoturfersFetcher was called with the untransformed URL
         MockBoturfersFetcher.assert_called_once_with(
             race_url=test_url, correlation_id=None, trace_id=None
@@ -108,7 +122,10 @@ async def test_fetch_boturfers_race_details_non_boturfers_url_no_partant(caplog)
 
 
 @pytest.mark.asyncio
-@patch("hippique_orchestrator.scrapers.boturfers.BoturfersFetcher._fetch_html", AsyncMock(side_effect=Exception("Mocked fetch error")))
+@patch(
+    "hippique_orchestrator.scrapers.boturfers.BoturfersFetcher._fetch_html",
+    AsyncMock(side_effect=Exception("Mocked fetch error")),
+)
 async def test_fetch_boturfers_race_details_generic_exception(caplog):
     """
     Test fetch_boturfers_race_details handles and logs generic exceptions.
@@ -117,4 +134,7 @@ async def test_fetch_boturfers_race_details_generic_exception(caplog):
     with caplog.at_level(logging.ERROR):
         result = await fetch_boturfers_race_details(url="http://example.com/race/details")
         assert result == {}
-        assert "Une erreur inattendue est survenue lors du scraping des détails de http://example.com/race/details: Mocked fetch error" in caplog.text
+        assert (
+            "Une erreur inattendue est survenue lors du scraping des détails de http://example.com/race/details: Mocked fetch error"
+            in caplog.text
+        )

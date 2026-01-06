@@ -1,7 +1,7 @@
 import csv
 import json
 from pathlib import Path
-import shlex # Moved import to top-level
+import shlex  # Moved import to top-level
 
 import pytest
 from fsspec.implementations.memory import MemoryFileSystem
@@ -270,10 +270,10 @@ def test_collect_stats_local_filesystem(
     mocker.patch("time.sleep")
 
     json_output_path_str = fetch_je_stats.collect_stats(h5=str(h5_path))
-    
+
     json_output_path = Path(json_output_path_str)
     assert json_output_path.exists()
-    
+
     with json_output_path.open("r") as f:
         stats_data = json.load(f)
 
@@ -288,6 +288,7 @@ def test_collect_stats_local_filesystem(
         csv_rows = list(reader)
         assert len(csv_rows) == 1
         assert csv_rows[0]["j_rate"] == "15.00"
+
 
 def test_enrich_from_snapshot_calls_subprocess(mocker):
     """Tests that enrich_from_snapshot calls the correct subprocess command."""
@@ -306,7 +307,6 @@ def test_enrich_from_snapshot_calls_subprocess(mocker):
     expected_cmd = f'python -m hippique_orchestrator.fetch_je_stats --h5 "{snapshot_path}" --out "{expected_out_path}" --cache --ttl-seconds 86400'
     assert args[0] == shlex.split(expected_cmd)
     assert kwargs["check"] is True
-
 
 
 def test_collect_stats_integration(

@@ -22,7 +22,7 @@ class StructuredLogger(logging.Logger):
         *,
         extra: dict[str, Any] | None = None,
         exc_info: Any = None,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> None:
         """Émet un log structuré JSON."""
 
@@ -78,20 +78,14 @@ class StructuredLogger(logging.Logger):
         """Log ERROR structuré."""
         if self.isEnabledFor(logging.ERROR):
             self._log_structured(
-                logging.ERROR,
-                msg % args if args else msg,
-                exc_info=exc_info,
-                **kwargs
+                logging.ERROR, msg % args if args else msg, exc_info=exc_info, **kwargs
             )
 
     def critical(self, msg: str, *args: Any, exc_info: Any = None, **kwargs: Any) -> None:
         """Log CRITICAL structuré."""
         if self.isEnabledFor(logging.CRITICAL):
             self._log_structured(
-                logging.CRITICAL,
-                msg % args if args else msg,
-                exc_info=exc_info,
-                **kwargs
+                logging.CRITICAL, msg % args if args else msg, exc_info=exc_info, **kwargs
             )
 
 
@@ -135,7 +129,7 @@ def log_request(
     status: int,
     duration_ms: float,
     correlation_id: str | None = None,
-    **extra: Any
+    **extra: Any,
 ) -> None:
     """Log une requête HTTP."""
     logger = get_logger("http")
@@ -146,5 +140,5 @@ def log_request(
         status=status,
         duration_ms=round(duration_ms, 2),
         correlation_id=correlation_id,
-        **extra
+        **extra,
     )

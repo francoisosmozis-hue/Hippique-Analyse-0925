@@ -148,9 +148,7 @@ def test_enqueue_run_task_permission_denied(
     mock_auth_default.return_value = (None, "test-project")
     mock_client_instance = MagicMock()
     mock_cloud_tasks_client.return_value = mock_client_instance
-    mock_client_instance.create_task.side_effect = gexc.PermissionDenied(
-        "Forbidden by policy"
-    )
+    mock_client_instance.create_task.side_effect = gexc.PermissionDenied("Forbidden by policy")
 
     caplog.set_level("CRITICAL")
 
@@ -165,9 +163,7 @@ def test_enqueue_run_task_permission_denied(
 
     assert not success
     assert "Permission denied to create Cloud Task" in message
-    assert (
-        "Please grant 'roles/cloudtasks.enqueuer' to 'sa@example.com'" in caplog.text
-    )
+    assert "Please grant 'roles/cloudtasks.enqueuer' to 'sa@example.com'" in caplog.text
     mock_client_instance.create_task.assert_called_once()
 
 
@@ -213,8 +209,10 @@ def test_schedule_all_races_real_run_no_service_url(
     If service_url is not provided for a real run (dry_run=False),
     schedule_all_races should log a critical error and mark all tasks as failed.
     """
-    mock_cloud_tasks_client.return_value = MagicMock()  # Client is initialized but not used for enqueuing
-    mock_enqueue_run_task.return_value = (True, "mock-task-name") # Should not be called
+    mock_cloud_tasks_client.return_value = (
+        MagicMock()
+    )  # Client is initialized but not used for enqueuing
+    mock_enqueue_run_task.return_value = (True, "mock-task-name")  # Should not be called
 
     caplog.set_level("CRITICAL")
 
@@ -239,7 +237,7 @@ def test_schedule_all_races_cloud_tasks_client_init_fails(
     a critical error and mark all tasks as failed.
     """
     mock_cloud_tasks_client.side_effect = Exception("Client init failed")
-    mock_enqueue_run_task.return_value = (True, "mock-task-name") # Should not be called
+    mock_enqueue_run_task.return_value = (True, "mock-task-name")  # Should not be called
 
     caplog.set_level("CRITICAL")
 
@@ -249,16 +247,16 @@ def test_schedule_all_races_cloud_tasks_client_init_fails(
 
     assert len(results) == 4
     assert all(not r["ok"] for r in results)
-    assert all("Failed to init CloudTasks client: Client init failed" in r["reason"] for r in results)
+    assert all(
+        "Failed to init CloudTasks client: Client init failed" in r["reason"] for r in results
+    )
     assert "Failed to initialize Cloud Tasks client: Client init failed" in caplog.text
     mock_enqueue_run_task.assert_not_called()
 
 
 @patch("hippique_orchestrator.scheduler.enqueue_run_task")
 @patch("hippique_orchestrator.scheduler.tasks_v2.CloudTasksClient")
-def test_schedule_all_races_results_are_sorted(
-    mock_cloud_tasks_client, mock_enqueue_run_task
-):
+def test_schedule_all_races_results_are_sorted(mock_cloud_tasks_client, mock_enqueue_run_task):
     """
     schedule_all_races should return results sorted by race and phase.
     """
@@ -293,7 +291,6 @@ def test_schedule_all_races_results_are_sorted(
             "course_url": "http://example.com/r1c2",
         },
     ]
-
 
     results = scheduler.schedule_all_races(
         plan=plan_for_sorting, service_url="http://test.service", force=True, dry_run=False

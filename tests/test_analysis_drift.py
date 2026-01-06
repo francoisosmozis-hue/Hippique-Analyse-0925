@@ -1,6 +1,7 @@
 """
 Test the analysis pipeline's ability to handle H-30/H-5 drift.
 """
+
 import json
 import asyncio
 import yaml
@@ -49,6 +50,7 @@ ev_min_combo: 0.10
 payout_min_combo: 2.0
 """
 
+
 @pytest.mark.asyncio
 async def test_drift_is_detected_and_applied(mocker):
     """
@@ -81,7 +83,7 @@ async def test_drift_is_detected_and_applied(mocker):
         course_url="http://example.com/race/1",
         phase="H-5",
         date="2025-01-01",
-        race_doc_id="2025-01-01_R1C1"
+        race_doc_id="2025-01-01_R1C1",
     )
 
     # 3. Assertions
@@ -90,15 +92,17 @@ async def test_drift_is_detected_and_applied(mocker):
 
     # Check that the H-30 snapshot was found
     mock_gcs_client.list_files.assert_called_with("data/2025-01-01_R1C1/snapshots/")
-    
+
     # Check the analysis table for the horse that had drift
     market_table = analysis_result.get("tickets_analysis", {}).get("market_analysis_table", [])
     assert len(market_table) > 0, "Market analysis table should not be empty"
 
     horse_5_analysis = next((r for r in market_table if r.get("num") == "5"), None)
-    
+
     assert horse_5_analysis is not None, "Horse #5 should be in the analysis table"
-    assert horse_5_analysis["drift_status"] == "Steam", "Drift status for horse #5 should be 'Steam'"
+    assert horse_5_analysis["drift_status"] == "Steam", (
+        "Drift status for horse #5 should be 'Steam'"
+    )
     assert horse_5_analysis["drift_percent"] < 0, "Drift percentage should be negative for steam"
 
 
@@ -109,13 +113,14 @@ async def test_pipeline_raises_if_doc_id_missing(mocker):
     When run_analysis_for_phase is called,
     Then it should raise a ValueError.
     """
-    mocker.patch("hippique_orchestrator.analysis_pipeline.firestore_client.get_doc_id_from_url", return_value=None)
-    
+    mocker.patch(
+        "hippique_orchestrator.analysis_pipeline.firestore_client.get_doc_id_from_url",
+        return_value=None,
+    )
+
     with pytest.raises(ValueError, match="Could not determine race_doc_id"):
         await analysis_pipeline.run_analysis_for_phase(
-            course_url="invalid-url",
-            phase="H-5",
-            date="2025-01-01"
+            course_url="invalid-url", phase="H-5", date="2025-01-01"
         )
 
 
@@ -127,13 +132,16 @@ async def test_pipeline_abstains_if_snapshot_is_empty(mocker):
     Then it should return an 'abstention' decision.
     """
     # Mock the fetch and save step to return None
-    mocker.patch("hippique_orchestrator.analysis_pipeline._fetch_and_save_snapshot", return_value=(None, None))
-    
+    mocker.patch(
+        "hippique_orchestrator.analysis_pipeline._fetch_and_save_snapshot",
+        return_value=(None, None),
+    )
+
     result = await analysis_pipeline.run_analysis_for_phase(
         course_url="http://example.com/race/1",
         phase="H-5",
         date="2025-01-01",
-        race_doc_id="2025-01-01_R1C1"
+        race_doc_id="2025-01-01_R1C1",
     )
 
     assert result["status"] == "abstention"
@@ -148,15 +156,18 @@ async def test_pipeline_handles_generic_exception(mocker):
     When the analysis pipeline runs,
     Then it should return an 'error' status and log the exception.
     """
-    mocker.patch("hippique_orchestrator.analysis_pipeline._fetch_and_save_snapshot", side_effect=Exception("Unexpected GCS error"))
-    
+    mocker.patch(
+        "hippique_orchestrator.analysis_pipeline._fetch_and_save_snapshot",
+        side_effect=Exception("Unexpected GCS error"),
+    )
+
     result = await analysis_pipeline.run_analysis_for_phase(
         course_url="http://example.com/race/1",
         phase="H-5",
         date="2025-01-01",
-        race_doc_id="2025-01-01_R1C1"
+        race_doc_id="2025-01-01_R1C1",
     )
-    
+
     assert result["status"] == "error"
     assert result["gpi_decision"] == "error_pipeline_failure"
     assert "Unexpected GCS error" in result["error_message"]

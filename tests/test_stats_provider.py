@@ -145,7 +145,7 @@ class TestZoneTurfProviderParsing:
         assert chrono is not None
         assert chrono.record_attele_sec is None
         assert chrono.record_monte_sec is None
-        assert chrono.last3_rk_sec == [75.0, 74.5] # Only parses valid chronos
+        assert chrono.last3_rk_sec == [75.0, 74.5]  # Only parses valid chronos
         assert chrono.rk_best3_sec == 74.5
 
     def test_fetch_jockey_stats_parsing(self, zt_provider: ZoneTurfProvider, mocker):
@@ -179,20 +179,24 @@ class TestZoneTurfProviderParsing:
         assert stats.win_rate == pytest.approx(150 / 850)
         assert stats.place_rate == pytest.approx(425 / 850)
 
-    @pytest.mark.parametrize("fetch_method_name", ["fetch_horse_chrono", "fetch_jockey_stats", "fetch_trainer_stats"])
+    @pytest.mark.parametrize(
+        "fetch_method_name", ["fetch_horse_chrono", "fetch_jockey_stats", "fetch_trainer_stats"]
+    )
     def test_fetch_methods_handle_http_error(
         self, zt_provider: ZoneTurfProvider, mocker, caplog, fetch_method_name
     ):
         """Ensures fetch methods return None and log an error on HTTP failure."""
         # 1. Setup mocks
         mocker.patch.object(zt_provider, '_resolve_entity_id', return_value="12345")
-        
+
         mock_response = mocker.Mock()
         mock_response.status_code = 404
         mocker.patch.object(
-            zt_provider.client, 
-            'get', 
-            side_effect=httpx.HTTPStatusError("Not Found", request=mocker.Mock(), response=mock_response)
+            zt_provider.client,
+            'get',
+            side_effect=httpx.HTTPStatusError(
+                "Not Found", request=mocker.Mock(), response=mock_response
+            ),
         )
 
         # 2. Get and call the method
@@ -226,9 +230,9 @@ class TestZoneTurfProviderParsing:
             # Case 3: Missing header
             (
                 "<html><body><table><tr><td>Partants</td><td> 10 </td></tr></table></body></html>",
-                None
+                None,
             ),
-        ]
+        ],
     )
     def test_fetch_trainer_stats_parsing_edge_cases(
         self, zt_provider: ZoneTurfProvider, mocker, mock_html, expected_stats
@@ -253,7 +257,9 @@ class TestZoneTurfProviderParsing:
             assert stats.win_rate == expected_stats["win_rate"]
             assert stats.place_rate == expected_stats["place_rate"]
 
-    @pytest.mark.parametrize("fetch_method_name", ["fetch_horse_chrono", "fetch_jockey_stats", "fetch_trainer_stats"])
+    @pytest.mark.parametrize(
+        "fetch_method_name", ["fetch_horse_chrono", "fetch_jockey_stats", "fetch_trainer_stats"]
+    )
     def test_fetch_methods_handle_id_resolution_failure(
         self, zt_provider: ZoneTurfProvider, mocker, fetch_method_name
     ):
@@ -261,7 +267,7 @@ class TestZoneTurfProviderParsing:
         # 1. Setup mocks
         mocker.patch.object(zt_provider, '_resolve_entity_id', return_value=None)
         mock_http_get = mocker.patch.object(zt_provider.client, 'get')
-        
+
         # 2. Get the actual method from the provider instance
         fetch_method = getattr(zt_provider, fetch_method_name)
 
@@ -296,9 +302,9 @@ class TestZoneTurfProviderParsing:
             # Case 3: Missing header
             (
                 "<html><body><table><tr><td>Courses</td><td> 10 </td></tr></table></body></html>",
-                None
+                None,
             ),
-        ]
+        ],
     )
     def test_fetch_jockey_stats_parsing_edge_cases(
         self, zt_provider: ZoneTurfProvider, mocker, mock_html, expected_stats
@@ -322,7 +328,7 @@ class TestZoneTurfProviderParsing:
             assert stats.places == expected_stats["places"]
             assert stats.win_rate == expected_stats["win_rate"]
             assert stats.place_rate == expected_stats["place_rate"]
-    
+
     def test_fetch_trainer_stats_parsing(self, zt_provider: ZoneTurfProvider, mocker):
         """Tests the parsing of a mock trainer page."""
         mock_html = """
@@ -358,10 +364,14 @@ class TestZoneTurfProviderParsing:
 class TestZoneTurfIdResolution:
     """Tests the ID resolution logic."""
 
-    def test_get_id_from_cache_handles_exception(self, zt_provider: ZoneTurfProvider, mocker, caplog):
+    def test_get_id_from_cache_handles_exception(
+        self, zt_provider: ZoneTurfProvider, mocker, caplog
+    ):
         """Ensures that exceptions during cache read are handled gracefully."""
-        mocker.patch.object(firestore_client, 'get_document', side_effect=Exception("Firestore unavailable"))
-        
+        mocker.patch.object(
+            firestore_client, 'get_document', side_effect=Exception("Firestore unavailable")
+        )
+
         result = zt_provider._get_id_from_cache("horse", "My Horse")
 
         assert result is None
@@ -369,8 +379,10 @@ class TestZoneTurfIdResolution:
 
     def test_set_id_to_cache_handles_exception(self, zt_provider: ZoneTurfProvider, mocker, caplog):
         """Ensures that exceptions during cache write are handled gracefully."""
-        mocker.patch.object(firestore_client, 'set_document', side_effect=Exception("Firestore unavailable"))
-        
+        mocker.patch.object(
+            firestore_client, 'set_document', side_effect=Exception("Firestore unavailable")
+        )
+
         # This function should not raise an exception
         zt_provider._set_id_to_cache("horse", "My Horse", "12345")
 
@@ -384,7 +396,7 @@ class TestZoneTurfIdResolution:
 
         # Set TTL to 30 days for this test
         zt_provider.cache_ttl = timedelta(days=30)
-        
+
         result = zt_provider._get_id_from_cache("horse", "My Horse")
 
         assert result is None
@@ -393,7 +405,7 @@ class TestZoneTurfIdResolution:
     def test_resolve_entity_id_empty_name(self, zt_provider: ZoneTurfProvider, mocker):
         """Tests that an empty name is rejected early."""
         mock_get_cache = mocker.patch.object(zt_provider, '_get_id_from_cache')
-        
+
         result = zt_provider._resolve_entity_id("horse", "")
 
         assert result is None
@@ -418,7 +430,7 @@ class TestZoneTurfIdResolution:
 
         fixture_path = Path(__file__).parent / "fixtures" / "zoneturf_index_page.html"
         mock_html = fixture_path.read_text(encoding="utf-8")
-        
+
         mock_response = mocker.Mock()
         mock_response.text = mock_html
         mock_response.raise_for_status = mocker.Mock()
@@ -433,17 +445,20 @@ class TestZoneTurfIdResolution:
         mock_http_get.assert_called_once_with("/cheval/lettre-j.html?p=1")
         mock_set_to_cache.assert_called_once_with("horse", "JULLOU", "1772764")
 
-
-    def test_resolve_entity_id_handles_http_error(self, zt_provider: ZoneTurfProvider, mocker, caplog):
+    def test_resolve_entity_id_handles_http_error(
+        self, zt_provider: ZoneTurfProvider, mocker, caplog
+    ):
         """Tests that a non-404 HTTP error during scraping is handled."""
         mocker.patch.object(zt_provider, '_get_id_from_cache', return_value=None)
-        
+
         mock_response = mocker.Mock()
         mock_response.status_code = 500
         mocker.patch.object(
-            zt_provider.client, 
-            'get', 
-            side_effect=httpx.HTTPStatusError("Server Error", request=mocker.Mock(), response=mock_response)
+            zt_provider.client,
+            'get',
+            side_effect=httpx.HTTPStatusError(
+                "Server Error", request=mocker.Mock(), response=mock_response
+            ),
         )
 
         result = zt_provider._resolve_entity_id("horse", "My Horse")
@@ -454,7 +469,7 @@ class TestZoneTurfIdResolution:
     def test_resolve_entity_id_handles_non_letter_name(self, zt_provider: ZoneTurfProvider, mocker):
         """Tests ID resolution for names that don't start with a letter."""
         mocker.patch.object(zt_provider, '_get_id_from_cache', return_value=None)
-        
+
         mock_response = mocker.Mock()
         mock_response.text = "<html><body><p>No links here</p></body></html>"
         mock_response.raise_for_status = mocker.Mock()
@@ -468,7 +483,7 @@ class TestZoneTurfIdResolution:
     def test_resolve_entity_id_not_found(self, zt_provider: ZoneTurfProvider, mocker):
         """Tests the case where an entity is not found after scraping all pages."""
         mocker.patch.object(zt_provider, '_get_id_from_cache', return_value=None)
-        
+
         mock_response = mocker.Mock()
         mock_response.text = "<html><body><p>No links here</p></body></html>"
         mock_response.raise_for_status = mocker.Mock()

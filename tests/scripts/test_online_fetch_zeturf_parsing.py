@@ -5,6 +5,7 @@ import pytest
 from bs4 import BeautifulSoup
 from hippique_orchestrator.scripts import online_fetch_zeturf
 
+
 @pytest.fixture
 def zeturf_page_content() -> str:
     """Provides the HTML content of a Zeturf race page from an archived fixture."""
@@ -22,7 +23,7 @@ def test_double_extract_parses_real_html_fixture(zeturf_page_content, mocker):
     mock_response.status_code = 200
     mock_response.text = zeturf_page_content
     mocker.patch("requests.get", return_value=mock_response)
-    
+
     result = online_fetch_zeturf.fetch_race_snapshot_full(
         reunion="R1", course="C1", phase="H-30", date="2025-11-20"
     )
@@ -44,9 +45,9 @@ def test_fallback_parse_no_runners_table_finds_no_runners(zeturf_page_content):
     soup = BeautifulSoup(zeturf_page_content, "lxml")
     if table := soup.find("table", class_="table-runners"):
         table.extract()
-        
+
     result = online_fetch_zeturf._fallback_parse_html(str(soup))
-    
+
     assert result["runners"] == []
 
 
@@ -80,6 +81,7 @@ def test_fallback_parse_no_data_finds_nothing(zeturf_page_content):
 
     assert len(result["runners"]) == 0
 
+
 def test_double_extract_uses_fallback(mocker):
     """
     Tests that _double_extract uses the fallback parser when the primary one fails.
@@ -97,13 +99,3 @@ def test_double_extract_uses_fallback(mocker):
     online_fetch_zeturf._double_extract("http://example.com", snapshot="H-30")
 
     fallback_mock.assert_called_once_with(html_content)
-
-
-
-
-
-
-
-
-
-

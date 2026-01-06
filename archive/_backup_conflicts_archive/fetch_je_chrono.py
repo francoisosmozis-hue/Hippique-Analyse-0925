@@ -13,6 +13,7 @@ LOGGER = logging.getLogger(__name__)
 
 ResultDict: TypeAlias = dict[str, str | None]
 
+
 def enrich_from_snapshot(snapshot_path: str, out_dir: str) -> dict:
     """Build ``je_stats.csv`` and ``chronos.csv`` files from ``snapshot_path``.
 
@@ -175,5 +176,6 @@ def _write_csv(path: Path, rows: Iterable[dict[str, str]], columns: Iterable[str
         writer.writerow(header)
         for row in rows:
             writer.writerow([row.get(column, "") for column in header])
+
 
 __all__ = ["enrich_from_snapshot"]

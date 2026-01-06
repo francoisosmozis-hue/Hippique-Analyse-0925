@@ -5,11 +5,13 @@ import json
 
 from hippique_orchestrator.scripts import online_fetch_zeturf
 
+
 @pytest.fixture
 def zeturf_course_html():
     """Returns the content of the Zeturf course page fixture."""
     fixture_path = Path(__file__).parent.parent / "fixtures" / "zeturf_course_page.html"
     return fixture_path.read_text(encoding="utf-8")
+
 
 @pytest.fixture
 def malformed_zeturf_html(zeturf_course_html):
@@ -20,6 +22,7 @@ def malformed_zeturf_html(zeturf_course_html):
         zeturf_course_html,
         flags=re.DOTALL,
     )
+
 
 def test_fallback_parse_html_no_runners_table(malformed_zeturf_html):
     """
@@ -40,20 +43,15 @@ def test_fallback_parse_html_no_runners_table(malformed_zeturf_html):
     assert isinstance(parsed_data["runners"], list)
     assert len(parsed_data["runners"]) == 0
 
+
 def test_fallback_parse_html_runner_missing_data(zeturf_course_html):
     """
     Tests that _fallback_parse_html can handle a runner row with missing odds data.
     """
     # Remove the odds from the first runner, both from the table and the script
-    modified_html = zeturf_course_html.replace(
-        '<span class="cote">6.5</span>', "", 1
-    )
+    modified_html = zeturf_course_html.replace('<span class="cote">6.5</span>', "", 1)
     # Also remove the script fallback
-    modified_html = re.sub(
-        r"cotesInfos: \{.*\}",
-        "cotesInfos: {}",
-        modified_html
-    )
+    modified_html = re.sub(r"cotesInfos: \{.*\}", "cotesInfos: {}", modified_html)
 
     parsed_data = online_fetch_zeturf._fallback_parse_html(modified_html)
 
@@ -73,23 +71,44 @@ def test_fallback_parse_html_runner_missing_data(zeturf_course_html):
     "raw, expected",
     [
         # Simple case
-        ({"num": "1", "name": "HORSE A", "cote": "12,5"}, {"num": "1", "name": "HORSE A", "cote": 12.5}),
+        (
+            {"num": "1", "name": "HORSE A", "cote": "12,5"},
+            {"num": "1", "name": "HORSE A", "cote": 12.5},
+        ),
         # Different keys
-        ({"number": "2", "horse": "HORSE B", "odds": 5.0}, {"num": "2", "name": "HORSE B", "cote": 5.0, "odds": 5.0}),
-        ({"id": 3, "label": "HORSE C", "price": "2.3"}, {"num": "3", "name": "HORSE C", "id": "3", "cote": 2.3}),
+        (
+            {"number": "2", "horse": "HORSE B", "odds": 5.0},
+            {"num": "2", "name": "HORSE B", "cote": 5.0, "odds": 5.0},
+        ),
+        (
+            {"id": 3, "label": "HORSE C", "price": "2.3"},
+            {"num": "3", "name": "HORSE C", "id": "3", "cote": 2.3},
+        ),
         # Nested odds
-        ({"num": 4, "name": "HORSE D", "odds": {"place": "3,3"}}, {"num": "4", "name": "HORSE D", "odds_place": 3.3}),
-        ({"num": 5, "name": "HORSE E", "market": {"place": {"5": 4.0}}}, {"num": "5", "name": "HORSE E", "odds_place": 4.0}),
+        (
+            {"num": 4, "name": "HORSE D", "odds": {"place": "3,3"}},
+            {"num": "4", "name": "HORSE D", "odds_place": 3.3},
+        ),
+        (
+            {"num": 5, "name": "HORSE E", "market": {"place": {"5": 4.0}}},
+            {"num": "5", "name": "HORSE E", "odds_place": 4.0},
+        ),
         # Missing values
         ({"num": 6, "name": "HORSE F"}, {"num": "6", "name": "HORSE F"}),
         # Empty values
         ({"num": 7, "name": "HORSE G", "cote": ""}, {"num": "7", "name": "HORSE G"}),
         # Extra metadata
-        ({"num": 8, "name": "HORSE H", "driver": "DRIVER H"}, {"num": "8", "name": "HORSE H", "driver": "DRIVER H"}),
+        (
+            {"num": 8, "name": "HORSE H", "driver": "DRIVER H"},
+            {"num": "8", "name": "HORSE H", "driver": "DRIVER H"},
+        ),
         # No number
         ({"name": "HORSE I", "cote": 9.0}, None),
         # Nested odds dictionary with 'gagnant'
-        ({"num": "10", "name": "HORSE J", "odds": {"gagnant": "8,0"}}, {"num": "10", "name": "HORSE J", "cote": 8.0}),
+        (
+            {"num": "10", "name": "HORSE J", "odds": {"gagnant": "8,0"}},
+            {"num": "10", "name": "HORSE J", "cote": 8.0},
+        ),
     ],
 )
 def test_coerce_runner_entry_variations(raw, expected):
@@ -97,12 +116,14 @@ def test_coerce_runner_entry_variations(raw, expected):
     coerced = online_fetch_zeturf._coerce_runner_entry(raw)
     assert coerced == expected
 
+
 def test_coerce_runner_entry_invalid_input():
     """Tests that _coerce_runner_entry returns None for non-dict inputs."""
     assert online_fetch_zeturf._coerce_runner_entry(None) is None
     assert online_fetch_zeturf._coerce_runner_entry("a string") is None
     assert online_fetch_zeturf._coerce_runner_entry(123) is None
     assert online_fetch_zeturf._coerce_runner_entry([1, 2, 3]) is None
+
 
 def test_normalise_snapshot_result_merges_h30_odds(fs):
     """
@@ -140,13 +161,12 @@ def test_normalise_snapshot_result_merges_h30_odds(fs):
     assert runner2["odds_win_h30"] == 5.0
     assert runner2["odds_place_h30"] == 1.5
 
+
 def test_normalise_snapshot_result_no_market():
     """
     Tests that _normalise_snapshot_result handles a raw snapshot without a 'market' dictionary.
     """
-    raw_snapshot = {
-        "runners": [{"num": "1", "name": "HORSE A", "cote": 12.0}]
-    }
+    raw_snapshot = {"runners": [{"num": "1", "name": "HORSE A", "cote": 12.0}]}
 
     result = online_fetch_zeturf._normalise_snapshot_result(
         raw_snapshot,
@@ -157,7 +177,13 @@ def test_normalise_snapshot_result_no_market():
     )
 
     assert "market" in result
-    assert result["market"] == {'slots_place': 3, 'overround_win': 0.0833, 'overround': 0.0833, 'overround_place': 0.0833}
+    assert result["market"] == {
+        'slots_place': 3,
+        'overround_win': 0.0833,
+        'overround': 0.0833,
+        'overround_place': 0.0833,
+    }
+
 
 def test_http_get_raises_on_403(mocker):
     """
@@ -170,6 +196,7 @@ def test_http_get_raises_on_403(mocker):
     with pytest.raises(RuntimeError, match="HTTP 403 returned by http://example.com"):
         online_fetch_zeturf._http_get("http://example.com")
 
+
 def test_http_get_raises_on_suspicious_html(mocker):
     """
     Tests that _http_get raises a RuntimeError on suspicious HTML content.
@@ -181,4 +208,3 @@ def test_http_get_raises_on_suspicious_html(mocker):
 
     with pytest.raises(RuntimeError, match="Payload suspect reçu de http://example.com"):
         online_fetch_zeturf._http_get("http://example.com")
-

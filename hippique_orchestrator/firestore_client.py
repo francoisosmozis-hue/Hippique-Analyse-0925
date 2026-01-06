@@ -36,6 +36,7 @@ def get_document(collection: str, document_id: str) -> dict[str, Any] | None:
         logger.error(f"Failed to get document '{document_id}' from '{collection}': {e}", exc_info=e)
         return None
 
+
 def set_document(collection: str, document_id: str, data: dict[str, Any]) -> None:
     """
     Sets (overwrites) a document in a specified collection.
@@ -133,14 +134,17 @@ def get_processing_status_for_date(date_str: str, daily_plan: list[dict]) -> dic
     else:
         # If no docs for today, check for the latest doc in the entire collection
         # to differentiate between a stalled and an empty system.
-        latest_doc_query = db.collection(config.FIRESTORE_COLLECTION).order_by("update_time", direction=firestore.Query.DESCENDING).limit(1)
+        latest_doc_query = (
+            db.collection(config.FIRESTORE_COLLECTION)
+            .order_by("update_time", direction=firestore.Query.DESCENDING)
+            .limit(1)
+        )
         latest_docs = list(latest_doc_query.stream())
         if latest_docs:
             last_doc_id = latest_docs[0].id
             last_update_ts = latest_docs[0].update_time.isoformat()
         else:
             last_doc_id = None
-
 
     firestore_meta = {
         "docs_count_for_date": docs_count,

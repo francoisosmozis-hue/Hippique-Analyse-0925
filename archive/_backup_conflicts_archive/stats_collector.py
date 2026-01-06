@@ -27,6 +27,7 @@ from .logging_utils import logger
 # 1. PMU API - Performances détaillées des chevaux
 # ============================================================================
 
+
 class PMUPerformancesClient:
     """
     Client pour récupérer l'historique des performances des chevaux
@@ -38,16 +39,10 @@ class PMUPerformancesClient:
 
     def __init__(self):
         self.session = requests.Session()
-        self.session.headers.update({
-            'User-Agent': config.USER_AGENT,
-            'Accept': 'application/json'
-        })
+        self.session.headers.update({'User-Agent': config.USER_AGENT, 'Accept': 'application/json'})
 
     def get_horse_performances(
-        self,
-        date_str: str,
-        reunion_num: int,
-        course_num: int
+        self, date_str: str, reunion_num: int, course_num: int
     ) -> list[dict]:
         """
         Récupère les performances détaillées de tous les chevaux d'une course
@@ -129,16 +124,18 @@ class PMUPerformancesClient:
             performances = []
 
             for perf in perfs_raw[:15]:  # Max 15 dernières
-                performances.append({
-                    "date": perf.get("date", "")[:10],
-                    "hippodrome": perf.get("hippodrome", {}).get("libelleCourt", ""),
-                    "distance": perf.get("distance"),
-                    "discipline": perf.get("discipline", ""),
-                    "place": perf.get("place"),
-                    "partants": perf.get("nombrePartants"),
-                    "cote": perf.get("rapport"),
-                    "gains": perf.get("allocation")
-                })
+                performances.append(
+                    {
+                        "date": perf.get("date", "")[:10],
+                        "hippodrome": perf.get("hippodrome", {}).get("libelleCourt", ""),
+                        "distance": perf.get("distance"),
+                        "discipline": perf.get("discipline", ""),
+                        "place": perf.get("place"),
+                        "partants": perf.get("nombrePartants"),
+                        "cote": perf.get("rapport"),
+                        "gains": perf.get("allocation"),
+                    }
+                )
 
             # Calcul stats 12 mois
             stats = self._compute_stats(performances)
@@ -147,7 +144,7 @@ class PMUPerformancesClient:
                 "cheval": cheval_nom,
                 "numero": numero,
                 "performances": performances,
-                "stats": stats
+                "stats": stats,
             }
 
         except Exception as e:
@@ -162,11 +159,12 @@ class PMUPerformancesClient:
                 "victoires_12_mois": 0,
                 "places_12_mois": 0,
                 "taux_victoire": 0.0,
-                "taux_place": 0.0
+                "taux_place": 0.0,
             }
 
         # Filtrer 12 derniers mois
         from datetime import datetime, timedelta
+
         cutoff_date = datetime.now() - timedelta(days=365)
 
         courses = 0
@@ -195,13 +193,14 @@ class PMUPerformancesClient:
             "victoires_12_mois": victoires,
             "places_12_mois": places,
             "taux_victoire": round(taux_victoire, 1),
-            "taux_place": round(taux_place, 1)
+            "taux_place": round(taux_place, 1),
         }
 
 
 # ============================================================================
 # 2. GENY - Statistiques Jockeys et Entraîneurs
 # ============================================================================
+
 
 class GenyStatsParser:
     """
@@ -215,18 +214,15 @@ class GenyStatsParser:
 
     def __init__(self):
         self.session = requests.Session()
-        self.session.headers.update({
-            'User-Agent': config.USER_AGENT,
-            'Accept': 'text/html',
-            'Accept-Language': 'fr-FR,fr;q=0.9'
-        })
+        self.session.headers.update(
+            {
+                'User-Agent': config.USER_AGENT,
+                'Accept': 'text/html',
+                'Accept-Language': 'fr-FR,fr;q=0.9',
+            }
+        )
 
-    def get_course_stats(
-        self,
-        date_str: str,
-        reunion_num: int,
-        course_num: int
-    ) -> dict:
+    def get_course_stats(self, date_str: str, reunion_num: int, course_num: int) -> dict:
         """
         Récupère les statistiques jockey/entraîneur pour une course
 
@@ -276,10 +272,7 @@ class GenyStatsParser:
             # Parser entraîneurs
             entraineurs = self._parse_trainer_stats(soup)
 
-            return {
-                "jockeys": jockeys,
-                "entraineurs": entraineurs
-            }
+            return {"jockeys": jockeys, "entraineurs": entraineurs}
 
         except Exception as e:
             logger.error(f"Error fetching Geny stats: {e}")
@@ -325,7 +318,7 @@ class GenyStatsParser:
                     "pct_victoires": pct_victoires,
                     "pct_places": pct_places,
                     "musique": musique,
-                    "ecart_victoire": ecart
+                    "ecart_victoire": ecart,
                 }
 
             except Exception as e:
@@ -351,10 +344,12 @@ class GenyStatsParser:
                 stats_text = block.get_text()
 
                 entraineurs[nom] = {
-                    "pct_victoires": self._extract_percentage(stats_text, r'(\d+\.?\d*)%.*victoire'),
+                    "pct_victoires": self._extract_percentage(
+                        stats_text, r'(\d+\.?\d*)%.*victoire'
+                    ),
                     "pct_places": self._extract_percentage(stats_text, r'(\d+\.?\d*)%.*place'),
                     "musique": self._extract_musique(stats_text),
-                    "ecart_victoire": self._extract_ecart(stats_text)
+                    "ecart_victoire": self._extract_ecart(stats_text),
                 }
 
             except Exception as e:
@@ -402,6 +397,7 @@ class GenyStatsParser:
 # 3. Collecteur unifié
 # ============================================================================
 
+
 class StatsCollector:
     """
     Collecteur unifié de statistiques pour ML
@@ -416,12 +412,7 @@ class StatsCollector:
         self.pmu_client = PMUPerformancesClient()
         self.geny_parser = GenyStatsParser()
 
-    def collect_all_stats(
-        self,
-        date_str: str,
-        reunion_num: int,
-        course_num: int
-    ) -> dict:
+    def collect_all_stats(self, date_str: str, reunion_num: int, course_num: int) -> dict:
         """
         Collecte toutes les statistiques pour une course
 
@@ -435,19 +426,15 @@ class StatsCollector:
         logger.info(f"Collecting stats for R{reunion_num}C{course_num}")
 
         # 1. Performances chevaux (PMU)
-        chevaux = self.pmu_client.get_horse_performances(
-            date_str, reunion_num, course_num
-        )
+        chevaux = self.pmu_client.get_horse_performances(date_str, reunion_num, course_num)
 
         # 2. Stats jockeys/entraîneurs (Geny)
-        geny_stats = self.geny_parser.get_course_stats(
-            date_str, reunion_num, course_num
-        )
+        geny_stats = self.geny_parser.get_course_stats(date_str, reunion_num, course_num)
 
         return {
             "chevaux": chevaux,
             "jockeys": geny_stats.get("jockeys", {}),
-            "entraineurs": geny_stats.get("entraineurs", {})
+            "entraineurs": geny_stats.get("entraineurs", {}),
         }
 
     def export_for_ml(self, stats: dict) -> list[dict]:
@@ -482,18 +469,13 @@ class StatsCollector:
             features = {
                 "cheval": cheval_data["cheval"],
                 "numero": cheval_data["numero"],
-
                 # Stats cheval
                 "nb_courses_12m": cheval_data["stats"]["courses_12_mois"],
                 "nb_victoires_12m": cheval_data["stats"]["victoires_12_mois"],
                 "taux_victoire_cheval": cheval_data["stats"]["taux_victoire"],
                 "taux_place_cheval": cheval_data["stats"]["taux_place"],
-
                 # Dernières performances
-                "last_5_places": [
-                    p.get("place") for p in cheval_data["performances"][:5]
-                ],
-
+                "last_5_places": [p.get("place") for p in cheval_data["performances"][:5]],
                 # TODO: Ajouter jockey/entraîneur via matching
             }
 

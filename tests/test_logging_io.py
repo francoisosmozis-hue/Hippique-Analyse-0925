@@ -4,13 +4,14 @@ import pytest
 
 from hippique_orchestrator.logging_io import CSV_HEADER, append_csv_line, append_json
 
+
 # Test the local filesystem path for append_csv_line
 def test_append_csv_line_local_filesystem(tmp_path, mocker):
     mocker.patch("hippique_orchestrator.logging_io.get_gcs_manager", return_value=None)
 
     path = tmp_path / "log_local.csv"
     data = {"reunion": "R2", "course": "C3"}
-    
+
     append_csv_line(path, data)
 
     assert path.exists()
@@ -18,6 +19,7 @@ def test_append_csv_line_local_filesystem(tmp_path, mocker):
     assert content[0].split(";") == CSV_HEADER
     assert "R2" in content[1]
     assert "C3" in content[1]
+
 
 # Test appending to an existing CSV on local disk
 def test_append_csv_line_appends_locally(tmp_path, mocker):
@@ -33,6 +35,7 @@ def test_append_csv_line_appends_locally(tmp_path, mocker):
     assert "R1" in content[1]
     assert "R2" in content[2]
 
+
 # Test the local filesystem path for append_json
 def test_append_json_local_filesystem(tmp_path, mocker):
     mocker.patch("hippique_orchestrator.logging_io.get_gcs_manager", return_value=None)
@@ -40,11 +43,13 @@ def test_append_json_local_filesystem(tmp_path, mocker):
     data = {"key": "value", "items": [1, 2]}
 
     from hippique_orchestrator.logging_io import append_json
+
     append_json(path, data)
 
     assert path.exists()
     content = json.loads(path.read_text())
     assert content == data
+
 
 # Test the GCS path for append_json
 def test_append_json_gcs(mocker):
@@ -58,6 +63,7 @@ def test_append_json_gcs(mocker):
     data = {"key": "gcs_value"}
 
     from hippique_orchestrator.logging_io import append_json
+
     append_json(path, data)
 
     assert mem_fs.exists(path)

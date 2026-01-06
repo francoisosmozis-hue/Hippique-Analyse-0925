@@ -7,6 +7,7 @@ for bookkeeping such as a CSV summary line and the command required to
 update the tracking spreadsheet.  The number of paid positions can be
 controlled via the ``--places`` option (defaults to one winner).
 """
+
 from __future__ import annotations
 
 import argparse
@@ -44,7 +45,9 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="Post-course processing")
     ap.add_argument("--arrivee", required=True, help="Path to official arrival JSON")
     ap.add_argument("--tickets", required=True, help="Path to tickets.json to update")
-    ap.add_argument("--outdir", default=None, help="Output directory (defaults to tickets directory)")
+    ap.add_argument(
+        "--outdir", default=None, help="Output directory (defaults to tickets directory)"
+    )
     ap.add_argument(
         "--excel",
         default="modele_suivi_courses_hippiques.xlsx",
@@ -103,11 +106,7 @@ def main() -> None:
         CSV_HEADER + "\n" + ligne + "\n",
     )
 
-    cmd = (
-        f'python update_excel_with_results.py '
-        f'--excel "{args.excel}" '
-        f'--payload "{payload_path}"\n'
-    )
+    cmd = f'python update_excel_with_results.py --excel "{args.excel}" --payload "{payload_path}"\n'
     _save_text(outdir / "cmd_update_excel.txt", cmd)
 
 

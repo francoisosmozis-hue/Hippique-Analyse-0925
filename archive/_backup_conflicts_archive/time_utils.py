@@ -72,9 +72,7 @@ def utc_to_local_datetime(utc_dt: datetime) -> datetime:
 
 
 def compute_snapshot_time(
-    date: str,
-    race_time_local: str,
-    offset_minutes: int
+    date: str, race_time_local: str, offset_minutes: int
 ) -> tuple[datetime, datetime]:
     """
     Calcule l'heure de snapshot (Europe/Paris et UTC) pour une course.
@@ -89,11 +87,7 @@ def compute_snapshot_time(
     """
     race_time = parse_local_time(race_time_local)
     race_dt = datetime.strptime(date, "%Y-%m-%d").replace(
-        hour=race_time.hour,
-        minute=race_time.minute,
-        second=0,
-        microsecond=0,
-        tzinfo=TZ_PARIS
+        hour=race_time.hour, minute=race_time.minute, second=0, microsecond=0, tzinfo=TZ_PARIS
     )
 
     snapshot_local = race_dt + timedelta(minutes=offset_minutes)

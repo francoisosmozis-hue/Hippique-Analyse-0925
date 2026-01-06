@@ -28,17 +28,16 @@ def test_schedule_all_races_dry_run_no_force():
     """
     Given a plan with a past race, a dry run without force should mark it as skipped.
     """
-    results = scheduler.schedule_all_races(plan=SAMPLE_PLAN, force=False, dry_run=True, service_url="http://test.service")
+    results = scheduler.schedule_all_races(
+        plan=SAMPLE_PLAN, force=False, dry_run=True, service_url="http://test.service"
+    )
 
     skipped_tasks = [r for r in results if not r["ok"]]
     candidate_tasks = [r for r in results if r["ok"]]
 
     # R1C1 (H30 and H5) should be skipped because it's in the past
     assert len(skipped_tasks) == 2
-    assert all(
-        "R1C1" in task["race"] and "in the past" in task["reason"]
-        for task in skipped_tasks
-    )
+    assert all("R1C1" in task["race"] and "in the past" in task["reason"] for task in skipped_tasks)
 
     # R1C2 (H30 and H5) should be a candidate
     assert len(candidate_tasks) == 2
@@ -49,7 +48,9 @@ def test_schedule_all_races_dry_run_with_force():
     """
     Given a plan with a past race, a dry run with force should make it a candidate.
     """
-    results = scheduler.schedule_all_races(plan=SAMPLE_PLAN, force=True, dry_run=True, service_url="http://test.service")
+    results = scheduler.schedule_all_races(
+        plan=SAMPLE_PLAN, force=True, dry_run=True, service_url="http://test.service"
+    )
 
     skipped_tasks = [r for r in results if not r["ok"]]
     candidate_tasks = [r for r in results if r["ok"]]
@@ -74,7 +75,9 @@ def test_schedule_all_races_real_run_with_force(mock_cloud_tasks_client):
         name="projects/p/locations/l/queues/q/tasks/t"
     )
 
-    results = scheduler.schedule_all_races(plan=SAMPLE_PLAN, force=True, dry_run=False, service_url="http://test.service")
+    results = scheduler.schedule_all_races(
+        plan=SAMPLE_PLAN, force=True, dry_run=False, service_url="http://test.service"
+    )
 
     # All 4 potential tasks should have been processed
     assert len(results) == 4
@@ -95,7 +98,9 @@ def test_schedule_all_races_real_run_no_force(mock_cloud_tasks_client):
         name="projects/p/locations/l/queues/q/tasks/t"
     )
 
-    results = scheduler.schedule_all_races(plan=SAMPLE_PLAN, force=False, dry_run=False, service_url="http://test.service")
+    results = scheduler.schedule_all_races(
+        plan=SAMPLE_PLAN, force=False, dry_run=False, service_url="http://test.service"
+    )
 
     # All 4 potential tasks are in the results list
     assert len(results) == 4

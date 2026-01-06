@@ -19,11 +19,13 @@ class PlanBuilder:
 
     def __init__(self):
         self.session = requests.Session()
-        self.session.headers.update({
-            'User-Agent': config.USER_AGENT,
-            'Accept': 'text/html,application/xhtml+xml',
-            'Accept-Language': 'fr-FR,fr;q=0.9',
-        })
+        self.session.headers.update(
+            {
+                'User-Agent': config.USER_AGENT,
+                'Accept': 'text/html,application/xhtml+xml',
+                'Accept-Language': 'fr-FR,fr;q=0.9',
+            }
+        )
 
     def build_plan(self, date_str: str) -> list[dict]:
         """
@@ -84,7 +86,9 @@ class PlanBuilder:
 
             # Pattern URL vérifié: /fr/course/YYYY-MM-DD/RxCy-...
             # IMPORTANT: Chercher tous les liens <a> avec href contenant /fr/course/
-            course_links = soup.find_all('a', href=re.compile(r'/fr/course/\d{4}-\d{2}-\d{2}/R\d+C\d+'))
+            course_links = soup.find_all(
+                'a', href=re.compile(r'/fr/course/\d{4}-\d{2}-\d{2}/R\d+C\d+')
+            )
 
             logger.info(f"Found {len(course_links)} course links on ZEturf")
 
@@ -93,10 +97,7 @@ class PlanBuilder:
 
                 # Extraire date, R, C depuis l'URL
                 # Format: /fr/course/2025-10-16/R7C4-concepcion-premio
-                match = re.search(
-                    r'/fr/course/(\d{4}-\d{2}-\d{2})/R(\d+)C(\d+)-(.+)',
-                    href
-                )
+                match = re.search(r'/fr/course/(\d{4}-\d{2}-\d{2})/R(\d+)C(\d+)-(.+)', href)
 
                 if not match:
                     continue
@@ -120,7 +121,7 @@ class PlanBuilder:
                     "meeting": meeting.upper(),
                     "time_local": time_local,
                     "course_url": f"https://www.zeturf.fr{href}",
-                    "reunion_url": f"https://www.zeturf.fr/fr/reunion/{race_date}/R{r_num}"
+                    "reunion_url": f"https://www.zeturf.fr/fr/reunion/{race_date}/R{r_num}",
                 }
 
                 races.append(race)
@@ -155,8 +156,16 @@ class PlanBuilder:
 
             # Mots courants de titre de course à ignorer
             race_keywords = [
-                'prix', 'premio', 'allowance', 'claiming', 'maiden',
-                'handicap', 'stakes', 'conditions', 'listed', 'group'
+                'prix',
+                'premio',
+                'allowance',
+                'claiming',
+                'maiden',
+                'handicap',
+                'stakes',
+                'conditions',
+                'listed',
+                'group',
             ]
 
             # Si le 2e mot n'est pas un keyword, c'est probablement
@@ -187,9 +196,9 @@ class PlanBuilder:
 
         # Patterns d'heure
         patterns = [
-            r'(\d{1,2})h(\d{2})',           # 14h30
-            r'(\d{1,2}):(\d{2})',            # 14:30
-            r'(\d{1,2})[h:](\d{2})\s*(?:pm|am)?'  # 2:30pm
+            r'(\d{1,2})h(\d{2})',  # 14h30
+            r'(\d{1,2}):(\d{2})',  # 14:30
+            r'(\d{1,2})[h:](\d{2})\s*(?:pm|am)?',  # 2:30pm
         ]
 
         for pattern in patterns:
@@ -238,6 +247,7 @@ class PlanBuilder:
 # FALLBACK GENY.COM (si besoin)
 # ============================================================================
 
+
 class GenyFallbackParser:
     """
     Parser Geny.com en fallback si ZEturf insuffisant
@@ -246,11 +256,13 @@ class GenyFallbackParser:
 
     def __init__(self):
         self.session = requests.Session()
-        self.session.headers.update({
-            'User-Agent': config.USER_AGENT,
-            'Accept': 'text/html',
-            'Accept-Language': 'fr-FR,fr;q=0.9',
-        })
+        self.session.headers.update(
+            {
+                'User-Agent': config.USER_AGENT,
+                'Accept': 'text/html',
+                'Accept-Language': 'fr-FR,fr;q=0.9',
+            }
+        )
 
     def parse_program(self, date_str: str) -> list[dict]:
         """
@@ -299,15 +311,17 @@ class GenyFallbackParser:
                 meeting_elem = block.find(class_='hippodrome-name')
                 meeting = meeting_elem.get_text().strip() if meeting_elem else "UNKNOWN"
 
-                races.append({
-                    "date": date_str,
-                    "r_label": f"R{r_num}",
-                    "c_label": f"C{c_num}",
-                    "meeting": meeting.upper(),
-                    "time_local": time_local,
-                    "course_url": f"https://www.zeturf.fr/fr/course/{date_str}/R{r_num}C{c_num}",
-                    "reunion_url": f"https://www.zeturf.fr/fr/reunion/{date_str}/R{r_num}"
-                })
+                races.append(
+                    {
+                        "date": date_str,
+                        "r_label": f"R{r_num}",
+                        "c_label": f"C{c_num}",
+                        "meeting": meeting.upper(),
+                        "time_local": time_local,
+                        "course_url": f"https://www.zeturf.fr/fr/course/{date_str}/R{r_num}C{c_num}",
+                        "reunion_url": f"https://www.zeturf.fr/fr/reunion/{date_str}/R{r_num}",
+                    }
+                )
 
             return races
 
@@ -357,8 +371,7 @@ if __name__ == "__main__":
 
         for i, race in enumerate(plan[:5], 1):
             time_str = race["time_local"] or "??:??"
-            print(f"{i}. {race['r_label']}{race['c_label']} - "
-                  f"{race['meeting']} - {time_str}")
+            print(f"{i}. {race['r_label']}{race['c_label']} - {race['meeting']} - {time_str}")
             print(f"   URL: {race['course_url']}")
 
         if len(plan) > 5:

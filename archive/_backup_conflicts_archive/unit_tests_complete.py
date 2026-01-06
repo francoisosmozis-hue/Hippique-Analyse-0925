@@ -134,10 +134,7 @@ def test_parse_zeturf_program(mock_zeturf_response):
     builder = PlanBuilder()
 
     with patch.object(builder.session, 'get') as mock_get:
-        mock_get.return_value = Mock(
-            status_code=200,
-            text=mock_zeturf_response
-        )
+        mock_get.return_value = Mock(status_code=200, text=mock_zeturf_response)
 
         result = builder._parse_zeturf_program("2025-10-16")
 
@@ -184,10 +181,7 @@ def test_build_plan_empty_response():
     builder = PlanBuilder()
 
     with patch.object(builder.session, 'get') as mock_get:
-        mock_get.return_value = Mock(
-            status_code=200,
-            text="<html><body></body></html>"
-        )
+        mock_get.return_value = Mock(status_code=200, text="<html><body></body></html>")
 
         result = builder.build_plan("2025-10-16")
 
@@ -206,9 +200,10 @@ from hippique_orchestrator.scheduler import TaskScheduler
 @pytest.fixture
 def mock_scheduler():
     """TaskScheduler avec clients mockés"""
-    with patch('src.scheduler.tasks_v2.CloudTasksClient'), \
-         patch('src.scheduler.scheduler_v1.CloudSchedulerClient'):
-
+    with (
+        patch('src.scheduler.tasks_v2.CloudTasksClient'),
+        patch('src.scheduler.scheduler_v1.CloudSchedulerClient'),
+    ):
         scheduler = TaskScheduler()
         scheduler.tasks_client = MagicMock()
         scheduler.scheduler_client = MagicMock()
@@ -237,7 +232,7 @@ def test_enqueue_run_task_success(mock_scheduler):
         when_paris=when,
         date_str="2025-10-16",
         r_label="R1",
-        c_label="C1"
+        c_label="C1",
     )
 
     assert result is not None
@@ -248,9 +243,7 @@ def test_enqueue_run_task_success(mock_scheduler):
 def test_enqueue_run_task_already_exists(mock_scheduler):
     """Test quand la tâche existe déjà"""
     # Mock GET (tâche existe)
-    mock_scheduler.tasks_client.get_task.return_value = Mock(
-        name="existing-task"
-    )
+    mock_scheduler.tasks_client.get_task.return_value = Mock(name="existing-task")
 
     when = datetime(2025, 10, 16, 14, 30, tzinfo=ZoneInfo("Europe/Paris"))
 
@@ -261,7 +254,7 @@ def test_enqueue_run_task_already_exists(mock_scheduler):
         when_paris=when,
         date_str="2025-10-16",
         r_label="R1",
-        c_label="C1"
+        c_label="C1",
     )
 
     # Doit retourner le nom de la tâche existante
@@ -288,7 +281,7 @@ def test_enqueue_task_name_format(mock_scheduler):
             when_paris=when,
             date_str="2025-10-16",
             r_label="R1",
-            c_label="C1"
+            c_label="C1",
         )
 
         # Vérifier l'appel avec le nom correct
@@ -362,16 +355,9 @@ def test_collect_artifacts(runner, sample_gpi_output):
 @patch('subprocess.run')
 def test_run_subprocess_success(mock_run, runner):
     """Test exécution subprocess réussie"""
-    mock_run.return_value = Mock(
-        returncode=0,
-        stdout="Output",
-        stderr=""
-    )
+    mock_run.return_value = Mock(returncode=0, stdout="Output", stderr="")
 
-    rc, stdout, stderr = runner._run_subprocess(
-        ["python", "test.py"],
-        env={"TEST": "value"}
-    )
+    rc, stdout, stderr = runner._run_subprocess(["python", "test.py"], env={"TEST": "value"})
 
     assert rc == 0
     assert stdout == "Output"
@@ -384,11 +370,7 @@ def test_run_subprocess_timeout(mock_run, runner):
     """Test timeout subprocess"""
     mock_run.side_effect = subprocess.TimeoutExpired("cmd", 10)
 
-    rc, stdout, stderr = runner._run_subprocess(
-        ["python", "test.py"],
-        env={},
-        timeout=10
-    )
+    rc, stdout, stderr = runner._run_subprocess(["python", "test.py"], env={}, timeout=10)
 
     assert rc == 124  # Code timeout
     assert "Timeout" in stderr
@@ -398,16 +380,9 @@ def test_run_subprocess_timeout(mock_run, runner):
 @patch('subprocess.run')
 def test_run_subprocess_error(mock_run, runner):
     """Test erreur subprocess"""
-    mock_run.return_value = Mock(
-        returncode=1,
-        stdout="",
-        stderr="Error occurred"
-    )
+    mock_run.return_value = Mock(returncode=1, stdout="", stderr="Error occurred")
 
-    rc, stdout, stderr = runner._run_subprocess(
-        ["python", "test.py"],
-        env={}
-    )
+    rc, stdout, stderr = runner._run_subprocess(["python", "test.py"], env={})
 
     assert rc == 1
     assert stderr == "Error occurred"
@@ -458,17 +433,14 @@ def test_schedule_endpoint_success(mock_enqueue, mock_build_plan, client):
             "meeting": "VINCENNES",
             "time_local": "14:30",
             "course_url": "http://course.com",
-            "reunion_url": "http://reunion.com"
+            "reunion_url": "http://reunion.com",
         }
     ]
 
     # Mock enqueue
     mock_enqueue.return_value = "task-name"
 
-    response = client.post("/schedule", json={
-        "date": "2025-10-16",
-        "mode": "tasks"
-    })
+    response = client.post("/schedule", json={"date": "2025-10-16", "mode": "tasks"})
 
     assert response.status_code == 200
     data = response.json()
@@ -483,10 +455,7 @@ def test_schedule_endpoint_no_races(mock_build_plan, client):
     """Test /schedule sans courses"""
     mock_build_plan.return_value = []
 
-    response = client.post("/schedule", json={
-        "date": "2025-10-16",
-        "mode": "tasks"
-    })
+    response = client.post("/schedule", json={"date": "2025-10-16", "mode": "tasks"})
 
     assert response.status_code == 404
     assert "No races found" in response.json()["detail"]
@@ -501,14 +470,12 @@ def test_run_endpoint_success(mock_run_course, client):
         "rc": 0,
         "stdout_tail": "Success",
         "stderr_tail": "",
-        "artifacts": ["file1.json"]
+        "artifacts": ["file1.json"],
     }
 
-    response = client.post("/run", json={
-        "course_url": "http://course.com",
-        "phase": "H30",
-        "date": "2025-10-16"
-    })
+    response = client.post(
+        "/run", json={"course_url": "http://course.com", "phase": "H30", "date": "2025-10-16"}
+    )
 
     assert response.status_code == 200
     data = response.json()
@@ -525,14 +492,12 @@ def test_run_endpoint_failure(mock_run_course, client):
         "rc": 1,
         "stdout_tail": "",
         "stderr_tail": "Error",
-        "artifacts": []
+        "artifacts": [],
     }
 
-    response = client.post("/run", json={
-        "course_url": "http://course.com",
-        "phase": "H30",
-        "date": "2025-10-16"
-    })
+    response = client.post(
+        "/run", json={"course_url": "http://course.com", "phase": "H30", "date": "2025-10-16"}
+    )
 
     assert response.status_code == 200  # Code 200 même si échec interne
     data = response.json()

@@ -1,6 +1,7 @@
 import pytest
 from hippique_orchestrator import analysis_utils
 
+
 @pytest.mark.parametrize(
     "musique_str, expected",
     [
@@ -71,6 +72,7 @@ def test_parse_musique(musique_str, expected):
     parsed = analysis_utils.parse_musique(musique_str)
     assert parsed == expected
 
+
 @pytest.mark.parametrize(
     "musique_data, expected_volatility",
     [
@@ -106,23 +108,23 @@ def test_calculate_volatility(musique_data, expected_volatility):
     """Tests the calculate_volatility function."""
     assert analysis_utils.calculate_volatility(musique_data) == expected_volatility
 
+
 @pytest.mark.parametrize(
     "odds_list, expected_probs, expected_overround",
     [
         ([2.0, 3.0, 6.0], [0.5, 0.3333, 0.1667], 1.0),
         ([], [], 0.0),
         ([4.0], [1.0], 0.25),
-        ([1.0, 2.0], [0.0, 1.0], 0.5) # Invalid odds are handled
+        ([1.0, 2.0], [0.0, 1.0], 0.5),  # Invalid odds are handled
     ],
 )
-def test_convert_odds_to_implied_probabilities(
-    odds_list, expected_probs, expected_overround
-):
+def test_convert_odds_to_implied_probabilities(odds_list, expected_probs, expected_overround):
     """Tests the convert_odds_to_implied_probabilities function."""
     probs, overround = analysis_utils.convert_odds_to_implied_probabilities(odds_list)
     assert overround == expected_overround
     for p, e_p in zip(probs, expected_probs, strict=True):
         assert round(p, 4) == e_p
+
 
 @pytest.mark.parametrize(
     "runner_data, expected",
@@ -138,29 +140,60 @@ def test_identify_outsider_reparable(runner_data, expected):
     """Tests the identify_outsider_reparable function."""
     assert analysis_utils.identify_outsider_reparable(runner_data) == expected
 
+
 @pytest.mark.parametrize(
     "runner_data, expected",
     [
-         ({"p_place": 0.05, "parsed_musique": {"regularity_score": 3.0, "num_races_in_musique": 3}}, True),
-         ({"p_place": 0.2, "parsed_musique": {"regularity_score": 3.0, "num_races_in_musique": 3}}, False),
-         ({"p_place": 0.05, "parsed_musique": {"regularity_score": 5.0, "num_races_in_musique": 3}}, False),
-         ({"p_place": 0.05, "parsed_musique": {"regularity_score": 3.0, "num_races_in_musique": 2}}, False),
-         ({}, False),
-    ]
+        (
+            {
+                "p_place": 0.05,
+                "parsed_musique": {"regularity_score": 3.0, "num_races_in_musique": 3},
+            },
+            True,
+        ),
+        (
+            {
+                "p_place": 0.2,
+                "parsed_musique": {"regularity_score": 3.0, "num_races_in_musique": 3},
+            },
+            False,
+        ),
+        (
+            {
+                "p_place": 0.05,
+                "parsed_musique": {"regularity_score": 5.0, "num_races_in_musique": 3},
+            },
+            False,
+        ),
+        (
+            {
+                "p_place": 0.05,
+                "parsed_musique": {"regularity_score": 3.0, "num_races_in_musique": 2},
+            },
+            False,
+        ),
+        ({}, False),
+    ],
 )
 def test_identify_profil_oublie(runner_data, expected):
     """Tests the identify_profil_oublie function."""
     assert analysis_utils.identify_profil_oublie(runner_data) == expected
 
+
 @pytest.mark.parametrize(
     "musique_data, expected_score",
     [
-        ({"top3_count": 2, "top5_count": 3, "regularity_score": 3.0, "num_races_in_musique": 5}, pytest.approx(4.333333)),
-        ({"is_dai": True, "top3_count": 1, "regularity_score": 5.0, "num_races_in_musique": 5}, pytest.approx(-1.333333)),
+        (
+            {"top3_count": 2, "top5_count": 3, "regularity_score": 3.0, "num_races_in_musique": 5},
+            pytest.approx(4.333333),
+        ),
+        (
+            {"is_dai": True, "top3_count": 1, "regularity_score": 5.0, "num_races_in_musique": 5},
+            pytest.approx(-1.333333),
+        ),
         ({}, 0.0),
     ],
 )
 def test_score_musique_form(musique_data, expected_score):
     """Tests the score_musique_form function."""
     assert analysis_utils.score_musique_form(musique_data) == expected_score
-

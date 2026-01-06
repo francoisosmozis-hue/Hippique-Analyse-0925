@@ -1,6 +1,7 @@
 """
 Tests for the data_source abstraction layer.
 """
+
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -13,10 +14,13 @@ async def test_fetch_programme_routes_to_boturfers():
     """
     Ensures fetch_programme correctly routes to the boturfers scraper.
     """
-    with patch("hippique_orchestrator.data_source.boturfers.fetch_boturfers_programme", new_callable=AsyncMock) as mock_fetch:
+    with patch(
+        "hippique_orchestrator.data_source.boturfers.fetch_boturfers_programme",
+        new_callable=AsyncMock,
+    ) as mock_fetch:
         mock_fetch.return_value = {"status": "ok"}
         url = "http://example.com"
-        
+
         result = await data_source.fetch_programme(url, correlation_id="test-id")
 
         assert result == {"status": "ok"}
@@ -43,7 +47,7 @@ async def test_fetch_race_details_routes_to_boturfers(race_url, expected_scraper
     """
     with patch(expected_scraper_path, new_callable=AsyncMock) as mock_fetch:
         mock_fetch.return_value = {"source": "boturfers"}
-        
+
         result = await data_source.fetch_race_details(race_url, correlation_id="test-id")
 
         assert result == {"source": "boturfers"}
@@ -70,7 +74,7 @@ async def test_fetch_race_details_routes_to_zeturf(race_url, expected_scraper_pa
     """
     with patch(expected_scraper_path, new_callable=AsyncMock) as mock_fetch:
         mock_fetch.return_value = {"source": "zeturf"}
-        
+
         result = await data_source.fetch_race_details(race_url, phase="H5", date="2025-12-25")
 
         assert result == {"source": "zeturf"}

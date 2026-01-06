@@ -37,11 +37,7 @@ from hippique_orchestrator import config
 from pathlib import Path
 
 
-
-
-
 def test_validate_inputs_happy_path():
-
     """Test that validate_inputs passes with valid data."""
 
     cfg = {"ALLOW_JE_NA": False}
@@ -55,11 +51,7 @@ def test_validate_inputs_happy_path():
     assert validate_inputs(cfg, partants, odds, stats_je) is True
 
 
-
-
-
 def test_validate_inputs_not_enough_partants():
-
     """Test that validate_inputs fails when there are not enough partants."""
 
     cfg = {}
@@ -71,15 +63,10 @@ def test_validate_inputs_not_enough_partants():
     stats_je = {"coverage": 90}
 
     with pytest.raises(ValidationError, match="Nombre de partants insuffisant"):
-
         validate_inputs(cfg, partants, odds, stats_je)
 
 
-
-
-
 def test_validate_inputs_missing_odds():
-
     """Test that validate_inputs fails with missing odds."""
 
     cfg = {}
@@ -91,15 +78,10 @@ def test_validate_inputs_missing_odds():
     stats_je = {"coverage": 90}
 
     with pytest.raises(ValidationError, match="Cotes manquantes"):
-
         validate_inputs(cfg, partants, odds, stats_je)
 
 
-
-
-
 def test_validate_inputs_none_in_odds():
-
     """Test that validate_inputs fails with a None value in odds."""
 
     cfg = {}
@@ -113,15 +95,10 @@ def test_validate_inputs_none_in_odds():
     stats_je = {"coverage": 90}
 
     with pytest.raises(ValidationError, match="Cote manquante pour 5"):
-
         validate_inputs(cfg, partants, odds, stats_je)
 
 
-
-
-
 def test_validate_inputs_je_coverage_insufficient():
-
     """Test that validate_inputs fails with insufficient J/E coverage."""
 
     cfg = {"ALLOW_JE_NA": False}
@@ -133,15 +110,10 @@ def test_validate_inputs_je_coverage_insufficient():
     stats_je = {"coverage": 79.9}
 
     with pytest.raises(ValidationError, match="Couverture J/E insuffisante"):
-
         validate_inputs(cfg, partants, odds, stats_je)
 
 
-
-
-
 def test_validate_inputs_je_coverage_missing_but_allowed():
-
     """Test that validate_inputs passes if J/E coverage is missing but allowed."""
 
     cfg = {"ALLOW_JE_NA": True}
@@ -155,11 +127,7 @@ def test_validate_inputs_je_coverage_missing_but_allowed():
     assert validate_inputs(cfg, partants, odds, stats_je) is True
 
 
-
-
-
 def test_validate_inconsistent_partants():
-
     """Test validate fails with inconsistent partants."""
 
     h30 = {"runners": [{"id": 1}, {"id": 2}]}
@@ -167,15 +135,10 @@ def test_validate_inconsistent_partants():
     h5 = {"runners": [{"id": 1}, {"id": 3}]}
 
     with pytest.raises(ValueError, match="Partants incohérents"):
-
         validate(h30, h5, allow_je_na=True)
 
 
-
-
-
 def test_validate_no_partants():
-
     """Test validate fails with no partants."""
 
     h30 = {"runners": []}
@@ -183,15 +146,10 @@ def test_validate_no_partants():
     h5 = {"runners": []}
 
     with pytest.raises(ValueError, match="Aucun partant"):
-
         validate(h30, h5, allow_je_na=True)
 
 
-
-
-
 def test_validate_missing_odds_h30():
-
     """Test validate fails with missing odds in H-30."""
 
     h30 = {"runners": [{"id": 1, "name": "horse-1"}]}
@@ -199,15 +157,10 @@ def test_validate_missing_odds_h30():
     h5 = {"runners": [{"id": 1, "name": "horse-1", "odds": "2.5"}]}
 
     with pytest.raises(ValueError, match="Cotes manquantes H-30 pour horse-1"):
-
         validate(h30, h5, allow_je_na=True)
 
 
-
-
-
 def test_validate_non_numeric_odds_h5():
-
     """Test validate fails with non-numeric odds in H-5."""
 
     h30 = {"runners": [{"id": 1, "name": "horse-1", "odds": "2.5"}]}
@@ -215,15 +168,10 @@ def test_validate_non_numeric_odds_h5():
     h5 = {"runners": [{"id": 1, "name": "horse-1", "odds": "invalid"}]}
 
     with pytest.raises(ValueError, match="Cote non numérique H-5 pour horse-1: invalid"):
-
         validate(h30, h5, allow_je_na=True)
 
 
-
-
-
 def test_validate_invalid_odds_h30():
-
     """Test validate fails with odds <= 1.01."""
 
     h30 = {"runners": [{"id": 1, "name": "horse-1", "odds": "1.01"}]}
@@ -231,15 +179,10 @@ def test_validate_invalid_odds_h30():
     h5 = {"runners": [{"id": 1, "name": "horse-1", "odds": "2.5"}]}
 
     with pytest.raises(ValueError, match="Cote invalide H-30 pour horse-1: 1.01"):
-
         validate(h30, h5, allow_je_na=True)
 
 
-
-
-
 def test_validate_missing_je_stats_when_required():
-
     """Test validate fails with missing J/E stats when required."""
 
     h30 = {"runners": [{"id": 1, "name": "horse-1", "odds": "2.5"}]}
@@ -247,47 +190,29 @@ def test_validate_missing_je_stats_when_required():
     h5 = {"runners": [{"id": 1, "name": "horse-1", "odds": "2.5"}]}
 
     with pytest.raises(ValueError, match="Stats J/E manquantes: horse-1"):
-
         validate(h30, h5, allow_je_na=False)
 
 
-
-
-
 def test_validate_happy_path():
-
     """Test that validate passes with correct data."""
 
     h30 = {"runners": [{"id": 1, "name": "horse-1", "odds": "2.5"}]}
 
     h5 = {
-
         "runners": [
-
             {
-
                 "id": 1,
-
                 "name": "horse-1",
-
                 "odds": "2.5",
-
                 "je_stats": {"j_win": 0.1, "e_win": 0.2},
-
             }
-
         ]
-
     }
 
     assert validate(h30, h5, allow_je_na=False) is True
 
 
-
-
-
 def test_validate_je_stats_not_required():
-
     """Test that validate passes when J/E stats are not required."""
 
     h30 = {"runners": [{"id": 1, "name": "horse-1", "odds": "2.5"}]}
@@ -297,255 +222,138 @@ def test_validate_je_stats_not_required():
     assert validate(h30, h5, allow_je_na=True) is True
 
 
-
-
-
 def test_validate_ev_sp_below_threshold():
-
     """Test validate_ev fails if ev_sp is below threshold."""
 
     with pytest.raises(ValidationError, match="EV SP below threshold"):
-
         validate_ev(ev_sp=config.EV_MIN_SP - 0.1, ev_global=config.EV_MIN_GLOBAL)
 
 
-
-
-
 def test_validate_ev_global_below_threshold():
-
     """Test validate_ev fails if ev_global is below threshold and need_combo is True."""
 
     with pytest.raises(ValidationError, match="EV global below threshold"):
-
         validate_ev(
-
             ev_sp=config.EV_MIN_SP,
-
             ev_global=config.EV_MIN_GLOBAL - 0.1,
-
             need_combo=True,
-
         )
-
-
-
 
 
 def test_validate_ev_global_none_and_combo_needed():
-
     """Test validate_ev fails if ev_global is None and need_combo is True."""
 
     with pytest.raises(ValidationError, match="EV global below threshold"):
-
         validate_ev(ev_sp=config.EV_MIN_SP, ev_global=None, need_combo=True)
 
 
-
-
-
 def test_validate_ev_happy_path_with_combo():
-
     """Test validate_ev passes with valid combo EVs."""
 
     assert (
-
-        validate_ev(
-
-            ev_sp=config.EV_MIN_SP, ev_global=config.EV_MIN_GLOBAL, need_combo=True
-
-        )
-
-        is True
-
+        validate_ev(ev_sp=config.EV_MIN_SP, ev_global=config.EV_MIN_GLOBAL, need_combo=True) is True
     )
-
-
-
 
 
 def test_validate_ev_happy_path_no_combo():
-
     """Test validate_ev passes with no combo needed."""
 
     assert (
-
-        validate_ev(
-
-            ev_sp=config.EV_MIN_SP, ev_global=config.EV_MIN_GLOBAL - 0.1, need_combo=False
-
-        )
-
+        validate_ev(ev_sp=config.EV_MIN_SP, ev_global=config.EV_MIN_GLOBAL - 0.1, need_combo=False)
         is True
-
     )
 
 
-
-
-
 def test_validate_ev_missing_p_success():
-
     """Test validate_ev returns invalid_input if p_success is missing."""
 
     result = validate_ev(
-
         ev_sp=config.EV_MIN_SP,
-
         ev_global=config.EV_MIN_GLOBAL,
-
         payout_expected=10,
-
     )
 
     assert result == {"status": "invalid_input", "reason": "missing p_success"}
 
 
-
-
-
 def test_validate_ev_missing_payout_expected():
-
     """Test validate_ev returns invalid_input if payout_expected is missing."""
 
     result = validate_ev(
-
         ev_sp=config.EV_MIN_SP,
-
         ev_global=config.EV_MIN_GLOBAL,
-
         p_success=0.5,
-
     )
 
     assert result == {"status": "invalid_input", "reason": "missing payout_expected"}
 
 
-
-
-
 def test_validate_policy_ev_below_threshold():
-
     """Test validate_policy fails if ev_global is below threshold."""
 
     with pytest.raises(ValidationError, match="EV global below threshold"):
-
         validate_policy(ev_global=0.1, roi_global=0.2, min_ev=0.15, min_roi=0.1)
 
 
-
-
-
 def test_validate_policy_roi_below_threshold():
-
     """Test validate_policy fails if roi_global is below threshold."""
 
     with pytest.raises(ValidationError, match="ROI global below threshold"):
-
         validate_policy(ev_global=0.2, roi_global=0.1, min_ev=0.15, min_roi=0.15)
 
 
-
-
-
 def test_validate_policy_happy_path():
-
     """Test validate_policy passes with valid inputs."""
 
     assert validate_policy(ev_global=0.2, roi_global=0.2, min_ev=0.15, min_roi=0.15) is True
 
 
-
-
-
 def test_validate_budget_total_exceeded():
-
     """Test validate_budget fails if total stake exceeds budget cap."""
 
     with pytest.raises(ValidationError, match="Budget cap exceeded"):
-
         validate_budget(stakes={"h1": 5, "h2": 6}, budget_cap=10, max_vol_per_horse=0.5)
 
 
-
-
-
 def test_validate_budget_per_horse_exceeded():
-
     """Test validate_budget fails if per-horse stake exceeds cap."""
 
     with pytest.raises(ValidationError, match="Stake cap exceeded for h2"):
-
         validate_budget(stakes={"h1": 5, "h2": 6}, budget_cap=20, max_vol_per_horse=0.25)
 
 
-
-
-
 def test_validate_budget_happy_path():
-
     """Test validate_budget passes with valid stakes."""
 
-    assert (
-
-        validate_budget(stakes={"h1": 5, "h2": 5}, budget_cap=20, max_vol_per_horse=0.3)
-
-        is True
-
-    )
-
-
-
+    assert validate_budget(stakes={"h1": 5, "h2": 5}, budget_cap=20, max_vol_per_horse=0.3) is True
 
 
 def test_validate_combos_payout_below_threshold():
-
     """Test validate_combos fails if expected payout is below threshold."""
 
-    with pytest.raises(
-
-        ValidationError, match="expected payout for combined bets below threshold"
-
-    ):
-
+    with pytest.raises(ValidationError, match="expected payout for combined bets below threshold"):
         validate_combos(expected_payout=10, min_payout=12)
 
 
-
-
-
 def test_validate_combos_happy_path():
-
     """Test validate_combos passes with valid payout."""
 
     assert validate_combos(expected_payout=15, min_payout=12) is True
 
 
-
-
-
 def test_combos_allowed_ev_below_threshold():
-
     """Test combos_allowed returns False if EV is below threshold."""
 
     assert combos_allowed(ev_basket=0.3, expected_payout=15, min_ev=0.4) is False
 
 
-
-
-
 def test_combos_allowed_payout_below_threshold():
-
     """Test combos_allowed returns False if payout is below threshold."""
 
     assert combos_allowed(ev_basket=0.5, expected_payout=10, min_payout=12) is False
 
 
-
-
-
 def test_combos_allowed_invalid_inputs():
-
     """Test combos_allowed handles non-numeric inputs."""
 
     assert combos_allowed(ev_basket="invalid", expected_payout=15) is False
@@ -553,17 +361,10 @@ def test_combos_allowed_invalid_inputs():
     assert combos_allowed(ev_basket=0.5, expected_payout="invalid") is False
 
 
-
-
-
 def test_combos_allowed_happy_path():
-
     """Test combos_allowed returns True with valid inputs."""
 
     assert combos_allowed(ev_basket=0.5, expected_payout=15, min_ev=0.4, min_payout=12) is True
-
-
-
 
 
 @pytest.fixture
@@ -584,7 +385,9 @@ def fake_fs_cli(fs):
 
 def test_cli_happy_path(fake_fs_cli, capsys):
     """Test the CLI happy path."""
-    with patch("hippique_orchestrator.validator_ev._load_cfg", return_value={"ev": {"min_roi_sp": 0.1}}):
+    with patch(
+        "hippique_orchestrator.validator_ev._load_cfg", return_value={"ev": {"min_roi_sp": 0.1}}
+    ):
         return_code = validator_main(["--reunion", "R1", "--course", "C1"])
         captured = capsys.readouterr()
         result = json.loads(captured.out)
@@ -607,7 +410,9 @@ def test_cli_validation_error(fake_fs_cli, capsys):
     """Test the CLI when a validation error occurs."""
     fake_fs_cli.remove_object("data/R1C1/partants.json")
     fake_fs_cli.create_file("data/R1C1/partants.json", contents=json.dumps([{"id": 1}]))
-    with patch("hippique_orchestrator.validator_ev._load_cfg", return_value={"ev": {"min_roi_sp": 0.1}}):
+    with patch(
+        "hippique_orchestrator.validator_ev._load_cfg", return_value={"ev": {"min_roi_sp": 0.1}}
+    ):
         return_code = validator_main(["--reunion", "R1", "--course", "C1"])
         captured = capsys.readouterr()
         result = json.loads(captured.out)
@@ -618,7 +423,9 @@ def test_cli_validation_error(fake_fs_cli, capsys):
 
 def test_cli_readme_roi_mismatch(fake_fs_cli, capsys):
     """Test the CLI when README ROI SP is below target."""
-    with patch("hippique_orchestrator.validator_ev._load_cfg", return_value={"ev": {"min_roi_sp": 0.2}}):
+    with patch(
+        "hippique_orchestrator.validator_ev._load_cfg", return_value={"ev": {"min_roi_sp": 0.2}}
+    ):
         return_code = validator_main(["--reunion", "R1", "--course", "C1"])
         captured = capsys.readouterr()
         result = json.loads(captured.out)
@@ -630,10 +437,10 @@ def test_cli_readme_roi_mismatch(fake_fs_cli, capsys):
 def test_cli_allow_je_na_flag(fake_fs_cli, capsys):
     """Test that the --allow-je-na flag works correctly."""
     fake_fs_cli.remove("data/R1C1/stats_je.json")
-    with patch("hippique_orchestrator.validator_ev._load_cfg", return_value={"ev": {"min_roi_sp": 0.1}}):
-        return_code = validator_main(
-            ["--reunion", "R1", "--course", "C1", "--allow-je-na"]
-        )
+    with patch(
+        "hippique_orchestrator.validator_ev._load_cfg", return_value={"ev": {"min_roi_sp": 0.1}}
+    ):
+        return_code = validator_main(["--reunion", "R1", "--course", "C1", "--allow-je-na"])
         captured = capsys.readouterr()
         result = json.loads(captured.out)
         assert return_code == 0
@@ -644,6 +451,7 @@ def test_cli_allow_je_na_flag(fake_fs_cli, capsys):
 
 # Removed test_load_cfg_no_yaml_raises_runtime_error as it's hard to mock correctly without modifying the source file.
 
+
 def test_load_cfg_no_config_file(fs):
     """Test _load_cfg returns empty dict if config file does not exist."""
     assert _load_cfg() == {}
@@ -651,7 +459,7 @@ def test_load_cfg_no_config_file(fs):
 
 def test_load_cfg_invalid_yaml_returns_empty_dict(fs):
     """Test _load_cfg returns empty dict if yaml content is invalid."""
-    fs.create_file("config/gpi.yml", contents="invalid: [-\n  value") # Truly invalid YAML
+    fs.create_file("config/gpi.yml", contents="invalid: [-\n  value")  # Truly invalid YAML
     assert _load_cfg() == {}
 
 
@@ -785,7 +593,10 @@ def test_load_odds_from_dict_with_invalid_values(fs):
 
 def test_load_odds_from_list_with_invalid_values(fs):
     """Test _load_odds handles list with non-numeric odds values."""
-    fs.create_file("odds_invalid_list.json", contents=json.dumps([{"id": 1, "odds": "abc"}, {"id": 2, "odds": 2.5}]))
+    fs.create_file(
+        "odds_invalid_list.json",
+        contents=json.dumps([{"id": 1, "odds": "abc"}, {"id": 2, "odds": 2.5}]),
+    )
     result = _load_odds(Path("odds_invalid_list.json"))
     assert result == {"2": 2.5}
 

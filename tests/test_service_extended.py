@@ -4,6 +4,7 @@ from hippique_orchestrator.service import app
 
 client = TestClient(app)
 
+
 def test_get_pronostics_data_invalid_date():
     """
     Tests that the /api/pronostics endpoint returns a 422 error
@@ -12,6 +13,7 @@ def test_get_pronostics_data_invalid_date():
     response = client.get("/api/pronostics?date=invalid-date")
     assert response.status_code == 422
     assert "Invalid date format" in response.json()["detail"]
+
 
 def test_get_pronostics_data_plan_only(mocker):
     """

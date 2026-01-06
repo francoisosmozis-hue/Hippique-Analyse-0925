@@ -39,11 +39,13 @@ class PMUClient:
 
     def __init__(self):
         self.session = requests.Session()
-        self.session.headers.update({
-            'User-Agent': config.USER_AGENT,
-            'Accept': 'application/json',
-            'Accept-Language': 'fr-FR,fr;q=0.9'
-        })
+        self.session.headers.update(
+            {
+                'User-Agent': config.USER_AGENT,
+                'Accept': 'application/json',
+                'Accept-Language': 'fr-FR,fr;q=0.9',
+            }
+        )
 
     def get_program(self, date_str: str, use_online: bool = False) -> dict:
         """
@@ -75,7 +77,9 @@ class PMUClient:
             resp.raise_for_status()
 
             data = resp.json()
-            logger.info(f"PMU program fetched: {len(data.get('programme', {}).get('reunions', []))} réunions")
+            logger.info(
+                f"PMU program fetched: {len(data.get('programme', {}).get('reunions', []))} réunions"
+            )
 
             return data
 
@@ -136,12 +140,7 @@ class PMUClient:
             logger.error(f"Error fetching course R{reunion_num}C{course_num}: {e}")
             return {}
 
-    def get_participants(
-        self,
-        date_str: str,
-        reunion_num: int,
-        course_num: int
-    ) -> list[dict]:
+    def get_participants(self, date_str: str, reunion_num: int, course_num: int) -> list[dict]:
         """
         Récupère les partants avec cotes live
 
@@ -179,12 +178,7 @@ class PMUClient:
             logger.error(f"Error fetching participants: {e}")
             return []
 
-    def get_results(
-        self,
-        date_str: str,
-        reunion_num: int,
-        course_num: int
-    ) -> dict:
+    def get_results(self, date_str: str, reunion_num: int, course_num: int) -> dict:
         """
         Récupère les résultats finaux
 
@@ -270,11 +264,11 @@ class PMUClient:
                 # Construire URLs ZEturf
                 course_url = (
                     f"https://www.zeturf.fr/fr/course/{date_str}/R{r_num}C{c_num}"
-                    if date_str else None
+                    if date_str
+                    else None
                 )
                 reunion_url = (
-                    f"https://www.zeturf.fr/fr/reunion/{date_str}/R{r_num}"
-                    if date_str else None
+                    f"https://www.zeturf.fr/fr/reunion/{date_str}/R{r_num}" if date_str else None
                 )
 
                 race = {
@@ -292,7 +286,7 @@ class PMUClient:
                     "montant": course.get("montantPrix"),
                     "partants": course.get("nombreDeclaresPartants"),
                     "specialite": course.get("specialite"),
-                    "corde": course.get("corde")
+                    "corde": course.get("corde"),
                 }
 
                 plan.append(race)
@@ -344,10 +338,11 @@ if __name__ == "__main__":
 
         # Afficher échantillon
         for i, race in enumerate(plan[:5], 1):
-            print(f"{i}. {race['r_label']}{race['c_label']} - "
-                  f"{race['meeting']} - {race['time_local']}")
-            print(f"   {race['discipline']} - {race['distance']}m - "
-                  f"{race['partants']} partants")
+            print(
+                f"{i}. {race['r_label']}{race['c_label']} - "
+                f"{race['meeting']} - {race['time_local']}"
+            )
+            print(f"   {race['discipline']} - {race['distance']}m - {race['partants']} partants")
             print(f"   Prize: {race['montant']}€")
             print()
 
@@ -382,6 +377,7 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"❌ Erreur: {e}")
         import traceback
+
         traceback.print_exc()
 
     print()

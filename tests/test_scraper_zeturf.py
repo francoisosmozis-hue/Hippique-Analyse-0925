@@ -1,10 +1,11 @@
 from unittest.mock import MagicMock, patch
 from pathlib import Path
 import pytest
-import asyncio # New import
+import asyncio  # New import
 
 from hippique_orchestrator.scripts import online_fetch_zeturf
-from hippique_orchestrator.scrapers import zeturf as zeturf_scraper # New import with alias
+from hippique_orchestrator.scrapers import zeturf as zeturf_scraper  # New import with alias
+
 
 @pytest.fixture
 def zeturf_html_content() -> str:
@@ -14,6 +15,7 @@ def zeturf_html_content() -> str:
     if not fixture_path.exists():
         pytest.fail(f"Fixture file not found: {fixture_path}")
     return fixture_path.read_text(encoding='utf-8')
+
 
 @pytest.fixture
 def zeturf_page_content() -> str:
@@ -60,13 +62,9 @@ def test_fetch_race_snapshot_full_success(mocker):
         return_value=expected_parsed_data,
     )
 
-
     # 2. Call the function
     result = online_fetch_zeturf.fetch_race_snapshot_full(
-        reunion="R1",
-        course="C1",
-        phase="H-30",
-        date="2025-11-20"
+        reunion="R1", course="C1", phase="H-30", date="2025-11-20"
     )
 
     # 3. Assertions
@@ -77,12 +75,12 @@ def test_fetch_race_snapshot_full_success(mocker):
     assert result.get("phase") == "H30"
     assert result.get("hippodrome") == "SAINT GALMIER"
     assert result.get("discipline") == "attelé"
-    
+
     # The fallback parser finds 12 runners in the race page fixture
     assert result.get("partants_count") == 12
     assert "runners" in result
     assert len(result["runners"]) == 12
-    
+
     # Check that a canonical URL was built
     assert "source_url" in result
     assert "2025-11-20/R1C1-vincennes" in result["source_url"]
@@ -95,19 +93,22 @@ def test_fetch_race_snapshot_full_success(mocker):
         ("H30", "H30"),
         ("h05", "H5"),
         ("H5", "H5"),
-        ("UNKNOWN", "H30"), # Default behavior
-        ("", "H30"), # Default behavior
-        (None, "H30"), # Default behavior
-    ]
+        ("UNKNOWN", "H30"),  # Default behavior
+        ("", "H30"),  # Default behavior
+        (None, "H30"),  # Default behavior
+    ],
 )
 def test_phase_norm(input_phase, expected_norm):
     assert zeturf_scraper._phase_norm(input_phase) == expected_norm
+
 
 @pytest.mark.asyncio
 @patch("hippique_orchestrator.scrapers.zeturf.fetch_race_snapshot_full")
 async def test_fetch_zeturf_race_details_success(mock_fetch_race_snapshot_full):
     # Arrange
-    course_url = "https://www.zeturf.fr/fr/course/2025-11-20/R1C1-vincennes-prix-de-sille-le-guillaume"
+    course_url = (
+        "https://www.zeturf.fr/fr/course/2025-11-20/R1C1-vincennes-prix-de-sille-le-guillaume"
+    )
     mock_snapshot_data = {
         "reunion": "R1",
         "course": "C1",
@@ -134,11 +135,13 @@ async def test_fetch_zeturf_race_details_success(mock_fetch_race_snapshot_full):
     assert result["date"] == "2025-11-20"
     assert len(result["runners"]) == 2
 
+
 @pytest.mark.asyncio
 async def test_fetch_zeturf_race_details_value_error_no_rc():
     course_url = "https://www.zeturf.fr/fr/course/2025-11-20/no-rc-here"
     with pytest.raises(ValueError, match="impossible d'extraire R\\?C\\? depuis l'URL"):
         await zeturf_scraper.fetch_zeturf_race_details(course_url)
+
 
 @pytest.mark.asyncio
 @patch("hippique_orchestrator.scrapers.zeturf.fetch_race_snapshot_full")
@@ -147,17 +150,19 @@ async def test_fetch_zeturf_race_details_empty_snapshot(mock_fetch_race_snapshot
     course_url = "https://www.zeturf.fr/fr/course/2025-11-20/R1C1-vincennes"
     result = await zeturf_scraper.fetch_zeturf_race_details(course_url)
     assert result["runners"] == []
-    assert result["phase"] == "H30" # Default
+    assert result["phase"] == "H30"  # Default
     assert result["source"] == "zeturf"
+
 
 @pytest.mark.asyncio
 @patch("hippique_orchestrator.scrapers.zeturf.fetch_race_snapshot_full")
 async def test_fetch_zeturf_race_details_missing_runners(mock_fetch_race_snapshot_full):
-    mock_fetch_race_snapshot_full.return_value = {"reunion": "R1"} # Missing runners
+    mock_fetch_race_snapshot_full.return_value = {"reunion": "R1"}  # Missing runners
     course_url = "https://www.zeturf.fr/fr/course/2025-11-20/R1C1-vincennes"
     result = await zeturf_scraper.fetch_zeturf_race_details(course_url)
-    assert result["runners"] == [] # Should be initialized to empty list
+    assert result["runners"] == []  # Should be initialized to empty list
     assert result["reunion"] == "R1"
+
 
 @pytest.mark.asyncio
 @patch("hippique_orchestrator.scrapers.zeturf.fetch_race_snapshot_full")
@@ -166,8 +171,9 @@ async def test_fetch_zeturf_race_details_non_dict_snapshot(mock_fetch_race_snaps
     course_url = "https://www.zeturf.fr/fr/course/2025-11-20/R1C1-vincennes"
     result = await zeturf_scraper.fetch_zeturf_race_details(course_url)
     assert result["runners"] == []
-    assert result["source"] == "zeturf" # Check defaults are still applied
-    assert result.get("reunion") is None # Original non-dict had no reunion key
+    assert result["source"] == "zeturf"  # Check defaults are still applied
+    assert result.get("reunion") is None  # Original non-dict had no reunion key
+
 
 @pytest.mark.asyncio
 @patch("hippique_orchestrator.scrapers.zeturf.fetch_race_snapshot_full")
@@ -180,6 +186,7 @@ async def test_fetch_zeturf_race_details_h5_phase_input(mock_fetch_race_snapshot
         "R1C1", None, "H5", course_url=course_url, date=None
     )
     assert result["phase"] == "H5"
+
 
 @pytest.mark.asyncio
 @patch("hippique_orchestrator.scrapers.zeturf.fetch_race_snapshot_full")

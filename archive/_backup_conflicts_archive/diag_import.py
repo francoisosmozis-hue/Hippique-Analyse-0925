@@ -1,4 +1,3 @@
-
 import sys
 import traceback
 from pathlib import Path
@@ -10,7 +9,6 @@ try:
 
     print(f"PYTHONPATH (début): {sys.path[:3]}")
     print("Tentative d'importation de 'src.service'...")
-
 
     print("--- Importation de 'src.service' réussie ! ---")
 

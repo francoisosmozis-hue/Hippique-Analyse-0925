@@ -1,4 +1,3 @@
-
 import json
 import sys
 import uuid
@@ -9,7 +8,7 @@ from hippique_orchestrator.runner import run_course
 def analyze_race():
     course_url = "https://www.zeturf.fr/fr/course/2025-11-28/R3C4-pau-prix-de-mont-de-marsan"
     race_date = "2025-11-28"
-    phase = "H-5" # Assuming full analysis
+    phase = "H-5"  # Assuming full analysis
     correlation_id = str(uuid.uuid4())
 
     print(f"Starting analysis for {course_url} (Phase: {phase})")
@@ -43,7 +42,9 @@ def analyze_race():
         print("\n--- SCRIPT ERROR ---")
         print(f"An error occurred while running the analysis script: {e}")
         import traceback
+
         traceback.print_exc()
+
 
 if __name__ == "__main__":
     # Add src to path to find the modules

@@ -71,7 +71,9 @@ def _normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
             df[col] = df[col].astype(str).replace('nan', pd.NA)
     # num as nullable integer where possible
     if 'num' in df.columns:
-        df['num'] = pd.to_numeric(df['num'], errors='coerce', downcast='integer').astype(pd.Int64Dtype())
+        df['num'] = pd.to_numeric(df['num'], errors='coerce', downcast='integer').astype(
+            pd.Int64Dtype()
+        )
     # rates numeric
     for col in ['j_rate', 'e_rate']:
         if col in df.columns:
@@ -201,7 +203,9 @@ def main():
 
         print(f"[OK] Écrits :\n - {outbase}\n - {out_j}\n - {out_e}")
     elif paths:
-        print(f"Aucune donnée pertinente trouvée pour le mois {args.month} parmi les fichiers trouvés.")
+        print(
+            f"Aucune donnée pertinente trouvée pour le mois {args.month} parmi les fichiers trouvés."
+        )
 
 
 if __name__ == '__main__':

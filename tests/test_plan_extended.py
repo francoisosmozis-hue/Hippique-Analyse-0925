@@ -1,8 +1,8 @@
-
 import pytest
 from unittest.mock import AsyncMock, patch
 
 from hippique_orchestrator import plan
+
 
 @pytest.mark.asyncio
 @patch("hippique_orchestrator.data_source.fetch_programme", new_callable=AsyncMock)
@@ -13,10 +13,30 @@ async def test_build_plan_handles_various_invalid_rc_formats(mock_fetch_programm
     # Arrange
     mock_programme_data = {
         "races": [
-            {"rc": "R C", "name": "Invalid RC 1", "start_time": "10:00", "url": "http://example.com/r1c1"},
-            {"rc": "R1C", "name": "Invalid RC 2", "start_time": "11:00", "url": "http://example.com/r1c2"},
-            {"rc": "RC1", "name": "Invalid RC 3", "start_time": "12:00", "url": "http://example.com/r1c3"},
-            {"rc": "R1 C1", "name": "Valid RC", "start_time": "13:00", "url": "http://example.com/r1c4"},
+            {
+                "rc": "R C",
+                "name": "Invalid RC 1",
+                "start_time": "10:00",
+                "url": "http://example.com/r1c1",
+            },
+            {
+                "rc": "R1C",
+                "name": "Invalid RC 2",
+                "start_time": "11:00",
+                "url": "http://example.com/r1c2",
+            },
+            {
+                "rc": "RC1",
+                "name": "Invalid RC 3",
+                "start_time": "12:00",
+                "url": "http://example.com/r1c3",
+            },
+            {
+                "rc": "R1 C1",
+                "name": "Valid RC",
+                "start_time": "13:00",
+                "url": "http://example.com/r1c4",
+            },
         ]
     }
     mock_fetch_programme.return_value = mock_programme_data
@@ -30,6 +50,7 @@ async def test_build_plan_handles_various_invalid_rc_formats(mock_fetch_programm
     assert "Could not parse R/C from 'R C'" in caplog.text
     assert "Could not parse R/C from 'R1C'" in caplog.text
     assert "Could not parse R/C from 'RC1'" in caplog.text
+
 
 @pytest.mark.asyncio
 @patch("hippique_orchestrator.data_source.fetch_programme", new_callable=AsyncMock)
@@ -45,7 +66,7 @@ async def test_build_plan_data_types(mock_fetch_programme):
                 "name": "Test Race",
                 "start_time": "10:00",
                 "url": "http://example.com/r1c1",
-                "runners_count": "10", # runners_count is a string
+                "runners_count": "10",  # runners_count is a string
             }
         ]
     }
@@ -64,6 +85,7 @@ async def test_build_plan_data_types(mock_fetch_programme):
     assert isinstance(race["course_url"], str)
     assert isinstance(race["partants"], int)
     assert race["partants"] == 10
+
 
 @pytest.mark.asyncio
 @patch("hippique_orchestrator.data_source.fetch_programme", new_callable=AsyncMock)
@@ -91,6 +113,7 @@ async def test_build_plan_invalid_runners_count(mock_fetch_programme):
     # Assert
     assert len(result_plan) == 1
     assert result_plan[0]["partants"] is None
+
 
 @pytest.mark.asyncio
 @patch("hippique_orchestrator.data_source.fetch_programme", new_callable=AsyncMock)

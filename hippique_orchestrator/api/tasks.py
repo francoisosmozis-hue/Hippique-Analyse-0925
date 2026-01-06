@@ -8,14 +8,14 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request,
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from hippique_orchestrator import config, firestore_client # Added firestore_client import
+from hippique_orchestrator import config, firestore_client  # Added firestore_client import
 from hippique_orchestrator.auth import verify_oidc_token
 from hippique_orchestrator.logging_utils import get_logger
 from hippique_orchestrator.plan import build_plan_async
 from hippique_orchestrator.runner import run_course
 from hippique_orchestrator.scheduler import enqueue_run_task
 from hippique_orchestrator.schemas import BootstrapDayRequest, RunPhaseRequest, Snapshot9HRequest
-from hippique_orchestrator.snapshot_manager import write_snapshot_for_day_async # Added this import
+from hippique_orchestrator.snapshot_manager import write_snapshot_for_day_async  # Added this import
 from hippique_orchestrator.snapshot_manager import write_snapshot_for_day
 
 
@@ -49,11 +49,13 @@ async def run_phase_task(
             "date": body.date,
         },
     )
-    doc_id = firestore_client.get_doc_id_from_url(body.course_url, body.date) # Added doc_id extraction here
+    doc_id = firestore_client.get_doc_id_from_url(
+        body.course_url, body.date
+    )  # Added doc_id extraction here
 
     try:
         # Re-using the existing run_course function from the project's core logic
-        analysis_result = await run_course( # Renamed result to analysis_result for clarity
+        analysis_result = await run_course(  # Renamed result to analysis_result for clarity
             course_url=body.course_url,
             phase=body.phase,
             date=body.date,
@@ -62,7 +64,6 @@ async def run_phase_task(
         # Ensure analysis_result is a mutable dictionary to add correlation_id
         final_result = dict(analysis_result)
         final_result["correlation_id"] = correlation_id
-
 
         if not final_result.get("ok"):
             logger.error(
@@ -74,7 +75,7 @@ async def run_phase_task(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 content=final_result,
             )
-        
+
         # Save analysis result to Firestore only if successful
         firestore_client.update_race_document(doc_id, final_result)
 
@@ -110,7 +111,12 @@ async def snapshot_9h_task(
 
     logger.info(
         f"Received snapshot-9h request for {target_date_str} with URLs: {body.meeting_urls}, RC Labels: {body.rc_labels}",
-        extra={"correlation_id": correlation_id, "date": target_date_str, "meeting_urls": body.meeting_urls, "rc_labels": body.rc_labels},
+        extra={
+            "correlation_id": correlation_id,
+            "date": target_date_str,
+            "meeting_urls": body.meeting_urls,
+            "rc_labels": body.rc_labels,
+        },
     )
 
     try:
@@ -120,7 +126,7 @@ async def snapshot_9h_task(
             phase="H9",  # Explicitly passing the phase
             race_urls=body.meeting_urls,
             rc_labels=body.rc_labels,
-            correlation_id=correlation_id
+            correlation_id=correlation_id,
         )
 
         logger.info(
@@ -146,7 +152,9 @@ async def snapshot_9h_task(
 
 
 @router.post("/bootstrap-day", status_code=status.HTTP_200_OK)
-async def bootstrap_day_task(request: Request, body: BootstrapDayRequest,
+async def bootstrap_day_task(
+    request: Request,
+    body: BootstrapDayRequest,
     token_claims: dict = OIDC_TOKEN_DEPENDENCY,
 ):
     """

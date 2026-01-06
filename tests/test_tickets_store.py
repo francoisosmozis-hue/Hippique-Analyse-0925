@@ -8,6 +8,7 @@ import pytest
 
 from hippique_orchestrator import tickets_store
 
+
 # Mock the GCS client and related objects
 @pytest.fixture
 def mock_gcs_client():
@@ -34,7 +35,7 @@ def test_client_returns_storage_client(mock_gcs_client):
     mock_client_cls, _, _, _ = mock_gcs_client
     client = tickets_store._client()
     mock_client_cls.assert_called_once_with()
-    assert isinstance(client, MagicMock) # Ensure it's the mocked client
+    assert isinstance(client, MagicMock)  # Ensure it's the mocked client
 
 
 def test_blob_path_constructs_correct_path():
@@ -54,14 +55,16 @@ def test_render_ticket_html_full_payload():
         "ev": 1.2,
         "roi": 0.15,
         "tickets": [{"runner": "Horse A", "odds": 5.0}],
-        "some_other_data": "value"
+        "some_other_data": "value",
     }
     reunion = "R1"
     course = "C1"
     phase = "h5"
     budget = 100.0
 
-    html = tickets_store.render_ticket_html(payload, reunion=reunion, course=course, phase=phase, budget=budget)
+    html = tickets_store.render_ticket_html(
+        payload, reunion=reunion, course=course, phase=phase, budget=budget
+    )
 
     assert "<h1>Ticket R1C1</h1>" in html
     assert "<div><b>Réunion:</b> R1</div>" in html
@@ -81,7 +84,9 @@ def test_render_ticket_html_minimal_payload():
     phase = "h30"
     budget = 50.0
 
-    html = tickets_store.render_ticket_html(payload, reunion=reunion, course=course, phase=phase, budget=budget)
+    html = tickets_store.render_ticket_html(
+        payload, reunion=reunion, course=course, phase=phase, budget=budget
+    )
 
     assert "<h1>Ticket R2C2</h1>" in html
     assert "<div><b>Réunion:</b> R2</div>" in html
@@ -96,7 +101,7 @@ def test_render_ticket_html_minimal_payload():
 def test_render_ticket_html_different_keys_for_ev_roi_tickets():
     payload = {
         "ev_global": 1.3,
-        "roi_estime": 0.20, # Will be rendered as 0.2
+        "roi_estime": 0.20,  # Will be rendered as 0.2
         "ticket": [{"runner": "Horse B", "odds": 3.0}],
     }
     reunion = "R3"
@@ -104,7 +109,9 @@ def test_render_ticket_html_different_keys_for_ev_roi_tickets():
     phase = "h1"
     budget = 75.0
 
-    html = tickets_store.render_ticket_html(payload, reunion=reunion, course=course, phase=phase, budget=budget)
+    html = tickets_store.render_ticket_html(
+        payload, reunion=reunion, course=course, phase=phase, budget=budget
+    )
 
     assert "<div><b>EV estimée:</b> 1.3</div>" in html
     # Adjusted assertion for float representation
@@ -121,10 +128,14 @@ def test_save_ticket_html_success(mock_gcs_client):
 
     tickets_store.save_ticket_html(html_content, date_str=date_str, rxcy=rxcy)
 
-    mock_bucket.blob.assert_called_once_with(f"{tickets_store.TICKETS_PREFIX}/{date_str}/{rxcy}.html")
+    mock_bucket.blob.assert_called_once_with(
+        f"{tickets_store.TICKETS_PREFIX}/{date_str}/{rxcy}.html"
+    )
     assert mock_blob.cache_control == "no-cache"
     assert mock_blob.content_type == "text/html; charset=utf-8"
-    mock_blob.upload_from_string.assert_called_once_with(html_content, content_type="text/html; charset=utf-8")
+    mock_blob.upload_from_string.assert_called_once_with(
+        html_content, content_type="text/html; charset=utf-8"
+    )
 
 
 def test_save_ticket_html_no_bucket_env_var_raises_error():
@@ -143,7 +154,9 @@ def test_build_and_save_ticket_success(mock_gcs_client):
     budget = 100.0
 
     # Mock render_ticket_html as well to isolate build_and_save_ticket logic
-    with patch("hippique_orchestrator.tickets_store.render_ticket_html", return_value="mocked html") as mock_render:
+    with patch(
+        "hippique_orchestrator.tickets_store.render_ticket_html", return_value="mocked html"
+    ) as mock_render:
         with patch("hippique_orchestrator.tickets_store.save_ticket_html") as mock_save:
             result = tickets_store.build_and_save_ticket(
                 payload, reunion=reunion, course=course, phase=phase, budget=budget
@@ -154,7 +167,9 @@ def test_build_and_save_ticket_success(mock_gcs_client):
                 date_str=datetime.datetime.now().strftime("%Y-%m-%d"),
                 rxcy=f"{reunion}{course}",
             )
-            assert result == f"{datetime.datetime.now().strftime('%Y-%m-%d')}/{reunion}{course}.html"
+            assert (
+                result == f"{datetime.datetime.now().strftime('%Y-%m-%d')}/{reunion}{course}.html"
+            )
 
 
 def test_list_ticket_objects_success(mock_gcs_client):
@@ -176,7 +191,9 @@ def test_list_ticket_objects_success(mock_gcs_client):
 
     items = tickets_store.list_ticket_objects()
 
-    mock_client.list_blobs.assert_called_once_with(mock_bucket, prefix=f"{tickets_store.TICKETS_PREFIX}/", max_results=200)
+    mock_client.list_blobs.assert_called_once_with(
+        mock_bucket, prefix=f"{tickets_store.TICKETS_PREFIX}/", max_results=200
+    )
     assert len(items) == 2
     assert items[0]["date"] == "2025-12-31"
     assert items[0]["key"] == "R1C2"
@@ -188,7 +205,7 @@ def test_list_ticket_objects_success(mock_gcs_client):
 
 def test_list_ticket_objects_empty_list(mock_gcs_client):
     _, mock_client, mock_bucket, _ = mock_gcs_client
-    mock_client.list_blobs.return_value = []
+    mock_client.list_blobs.return_value = iter([])  # Explicitly return an empty iterator
     items = tickets_store.list_ticket_objects()
     assert items == []
 
@@ -206,7 +223,10 @@ def test_rebuild_index_success(mock_gcs_client):
         {"date": "2025-12-30", "key": "R1C1", "size": 100},
     ]
 
-    with patch("hippique_orchestrator.tickets_store.list_ticket_objects", return_value=mock_list_ticket_objects_return_value) as mock_list_ticket_objects:
+    with patch(
+        "hippique_orchestrator.tickets_store.list_ticket_objects",
+        return_value=mock_list_ticket_objects_return_value,
+    ) as mock_list_ticket_objects:
         tickets_store.rebuild_index()
 
         mock_list_ticket_objects.assert_called_once()
@@ -216,7 +236,9 @@ def test_rebuild_index_success(mock_gcs_client):
         mock_blob.upload_from_string.assert_called_once()
         uploaded_content = mock_blob.upload_from_string.call_args[0][0]
         assert "<h1>Tickets disponibles</h1>" in uploaded_content
-        assert '<li><a href="/tickets/2025-12-30/R1C1.html">2025-12-30 – R1C1</a>' in uploaded_content
+        assert (
+            '<li><a href="/tickets/2025-12-30/R1C1.html">2025-12-30 – R1C1</a>' in uploaded_content
+        )
 
 
 def test_rebuild_index_no_bucket_env_var_raises_error():
@@ -233,7 +255,9 @@ def test_load_ticket_html_success(mock_gcs_client):
 
     html = tickets_store.load_ticket_html(date_str, rxcy)
 
-    mock_bucket.blob.assert_called_once_with(f"{tickets_store.TICKETS_PREFIX}/{date_str}/{rxcy}.html")
+    mock_bucket.blob.assert_called_once_with(
+        f"{tickets_store.TICKETS_PREFIX}/{date_str}/{rxcy}.html"
+    )
     mock_blob.download_as_text.assert_called_once_with(encoding="utf-8")
     assert html == "mocked ticket html"
 

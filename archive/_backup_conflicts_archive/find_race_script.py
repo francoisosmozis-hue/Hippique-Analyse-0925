@@ -1,4 +1,3 @@
-
 import asyncio
 import json
 import sys
@@ -8,7 +7,7 @@ from hippique_orchestrator.plan import build_plan_async
 
 async def find_race():
     # The date is now ignored by plan.py, but we pass it for compatibility
-    date_str = "2025-11-10" # The date from the boturfers file
+    date_str = "2025-11-10"  # The date from the boturfers file
     try:
         # The new plan.py builds the plan from a local html file
         plan = await build_plan_async(date_str)
@@ -20,9 +19,7 @@ async def find_race():
             c_label = race.get('c_label', '').upper()
             meeting_name = race.get('meeting', '').lower()
 
-            if (r_label == 'R3' and
-                c_label == 'C4' and
-                'vincennes' in meeting_name):
+            if r_label == 'R3' and c_label == 'C4' and 'vincennes' in meeting_name:
                 target_race = race
                 break
 
@@ -36,6 +33,7 @@ async def find_race():
     except Exception as e:
         print(f"An error occurred: {e}", file=sys.stderr)
         import traceback
+
         traceback.print_exc()
 
 

@@ -12,29 +12,31 @@ from hippique_orchestrator.scripts.concat_je_month import (
     summarize_month,
     main,
     STD_COLUMNS,
-    CANDIDATES
+    CANDIDATES,
 )
 
 
 @pytest.fixture
 def sample_dataframe():
     """Provides a sample DataFrame for testing column normalization."""
-    return pd.DataFrame({
-        'Date': ['2026-01-01', '2026-01-02'],
-        'reunion_num': [1, 2],
-        'Race': [1, 2],
-        'Track': ['Hippodrome A', 'Hippodrome B'],
-        'discipline': ['Plat', 'Obstacle'],
-        'Horse': ['Cheval 1', 'Cheval 2'],
-        'Numero': [1, 2],
-        'Jockey': ['Jockey 1', 'Jockey 2'],
-        'Trainer': ['Entraineur 1', 'Entraineur 2'],
-        'j_percent': [0.5, 0.6],
-        'e_percent': [0.4, 0.7],
-        'Source': ['Source A', 'Source B'],
-        'UID': ['ID1', 'ID2'],
-        'extra_col': [100, 200]
-    })
+    return pd.DataFrame(
+        {
+            'Date': ['2026-01-01', '2026-01-02'],
+            'reunion_num': [1, 2],
+            'Race': [1, 2],
+            'Track': ['Hippodrome A', 'Hippodrome B'],
+            'discipline': ['Plat', 'Obstacle'],
+            'Horse': ['Cheval 1', 'Cheval 2'],
+            'Numero': [1, 2],
+            'Jockey': ['Jockey 1', 'Jockey 2'],
+            'Trainer': ['Entraineur 1', 'Entraineur 2'],
+            'j_percent': [0.5, 0.6],
+            'e_percent': [0.4, 0.7],
+            'Source': ['Source A', 'Source B'],
+            'UID': ['ID1', 'ID2'],
+            'extra_col': [100, 200],
+        }
+    )
 
 
 def test_normalize_columns(sample_dataframe):
@@ -67,9 +69,7 @@ def test_normalize_columns(sample_dataframe):
 
 def test_normalize_columns_missing_cols():
     """Test that missing standard columns are added as NaN."""
-    df_subset = pd.DataFrame({
-        'some_other_col': [1, 2]
-    })
+    df_subset = pd.DataFrame({'some_other_col': [1, 2]})
     df = _normalize_columns(df_subset.copy())
     assert 'jockey' in df.columns
     assert 'entraineur' in df.columns
@@ -77,12 +77,15 @@ def test_normalize_columns_missing_cols():
     assert df['entraineur'].isna().all()
 
 
-@pytest.mark.parametrize("path_str, expected_date", [
-    ("data/2026-01-01/some_file.csv", datetime(2026, 1, 1).date()),
-    ("data/2025_12_31/other_file.csv", datetime(2025, 12, 31).date()),
-    ("data/no_date_here.csv", None),
-    ("data/20240229_special.csv", datetime(2024, 2, 29).date()), # Leap year
-])
+@pytest.mark.parametrize(
+    "path_str, expected_date",
+    [
+        ("data/2026-01-01/some_file.csv", datetime(2026, 1, 1).date()),
+        ("data/2025_12_31/other_file.csv", datetime(2025, 12, 31).date()),
+        ("data/no_date_here.csv", None),
+        ("data/20240229_special.csv", datetime(2024, 2, 29).date()),  # Leap year
+    ],
+)
 def test_infer_date_from_path(path_str, expected_date):
     """Test date inference from various path formats."""
     assert _infer_date_from_path(Path(path_str)) == expected_date
@@ -106,19 +109,19 @@ def test_load_and_filter(mock_infer_date, mock_normalize_columns, mock_read_csv,
     mock_read_csv.side_effect = [
         pd.DataFrame({'Date': ['2026-01-15'], 'reunion': [1], 'course': [1]}),
         pd.DataFrame({'Date': ['2026-02-10'], 'reunion': [1], 'course': [1]}),
-        pd.DataFrame({'Date': ['2026-01-20'], 'reunion': [1], 'course': [1]})
+        pd.DataFrame({'Date': ['2026-01-20'], 'reunion': [1], 'course': [1]}),
     ]
 
     # Mock _normalize_columns to return a DataFrame with normalized columns
     # It should return a DataFrame with 'date' column already processed by _normalize_columns
     def normalize_side_effect(df_input):
         normalized_data = {}
-        df_input_lower_cols = {c.lower(): c for c in df_input.columns} # Add this
-        
+        df_input_lower_cols = {c.lower(): c for c in df_input.columns}  # Add this
+
         for std_col, candidates in CANDIDATES.items():
             found = False
             for cand in candidates:
-                if cand.lower() in df_input_lower_cols: # Change this to use lowercased columns
+                if cand.lower() in df_input_lower_cols:  # Change this to use lowercased columns
                     original_col_name = df_input_lower_cols[cand.lower()]
                     normalized_data[std_col] = df_input[original_col_name]
                     found = True
@@ -133,7 +136,9 @@ def test_load_and_filter(mock_infer_date, mock_normalize_columns, mock_read_csv,
 
         # Handle 'num' as 'Int64' as per _normalize_columns
         if 'num' in normalized_data:
-            normalized_data['num'] = pd.to_numeric(normalized_data['num'], errors='coerce', downcast='integer').astype(pd.Int64Dtype())
+            normalized_data['num'] = pd.to_numeric(
+                normalized_data['num'], errors='coerce', downcast='integer'
+            ).astype(pd.Int64Dtype())
 
         # Keep original extra columns if any
         for col in df_input.columns:
@@ -143,10 +148,11 @@ def test_load_and_filter(mock_infer_date, mock_normalize_columns, mock_read_csv,
                 if col in cands_list or col.lower() in [c.lower() for c in cands_list]:
                     is_mapped = True
                     break
-            if not is_mapped and col not in normalized_data: # Also ensure it's not already added
+            if not is_mapped and col not in normalized_data:  # Also ensure it's not already added
                 normalized_data[col] = df_input[col]
 
         return pd.DataFrame(normalized_data)
+
     mock_normalize_columns.side_effect = normalize_side_effect
 
     # Test for January 2026
@@ -165,22 +171,27 @@ def test_load_and_filter(mock_infer_date, mock_normalize_columns, mock_read_csv,
     assert df_filtered_error.empty
 
     # Test with inferred date when 'date' column is missing in CSV
-    mock_read_csv.side_effect = [pd.DataFrame({'reunion': [1], 'course': [1]})] # No 'Date' column
+    mock_read_csv.side_effect = [pd.DataFrame({'reunion': [1], 'course': [1]})]  # No 'Date' column
     mock_infer_date.return_value = datetime(2026, 1, 10).date()
     df_inferred_date = load_and_filter([file1], "2026-01")
     assert not df_inferred_date.empty
     assert datetime(2026, 1, 10).date() in df_inferred_date['date'].tolist()
 
+
 def test_summarize_month(tmp_path):
     """Test summarizing data by jockey and trainer."""
     # Create a dummy DataFrame for testing
     data = {
-        'date': [pd.to_datetime('2026-01-01'), pd.to_datetime('2026-01-01'), pd.to_datetime('2026-01-02')],
+        'date': [
+            pd.to_datetime('2026-01-01'),
+            pd.to_datetime('2026-01-01'),
+            pd.to_datetime('2026-01-02'),
+        ],
         'jockey': ['Jockey A', 'Jockey B', 'Jockey A'],
         'entraineur': ['Trainer X', 'Trainer Y', 'Trainer X'],
         'j_rate': [0.5, 0.6, 0.7],
         'e_rate': [0.8, 0.9, 0.75],
-        '__source_file': ['file1', 'file2', 'file3']
+        '__source_file': ['file1', 'file2', 'file3'],
     }
     df = pd.DataFrame(data)
 
@@ -191,8 +202,8 @@ def test_summarize_month(tmp_path):
     assert len(jockey_summary) == 2
     jockey_a = jockey_summary[jockey_summary['jockey'] == 'Jockey A']
     assert jockey_a['starts'].iloc[0] == 2
-    assert jockey_a['mean_j_rate'].iloc[0] == pytest.approx(0.6) # (0.5 + 0.7) / 2
-    
+    assert jockey_a['mean_j_rate'].iloc[0] == pytest.approx(0.6)  # (0.5 + 0.7) / 2
+
     jockey_b = jockey_summary[jockey_summary['jockey'] == 'Jockey B']
     assert jockey_b['starts'].iloc[0] == 1
     assert jockey_b['mean_j_rate'].iloc[0] == pytest.approx(0.6)
@@ -202,7 +213,7 @@ def test_summarize_month(tmp_path):
     assert len(entraineur_summary) == 2
     trainer_x = entraineur_summary[entraineur_summary['entraineur'] == 'Trainer X']
     assert trainer_x['starts'].iloc[0] == 2
-    assert trainer_x['mean_e_rate'].iloc[0] == pytest.approx(0.775) # (0.8 + 0.75) / 2
+    assert trainer_x['mean_e_rate'].iloc[0] == pytest.approx(0.775)  # (0.8 + 0.75) / 2
 
     trainer_y = entraineur_summary[entraineur_summary['entraineur'] == 'Trainer Y']
     assert trainer_y['starts'].iloc[0] == 1
@@ -217,7 +228,7 @@ def test_summarize_month_no_jockey_trainer_data():
         'entraineur': [np.nan],
         'j_rate': [0.5],
         'e_rate': [0.8],
-        '__source_file': ['file1']
+        '__source_file': ['file1'],
     }
     df = pd.DataFrame(data)
     jockey_summary, entraineur_summary = summarize_month(df.copy())
@@ -231,14 +242,22 @@ def test_summarize_month_no_jockey_trainer_data():
 @patch('argparse.ArgumentParser.parse_args')
 @patch('pathlib.Path.rglob')
 @patch('pathlib.Path.mkdir')
-@patch('pathlib.Path.exists', return_value=True) # Patch exists for main_success
+@patch('pathlib.Path.exists', return_value=True)  # Patch exists for main_success
 @patch('builtins.print')
-def test_main_success(mock_print, mock_exists, mock_mkdir, mock_rglob, mock_parse_args, mock_to_csv, mock_summarize_month, mock_load_and_filter, tmp_path):
+def test_main_success(
+    mock_print,
+    mock_exists,
+    mock_mkdir,
+    mock_rglob,
+    mock_parse_args,
+    mock_to_csv,
+    mock_summarize_month,
+    mock_load_and_filter,
+    tmp_path,
+):
     """Test main function with successful execution."""
     mock_parse_args.return_value = MagicMock(
-        data_dir=tmp_path / "data",
-        month="2026-01",
-        outdir=tmp_path / "out"
+        data_dir=tmp_path / "data", month="2026-01", outdir=tmp_path / "out"
     )
 
     # Setup mock file structure and rglob return
@@ -246,19 +265,21 @@ def test_main_success(mock_print, mock_exists, mock_mkdir, mock_rglob, mock_pars
     mock_rglob.return_value = [tmp_path / "data" / "file1_je.csv"]
 
     # Mock load_and_filter return
-    mock_load_and_filter.return_value = pd.DataFrame({
-        'date': [pd.to_datetime('2026-01-01')], # Ensure datetime object
-        'jockey': ['Jockey A'],
-        'entraineur': ['Trainer X'],
-        'j_rate': [0.5],
-        'e_rate': [0.8],
-        '__source_file': ['file1_je.csv']
-    })
+    mock_load_and_filter.return_value = pd.DataFrame(
+        {
+            'date': [pd.to_datetime('2026-01-01')],  # Ensure datetime object
+            'jockey': ['Jockey A'],
+            'entraineur': ['Trainer X'],
+            'j_rate': [0.5],
+            'e_rate': [0.8],
+            '__source_file': ['file1_je.csv'],
+        }
+    )
 
     # Mock summarize_month return
     mock_summarize_month.return_value = (
         pd.DataFrame({'jockey': ['Jockey A'], 'starts': [1], 'mean_j_rate': [0.5]}),
-        pd.DataFrame({'entraineur': ['Trainer X'], 'starts': [1], 'mean_e_rate': [0.8]})
+        pd.DataFrame({'entraineur': ['Trainer X'], 'starts': [1], 'mean_e_rate': [0.8]}),
     )
 
     main()
@@ -274,14 +295,12 @@ def test_main_success(mock_print, mock_exists, mock_mkdir, mock_rglob, mock_pars
 
 @patch('hippique_orchestrator.scripts.concat_je_month.load_and_filter')
 @patch('argparse.ArgumentParser.parse_args')
-@patch('pathlib.Path.exists', return_value=False) # Ensure this is mocked for success scenario
+@patch('pathlib.Path.exists', return_value=False)  # Ensure this is mocked for success scenario
 @patch('builtins.print')
 def test_main_data_dir_not_found(mock_print, mock_exists, mock_parse_args, mock_load_and_filter):
     """Test main function when data directory is not found."""
     mock_parse_args.return_value = MagicMock(
-        data_dir="non_existent_dir",
-        month="2026-01",
-        outdir="."
+        data_dir="non_existent_dir", month="2026-01", outdir="."
     )
     with pytest.raises(SystemExit) as excinfo:
         main()
@@ -291,15 +310,21 @@ def test_main_data_dir_not_found(mock_print, mock_exists, mock_parse_args, mock_
 @patch('hippique_orchestrator.scripts.concat_je_month.load_and_filter')
 @patch('argparse.ArgumentParser.parse_args')
 @patch('pathlib.Path.rglob', return_value=[])
-@patch('pathlib.Path.exists', return_value=True) # Patch exists to avoid SystemExit for data_dir
+@patch('pathlib.Path.exists', return_value=True)  # Patch exists to avoid SystemExit for data_dir
 @patch('builtins.print')
-@patch('pandas.DataFrame.to_csv') # Add this mock
-def test_main_no_csv_files_found(mock_to_csv, mock_print, mock_exists, mock_rglob, mock_parse_args, mock_load_and_filter, tmp_path): # Corrected order
+@patch('pandas.DataFrame.to_csv')  # Add this mock
+def test_main_no_csv_files_found(
+    mock_to_csv,
+    mock_print,
+    mock_exists,
+    mock_rglob,
+    mock_parse_args,
+    mock_load_and_filter,
+    tmp_path,
+):  # Corrected order
     """Test main function when no CSV files are found."""
     mock_parse_args.return_value = MagicMock(
-        data_dir=tmp_path / "data",
-        month="2026-01",
-        outdir=tmp_path / "out"
+        data_dir=tmp_path / "data", month="2026-01", outdir=tmp_path / "out"
     )
     (tmp_path / "data").mkdir()
     mock_load_and_filter.return_value = pd.DataFrame(columns=STD_COLUMNS + ['__source_file'])
@@ -308,7 +333,7 @@ def test_main_no_csv_files_found(mock_to_csv, mock_print, mock_exists, mock_rglo
 
     mock_print.assert_any_call("Aucun fichier *_je.csv trouvé sous", tmp_path / "data")
     mock_load_and_filter.assert_called_once()
-        # Ensure no CSV export if no data
-    assert mock_rglob.call_count > 0 
+    # Ensure no CSV export if no data
+    assert mock_rglob.call_count > 0
     # Check that to_csv was not called if load_and_filter returns empty DataFrame
     # Note: this check is implicitly handled by mock_to_csv not being called later if df is empty

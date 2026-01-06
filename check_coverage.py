@@ -19,7 +19,7 @@ for package in root.findall('.//package'):
         for class_elem in package.findall('.//class'):
             filename = class_elem.get('filename')
             line_rate_str = class_elem.get('line-rate')
-            
+
             if filename and line_rate_str:
                 try:
                     line_rate = float(line_rate_str)

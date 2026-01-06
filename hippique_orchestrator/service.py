@@ -17,7 +17,7 @@ from pydantic import BaseModel
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from . import __version__, analysis_pipeline, config, firestore_client, plan, scheduler
-from .api import tasks # Import the tasks router
+from .api import tasks  # Import the tasks router
 from .auth import check_api_key, verify_oidc_token
 from .logging_middleware import logging_middleware
 from .logging_utils import (
@@ -43,7 +43,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 app = FastAPI(title="Hippique Orchestrator", version=__version__, lifespan=lifespan, redoc_url=None)
 
 # --- Include Routers ---
-app.include_router(tasks.router) # Include the tasks router
+app.include_router(tasks.router)  # Include the tasks router
 
 # --- Middlewares ---
 app.add_middleware(BaseHTTPMiddleware, dispatch=logging_middleware)
@@ -267,7 +267,9 @@ async def run_single_race(rc: str, api_key: str = Security(check_api_key)):
     logger.info(f"Manual run triggered for race {rc} on {date_str}")
 
     daily_plan = await plan.build_plan_async(date_str)
-    target_race = next((r for r in daily_plan if f"{r.get('r_label')}{r.get('c_label')}" == rc), None)
+    target_race = next(
+        (r for r in daily_plan if f"{r.get('r_label')}{r.get('c_label')}" == rc), None
+    )
 
     if not target_race:
         raise HTTPException(status_code=404, detail=f"Race {rc} not found in plan for {date_str}")
@@ -305,8 +307,6 @@ async def run_single_race(rc: str, api_key: str = Security(check_api_key)):
         raise HTTPException(
             status_code=500, detail=f"Failed to process manual run for {doc_id}."
         ) from e
-
-
 
 
 @app.get("/debug/config", tags=["Debug"])

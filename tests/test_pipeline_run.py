@@ -14,7 +14,7 @@ def mock_gpi_config() -> dict:
         "h30_snapshot_data": None,
         "roi_min_sp": 0.20,
         "roi_min_global": 0.25,
-        "overround_max_exotics": 1.30, # Explicitly added here
+        "overround_max_exotics": 1.30,  # Explicitly added here
         "ev_min_combo": 0.40,
         "payout_min_combo": 10.0,
         "weights": {"base": {}, "horse_stats": {}},

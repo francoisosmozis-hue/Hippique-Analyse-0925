@@ -84,7 +84,7 @@ def test_get_env_required_missing_non_prod_logs_critical_no_exit(monkeypatch, ca
 
     with caplog.at_level(logging.CRITICAL):
         val = get_env("NON_PROD_REQUIRED", required=True)
-    
+
     assert "Missing required environment variable 'NON_PROD_REQUIRED'" in caplog.text
     assert val is None
     assert "IS_PROD=True. Exiting." not in caplog.text

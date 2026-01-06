@@ -15,7 +15,11 @@ try:
     content = content.replace('mode=request.mode,', 'mode=body.mode,')
     content = content.replace('service_url=service_url', 'correlation_id=correlation_id')
     content = content.replace('run_url=f"{service_url}/run"', 'correlation_id=correlation_id')
-    content = re.sub(r'correlation_id=correlation_id\s*,\s*correlation_id=correlation_id', 'correlation_id=correlation_id', content)
+    content = re.sub(
+        r'correlation_id=correlation_id\s*,\s*correlation_id=correlation_id',
+        'correlation_id=correlation_id',
+        content,
+    )
 
     with open('src/service.py', 'w') as f:
         f.write(content)

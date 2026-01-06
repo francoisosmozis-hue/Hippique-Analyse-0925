@@ -31,18 +31,17 @@ class UnifiedPlanBuilder:
     def __init__(self):
         self.pmu_client = PMUClient()
         self.session = requests.Session()
-        self.session.headers.update({
-            'User-Agent': config.USER_AGENT,
-            'Accept': 'text/html,application/xhtml+xml',
-            'Accept-Language': 'fr-FR,fr;q=0.9',
-        })
+        self.session.headers.update(
+            {
+                'User-Agent': config.USER_AGENT,
+                'Accept': 'text/html,application/xhtml+xml',
+                'Accept-Language': 'fr-FR,fr;q=0.9',
+            }
+        )
         self.last_source_used = None
 
     def build_plan(
-        self,
-        date_str: str,
-        sources: list[str] | None = None,
-        fill_missing_times: bool = True
+        self, date_str: str, sources: list[str] | None = None, fill_missing_times: bool = True
     ) -> list[dict]:
         """
         Construit le plan en essayant plusieurs sources
@@ -152,10 +151,7 @@ class UnifiedPlanBuilder:
             href = link.get('href')
 
             # Extraire date, R, C, slug
-            match = re.search(
-                r'/fr/course/(\d{4}-\d{2}-\d{2})/R(\d+)C(\d+)-(.+)',
-                href
-            )
+            match = re.search(r'/fr/course/(\d{4}-\d{2}-\d{2})/R(\d+)C(\d+)-(.+)', href)
 
             if not match:
                 continue
@@ -172,15 +168,17 @@ class UnifiedPlanBuilder:
             # Chercher heure
             time_local = self._extract_time_near_link(link)
 
-            races.append({
-                "date": race_date,
-                "r_label": f"R{r_num}",
-                "c_label": f"C{c_num}",
-                "meeting": meeting.upper(),
-                "time_local": time_local,
-                "course_url": f"https://www.zeturf.fr{href}",
-                "reunion_url": f"https://www.zeturf.fr/fr/reunion/{race_date}/R{r_num}"
-            })
+            races.append(
+                {
+                    "date": race_date,
+                    "r_label": f"R{r_num}",
+                    "c_label": f"C{c_num}",
+                    "meeting": meeting.upper(),
+                    "time_local": time_local,
+                    "course_url": f"https://www.zeturf.fr{href}",
+                    "reunion_url": f"https://www.zeturf.fr/fr/reunion/{race_date}/R{r_num}",
+                }
+            )
 
         return races
 
@@ -197,8 +195,16 @@ class UnifiedPlanBuilder:
             second = parts[1].lower()
 
             race_keywords = [
-                'prix', 'premio', 'allowance', 'claiming', 'maiden',
-                'handicap', 'stakes', 'conditions', 'listed', 'group'
+                'prix',
+                'premio',
+                'allowance',
+                'claiming',
+                'maiden',
+                'handicap',
+                'stakes',
+                'conditions',
+                'listed',
+                'group',
             ]
 
             if second not in race_keywords:
@@ -271,21 +277,23 @@ class UnifiedPlanBuilder:
 
             # Chercher les courses après ce match
             # Pattern: "1 - Prix...", "2 - Prix...", etc.
-            course_section = text[match.end():match.end()+2000]
+            course_section = text[match.end() : match.end() + 2000]
             course_pattern = r'(\d+)\s+-\s+(.+?)(?=\d+\s+-\s+|$)'
 
             for c_match in re.finditer(course_pattern, course_section):
                 c_num = c_match.group(1)
 
-                races.append({
-                    "date": date_str,
-                    "r_label": f"R{r_num}",
-                    "c_label": f"C{c_num}",
-                    "meeting": hippodrome.upper(),
-                    "time_local": time_local,
-                    "course_url": f"https://www.zeturf.fr/fr/course/{date_str}/R{r_num}C{c_num}",
-                    "reunion_url": f"https://www.zeturf.fr/fr/reunion/{date_str}/R{r_num}"
-                })
+                races.append(
+                    {
+                        "date": date_str,
+                        "r_label": f"R{r_num}",
+                        "c_label": f"C{c_num}",
+                        "meeting": hippodrome.upper(),
+                        "time_local": time_local,
+                        "course_url": f"https://www.zeturf.fr/fr/course/{date_str}/R{r_num}C{c_num}",
+                        "reunion_url": f"https://www.zeturf.fr/fr/reunion/{date_str}/R{r_num}",
+                    }
+                )
 
         return races
 
@@ -315,7 +323,9 @@ class UnifiedPlanBuilder:
                     time_found = geny_times.get(race["r_label"])
                     if time_found:
                         race["time_local"] = time_found
-                        logger.debug(f"Filled time for {race['r_label']}{race['c_label']} from Geny")
+                        logger.debug(
+                            f"Filled time for {race['r_label']}{race['c_label']} from Geny"
+                        )
 
         except Exception as e:
             logger.warning(f"Could not fill times from Geny: {e}")
@@ -434,14 +444,15 @@ if __name__ == "__main__":
 
         for i, race in enumerate(plan[:5], 1):
             time_str = race.get("time_local", "??:??")
-            print(f"{i}. {race['r_label']}{race['c_label']} - "
-                  f"{race['meeting']} - {time_str}")
+            print(f"{i}. {race['r_label']}{race['c_label']} - {race['meeting']} - {time_str}")
             print(f"   URL: {race.get('course_url', 'N/A')}")
 
             # Afficher données PMU si disponibles
             if race.get('discipline'):
-                print(f"   {race['discipline']} - {race.get('distance')}m - "
-                      f"{race.get('partants')} partants")
+                print(
+                    f"   {race['discipline']} - {race.get('distance')}m - "
+                    f"{race.get('partants')} partants"
+                )
 
         if len(plan) > 5:
             print(f"\n... et {len(plan) - 5} autres courses")

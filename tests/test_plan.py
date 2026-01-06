@@ -26,9 +26,23 @@ MOCK_PROGRAMME_DATA = {
 # Sample data with malformed entries
 MOCK_MALFORMED_DATA = {
     "races": [
-        {"rc": "R1 C1", "name": "Course Valide", "start_time": "10:00", "url": "http://example.com/r1c1"},
-        {"rc": "invalid", "name": "RC non valide", "start_time": "11:00", "url": "http://example.com/r2c2"}, # Truly malformed RC
-        {"rc": "R3 C3", "name": "Heure manquante", "url": "http://example.com/r3c3"}, # Missing start_time
+        {
+            "rc": "R1 C1",
+            "name": "Course Valide",
+            "start_time": "10:00",
+            "url": "http://example.com/r1c1",
+        },
+        {
+            "rc": "invalid",
+            "name": "RC non valide",
+            "start_time": "11:00",
+            "url": "http://example.com/r2c2",
+        },  # Truly malformed RC
+        {
+            "rc": "R3 C3",
+            "name": "Heure manquante",
+            "url": "http://example.com/r3c3",
+        },  # Missing start_time
     ]
 }
 
@@ -48,20 +62,18 @@ async def test_build_plan_nominal_case(mock_fetch_programme):
 
     # Assert
     assert len(result_plan) == 2
-    mock_fetch_programme.assert_called_once_with(
-        f"https://www.boturfers.fr/courses/{test_date}"
-    )
+    mock_fetch_programme.assert_called_once_with(f"https://www.boturfers.fr/courses/{test_date}")
 
     # Check content and sorting (13:50 should be first)
     assert result_plan[0]["c_label"] == "C1"
     assert result_plan[0]["time_local"] == "13:50"
     assert result_plan[0]["date"] == test_date
-    assert result_plan[0]["meeting"] == "PRIX D'OUVERTURE" # New assertion for meeting
+    assert result_plan[0]["meeting"] == "PRIX D'OUVERTURE"  # New assertion for meeting
 
     assert result_plan[1]["c_label"] == "C2"
     assert result_plan[1]["time_local"] == "14:30"
     assert result_plan[1]["course_url"] == "http://example.com/r1c2"
-    assert result_plan[1]["meeting"] == "PRIX DE TEST" # New assertion for meeting
+    assert result_plan[1]["meeting"] == "PRIX DE TEST"  # New assertion for meeting
 
 
 @pytest.mark.asyncio
@@ -103,6 +115,7 @@ async def test_build_plan_handles_malformed_data(mock_fetch_programme, caplog):
     assert "Could not parse R/C from 'invalid'" in caplog.text
     # The entry with missing start_time is filtered out before the RC parsing, so no log is expected for it.
 
+
 @pytest.mark.asyncio
 @patch("hippique_orchestrator.data_source.fetch_programme", new_callable=AsyncMock)
 async def test_build_plan_today_string(mock_fetch_programme):
@@ -115,6 +128,7 @@ async def test_build_plan_today_string(mock_fetch_programme):
 
     mock_fetch_programme.assert_called_once_with("https://www.boturfers.fr/programme-pmu-du-jour")
 
+
 @pytest.mark.asyncio
 @patch("hippique_orchestrator.data_source.fetch_programme", new_callable=AsyncMock)
 async def test_build_plan_empty_enriched_plan(mock_fetch_programme, caplog):
@@ -122,11 +136,11 @@ async def test_build_plan_empty_enriched_plan(mock_fetch_programme, caplog):
     Tests that sorting is skipped if the enriched plan is empty, covering the `if enriched_plan:` branch.
     """
     # Arrange: return races that will all be filtered out
-    mock_fetch_programme.return_value = { "races": [ {"rc": "invalid", "start_time": "10:00"} ] }
+    mock_fetch_programme.return_value = {"races": [{"rc": "invalid", "start_time": "10:00"}]}
 
     # Act
     result_plan = await plan.build_plan_async("2025-12-20")
-    
+
     # Assert
     assert result_plan == []
 
@@ -145,7 +159,7 @@ async def test_build_plan_partants_non_digit_string(mock_fetch_programme):
                 "name": "Test Race",
                 "start_time": "10:00",
                 "url": "http://example.com/r1c1",
-                "runners_count": "10 partants", # Non-digit string
+                "runners_count": "10 partants",  # Non-digit string
             }
         ]
     }
@@ -159,7 +173,6 @@ async def test_build_plan_partants_non_digit_string(mock_fetch_programme):
     assert result_plan[0]["partants"] is None
 
 
-
 @pytest.mark.asyncio
 @patch("hippique_orchestrator.data_source.fetch_programme", new_callable=AsyncMock)
 async def test_build_plan_handles_compact_rc_format(mock_fetch_programme):
@@ -168,7 +181,14 @@ async def test_build_plan_handles_compact_rc_format(mock_fetch_programme):
     """
     # Arrange
     mock_fetch_programme.return_value = {
-        "races": [{"rc": "R1C1", "name": "Compact RC", "start_time": "10:00", "url": "http://example.com/r1c1"}]
+        "races": [
+            {
+                "rc": "R1C1",
+                "name": "Compact RC",
+                "start_time": "10:00",
+                "url": "http://example.com/r1c1",
+            }
+        ]
     }
 
     # Act
@@ -200,7 +220,6 @@ def test_build_plan_sync_raises_in_event_loop():
     """
     # Arrange: Mock asyncio.run to raise the specific error the code is looking for
     with patch("asyncio.run", side_effect=RuntimeError("cannot run loop while another is running")):
-
         # Act & Assert
         with pytest.raises(RuntimeError) as excinfo:
             plan.build_plan("2025-12-20")
@@ -215,7 +234,6 @@ def test_build_plan_sync_reraises_other_runtime_errors():
     """
     # Arrange: Mock asyncio.run to raise a generic RuntimeError
     with patch("asyncio.run", side_effect=RuntimeError("A different runtime error")):
-        
         # Act & Assert
         with pytest.raises(RuntimeError, match="A different runtime error"):
             plan.build_plan("2025-12-20")

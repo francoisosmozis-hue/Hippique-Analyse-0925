@@ -3,33 +3,45 @@ from __future__ import annotations
 import pathlib
 import pytest
 from unittest.mock import MagicMock, patch, call
-import requests # Needed to mock this
-from datetime import datetime # Needed for tests
+import requests  # Needed to mock this
+from datetime import datetime  # Needed for tests
 from pytest import LogCaptureFixture
 
 from hippique_orchestrator.zoneturf_client import (
-    _normalize_name, _parse_rk_string, fetch_chrono_from_html,
-    resolve_horse_id, resolve_person_id, fetch_person_stats_from_html,
-    get_chrono_stats, get_jockey_trainer_stats,
-    ID_CACHE, CHRONO_CACHE, PERSON_ID_CACHE, PERSON_STATS_CACHE,
-    BASE_URL # To check URLs built
+    _normalize_name,
+    _parse_rk_string,
+    fetch_chrono_from_html,
+    resolve_horse_id,
+    resolve_person_id,
+    fetch_person_stats_from_html,
+    get_chrono_stats,
+    get_jockey_trainer_stats,
+    ID_CACHE,
+    CHRONO_CACHE,
+    PERSON_ID_CACHE,
+    PERSON_STATS_CACHE,
+    BASE_URL,  # To check URLs built
 )
 
 FIXTURE_DIR = pathlib.Path(__file__).parent / 'fixtures'
 
 # --- Fixtures for missing/malformed HTML snippets ---
 
+
 @pytest.fixture
 def empty_html() -> str:
     return "<html><body></body></html>"
+
 
 @pytest.fixture
 def html_no_info_card() -> str:
     return "<html><body><div class='card-body'>No info card here</div></body></html>"
 
+
 @pytest.fixture
 def html_no_performance_card() -> str:
     return "<html><body><div class='card-header'>Informations générales</div><div class='card-body'>...</div></body></html>"
+
 
 @pytest.fixture
 def html_performance_no_list_group() -> str:
@@ -41,6 +53,7 @@ def html_performance_no_list_group() -> str:
         </div>
     </body></html>
     """
+
 
 @pytest.fixture
 def html_performance_no_attelle_li() -> str:
@@ -58,6 +71,7 @@ def html_performance_no_attelle_li() -> str:
     </body></html>
     """
 
+
 @pytest.fixture
 def html_performance_no_red_km_header() -> str:
     return """
@@ -74,6 +88,7 @@ def html_performance_no_red_km_header() -> str:
     </body></html>
     """
 
+
 @pytest.fixture
 def html_performance_malformed_row() -> str:
     return """
@@ -89,6 +104,8 @@ def html_performance_malformed_row() -> str:
         </div>
     </body></html>
     """
+
+
 @pytest.fixture
 def html_performance_other_horse_name() -> str:
     return """
@@ -109,6 +126,8 @@ def html_performance_other_horse_name() -> str:
         </div>
     </body></html>
     """
+
+
 @pytest.fixture
 def html_person_stats_missing_rates() -> str:
     return """
@@ -123,6 +142,7 @@ def html_person_stats_missing_rates() -> str:
     </body></html>
     """
 
+
 @pytest.fixture
 def html_person_stats_missing_table() -> str:
     return """
@@ -133,6 +153,7 @@ def html_person_stats_missing_table() -> str:
         </div>
     </body></html>
     """
+
 
 @pytest.fixture
 def html_person_stats_malformed_table_data() -> str:
@@ -149,23 +170,26 @@ def html_person_stats_malformed_table_data() -> str:
     </body></html>
     """
 
+
 @pytest.fixture(autouse=True)
 def clear_caches_extended():
     ID_CACHE.clear()
     CHRONO_CACHE.clear()
     PERSON_ID_CACHE.clear()
     PERSON_STATS_CACHE.clear()
-    yield # Run test
+    yield  # Run test
     ID_CACHE.clear()
     CHRONO_CACHE.clear()
     PERSON_ID_CACHE.clear()
     PERSON_STATS_CACHE.clear()
+
 
 @pytest.fixture
 def mock_requests_get():
     # Patch requests.Session.get which is used by the client functions
     with patch('requests.Session.get') as mock_get:
         yield mock_get
+
 
 # --- Tests for resolve_horse_id (extended) ---
 def test_resolve_horse_id_non_200_status(mock_requests_get, caplog: LogCaptureFixture):
@@ -178,7 +202,7 @@ def test_resolve_horse_id_non_200_status(mock_requests_get, caplog: LogCaptureFi
     horse_id = resolve_horse_id("TestHorse")
     assert horse_id is None
     assert "Received non-200 status code 404 for URL" in caplog.text
-    mock_requests_get.assert_called_once() # Should try once and break
+    mock_requests_get.assert_called_once()  # Should try once and break
 
 
 def test_resolve_horse_id_url_without_id(mock_requests_get):
@@ -200,27 +224,33 @@ def test_resolve_horse_id_url_without_id(mock_requests_get):
 
     mock_response_page1 = MagicMock(status_code=200, text=malformed_html_page1)
     mock_response_other_pages = MagicMock(status_code=200, text=malformed_html_other_pages)
-    
+
     # Configure mock_requests_get to return the malformed page once, then empty pages
-    mock_requests_get.side_effect = [mock_response_page1] + [mock_response_other_pages] * 19 # Simulate 20 pages
-    
+    mock_requests_get.side_effect = [mock_response_page1] + [
+        mock_response_other_pages
+    ] * 19  # Simulate 20 pages
+
     horse_id = resolve_horse_id("Jullou")
     assert horse_id is None
     # Expect it to have tried all max_pages attempts
     assert mock_requests_get.call_count == 20
     # Also check the last call to ensure it iterated
-    expected_last_call = call(f"{BASE_URL}/cheval/lettre-j.html?p=20", timeout=15, headers={"User-Agent": "Mozilla/5.0"})
+    expected_last_call = call(
+        f"{BASE_URL}/cheval/lettre-j.html?p=20", timeout=15, headers={"User-Agent": "Mozilla/5.0"}
+    )
     assert mock_requests_get.call_args_list[-1] == expected_last_call
 
 
 # --- Tests for fetch_chrono_from_html (extended) ---
 def test_fetch_chrono_from_html_no_info_card(html_no_info_card):
     result = fetch_chrono_from_html(html_no_info_card, "TestHorse")
-    assert result == {'last_3_chrono': []} # Should return empty but not None
+    assert result == {'last_3_chrono': []}  # Should return empty but not None
+
 
 def test_fetch_chrono_from_html_no_performance_card(html_no_performance_card):
     result = fetch_chrono_from_html(html_no_performance_card, "TestHorse")
-    assert result == {'last_3_chrono': []} # Should return empty but not None
+    assert result == {'last_3_chrono': []}  # Should return empty but not None
+
 
 def test_fetch_chrono_from_html_no_record_tag():
     html_content = """
@@ -235,6 +265,7 @@ def test_fetch_chrono_from_html_no_record_tag():
     assert "record_attele" not in result
     assert result == {'last_3_chrono': []}
 
+
 def test_fetch_chrono_from_html_no_record_text():
     html_content = """
     <html><body>
@@ -248,27 +279,35 @@ def test_fetch_chrono_from_html_no_record_text():
     assert "record_attele" not in result
     assert result == {'last_3_chrono': []}
 
+
 def test_fetch_chrono_from_html_performance_no_list_group(html_performance_no_list_group):
     result = fetch_chrono_from_html(html_performance_no_list_group, "TestHorse")
     assert result == {'last_3_chrono': []}
+
 
 def test_fetch_chrono_from_html_performance_no_attelle_li(html_performance_no_attelle_li):
     result = fetch_chrono_from_html(html_performance_no_attelle_li, "TestHorse")
     assert result == {'last_3_chrono': []}
 
-def test_fetch_chrono_from_html_performance_no_red_km_header(html_performance_no_red_km_header, caplog: LogCaptureFixture):
+
+def test_fetch_chrono_from_html_performance_no_red_km_header(
+    html_performance_no_red_km_header, caplog: LogCaptureFixture
+):
     caplog.set_level("DEBUG")
     result = fetch_chrono_from_html(html_performance_no_red_km_header, "Jullou")
     assert result == {'last_3_chrono': []}
     assert "Red.Km column not found" in caplog.text
 
+
 def test_fetch_chrono_from_html_performance_malformed_row(html_performance_malformed_row):
     result = fetch_chrono_from_html(html_performance_malformed_row, "Jullou")
-    assert result == {'last_3_chrono': []} # No chrono added due to malformed row
+    assert result == {'last_3_chrono': []}  # No chrono added due to malformed row
+
 
 def test_fetch_chrono_from_html_performance_other_horse_name(html_performance_other_horse_name):
     result = fetch_chrono_from_html(html_performance_other_horse_name, "Jullou")
-    assert result == {'last_3_chrono': []} # Should not match other horses
+    assert result == {'last_3_chrono': []}  # Should not match other horses
+
 
 def test_fetch_chrono_from_html_multiple_attelle_sections():
     html_content = """
@@ -299,7 +338,7 @@ def test_fetch_chrono_from_html_multiple_attelle_sections():
     </body></html>
     """
     result = fetch_chrono_from_html(html_content, "Jullou")
-    assert result['last_3_chrono'] == [70.0, 71.0] # Should only pick 'Attelé' ones
+    assert result['last_3_chrono'] == [70.0, 71.0]  # Should only pick 'Attelé' ones
 
 
 # --- Tests for resolve_person_id (extended) ---
@@ -314,6 +353,7 @@ def test_resolve_person_id_non_200_status(mock_requests_get, caplog: LogCaptureF
     assert person_id is None
     assert "Received non-200 status code 404 for URL" in caplog.text
     mock_requests_get.assert_called_once()
+
 
 def test_resolve_person_id_url_without_id(mock_requests_get):
     """
@@ -334,31 +374,38 @@ def test_resolve_person_id_url_without_id(mock_requests_get):
 
     mock_response_page1 = MagicMock(status_code=200, text=malformed_html_page1)
     mock_response_other_pages = MagicMock(status_code=200, text=malformed_html_other_pages)
-    
+
     # Configure mock_requests_get to return the malformed page once, then empty pages
-    mock_requests_get.side_effect = [mock_response_page1] + [mock_response_other_pages] * 19 # Simulate 20 pages
+    mock_requests_get.side_effect = [mock_response_page1] + [
+        mock_response_other_pages
+    ] * 19  # Simulate 20 pages
 
     person_id = resolve_person_id("TestPerson", "jockey")
     assert person_id is None
     # Expect it to have tried all max_pages attempts
     assert mock_requests_get.call_count == 20
     # Also check the last call to ensure it iterated
-    expected_last_call = call(f"{BASE_URL}/jockey/lettre-t.html?p=20", timeout=15, headers={"User-Agent": "Mozilla/5.0"})
+    expected_last_call = call(
+        f"{BASE_URL}/jockey/lettre-t.html?p=20", timeout=15, headers={"User-Agent": "Mozilla/5.0"}
+    )
     assert mock_requests_get.call_args_list[-1] == expected_last_call
 
 
 # --- Tests for fetch_person_stats_from_html (extended) ---
 def test_fetch_person_stats_from_html_missing_rates(html_person_stats_missing_rates):
     result = fetch_person_stats_from_html(html_person_stats_missing_rates, "jockey")
-    assert result is None # Should return None if any critical stats are missing
+    assert result is None  # Should return None if any critical stats are missing
+
 
 def test_fetch_person_stats_from_html_missing_table(html_person_stats_missing_table):
     result = fetch_person_stats_from_html(html_person_stats_missing_table, "jockey")
-    assert result is None # Should return None if table is missing (num_races, wins, places)
+    assert result is None  # Should return None if table is missing (num_races, wins, places)
+
 
 def test_fetch_person_stats_from_html_malformed_table_data(html_person_stats_malformed_table_data):
     result = fetch_person_stats_from_html(html_person_stats_malformed_table_data, "jockey")
-    assert result is None # Should return None if parsing table data fails
+    assert result is None  # Should return None if parsing table data fails
+
 
 def test_fetch_person_stats_from_html_no_stat_paragraph():
     html_content = """

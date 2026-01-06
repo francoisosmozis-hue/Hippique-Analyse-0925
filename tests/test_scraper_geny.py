@@ -7,16 +7,19 @@ import os
 
 from hippique_orchestrator.scrapers import geny
 
+
 # Fixture to read HTML content
 @pytest.fixture
 def geny_programme_html_success():
     with open("tests/fixtures/geny_programme.html", "r") as f:
         return f.read()
 
+
 @pytest.fixture
 def mock_httpx_get():
     with patch("httpx.get") as mock_get:
         yield mock_get
+
 
 @pytest.fixture
 def mock_datetime_today():
@@ -27,24 +30,27 @@ def mock_datetime_today():
         mock_dt.side_effect = lambda *args, **kwargs: datetime(*args, **kwargs)
         yield mock_dt
 
+
 # Test for _slugify helper
-@pytest.mark.parametrize("input_str, expected_slug", [
-    ("Paris-Vincennes (FR)", "paris-vincennes-fr"),
-    ("Hippodrome de la Côte d'Azur", "hippodrome-de-la-cote-d-azur"),
-    ("Saint-Cloud", "saint-cloud"),
-    ("123 Test", "123-test"),
-    ("", ""),
-    ("   ", ""),
-    ("  _!@# my string 123", "my-string-123"),
-])
+@pytest.mark.parametrize(
+    "input_str, expected_slug",
+    [
+        ("Paris-Vincennes (FR)", "paris-vincennes-fr"),
+        ("Hippodrome de la Côte d'Azur", "hippodrome-de-la-cote-d-azur"),
+        ("Saint-Cloud", "saint-cloud"),
+        ("123 Test", "123-test"),
+        ("", ""),
+        ("   ", ""),
+        ("  _!@# my string 123", "my-string-123"),
+    ],
+)
 def test_slugify(input_str, expected_slug):
     assert geny._slugify(input_str) == expected_slug
 
+
 # Nominal case test
 def test_fetch_geny_programme_success(
-    geny_programme_html_success,
-    mock_httpx_get,
-    mock_datetime_today
+    geny_programme_html_success, mock_httpx_get, mock_datetime_today
 ):
     mock_response = MagicMock(spec=httpx.Response)
     mock_response.status_code = 200
@@ -54,17 +60,17 @@ def test_fetch_geny_programme_success(
 
     result = geny.fetch_geny_programme()
 
-    expected_date_geny_url_format = "30-12-2025" # Format used in Geny URL
-    expected_date_result_format = "2025-12-30" # Format used in result dict
+    expected_date_geny_url_format = "30-12-2025"  # Format used in Geny URL
+    expected_date_result_format = "2025-12-30"  # Format used in result dict
 
     mock_httpx_get.assert_called_once_with(
         f"https://www.genybet.fr/reunions/{expected_date_geny_url_format}",
         follow_redirects=True,
-        timeout=10.0
+        timeout=10.0,
     )
     assert result["date"] == expected_date_result_format
-    assert len(result["meetings"]) == 2 # Hippodrome A and Hippodrome B
-    
+    assert len(result["meetings"]) == 2  # Hippodrome A and Hippodrome B
+
     meeting_a = next(m for m in result["meetings"] if m["hippo"] == "Hippodrome A (FR)")
     meeting_b = next(m for m in result["meetings"] if m["hippo"] == "Hippodrome B (BE)")
 
@@ -82,11 +88,8 @@ def test_fetch_geny_programme_success(
     assert meeting_b["courses"][0]["c"] == "C1"
     assert meeting_b["courses"][0]["id_course"] == "67890"
 
-def test_fetch_geny_programme_no_races_container(
-    mock_httpx_get,
-    mock_datetime_today,
-    caplog
-):
+
+def test_fetch_geny_programme_no_races_container(mock_httpx_get, mock_datetime_today, caplog):
     mock_response = MagicMock(spec=httpx.Response)
     mock_response.status_code = 200
     mock_response.text = "<html><body><div id='some-other-container'></div></body></html>"
@@ -97,11 +100,8 @@ def test_fetch_geny_programme_no_races_container(
     assert result == {"date": "2025-12-30", "meetings": []}
     assert "No 'next-races-container' found on Geny page." in caplog.text
 
-def test_fetch_geny_programme_empty_rows(
-    mock_httpx_get,
-    mock_datetime_today,
-    caplog
-):
+
+def test_fetch_geny_programme_empty_rows(mock_httpx_get, mock_datetime_today, caplog):
     mock_response = MagicMock(spec=httpx.Response)
     mock_response.status_code = 200
     mock_response.text = "<div id='next-races-container'><table><tbody></tbody></table></div>"
@@ -112,11 +112,8 @@ def test_fetch_geny_programme_empty_rows(
     assert result == {"date": "2025-12-30", "meetings": []}
     assert "Discovered 0 meetings from Geny" in caplog.text
 
-def test_fetch_geny_programme_malformed_row_elements(
-    mock_httpx_get,
-    mock_datetime_today,
-    caplog
-):
+
+def test_fetch_geny_programme_malformed_row_elements(mock_httpx_get, mock_datetime_today, caplog):
     mock_response = MagicMock(spec=httpx.Response)
     mock_response.status_code = 200
     # Missing th.race-name
@@ -137,23 +134,18 @@ def test_fetch_geny_programme_malformed_row_elements(
     assert "Could not find meeting element 'th.race-name' in a row. Skipping row." in caplog.text
 
 
-def test_fetch_geny_programme_httpx_request_error(
-    mock_httpx_get,
-    mock_datetime_today,
-    caplog
-):
-    mock_httpx_get.side_effect = httpx.RequestError("Mock request error", request=MagicMock(url="http://mock.url"))
+def test_fetch_geny_programme_httpx_request_error(mock_httpx_get, mock_datetime_today, caplog):
+    mock_httpx_get.side_effect = httpx.RequestError(
+        "Mock request error", request=MagicMock(url="http://mock.url")
+    )
 
     result = geny.fetch_geny_programme()
 
     assert result == {"date": "2025-12-30", "meetings": []}
     assert "An error occurred while requesting 'http://mock.url'" in caplog.text
 
-def test_fetch_geny_programme_httpx_status_error(
-    mock_httpx_get,
-    mock_datetime_today,
-    caplog
-):
+
+def test_fetch_geny_programme_httpx_status_error(mock_httpx_get, mock_datetime_today, caplog):
     mock_response = MagicMock(spec=httpx.Response)
     mock_response.status_code = 404
     mock_response.raise_for_status.side_effect = httpx.HTTPStatusError(
@@ -166,10 +158,8 @@ def test_fetch_geny_programme_httpx_status_error(
     assert result == {"date": "2025-12-30", "meetings": []}
     assert "Error response 404 while requesting 'http://mock.url'" in caplog.text
 
-def test_fetch_geny_programme_id_course_from_href_fallback(
-    mock_httpx_get,
-    mock_datetime_today
-):
+
+def test_fetch_geny_programme_id_course_from_href_fallback(mock_httpx_get, mock_datetime_today):
     mock_response = MagicMock(spec=httpx.Response)
     mock_response.status_code = 200
     # HTML where id attribute is missing, but href has the ID

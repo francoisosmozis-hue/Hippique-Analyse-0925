@@ -24,7 +24,9 @@ CSV_HEADER = [
 ]
 
 
-def append_csv_line(path: str, data: Mapping[str, object], header: Iterable[str] = CSV_HEADER) -> None:
+def append_csv_line(
+    path: str, data: Mapping[str, object], header: Iterable[str] = CSV_HEADER
+) -> None:
     """Append a line to a CSV file ensuring the header exists.
 
     Parameters

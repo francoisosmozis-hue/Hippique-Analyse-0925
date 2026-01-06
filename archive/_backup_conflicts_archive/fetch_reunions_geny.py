@@ -25,9 +25,7 @@ def _slugify(value: str) -> str:
 
 def _fetch_reunions() -> list[dict[str, str]]:
     """Download Geny page and extract reunion data."""
-    resp = requests.get(
-        GENY_URL, headers={"User-Agent": "Mozilla/5.0"}, timeout=10
-    )
+    resp = requests.get(GENY_URL, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
     resp.raise_for_status()
     soup = BeautifulSoup(resp.text, "html.parser")
 
@@ -41,7 +39,7 @@ def _fetch_reunions() -> list[dict[str, str]]:
         if not match:
             continue
         label = match.group(0)
-        hippo = title[match.end():].strip(" -")
+        hippo = title[match.end() :].strip(" -")
         hippo = re.sub(r"\s*\([A-Z]{2}\)$", "", hippo)
 
         # Extract Geny link even if not used later

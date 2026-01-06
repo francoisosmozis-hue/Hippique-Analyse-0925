@@ -1,4 +1,3 @@
-
 # pip install playwright
 # python -m playwright install chromium
 import argparse
@@ -11,7 +10,7 @@ from playwright.sync_api import sync_playwright
 def get_course_json(page, url):
     page.goto(url, wait_until="domcontentloaded")
     # Attendre que les XHR peuplent la page (adapter le sélecteur si nécessaire)
-    page.wait_for_timeout(3000) # Augmenté pour plus de robustesse
+    page.wait_for_timeout(3000)  # Augmenté pour plus de robustesse
 
     content = page.content()
     # Plan A: détecter un <script type="application/json"> ou un data-state
@@ -33,6 +32,7 @@ def get_course_json(page, url):
 
     return data
 
+
 def snapshot_odds(course_url, tag, out_dir):
     print(f"[Playwright] Lancement pour {course_url} (tag: {tag})")
     out_path = Path(out_dir) / f"snapshot_{tag}.json"
@@ -40,7 +40,9 @@ def snapshot_odds(course_url, tag, out_dir):
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
-        ctx = browser.new_context(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
+        ctx = browser.new_context(
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+        )
         page = ctx.new_page()
 
         try:
@@ -56,6 +58,7 @@ def snapshot_odds(course_url, tag, out_dir):
         finally:
             browser.close()
 
+
 def main():
     parser = argparse.ArgumentParser(description="Crée un snapshot de cotes avec Playwright.")
     parser.add_argument("--course-url", required=True, help="URL de la course ZEturf")
@@ -64,6 +67,7 @@ def main():
     args = parser.parse_args()
 
     snapshot_odds(args.course_url, args.tag, args.out_dir)
+
 
 if __name__ == "__main__":
     main()

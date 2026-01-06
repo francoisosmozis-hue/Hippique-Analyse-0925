@@ -29,7 +29,7 @@ def test_get_processing_status_for_date_processing_stalled():
     mock_doc.id = "2025-01-01_R1C1"
     mock_doc.to_dict.return_value = {"gpi_decision": "PLAY"}
     mock_doc.update_time = datetime(2025, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
-    
+
     mock_latest_doc_query.stream.return_value = [mock_doc]
 
     # a daily plan with races
@@ -39,9 +39,10 @@ def test_get_processing_status_for_date_processing_stalled():
     ]
 
     # Act
-    with patch("hippique_orchestrator.firestore_client.db", mock_db), \
-         patch("hippique_orchestrator.firestore_client.get_races_for_date", return_value=[]):
-        
+    with (
+        patch("hippique_orchestrator.firestore_client.db", mock_db),
+        patch("hippique_orchestrator.firestore_client.get_races_for_date", return_value=[]),
+    ):
         status = firestore_client.get_processing_status_for_date("2025-01-02", daily_plan)
 
     # Assert
@@ -64,16 +65,16 @@ def test_get_processing_status_for_date_db_empty():
     mock_collection.order_by.return_value.limit.return_value = mock_latest_doc_query
     mock_latest_doc_query.stream.return_value = []
 
-
     # a daily plan with races
     daily_plan = [
         {"rc_key": "R1C1", "race_url": "http://example.com/R1C1"},
     ]
 
     # Act
-    with patch("hippique_orchestrator.firestore_client.db", mock_db), \
-         patch("hippique_orchestrator.firestore_client.get_races_for_date", return_value=[]):
-        
+    with (
+        patch("hippique_orchestrator.firestore_client.db", mock_db),
+        patch("hippique_orchestrator.firestore_client.get_races_for_date", return_value=[]),
+    ):
         status = firestore_client.get_processing_status_for_date("2025-01-01", daily_plan)
 
     # Assert

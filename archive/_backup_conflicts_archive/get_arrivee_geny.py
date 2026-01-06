@@ -607,6 +607,7 @@ def fetch_and_write_arrivals(planning_path_str: str, out_path_str: str) -> None:
     out_path = Path(out_path_str)
     write_arrivals(entries, out_path)
 
+
 def main(argv: Sequence[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
         description="Fetch arrivals from geny.com based on planning JSON"

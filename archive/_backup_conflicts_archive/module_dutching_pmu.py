@@ -157,6 +157,7 @@ def _parse_odds_place(r: dict[str, Any]) -> float:
                 pass
     return 4.0  # fallback prudente
 
+
 def _implied_probs_place_from_odds(runners: list[dict[str, Any]]) -> dict[str, float]:
     ids, px = [], []
     for r in runners:
@@ -166,7 +167,8 @@ def _implied_probs_place_from_odds(runners: list[dict[str, Any]]) -> dict[str, f
         o = _parse_odds_place(r)
         o = 1.01 if o <= 1.0 else o  # borne
         p = max(0.01, min(0.90, 1.0 / o))
-        ids.append(num); px.append(p)
+        ids.append(num)
+        px.append(p)
     if not ids:
         return {}
     n = len(ids)
@@ -175,15 +177,20 @@ def _implied_probs_place_from_odds(runners: list[dict[str, Any]]) -> dict[str, f
     scale = float(places) / s if s > 0 else 1.0
     return {i: max(0.005, min(0.90, p * scale)) for i, p in zip(ids, px, strict=False)}
 
+
 def _kelly_fraction(p: float, odds: float) -> float:
     """Kelly pour pari binaire avec cote décimale 'odds' (incluant la mise)."""
     b = max(1e-6, odds - 1.0)
     return max(0.0, (p * odds - 1.0) / b)
 
+
 def _round_to(x: float, step: float) -> float:
     return round(max(0.0, x) / step) * step
 
-def allocate_dutching_sp(cfg: dict[str, float], runners: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], float]:
+
+def allocate_dutching_sp(
+    cfg: dict[str, float], runners: list[dict[str, Any]]
+) -> tuple[list[dict[str, Any]], float]:
     """
     Dutching Simple Placé (GPI v5.1)
     Retourne (tickets, ev_panier) où:
@@ -233,28 +240,30 @@ def allocate_dutching_sp(cfg: dict[str, float], runners: list[dict[str, Any]]) -
 
     # Kelly théorique puis Kelly effectif (fraction utilisateur + cap volatilité)
     stakes = []
-    for (num, odds, p, _, r) in cand:
-        k_theo = _kelly_fraction(p, odds)                # 0..1
-        k_eff = min(cap_vol, k_theo * kelly_frac_user)   # cap 60% par cheval
+    for num, odds, p, _, r in cand:
+        k_theo = _kelly_fraction(p, odds)  # 0..1
+        k_eff = min(cap_vol, k_theo * kelly_frac_user)  # cap 60% par cheval
         stakes.append((num, odds, p, k_eff, r))
 
     # Normalisation au budget SP
     s_k = sum(max(1e-9, k) for _, _, _, k, _ in stakes)
     tickets: list[dict[str, Any]] = []
     remaining = budget_sp
-    for (num, odds, p, k, r) in stakes:
+    for num, odds, p, k, r in stakes:
         raw = budget_sp * (k / s_k) if s_k > 0 else budget_sp / max(1, len(stakes))
         mise = _round_to(raw, step)
         if mise < min_stake:
             continue
         remaining -= mise
-        tickets.append({
-            "num": num,
-            "mise": round(mise, 2),
-            "odds_place": odds,
-            "p_place": round(p, 4),
-            "kelly": round(k, 4),
-        })
+        tickets.append(
+            {
+                "num": num,
+                "mise": round(mise, 2),
+                "odds_place": odds,
+                "p_place": round(p, 4),
+                "kelly": round(k, 4),
+            }
+        )
 
     # Si on a perdu trop à l'arrondi, réinjecte le reliquat sur le meilleur cheval
     if remaining >= min_stake and tickets:
@@ -268,16 +277,19 @@ def allocate_dutching_sp(cfg: dict[str, float], runners: list[dict[str, Any]]) -
     # EV par ticket: p*(odds-1) - (1-p)
     ev_sum = 0.0
     for t in tickets:
-        p = float(t["p_place"]); odds = float(t["odds_place"])
+        p = float(t["p_place"])
+        odds = float(t["odds_place"])
         ev_per_euro = p * (odds - 1.0) - (1.0 - p)
         ev_sum += ev_per_euro * float(t["mise"])
 
     ev_panier = ev_sum / total_stake  # EV par € misé
     return tickets, ev_panier
 
+
 # Aliases possibles si ton code legacy appelle d'autres noms
 try:
     compute_dutching_sp  # existant ?
 except NameError:
+
     def compute_dutching_sp(cfg, runners):
         return allocate_dutching_sp(cfg, runners)

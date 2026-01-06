@@ -17,7 +17,7 @@ def equal_profit_stakes(odds_list: Iterable[float], total_stake: float) -> list[
     processed_odds = []
     for o in odds_list:
         odd_float = float(o)
-        if odd_float <= 1.0: # Odds must be > 1.0 for a profit to be possible in theory
+        if odd_float <= 1.0:  # Odds must be > 1.0 for a profit to be possible in theory
             raise ValueError("Odds must be greater than 1.0")
         processed_odds.append(odd_float)
 
@@ -64,8 +64,8 @@ def require_mid_odds(horses_meta: Iterable[dict]) -> bool:
         try:
             odds_float = float(odds)
         except ValueError:
-            continue # Ignore non-numeric odds
-        
+            continue  # Ignore non-numeric odds
+
         if MID_ODDS_LOWER_BOUND <= odds_float <= MID_ODDS_UPPER_BOUND:
             return True
     return False

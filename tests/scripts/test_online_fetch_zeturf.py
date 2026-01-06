@@ -92,9 +92,7 @@ def test_build_snapshot_payload():
             {"num": "2", "name": "Test Horse 2", "cote": "5.0", "odds_place": "1.5"},
         ],
     }
-    payload = online_fetch_zeturf._build_snapshot_payload(
-        raw_snapshot, "R1", "C1", phase="H-30"
-    )
+    payload = online_fetch_zeturf._build_snapshot_payload(raw_snapshot, "R1", "C1", phase="H-30")
     assert payload["meeting"] == "Test Meeting"
     assert payload["date"] == "2025-01-01"
     assert payload["discipline"] == "Test Discipline"
@@ -122,5 +120,3 @@ def test_fetch_race_snapshot_cli(mocker):
     mock_run.assert_called_once()
     args, kwargs = mock_run.call_args
     assert "analyse_courses_du_jour_enrichie" in args[0]
-
-

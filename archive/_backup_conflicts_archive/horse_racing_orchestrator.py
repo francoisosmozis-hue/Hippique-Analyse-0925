@@ -35,47 +35,66 @@ from pydantic import BaseModel, Field
 
 load_dotenv()
 
+
 class Config(BaseModel):
     # GCP
     PROJECT_ID: str = Field(default_factory=lambda: os.getenv("PROJECT_ID", ""))
     REGION: str = Field(default_factory=lambda: os.getenv("REGION", "europe-west1"))
-    SERVICE_NAME: str = Field(default_factory=lambda: os.getenv("SERVICE_NAME", "horse-racing-orchestrator"))
+    SERVICE_NAME: str = Field(
+        default_factory=lambda: os.getenv("SERVICE_NAME", "horse-racing-orchestrator")
+    )
     SERVICE_URL: str = Field(default_factory=lambda: os.getenv("SERVICE_URL", ""))
     QUEUE_ID: str = Field(default_factory=lambda: os.getenv("QUEUE_ID", "horse-racing-queue"))
 
     # Scheduler & Tasks
     SCHEDULER_SA_EMAIL: str = Field(default_factory=lambda: os.getenv("SCHEDULER_SA_EMAIL", ""))
-    SCHEDULER_JOB_0900: str = Field(default_factory=lambda: os.getenv("SCHEDULER_JOB_0900", "daily-plan-0900"))
+    SCHEDULER_JOB_0900: str = Field(
+        default_factory=lambda: os.getenv("SCHEDULER_JOB_0900", "daily-plan-0900")
+    )
 
     # Auth & Security
-    REQUIRE_AUTH: bool = Field(default_factory=lambda: os.getenv("REQUIRE_AUTH", "true").lower() == "true")
+    REQUIRE_AUTH: bool = Field(
+        default_factory=lambda: os.getenv("REQUIRE_AUTH", "true").lower() == "true"
+    )
     OIDC_AUDIENCE: str | None = Field(default_factory=lambda: os.getenv("OIDC_AUDIENCE"))
 
     # Storage
     GCS_BUCKET: str | None = Field(default_factory=lambda: os.getenv("GCS_BUCKET"))
-    LOCAL_DATA_DIR: str = Field(default_factory=lambda: os.getenv("LOCAL_DATA_DIR", "/tmp/horse_data"))
+    LOCAL_DATA_DIR: str = Field(
+        default_factory=lambda: os.getenv("LOCAL_DATA_DIR", "/tmp/horse_data")
+    )
 
     # Timezone & Scheduling
     TIMEZONE: str = Field(default_factory=lambda: os.getenv("TIMEZONE", "Europe/Paris"))
-    DAILY_SCHEDULE_HOUR: int = Field(default_factory=lambda: int(os.getenv("DAILY_SCHEDULE_HOUR", "9")))
+    DAILY_SCHEDULE_HOUR: int = Field(
+        default_factory=lambda: int(os.getenv("DAILY_SCHEDULE_HOUR", "9"))
+    )
 
     # Throttling & Retries
     REQUEST_TIMEOUT: int = Field(default_factory=lambda: int(os.getenv("REQUEST_TIMEOUT", "30")))
     MAX_RETRIES: int = Field(default_factory=lambda: int(os.getenv("MAX_RETRIES", "3")))
-    RATE_LIMIT_DELAY: float = Field(default_factory=lambda: float(os.getenv("RATE_LIMIT_DELAY", "1.0")))
+    RATE_LIMIT_DELAY: float = Field(
+        default_factory=lambda: float(os.getenv("RATE_LIMIT_DELAY", "1.0"))
+    )
 
     # User Agent
-    USER_AGENT: str = Field(default_factory=lambda: os.getenv(
-        "USER_AGENT",
-        "HorseRacingAnalyzer/5.1 (Educational; contact@example.com)"
-    ))
+    USER_AGENT: str = Field(
+        default_factory=lambda: os.getenv(
+            "USER_AGENT", "HorseRacingAnalyzer/5.1 (Educational; contact@example.com)"
+        )
+    )
 
     # GPI Budget
-    GPI_BUDGET_PER_RACE: float = Field(default_factory=lambda: float(os.getenv("GPI_BUDGET_PER_RACE", "5.0")))
-    GPI_MIN_EV_PERCENT: float = Field(default_factory=lambda: float(os.getenv("GPI_MIN_EV_PERCENT", "40.0")))
+    GPI_BUDGET_PER_RACE: float = Field(
+        default_factory=lambda: float(os.getenv("GPI_BUDGET_PER_RACE", "5.0"))
+    )
+    GPI_MIN_EV_PERCENT: float = Field(
+        default_factory=lambda: float(os.getenv("GPI_MIN_EV_PERCENT", "40.0"))
+    )
 
     class Config:
         case_sensitive = True
+
 
 config = Config()
 
@@ -97,7 +116,9 @@ from pythonjsonlogger import jsonlogger
 class CloudLoggingFormatter(jsonlogger.JsonFormatter):
     """Formatter compatible avec Cloud Logging (structured logs)"""
 
-    def add_fields(self, log_record: dict[str, Any], record: logging.LogRecord, message_dict: dict) -> None:
+    def add_fields(
+        self, log_record: dict[str, Any], record: logging.LogRecord, message_dict: dict
+    ) -> None:
         super().add_fields(log_record, record, message_dict)
 
         # Cloud Logging fields
@@ -113,6 +134,7 @@ class CloudLoggingFormatter(jsonlogger.JsonFormatter):
         if record.exc_info:
             log_record['exception'] = traceback.format_exception(*record.exc_info)
 
+
 def setup_logger(name: str = "horse_racing") -> logging.Logger:
     """Configure un logger JSON structuré"""
     logger = logging.getLogger(name)
@@ -123,13 +145,12 @@ def setup_logger(name: str = "horse_racing") -> logging.Logger:
         return logger
 
     handler = logging.StreamHandler(sys.stdout)
-    formatter = CloudLoggingFormatter(
-        '%(timestamp)s %(severity)s %(name)s %(message)s'
-    )
+    formatter = CloudLoggingFormatter('%(timestamp)s %(severity)s %(name)s %(message)s')
     handler.setFormatter(formatter)
     logger.addHandler(handler)
 
     return logger
+
 
 logger = setup_logger()
 
@@ -144,9 +165,11 @@ from zoneinfo import ZoneInfo
 PARIS_TZ = ZoneInfo("Europe/Paris")
 UTC_TZ = ZoneInfo("UTC")
 
+
 def now_paris() -> datetime:
     """Heure actuelle en Europe/Paris"""
     return datetime.now(PARIS_TZ)
+
 
 def parse_local_time(date_str: str, time_str: str) -> datetime:
     """
@@ -160,11 +183,13 @@ def parse_local_time(date_str: str, time_str: str) -> datetime:
     dt_naive = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M")
     return dt_naive.replace(tzinfo=PARIS_TZ)
 
+
 def to_utc(dt_paris: datetime) -> datetime:
     """Convertit Europe/Paris -> UTC"""
     if dt_paris.tzinfo is None:
         dt_paris = dt_paris.replace(tzinfo=PARIS_TZ)
     return dt_paris.astimezone(UTC_TZ)
+
 
 def to_paris(dt_utc: datetime) -> datetime:
     """Convertit UTC -> Europe/Paris"""
@@ -172,11 +197,13 @@ def to_paris(dt_utc: datetime) -> datetime:
         dt_utc = dt_utc.replace(tzinfo=UTC_TZ)
     return dt_utc.astimezone(PARIS_TZ)
 
+
 def to_rfc3339(dt: datetime) -> str:
     """Convertit datetime en RFC3339 (requis par Cloud Tasks)"""
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=UTC_TZ)
     return dt.isoformat()
+
 
 def calculate_snapshots(race_time_local: datetime) -> tuple[datetime, datetime]:
     """
@@ -208,11 +235,13 @@ class PlanBuilder:
 
     def __init__(self):
         self.session = requests.Session()
-        self.session.headers.update({
-            'User-Agent': config.USER_AGENT,
-            'Accept': 'text/html,application/xhtml+xml',
-            'Accept-Language': 'fr-FR,fr;q=0.9',
-        })
+        self.session.headers.update(
+            {
+                'User-Agent': config.USER_AGENT,
+                'Accept': 'text/html,application/xhtml+xml',
+                'Accept-Language': 'fr-FR,fr;q=0.9',
+            }
+        )
 
     def build_plan(self, date_str: str) -> list[dict]:
         """
@@ -265,7 +294,9 @@ class PlanBuilder:
             races = []
 
             # Pattern URL: /fr/course/YYYY-MM-DD/R1C2-hippodrome-name
-            course_links = soup.find_all('a', href=re.compile(r'/fr/course/\d{4}-\d{2}-\d{2}/R\d+C\d+'))
+            course_links = soup.find_all(
+                'a', href=re.compile(r'/fr/course/\d{4}-\d{2}-\d{2}/R\d+C\d+')
+            )
 
             for link in course_links:
                 href = link.get('href')
@@ -278,15 +309,17 @@ class PlanBuilder:
                 # Extraire meeting depuis le texte ou l'URL
                 meeting = self._extract_meeting(link, href)
 
-                races.append({
-                    "date": race_date,
-                    "r_label": f"R{r_num}",
-                    "c_label": f"C{c_num}",
-                    "meeting": meeting.upper(),
-                    "time_local": None,  # À compléter
-                    "course_url": f"https://www.zeturf.fr{href}",
-                    "reunion_url": f"https://www.zeturf.fr/fr/reunion/{race_date}/R{r_num}"
-                })
+                races.append(
+                    {
+                        "date": race_date,
+                        "r_label": f"R{r_num}",
+                        "c_label": f"C{c_num}",
+                        "meeting": meeting.upper(),
+                        "time_local": None,  # À compléter
+                        "course_url": f"https://www.zeturf.fr{href}",
+                        "reunion_url": f"https://www.zeturf.fr/fr/reunion/{race_date}/R{r_num}",
+                    }
+                )
 
             logger.info(f"Parsed {len(races)} races from ZEturf")
             return races
@@ -375,15 +408,17 @@ class PlanBuilder:
                         h, m = time_match.groups()
                         time_local = f"{h.zfill(2)}:{m}"
 
-                    races.append({
-                        "date": date_str,
-                        "r_label": f"R{r_num}",
-                        "c_label": f"C{c_num}",
-                        "meeting": "UNKNOWN",  # À extraire
-                        "time_local": time_local,
-                        "course_url": f"https://www.zeturf.fr/fr/course/{date_str}/R{r_num}C{c_num}",
-                        "reunion_url": f"https://www.zeturf.fr/fr/reunion/{date_str}/R{r_num}"
-                    })
+                    races.append(
+                        {
+                            "date": date_str,
+                            "r_label": f"R{r_num}",
+                            "c_label": f"C{c_num}",
+                            "meeting": "UNKNOWN",  # À extraire
+                            "time_local": time_local,
+                            "course_url": f"https://www.zeturf.fr/fr/course/{date_str}/R{r_num}C{c_num}",
+                            "reunion_url": f"https://www.zeturf.fr/fr/reunion/{date_str}/R{r_num}",
+                        }
+                    )
 
             return races
 
@@ -435,9 +470,7 @@ class TaskScheduler:
         self.tasks_client = tasks_v2.CloudTasksClient()
         self.scheduler_client = scheduler_v1.CloudSchedulerClient()
         self.queue_path = self.tasks_client.queue_path(
-            config.PROJECT_ID,
-            config.REGION,
-            config.QUEUE_ID
+            config.PROJECT_ID, config.REGION, config.QUEUE_ID
         )
 
     def enqueue_run_task(
@@ -448,7 +481,7 @@ class TaskScheduler:
         when_paris: datetime,
         date_str: str,
         r_label: str,
-        c_label: str
+        c_label: str,
     ) -> str | None:
         """
         Crée une tâche Cloud Tasks pour exécuter /run
@@ -478,11 +511,7 @@ class TaskScheduler:
                 pass  # N'existe pas, on continue
 
             # Payload
-            payload = {
-                "course_url": course_url,
-                "phase": phase,
-                "date": date_str
-            }
+            payload = {"course_url": course_url, "phase": phase, "date": date_str}
 
             # Schedule time en UTC
             when_utc = to_utc(when_paris)
@@ -495,25 +524,20 @@ class TaskScheduler:
                 "http_request": {
                     "http_method": tasks_v2.HttpMethod.POST,
                     "url": run_url,
-                    "headers": {
-                        "Content-Type": "application/json"
-                    },
+                    "headers": {"Content-Type": "application/json"},
                     "body": json.dumps(payload).encode(),
                 },
-                "schedule_time": timestamp
+                "schedule_time": timestamp,
             }
 
             # OIDC si requis
             if config.REQUIRE_AUTH and config.SCHEDULER_SA_EMAIL:
                 task["http_request"]["oidc_token"] = {
                     "service_account_email": config.SCHEDULER_SA_EMAIL,
-                    "audience": run_url
+                    "audience": run_url,
                 }
 
-            response = self.tasks_client.create_task(
-                parent=self.queue_path,
-                task=task
-            )
+            response = self.tasks_client.create_task(parent=self.queue_path, task=task)
 
             logger.info(
                 f"Task created: {task_id} at {when_paris.strftime('%Y-%m-%d %H:%M %Z')} "
@@ -526,11 +550,7 @@ class TaskScheduler:
             return None
 
     def create_one_shot_scheduler_job(
-        self,
-        job_name: str,
-        when_paris: datetime,
-        target_url: str,
-        payload: dict
+        self, job_name: str, when_paris: datetime, target_url: str, payload: dict
     ) -> bool:
         """
         Fallback: crée un job Scheduler one-shot
@@ -582,11 +602,7 @@ class GPIRunner:
         self.gpi_base = Path("gpi_modules")  # Ajuster le chemin
 
     def run_course(
-        self,
-        course_url: str,
-        phase: str,
-        date_str: str,
-        correlation_id: str | None = None
+        self, course_url: str, phase: str, date_str: str, correlation_id: str | None = None
     ) -> dict:
         """
         Exécute l'analyse complète d'une course
@@ -609,35 +625,31 @@ class GPIRunner:
 
         logger.info(
             f"Running GPI analysis for {course_url} phase={phase_norm}",
-            extra={"correlation_id": correlation_id}
+            extra={"correlation_id": correlation_id},
         )
 
-        results = {
-            "ok": False,
-            "rc": -1,
-            "stdout_tail": "",
-            "stderr_tail": "",
-            "artifacts": []
-        }
+        results = {"ok": False, "rc": -1, "stdout_tail": "", "stderr_tail": "", "artifacts": []}
 
         try:
             # Environnement pour subprocess
             env = os.environ.copy()
-            env.update({
-                "COURSE_URL": course_url,
-                "PHASE": phase_norm,
-                "DATE": date_str,
-                "DATA_DIR": str(self.data_dir),
-                "GPI_BUDGET": str(config.GPI_BUDGET_PER_RACE),
-                "GPI_MIN_EV": str(config.GPI_MIN_EV_PERCENT)
-            })
+            env.update(
+                {
+                    "COURSE_URL": course_url,
+                    "PHASE": phase_norm,
+                    "DATE": date_str,
+                    "DATA_DIR": str(self.data_dir),
+                    "GPI_BUDGET": str(config.GPI_BUDGET_PER_RACE),
+                    "GPI_MIN_EV": str(config.GPI_MIN_EV_PERCENT),
+                }
+            )
 
             # Séquence d'exécution
             steps = [
                 ("analyse_enrichie", self._run_analyse_enrichie),
                 ("p_finale_export", self._run_p_finale_export),
                 ("simulate_ev", self._run_simulate_ev),
-                ("pipeline_run", self._run_pipeline_run)
+                ("pipeline_run", self._run_pipeline_run),
             ]
 
             all_stdout = []
@@ -653,7 +665,7 @@ class GPIRunner:
                 if rc != 0:
                     logger.error(
                         f"Step {step_name} failed with rc={rc}",
-                        extra={"correlation_id": correlation_id}
+                        extra={"correlation_id": correlation_id},
                     )
                     results["rc"] = rc
                     break
@@ -677,12 +689,13 @@ class GPIRunner:
                 self._upload_to_gcs(results["artifacts"], date_str, correlation_id)
 
             logger.info(
-                f"Analysis complete: ok={results['ok']}",
-                extra={"correlation_id": correlation_id}
+                f"Analysis complete: ok={results['ok']}", extra={"correlation_id": correlation_id}
             )
 
         except Exception as e:
-            logger.error(f"Runner error: {e}", exc_info=True, extra={"correlation_id": correlation_id})
+            logger.error(
+                f"Runner error: {e}", exc_info=True, extra={"correlation_id": correlation_id}
+            )
             results["stderr_tail"] = str(e)
 
         return results
@@ -701,10 +714,14 @@ class GPIRunner:
             return (1, "", f"Script not found: {script}")
 
         cmd = [
-            "python", str(script),
-            "--course-url", env["COURSE_URL"],
-            "--phase", env["PHASE"],
-            "--output-dir", env["DATA_DIR"]
+            "python",
+            str(script),
+            "--course-url",
+            env["COURSE_URL"],
+            "--phase",
+            env["PHASE"],
+            "--output-dir",
+            env["DATA_DIR"],
         ]
 
         return self._run_subprocess(cmd, env)
@@ -725,9 +742,12 @@ class GPIRunner:
             return (0, "Script skipped (optional)", "")
 
         cmd = [
-            "python", str(script),
-            "--data-dir", env["DATA_DIR"],
-            "--min-ev", str(config.GPI_MIN_EV_PERCENT)
+            "python",
+            str(script),
+            "--data-dir",
+            env["DATA_DIR"],
+            "--min-ev",
+            str(config.GPI_MIN_EV_PERCENT),
         ]
         return self._run_subprocess(cmd, env)
 
@@ -741,20 +761,12 @@ class GPIRunner:
         return self._run_subprocess(cmd, env)
 
     def _run_subprocess(
-        self,
-        cmd: list[str],
-        env: dict,
-        timeout: int = 300
+        self, cmd: list[str], env: dict, timeout: int = 300
     ) -> tuple[int, str, str]:
         """Exécute une commande subprocess avec timeout"""
         try:
             proc = subprocess.run(
-                cmd,
-                env=env,
-                capture_output=True,
-                text=True,
-                timeout=timeout,
-                check=False
+                cmd, env=env, capture_output=True, text=True, timeout=timeout, check=False
             )
             return (proc.returncode, proc.stdout, proc.stderr)
         except subprocess.TimeoutExpired:
@@ -776,18 +788,23 @@ class GPIRunner:
 
         return artifacts
 
-    def _upload_to_gcs(self, artifacts: list[str], date_str: str, correlation_id: str | None) -> None:
+    def _upload_to_gcs(
+        self, artifacts: list[str], date_str: str, correlation_id: str | None
+    ) -> None:
         """Upload artefacts vers GCS"""
         if not config.GCS_BUCKET:
             return
 
         try:
             from google.cloud import storage
+
             client = storage.Client()
             bucket = client.bucket(config.GCS_BUCKET)
 
             for artifact in artifacts:
-                blob_name = f"results/{date_str}/{correlation_id or 'unknown'}/{Path(artifact).name}"
+                blob_name = (
+                    f"results/{date_str}/{correlation_id or 'unknown'}/{Path(artifact).name}"
+                )
                 blob = bucket.blob(blob_name)
                 blob.upload_from_filename(artifact)
                 logger.info(f"Uploaded to GCS: {blob_name}")
@@ -821,16 +838,20 @@ runner = GPIRunner()
 
 # ============ Models ============
 
+
 class ScheduleRequest(BaseModel):
     date: str = "today"  # "YYYY-MM-DD" ou "today"
     mode: Literal["tasks", "scheduler"] = "tasks"
+
 
 class RunRequest(BaseModel):
     course_url: str
     phase: str  # "H-30", "H30", "H-5", "H5"
     date: str  # "YYYY-MM-DD"
 
+
 # ============ Auth ============
+
 
 async def verify_oidc(request: Request):
     """Vérifie le token OIDC si REQUIRE_AUTH=true"""
@@ -846,12 +867,15 @@ async def verify_oidc(request: Request):
     # TODO: Vérifier signature JWT avec google.auth
     return True
 
+
 # ============ Endpoints ============
+
 
 @app.get("/healthz")
 async def healthz():
     """Health check"""
     return {"status": "ok", "timestamp": now_paris().isoformat()}
+
 
 @app.post("/schedule")
 async def schedule(req: ScheduleRequest, _auth=Depends(verify_oidc)):
@@ -860,8 +884,7 @@ async def schedule(req: ScheduleRequest, _auth=Depends(verify_oidc)):
     """
     correlation_id = str(uuid.uuid4())
     logger.info(
-        f"POST /schedule date={req.date} mode={req.mode}",
-        extra={"correlation_id": correlation_id}
+        f"POST /schedule date={req.date} mode={req.mode}", extra={"correlation_id": correlation_id}
     )
 
     try:
@@ -898,7 +921,7 @@ async def schedule(req: ScheduleRequest, _auth=Depends(verify_oidc)):
                         when_paris=h30_time,
                         date_str=race["date"],
                         r_label=race["r_label"],
-                        c_label=race["c_label"]
+                        c_label=race["c_label"],
                     )
 
                     # Tâche H-5
@@ -909,18 +932,20 @@ async def schedule(req: ScheduleRequest, _auth=Depends(verify_oidc)):
                         when_paris=h5_time,
                         date_str=race["date"],
                         r_label=race["r_label"],
-                        c_label=race["c_label"]
+                        c_label=race["c_label"],
                     )
 
-                    scheduled_tasks.append({
-                        "race": f"{race['r_label']}{race['c_label']}",
-                        "meeting": race["meeting"],
-                        "time_local": race["time_local"],
-                        "h30_task": task_h30,
-                        "h30_time_utc": to_utc(h30_time).strftime("%Y-%m-%d %H:%M:%S UTC"),
-                        "h5_task": task_h5,
-                        "h5_time_utc": to_utc(h5_time).strftime("%Y-%m-%d %H:%M:%S UTC")
-                    })
+                    scheduled_tasks.append(
+                        {
+                            "race": f"{race['r_label']}{race['c_label']}",
+                            "meeting": race["meeting"],
+                            "time_local": race["time_local"],
+                            "h30_task": task_h30,
+                            "h30_time_utc": to_utc(h30_time).strftime("%Y-%m-%d %H:%M:%S UTC"),
+                            "h5_task": task_h5,
+                            "h5_time_utc": to_utc(h5_time).strftime("%Y-%m-%d %H:%M:%S UTC"),
+                        }
+                    )
 
             except Exception as e:
                 logger.error(f"Error scheduling {race['r_label']}{race['c_label']}: {e}")
@@ -931,12 +956,13 @@ async def schedule(req: ScheduleRequest, _auth=Depends(verify_oidc)):
             "plan_path": str(plan_path),
             "races_count": len(plan),
             "tasks_scheduled": len(scheduled_tasks),
-            "tasks": scheduled_tasks
+            "tasks": scheduled_tasks,
         }
 
     except Exception as e:
         logger.error(f"Schedule error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.post("/run")
 async def run(req: RunRequest, _auth=Depends(verify_oidc)):
@@ -946,7 +972,7 @@ async def run(req: RunRequest, _auth=Depends(verify_oidc)):
     correlation_id = str(uuid.uuid4())
     logger.info(
         f"POST /run url={req.course_url} phase={req.phase}",
-        extra={"correlation_id": correlation_id}
+        extra={"correlation_id": correlation_id},
     )
 
     try:
@@ -954,7 +980,7 @@ async def run(req: RunRequest, _auth=Depends(verify_oidc)):
             course_url=req.course_url,
             phase=req.phase,
             date_str=req.date,
-            correlation_id=correlation_id
+            correlation_id=correlation_id,
         )
 
         return {
@@ -963,20 +989,18 @@ async def run(req: RunRequest, _auth=Depends(verify_oidc)):
             "returncode": result["rc"],
             "stdout_tail": result["stdout_tail"],
             "stderr_tail": result["stderr_tail"],
-            "artifacts": result["artifacts"]
+            "artifacts": result["artifacts"],
         }
 
     except Exception as e:
         logger.error(f"Run error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     logger.error(f"Unhandled exception: {exc}", exc_info=True)
-    return JSONResponse(
-        status_code=500,
-        content={"detail": "Internal server error"}
-    )
+    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
 
 # ============================================================================

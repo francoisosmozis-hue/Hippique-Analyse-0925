@@ -21,18 +21,50 @@ from hippique_orchestrator.scripts.backup_restore import (
 def mock_data_dir(tmp_path):
     """Fixture to create a mock data directory structure for testing."""
     (tmp_path / "R1C1").mkdir()
-    (tmp_path / "R1C1" / "analysis.json").write_text(json.dumps({"meta": {"date": "2026-01-01"}, "tickets": [{"type": "win", "stake": 10, "gain": 15}], "validation": {"roi_global_est": 0.1}, "ev": {"ev_ratio": 0.05}}))
+    (tmp_path / "R1C1" / "analysis.json").write_text(
+        json.dumps(
+            {
+                "meta": {"date": "2026-01-01"},
+                "tickets": [{"type": "win", "stake": 10, "gain": 15}],
+                "validation": {"roi_global_est": 0.1},
+                "ev": {"ev_ratio": 0.05},
+            }
+        )
+    )
     (tmp_path / "R1C1" / "tracking.csv").write_text("header1,header2\nvalue1,value2")
-    (tmp_path / "R1C1" / "metrics.json").write_text(json.dumps({"clv_moyen": 0.02, "sharpe": 0.5, "risk_of_ruin": 0.01}))
+    (tmp_path / "R1C1" / "metrics.json").write_text(
+        json.dumps({"clv_moyen": 0.02, "sharpe": 0.5, "risk_of_ruin": 0.01})
+    )
 
     (tmp_path / "R2C2").mkdir()
-    (tmp_path / "R2C2" / "analysis.json").write_text(json.dumps({"meta": {"date": "2026-01-01"}, "tickets": [{"type": "place", "stake": 5, "gain": 4}], "validation": {"roi_global_est": -0.1}, "ev": {"ev_ratio": -0.02}}))
+    (tmp_path / "R2C2" / "analysis.json").write_text(
+        json.dumps(
+            {
+                "meta": {"date": "2026-01-01"},
+                "tickets": [{"type": "place", "stake": 5, "gain": 4}],
+                "validation": {"roi_global_est": -0.1},
+                "ev": {"ev_ratio": -0.02},
+            }
+        )
+    )
 
     (tmp_path / "R3C3").mkdir()
-    (tmp_path / "R3C3" / "analysis.json").write_text(json.dumps({"meta": {"date": "2026-01-02"}, "abstain": True}))
+    (tmp_path / "R3C3" / "analysis.json").write_text(
+        json.dumps({"meta": {"date": "2026-01-02"}, "abstain": True})
+    )
 
     (tmp_path / "R4C4").mkdir()
-    (tmp_path / "R4C4" / "analysis_H5.json").write_text(json.dumps({"meta": {"date": "2026-01-01"}, "tickets": [{"type": "show", "stake": 20, "gain": 30}], "validation": {"roi_global_est": 0.2}, "ev": {"ev_global": 0.1}, "flags": {"ALERTE_VALUE": True}}))
+    (tmp_path / "R4C4" / "analysis_H5.json").write_text(
+        json.dumps(
+            {
+                "meta": {"date": "2026-01-01"},
+                "tickets": [{"type": "show", "stake": 20, "gain": 30}],
+                "validation": {"roi_global_est": 0.2},
+                "ev": {"ev_global": 0.1},
+                "flags": {"ALERTE_VALUE": True},
+            }
+        )
+    )
 
     return tmp_path
 
@@ -205,4 +237,3 @@ def test_main_watch_mode(mock_stderr, mock_sleep, mock_print, mock_parse_args, m
     main()
     assert mock_sleep.call_count == 2
     mock_print.assert_any_call("\n👋 Monitoring stopped")
-
