@@ -32,7 +32,7 @@ OIDC_TOKEN_DEPENDENCY = Depends(verify_oidc_token)
 async def run_phase_task(
     request: Request,
     body: RunPhaseRequest,
-    token_claims: dict = Depends(verify_oidc_token),
+    token_claims: dict = OIDC_TOKEN_DEPENDENCY,
 ):
     """
     Executes the analysis for a single race for a given phase (H9, H30, H5).
