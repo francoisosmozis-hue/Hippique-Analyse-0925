@@ -22,9 +22,13 @@ from typing import Any
 from urllib.parse import urljoin
 from zoneinfo import ZoneInfo
 
+import requests
 import yaml
+from bs4 import BeautifulSoup
 
 from hippique_orchestrator import config
+
+logger = logging.getLogger(__name__)
 
 _RC_COMBINED_RE = re.compile(r"R?\s*(\d+)\s*C\s*(\d+)", re.IGNORECASE)
 _COURSE_ID_PATTERN = re.compile(r"/(\d{4}-\d{2}-\d{2}/R\d+C\d+)")
@@ -137,12 +141,7 @@ def fetch_race_snapshot(
     return normalised
 
 
-try:  # pragma: no cover - requests is always available in production
-    import requests
-except Exception:  # pragma: no cover - fallback when requests missing in tests
-    requests = None  # type: ignore[assignment]
 
-logger = logging.getLogger(__name__)
 
 
 def _normalize_decimal(value: Any) -> float | None:
@@ -352,7 +351,6 @@ def _exp_backoff_sleep(attempt: int, *, base: float = 1.0, cap: float = 5.0) -> 
         time.sleep(delay)
 
 
-from bs4 import BeautifulSoup
 def _fallback_parse_html(html: Any) -> dict[str, Any]:
     """Extract a minimal snapshot payload using BeautifulSoup."""
 
@@ -365,7 +363,7 @@ def _fallback_parse_html(html: Any) -> dict[str, Any]:
         html = str(html or "")
 
     soup = BeautifulSoup(html, "lxml")
-    
+
     def _clean_text(
         value: str | None, *, lowercase: bool = False, strip_accents: bool = False
     ) -> str | None:
@@ -384,7 +382,7 @@ def _fallback_parse_html(html: Any) -> dict[str, Any]:
         return text
 
     runners: list[dict[str, Any]] = []
-    
+
     # Find the main table of runners
     table = soup.find("table", class_="table-runners")
     if table:
@@ -395,7 +393,7 @@ def _fallback_parse_html(html: Any) -> dict[str, Any]:
             num_cell = row.find("td", class_="numero")
             if num_cell:
                 runner_data["num"] = _clean_text(num_cell.text)
-            
+
             name_cell = row.find("td", class_="cheval")
             if name_cell:
                 name_anchor = name_cell.find("a", class_="horse-name")
@@ -407,7 +405,7 @@ def _fallback_parse_html(html: Any) -> dict[str, Any]:
                 odds_span = odds_cell.find("span", class_="cote")
                 if odds_span:
                     runner_data["cote"] = _clean_text(odds_span.text)
-            
+
             # This data is in a script tag, so we need to find it and parse it.
             cotes_infos_script = soup.find("script", string=re.compile("cotesInfos"))
             if cotes_infos_script:
