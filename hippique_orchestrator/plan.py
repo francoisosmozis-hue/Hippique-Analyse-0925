@@ -82,7 +82,7 @@ async def build_plan_async(date_str: str) -> list[dict[str, Any]]:
 
             enriched_plan.append(
                 {
-                    "date": date,
+                    "date": date_str,
                     "r_label": r_label,
                     "c_label": c_label,
                     "course_id": None,  # Geny ID n'est plus disponible
