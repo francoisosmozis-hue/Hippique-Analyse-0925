@@ -4,7 +4,7 @@ steps:
 - name: 'python:3.12-slim'
   id: "Install Dependencies"
   entrypoint: 'bash'
-  args: ['-c', 'python -m pip install -r requirements.txt -r requirements-dev.txt']
+  args: ['-c', 'python -m pip install -r requirements.txt -r requirements-dev.txt && python -m pip show ruff']
 
 # Lint the code
 - name: 'python:3.12-slim'
