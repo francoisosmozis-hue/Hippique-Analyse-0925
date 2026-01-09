@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import asyncio
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date as date_obj
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -29,27 +29,32 @@ from hippique_orchestrator.logging_utils import get_logger
 logger = get_logger(__name__)
 
 
-async def build_plan_async(date: str) -> list[dict[str, Any]]:
+async def build_plan_async(date_str: str) -> list[dict[str, Any]]:
     """
     Construit le plan complet du jour en utilisant Boturfers comme unique source.
     """
-    if date == "today":
-        date = datetime.now(ZoneInfo(config.TIMEZONE)).strftime("%Y-%m-%d")
+    if date_str == "today":
+        date_str = datetime.now(ZoneInfo(config.TIMEZONE)).strftime("%Y-%m-%d")
 
-    logger.info(f"Building plan for {date} using Boturfers as the single source.")
+    logger.info(f"Building plan for {date_str} using Boturfers as the single source.")
 
-    # Determine the correct URL based on the date
-    today_str = datetime.now(ZoneInfo(config.TIMEZONE)).strftime("%Y-%m-%d")
-    tomorrow_str = (datetime.now(ZoneInfo(config.TIMEZONE)) + timedelta(days=1)).strftime(
-        "%Y-%m-%d"
-    )
+    # Convert to date objects for robust comparison
+    try:
+        req_date = date_obj.fromisoformat(date_str)
+    except (ValueError, TypeError):
+        logger.warning(f"Invalid date string format: '{date_str}'. Defaulting to today.")
+        req_date = datetime.now(ZoneInfo(config.TIMEZONE)).date()
+        date_str = req_date.isoformat()
 
-    if date == today_str:
+    today = datetime.now(ZoneInfo(config.TIMEZONE)).date()
+    tomorrow = today + timedelta(days=1)
+
+    if req_date == today:
         programme_url = "https://www.boturfers.fr/programme-pmu-du-jour"
-    elif date == tomorrow_str:
+    elif req_date == tomorrow:
         programme_url = "https://www.boturfers.fr/programme-pmu-demain"
     else:
-        programme_url = f"https://www.boturfers.fr/courses/{date}"
+        programme_url = f"https://www.boturfers.fr/courses/{date_str}"
 
     logger.info(f"Using Boturfers programme URL: {programme_url}")
 
