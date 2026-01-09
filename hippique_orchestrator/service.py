@@ -14,9 +14,11 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
+from starlette.concurrency import run_in_threadpool
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from . import __version__, analysis_pipeline, config, firestore_client, plan, scheduler
+from . import __version__, analysis_pipeline, config, firestore_client, plan, scheduler, runner
+from .analysis_utils import normalize_phase
 from .api import tasks  # Import the tasks router
 from .auth import check_api_key, verify_oidc_token
 from .logging_middleware import logging_middleware
@@ -24,6 +26,9 @@ from .logging_utils import (
     setup_logging,
 )
 from .schemas import ScheduleRequest, ScheduleResponse
+from typing import Optional
+from pydantic import Field
+
 
 # --- Configuration & Initialization ---
 setup_logging(log_level=config.LOG_LEVEL)
@@ -92,7 +97,7 @@ async def get_pronostics_data(date: str | None = None, if_none_match: str | None
         ) from e
 
     server_timestamp = datetime.now(timezone.utc)
-    races_from_db = firestore_client.get_races_for_date(date_str)
+    races_from_db = await run_in_threadpool(firestore_client.get_races_for_date, date_str)
     daily_plan = await plan.build_plan_async(date_str)
 
     all_races_map = {}
@@ -275,7 +280,7 @@ async def run_single_race(rc: str, api_key: str = Security(check_api_key)):
         raise HTTPException(status_code=404, detail=f"Race {rc} not found in plan for {date_str}")
 
     doc_id = f"{date_str}_{rc}"
-    course_url = target_race.get("url")
+    course_url = target_race.get("course_url")
     if not course_url:
         raise HTTPException(status_code=400, detail=f"Race {rc} is missing a URL in the plan.")
 
@@ -283,7 +288,7 @@ async def run_single_race(rc: str, api_key: str = Security(check_api_key)):
         # Using H-5 as the default phase for a manual run
         analysis_result = await analysis_pipeline.run_analysis_for_phase(
             course_url=course_url,
-            phase="H-5",
+            phase=normalize_phase("H-5"),
             date=date_str,
             race_doc_id=doc_id,
         )
@@ -309,6 +314,104 @@ async def run_single_race(rc: str, api_key: str = Security(check_api_key)):
         ) from e
 
 
+class LegacyRunRequest(BaseModel):
+    course_url: Optional[str] = None
+    reunion: Optional[str] = None
+    course: Optional[str] = None
+    phase: str
+    budget: Optional[float] = 5.0  # Keep for compatibility, but it's unused
+
+
+async def _get_course_url_from_legacy(
+    date_str: str, req: LegacyRunRequest, correlation_id: str
+) -> str:
+    if req.course_url:
+        return req.course_url
+
+    if req.reunion and req.course:
+        daily_plan = await plan.build_plan_async(date_str)
+        rc_label_to_find = f"R{req.reunion.lstrip('R')}{req.course.lstrip('C')}"
+
+        logger.info(
+            "Searching for %s in daily plan",
+            rc_label_to_find,
+            extra={"correlation_id": correlation_id},
+        )
+        for race in daily_plan:
+            if f"{race.get('r_label')}{race.get('c_label')}" == rc_label_to_find:
+                logger.info(
+                    "Found matching race in plan",
+                    extra={"correlation_id": correlation_id, "race": race},
+                )
+                if race.get("course_url"):
+                    return race["course_url"]
+        raise HTTPException(
+            status_code=404,
+            detail=f"Race {rc_label_to_find} not found in plan for {date_str}",
+        )
+    raise HTTPException(
+        status_code=422, detail="Either course_url or reunion/course must be provided."
+    )
+
+
+async def _execute_legacy_run(request: Request, body: LegacyRunRequest):
+    correlation_id = getattr(request.state, "correlation_id", "N/A")
+    trace_id = getattr(request.state, "trace_id", None)
+    date_str = datetime.now(ZoneInfo(config.TIMEZONE)).strftime("%Y-%m-%d")
+
+    try:
+        course_url = await _get_course_url_from_legacy(date_str, body, correlation_id)
+        result = await runner.run_course(
+            course_url=course_url,
+            phase=body.phase,
+            date=date_str,
+            correlation_id=correlation_id,
+            trace_id=trace_id,
+        )
+        return result
+    except HTTPException as e:
+        # Re-raise HTTP exceptions from the helper
+        raise e
+    except Exception as e:
+        tb_str = traceback.format_exc()
+        logger.error(
+            "Unhandled exception in legacy run endpoint: %s\n%s",
+            e,
+            tb_str,
+            extra={"correlation_id": correlation_id},
+        )
+        raise HTTPException(status_code=500, detail=f"An internal error occurred: {e}")
+
+
+@app.post("/run", tags=["Legacy"], include_in_schema=False)
+async def legacy_run(
+    request: Request,
+    body: LegacyRunRequest,
+    token_claims: dict = OIDC_TOKEN_DEPENDENCY,
+):
+    return await _execute_legacy_run(request, body)
+
+
+@app.post("/analyse", tags=["Legacy"], include_in_schema=False)
+async def legacy_analyse(
+    request: Request,
+    body: LegacyRunRequest,
+    # This endpoint was likely unsecured in the past.
+    # To maintain compatibility, we can make auth optional for now.
+    # token_claims: dict = OIDC_TOKEN_DEPENDENCY,
+):
+    return await _execute_legacy_run(request, body)
+
+
+@app.post("/pipeline/run", tags=["Legacy"], include_in_schema=False)
+async def legacy_pipeline_run(
+    request: Request,
+    body: LegacyRunRequest,
+    # token_claims: dict = OIDC_TOKEN_DEPENDENCY,
+):
+    return await _execute_legacy_run(request, body)
+
+
 @app.get("/debug/config", tags=["Debug"])
 async def debug_config():
     """
@@ -329,6 +432,12 @@ async def debug_config():
         "timezone": config.TIMEZONE,
         "version": __version__,
     }
+
+
+
+@app.get("/healthz", include_in_schema=False)
+async def healthz():
+    return await health_check()
 
 
 @app.get("/health", tags=["Monitoring"])
@@ -364,63 +473,3 @@ async def get_next_scheduled_tasks():
         "tasks": [],
     }
 
-
-# --- Task Worker Endpoint ---
-class RaceTaskPayload(BaseModel):
-    course_url: str
-    phase: str
-    date: str
-    # Robust identifiers (preferred over URL parsing)
-    r_label: str | None = None
-    c_label: str | None = None
-    doc_id: str | None = None
-
-
-@app.post("/tasks/run-phase", tags=["Tasks"])
-async def run_phase_worker(
-    payload: RaceTaskPayload, request: Request, token_claims: dict = OIDC_TOKEN_DEPENDENCY
-):
-    correlation_id = getattr(request.state, "correlation_id", "N/A")
-    logger.info("Received task to run phase.", extra={"payload": payload.dict()})
-    # Prefer explicit doc_id, then (date + r_label/c_label), then URL parsing as last resort.
-    doc_id = payload.doc_id
-    if not doc_id and payload.r_label and payload.c_label:
-        doc_id = f"{payload.date}_{payload.r_label}{payload.c_label}"
-    if not doc_id:
-        doc_id = firestore_client.get_doc_id_from_url(payload.course_url, payload.date)
-
-    try:
-        # This is the actual call to the analysis pipeline
-        analysis_result = await analysis_pipeline.run_analysis_for_phase(
-            course_url=payload.course_url,
-            phase=payload.phase,
-            date=payload.date,
-            race_doc_id=doc_id,
-            correlation_id=correlation_id,
-        )
-
-        # The pipeline is responsible for creating the full document to save
-        firestore_client.update_race_document(doc_id, analysis_result)
-
-        logger.info(f"Successfully processed and saved analysis for {doc_id}")
-        return {
-            "status": "success",
-            "document_id": doc_id,
-            "gpi_decision": analysis_result.get("gpi_decision", "N/A"),
-        }
-
-    except Exception as e:
-        logger.error(f"Critical error processing task for {doc_id}: {e}", exc_info=True)
-        error_data = {
-            "last_analyzed_at": datetime.now(timezone.utc).isoformat(),
-            "phase": payload.phase,
-            "status": "error",
-            "error_message": str(e),
-            "gpi_decision": "error_critical",
-        }
-        # Save error state to Firestore to prevent retries on permanent failures
-        firestore_client.update_race_document(doc_id, error_data)
-        # Raise an exception to signal failure to Cloud Tasks
-        raise HTTPException(
-            status_code=500, detail=f"Failed to process task for {doc_id}. See logs for details."
-        ) from e
