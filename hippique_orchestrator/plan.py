@@ -19,10 +19,11 @@ from __future__ import annotations
 
 import asyncio
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo
 
-from hippique_orchestrator import data_source
+from hippique_orchestrator import config, data_source
 from hippique_orchestrator.logging_utils import get_logger
 
 logger = get_logger(__name__)
@@ -33,15 +34,26 @@ async def build_plan_async(date: str) -> list[dict[str, Any]]:
     Construit le plan complet du jour en utilisant Boturfers comme unique source.
     """
     if date == "today":
-        date = datetime.now().strftime("%Y-%m-%d")
+        date = datetime.now(ZoneInfo(config.TIMEZONE)).strftime("%Y-%m-%d")
 
     logger.info(f"Building plan for {date} using Boturfers as the single source.")
 
-    # 1. Obtenir le programme depuis la source de données (Boturfers)
-    if date == datetime.now().strftime("%Y-%m-%d"):
+    # Determine the correct URL based on the date
+    today_str = datetime.now(ZoneInfo(config.TIMEZONE)).strftime("%Y-%m-%d")
+    tomorrow_str = (datetime.now(ZoneInfo(config.TIMEZONE)) + timedelta(days=1)).strftime(
+        "%Y-%m-%d"
+    )
+
+    if date == today_str:
         programme_url = "https://www.boturfers.fr/programme-pmu-du-jour"
+    elif date == tomorrow_str:
+        programme_url = "https://www.boturfers.fr/programme-pmu-demain"
     else:
         programme_url = f"https://www.boturfers.fr/courses/{date}"
+
+    logger.info(f"Using Boturfers programme URL: {programme_url}")
+
+    # 1. Obtenir le programme depuis la source de données (Boturfers)
     source_data = await data_source.fetch_programme(programme_url)
 
     if not source_data or not source_data.get("races"):
