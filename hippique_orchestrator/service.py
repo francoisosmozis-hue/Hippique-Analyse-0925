@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response, Security
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response, Security, BackgroundTasks
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -81,12 +81,39 @@ async def redirect_legacy_api_ui():
     return RedirectResponse(url="/api/pronostics", status_code=307)
 
 
+# --- Helper for Background Task ---
+async def trigger_background_scheduling(date_str: str, service_url: str):
+    """Fetches the daily plan and schedules all races in the background."""
+    logger.info(f"Background scheduling triggered for {date_str}")
+    try:
+        daily_plan = await plan.build_plan_async(date_str)
+        if daily_plan:
+            await run_in_threadpool(
+                scheduler.schedule_all_races,
+                plan=daily_plan,
+                service_url=service_url,
+                force=False,  # Do not force to avoid re-creating existing tasks
+                dry_run=False,
+            )
+            logger.info(f"Background scheduling for {date_str} successfully queued.")
+        else:
+            logger.info(f"No daily plan found for {date_str} in background task. Nothing to schedule.")
+    except Exception as e:
+        logger.error(f"Error in background scheduling for {date_str}: {e}", exc_info=True)
+
+
 # --- API Endpoints ---
 @app.get("/api/pronostics", tags=["API"])
-async def get_pronostics_data(date: str | None = None, if_none_match: str | None = Header(None)):
+async def get_pronostics_data(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    date: str | None = None,
+    if_none_match: str | None = Header(None),
+):
     """
     Main endpoint to get daily pronostics.
     Combines data from the daily plan and Firestore.
+    Triggers background scheduling if no data is found for the date.
     """
     try:
         date_str = date or datetime.now(ZoneInfo(config.TIMEZONE)).strftime("%Y-%m-%d")
@@ -99,6 +126,15 @@ async def get_pronostics_data(date: str | None = None, if_none_match: str | None
     server_timestamp = datetime.now(timezone.utc)
     races_from_db = await run_in_threadpool(firestore_client.get_races_for_date, date_str)
     daily_plan = await plan.build_plan_async(date_str)
+
+    # If no races are processed yet but a plan exists, trigger background scheduling
+    if not races_from_db and daily_plan:
+        logger.info(
+            f"No processed races found for {date_str} with a valid plan. "
+            "Triggering background scheduling."
+        )
+        service_url = f"https://{request.url.netloc}"
+        background_tasks.add_task(trigger_background_scheduling, date_str, service_url)
 
     all_races_map = {}
     for race in daily_plan:
@@ -262,7 +298,9 @@ async def get_ops_status(date: str | None = None, api_key: str = Security(check_
         raise HTTPException(status_code=422, detail="Invalid date format. Use YYYY-MM-DD.") from e
 
     daily_plan = await plan.build_plan_async(date_str)
-    return await run_in_threadpool(firestore_client.get_processing_status_for_date, date_str, daily_plan)
+    return await run_in_threadpool(
+        firestore_client.get_processing_status_for_date, date_str, daily_plan
+    )
 
 
 @app.post("/ops/run", tags=["Operations"])
@@ -387,7 +425,7 @@ async def _execute_legacy_run(request: Request, body: LegacyRunRequest):
 async def legacy_run(
     request: Request,
     body: LegacyRunRequest,
-    #token_claims: dict = OIDC_TOKEN_DEPENDENCY,
+    # token_claims: dict = OIDC_TOKEN_DEPENDENCY,
 ):
     return await _execute_legacy_run(request, body)
 
@@ -434,7 +472,6 @@ async def debug_config():
     }
 
 
-
 @app.get("/healthz", include_in_schema=False)
 async def healthz():
     return await health_check()
@@ -472,4 +509,3 @@ async def get_next_scheduled_tasks():
         ),
         "tasks": [],
     }
-
