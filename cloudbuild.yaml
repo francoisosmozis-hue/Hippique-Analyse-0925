@@ -10,7 +10,7 @@ steps:
 - name: 'python:3.12-slim'
   id: "Lint"
   entrypoint: 'bash'
-  args: ['-c', 'python -c "import sys; print(sys.path)" && python -m ruff check . --fix --exclude archive/']
+  args: ['-c', 'which ruff && python -m ruff check . --fix --exclude archive/']
 
 # Check formatting
 - name: 'python:3.12-slim'
