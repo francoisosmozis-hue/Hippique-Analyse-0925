@@ -10,13 +10,19 @@ steps:
 - name: 'python:3.12-slim'
   id: "Lint"
   entrypoint: 'bash'
-  args: ['-c', '/usr/local/bin/ruff check . --fix --exclude archive/']
+  args: ['-c', 'python -m pip install ruff==0.13.3 && python -m ruff check . --fix --exclude archive/']
+
+# Apply formatting fixes
+- name: 'python:3.12-slim'
+  id: "Apply Formatting"
+  entrypoint: 'bash'
+  args: ['-c', 'python -m pip install ruff==0.13.3 && python -m ruff format . --exclude archive/']
 
 # Check formatting
 - name: 'python:3.12-slim'
   id: "Format Check"
   entrypoint: 'bash'
-  args: ['-c', '/usr/local/bin/ruff format . --check --exclude archive/']
+  args: ['-c', 'python -m pip install ruff==0.13.3 && python -m ruff format . --check --exclude archive/']
 
 # Build the Docker image
 - name: 'gcr.io/cloud-builders/docker'
