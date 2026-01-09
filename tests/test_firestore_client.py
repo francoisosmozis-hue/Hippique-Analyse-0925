@@ -8,14 +8,24 @@ from google.cloud.firestore import DocumentSnapshot
 from hippique_orchestrator import firestore_client
 
 # We need to patch the client at the source, where it's looked up.
-FIRESTORE_CLIENT_PATH = "hippique_orchestrator.firestore_client.db"
+FIRESTORE_CLIENT_PATH = "hippique_orchestrator.firestore_client._get_firestore_client"
 
+@pytest.fixture(autouse=True)
+def reset_firestore_client():
+    """Resets the internal _db_client state before each test."""
+    original_db_client = firestore_client._db_client
+    firestore_client._db_client = None
+    yield
+    firestore_client._db_client = original_db_client
 
 @pytest.fixture
 def mock_db():
-    """Fixture to mock the global firestore client."""
-    with patch(FIRESTORE_CLIENT_PATH, MagicMock()) as mock_client:
-        yield mock_client
+    """Fixture to mock the firestore client returned by _get_firestore_client."""
+    # Import firestore here to ensure it's defined in the fixture's scope
+    from google.cloud import firestore
+    mock_firestore_client = MagicMock()
+    with patch(FIRESTORE_CLIENT_PATH, return_value=mock_firestore_client):
+        yield mock_firestore_client
 
 
 def test_update_race_document_success(mock_db):
@@ -44,12 +54,17 @@ def test_update_race_document_handles_exception(mock_db, caplog):
     assert "Firestore unavailable" in caplog.text
 
 
-@patch(FIRESTORE_CLIENT_PATH, None)
-def test_update_race_document_skips_if_db_not_available(caplog):
+from unittest.mock import call
+
+# ... (rest of the file)
+
+@patch("hippique_orchestrator.config.PROJECT_ID", None)
+@patch("hippique_orchestrator.firestore_client.logger.warning")
+def test_update_race_document_skips_if_db_not_available(mock_warning):
     """Test that updates are skipped if the db client is None."""
 
     firestore_client.update_race_document("any_id", {})
-    assert "Firestore is not available, skipping update" in caplog.text
+    mock_warning.assert_called_once_with("Firestore is not available, skipping update.")
 
 
 def test_get_races_for_date_success(mock_db):
@@ -98,15 +113,15 @@ def test_get_races_for_date_handles_exception(mock_db, caplog):
     assert results == []
 
 
-@patch(FIRESTORE_CLIENT_PATH, None)
-def test_get_races_for_date_skips_if_db_not_available(caplog):
+@patch("hippique_orchestrator.config.PROJECT_ID", None)
+@patch("hippique_orchestrator.firestore_client.logger.warning")
+def test_get_races_for_date_skips_if_db_not_available(mock_warning):
     """Test that `get_races_for_date` skips if the db client is None."""
 
     date_str = "2025-12-30"
     results = firestore_client.get_races_for_date(date_str)
-
-    assert "Firestore is not available, cannot query races." in caplog.text
     assert results == []
+    mock_warning.assert_called_once_with("Firestore is not available, cannot query races.")
 
 
 @pytest.mark.parametrize(
@@ -133,10 +148,14 @@ def test_get_doc_id_from_url(url, date, expected):
 
 def create_mock_doc(doc_id, update_time_str, data=None):
     """Helper to create a mock DocumentSnapshot."""
-    mock_doc = MagicMock(spec=DocumentSnapshot)
+    mock_doc = MagicMock()
     mock_doc.id = doc_id
     mock_doc.update_time = datetime.fromisoformat(update_time_str)
-    mock_doc.to_dict.return_value = data if data is not None else {}
+    # Ensure to_dict includes id and update_time, mimicking real DocumentSnapshot behavior
+    mock_data = data.copy() if data else {}
+    mock_data["race_doc_id"] = doc_id  # Expected by _get_metadata_from_docs
+    mock_data["last_modified_at"] = mock_doc.update_time.isoformat()  # Expected by _get_metadata_from_docs
+    mock_doc.to_dict.return_value = mock_data
     return mock_doc
 
 
@@ -183,14 +202,13 @@ def test_get_processing_status_for_date_success(mock_db):
     assert status["reason_if_empty"] is None
 
 
-def test_get_processing_status_for_date_db_not_available(mock_db):
+@patch(FIRESTORE_CLIENT_PATH, return_value=None)
+def test_get_processing_status_for_date_db_not_available(caplog):
     """Test `get_processing_status_for_date` when Firestore client is None."""
-
-    # Mock db to be None
-    with patch("hippique_orchestrator.firestore_client.db", None):
+    with caplog.at_level(logging.WARNING):
         status = firestore_client.get_processing_status_for_date("2025-12-30", [])
-        assert status["error"] == "Firestore client is not available."
-        assert status["reason_if_empty"] == "FIRESTORE_CONNECTION_FAILED"
+    assert status["error"] == "Firestore client is not available."
+    assert status["reason_if_empty"] == "FIRESTORE_CONNECTION_FAILED"
 
 
 def test_get_processing_status_for_date_empty_daily_plan(mock_db):
@@ -354,31 +372,31 @@ def test_set_document_exception(mock_db, caplog):
     )
 
 
-@patch(FIRESTORE_CLIENT_PATH, None)
-def test_get_races_for_date_db_unavailable(caplog):
+@patch("hippique_orchestrator.config.PROJECT_ID", None)
+@patch("hippique_orchestrator.firestore_client.logger.warning")
+def test_get_races_for_date_db_unavailable(mock_warning):
     """Test get_races_for_date when the database is unavailable."""
 
-    with caplog.at_level(logging.WARNING):
-        races = firestore_client.get_races_for_date("2025-12-30")
+    races = firestore_client.get_races_for_date("2025-12-30")
     assert races == []
-    assert "Firestore is not available" in caplog.text
+    mock_warning.assert_called_once_with("Firestore is not available, cannot query races.")
 
 
-@patch(FIRESTORE_CLIENT_PATH, None)
-def test_get_document_skips_if_db_not_available(caplog):
+@patch("hippique_orchestrator.config.PROJECT_ID", None)
+@patch("hippique_orchestrator.firestore_client.logger.warning")
+def test_get_document_skips_if_db_not_available(mock_warning):
     """Test that get_document skips if the db client is None."""
 
-    with caplog.at_level(logging.WARNING):
-        result = firestore_client.get_document("test_collection", "test_doc")
+    result = firestore_client.get_document("test_collection", "test_doc")
     assert result is None
-    assert "Firestore is not available, cannot get document." in caplog.text
+    mock_warning.assert_called_once_with("Firestore is not available, cannot get document.")
 
 
-@patch(FIRESTORE_CLIENT_PATH, None)
-def test_set_document_skips_if_db_not_available(caplog):
+@patch("hippique_orchestrator.config.PROJECT_ID", None)
+@patch("hippique_orchestrator.firestore_client.logger.warning")
+def test_set_document_skips_if_db_not_available(mock_warning):
     """Test that set_document skips if the db client is None."""
 
-    with caplog.at_level(logging.WARNING):
-        firestore_client.set_document("test_collection", "test_doc", {"key": "value"})
+    firestore_client.set_document("test_collection", "test_doc", {"key": "value"})
     # No return value to assert, just check logs
-    assert "Firestore is not available, cannot set document." in caplog.text
+    mock_warning.assert_called_once_with("Firestore is not available, cannot set document.")
