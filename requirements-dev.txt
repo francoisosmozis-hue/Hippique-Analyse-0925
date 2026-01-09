@@ -2,7 +2,7 @@ pytest
 pytest-env
 pytest-cov
 pytest-xdist
-ruff
+ruff==0.13.3
 coverage
 freezegun
 pytest-timeout
