@@ -6,6 +6,9 @@ import re
 import unicodedata
 from collections.abc import MutableMapping
 from typing import Any
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Constants for overround calculation
 _FLAT_HANDICAP_CAP = 1.25
@@ -68,6 +71,22 @@ def _coerce_partants(value: Any) -> int | None:
             except ValueError:
                 result = None
     return result
+
+
+def normalize_phase(phase: str | None) -> str:
+    """Normalise la phase en format H5, H30, H9."""
+    if not phase:
+        return "H5"  # Fallback
+    cleaned = str(phase).upper().replace("-", "")
+    if cleaned in ("H5", "H05"):
+        return "H5"
+    if cleaned in ("H30", "H-30"):
+        return "H30"
+    if cleaned == "H9":
+        return "H9"
+
+    logger.warning(f"Phase non reconnue '{phase}', normalisée en H5 par défaut.")
+    return "H5"
 
 
 def compute_overround_cap(

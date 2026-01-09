@@ -9,6 +9,7 @@ import re
 from typing import Any
 
 from hippique_orchestrator import analysis_pipeline
+from hippique_orchestrator.analysis_utils import normalize_phase
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +44,7 @@ async def run_course(
     Executes the analysis for a single course by calling the Firestore-native pipeline.
     This function is now a high-level orchestrator that delegates to the analysis module.
     """
-    phase_clean = phase.upper().replace("-", "")
+    phase_clean = normalize_phase(phase)
 
     try:
         reunion, course = _extract_rc_from_url(course_url)

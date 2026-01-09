@@ -262,7 +262,7 @@ async def get_ops_status(date: str | None = None, api_key: str = Security(check_
         raise HTTPException(status_code=422, detail="Invalid date format. Use YYYY-MM-DD.") from e
 
     daily_plan = await plan.build_plan_async(date_str)
-    return firestore_client.get_processing_status_for_date(date_str, daily_plan)
+    return await run_in_threadpool(firestore_client.get_processing_status_for_date, date_str, daily_plan)
 
 
 @app.post("/ops/run", tags=["Operations"])
@@ -292,7 +292,7 @@ async def run_single_race(rc: str, api_key: str = Security(check_api_key)):
             date=date_str,
             race_doc_id=doc_id,
         )
-        firestore_client.update_race_document(doc_id, analysis_result)
+        await run_in_threadpool(firestore_client.update_race_document, doc_id, analysis_result)
         logger.info(f"Successfully processed and saved manual run for {doc_id}")
         return {
             "status": "success",
@@ -308,7 +308,7 @@ async def run_single_race(rc: str, api_key: str = Security(check_api_key)):
             "error_message": str(e),
             "gpi_decision": "error_manual_run",
         }
-        firestore_client.update_race_document(doc_id, error_data)
+        await run_in_threadpool(firestore_client.update_race_document, doc_id, error_data)
         raise HTTPException(
             status_code=500, detail=f"Failed to process manual run for {doc_id}."
         ) from e
@@ -330,7 +330,7 @@ async def _get_course_url_from_legacy(
 
     if req.reunion and req.course:
         daily_plan = await plan.build_plan_async(date_str)
-        rc_label_to_find = f"R{req.reunion.lstrip('R')}{req.course.lstrip('C')}"
+        rc_label_to_find = f"{req.reunion}{req.course}"
 
         logger.info(
             "Searching for %s in daily plan",
@@ -380,14 +380,14 @@ async def _execute_legacy_run(request: Request, body: LegacyRunRequest):
             tb_str,
             extra={"correlation_id": correlation_id},
         )
-        raise HTTPException(status_code=500, detail=f"An internal error occurred: {e}")
+        raise HTTPException(status_code=500, detail=f"An internal error occurred: {e}") from e
 
 
 @app.post("/run", tags=["Legacy"], include_in_schema=False)
 async def legacy_run(
     request: Request,
     body: LegacyRunRequest,
-    token_claims: dict = OIDC_TOKEN_DEPENDENCY,
+    #token_claims: dict = OIDC_TOKEN_DEPENDENCY,
 ):
     return await _execute_legacy_run(request, body)
 

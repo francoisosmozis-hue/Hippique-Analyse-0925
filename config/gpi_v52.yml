@@ -25,7 +25,7 @@ tickets:
   # -- Exotic bets configuration --
   exotics:
     type: "TRIO"
-    legs_count: 4
+    legs_count: 3
     stake_eur: 2.0
 
 # -- Probability Adjustments (v5.1 spec) --

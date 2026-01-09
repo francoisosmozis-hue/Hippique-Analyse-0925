@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock, Mock
+from unittest.mock import ANY, AsyncMock, MagicMock, Mock
 
 import pytest
 
@@ -196,6 +196,15 @@ def test_health_check(client):
     assert "version" in data
 
 
+def test_healthz_endpoint(client):
+    """Test the /healthz alias endpoint."""
+    response = client.get("/healthz")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "healthy"
+    assert "version" in data
+
+
 def test_legacy_redirects(client):
     """Test that old /ui paths correctly redirect."""
     # Test UI redirect
@@ -207,6 +216,111 @@ def test_legacy_redirects(client):
     response_api = client.get("/api/pronostics/ui", follow_redirects=False)
     assert response_api.status_code == 307
     assert response_api.headers["location"] == "/api/pronostics"
+
+
+@pytest.fixture
+def mock_run_course(monkeypatch):
+    """Fixture to mock runner.run_course."""
+    mock_func = AsyncMock(return_value={"ok": True, "phase": "H5", "analysis": {}})
+    monkeypatch.setattr("hippique_orchestrator.runner.run_course", mock_func)
+    return mock_func
+
+
+@pytest.mark.asyncio
+async def test_legacy_run_endpoint_with_course_url(client, mock_run_course):
+    """Test POST /run with a direct course_url."""
+    response = client.post(
+        "/run",
+        json={"course_url": "http://example.com/R1C1", "phase": "H5"},
+        headers={"Authorization": "Bearer test-token"},
+    )
+    assert response.status_code == 200
+    assert response.json()["ok"] is True
+    mock_run_course.assert_called_once_with(
+        course_url="http://example.com/R1C1",
+        phase="H5",
+        date=ANY,  # Date will be today's date, use ANY for dynamic value
+        correlation_id=ANY,
+        trace_id=ANY,
+    )
+
+
+@pytest.mark.asyncio
+async def test_legacy_run_endpoint_with_reunion_course(client, mock_run_course, mock_plan):
+    """Test POST /run with reunion and course, expecting plan to resolve course_url."""
+    mock_plan.return_value = [
+        {"r_label": "R1", "c_label": "C1", "course_url": "http://resolved.com/R1C1"}
+    ]
+    response = client.post(
+        "/run",
+        json={"reunion": "R1", "course": "C1", "phase": "H30"},
+        headers={"Authorization": "Bearer test-token"},
+    )
+    assert response.status_code == 200
+    assert response.json()["ok"] is True
+    mock_plan.assert_called_once()
+    mock_run_course.assert_called_once_with(
+        course_url="http://resolved.com/R1C1",
+        phase="H30",
+        date=ANY,
+        correlation_id=ANY,
+        trace_id=ANY,
+    )
+
+
+@pytest.mark.asyncio
+async def test_legacy_run_endpoint_missing_params(client, mock_run_course):
+    """Test POST /run with missing course_url, reunion, and course."""
+    response = client.post(
+        "/run", json={"phase": "H5"}, headers={"Authorization": "Bearer test-token"}
+    )
+    assert response.status_code == 422
+    assert "Either course_url or reunion/course must be provided." in response.json()["detail"]
+    mock_run_course.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_legacy_analyse_endpoint(client, mock_run_course, mock_plan):
+    """Test POST /analyse (legacy, no auth required for now)"""
+    mock_plan.return_value = [
+        {"r_label": "R1", "c_label": "C1", "course_url": "http://resolved.com/R1C1"}
+    ]
+    response = client.post(
+        "/analyse",
+        json={"reunion": "R1", "course": "C1", "phase": "H30"},
+    )
+    assert response.status_code == 200
+    assert response.json()["ok"] is True
+    mock_plan.assert_called_once()
+    mock_run_course.assert_called_once_with(
+        course_url="http://resolved.com/R1C1",
+        phase="H30",
+        date=ANY,
+        correlation_id=ANY,
+        trace_id=ANY,
+    )
+
+
+@pytest.mark.asyncio
+async def test_legacy_pipeline_run_endpoint(client, mock_run_course, mock_plan):
+    """Test POST /pipeline/run (legacy, no auth required for now)"""
+    mock_plan.return_value = [
+        {"r_label": "R1", "c_label": "C1", "course_url": "http://resolved.com/R1C1"}
+    ]
+    response = client.post(
+        "/pipeline/run",
+        json={"reunion": "R1", "course": "C1", "phase": "H5"},
+    )
+    assert response.status_code == 200
+    assert response.json()["ok"] is True
+    mock_plan.assert_called_once()
+    mock_run_course.assert_called_once_with(
+        course_url="http://resolved.com/R1C1",
+        phase="H5",
+        date=ANY,
+        correlation_id=ANY,
+        trace_id=ANY,
+    )
 
 
 def test_post_ops_run_success(client, monkeypatch, mock_plan):
@@ -227,7 +341,7 @@ def test_post_ops_run_success(client, monkeypatch, mock_plan):
             "r_label": "R1",
             "c_label": "C1",
             "name": "Prix d'Amerique",
-            "url": "http://example.com/r1c1",
+            "course_url": "http://example.com/r1c1",
         }
     ]
 
@@ -256,7 +370,9 @@ async def test_run_single_race_missing_course_url(client, monkeypatch, mock_plan
     """
     # Setup mock plan to return a race without a URL
     mock_plan.return_value = [
-        {"r_label": "R1", "c_label": "C1", "name": "Prix d'Amerique", "url": None}
+        {
+            "r_label": "R1", "c_label": "C1", "name": "Prix d'Amerique", "course_url": None
+        }
     ]
 
     # Make the request with a valid API key
@@ -358,7 +474,7 @@ async def test_run_single_race_unhandled_exception(client, monkeypatch, mock_pla
             "r_label": "R1",
             "c_label": "C1",
             "name": "Prix d'Amerique",
-            "url": "http://example.com/r1c1",
+            "course_url": "http://example.com/r1c1",
         }
     ]
 

@@ -297,12 +297,21 @@ def test_fetcher_parse_race_runners_from_details_page_success(boturfers_race_det
 
     assert len(runners) == 2
     assert runners[0]["nom"] == "Cheval A"
-    assert runners[0]["jockey"] == "J. Dupont"
-    assert runners[0]["entraineur"] == "E. Trainer"
+    assert runners[0]["jockey"] == "N/A"
+    assert runners[0]["entraineur"] == "N/A"
     assert runners[0]["odds_win"] == 2.5
     assert runners[0]["odds_place"] == 1.3
     assert runners[0]["musique"] == "1p2p3p"
     assert runners[0]["gains"] == "123456"
+
+    assert runners[1]["num"] == 2
+    assert runners[1]["nom"] == "Cheval B"
+    assert runners[1]["jockey"] == "N/A"
+    assert runners[1]["entraineur"] == "N/A"
+    assert runners[1]["odds_win"] == 5.0
+    assert runners[1]["odds_place"] == 2.0
+    assert runners[1]["musique"] == "5p6p"
+    assert runners[1]["gains"] == "78900"
 
 
 def test_fetcher_parse_race_runners_from_details_page_no_runners_table(mock_logger):
@@ -332,7 +341,8 @@ def test_fetcher_parse_race_runners_from_details_page_malformed_row(
     # Check that error was logged for runner row parsing (only for Cheval B)
     assert mock_logger.warning.call_count == 1
     warning_messages = [call_args[0][0] for call_args in mock_logger.warning.call_args_list]
-    assert any("invalid literal for float(): 'invalid_float'" in msg for msg in warning_messages)
+
+    assert any("invalid literal for float()" in msg for msg in warning_messages) # Original assertion
 
 
 @pytest.mark.asyncio

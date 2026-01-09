@@ -69,14 +69,13 @@ make logs
 
 # Healthcheck
 curl $(gcloud run services describe hippique-orchestrator \
-  --region=europe-west1 --format='value(status.url)')/healthz
+  --region=europe-west1 --format='value(status.url)')/health
 ```
 
 **Sortie attendue :**
 ```json
 {
-  "status": "ok",
-  "service": "hippique-orchestrator",
+  "status": "healthy",
   "version": "1.0.0"
 }
 ```
@@ -101,6 +100,33 @@ curl -X POST \
     "phase": "H5",
     "date": "2025-10-15"
   }'
+
+### Test manuel (analyse / pipeline - legacy)
+
+Ces endpoints sont présents pour la rétro-compatibilité avec les anciens scripts et ne nécessitent pas d'authentification par OIDC/API Key.
+
+```bash
+# Déclencher analyse H30 via /analyse
+curl -X POST \
+  https://your-service-url/analyse \
+  -H "Content-Type: application/json" \
+  -d '{
+    "reunion": "R1",
+    "course": "C3",
+    "phase": "H30"
+  }'
+
+# Déclencher analyse H5 via /pipeline/run
+curl -X POST \
+  https://your-service-url/pipeline/run \
+  -H "Content-Type: application/json" \
+  -d '{
+    "reunion": "R1",
+    "course": "C3",
+    "phase": "H5"
+  }'
+```
+
 ```
 
 ### Planification automatique (toutes les courses du jour)

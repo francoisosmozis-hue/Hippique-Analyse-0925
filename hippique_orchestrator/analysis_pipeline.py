@@ -13,6 +13,7 @@ from .analysis_utils import (
     calculate_volatility,
     identify_outsider_reparable,
     identify_profil_oublie,
+    normalize_phase,
     parse_musique,
 )
 from .fetch_je_stats import collect_stats
@@ -32,9 +33,9 @@ def _find_and_load_h30_snapshot(race_doc_id: str, log_extra: dict) -> dict[str, 
             )
             return {}
 
-        # Filter for H-30 snapshots and get the most recent one
+        # Flexible filtering for H-30 snapshots
         h30_snapshots = sorted(
-            [s for s in all_snapshots if "_H-30.json" in s],
+            [s for s in all_snapshots if "_H-30.json" in s or "_H30.json" in s],
             reverse=True,
         )
         if not h30_snapshots:
@@ -81,8 +82,8 @@ def _run_gpi_pipeline(
 
     # --- DRIFT LOGIC IMPLEMENTATION ---
     h30_snapshot_data = {}
-    if phase == "H-5":
-        logger.info("H-5 phase: attempting to load H-30 snapshot for drift.", extra=log_extra)
+    if phase == "H5":
+        logger.info("H5 phase: attempting to load H30 snapshot for drift.", extra=log_extra)
         h30_snapshot_data = _find_and_load_h30_snapshot(race_doc_id, log_extra)
     gpi_config["h30_snapshot_data"] = h30_snapshot_data
     # --- END DRIFT LOGIC ---
@@ -134,17 +135,29 @@ async def _fetch_and_save_snapshot(
 
 
 async def run_analysis_for_phase(
-    course_url: str, phase: str, date: str, race_doc_id: str | None = None
+    course_url: str,
+    phase: str,
+    date: str,
+    race_doc_id: str | None = None,
+    correlation_id: str | None = None,
+    trace_id: str | None = None,
 ) -> dict[str, Any]:
     """
     Main entry point for processing a single course analysis triggered by a task.
     Orchestrates snapshot creation, enrichment, and ticket generation.
     """
+    phase = normalize_phase(phase)
     race_doc_id = race_doc_id or firestore_client.get_doc_id_from_url(course_url, date)
     if not race_doc_id:
         raise ValueError(f"Could not determine race_doc_id from URL {course_url}")
 
-    log_extra = {"race_doc_id": race_doc_id, "phase": phase, "date": date}
+    log_extra = {
+        "race_doc_id": race_doc_id,
+        "phase": phase,
+        "date": date,
+        "correlation_id": correlation_id,
+        "trace_id": trace_id,
+    }
     logger.info("Starting analysis pipeline for phase.", extra=log_extra)
 
     analysis_content = {

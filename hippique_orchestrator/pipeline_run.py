@@ -463,6 +463,7 @@ def _generate_sp_dutching_tickets(
 
         if odds >= sp_config["odds_range"][0] and odds <= sp_config["odds_range"][1]:
             roi = prob_for_roi * (odds - 1) - (1 - prob_for_roi)
+            logger.info(f"Runner {r['num']}: ROI = {roi}")
             if roi >= roi_min_sp:
                 all_profitable_sp_candidates.append(
                     {
@@ -478,11 +479,7 @@ def _generate_sp_dutching_tickets(
 
     sp_candidates_for_exotics = all_profitable_sp_candidates[: sp_config["legs_max"] + 2]
 
-    dutching_pool = [
-        c
-        for c in all_profitable_sp_candidates
-        if SP_DUTCHING_ODDS_LOWER_BOUND <= c["odds"] <= SP_DUTCHING_ODDS_UPPER_BOUND
-    ]
+    dutching_pool = all_profitable_sp_candidates
 
     sp_dutching_final_selection = _select_sp_dutching_candidates(dutching_pool)
 

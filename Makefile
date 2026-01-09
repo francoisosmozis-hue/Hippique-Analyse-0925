@@ -57,8 +57,30 @@ logs-tasks: ## View tasks queue status
 		--location=$(QUEUE_LOCATION) --project=$(PROJECT_ID)
 
 # Testing commands
-test-health: ## Test health endpoint
-	@curl -s $(SERVICE_URL)/healthz | jq
+test-health-deployed: ## Test health endpoint of the deployed service
+	@curl -s $(SERVICE_URL)/health | jq
+
+test-health-local: ## Test local health endpoint
+	@curl -s http://localhost:8080/health | jq
+
+test-healthz-local: ## Test local healthz (alias) endpoint
+	@curl -s http://localhost:8080/healthz | jq
+
+test-run-local: ## Test local /run legacy endpoint (requires local service, and SERVICE_URL to be set to http://localhost:8080 if OIDC is enabled)
+	@curl -s -X POST http://localhost:8080/run \
+		-H "Authorization: Bearer $(gcloud auth print-identity-token)" \
+		-H "Content-Type: application/json" \
+		-d '{"course_url":"https://www.boturfers.fr/courses/2025-01-01/R1C1","phase":"H5","date":"2025-01-01"}' | jq
+
+test-analyse-local: ## Test local /analyse legacy endpoint (requires local service)
+	@curl -s -X POST http://localhost:8080/analyse \
+		-H "Content-Type: application/json" \
+		-d '{"reunion":"R1","course":"C1","phase":"H30"}' | jq
+
+test-pipeline-run-local: ## Test local /pipeline/run legacy endpoint (requires local service)
+	@curl -s -X POST http://localhost:8080/pipeline/run \
+		-H "Content-Type: application/json" \
+		-d '{"reunion":"R1","course":"C1","phase":"H5"}' | jq
 
 test-schedule: ## Test schedule endpoint
 	@curl -s -X POST $(SERVICE_URL)/schedule \

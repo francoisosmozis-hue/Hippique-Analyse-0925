@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from datetime import datetime, timezone
 from typing import Any
 
 from google.cloud import firestore
@@ -12,22 +13,45 @@ from hippique_orchestrator.logging_utils import get_logger
 
 logger = get_logger(__name__)
 
-# Initialize the Firestore client globally.
-# Let it raise an exception if configuration (e.g., project ID, credentials) is wrong.
-# The application should fail to start if it cannot connect to the database.
-db = firestore.Client(project=config.PROJECT_ID)
-logger.info(f"Firestore client initialized for project '{config.PROJECT_ID}'.")
+# Firestore client instance for lazy initialization
+_db_client: firestore.Client | None = None
+
+
+def _get_firestore_client() -> firestore.Client | None:
+    global _db_client
+    if _db_client:
+        return _db_client
+
+    if not config.PROJECT_ID:
+        logger.warning(
+            "FIRESTORE_PROJECT_ID is not configured. Firestore operations will be skipped (stateless mode)."
+        )
+        return None
+
+    try:
+        _db_client = firestore.Client(project=config.PROJECT_ID)
+        logger.info(f"Firestore client initialized for project '{config.PROJECT_ID}'.")
+        return _db_client
+    except Exception as e:
+        logger.error(
+            f"Failed to initialize Firestore client for project '{config.PROJECT_ID}': {e}",
+            exc_info=True,
+        )
+        # In case of initialization failure, prevent repeated attempts if it's a persistent config error
+        # by keeping _db_client as None. Functions relying on it will then return None.
+        return None
 
 
 def get_document(collection: str, document_id: str) -> dict[str, Any] | None:
     """
     Retrieves a single document from a specified collection.
     """
-    if not db:
+    db_client = _get_firestore_client()
+    if not db_client:
         logger.warning("Firestore is not available, cannot get document.")
         return None
     try:
-        doc_ref = db.collection(collection).document(document_id)
+        doc_ref = db_client.collection(collection).document(document_id)
         doc = doc_ref.get()
         if doc.exists:
             return doc.to_dict()
@@ -41,11 +65,12 @@ def set_document(collection: str, document_id: str, data: dict[str, Any]) -> Non
     """
     Sets (overwrites) a document in a specified collection.
     """
-    if not db:
+    db_client = _get_firestore_client()
+    if not db_client:
         logger.warning("Firestore is not available, cannot set document.")
         return
     try:
-        db.collection(collection).document(document_id).set(data)
+        db_client.collection(collection).document(document_id).set(data)
         logger.debug(f"Document {document_id} set successfully in {collection}.")
     except Exception as e:
         logger.error(f"Failed to set document '{document_id}' in '{collection}': {e}", exc_info=e)
@@ -53,12 +78,15 @@ def set_document(collection: str, document_id: str, data: dict[str, Any]) -> Non
 
 def update_race_document(document_id: str, data: dict[str, Any]) -> None:
     """Updates a document in the main races collection, merging data."""
-    if not db:
+    db_client = _get_firestore_client()
+    if not db_client:
         logger.warning("Firestore is not available, skipping update.")
         return
 
     try:
-        doc_ref = db.collection(config.FIRESTORE_COLLECTION).document(document_id)
+        doc_ref = db_client.collection(config.FIRESTORE_COLLECTION).document(document_id)
+        # Always set a last_modified_at timestamp for reliable ordering
+        data["last_modified_at"] = datetime.now(timezone.utc).isoformat()
         logger.info(
             "Updating Firestore document",
             extra={
@@ -75,12 +103,13 @@ def update_race_document(document_id: str, data: dict[str, Any]) -> None:
 
 def get_races_for_date(date_str: str) -> list[firestore.DocumentSnapshot]:
     """Retrieves all race document snapshots for a given date."""
-    if not db:
+    db_client = _get_firestore_client()
+    if not db_client:
         logger.warning("Firestore is not available, cannot query races.")
         return []
 
     try:
-        races_ref = db.collection(config.FIRESTORE_COLLECTION)
+        races_ref = db_client.collection(config.FIRESTORE_COLLECTION)
         # Firestore __name__ queries require this format
         query = races_ref.order_by("__name__").start_at([date_str]).end_at([date_str + "\uf8ff"])
         docs = list(query.stream())
@@ -107,7 +136,8 @@ def get_processing_status_for_date(date_str: str, daily_plan: list[dict]) -> dic
     """
     Aggregates processing status from Firestore and system config for the /ops/status endpoint.
     """
-    if not db:
+    db_client = _get_firestore_client()
+    if not db_client:
         return {
             "error": "Firestore client is not available.",
             "reason_if_empty": "FIRESTORE_CONNECTION_FAILED",
@@ -128,21 +158,26 @@ def get_processing_status_for_date(date_str: str, daily_plan: list[dict]) -> dic
     docs_count = len(races_from_db)
     last_update_ts = None
     if races_from_db:
-        last_doc = max(races_from_db, key=lambda doc: doc.update_time)
-        last_doc_id = last_doc.id
-        last_update_ts = last_doc.update_time.isoformat()
+        # Sort in-memory by the new 'last_modified_at' field
+        last_doc_data = max(
+            [doc.to_dict() for doc in races_from_db if doc.to_dict().get("last_modified_at")],
+            key=lambda d: d.get("last_modified_at", ""),
+            default={},
+        )
+        last_doc_id = last_doc_data.get("race_doc_id")  # Assuming race_doc_id is present
+        last_update_ts = last_doc_data.get("last_modified_at")
     else:
         # If no docs for today, check for the latest doc in the entire collection
-        # to differentiate between a stalled and an empty system.
         latest_doc_query = (
-            db.collection(config.FIRESTORE_COLLECTION)
-            .order_by("update_time", direction=firestore.Query.DESCENDING)
+            db_client.collection(config.FIRESTORE_COLLECTION)
+            .order_by("last_modified_at", direction=firestore.Query.DESCENDING)
             .limit(1)
         )
         latest_docs = list(latest_doc_query.stream())
-        if latest_docs:
-            last_doc_id = latest_docs[0].id
-            last_update_ts = latest_docs[0].update_time.isoformat()
+        if latest_docs and latest_docs[0].to_dict():
+            latest_doc_data = latest_docs[0].to_dict()
+            last_doc_id = latest_doc_data.get("race_doc_id")
+            last_update_ts = latest_doc_data.get("last_modified_at")
         else:
             last_doc_id = None
 
