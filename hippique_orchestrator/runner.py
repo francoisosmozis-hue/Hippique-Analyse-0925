@@ -65,18 +65,27 @@ async def run_course(
     )
 
     try:
-        # Pipeline is the source of truth; it returns a full analysis payload.
-        return await analysis_pipeline.run_analysis_for_phase(
+        analysis_result = await analysis_pipeline.run_analysis_for_phase(
             course_url=course_url,
             phase=phase_clean,
             date=date,
             correlation_id=correlation_id,
             trace_id=trace_id,
         )
+        logger.info(
+            "Course analysis completed successfully.",
+            extra={
+                "correlation_id": correlation_id,
+                "trace_id": trace_id,
+                "reunion": reunion,
+                "course": course,
+            },
+        )
+        return analysis_result
 
     except Exception as e:
         logger.error(  # Changed from logger.exception
-            "An unexpected error occurred during course analysis.",
+            "Course analysis failed.",
             exc_info=True,
             extra={
                 "correlation_id": correlation_id,

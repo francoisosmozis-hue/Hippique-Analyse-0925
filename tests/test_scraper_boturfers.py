@@ -1,10 +1,12 @@
+import logging
 from datetime import datetime
 from pathlib import Path
 from unittest.mock import MagicMock
 
 import httpx
 import pytest
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup # type: ignore
+from pytest_mock import MockerFixture
 
 from hippique_orchestrator.scrapers import boturfers
 
@@ -324,25 +326,23 @@ def test_fetcher_parse_race_runners_from_details_page_no_runners_table(mock_logg
 
 
 def test_fetcher_parse_race_runners_from_details_page_malformed_row(
-    boturfers_race_details_malformed_html, mock_logger
+    boturfers_race_details_malformed_html, mocker: MockerFixture, caplog
 ):
-    fetcher = boturfers.BoturfersFetcher("http://dummy.url")
-    fetcher.soup = BeautifulSoup(boturfers_race_details_malformed_html, 'lxml')
-    runners = fetcher._parse_race_runners_from_details_page()
-    assert len(runners) == 1
-    assert runners[0]["nom"] == "Cheval A"
-    assert runners[0]["jockey"] == "N/A"
-    assert runners[0]["entraineur"] == "N/A"
-    assert runners[0]["odds_win"] is None
-    assert runners[0]["odds_place"] is None
-    assert runners[0]["musique"] is None
-    assert runners[0]["gains"] is None
+    with caplog.at_level(logging.WARNING):
+        fetcher = boturfers.BoturfersFetcher("http://dummy.url")
+        fetcher.soup = BeautifulSoup(boturfers_race_details_malformed_html, 'lxml')
+        runners = fetcher._parse_race_runners_from_details_page()
+        assert len(runners) == 1
+        assert runners[0]["nom"] == "Cheval A"
+        assert runners[0]["jockey"] == "N/A"
+        assert runners[0]["entraineur"] == "N/A"
+        assert runners[0]["odds_win"] is None
+        assert runners[0]["odds_place"] is None
+        assert runners[0]["musique"] is None
+        assert runners[0]["gains"] is None
 
-    # Check that error was logged for runner row parsing (only for Cheval B)
-    assert mock_logger.warning.call_count == 1
-    warning_messages = [call_args[0][0] for call_args in mock_logger.warning.call_args_list]
-
-    assert any("invalid literal for float()" in msg for msg in warning_messages) # Original assertion
+    assert "Failed to parse a runner row:" in caplog.text
+    assert "could not convert string to float: 'invalid_float'" in caplog.text
 
 
 @pytest.mark.asyncio

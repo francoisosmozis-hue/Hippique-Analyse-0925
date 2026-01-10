@@ -404,7 +404,9 @@ async def test_parse_race_runners_malformed_row(mock_httpx_and_soup, caplog):
     mock_nom_tag = MagicMock(text="Nom Valide")
     mock_nom_tag.get.return_value = "http://example.com/runner1"  # for 'href'
     mock_jockey_link = MagicMock(text="Jockey Valide")
+    mock_jockey_link.get.return_value = "/jockey/jockey-valide"
     mock_trainer_link = MagicMock(text="Entraineur Valide")
+    mock_trainer_link.get.return_value = "/entraineur/entraineur-valide"
     mock_odds_win_tag = MagicMock(text="1.5")
     mock_odds_place_tag = MagicMock(text="1.2")
     mock_musique_tag = MagicMock(text="Musique")

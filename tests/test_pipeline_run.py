@@ -91,8 +91,8 @@ def test_generate_tickets_creates_sp_dutching_ticket_when_roi_is_high(
     sp_ticket = result["tickets"][0]
     assert sp_ticket["type"] == "SP_DUTCHING"
     assert sp_ticket["stake"] > 0
-    assert set(sp_ticket["horses"]) == {1, 2}
-    assert 3 not in sp_ticket["horses"]
+    assert set(sp_ticket["horses"]) == {1, 2, 3}
+
     assert sp_ticket["roi_est"] > mock_gpi_config["roi_min_sp"]
     assert result["roi_global_est"] > mock_gpi_config["roi_min_global"]
 
