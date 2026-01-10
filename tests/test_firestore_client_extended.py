@@ -27,12 +27,14 @@ def test_get_processing_status_for_date_processing_stalled():
     # Simulate a non-empty database, but with no races for the given date
     mock_doc = MagicMock(spec=firestore.DocumentSnapshot)
     mock_doc.id = "2025-01-01_R1C1"
-    mock_doc.to_dict.return_value = {"gpi_decision": "PLAY"}
+    mock_doc.to_dict.return_value = {
+        "gpi_decision": "PLAY",
+        "last_modified_at": datetime(2025, 1, 1, 12, 0, 0, tzinfo=timezone.utc).isoformat(),
+    }
     mock_doc.update_time = datetime(2025, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
 
     mock_latest_doc_query.stream.return_value = [mock_doc]
 
-    # a daily plan with races
     daily_plan = [
         {"rc_key": "R1C1", "race_url": "http://example.com/R1C1"},
         {"rc_key": "R1C2", "race_url": "http://example.com/R1C2"},
@@ -40,7 +42,7 @@ def test_get_processing_status_for_date_processing_stalled():
 
     # Act
     with (
-        patch("hippique_orchestrator.firestore_client.db", mock_db),
+        patch("hippique_orchestrator.firestore_client._get_firestore_client", return_value=mock_db),
         patch("hippique_orchestrator.firestore_client.get_races_for_date", return_value=[]),
     ):
         status = firestore_client.get_processing_status_for_date("2025-01-02", daily_plan)
@@ -72,7 +74,7 @@ def test_get_processing_status_for_date_db_empty():
 
     # Act
     with (
-        patch("hippique_orchestrator.firestore_client.db", mock_db),
+        patch("hippique_orchestrator.firestore_client._get_firestore_client", return_value=mock_db),
         patch("hippique_orchestrator.firestore_client.get_races_for_date", return_value=[]),
     ):
         status = firestore_client.get_processing_status_for_date("2025-01-01", daily_plan)
