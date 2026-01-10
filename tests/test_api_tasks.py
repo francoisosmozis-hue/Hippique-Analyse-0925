@@ -31,12 +31,15 @@ def mock_dependencies():
         patch(
             "starlette.concurrency.run_in_threadpool",
             new_callable=AsyncMock,
+        ) as mock_run_in_threadpool,
+        patch(
+            "hippique_orchestrator.scheduler.schedule_all_races",
             return_value=[
                 {"ok": True, "race": "race1", "phase": "H30", "task_name": "task1", "reason": None},
                 {"ok": True, "race": "race1", "phase": "H5", "task_name": "task2", "reason": None},
                 {"ok": True, "race": "race2", "phase": "H5", "task_name": "task3", "reason": None}
             ]
-        ) as mock_run_in_threadpool,
+        ) as mock_schedule_all_races,
         patch(
             "google.oauth2.id_token.verify_oauth2_token", return_value={"email": "test@example.com"}
         ) as mock_verify_oidc_token,
@@ -48,6 +51,7 @@ def mock_dependencies():
             "mock_run_course": mock_run_course,
             "mock_build_plan": mock_build_plan,
             "mock_run_in_threadpool": mock_run_in_threadpool,
+            "mock_schedule_all_races": mock_schedule_all_races,
             "mock_config": mock_config,
             "mock_verify_oidc_token": mock_verify_oidc_token,
         }
@@ -274,7 +278,7 @@ async def test_bootstrap_day_task_success(mock_dependencies, mock_get_correlatio
     Test successful bootstrap-day task where tasks are scheduled.
     """
     mock_build_plan = mock_dependencies["mock_build_plan"]
-    mock_run_in_threadpool = mock_dependencies["mock_run_in_threadpool"]
+    mock_schedule_all_races = mock_dependencies["mock_schedule_all_races"]
 
     now = datetime.now()
     mock_plan = [
@@ -295,12 +299,6 @@ async def test_bootstrap_day_task_success(mock_dependencies, mock_get_correlatio
     ]
     mock_build_plan.return_value = mock_plan
     
-    mock_run_in_threadpool.return_value = [
-        {"ok": True, "race": "race1", "phase": "H30"},
-        {"ok": True, "race": "race1", "phase": "H5"},
-        {"ok": True, "race": "race2", "phase": "H5"},
-    ]
-
     headers = {"Authorization": "Bearer fake-token"}
     response = client.post(
         "/tasks/bootstrap-day", json={"date": datetime.now().strftime("%Y-%m-%d")}, headers=headers
@@ -309,11 +307,15 @@ async def test_bootstrap_day_task_success(mock_dependencies, mock_get_correlatio
     assert response.json()["ok"] is True
     assert "done" in response.json()["message"]
     assert response.json()["date"] == datetime.now().strftime("%Y-%m-%d")
-    assert response.json()["details"] == mock_run_in_threadpool.return_value
+    assert response.json()["details"] == mock_schedule_all_races.return_value
     assert response.json()["message"] == f"Bootstrap for {datetime.now().strftime('%Y-%m-%d')} done: 3/3 tasks scheduled."
 
-    mock_run_in_threadpool.assert_called_once()
-    assert mock_run_in_threadpool.call_args[0][0] == "hippique_orchestrator.scheduler.schedule_all_races"
+    mock_schedule_all_races.assert_called_once_with(
+        mock_plan,
+        "http://testserver",
+        False,  # force
+        False,  # dry_run
+    )
 
 
 @pytest.mark.asyncio
