@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from hippique_orchestrator import snapshot_manager
+from hippique_orchestrator import config, snapshot_manager
 
 
 @pytest.fixture
@@ -58,7 +58,10 @@ async def test_write_snapshot_for_day_async_successful_run(
         )
 
     assert "Starting daily snapshot job for 2025-01-01, phase H-5" in caplog.text
-    assert "Found 2 races for 2025-01-01. Creating snapshots..." in caplog.text
+    assert (
+        f"Found 2 races for 2025-01-01. Creating {config.MAX_CONCURRENT_SNAPSHOT_TASKS} concurrent snapshots..."
+        in caplog.text
+    )
     assert "Finished creating 2 snapshot tasks for 2025-01-01." in caplog.text
 
     assert mock_run_course.call_count == 2
