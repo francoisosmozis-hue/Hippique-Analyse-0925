@@ -51,7 +51,7 @@ def _normalise_text(value: str | None) -> str:
     return re.sub(r"\s+", " ", text).strip().lower()
 
 
-def _coerce_partants(value: Any) -> int | None:
+def coerce_partants(value: Any) -> int | None:
     """Extract an integer runner count from ``value`` when possible."""
     result = None
     if isinstance(value, bool):  # Prevent bools being treated as ints
@@ -101,7 +101,7 @@ def compute_overround_cap(
 
     discipline_norm = _normalise_text(discipline)
     label_norm = _normalise_text(course_label)
-    runners = _coerce_partants(partants)
+    runners = coerce_partants(partants)
 
     is_handicap = "handicap" in discipline_norm or "handicap" in label_norm
     is_flat = "plat" in discipline_norm or "plat" in label_norm

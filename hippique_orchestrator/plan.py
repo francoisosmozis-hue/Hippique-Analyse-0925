@@ -20,10 +20,11 @@ from __future__ import annotations
 import asyncio
 import re
 from datetime import datetime, timedelta, date as date_obj
-from typing import Any
+from hippique_orchestrator.analysis_utils import coerce_partants
 from zoneinfo import ZoneInfo
 
-from hippique_orchestrator import config, data_source
+from hippique_orchestrator import config
+from hippique_orchestrator.source_registry import source_registry
 from hippique_orchestrator.logging_utils import get_logger
 
 logger = get_logger(__name__)
@@ -31,12 +32,12 @@ logger = get_logger(__name__)
 
 async def build_plan_async(date_str: str) -> list[dict[str, Any]]:
     """
-    Construit le plan complet du jour en utilisant Boturfers comme unique source.
+    Construit le plan complet du jour en utilisant la SourceRegistry.
     """
     if date_str == "today":
         date_str = datetime.now(ZoneInfo(config.TIMEZONE)).strftime("%Y-%m-%d")
 
-    logger.info(f"Building plan for {date_str} using Boturfers as the single source.")
+    logger.info(f"Building plan for {date_str} using SourceRegistry.")
 
     # Convert to date objects for robust comparison
     try:
@@ -56,20 +57,20 @@ async def build_plan_async(date_str: str) -> list[dict[str, Any]]:
     else:
         programme_url = f"https://www.boturfers.fr/courses/{date_str}"
 
-    logger.info(f"Using Boturfers programme URL: {programme_url}")
+    logger.info(f"Using programme URL for SourceRegistry: {programme_url}")
 
-    # 1. Obtenir le programme depuis la source de données (Boturfers)
-    source_data = await data_source.fetch_programme(programme_url)
+    # 1. Obtenir le programme depuis la SourceRegistry
+    source_data = await source_registry.fetch_programme(programme_url)
 
-    if not source_data or not source_data.get("races"):
-        logger.warning("Failed to fetch programme from Boturfers or it was empty.")
+    if not source_data: # source_data is already list[dict]
+        logger.warning("Failed to fetch programme or it was empty from SourceRegistry.")
         return []
 
-    logger.info(f"Successfully fetched {len(source_data.get('races', []))} races from Boturfers.")
+    logger.info(f"Successfully fetched {len(source_data)} races from SourceRegistry.")
 
-    # 2. Construire le plan directement depuis les données Boturfers
+    # 2. Construire le plan directement depuis les données du programme
     enriched_plan = []
-    for race_source in source_data["races"]:
+    for race_source in source_data:
         if race_source.get("start_time"):
             # Extrait R et C de "R1 C1"
             rc_match = re.match(r"(R\d+)\s*(C\d+)", race_source.get("rc", ""))
@@ -89,13 +90,10 @@ async def build_plan_async(date_str: str) -> list[dict[str, Any]]:
                     "meeting": race_source.get(
                         "name", ""
                     ),  # Le nom de la course est utilisé comme meeting
-                    "time_local": race_source["start_time"],
+                    "time_local": race_source["start_time"].replace('h', ':'),
                     "course_url": race_source["url"],
                     "reunion_url": None,  # L'URL de la réunion n'est plus disponible
-                    "partants": int(race_source.get("runners_count"))
-                    if race_source.get("runners_count")
-                    and str(race_source.get("runners_count")).isdigit()
-                    else None,
+                    "partants": coerce_partants(race_source.get("runners_count"))
                 }
             )
 

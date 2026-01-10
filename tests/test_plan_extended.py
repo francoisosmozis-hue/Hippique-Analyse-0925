@@ -6,40 +6,38 @@ from hippique_orchestrator import plan
 
 
 @pytest.mark.asyncio
-@patch("hippique_orchestrator.data_source.fetch_programme", new_callable=AsyncMock)
+@patch("hippique_orchestrator.plan.source_registry.fetch_programme", new_callable=AsyncMock)
 async def test_build_plan_handles_various_invalid_rc_formats(mock_fetch_programme, caplog):
     """
     Tests that various invalid RC formats are skipped.
     """
     # Arrange
-    mock_programme_data = {
-        "races": [
-            {
-                "rc": "R C",
-                "name": "Invalid RC 1",
-                "start_time": "10:00",
-                "url": "http://example.com/r1c1",
-            },
-            {
-                "rc": "R1C",
-                "name": "Invalid RC 2",
-                "start_time": "11:00",
-                "url": "http://example.com/r1c2",
-            },
-            {
-                "rc": "RC1",
-                "name": "Invalid RC 3",
-                "start_time": "12:00",
-                "url": "http://example.com/r1c3",
-            },
-            {
-                "rc": "R1 C1",
-                "name": "Valid RC",
-                "start_time": "13:00",
-                "url": "http://example.com/r1c4",
-            },
-        ]
-    }
+    mock_programme_data = [
+        {
+            "rc": "R C",
+            "name": "Invalid RC 1",
+            "start_time": "10:00",
+            "url": "http://example.com/r1c1",
+        },
+        {
+            "rc": "R1C",
+            "name": "Invalid RC 2",
+            "start_time": "11:00",
+            "url": "http://example.com/r1c2",
+        },
+        {
+            "rc": "RC1",
+            "name": "Invalid RC 3",
+            "start_time": "12:00",
+            "url": "http://example.com/r1c3",
+        },
+        {
+            "rc": "R1 C1",
+            "name": "Valid RC",
+            "start_time": "13:00",
+            "url": "http://example.com/r1c4",
+        },
+    ]
     mock_fetch_programme.return_value = mock_programme_data
 
     # Act
@@ -54,23 +52,21 @@ async def test_build_plan_handles_various_invalid_rc_formats(mock_fetch_programm
 
 
 @pytest.mark.asyncio
-@patch("hippique_orchestrator.data_source.fetch_programme", new_callable=AsyncMock)
+@patch("hippique_orchestrator.plan.source_registry.fetch_programme", new_callable=AsyncMock)
 async def test_build_plan_data_types(mock_fetch_programme):
     """
     Tests that the data types in the returned plan are correct.
     """
     # Arrange
-    mock_programme_data = {
-        "races": [
-            {
-                "rc": "R1 C1",
-                "name": "Test Race",
-                "start_time": "10:00",
-                "url": "http://example.com/r1c1",
-                "runners_count": "10",  # runners_count is a string
-            }
-        ]
-    }
+    mock_programme_data = [
+        {
+            "rc": "R1 C1",
+            "name": "Test Race",
+            "start_time": "10:00",
+            "url": "http://example.com/r1c1",
+            "runners_count": "10",  # runners_count is a string
+        }
+    ]
     mock_fetch_programme.return_value = mock_programme_data
 
     # Act
@@ -89,23 +85,21 @@ async def test_build_plan_data_types(mock_fetch_programme):
 
 
 @pytest.mark.asyncio
-@patch("hippique_orchestrator.data_source.fetch_programme", new_callable=AsyncMock)
+@patch("hippique_orchestrator.plan.source_registry.fetch_programme", new_callable=AsyncMock)
 async def test_build_plan_invalid_runners_count(mock_fetch_programme):
     """
     Tests that `partants` is None when `runners_count` is not a valid integer.
     """
     # Arrange
-    mock_programme_data = {
-        "races": [
-            {
-                "rc": "R1 C1",
-                "name": "Test Race",
-                "start_time": "10:00",
-                "url": "http://example.com/r1c1",
-                "runners_count": "N/A",
-            }
-        ]
-    }
+    mock_programme_data = [
+        {
+            "rc": "R1 C1",
+            "name": "Test Race",
+            "start_time": "10:00",
+            "url": "http://example.com/r1c1",
+            "runners_count": "N/A",
+        }
+    ]
     mock_fetch_programme.return_value = mock_programme_data
 
     # Act
@@ -117,23 +111,21 @@ async def test_build_plan_invalid_runners_count(mock_fetch_programme):
 
 
 @pytest.mark.asyncio
-@patch("hippique_orchestrator.data_source.fetch_programme", new_callable=AsyncMock)
+@patch("hippique_orchestrator.plan.source_registry.fetch_programme", new_callable=AsyncMock)
 async def test_build_plan_mandatory_keys(mock_fetch_programme):
     """
     Tests that all mandatory keys are present in the returned plan.
     """
     # Arrange
-    mock_programme_data = {
-        "races": [
-            {
-                "rc": "R1 C1",
-                "name": "Test Race",
-                "start_time": "10:00",
-                "url": "http://example.com/r1c1",
-                "runners_count": "10",
-            }
-        ]
-    }
+    mock_programme_data = [
+        {
+            "rc": "R1 C1",
+            "name": "Test Race",
+            "start_time": "10:00",
+            "url": "http://example.com/r1c1",
+            "runners_count": "10",
+        }
+    ]
     mock_fetch_programme.return_value = mock_programme_data
 
     # Act

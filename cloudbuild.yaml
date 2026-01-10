@@ -47,7 +47,8 @@ steps:
     - '--platform=managed'
     - '--allow-unauthenticated'
     - '--service-account=${_SERVICE_ACCOUNT_EMAIL}'
-    - '--update-env-vars=PROJECT_ID=${PROJECT_ID},LOCATION=${_REGION},BUCKET_NAME=${_BUCKET_NAME},TASK_QUEUE=${_TASK_QUEUE},TASK_OIDC_SA_EMAIL=${_SERVICE_ACCOUNT_EMAIL},REQUIRE_AUTH=true,FIRESTORE_COLLECTION=races'
+    - '--update-env-vars'
+    - 'PROJECT_ID=${PROJECT_ID},LOCATION=${_REGION},BUCKET_NAME=${_BUCKET_NAME},TASK_QUEUE=${_TASK_QUEUE},TASK_OIDC_SA_EMAIL=${_SERVICE_ACCOUNT_EMAIL},REQUIRE_AUTH=true,FIRESTORE_COLLECTION=races,INTERNAL_API_SECRET=IZgmzgo8NLtBrN6s8PJ+O08TmCEnviICyVrYGPP/r6A=,GCS_ENABLED=true'
     - '--quiet'
 
 images:
@@ -59,5 +60,5 @@ substitutions:
   _REGION: 'europe-west1'
   _TASK_QUEUE: 'hippique-tasks-queue'
   _SERVICE_ACCOUNT_EMAIL: 'hippique-orchestrator@analyse-hippique.iam.gserviceaccount.com'
-  _BUCKET_NAME: 'hippique-data-prod'
+  _BUCKET_NAME: 'analyse-hippique-data'
   _TAG: 'manual' # Default tag for manual builds

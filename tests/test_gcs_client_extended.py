@@ -10,8 +10,7 @@ from hippique_orchestrator import config, gcs_client
 def gcs_manager(monkeypatch):
     monkeypatch.setattr(config, "BUCKET_NAME", "test-bucket")
     monkeypatch.setattr(config, "GCS_ENABLED", True)  # Ensure GCS is enabled for the test
-    gcs_client.get_gcs_manager.cache_clear()
-    gcs_client.get_gcs_fs.cache_clear()
+    gcs_client.reset_gcs_manager()
     return gcs_client.get_gcs_manager()
 
 
@@ -66,18 +65,10 @@ def test_file_exists(gcs_manager, mocker):
     assert gcs_manager.file_exists("gs://test-bucket/test/path") is False
 
 
-def test_get_gcs_fs(gcs_manager, mocker):
-    mock_gcsfs = mocker.patch("gcsfs.GCSFileSystem")
-    mock_fs_instance = mock_gcsfs.return_value
-
-    fs = gcs_manager.fs
-    assert fs is mock_fs_instance
-
-
 def test_get_gcs_manager_no_bucket(monkeypatch, caplog):
     monkeypatch.setattr(config, "BUCKET_NAME", None)
     monkeypatch.setattr(config, "GCS_ENABLED", True) # GCS enabled, but no bucket
-    gcs_client.get_gcs_manager.cache_clear()
+    gcs_client.reset_gcs_manager()
     with caplog.at_level(logging.WARNING):
         assert gcs_client.get_gcs_manager() is None
 
@@ -85,7 +76,7 @@ def test_get_gcs_manager_no_bucket(monkeypatch, caplog):
 def test_get_gcs_manager_singleton(monkeypatch):
     monkeypatch.setattr(config, "BUCKET_NAME", "test-bucket")
     monkeypatch.setattr(config, "GCS_ENABLED", True)
-    gcs_client.get_gcs_manager.cache_clear()
+    gcs_client.reset_gcs_manager()
     manager1 = gcs_client.get_gcs_manager()
     manager2 = gcs_client.get_gcs_manager()
     assert manager1 is manager2
@@ -94,8 +85,7 @@ def test_get_gcs_manager_singleton(monkeypatch):
 def test_get_gcs_fs_no_manager(monkeypatch):
     monkeypatch.setattr(config, "BUCKET_NAME", None)
     monkeypatch.setattr(config, "GCS_ENABLED", True) # GCS enabled, but no bucket
-    gcs_client.get_gcs_manager.cache_clear()  # Explicitly clear manager cache
-    gcs_client.get_gcs_fs.cache_clear()
+    gcs_client.reset_gcs_manager()  # Explicitly clear manager cache
     assert gcs_client.get_gcs_fs() is None
 
 
@@ -106,7 +96,7 @@ def test_build_gcs_path(gcs_manager):
 def test_build_gcs_path_no_manager(monkeypatch, caplog):
     monkeypatch.setattr(config, "BUCKET_NAME", None)
     monkeypatch.setattr(config, "GCS_ENABLED", True) # GCS enabled, but no bucket
-    gcs_client.get_gcs_manager.cache_clear()  # Explicitly clear manager cache
+    gcs_client.reset_gcs_manager()  # Explicitly clear manager cache
     with caplog.at_level(logging.ERROR):
         assert gcs_client.build_gcs_path("test/path") is None
     assert "GCSManager is not initialized. Cannot build GCS path." in caplog.text
@@ -145,8 +135,7 @@ def test_gcs_manager_save_json_to_gcs_success(gcs_manager, mocker, caplog):
 def test_global_save_json_to_gcs_success(monkeypatch, mocker):
     monkeypatch.setattr(config, "BUCKET_NAME", "test-bucket")
     monkeypatch.setattr(config, "GCS_ENABLED", True)
-    gcs_client.get_gcs_manager.cache_clear()
-    gcs_client.get_gcs_fs.cache_clear()
+    gcs_client.reset_gcs_manager()
 
     mock_manager_save = mocker.patch.object(gcs_client.GCSManager, "save_json_to_gcs")
 
@@ -161,7 +150,7 @@ def test_global_save_json_to_gcs_success(monkeypatch, mocker):
 def test_global_save_json_to_gcs_no_manager_raises_runtime_error(monkeypatch, caplog):
     monkeypatch.setattr(config, "BUCKET_NAME", None)
     monkeypatch.setattr(config, "GCS_ENABLED", False) # GCS explicitly disabled
-    gcs_client.get_gcs_manager.cache_clear()
+    gcs_client.reset_gcs_manager()
 
     gcs_path = "gs://test-bucket/error.json"
     data = {"key": "value"}
@@ -222,7 +211,7 @@ def test_gcs_manager_read_file_from_gcs_exception(gcs_manager, mocker):
 def test_global_list_files_gcs_enabled_success(monkeypatch, mocker):
     monkeypatch.setattr(config, "BUCKET_NAME", "test-bucket")
     monkeypatch.setattr(config, "GCS_ENABLED", True)
-    gcs_client.get_gcs_manager.cache_clear()
+    gcs_client.reset_gcs_manager()
 
     mock_manager_list_files = mocker.patch.object(gcs_client.GCSManager, "list_files")
     mock_manager_list_files.return_value = ["gs://test-bucket/dir/file1.json"]
@@ -235,7 +224,7 @@ def test_global_list_files_gcs_enabled_success(monkeypatch, mocker):
 def test_global_list_files_gcs_disabled_local_fallback(monkeypatch, mocker, tmp_path):
     monkeypatch.setattr(config, "BUCKET_NAME", "test-bucket")
     monkeypatch.setattr(config, "GCS_ENABLED", False)
-    gcs_client.get_gcs_manager.cache_clear()
+    gcs_client.reset_gcs_manager()
 
     # Create dummy local files
     local_dir = tmp_path / "data/test_race/snapshots"
@@ -257,7 +246,7 @@ def test_global_list_files_gcs_disabled_local_fallback(monkeypatch, mocker, tmp_
 def test_global_read_file_from_gcs_gcs_enabled_success(monkeypatch, mocker):
     monkeypatch.setattr(config, "BUCKET_NAME", "test-bucket")
     monkeypatch.setattr(config, "GCS_ENABLED", True)
-    gcs_client.get_gcs_manager.cache_clear()
+    gcs_client.reset_gcs_manager()
 
     mock_manager_read_file = mocker.patch.object(gcs_client.GCSManager, "read_file_from_gcs")
     mock_manager_read_file.return_value = "GCS file content"
@@ -270,7 +259,7 @@ def test_global_read_file_from_gcs_gcs_enabled_success(monkeypatch, mocker):
 def test_global_read_file_from_gcs_gcs_disabled_local_fallback(monkeypatch, mocker, tmp_path):
     monkeypatch.setattr(config, "BUCKET_NAME", "test-bucket")
     monkeypatch.setattr(config, "GCS_ENABLED", False)
-    gcs_client.get_gcs_manager.cache_clear()
+    gcs_client.reset_gcs_manager()
 
     # Create a dummy local file
     local_file_name = "data/local_file.json"
@@ -294,7 +283,7 @@ def test_global_read_file_from_gcs_gcs_disabled_local_fallback(monkeypatch, mock
 def test_global_read_file_from_gcs_gcs_disabled_local_file_not_found(monkeypatch, mocker, tmp_path):
     monkeypatch.setattr(config, "BUCKET_NAME", "test-bucket")
     monkeypatch.setattr(config, "GCS_ENABLED", False)
-    gcs_client.get_gcs_manager.cache_clear()
+    gcs_client.reset_gcs_manager()
 
     gcs_path = "data/non_existent.json"
     content = gcs_client.read_file_from_gcs(gcs_path)

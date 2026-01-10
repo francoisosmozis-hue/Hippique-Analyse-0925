@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 import json
 import logging
 import traceback
@@ -16,7 +18,7 @@ from .analysis_utils import (
     normalize_phase,
     parse_musique,
 )
-from .fetch_je_stats import collect_stats
+from .source_registry import source_registry
 from .pipeline_run import generate_tickets
 
 logger = logging.getLogger(__name__)
@@ -53,9 +55,9 @@ def _find_and_load_h30_snapshot(race_doc_id: str, log_extra: dict) -> dict[str, 
         return {}
 
 
-def _run_gpi_pipeline(
+async def _run_gpi_pipeline(
     snapshot_data: dict[str, Any],
-    snapshot_gcs_path: str,
+    snapshot_gcs_path: str, # This parameter might become redundant if stats are not tied to a GCS path
     race_doc_id: str,
     phase: str,
     log_extra: dict,
@@ -70,15 +72,25 @@ def _run_gpi_pipeline(
     calibration_content = gcs_client.read_file_from_gcs("config/payout_calibration.yaml")
     calibration_data = yaml.safe_load(calibration_content) if calibration_content else {}
 
-    # Fetch stats
-    stats_h5_path = collect_stats(h5=snapshot_gcs_path)
-    stats_content = gcs_client.read_file_from_gcs(stats_h5_path)
-    stats_data = json.loads(stats_content) if stats_content else {}
+    # Fetch stats for each runner using SourceRegistry
+    all_runners_stats: dict[str, Any] = {}
+    discipline = snapshot_data.get("discipline", "unknown") # Get discipline from snapshot
 
+    for runner in snapshot_data.get("runners", []):
+        runner_name = runner.get("name", f"Runner {runner.get('num', 'N/A')}")
+        runner_stats = await source_registry.fetch_stats_for_runner(
+            runner_name=runner_name,
+            discipline=discipline,
+            runner_data=runner, # Pass full runner data for context
+            correlation_id=log_extra.get("correlation_id"),
+            trace_id=log_extra.get("trace_id"),
+        )
+        all_runners_stats[runner_name] = runner_stats
+    
     # Prepare pipeline input
     gpi_config["budget"] = config.BUDGET_CAP_EUR
     gpi_config["calibration_data"] = calibration_data
-    gpi_config["je_stats"] = stats_data
+    gpi_config["je_stats"] = all_runners_stats # Use the new structured stats
 
     # --- DRIFT LOGIC IMPLEMENTATION ---
     h30_snapshot_data = {}
@@ -221,7 +233,7 @@ async def run_analysis_for_phase(
 
         _enrich_snapshot(snapshot_data)
 
-        tickets_analysis = _run_gpi_pipeline(snapshot_data, gcs_path, race_doc_id, phase, log_extra)
+        tickets_analysis = await _run_gpi_pipeline(snapshot_data, gcs_path, race_doc_id, phase, log_extra)
 
         analysis_content["tickets_analysis"] = tickets_analysis
         gpi_decision = tickets_analysis.get("gpi_decision", "error_in_analysis")

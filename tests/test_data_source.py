@@ -15,7 +15,7 @@ async def test_fetch_programme_routes_to_boturfers():
     Ensures fetch_programme correctly routes to the boturfers scraper.
     """
     with patch(
-        "hippique_orchestrator.data_source.boturfers.fetch_boturfers_programme",
+        "hippique_orchestrator.data_source.source_registry.fetch_programme",
         new_callable=AsyncMock,
     ) as mock_fetch:
         mock_fetch.return_value = {"status": "ok"}
@@ -33,11 +33,11 @@ async def test_fetch_programme_routes_to_boturfers():
     [
         (
             "https://www.boturfers.fr/c/2025-01-01/r1c1",
-            "hippique_orchestrator.data_source.boturfers.fetch_boturfers_race_details",
+            "hippique_orchestrator.data_source.source_registry.fetch_snapshot",
         ),
         (
             "http://some-other-site.com/race",
-            "hippique_orchestrator.data_source.boturfers.fetch_boturfers_race_details",
+            "hippique_orchestrator.data_source.source_registry.fetch_snapshot",
         ),
     ],
 )
@@ -51,7 +51,9 @@ async def test_fetch_race_details_routes_to_boturfers(race_url, expected_scraper
         result = await data_source.fetch_race_details(race_url, correlation_id="test-id")
 
         assert result == {"source": "boturfers"}
-        mock_fetch.assert_called_once_with(race_url, correlation_id="test-id", trace_id=None)
+        mock_fetch.assert_called_once_with(
+            race_url, phase="H30", date=None, correlation_id="test-id", trace_id=None
+        )
 
 
 @pytest.mark.asyncio
@@ -60,11 +62,11 @@ async def test_fetch_race_details_routes_to_boturfers(race_url, expected_scraper
     [
         (
             "https://www.zeturf.fr/fr/course/2025-12-25/R1C2-test",
-            "hippique_orchestrator.data_source.fetch_zeturf_race_details",
+            "hippique_orchestrator.data_source.source_registry.fetch_snapshot",
         ),
         (
             "http://zeturf.com/R1C1",
-            "hippique_orchestrator.data_source.fetch_zeturf_race_details",
+            "hippique_orchestrator.data_source.source_registry.fetch_snapshot",
         ),
     ],
 )
@@ -78,4 +80,6 @@ async def test_fetch_race_details_routes_to_zeturf(race_url, expected_scraper_pa
         result = await data_source.fetch_race_details(race_url, phase="H5", date="2025-12-25")
 
         assert result == {"source": "zeturf"}
-        mock_fetch.assert_called_once_with(race_url, phase="H5", date="2025-12-25")
+        mock_fetch.assert_called_once_with(
+            race_url, phase="H5", date="2025-12-25", correlation_id=None, trace_id=None
+        )

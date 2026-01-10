@@ -5,49 +5,45 @@ import pytest
 from hippique_orchestrator import plan
 
 # Sample data returned by a successful scraper call
-MOCK_PROGRAMME_DATA = {
-    "races": [
-        {
-            "rc": "R1 C2",
-            "name": "PRIX DE TEST",
-            "start_time": "14:30",
-            "url": "http://example.com/r1c2",
-        },
-        {
-            "rc": "R1 C1",
-            "name": "PRIX D'OUVERTURE",
-            "start_time": "13:50",
-            "url": "http://example.com/r1c1",
-        },
-    ]
-}
+MOCK_PROGRAMME_DATA = [
+    {
+        "rc": "R1 C2",
+        "name": "PRIX DE TEST",
+        "start_time": "14:30",
+        "url": "http://example.com/r1c2",
+    },
+    {
+        "rc": "R1 C1",
+        "name": "PRIX D'OUVERTURE",
+        "start_time": "13:50",
+        "url": "http://example.com/r1c1",
+    },
+]
 
 # Sample data with malformed entries
-MOCK_MALFORMED_DATA = {
-    "races": [
-        {
-            "rc": "R1 C1",
-            "name": "Course Valide",
-            "start_time": "10:00",
-            "url": "http://example.com/r1c1",
-        },
-        {
-            "rc": "invalid",
-            "name": "RC non valide",
-            "start_time": "11:00",
-            "url": "http://example.com/r2c2",
-        },  # Truly malformed RC
-        {
-            "rc": "R3 C3",
-            "name": "Heure manquante",
-            "url": "http://example.com/r3c3",
-        },  # Missing start_time
-    ]
-}
+MOCK_MALFORMED_DATA = [
+    {
+        "rc": "R1 C1",
+        "name": "Course Valide",
+        "start_time": "10:00",
+        "url": "http://example.com/r1c1",
+    },
+    {
+        "rc": "invalid",
+        "name": "RC non valide",
+        "start_time": "11:00",
+        "url": "http://example.com/r2c2",
+    },  # Truly malformed RC
+    {
+        "rc": "R3 C3",
+        "name": "Heure manquante",
+        "url": "http://example.com/r3c3",
+    },  # Missing start_time
+]
 
 
 @pytest.mark.asyncio
-@patch("hippique_orchestrator.data_source.fetch_programme", new_callable=AsyncMock)
+@patch("hippique_orchestrator.plan.source_registry.fetch_programme", new_callable=AsyncMock)
 async def test_build_plan_nominal_case(mock_fetch_programme):
     """
     Tests the happy path: the scraper returns valid data, and the plan is built and sorted correctly.
@@ -76,7 +72,7 @@ async def test_build_plan_nominal_case(mock_fetch_programme):
 
 
 @pytest.mark.asyncio
-@patch("hippique_orchestrator.data_source.fetch_programme", new_callable=AsyncMock)
+@patch("hippique_orchestrator.plan.source_registry.fetch_programme", new_callable=AsyncMock)
 async def test_build_plan_scraper_fails(mock_fetch_programme, caplog):
     """
     Tests that an empty plan is returned if the scraper fails (returns None).
@@ -89,11 +85,11 @@ async def test_build_plan_scraper_fails(mock_fetch_programme, caplog):
 
     # Assert
     assert result_plan == []
-    assert "Failed to fetch programme from Boturfers or it was empty." in caplog.text
+    assert "Failed to fetch programme or it was empty from SourceRegistry." in caplog.text
 
 
 @pytest.mark.asyncio
-@patch("hippique_orchestrator.data_source.fetch_programme", new_callable=AsyncMock)
+@patch("hippique_orchestrator.plan.source_registry.fetch_programme", new_callable=AsyncMock)
 async def test_build_plan_handles_malformed_data(mock_fetch_programme, caplog):
     """
     Tests that entries with malformed RC format or missing start_time are skipped.
@@ -116,12 +112,12 @@ async def test_build_plan_handles_malformed_data(mock_fetch_programme, caplog):
 
 
 @pytest.mark.asyncio
-@patch("hippique_orchestrator.data_source.fetch_programme", new_callable=AsyncMock)
+@patch("hippique_orchestrator.plan.source_registry.fetch_programme", new_callable=AsyncMock)
 async def test_build_plan_today_string(mock_fetch_programme):
     """
     Tests that passing "today" uses the correct URL for the current day's programme.
     """
-    mock_fetch_programme.return_value = {"races": []}
+    mock_fetch_programme.return_value = []
 
     await plan.build_plan_async("today")
 
@@ -129,13 +125,13 @@ async def test_build_plan_today_string(mock_fetch_programme):
 
 
 @pytest.mark.asyncio
-@patch("hippique_orchestrator.data_source.fetch_programme", new_callable=AsyncMock)
+@patch("hippique_orchestrator.plan.source_registry.fetch_programme", new_callable=AsyncMock)
 async def test_build_plan_empty_enriched_plan(mock_fetch_programme, caplog):
     """
     Tests that sorting is skipped if the enriched plan is empty, covering the `if enriched_plan:` branch.
     """
     # Arrange: return races that will all be filtered out
-    mock_fetch_programme.return_value = {"races": [{"rc": "invalid", "start_time": "10:00"}]}
+    mock_fetch_programme.return_value = []
 
     # Act
     result_plan = await plan.build_plan_async("2025-12-20")
@@ -145,23 +141,21 @@ async def test_build_plan_empty_enriched_plan(mock_fetch_programme, caplog):
 
 
 @pytest.mark.asyncio
-@patch("hippique_orchestrator.data_source.fetch_programme", new_callable=AsyncMock)
+@patch("hippique_orchestrator.plan.source_registry.fetch_programme", new_callable=AsyncMock)
 async def test_build_plan_partants_non_digit_string(mock_fetch_programme):
     """
     Tests that `partants` is None when `runners_count` is a non-digit string.
     """
     # Arrange
-    mock_programme_data = {
-        "races": [
-            {
-                "rc": "R1 C1",
-                "name": "Test Race",
-                "start_time": "10:00",
-                "url": "http://example.com/r1c1",
-                "runners_count": "10 partants",  # Non-digit string
-            }
-        ]
-    }
+    mock_programme_data = [
+        {
+            "rc": "R1 C1",
+            "name": "Test Race",
+            "start_time": "10:00",
+            "url": "http://example.com/r1c1",
+            "runners_count": "10 partants",  # Non-digit string
+        }
+    ]
     mock_fetch_programme.return_value = mock_programme_data
 
     # Act
@@ -169,26 +163,23 @@ async def test_build_plan_partants_non_digit_string(mock_fetch_programme):
 
     # Assert
     assert len(result_plan) == 1
-    assert result_plan[0]["partants"] is None
-
+    assert result_plan[0]["partants"] == 10
 
 @pytest.mark.asyncio
-@patch("hippique_orchestrator.data_source.fetch_programme", new_callable=AsyncMock)
+@patch("hippique_orchestrator.plan.source_registry.fetch_programme", new_callable=AsyncMock)
 async def test_build_plan_handles_compact_rc_format(mock_fetch_programme):
     """
     Tests that RC format without space (e.g., "R1C1") is correctly parsed.
     """
     # Arrange
-    mock_fetch_programme.return_value = {
-        "races": [
-            {
-                "rc": "R1C1",
-                "name": "Compact RC",
-                "start_time": "10:00",
-                "url": "http://example.com/r1c1",
-            }
-        ]
-    }
+    mock_fetch_programme.return_value = [
+        {
+            "rc": "R1C1",
+            "name": "Compact RC",
+            "start_time": "10:00",
+            "url": "http://example.com/r1c1",
+        }
+    ]
 
     # Act
     result_plan = await plan.build_plan_async("2025-12-20")

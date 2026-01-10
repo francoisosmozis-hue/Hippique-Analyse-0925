@@ -31,8 +31,7 @@ def test_normalise_text(value, expected):
     ],
 )
 def test_coerce_partants(value, expected):
-    assert analysis_utils._coerce_partants(value) == expected
-
+            assert analysis_utils.coerce_partants(value) == expected
 
 def test_compute_overround_cap_default():
     """Tests that the default cap is returned when no special conditions apply."""

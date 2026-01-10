@@ -450,6 +450,11 @@ async def debug_config():
     }
 
 
+@app.get("/__health", include_in_schema=False)
+async def double_underscore_health():
+    return await health_check()
+
+
 @app.get("/healthz", include_in_schema=False)
 async def healthz():
     return await health_check()

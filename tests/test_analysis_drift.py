@@ -73,8 +73,10 @@ async def test_drift_is_detected_and_applied(mocker):
 
     mock_gcs_client.read_file_from_gcs.side_effect = mock_read_file
 
-    # Mock other dependencies that are called
-    mocker.patch("hippique_orchestrator.analysis_pipeline.collect_stats", return_value="stats.json")
+    mocker.patch(
+        "hippique_orchestrator.analysis_pipeline.source_registry.fetch_stats_for_runner",
+        return_value={"mock_stats": "stats.json"},
+    )
     mocker.patch("hippique_orchestrator.data_source.fetch_race_details", return_value=H5_SNAPSHOT)
 
     # 2. Run the analysis for the H-5 phase

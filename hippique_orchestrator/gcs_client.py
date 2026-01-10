@@ -175,31 +175,39 @@ class GCSManager:
             raise
 
 
-@cache
+_gcs_manager_instance = None # Global instance to manage the singleton
+
 def get_gcs_manager() -> GCSManager | None:
     """
-    Returns a singleton instance of the GCSManager, creating it on first call.
-    This deferred initialization helps prevent circular import issues.
+    Returns a singleton instance of the GCSManager.
     """
-    # Check config.GCS_ENABLED first
+    global _gcs_manager_instance
+    logger.debug(f"Attempting to get GCSManager. GCS_ENABLED: {config.GCS_ENABLED}, BUCKET_NAME: {config.BUCKET_NAME}")
     if not config.GCS_ENABLED:
         logger.info("GCS operations are disabled because GCS_ENABLED is False.")
+        _gcs_manager_instance = None # Ensure no stale manager is kept
         return None
-    # Then check BUCKET_NAME
     if not config.BUCKET_NAME:
         logger.info("GCS operations are disabled because BUCKET_NAME is not set.")
+        _gcs_manager_instance = None # Ensure no stale manager is kept
         return None
-    try:
-        return GCSManager()
-    except ValueError as e:
-        logger.warning(f"Could not initialize GCSManager: {e}")
-        return None
+    
+    if _gcs_manager_instance is None:
+        try:
+            _gcs_manager_instance = GCSManager()
+        except ValueError as e:
+            logger.warning(f"Could not initialize GCSManager: {e}")
+            _gcs_manager_instance = None
+    return _gcs_manager_instance
 
+def reset_gcs_manager():
+    """Resets the singleton GCSManager instance. Useful for testing."""
+    global _gcs_manager_instance
+    _gcs_manager_instance = None
 
-@cache
 def get_gcs_fs():
     """
-    Returns a cached instance of the GCS filesystem.
+    Returns the GCS filesystem object from the manager.
     """
     manager = get_gcs_manager()
     if manager:

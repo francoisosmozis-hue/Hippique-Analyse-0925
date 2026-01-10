@@ -11,35 +11,23 @@ import logging
 from typing import Any
 from urllib.parse import urlparse
 
-from hippique_orchestrator.scrapers.zeturf import fetch_zeturf_race_details
-
-from .scrapers import boturfers
+from hippique_orchestrator.source_registry import source_registry
 
 logger = logging.getLogger(__name__)
 
 
 async def fetch_programme(
     url: str, correlation_id: str | None = None, trace_id: str | None = None
-) -> dict[str, Any]:
+) -> list[dict[str, Any]]:
     """
-    Fetches the daily race programme from the configured data source.
-
-    Args:
-        url (str): The URL of the programme page.
-        correlation_id (str, optional): Correlation ID for logging.
-        trace_id (str, optional): Trace ID for logging.
-
-    Returns:
-        dict[str, Any]: The parsed programme data.
+    Fetches the daily race programme from the configured data source via the SourceRegistry.
     """
-    # Currently, this delegates to the boturfers scraper.
-    # This is the single point to change if the data source is switched.
     logger.info(
-        "Fetching programme from data source via URL: %s",
+        "Fetching programme via SourceRegistry using URL: %s",
         url,
         extra={"correlation_id": correlation_id, "trace_id": trace_id},
     )
-    return await boturfers.fetch_boturfers_programme(
+    return await source_registry.fetch_programme(
         url, correlation_id=correlation_id, trace_id=trace_id
     )
 
@@ -52,20 +40,14 @@ async def fetch_race_details(
     correlation_id: str | None = None,
     trace_id: str | None = None,
 ) -> dict[str, Any]:
-    """Fetches race details and returns a normalized snapshot dict.
-
-    Routes by domain:
-      - zeturf.* -> ZEturf scraper (no /partant)
-      - default  -> Boturfers scraper (existing behavior)
+    """Fetches race details and returns a normalized snapshot dict via the SourceRegistry.
+    The SourceRegistry handles routing to the appropriate scraper (e.g., Boturfers, ZEturf).
     """
-    host = (urlparse(race_url).netloc or "").lower()
     logger.info(
-        "Fetching race details from data source via URL: %s",
+        "Fetching race details via SourceRegistry using URL: %s",
         race_url,
         extra={"correlation_id": correlation_id, "trace_id": trace_id},
     )
-    if "zeturf" in host:
-        return await fetch_zeturf_race_details(race_url, phase=phase, date=date)
-    return await boturfers.fetch_boturfers_race_details(
-        race_url, correlation_id=correlation_id, trace_id=trace_id
+    return await source_registry.fetch_snapshot(
+        race_url, phase=phase, date=date, correlation_id=correlation_id, trace_id=trace_id
     )

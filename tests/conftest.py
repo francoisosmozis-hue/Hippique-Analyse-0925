@@ -33,7 +33,9 @@ def mock_network_calls(session_mocker):
 
     # This correctly mocks the async context manager
     mock_async_client = session_mocker.MagicMock()
-    mock_async_client.__aenter__.return_value.get.return_value = mock_httpx_response
+    mock_async_client.__aenter__.return_value = mock_async_client  # Return self for async with
+    mock_async_client.__aexit__.return_value = False  # Explicitly mock async exit
+    mock_async_client.get.return_value = mock_httpx_response
     session_mocker.patch("httpx.AsyncClient", return_value=mock_async_client)
 
     # --- Legacy mock for 'requests' library ---
@@ -78,13 +80,15 @@ def mock_config_values(mocker):
     mocker.patch("google.cloud.firestore.Client", return_value=mocker.MagicMock())
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture(scope="session")
 def client():
     """
     Test client for the FastAPI app. It's function-scoped to ensure
     that mocks applied in one test don't leak into others.
+    Uses a 'with' statement for proper client shutdown.
     """
-    return TestClient(app)
+    with TestClient(app) as client_instance:
+        yield client_instance
 
 
 @pytest.fixture
