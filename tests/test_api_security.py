@@ -234,7 +234,7 @@ def test_ops_run_endpoint_accessible_when_auth_not_required(client: TestClient, 
     mocker.patch(
         "hippique_orchestrator.service.plan.build_plan_async",
         new_callable=mocker.AsyncMock,
-        return_value=[{"r_label": "R1", "c_label": "C1", "url": "http://example.com"}],
+        return_value=[{"r_label": "R1", "c_label": "C1", "course_url": "http://example.com"}],
     )
     mocker.patch(
         "hippique_orchestrator.service.analysis_pipeline.run_analysis_for_phase",

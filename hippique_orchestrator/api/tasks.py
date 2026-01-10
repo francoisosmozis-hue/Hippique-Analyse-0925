@@ -7,12 +7,14 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 
-from hippique_orchestrator import config, firestore_client  # Added firestore_client import
+from starlette.concurrency import run_in_threadpool
+
+from hippique_orchestrator import config, firestore_client, scheduler
 from hippique_orchestrator.auth import verify_oidc_token
 from hippique_orchestrator.logging_utils import get_logger
 from hippique_orchestrator.plan import build_plan_async
 from hippique_orchestrator.runner import run_course
-from hippique_orchestrator.scheduler import enqueue_run_task
+
 from hippique_orchestrator.schemas import BootstrapDayRequest, RunPhaseRequest, Snapshot9HRequest
 from hippique_orchestrator.snapshot_manager import (
     write_snapshot_for_day_async,  # Added this import
@@ -48,38 +50,24 @@ async def run_phase_task(
             "date": body.date,
         },
     )
-    doc_id = firestore_client.get_doc_id_from_url(
-        body.course_url, body.date
-    )  # Added doc_id extraction here
+    doc_id = body.doc_id or firestore_client.get_doc_id_from_url(body.course_url, body.date)
+    if not doc_id:
+        raise HTTPException(status_code=422, detail="Cannot determine doc_id (missing doc_id and unparseable URL).")
 
     try:
-        # Re-using the existing run_course function from the project's core logic
-        analysis_result = await run_course(  # Renamed result to analysis_result for clarity
+        analysis_result = await run_course(
             course_url=body.course_url,
             phase=body.phase,
             date=body.date,
             correlation_id=correlation_id,
         )
-        # Ensure analysis_result is a mutable dictionary to add correlation_id
         final_result = dict(analysis_result)
         final_result["correlation_id"] = correlation_id
 
-        if not final_result.get("ok"):
-            logger.error(
-                f"Run phase failed for {body.course_url} (phase: {body.phase})",
-                extra={"correlation_id": correlation_id, "error": final_result.get("error")},
-            )
-            # Return a 500 error but with the structured error message from the runner
-            return JSONResponse(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                content=final_result,
-            )
-
-        # Save analysis result to Firestore only if successful
-        firestore_client.update_race_document(doc_id, final_result)
+        await run_in_threadpool(firestore_client.update_race_document, doc_id, final_result)
 
         logger.info(
-            (f"Run phase completed successfully for {body.course_url} (phase: {body.phase})"),
+            f"Run phase completed successfully for {body.course_url} (phase: {body.phase})",
             extra={"correlation_id": correlation_id},
         )
         return final_result
@@ -198,53 +186,21 @@ async def bootstrap_day_task(
             extra={"correlation_id": correlation_id, "num_races": len(plan)},
         )
 
-        # 2. Schedule tasks for each race
-        scheduled_tasks_count = 0
-        for race in plan:
-            race_datetime_str = f"{target_date_str} {race['time_local']}"
-            race_datetime = datetime.strptime(race_datetime_str, "%Y-%m-%d %H:%M")
-
-            # Schedule H-30 task
-            h30_datetime = race_datetime - config.h30_offset
-            if h30_datetime > datetime.now():
-                enqueue_run_task(
-                    course_url=race["course_url"],
-                    phase="H30",
-                    date=target_date_str,
-                    race_time_local=race["time_local"],
-                    r_label=race["r_label"],
-                    c_label=race["c_label"],
-                    correlation_id=correlation_id,
-                )
-                scheduled_tasks_count += 1
-
-            # Schedule H-5 task
-            h5_datetime = race_datetime - config.h5_offset
-            if h5_datetime > datetime.now():
-                enqueue_run_task(
-                    course_url=race["course_url"],
-                    phase="H5",
-                    date=target_date_str,
-                    race_time_local=race["time_local"],
-                    r_label=race["r_label"],
-                    c_label=race["c_label"],
-                    correlation_id=correlation_id,
-                )
-                scheduled_tasks_count += 1
-
-        logger.info(
-            (f"Bootstrap day completed. Scheduled {scheduled_tasks_count} tasks."),
-            extra={"correlation_id": correlation_id},
+        # Delegate to the canonical scheduler (single source of truth)
+        service_url = f"{request.url.scheme}://{request.url.netloc}"
+        results = await run_in_threadpool(
+            scheduler.schedule_all_races,
+            plan,
+            service_url,
+            False,  # force
+            False,  # dry_run
         )
+        ok_count = sum(1 for r in results if r.get("ok"))
         return {
             "ok": True,
-            "message": (
-                f"Bootstrap for {target_date_str} initiated."
-                f" {scheduled_tasks_count} tasks scheduled."
-            ),
+            "message": f"Bootstrap for {target_date_str} done: {ok_count}/{len(results)} tasks scheduled.",
             "date": target_date_str,
-            "total_races": len(plan),
-            "scheduled_tasks": scheduled_tasks_count,
+            "details": results,
             "correlation_id": correlation_id,
         }
 

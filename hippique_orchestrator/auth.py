@@ -4,6 +4,8 @@ src/auth.py - API Key Authentication
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import HTTPException, Request, Security
 from fastapi.security.api_key import APIKeyHeader
 from google.auth.transport import requests
@@ -35,7 +37,7 @@ async def check_api_key(api_key_header: str | None = Security(api_key_header_sch
 
 async def verify_oidc_token(
     request: Request, token: str = Security(oidc_token_scheme)
-) -> dict[str, any]:
+) -> dict[str, Any]:
     """
     Dependency to verify Google-issued OIDC tokens, typically from Cloud Tasks.
     """

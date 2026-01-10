@@ -27,10 +27,16 @@ def mock_dependencies():
         patch(
             "hippique_orchestrator.api.tasks.build_plan_async", new_callable=AsyncMock
         ) as mock_build_plan,
-        patch(
-            "hippique_orchestrator.api.tasks.enqueue_run_task", new_callable=AsyncMock
-        ) as mock_enqueue_run_task,
         patch("hippique_orchestrator.api.tasks.config", autospec=True) as mock_config,
+        patch(
+            "starlette.concurrency.run_in_threadpool",
+            new_callable=AsyncMock,
+            return_value=[
+                {"ok": True, "race": "race1", "phase": "H30", "task_name": "task1", "reason": None},
+                {"ok": True, "race": "race1", "phase": "H5", "task_name": "task2", "reason": None},
+                {"ok": True, "race": "race2", "phase": "H5", "task_name": "task3", "reason": None}
+            ]
+        ) as mock_run_in_threadpool,
         patch(
             "google.oauth2.id_token.verify_oauth2_token", return_value={"email": "test@example.com"}
         ) as mock_verify_oidc_token,
@@ -41,7 +47,7 @@ def mock_dependencies():
             "mock_write_snapshot": mock_write_snapshot,
             "mock_run_course": mock_run_course,
             "mock_build_plan": mock_build_plan,
-            "mock_enqueue_run_task": mock_enqueue_run_task,
+            "mock_run_in_threadpool": mock_run_in_threadpool,
             "mock_config": mock_config,
             "mock_verify_oidc_token": mock_verify_oidc_token,
         }
@@ -175,10 +181,10 @@ async def test_run_phase_task_runner_returns_error(
         json={"course_url": "http://example.com/R1C1", "phase": "H5", "date": "date"},
         headers=headers,
     )
-    assert response.status_code == 500
-    # The endpoint adds the correlation_id to the response
-    expected_response = {**error_payload, "correlation_id": "12345678-1234-5678-1234-567812345678"}
-    assert response.json() == expected_response
+    assert response.status_code == 200
+    response_data = response.json()
+    assert response_data["ok"] is False
+    assert response_data["error"] == "Runner failed"
 
 
 @pytest.mark.asyncio
@@ -263,15 +269,13 @@ async def test_run_phase_task_infers_doc_id(mock_dependencies, mock_get_correlat
 
 
 @pytest.mark.asyncio
-async def test_bootstrap_day_task_success(mock_dependencies, mock_get_correlation_id, mocker):
+async def test_bootstrap_day_task_success(mock_dependencies, mock_get_correlation_id):
     """
     Test successful bootstrap-day task where tasks are scheduled.
     """
     mock_build_plan = mock_dependencies["mock_build_plan"]
-    mock_enqueue_run_task = mock_dependencies["mock_enqueue_run_task"]
+    mock_run_in_threadpool = mock_dependencies["mock_run_in_threadpool"]
 
-    # Mock a plan with two races, one of which schedules both H30 and H5,
-    # and another that schedules only H5 because H30 is in the past.
     now = datetime.now()
     mock_plan = [
         {
@@ -279,78 +283,56 @@ async def test_bootstrap_day_task_success(mock_dependencies, mock_get_correlatio
             "time_local": (now + timedelta(hours=1)).strftime("%H:%M"),
             "r_label": "R1",
             "c_label": "C1",
+            "date": datetime.now().strftime("%Y-%m-%d"),
         },
         {
             "course_url": "http://example.com/race2",
-            "time_local": (now + timedelta(minutes=10)).strftime(
-                "%H:%M"
-            ),  # H30 would be in the past
+            "time_local": (now + timedelta(minutes=10)).strftime("%H:%M"),
             "r_label": "R2",
             "c_label": "C2",
+            "date": datetime.now().strftime("%Y-%m-%d"),
         },
     ]
-    mock_build_plan.return_value = mock_plan  # Set return value for build_plan_async
-    mock_build_plan.return_value = mock_plan  # Set return value for build_plan_async
-    mocker.patch(
-        "google.oauth2.id_token.verify_oauth2_token", return_value={"email": "test@example.com"}
-    )
+    mock_build_plan.return_value = mock_plan
+    
+    mock_run_in_threadpool.return_value = [
+        {"ok": True, "race": "race1", "phase": "H30"},
+        {"ok": True, "race": "race1", "phase": "H5"},
+        {"ok": True, "race": "race2", "phase": "H5"},
+    ]
+
     headers = {"Authorization": "Bearer fake-token"}
     response = client.post(
         "/tasks/bootstrap-day", json={"date": datetime.now().strftime("%Y-%m-%d")}, headers=headers
     )
     assert response.status_code == 200
     assert response.json()["ok"] is True
-    assert "initiated" in response.json()["message"]
-    assert response.json()["total_races"] == 2
+    assert "done" in response.json()["message"]
+    assert response.json()["date"] == datetime.now().strftime("%Y-%m-%d")
+    assert response.json()["details"] == mock_run_in_threadpool.return_value
+    assert response.json()["message"] == f"Bootstrap for {datetime.now().strftime('%Y-%m-%d')} done: 3/3 tasks scheduled."
 
-    # Assert calls to enqueue_run_task
-    # Race 1: Both H30 and H5 should be scheduled
-    mock_enqueue_run_task.assert_any_call(
-        course_url="http://example.com/race1",
-        phase="H30",
-        date=datetime.now().strftime("%Y-%m-%d"),
-        race_time_local=mock_plan[0]["time_local"],
-        r_label="R1",
-        c_label="C1",
-        correlation_id="12345678-1234-5678-1234-567812345678",
-    )
-    mock_enqueue_run_task.assert_any_call(
-        course_url="http://example.com/race1",
-        phase="H5",
-        date=datetime.now().strftime("%Y-%m-%d"),
-        race_time_local=mock_plan[0]["time_local"],
-        r_label="R1",
-        c_label="C1",
-        correlation_id="12345678-1234-5678-1234-567812345678",
-    )
-    # Race 2: Only H5 should be scheduled (H30 in past)
-    mock_enqueue_run_task.assert_any_call(
-        course_url="http://example.com/race2",
-        phase="H5",
-        date=datetime.now().strftime("%Y-%m-%d"),
-        race_time_local=mock_plan[1]["time_local"],
-        r_label="R2",
-        c_label="C2",
-        correlation_id="12345678-1234-5678-1234-567812345678",
-    )
-
-    # 3 tasks should have been scheduled (H30 for race1, H5 for race1, H5 for race2)
-    assert mock_enqueue_run_task.call_count == 3
-    assert response.json()["scheduled_tasks"] == 3
+    mock_run_in_threadpool.assert_called_once()
+    assert mock_run_in_threadpool.call_args[0][0] == "hippique_orchestrator.scheduler.schedule_all_races"
 
 
 @pytest.mark.asyncio
-async def test_bootstrap_day_task_empty_plan(mock_dependencies, mock_get_correlation_id, mocker):
+async def test_bootstrap_day_task_empty_plan(mock_dependencies, mock_get_correlation_id):
     """
     Test bootstrap-day task when build_plan_async returns an empty plan.
     """
     mock_build_plan = mock_dependencies["mock_build_plan"]
+    mock_run_in_threadpool = mock_dependencies["mock_run_in_threadpool"]
+
     mock_build_plan.return_value = []  # Ensure build_plan_async returns an empty list
-    mocker.patch(
-        "google.oauth2.id_token.verify_oauth2_token", return_value={"email": "test@example.com"}
-    )
+    mock_run_in_threadpool.return_value = [] # run_in_threadpool will be called with an empty plan, returning empty results.
+
     headers = {"Authorization": "Bearer fake-token"}
     response = client.post(
         "/tasks/bootstrap-day", json={"date": datetime.now().strftime("%Y-%m-%d")}, headers=headers
     )
     assert response.status_code == 404
+    assert response.json()["ok"] is False
+    assert "No races found for this date" in response.json()["error"]
+    
+    mock_run_in_threadpool.assert_not_called() # No call to run_in_threadpool if plan is empty

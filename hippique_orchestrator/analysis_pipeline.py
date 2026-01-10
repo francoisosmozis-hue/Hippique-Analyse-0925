@@ -161,6 +161,8 @@ async def run_analysis_for_phase(
     logger.info("Starting analysis pipeline for phase.", extra=log_extra)
 
     analysis_content = {
+        "ok": True,  # analysis completed (even if abstention); set to False only on error
+        "race_doc_id": race_doc_id,
         "last_analyzed_at": datetime.now(timezone.utc).isoformat(),
         "phase": phase,
         "status": "processing",
@@ -179,6 +181,7 @@ async def run_analysis_for_phase(
             analysis_content.update(
                 {
                     "status": "abstention",
+                    "ok": True,
                     "gpi_decision": "ABSTENTION_NO_DATA",
                     "abstention_raisons": [reason],
                     "tickets_analysis": {
@@ -226,6 +229,7 @@ async def run_analysis_for_phase(
         analysis_content.update(
             {
                 "status": "error",
+                "ok": False,
                 "error_message": f"{type(e).__name__}: {e}",
                 "gpi_decision": "error_pipeline_failure",
             }

@@ -24,6 +24,9 @@ class RunPhaseRequest(BaseModel):
     phase: str
     date: str
     correlation_id: str | None = None
+    doc_id: str | None = None
+    r_label: str | None = None
+    c_label: str | None = None
 
 
 class ScheduleRequest(BaseModel):
