@@ -58,9 +58,9 @@ from unittest.mock import call
 
 # ... (rest of the file)
 
-@patch("hippique_orchestrator.config.PROJECT_ID", None)
+@patch("hippique_orchestrator.firestore_client._get_firestore_client", return_value=None)
 @patch("hippique_orchestrator.firestore_client.logger.warning")
-def test_update_race_document_skips_if_db_not_available(mock_warning):
+def test_update_race_document_skips_if_db_not_available(mock_warning, mock_get_firestore_client):
     """Test that updates are skipped if the db client is None."""
 
     firestore_client.update_race_document("any_id", {})
@@ -113,9 +113,9 @@ def test_get_races_for_date_handles_exception(mock_db, caplog):
     assert results == []
 
 
-@patch("hippique_orchestrator.config.PROJECT_ID", None)
+@patch("hippique_orchestrator.firestore_client._get_firestore_client", return_value=None)
 @patch("hippique_orchestrator.firestore_client.logger.warning")
-def test_get_races_for_date_skips_if_db_not_available(mock_warning):
+def test_get_races_for_date_skips_if_db_not_available(mock_warning, mock_get_firestore_client):
     """Test that `get_races_for_date` skips if the db client is None."""
 
     date_str = "2025-12-30"
@@ -372,9 +372,9 @@ def test_set_document_exception(mock_db, caplog):
     )
 
 
-@patch("hippique_orchestrator.config.PROJECT_ID", None)
+@patch("hippique_orchestrator.firestore_client._get_firestore_client", return_value=None)
 @patch("hippique_orchestrator.firestore_client.logger.warning")
-def test_get_races_for_date_db_unavailable(mock_warning):
+def test_get_races_for_date_db_unavailable(mock_warning, mock_get_firestore_client):
     """Test get_races_for_date when the database is unavailable."""
 
     races = firestore_client.get_races_for_date("2025-12-30")
@@ -382,9 +382,9 @@ def test_get_races_for_date_db_unavailable(mock_warning):
     mock_warning.assert_called_once_with("Firestore is not available, cannot query races.")
 
 
-@patch("hippique_orchestrator.config.PROJECT_ID", None)
+@patch("hippique_orchestrator.firestore_client._get_firestore_client", return_value=None)
 @patch("hippique_orchestrator.firestore_client.logger.warning")
-def test_get_document_skips_if_db_not_available(mock_warning):
+def test_get_document_skips_if_db_not_available(mock_warning, mock_get_firestore_client):
     """Test that get_document skips if the db client is None."""
 
     result = firestore_client.get_document("test_collection", "test_doc")
@@ -392,9 +392,9 @@ def test_get_document_skips_if_db_not_available(mock_warning):
     mock_warning.assert_called_once_with("Firestore is not available, cannot get document.")
 
 
-@patch("hippique_orchestrator.config.PROJECT_ID", None)
+@patch("hippique_orchestrator.firestore_client._get_firestore_client", return_value=None)
 @patch("hippique_orchestrator.firestore_client.logger.warning")
-def test_set_document_skips_if_db_not_available(mock_warning):
+def test_set_document_skips_if_db_not_available(mock_warning, mock_get_firestore_client):
     """Test that set_document skips if the db client is None."""
 
     firestore_client.set_document("test_collection", "test_doc", {"key": "value"})

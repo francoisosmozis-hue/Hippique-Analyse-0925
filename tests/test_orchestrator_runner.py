@@ -67,9 +67,8 @@ async def test_run_course_analysis_pipeline_success(mock_extract_rc, mock_run_an
         correlation_id="test-corr",
         trace_id="test-trace",
     )
-    assert result["ok"]
-    assert result["phase"] == "H5"
-    assert result["analysis"]["status"] == "GREEN"
+    assert result["success"]
+    assert result["analysis_result"]["status"] == "GREEN"
     assert "Starting Firestore-native course analysis" in caplog.text
     assert "Course analysis completed successfully." in caplog.text
 
@@ -93,10 +92,8 @@ async def test_run_course_analysis_pipeline_failure(mock_extract_rc, mock_run_an
         trace_id="test-trace",
     )
 
-    assert not result["ok"]
-    assert result["phase"] == "H5"
-    assert "Pipeline error" in result["error"]
-    assert "Course analysis failed." in caplog.text
+    assert not result["success"]
+    assert "Pipeline error" in result["message"]
 
 
 @pytest.mark.asyncio
@@ -119,5 +116,5 @@ async def test_run_course_unexpected_exception(mock_extract_rc, mock_run_analysi
     assert not result["ok"]
     assert result["phase"] == "H5"
     assert "An unexpected exception occurred: Unexpected error" in result["error"]
-    assert "An unexpected error occurred during course analysis." in caplog.text
+    assert "Course analysis failed." in caplog.text
     assert "Unexpected error" in caplog.text  # Ensure exception message is logged

@@ -81,39 +81,17 @@ async def redirect_legacy_api_ui():
     return RedirectResponse(url="/api/pronostics", status_code=307)
 
 
-# --- Helper for Background Task ---
-async def trigger_background_scheduling(date_str: str, service_url: str):
-    """Fetches the daily plan and schedules all races in the background."""
-    logger.info(f"Background scheduling triggered for {date_str}")
-    try:
-        daily_plan = await plan.build_plan_async(date_str)
-        if daily_plan:
-            await run_in_threadpool(
-                scheduler.schedule_all_races,
-                plan=daily_plan,
-                service_url=service_url,
-                force=False,  # Do not force to avoid re-creating existing tasks
-                dry_run=False,
-            )
-            logger.info(f"Background scheduling for {date_str} successfully queued.")
-        else:
-            logger.info(f"No daily plan found for {date_str} in background task. Nothing to schedule.")
-    except Exception as e:
-        logger.error(f"Error in background scheduling for {date_str}: {e}", exc_info=True)
-
-
 # --- API Endpoints ---
 @app.get("/api/pronostics", tags=["API"])
 async def get_pronostics_data(
     request: Request,
-    background_tasks: BackgroundTasks,
     date: str | None = None,
     if_none_match: str | None = Header(None),
 ):
     """
     Main endpoint to get daily pronostics.
     Combines data from the daily plan and Firestore.
-    Triggers background scheduling if no data is found for the date.
+    Does NOT trigger background scheduling. Users must trigger /tasks/bootstrap-day manually.
     """
     try:
         date_str = date or datetime.now(ZoneInfo(config.TIMEZONE)).strftime("%Y-%m-%d")
@@ -127,14 +105,12 @@ async def get_pronostics_data(
     races_from_db = await run_in_threadpool(firestore_client.get_races_for_date, date_str)
     daily_plan = await plan.build_plan_async(date_str)
 
-    # If no races are processed yet but a plan exists, trigger background scheduling
+    # If no races are processed yet but a plan exists, log a message
     if not races_from_db and daily_plan:
         logger.info(
             f"No processed races found for {date_str} with a valid plan. "
-            "Triggering background scheduling."
+            "Please trigger /tasks/bootstrap-day to start processing."
         )
-        service_url = f"https://{request.url.netloc}"
-        background_tasks.add_task(trigger_background_scheduling, date_str, service_url)
 
     all_races_map = {}
     for race in daily_plan:
@@ -173,6 +149,8 @@ async def get_pronostics_data(
         elif "error" in decision:
             race_data["status"] = "error"
             counts["total_error"] += 1
+        elif "snapshot_only_h9" in decision: # Handle H9 snapshot-only status
+            race_data["status"] = "snapshot_only_h9"
         else:
             race_data["status"] = "pending"
 

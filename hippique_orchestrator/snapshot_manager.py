@@ -6,11 +6,28 @@ from __future__ import annotations
 
 import asyncio
 
+from hippique_orchestrator import config
 from hippique_orchestrator.logging_utils import get_logger
 from hippique_orchestrator.plan import build_plan_async
 from hippique_orchestrator.runner import run_course
 
 logger = get_logger(__name__)
+
+
+async def _run_course_with_semaphore(
+    semaphore: asyncio.Semaphore,
+    course_url: str,
+    phase: str,
+    date: str,
+    correlation_id: str,
+):
+    """
+    Acquires a semaphore before running a course and releases it afterwards.
+    """
+    async with semaphore:
+        await run_course(
+            course_url=course_url, phase=phase, date=date, correlation_id=correlation_id
+        )
 
 
 async def write_snapshot_for_day_async(
@@ -29,6 +46,8 @@ async def write_snapshot_for_day_async(
         extra={"correlation_id": correlation_id, "date": date_str, "phase": phase},
     )
 
+    semaphore = asyncio.Semaphore(config.MAX_CONCURRENT_SNAPSHOT_TASKS)
+
     try:
         plan = await build_plan_async(date_str)
         if not plan:
@@ -39,7 +58,7 @@ async def write_snapshot_for_day_async(
             return
 
         logger.info(
-            f"Found {len(plan)} races for {date_str}. Creating snapshots...",
+            f"Found {len(plan)} races for {date_str}. Creating {config.MAX_CONCURRENT_SNAPSHOT_TASKS} concurrent snapshots...",
             extra={"correlation_id": correlation_id, "num_races": len(plan)},
         )
 
@@ -55,9 +74,18 @@ async def write_snapshot_for_day_async(
                 )
                 continue
 
-            # The new way to run the analysis
-            run_course(course_url=course_url, phase=phase, date=date, correlation_id=correlation_id)
-            snapshot_tasks.append(course_url)  # Keep track of what was processed
+            task = asyncio.create_task(
+                _run_course_with_semaphore(
+                    semaphore,
+                    course_url=course_url,
+                    phase=phase,
+                    date=date,
+                    correlation_id=correlation_id,
+                )
+            )
+            snapshot_tasks.append(task)
+
+        await asyncio.gather(*snapshot_tasks)
 
         logger.info(
             f"Finished creating {len(snapshot_tasks)} snapshot tasks for {date_str}.",

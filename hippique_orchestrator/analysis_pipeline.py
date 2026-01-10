@@ -169,6 +169,25 @@ async def run_analysis_for_phase(
     }
 
     try:
+        # H9 phase is snapshot-only
+        if phase == "H9":
+            snapshot_data, gcs_path = await _fetch_and_save_snapshot(
+                course_url, race_doc_id, phase, log_extra
+            )
+            analysis_content.update(
+                {
+                    "status": "snapshot_only",
+                    "ok": True,
+                    "gpi_decision": "SNAPSHOT_ONLY_H9",
+                    "gcs_path": gcs_path, # Include GCS path of the saved snapshot
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                    "abstention_raisons": ["H9 phase is for snapshot only, no GPI analysis."],
+                }
+            )
+            logger.info(f"H9 snapshot for {race_doc_id} created successfully.", extra=log_extra)
+            return analysis_content
+
+        # For H5 and H30 phases, continue with full analysis
         snapshot_data, gcs_path = await _fetch_and_save_snapshot(
             course_url, race_doc_id, phase, log_extra
         )

@@ -20,6 +20,12 @@ EV_MIN_GLOBAL = float(os.getenv("EV_MIN_GLOBAL", "0.40"))
 ROI_MIN_GLOBAL = float(os.getenv("ROI_MIN_GLOBAL", "0.25"))
 MAX_COMBO_OVERROUND = float(os.getenv("MAX_COMBO_OVERROUND", "1.30"))
 
+# Task concurrency
+MAX_CONCURRENT_SNAPSHOT_TASKS = int(os.getenv("MAX_CONCURRENT_SNAPSHOT_TASKS", "5"))
+
+# GCS Enablement for local dev/test
+GCS_ENABLED = os.getenv("GCS_ENABLED", "False").lower() in ("true", "1", "t")
+
 # Secret key for internal API authentication
 INTERNAL_API_SECRET = os.getenv("INTERNAL_API_SECRET")
 
