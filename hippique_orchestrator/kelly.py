@@ -4,6 +4,7 @@ import math
 
 __all__ = ["calculate_kelly_fraction", "kelly_stake"]
 
+
 def _to_float(x, default: float | None = None) -> float | None:
     try:
         v = float(x)
@@ -12,6 +13,7 @@ def _to_float(x, default: float | None = None) -> float | None:
         return v
     except Exception:
         return default
+
 
 def calculate_kelly_fraction(p: float, odds: float, lam: float = 1.0, cap: float = 1.0) -> float:
     """
@@ -28,8 +30,8 @@ def calculate_kelly_fraction(p: float, odds: float, lam: float = 1.0, cap: float
     """
     p = _to_float(p)
     o = _to_float(odds)
-    lam = _to_float(lam, 1.0) or 1.0
-    cap = _to_float(cap, 1.0) or 1.0
+    lam: float = _to_float(lam, 1.0) or 1.0
+    cap: float = _to_float(cap, 1.0) or 1.0
 
     # Validation douce
     if p is None or o is None or not (0.0 < p < 1.0) or o <= 1.0:
@@ -59,7 +61,10 @@ def calculate_kelly_fraction(p: float, odds: float, lam: float = 1.0, cap: float
         f = 1.0
     return f
 
-def kelly_stake(p: float, odds: float, bankroll: float, lam: float = 1.0, cap: float = 1.0) -> float:
+
+def kelly_stake(
+    p: float, odds: float, bankroll: float, lam: float = 1.0, cap: float = 1.0
+) -> float:
     """
     Montant conseillé (en €) selon Kelly fractionné + plafond.
     """

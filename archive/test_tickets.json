@@ -1,0 +1,20 @@
+{
+  "tickets": [
+    {
+      "runner": "Cheval A",
+      "odds": 2.5,
+      "stake": 10.0,
+      "ev": 2.5,
+      "roi": 0.25
+    },
+    {
+      "runner": "Cheval B",
+      "odds": 3.0,
+      "stake": 8.0,
+      "ev": 1.6,
+      "roi": 0.20
+    }
+  ],
+  "race_id": "R1C1",
+  "timestamp": "2025-11-21T10:00:00Z"
+}

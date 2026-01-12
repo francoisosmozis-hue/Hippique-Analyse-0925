@@ -1,0 +1,9 @@
+{
+  "id_course": "34567_H30",
+  "phase": "H30",
+  "runners": [
+    {"num": 1, "nom": "Cheval A", "odds_win": 5.0, "odds_place": 2.5},
+    {"num": 2, "nom": "Cheval B", "odds_win": 6.0, "odds_place": 3.0}
+  ],
+  "date": "2025-01-03"
+}

@@ -310,9 +310,7 @@ def _find_correlation_groups(legs: Sequence[Any]) -> list[dict[str, Any]]:
         if len(unique) < 2:
             continue
         current = consolidated.get(unique)
-        if current is None or _identifier_priority(identifier) < _identifier_priority(
-            current
-        ):
+        if current is None or _identifier_priority(identifier) < _identifier_priority(current):
             consolidated[unique] = identifier
 
     groups: list[dict[str, Any]] = []
@@ -324,12 +322,7 @@ def _find_correlation_groups(legs: Sequence[Any]) -> list[dict[str, Any]]:
 def _load_correlation_settings() -> None:
     """Reload correlation settings from :data:`PAYOUT_CALIBRATION_PATH`."""
 
-    global _correlation_settings, _correlation_mtime, PAYOUT_CALIBRATION_PATH
-
-    new_path = _default_payout_calibration_path()
-    if new_path != PAYOUT_CALIBRATION_PATH:
-        PAYOUT_CALIBRATION_PATH = new_path
-        _correlation_mtime = 0.0
+    global _correlation_settings, _correlation_mtime
 
     try:
         mtime = PAYOUT_CALIBRATION_PATH.stat().st_mtime
@@ -444,26 +437,29 @@ def _estimate_group_probability(
     """Return adjusted probability for a correlated group of legs."""
 
     settings = _resolve_correlation_settings(identifier[0])
-    penalty = settings.get("penalty")
-    if penalty is None:
-        penalty = CORRELATION_PENALTY
-    base = math.prod(probabilities)
-    adjusted = base * penalty
-    method = "penalty"
-
     rho = settings.get("rho")
+    penalty = settings.get("penalty")
+
+    # Prioritise Monte Carlo simulation if rho is defined
     if rho is not None and len(probabilities) > 1:
-        mc = _monte_carlo_joint_probability(
+        mc_prob = _monte_carlo_joint_probability(
             probabilities,
             float(rho),
             int(settings.get("samples", 0)) or None,
         )
-        if mc is not None and mc < adjusted:
-            adjusted = mc
-            method = "monte_carlo"
+        if mc_prob is not None:
+            # Use the Monte Carlo result as the primary probability
+            # The penalty value is returned for logging/informational purposes
+            return mc_prob, "monte_carlo", float(penalty or CORRELATION_PENALTY)
 
-    adjusted = max(min(adjusted, base), _EPSILON)
-    return adjusted, method, float(penalty)
+    # Fallback to simple penalty method
+    if penalty is None:
+        penalty = CORRELATION_PENALTY
+
+    base_prob = math.prod(probabilities)
+    adjusted_prob = base_prob * penalty
+
+    return adjusted_prob, "penalty", float(penalty)
 
 
 def _extract_leg_probability(leg: Any) -> tuple[float, str, str, dict[str, Any]]:
@@ -492,9 +488,7 @@ def _extract_leg_probability(leg: Any) -> tuple[float, str, str, dict[str, Any]]
             sources = entry.get("sources")
             if isinstance(sources, str):
                 source = sources
-            elif isinstance(sources, Sequence) and not isinstance(
-                sources, (str, bytes)
-            ):
+            elif isinstance(sources, Sequence) and not isinstance(sources, (str, bytes)):
                 source = str(next(iter(sources), "calibration"))
             else:
                 source = "calibration"
@@ -535,8 +529,9 @@ def _load_calibration() -> None:
         return
     if mtime <= _calibration_mtime:
         return
-    with CALIBRATION_PATH.open("r", encoding="utf-8") as fh:
-        data = yaml.safe_load(fh) or {}
+    try:
+        with CALIBRATION_PATH.open("r", encoding="utf-8") as fh:
+            data = yaml.safe_load(fh) or {}
         metadata = data.get("__meta__") if isinstance(data, Mapping) else {}
         if isinstance(metadata, Mapping):
             _calibration_metadata.clear()
@@ -554,9 +549,7 @@ def _load_calibration() -> None:
             beta = float(v.get("beta", 1.0))
             p = float(v.get("p", alpha / (alpha + beta)))
             if alpha <= 0 or beta <= 0 or not (0.0 < p < 1.0):
-                raise ValueError(
-                    f"Invalid calibration for {k}: alpha={alpha}, beta={beta}, p={p}"
-                )
+                raise ValueError(f"Invalid calibration for {k}: alpha={alpha}, beta={beta}, p={p}")
             source = "calibration_combo" if "|" in key else "calibration_leg"
             weight = float(v.get("weight", alpha + beta))
             updated_at = v.get("updated_at")
@@ -582,6 +575,12 @@ def _load_calibration() -> None:
         _calibration_cache = parsed
         while len(_calibration_cache) > MAX_CACHE_SIZE:
             _calibration_cache.popitem(last=False)
+    except (OSError, yaml.YAMLError, ValueError) as e:
+        logger.warning("Could not load or parse calibration file %s: %s", CALIBRATION_PATH, e)
+        _calibration_cache = OrderedDict()
+        _calibration_mtime = 0.0
+        _calibration_metadata = {}
+
     _calibration_mtime = mtime
 
 

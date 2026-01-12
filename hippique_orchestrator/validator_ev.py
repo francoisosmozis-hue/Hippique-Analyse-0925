@@ -11,14 +11,9 @@ from collections.abc import Callable
 from functools import partial
 from pathlib import Path
 
-from hippique_orchestrator.config import get_config
+import yaml
 
-try:  # pragma: no cover - optional dependency
-    import yaml
-except Exception:  # pragma: no cover - yaml is optional for the CLI
-    yaml = None  # type: ignore
-
-config = get_config()
+from hippique_orchestrator import config
 
 
 class ValidationError(Exception):
@@ -36,7 +31,11 @@ def _load_cfg() -> dict:
     if not path.exists():
         return {}
     with path.open("r", encoding="utf-8") as handle:
-        data = yaml.safe_load(handle) or {}
+        try:
+            data = yaml.safe_load(handle) or {}
+        except yaml.YAMLError:
+            _LOG.warning("Invalid YAML in %s, returning empty config.", path)
+            return {}
     if not isinstance(data, dict):
         return {}
     return data
@@ -159,25 +158,23 @@ def validate(h30: dict, h5: dict, allow_je_na: bool) -> bool:
     for snap, label in [(h30, "H-30"), (h5, "H-5")]:
         for r in snap.get("runners", []):
             if "odds" not in r or r["odds"] in (None, ""):
-                raise ValueError(
-                    f"Cotes manquantes {label} pour {r.get('name', r.get('id'))}."
-                )
+                raise ValueError(f"Cotes manquantes {label} pour {r.get('name', r.get('id'))}.")
             try:
-                if float(r["odds"]) <= 1.01:
-                    raise ValueError(
-                        f"Cote invalide {label} pour {r.get('name', r.get('id'))}: {r['odds']}"
-                    )
-            except Exception:
+                odds_float = float(r["odds"])
+            except (TypeError, ValueError) as e:
                 raise ValueError(
                     f"Cote non numérique {label} pour {r.get('name', r.get('id'))}: {r.get('odds')}"
+                ) from e
+
+            if odds_float <= 1.01:
+                raise ValueError(
+                    f"Cote invalide {label} pour {r.get('name', r.get('id'))}: {r['odds']}"
                 )
     if not allow_je_na:
         for r in h5.get("runners", []):
             je = r.get("je_stats", {})
             if not je or ("j_win" not in je and "e_win" not in je):
-                raise ValueError(
-                    f"Stats J/E manquantes: {r.get('name', r.get('id'))}"
-                )
+                raise ValueError(f"Stats J/E manquantes: {r.get('name', r.get('id'))}")
     return True
 
 
@@ -424,8 +421,12 @@ def _load_odds(path: Path) -> dict[str, float]:
                 odds_map[str(identifier)] = float(value)
         else:
             for key, value in payload.items():
+                if isinstance(value, str):
+                    coerced_value = value.replace(",", ".")
+                else:
+                    coerced_value = value
                 try:
-                    odds_map[str(key)] = float(value)
+                    odds_map[str(key)] = float(coerced_value)
                 except (TypeError, ValueError):
                     continue
     elif isinstance(payload, list):
@@ -453,12 +454,20 @@ def _load_config(path: Path | None) -> dict:
     if path is None or not path.exists():
         return {}
     if path.suffix.lower() in {".yml", ".yaml"} and yaml is not None:
-        data = yaml.safe_load(path.read_text(encoding="utf-8"))
-        return data or {}
+        try:
+            data = yaml.safe_load(path.read_text(encoding="utf-8"))
+            return data or {}
+        except yaml.YAMLError:
+            _LOG.warning("Invalid YAML in %s, returning empty config.", path)
+            return {}
     if path.suffix.lower() in {".json"}:
-        payload = _load_json_payload(path)
-        if isinstance(payload, dict):
-            return payload
+        try:
+            payload = _load_json_payload(path)
+            if isinstance(payload, dict):
+                return payload
+        except json.JSONDecodeError:
+            _LOG.warning("Invalid JSON in %s, returning empty config.", path)
+            return {}
     return {}
 
 
@@ -473,10 +482,14 @@ def _resolve_rc_directory(
     if reunion and course:
         root = Path(base_dir) if base_dir else Path("data")
         return root / f"{reunion}{course}"
-    raise ValueError("Impossible de déterminer le dossier artefacts (fournir --artefacts ou --reunion/--course)")
+    raise ValueError(
+        "Impossible de déterminer le dossier artefacts (fournir --artefacts ou --reunion/--course)"
+    )
 
 
-def _discover_file(rc_dir: Path, candidates: tuple[str, ...], *, required: bool = True) -> Path | None:
+def _discover_file(
+    rc_dir: Path, candidates: tuple[str, ...], *, required: bool = True
+) -> Path | None:
     path = _find_first_existing(rc_dir, candidates)
     if path is None and required:
         names = ", ".join(candidates)
@@ -484,12 +497,20 @@ def _discover_file(rc_dir: Path, candidates: tuple[str, ...], *, required: bool 
     return path
 
 
-def _prepare_validation_inputs(args: argparse.Namespace) -> tuple[dict, list[dict], dict[str, float], dict]:
+def _prepare_validation_inputs(
+    args: argparse.Namespace,
+) -> tuple[dict, list[dict], dict[str, float], dict]:
     phase = _normalise_phase(args.phase)
     rc_dir = _resolve_rc_directory(args.artefacts, args.base_dir, args.reunion, args.course)
 
-    partants_path = Path(args.partants) if args.partants else _discover_file(rc_dir, _PARTANTS_CANDIDATES)
-    stats_path = Path(args.stats_je) if args.stats_je else _discover_file(rc_dir, _STATS_CANDIDATES, required=False)
+    partants_path = (
+        Path(args.partants) if args.partants else _discover_file(rc_dir, _PARTANTS_CANDIDATES)
+    )
+    stats_path = (
+        Path(args.stats_je)
+        if args.stats_je
+        else _discover_file(rc_dir, _STATS_CANDIDATES, required=False)
+    )
     odds_candidates = _ODDS_CANDIDATES.get(phase, _ODDS_CANDIDATES["H5"])
     odds_path = Path(args.odds) if args.odds else _discover_file(rc_dir, odds_candidates)
     config_path: Path | None

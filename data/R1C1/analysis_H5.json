@@ -1,0 +1,10 @@
+{
+  "abstain": true,
+  "tickets": [],
+  "roi_global_est": 0,
+  "message": "No valid tickets found after applying guardrails.",
+  "paths": {
+    "snapshot": "/home/francoisosmozis/hippique-orchestrator/data/R1C1/snapshot_H5.json",
+    "analysis": "/home/francoisosmozis/hippique-orchestrator/data/R1C1/analysis_H5.json"
+  }
+}

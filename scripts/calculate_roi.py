@@ -16,7 +16,7 @@ def get_manual_results(race_id: str) -> dict[str, list[int]]:
     Placeholder function to manually input the race results.
     """
     results = {}
-    print("\n" + "-"*30)
+    print("\n" + "-" * 30)
     print(f"Enter winning numbers for {race_id}")
     print("(e.g., '1,2,3' or just '1' for SP. Press Enter to skip a bet type)")
 
@@ -42,6 +42,7 @@ def get_manual_results(race_id: str) -> dict[str, list[int]]:
         return {}
 
     return results
+
 
 def is_winner(ticket_type: str, ticket_horses: list[int], results: dict[str, list[int]]) -> bool:
     """
@@ -71,6 +72,7 @@ def is_winner(ticket_type: str, ticket_horses: list[int], results: dict[str, lis
 
     return False
 
+
 def get_ticket_payout(ticket_type: str, ticket, results: dict) -> float:
     """
     For dutching, finds the payout of the winning horse. For others, asks manually.
@@ -91,6 +93,7 @@ def get_ticket_payout(ticket_type: str, ticket, results: dict) -> float:
         return float(input(f"  -> {ticket_type} WIN! Enter payout for this bet: "))
     except (ValueError, TypeError):
         return 0.0
+
 
 def calculate_roi(start_date: str, end_date: str):
     """
@@ -150,9 +153,9 @@ def calculate_roi(start_date: str, end_date: str):
                 returned_by_type[ticket_type] += payout
 
     # --- Reporting ---
-    print("\n" + "="*50)
+    print("\n" + "=" * 50)
     print("ROI Analysis Summary")
-    print("="*50)
+    print("=" * 50)
 
     roi = (total_returned - total_staked) / total_staked if total_staked > 0 else 0.0
 
@@ -173,12 +176,22 @@ def calculate_roi(start_date: str, end_date: str):
         print(f"  - Returned: {ret:.2f} €")
         print(f"  - ROI:      {roi_type:+.2%}")
 
-    print("="*50)
+    print("=" * 50)
+
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Calculate real ROI based on stored tickets and manual results.")
-    parser.add_argument("--start-date", type=str, required=True, help="Start date in YYYY-MM-DD format.")
-    parser.add_argument("--end-date", type=str, default=datetime.now().strftime("%Y-%m-%d"), help="End date in YYYY-MM-DD format (default: today).")
+    parser = argparse.ArgumentParser(
+        description="Calculate real ROI based on stored tickets and manual results."
+    )
+    parser.add_argument(
+        "--start-date", type=str, required=True, help="Start date in YYYY-MM-DD format."
+    )
+    parser.add_argument(
+        "--end-date",
+        type=str,
+        default=datetime.now().strftime("%Y-%m-%d"),
+        help="End date in YYYY-MM-DD format (default: today).",
+    )
 
     args = parser.parse_args()
 

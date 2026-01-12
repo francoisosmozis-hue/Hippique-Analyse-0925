@@ -1,0 +1,14 @@
+[tool.ruff]
+exclude = [
+    "archive",
+    "docs",
+    "build",
+    "dist",
+    "venv",
+    ".venv",
+    "htmlcov",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
+    "__pycache__",
+]

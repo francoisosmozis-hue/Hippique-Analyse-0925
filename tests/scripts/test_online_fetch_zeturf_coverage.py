@@ -1,0 +1,2035 @@
+# tests/scripts/test_online_fetch_zeturf_coverage.py
+
+import pytest
+from bs4 import BeautifulSoup
+
+from hippique_orchestrator.scripts.online_fetch_zeturf import (
+    _coerce_runner_entry,  # Moved import to top-level
+    _fallback_parse_html,
+    _normalise_rc_tag,
+    _normalize_decimal,
+    _slugify_hippodrome,
+)
+
+
+@pytest.mark.parametrize(
+    "reunion, course, expected",
+    [
+        (1, 2, "R1C2"),
+        ("R1", "C2", "R1C2"),
+        ("R3", 10, "R3C10"),
+        ("4", "5", "R4C5"),
+    ],
+)
+def test_normalise_rc_tag_valid(reunion, course, expected):
+    """Teste la normalisation des tags de réunion/course."""
+    assert _normalise_rc_tag(reunion, course) == expected
+
+
+def test_slugify_hippodrome():
+    """Teste la slugification des noms d'hippodromes."""
+    assert _slugify_hippodrome("CAGNES SUR MER") == "cagnes-sur-mer"
+    assert _slugify_hippodrome("SAINT-CLOUD") == "saint-cloud"
+    assert _slugify_hippodrome("  Deauville ") == "deauville"
+    assert _slugify_hippodrome(None) is None
+
+
+@pytest.mark.parametrize(
+    "value, expected",
+    [
+        ("12,5", 12.5),
+        ("15.5", 15.5),
+        (20, 20.0),
+        ("abc", None),
+        (None, None),
+    ],
+)
+def test_normalize_decimal(value, expected):
+    """Teste la conversion de valeurs en décimal."""
+    assert _normalize_decimal(value) == expected
+
+
+def test_fallback_parse_html_extracts_data():
+    """
+
+    Teste le parsing de la fonction fallback en utilisant une fixture HTML
+
+    qui contient à la fois la table des partants et le script des cotes.
+
+    """
+
+    html_content = """
+
+    <html>
+
+        <body>
+
+            <table class="table-runners">
+
+                <tbody>
+
+                    <tr data-runner="1">
+
+                        <td class="numero">1</td>
+
+                                                <td class="cheval">
+
+                                                    <a class="horse-name" title="TEST HORSE">...</a>
+
+                                                </td>
+
+                                                <td class="cotes">
+
+                            <span class="cote">12,5</span>
+
+                        </td>
+
+                    </tr>
+
+                    <tr data-runner="2">
+
+                        <td class="numero">2</td>
+
+                        <td class="cheval">
+
+                            <a class="horse-name">ANOTHER HORSE</a>
+
+                        </td>
+
+                        <td class="cotes">
+
+                            <span class="cote">8.0</span>
+
+                        </td>
+
+                    </tr>
+
+                </tbody>
+
+            </table>
+
+            <script>
+
+                var cotesInfos = {
+
+                    "1": {"odds": {"SG": "12,5"}},
+
+                    "2": {"odds": {"SG": "8.0"}}
+
+                };
+
+            </script>
+
+        </body>
+
+    </html>
+
+    """
+
+    soup = BeautifulSoup(html_content, "lxml")
+
+    data = _fallback_parse_html(str(soup))
+
+    assert isinstance(data, dict)
+
+    assert "runners" in data
+
+    runners = data["runners"]
+
+    assert isinstance(runners, list)
+
+    assert len(runners) == 2
+
+    runner1 = runners[0]
+
+    assert runner1.get("num") == "1"
+
+    assert runner1.get("name") == "TEST HORSE"
+
+    assert runner1.get("cote") == "12,5"
+
+
+def test_fallback_parse_html_data_odd_attribute():
+    """
+
+
+
+    Tests that the fallback HTML parser correctly extracts odds from a `data-odd` attribute.
+
+
+
+    """
+
+    html_content = """
+
+
+
+    <html>
+
+
+
+        <body>
+
+
+
+            <table class="table-runners">
+
+
+
+                <tbody>
+
+
+
+                    <tr data-runner="1">
+
+
+
+                        <td class="numero">1</td>
+
+
+
+                        <td class="cheval">
+
+
+
+                            <a class="horse-name" title="TEST HORSE">...</a>
+
+
+
+                        </td>
+
+
+
+                        <td class="cotes" data-odd="7.5">
+
+
+
+                            ...
+
+
+
+                        </td>
+
+
+
+                    </tr>
+
+
+
+                </tbody>
+
+
+
+            </table>
+
+
+
+        </body>
+
+
+
+    </html>
+
+
+
+    """
+
+    soup = BeautifulSoup(html_content, "lxml")
+
+    data = _fallback_parse_html(str(soup))
+
+    assert isinstance(data, dict)
+
+    assert "runners" in data
+
+    runners = data["runners"]
+
+    assert len(runners) == 1
+
+    runner1 = runners[0]
+
+    assert runner1.get("cote") is None  # `data-odd` is not directly parsed in fallback
+
+
+def test_fallback_parse_html_no_cotes_infos_script():
+    """
+
+
+
+
+
+
+
+    Tests that the fallback HTML parser can extract basic runner info
+
+
+
+
+
+
+
+    even when the `cotesInfos` script is missing.
+
+
+
+
+
+
+
+    """
+
+    html_content = """
+
+
+
+
+
+
+
+    <html>
+
+
+
+
+
+
+
+        <body>
+
+
+
+
+
+
+
+            <table class="table-runners">
+
+
+
+
+
+
+
+                <tbody>
+
+
+
+
+
+
+
+                    <tr data-runner="1">
+
+
+
+
+
+
+
+                        <td class="numero">1</td>
+
+
+
+
+
+
+
+                        <td class="cheval">
+
+
+
+
+
+
+
+                            <a class="horse-name" title="TEST HORSE">...</a>
+
+
+
+
+
+
+
+                        </td>
+
+
+
+
+
+
+
+                        <td class="cotes">
+
+
+
+
+
+
+
+                            <span class="cote">9,9</span>
+
+
+
+
+
+
+
+                        </td>
+
+
+
+
+
+
+
+                    </tr>
+
+
+
+
+
+
+
+                </tbody>
+
+
+
+
+
+
+
+            </table>
+
+
+
+
+
+
+
+        </body>
+
+
+
+
+
+
+
+    </html>
+
+
+
+
+
+
+
+    """
+
+    soup = BeautifulSoup(html_content, "lxml")
+
+    data = _fallback_parse_html(str(soup))
+
+    assert "runners" in data
+
+    runners = data["runners"]
+
+    assert len(runners) == 1
+
+    runner1 = runners[0]
+
+    assert runner1.get("num") == "1"
+
+    assert runner1.get("name") == "TEST HORSE"
+
+    assert runner1.get("cote") == "9,9"
+
+
+def test_fallback_parse_html_missing_cheval():
+    """
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    Tests that the fallback HTML parser can handle a runner row
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    that is missing the 'cheval' (horse) cell.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    """
+
+    html_content = """
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    <html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        <body>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+            <table class="table-runners">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                <tbody>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                    <tr data-runner="1">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                        <td class="numero">1</td>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                        <td class="cotes">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                            <span class="cote">9,9</span>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                        </td>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                    </tr>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                </tbody>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+            </table>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        </body>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    </html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    """
+
+    soup = BeautifulSoup(html_content, "lxml")
+
+    data = _fallback_parse_html(str(soup))
+
+    assert "runners" in data
+
+    runners = data["runners"]
+
+    assert len(runners) == 1
+
+    runner1 = runners[0]
+
+    assert runner1.get("num") == "1"
+
+    assert runner1.get("name") is None
+
+    assert runner1.get("cote") == "9,9"
+
+
+def test_fallback_parse_html_no_tbody():
+    """
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    Tests that the fallback HTML parser can handle a runners table
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    that is missing the <tbody> tag.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    """
+
+    html_content = """
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    <html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        <body>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+            <table class="table-runners">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                <tr data-runner="1">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                    <td class="numero">1</td>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                    <td class="cheval">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                        <a class="horse-name" title="TEST HORSE">...</a>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                    </td>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                    <td class="cotes">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                        <span class="cote">9,9</span>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                    </td>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                </tr>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+            </table>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        </body>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    </html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    """
+
+    soup = BeautifulSoup(html_content, "lxml")
+
+    data = _fallback_parse_html(str(soup))
+
+    assert "runners" in data
+
+    runners = data["runners"]
+
+    assert len(runners) == 1
+
+    runner1 = runners[0]
+
+    assert runner1.get("num") == "1"
+
+    assert runner1.get("name") == "TEST HORSE"
+
+    assert runner1.get("cote") == "9,9"
+
+
+# Fixture for _coerce_runner_entry tests
+
+
+@pytest.mark.parametrize(
+    "raw, expected",
+    [
+        # Nominal case
+        (
+            {"num": "1", "name": "Horse A", "cote": "4.5", "odds_place": "1.8", "p": "0.2"},
+            {"num": "1", "name": "Horse A", "cote": 4.5, "odds_place": 1.8, "p": 0.2},
+        ),
+        # Alias keys
+        (
+            {"number": 2, "horse": "Horse B", "odds": 8.0},
+            {"num": "2", "name": "Horse B", "odds": 8.0, "cote": 8.0, "id": "2"},
+        ),
+        # Missing values
+        ({"num": 3, "name": "Horse C"}, {"num": "3", "name": "Horse C"}),
+        # Non-numeric odds
+        ({"num": 4, "name": "Horse D", "cote": "N/A"}, {"num": "4", "name": "Horse D"}),
+        # Extracts from market
+        (
+            {"num": "5", "name": "Horse E", "market": {"place": {"5": "2.1"}}},
+            {"num": "5", "name": "Horse E", "odds_place": 2.1},
+        ),
+        # Empty input
+        ({}, None),
+        # No number
+        ({"name": "No Number"}, None),
+        # Nested odds dict
+        (
+            {"num": "6", "name": "Horse F", "odds": {"gagnant": 10.0, "place": 3.0}},
+            {"num": "6", "name": "Horse F", "cote": 10.0, "odds_place": 3.0},
+        ),
+    ],
+)
+def test_coerce_runner_entry_variations(raw, expected):
+    assert _coerce_runner_entry(raw) == expected

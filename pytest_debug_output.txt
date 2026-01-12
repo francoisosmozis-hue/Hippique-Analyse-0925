@@ -1,0 +1,85 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-8.2.0, pluggy-1.6.0 -- /usr/bin/python
+cachedir: .pytest_cache
+rootdir: /home/francoisosmozis/hippique-orchestrator
+configfile: pytest.ini
+plugins: anyio-3.7.1, rerunfailures-16.1, pyfakefs-6.0.0, cov-7.0.0, mock-3.14.0, timeout-2.4.0, xdist-3.8.0, env-1.1.3, asyncio-0.23.7, repeat-0.9.4
+timeout: 300.0s
+timeout method: signal
+timeout func_only: False
+asyncio: mode=Mode.STRICT
+collecting ... collected 1 item
+
+tests/test_scraper_boturfers.py::test_fetcher_parse_programme_success PASSED [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.3-final-0 ________________
+
+Name                                                         Stmts   Miss Branch BrPart  Cover   Missing
+--------------------------------------------------------------------------------------------------------
+hippique_orchestrator/__init__.py                                1      0      0      0   100%
+hippique_orchestrator/analysis_pipeline.py                      97     80     14      0    15%   26-50, 61-93, 99-105, 112-132, 142-221
+hippique_orchestrator/analysis_utils.py                        181    147     82      0    13%   44-48, 53-70, 83-112, 121-188, 207-252, 269-287, 295-327, 336-357, 366-391
+hippique_orchestrator/api/__init__.py                            1      0      0      0   100%
+hippique_orchestrator/api/tasks.py                              74     53     10      0    25%   39-91, 106-140, 154-248
+hippique_orchestrator/auth.py                                   28     18      8      0    28%   24-33, 42-64
+hippique_orchestrator/config.py                                 19      0      0      0   100%
+hippique_orchestrator/data_source.py                            16      7      2      0    50%   37-42, 61-69
+hippique_orchestrator/ev_calculator.py                         522    446    208      0    10%   59-65, 71-76, 86-104, 110-114, 118-122, 131-149, 155-173, 179-181, 185-191, 195-204, 208-217, 225-239, 248-272, 276-304, 315-355, 385-434, 446-457, 473-514, 532-545, 551-624, 635-689, 716-764, 818-994
+hippique_orchestrator/fetch_je_stats.py                        265    210     66      1    17%   56-69, 73, 86-93, 98-100, 108-140, 144-163, 172-197, 201-208, 214-237, 255-377, 381-405, 410-414, 418
+hippique_orchestrator/firestore_client.py                       98     83     32      0    12%   26-37, 43-50, 55-72, 77-93, 98-102, 109-181
+hippique_orchestrator/gcs_client.py                             72     46     14      0    30%   33-39, 44-46, 51, 56-58, 70, 82, 92-99, 108-115, 123-127, 134-138, 145-149
+hippique_orchestrator/gcs_utils.py                              52     52     10      0     0%   3-90
+hippique_orchestrator/kelly.py                                  42     36     18      0    10%   9-15, 31-62, 71-75
+hippique_orchestrator/logging_io.py                             39     39     10      0     0%   1-79
+hippique_orchestrator/logging_middleware.py                     22     16      0      0    27%   15-61
+hippique_orchestrator/logging_utils.py                          32      1      6      3    89%   18->20, 20->exit, 32->35, 60
+hippique_orchestrator/overround.py                              25     25     10      0     0%   8-77
+hippique_orchestrator/p_finale.py                               41     41     22      0     0%   7-103
+hippique_orchestrator/pipeline_run.py                          353    320    142      0     7%   38, 43-46, 62-133, 143-182, 192-246, 257-288, 293-299, 309-337, 343-417, 422-441, 450-535, 540-548, 558-632, 640-667, 680-737
+hippique_orchestrator/plan.py                                   42     32     16      0    17%   35-87, 99-109
+hippique_orchestrator/post_course_payload.py                   181    181     62      0     0%   3-319
+hippique_orchestrator/runner.py                                 35     27      6      0    20%   21-32, 46-118
+hippique_orchestrator/scheduler.py                             101     86     28      0    12%   28-52, 69-140, 146-248
+hippique_orchestrator/schemas.py                                32      0      0      0   100%
+hippique_orchestrator/scrapers/__init__.py                       0      0      0      0   100%
+hippique_orchestrator/scrapers/boturfers.py                    214    149     80     10    27%   40, 49-63, 70-71, 75-76, 80-81, 86->91, 88->91, 105-111, 116, 121-125, 134-143, 153, 158-173, 177-220, 224-268, 272-279, 289-297, 310-336, 343-374
+hippique_orchestrator/scrapers/geny.py                          61     61     14      0     0%   5-117
+hippique_orchestrator/scrapers/zeturf.py                        26     18      6      0    25%   14-15, 24-51
+hippique_orchestrator/scripts/__init__.py                        0      0      0      0   100%
+hippique_orchestrator/scripts/backup_restore.py                202    202     48      0     0%   14-343
+hippique_orchestrator/scripts/concat_je_month.py               108    108     48      0     0%   12-208
+hippique_orchestrator/scripts/cron_decider.py                   66     66     20      0     0%   10-137
+hippique_orchestrator/scripts/drive_sync.py                      8      8      2      0     0%   7-20
+hippique_orchestrator/scripts/enrich_requirements.py            49     49     20      0     0%   4-100
+hippique_orchestrator/scripts/fetch_je_chrono.py                84     84     22      0     0%   3-189
+hippique_orchestrator/scripts/fetch_je_stats.py                248    248     62      0     0%   3-404
+hippique_orchestrator/scripts/gcs_utils.py                      14     14      8      0     0%   3-23
+hippique_orchestrator/scripts/guardrails.py                     39     39     14      0     0%   4-78
+hippique_orchestrator/scripts/lint_sources.py                   94     94     32      0     0%   3-190
+hippique_orchestrator/scripts/merge_all_data.py                 21     21      2      0     0%   1-42
+hippique_orchestrator/scripts/monitor_roi.py                   204    204     44      0     0%   14-347
+hippique_orchestrator/scripts/online_fetch_zeturf.py          1048    955    576      1     6%   36-47, 53-62, 70, 82-137, 151-159, 167-179, 187-216, 220-237, 245-291, 314-343, 349-352, 359-456, 469-487, 498-517, 528-605, 611-624, 637-683, 704-719, 723-726, 730-736, 742-748, 776-804, 810-820, 824-831, 837-842, 848-990, 1001-1180, 1184-1200, 1211-1234, 1242-1435, 1447-1591, 1604-1665, 1694-1853, 1858, 1862
+hippique_orchestrator/scripts/p_finale_export.py                80     80     30      0     0%   4-142
+hippique_orchestrator/scripts/resolve_course_id.py             141    141     64      0     0%   3-259
+hippique_orchestrator/scripts/restore_from_drive.py             33     33     12      0     0%   3-56
+hippique_orchestrator/scripts/simulate_ev.py                   221    221     98      0     0%   3-364
+hippique_orchestrator/scripts/simulate_wrapper.py              468    468    238      0     0%   15-822
+hippique_orchestrator/scripts/snapshot_enricher.py              16     16      2      0     0%   1-31
+hippique_orchestrator/scripts/update_excel_planning.py         424    424    226      0     0%   3-689
+hippique_orchestrator/scripts/update_excel_with_results.py     183    183     66      0     0%   3-426
+hippique_orchestrator/service.py                               204    139     36      0    27%   35-37, 56, 62, 68, 74, 84-193, 200-246, 251-258, 264-303, 317, 334, 340-349, 357, 381-422
+hippique_orchestrator/simulate_ev.py                           221    221     98      0     0%   3-364
+hippique_orchestrator/simulate_wrapper.py                      475    418    236      0     8%   54-60, 104-110, 116-122, 128-132, 138-139, 152-158, 165-174, 178-181, 185-192, 196-203, 209-276, 282-294, 298-299, 305-322, 330-375, 381-389, 401-435, 444-464, 470-519, 525-579, 598-679, 685-699, 735-839
+hippique_orchestrator/snapshot_manager.py                       28     20      6      0    24%   27-68, 85
+hippique_orchestrator/stats_fetcher.py                          79     79     20      0     0%   5-181
+hippique_orchestrator/stats_provider.py                        299    299    102      0     0%   8-489
+hippique_orchestrator/tickets_store.py                          67     67      6      0     0%   2-161
+hippique_orchestrator/time_utils.py                             14      7      2      0    44%   15, 22, 30-36, 44
+hippique_orchestrator/validator_ev.py                          319    319    142      0     0%   3-591
+hippique_orchestrator/zoneturf_client.py                       252    252    116      0     0%   2-352
+--------------------------------------------------------------------------------------------------------
+TOTAL                                                         8381   7653   3264     15     6%
+Coverage HTML written to dir htmlcov
+Coverage XML written to file coverage.xml
+============================== 1 passed in 9.60s ===============================

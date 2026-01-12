@@ -12,8 +12,22 @@ def test_export_creates_csv_and_excel(tmp_path: Path):
 
     p_finale_data = {
         "runners": [
-            {"num": "1", "name": "Horse A", "p_finale": 0.5, "odds": 2.0, "j_rate": 0.1, "e_rate": 0.15},
-            {"num": "2", "name": "Horse B", "p_finale": 0.3, "odds": 3.0, "j_rate": 0.05, "e_rate": 0.1},
+            {
+                "num": "1",
+                "name": "Horse A",
+                "p_finale": 0.5,
+                "odds": 2.0,
+                "j_rate": 0.1,
+                "e_rate": 0.15,
+            },
+            {
+                "num": "2",
+                "name": "Horse B",
+                "p_finale": 0.3,
+                "odds": 3.0,
+                "j_rate": 0.05,
+                "e_rate": 0.1,
+            },
         ]
     }
     p_finale_path.write_text(json.dumps(p_finale_data))

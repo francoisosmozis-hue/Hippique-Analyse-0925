@@ -1,0 +1,1703 @@
+[
+  {
+    "date": "2025-11-20",
+    "r_label": "R59",
+    "c_label": "C7",
+    "meeting": "DAYTON RACEWAY",
+    "time_local": "00:00",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R59C7-dayton-raceway-race-7",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R59"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R60",
+    "c_label": "C6",
+    "meeting": "DOVER DOWNS",
+    "time_local": "00:10",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R60C6-dover-downs-race-6",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R60"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R7",
+    "c_label": "C15",
+    "meeting": "SAN ISIDRO",
+    "time_local": "00:15",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R7C15-san-isidro-premio-manicero-key-2012-2013-premier-peloton",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R7"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R59",
+    "c_label": "C8",
+    "meeting": "DAYTON RACEWAY",
+    "time_local": "00:20",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R59C8-dayton-raceway-race-8",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R59"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R61",
+    "c_label": "C3",
+    "meeting": "WOODBINE TB",
+    "time_local": "00:28",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R61C3-woodbine-tb-race-3",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R61"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R13",
+    "c_label": "C19",
+    "meeting": "CHILE",
+    "time_local": "00:30",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R13C19-chile-prix-lider-del-rimac",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R13"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R60",
+    "c_label": "C7",
+    "meeting": "DOVER DOWNS",
+    "time_local": "00:30",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R60C7-dover-downs-race-7",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R60"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R59",
+    "c_label": "C9",
+    "meeting": "DAYTON RACEWAY",
+    "time_local": "00:40",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R59C9-dayton-raceway-race-9",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R59"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R60",
+    "c_label": "C8",
+    "meeting": "DOVER DOWNS",
+    "time_local": "00:50",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R60C8-dover-downs-race-8",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R60"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R61",
+    "c_label": "C4",
+    "meeting": "WOODBINE TB",
+    "time_local": "00:57",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R61C4-woodbine-tb-race-4",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R61"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R59",
+    "c_label": "C10",
+    "meeting": "DAYTON RACEWAY",
+    "time_local": "01:00",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R59C10-dayton-raceway-race-10",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R59"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R60",
+    "c_label": "C9",
+    "meeting": "DOVER DOWNS",
+    "time_local": "01:10",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R60C9-dover-downs-race-9",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R60"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R59",
+    "c_label": "C11",
+    "meeting": "DAYTON RACEWAY",
+    "time_local": "01:20",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R59C11-dayton-raceway-race-11",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R59"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R61",
+    "c_label": "C5",
+    "meeting": "WOODBINE TB",
+    "time_local": "01:26",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R61C5-woodbine-tb-race-5",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R61"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R60",
+    "c_label": "C10",
+    "meeting": "DOVER DOWNS",
+    "time_local": "01:30",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R60C10-dover-downs-race-10",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R60"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R59",
+    "c_label": "C12",
+    "meeting": "DAYTON RACEWAY",
+    "time_local": "01:40",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R59C12-dayton-raceway-race-12",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R59"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R60",
+    "c_label": "C11",
+    "meeting": "DOVER DOWNS",
+    "time_local": "01:50",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R60C11-dover-downs-race-11",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R60"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R61",
+    "c_label": "C6",
+    "meeting": "WOODBINE TB",
+    "time_local": "01:55",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R61C6-woodbine-tb-race-6",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R61"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R8",
+    "c_label": "C3",
+    "meeting": "NARROGIN BECOME",
+    "time_local": "07:37",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R8C3-narrogin-become-a-member-save-maiden-handicap",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R8"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R9",
+    "c_label": "C7",
+    "meeting": "IPSWICH BARRIER",
+    "time_local": "07:50",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R9C7-ipswich-barrier-reef-pools-class-5-plate",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R9"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R8",
+    "c_label": "C4",
+    "meeting": "NARROGIN TABTOUCH",
+    "time_local": "08:15",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R8C4-narrogin-tabtouch-scan-my-bet-handicap",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R8"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R9",
+    "c_label": "C8",
+    "meeting": "IPSWICH SEVEN",
+    "time_local": "08:30",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R9C8-ipswich-seven-news-benchmark-62-handicap",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R9"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R8",
+    "c_label": "C5",
+    "meeting": "NARROGIN JAMES",
+    "time_local": "08:52",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R8C5-narrogin-james-squires-handicap",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R8"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R50",
+    "c_label": "C1",
+    "meeting": "GAVLE SPARTRAPPA",
+    "time_local": "09:37",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R50C1-gavle-spartrappa",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R50"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R50",
+    "c_label": "C2",
+    "meeting": "GAVLE STOLOPP",
+    "time_local": "09:37",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R50C2-gavle-stolopp",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R50"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R50",
+    "c_label": "C3",
+    "meeting": "GAVLE COURSE",
+    "time_local": "09:38",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R50C3-gavle-course-3",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R50"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R50",
+    "c_label": "C4",
+    "meeting": "GAVLE COURSE",
+    "time_local": "09:38",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R50C4-gavle-course-4",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R50"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R50",
+    "c_label": "C5",
+    "meeting": "GAVLE STOLOPP",
+    "time_local": "09:38",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R50C5-gavle-stolopp",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R50"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R50",
+    "c_label": "C6",
+    "meeting": "GAVLE COURSE",
+    "time_local": "09:38",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R50C6-gavle-course-6",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R50"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R50",
+    "c_label": "C7",
+    "meeting": "GAVLE COURSE",
+    "time_local": "09:39",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R50C7-gavle-course-7",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R50"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R50",
+    "c_label": "C8",
+    "meeting": "GAVLE COURSE",
+    "time_local": "09:39",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R50C8-gavle-course-8",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R50"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R50",
+    "c_label": "C9",
+    "meeting": "GAVLE P21",
+    "time_local": "09:39",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R50C9-gavle-p21-lopp",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R50"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R8",
+    "c_label": "C7",
+    "meeting": "NARROGIN XXXX",
+    "time_local": "10:05",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R8C7-narrogin-xxxx-gold-handicap",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R8"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R8",
+    "c_label": "C8",
+    "meeting": "NARROGIN WOMEN",
+    "time_local": "10:38",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R8C8-narrogin-women-can-saves-lives-handicap",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R8"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R11",
+    "c_label": "C1",
+    "meeting": "VAAL ",
+    "time_local": "10:53",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R11C1-vaal--youcanbetonus-maiden-plate",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R11"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R2",
+    "c_label": "C1",
+    "meeting": "MUNICH DAGLFING",
+    "time_local": "11:03",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R2C1-munich-daglfing-prix-de-quimper",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R2"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R11",
+    "c_label": "C2",
+    "meeting": "VAAL WIN",
+    "time_local": "11:25",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R11C2-vaal-win-a-jetour-x70-on-29-november-maiden-plate",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R11"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R2",
+    "c_label": "C2",
+    "meeting": "MUNICH DAGLFING",
+    "time_local": "11:35",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R2C2-munich-daglfing-prix-de-brest",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R2"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R3",
+    "c_label": "C1",
+    "meeting": "SAINT CLOUD",
+    "time_local": "11:51",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R3C1-saint-cloud-grand-prix-des-apprentis-finale-du-championnat-paristurf-des-apprentis-et-jeunes-jockeys",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R3"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R11",
+    "c_label": "C3",
+    "meeting": "VAAL ENTER",
+    "time_local": "11:57",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R11C3-vaal-enter-for-car-giveaway-www-tab-co-za-maiden-plate",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R11"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R2",
+    "c_label": "C3",
+    "meeting": "MUNICH DAGLFING",
+    "time_local": "12:07",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R2C3-munich-daglfing-prix-de-saint-brieuc",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R2"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R54",
+    "c_label": "C1",
+    "meeting": "LINGFIELD",
+    "time_local": "12:11",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R54C1-lingfield-handicap",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R54"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R3",
+    "c_label": "C2",
+    "meeting": "SAINT CLOUD",
+    "time_local": "12:23",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R3C2-saint-cloud-prix-du-viaduc-de-saint-cloud",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R3"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R11",
+    "c_label": "C4",
+    "meeting": "VAAL TAB",
+    "time_local": "12:30",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R11C4-vaal-tab-4racing-app-maiden-plate",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R11"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R2",
+    "c_label": "C4",
+    "meeting": "MUNICH DAGLFING",
+    "time_local": "12:39",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R2C4-munich-daglfing-prix-de-landivisiau",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R2"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R54",
+    "c_label": "C2",
+    "meeting": "LINGFIELD NOVICE",
+    "time_local": "12:42",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R54C2-lingfield-novice-stakes-gbb-race",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R54"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R53",
+    "c_label": "C1",
+    "meeting": "THURLES BEGINNERS",
+    "time_local": "12:46",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R53C1-thurles-beginners-chase",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R53"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R3",
+    "c_label": "C3",
+    "meeting": "SAINT CLOUD",
+    "time_local": "12:55",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R3C3-saint-cloud-prix-du-tunnel-de-saint-cloud",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R3"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R55",
+    "c_label": "C1",
+    "meeting": "WARWICK NATIONAL",
+    "time_local": "13:01",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R55C1-warwick-national-hunt-hurdle-gbb-race",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R55"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R11",
+    "c_label": "C5",
+    "meeting": "VAAL BUY",
+    "time_local": "13:05",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R11C5-vaal-buy-4-summer-garden-tickets-only-pay-for-3-middle-stakes",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R11"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R2",
+    "c_label": "C5",
+    "meeting": "MUNICH DAGLFING",
+    "time_local": "13:11",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R2C5-munich-daglfing-prix-de-guingamp",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R2"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R54",
+    "c_label": "C3",
+    "meeting": "LINGFIELD",
+    "time_local": "13:14",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R54C3-lingfield-maiden-stakes-gbb-race-div-1",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R54"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R53",
+    "c_label": "C2",
+    "meeting": "THURLES",
+    "time_local": "13:19",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R53C2-thurles-handicap-chase",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R53"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R3",
+    "c_label": "C4",
+    "meeting": "SAINT CLOUD",
+    "time_local": "13:27",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R3C4-saint-cloud-prix-du-plateau-de-saclay",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R3"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R56",
+    "c_label": "C1",
+    "meeting": "WINCANTON",
+    "time_local": "13:28",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R56C1-wincanton-handicap-hurdle-conditionals-amateurs",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R56"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R55",
+    "c_label": "C2",
+    "meeting": "WARWICK NATIONAL",
+    "time_local": "13:35",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R55C2-warwick-national-hunt-maiden-hurdle-gbb-race",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R55"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R2",
+    "c_label": "C6",
+    "meeting": "MUNICH DAGLFING",
+    "time_local": "13:36",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R2C6-munich-daglfing-prix-de-loudeac",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R2"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R54",
+    "c_label": "C4",
+    "meeting": "LINGFIELD",
+    "time_local": "13:46",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R54C4-lingfield-maiden-stakes-gbb-race-div-2",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R54"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R53",
+    "c_label": "C3",
+    "meeting": "THURLES NOVICE",
+    "time_local": "13:51",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R53C3-thurles-novice-hurdle",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R53"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R1",
+    "c_label": "C1",
+    "meeting": "VINCENNES",
+    "time_local": "13:55",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R1C1-vincennes-prix-de-sille-le-guillaume",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R1"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R3",
+    "c_label": "C5",
+    "meeting": "SAINT CLOUD",
+    "time_local": "14:12",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R3C5-saint-cloud-prix-de-la-vallee-de-chevreuse",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R3"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R55",
+    "c_label": "C3",
+    "meeting": "WARWICK MARES",
+    "time_local": "14:13",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R55C3-warwick-mares-handicap-hurdle",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R55"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R54",
+    "c_label": "C5",
+    "meeting": "LINGFIELD FILLIES",
+    "time_local": "14:20",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R54C5-lingfield-fillies-handicap",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R54"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R53",
+    "c_label": "C4",
+    "meeting": "THURLES MARES",
+    "time_local": "14:25",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R53C4-thurles-mares-maiden-hurdle",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R53"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R1",
+    "c_label": "C2",
+    "meeting": "VINCENNES",
+    "time_local": "14:32",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R1C2-vincennes-prix-urgent",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R1"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R55",
+    "c_label": "C4",
+    "meeting": "WARWICK",
+    "time_local": "14:47",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R55C4-warwick-handicap-chase",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R55"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R3",
+    "c_label": "C6",
+    "meeting": "SAINT CLOUD",
+    "time_local": "14:49",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R3C6-saint-cloud-prix-de-la-frette",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R3"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R56",
+    "c_label": "C2",
+    "meeting": "WINCANTON MARES",
+    "time_local": "14:50",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R56C2-wincanton-mares-maiden-hurdle-gbb-race",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R56"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R54",
+    "c_label": "C6",
+    "meeting": "LINGFIELD FILLIES",
+    "time_local": "14:55",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R54C6-lingfield-fillies-stakes-listed-gbbplus-race",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R54"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R11",
+    "c_label": "C6",
+    "meeting": "VAAL CATCH",
+    "time_local": "14:59",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R11C6-vaal-catch-dj-ankletap-rob-forbes-on-summer-cup-day-fm-84-divided-handicap",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R11"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R53",
+    "c_label": "C5",
+    "meeting": "THURLES",
+    "time_local": "14:59",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R53C5-thurles-handicap-hurdle-div-1",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R53"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R1",
+    "c_label": "C3",
+    "meeting": "VINCENNES",
+    "time_local": "15:05",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R1C3-vincennes-prix-de-valence-sur-baise",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R1"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R56",
+    "c_label": "C3",
+    "meeting": "WINCANTON NOVICES",
+    "time_local": "15:10",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R56C3-wincanton-novices-handicap-chase-gbb-race",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R56"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R55",
+    "c_label": "C5",
+    "meeting": "WARWICK MARES",
+    "time_local": "15:21",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R55C5-warwick-mares-novices-hurdle-gbb-race",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R55"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R3",
+    "c_label": "C7",
+    "meeting": "SAINT CLOUD",
+    "time_local": "15:23",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R3C7-saint-cloud-prix-des-falaises-de-jobourg",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R3"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R54",
+    "c_label": "C7",
+    "meeting": "LINGFIELD FILLIES",
+    "time_local": "15:30",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R54C7-lingfield-fillies-stakes-listed",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R54"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R53",
+    "c_label": "C6",
+    "meeting": "THURLES",
+    "time_local": "15:35",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R53C6-thurles-handicap-hurdle-div-2",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R53"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R1",
+    "c_label": "C4",
+    "meeting": "VINCENNES",
+    "time_local": "15:40",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R1C4-vincennes-prix-de-beauvoir",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R1"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R56",
+    "c_label": "C4",
+    "meeting": "WINCANTON",
+    "time_local": "15:43",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R56C4-wincanton-handicap-hurdle-div-1",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R56"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R11",
+    "c_label": "C7",
+    "meeting": "VAAL BOOSHLE",
+    "time_local": "15:44",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R11C7-vaal-booshle-g-ayanda-mvp-and-neon-dreams-live-29-november-fm-67-divided-handicap",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R11"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R55",
+    "c_label": "C6",
+    "meeting": "WARWICK MARES",
+    "time_local": "15:55",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R55C6-warwick-mares-handicap-chase-gbb-race",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R55"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R3",
+    "c_label": "C8",
+    "meeting": "SAINT CLOUD",
+    "time_local": "15:57",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R3C8-saint-cloud-prix-des-falaises-des-vaches-noires",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R3"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R54",
+    "c_label": "C8",
+    "meeting": "LINGFIELD",
+    "time_local": "16:06",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R54C8-lingfield-handicap",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R54"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R53",
+    "c_label": "C7",
+    "meeting": "THURLES",
+    "time_local": "16:09",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R53C7-thurles-handicap-hurdle-0-100",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R53"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R56",
+    "c_label": "C5",
+    "meeting": "WINCANTON",
+    "time_local": "16:13",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R56C5-wincanton-handicap-hurdle-div-2",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R56"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R1",
+    "c_label": "C5",
+    "meeting": "VINCENNES",
+    "time_local": "16:17",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R1C5-vincennes-prix-de-picardie",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R1"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R55",
+    "c_label": "C7",
+    "meeting": "WARWICK OPEN",
+    "time_local": "16:28",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R55C7-warwick-open-nh-flat-race-gbb-race",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R55"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R11",
+    "c_label": "C8",
+    "meeting": "VAAL 4",
+    "time_local": "16:30",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R11C8-vaal-4-friends-promo-on-ticketpro-mr-68-handicap",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R11"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R4",
+    "c_label": "C1",
+    "meeting": "GRAIGNES",
+    "time_local": "16:32",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R4C1-graignes-prix-maurice-marie",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R4"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R57",
+    "c_label": "C1",
+    "meeting": "NEWCASTLE",
+    "time_local": "16:35",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R57C1-newcastle-maiden-stakes-gbb-race",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R57"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R54",
+    "c_label": "C9",
+    "meeting": "LINGFIELD",
+    "time_local": "16:40",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R54C9-lingfield-handicap",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R54"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R53",
+    "c_label": "C8",
+    "meeting": "THURLES",
+    "time_local": "16:45",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R53C8-thurles-maiden-hurdle",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R53"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R1",
+    "c_label": "C6",
+    "meeting": "VINCENNES",
+    "time_local": "16:50",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R1C6-vincennes-prix-de-montelimar",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R1"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R56",
+    "c_label": "C6",
+    "meeting": "WINCANTON",
+    "time_local": "16:54",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R56C6-wincanton-handicap-chase-gbb-race",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R56"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R11",
+    "c_label": "C9",
+    "meeting": "VAAL BETWAY",
+    "time_local": "17:00",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R11C9-vaal-betway-summer-cup-29-november-conditions-plate",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R11"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R4",
+    "c_label": "C2",
+    "meeting": "GRAIGNES",
+    "time_local": "17:07",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R4C2-graignes-prix-intermarche-carentan",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R4"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R57",
+    "c_label": "C2",
+    "meeting": "NEWCASTLE NURSERY",
+    "time_local": "17:10",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R57C2-newcastle-nursery",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R57"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R56",
+    "c_label": "C7",
+    "meeting": "WINCANTON NH",
+    "time_local": "17:20",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R56C7-wincanton-nh-flat-race-gbb-race",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R56"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R1",
+    "c_label": "C7",
+    "meeting": "VINCENNES",
+    "time_local": "17:25",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R1C7-vincennes-prix-de-l-ile-de-re",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R1"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R11",
+    "c_label": "C10",
+    "meeting": "VAAL FOR",
+    "time_local": "17:30",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R11C10-vaal-for-hospitality-bookings-call-011-681-1796-mr-74-handicap",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R11"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R12",
+    "c_label": "C1",
+    "meeting": "SOUTHWELL TAKE",
+    "time_local": "17:30",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R12C1-southwell-take-time-out-during-sgweek25-nursery-gbbplus-race",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R12"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R4",
+    "c_label": "C3",
+    "meeting": "GRAIGNES",
+    "time_local": "17:42",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R4C3-graignes-prix-garage-hubert-fortin",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R4"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R57",
+    "c_label": "C3",
+    "meeting": "NEWCASTLE",
+    "time_local": "17:45",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R57C3-newcastle-maiden-stakes-gbb-race",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R57"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R12",
+    "c_label": "C2",
+    "meeting": "SOUTHWELL SET",
+    "time_local": "18:00",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R12C2-southwell-set-deposit-limits-at-betmgm-handicap-premier-peloton",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R12"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R1",
+    "c_label": "C8",
+    "meeting": "VINCENNES",
+    "time_local": "18:01",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R1C8-vincennes-prix-de-la-camargue",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R1"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R57",
+    "c_label": "C4",
+    "meeting": "NEWCASTLE",
+    "time_local": "18:15",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R57C4-newcastle-handicap",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R57"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R4",
+    "c_label": "C4",
+    "meeting": "GRAIGNES",
+    "time_local": "18:20",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R4C4-graignes-prix-madame-raymond-rigault",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R4"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R51",
+    "c_label": "C1",
+    "meeting": "OREBRO TVAARINGSLOPP",
+    "time_local": "18:20",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R51C1-orebro-tvaaringslopp",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R51"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R12",
+    "c_label": "C3",
+    "meeting": "SOUTHWELL SET",
+    "time_local": "18:30",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R12C3-southwell-set-deposit-limits-at-betmgm-handicap-deuxieme-peloton",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R12"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R5",
+    "c_label": "C1",
+    "meeting": "SON PARDO",
+    "time_local": "18:37",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R5C1-son-pardo-final-torneig-trotador-frances",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R5"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R51",
+    "c_label": "C2",
+    "meeting": "OREBRO COURSE",
+    "time_local": "18:42",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R51C2-orebro-course-2",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R51"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R57",
+    "c_label": "C5",
+    "meeting": "NEWCASTLE",
+    "time_local": "18:45",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R57C5-newcastle-handicap",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R57"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R58",
+    "c_label": "C1",
+    "meeting": "THE MEADOWS",
+    "time_local": "18:45",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R58C1-the-meadows-race-1",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R58"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R4",
+    "c_label": "C5",
+    "meeting": "GRAIGNES",
+    "time_local": "18:55",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R4C5-graignes-prix-bar-pmu-relais-de-saint-jean",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R4"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R52",
+    "c_label": "C1",
+    "meeting": "BERGEN COURSE",
+    "time_local": "18:55",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R52C1-bergen-course-1",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R52"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R12",
+    "c_label": "C4",
+    "meeting": "SOUTHWELL GAMBLE",
+    "time_local": "19:00",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R12C4-southwell-gamble-responsibly-at-betmgm-novice-stakes",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R12"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R6",
+    "c_label": "C1",
+    "meeting": "CHURCHILL DOWNS",
+    "time_local": "19:01",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R6C1-churchill-downs-claiming",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R6"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R51",
+    "c_label": "C3",
+    "meeting": "OREBRO FOR",
+    "time_local": "19:05",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R51C3-orebro-for-hastar-som-aldrig-vunnit-lopp",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R51"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R58",
+    "c_label": "C2",
+    "meeting": "THE MEADOWS",
+    "time_local": "19:05",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R58C2-the-meadows-race-2",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R58"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R5",
+    "c_label": "C2",
+    "meeting": "SON PARDO",
+    "time_local": "19:11",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R5C2-son-pardo-premi-societat-hipica-gabellina-del-trot",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R5"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R57",
+    "c_label": "C6",
+    "meeting": "NEWCASTLE FILLIES",
+    "time_local": "19:15",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R57C6-newcastle-fillies-handicap",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R57"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R52",
+    "c_label": "C2",
+    "meeting": "BERGEN KALLBLODSLOPP",
+    "time_local": "19:20",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R52C2-bergen-kallblodslopp",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R52"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R58",
+    "c_label": "C3",
+    "meeting": "THE MEADOWS",
+    "time_local": "19:25",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R58C3-the-meadows-race-3",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R58"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R4",
+    "c_label": "C6",
+    "meeting": "GRAIGNES",
+    "time_local": "19:27",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R4C6-graignes-prix-pmu-de-picauville",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R4"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R6",
+    "c_label": "C2",
+    "meeting": "CHURCHILL DOWNS",
+    "time_local": "19:29",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R6C2-churchill-downs-maiden-special-weight",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R6"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R12",
+    "c_label": "C5",
+    "meeting": "SOUTHWELL MIDNIGHT",
+    "time_local": "19:30",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R12C5-southwell-midnight-a-next-generation-betting-app-handicap",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R12"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R51",
+    "c_label": "C4",
+    "meeting": "OREBRO SPARTRAPPA",
+    "time_local": "19:30",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R51C4-orebro-spartrappa",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R51"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R5",
+    "c_label": "C3",
+    "meeting": "SON PARDO",
+    "time_local": "19:43",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R5C3-son-pardo-premi-club-cavallista-de-llucmajor",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R5"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R52",
+    "c_label": "C3",
+    "meeting": "BERGEN COURSE",
+    "time_local": "19:45",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R52C3-bergen-course-3",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R52"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R57",
+    "c_label": "C7",
+    "meeting": "NEWCASTLE",
+    "time_local": "19:45",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R57C7-newcastle-handicap",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R57"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R58",
+    "c_label": "C4",
+    "meeting": "THE MEADOWS",
+    "time_local": "19:45",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R58C4-the-meadows-race-4",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R58"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R51",
+    "c_label": "C5",
+    "meeting": "OREBRO COURSE",
+    "time_local": "19:52",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R51C5-orebro-course-5",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R51"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R6",
+    "c_label": "C3",
+    "meeting": "CHURCHILL DOWNS",
+    "time_local": "19:58",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R6C3-churchill-downs-claiming",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R6"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R4",
+    "c_label": "C7",
+    "meeting": "GRAIGNES",
+    "time_local": "19:59",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R4C7-graignes-prix-au-pain-de-marecou",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R4"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R12",
+    "c_label": "C6",
+    "meeting": "SOUTHWELL JOIN",
+    "time_local": "20:00",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R12C6-southwell-join-the-midnite-movement-handicap-gbbplus-race",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R12"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R58",
+    "c_label": "C5",
+    "meeting": "THE MEADOWS",
+    "time_local": "20:05",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R58C5-the-meadows-race-5",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R58"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R52",
+    "c_label": "C4",
+    "meeting": "BERGEN KALLBLODSLOPP",
+    "time_local": "20:10",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R52C4-bergen-kallblodslopp",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R52"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R51",
+    "c_label": "C6",
+    "meeting": "OREBRO TREARINGSLOPP",
+    "time_local": "20:14",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R51C6-orebro-trearingslopp-spartrappa",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R51"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R5",
+    "c_label": "C4",
+    "meeting": "SON PARDO",
+    "time_local": "20:15",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R5C4-son-pardo-premi-club-hipic-d-arta",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R5"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R57",
+    "c_label": "C8",
+    "meeting": "NEWCASTLE",
+    "time_local": "20:15",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R57C8-newcastle-handicap-div-1",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R57"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R58",
+    "c_label": "C6",
+    "meeting": "THE MEADOWS",
+    "time_local": "20:25",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R58C6-the-meadows-race-6",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R58"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R6",
+    "c_label": "C4",
+    "meeting": "CHURCHILL DOWNS",
+    "time_local": "20:27",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R6C4-churchill-downs-claiming",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R6"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R12",
+    "c_label": "C7",
+    "meeting": "SOUTHWELL USE",
+    "time_local": "20:30",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R12C7-southwell-use-safer-gambling-tools-at-betmgm-ebf-novice-stakes-gbb-race",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R12"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R52",
+    "c_label": "C5",
+    "meeting": "BERGEN COURSE",
+    "time_local": "20:30",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R52C5-bergen-course-5",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R52"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R4",
+    "c_label": "C8",
+    "meeting": "GRAIGNES",
+    "time_local": "20:31",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R4C8-graignes-prix-chez-emilie",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R4"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R51",
+    "c_label": "C7",
+    "meeting": "OREBRO STOLOPP",
+    "time_local": "20:36",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R51C7-orebro-stolopp-spartrappa",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R51"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R57",
+    "c_label": "C9",
+    "meeting": "NEWCASTLE",
+    "time_local": "20:45",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R57C9-newcastle-handicap-div-2",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R57"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R58",
+    "c_label": "C7",
+    "meeting": "THE MEADOWS",
+    "time_local": "20:45",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R58C7-the-meadows-race-7",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R58"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R5",
+    "c_label": "C5",
+    "meeting": "SON PARDO",
+    "time_local": "20:46",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R5C5-son-pardo-premi-unitra-rs",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R5"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R52",
+    "c_label": "C6",
+    "meeting": "BERGEN COURSE",
+    "time_local": "20:50",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R52C6-bergen-course-6",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R52"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R51",
+    "c_label": "C8",
+    "meeting": "OREBRO SPAR",
+    "time_local": "20:56",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R51C8-orebro-spar-efter-startpoang",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R51"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R6",
+    "c_label": "C5",
+    "meeting": "CHURCHILL DOWNS",
+    "time_local": "20:57",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R6C5-churchill-downs-claiming",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R6"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R12",
+    "c_label": "C8",
+    "meeting": "SOUTHWELL MIDNITE",
+    "time_local": "21:00",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R12C8-southwell-midnite-building-the-future-of-betting-handicap",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R12"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R58",
+    "c_label": "C8",
+    "meeting": "THE MEADOWS",
+    "time_local": "21:05",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R58C8-the-meadows-race-8",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R58"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R52",
+    "c_label": "C7",
+    "meeting": "BERGEN KALLBLODSLOPP",
+    "time_local": "21:07",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R52C7-bergen-kallblodslopp",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R52"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R7",
+    "c_label": "C9",
+    "meeting": "SAN ISIDRO",
+    "time_local": "21:10",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R7C9-san-isidro-premio-perdizero-key-2015",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R7"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R51",
+    "c_label": "C9",
+    "meeting": "OREBRO COURSE",
+    "time_local": "21:15",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R51C9-orebro-course-9",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R51"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R58",
+    "c_label": "C9",
+    "meeting": "THE MEADOWS",
+    "time_local": "21:25",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R58C9-the-meadows-race-9",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R58"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R6",
+    "c_label": "C6",
+    "meeting": "CHURCHILL DOWNS",
+    "time_local": "21:26",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R6C6-churchill-downs-starter-allowance",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R6"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R12",
+    "c_label": "C9",
+    "meeting": "SOUTHWELL CREATE",
+    "time_local": "21:30",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R12C9-southwell-create-your-bet-builders-at-midnite-handicap",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R12"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R51",
+    "c_label": "C10",
+    "meeting": "OREBRO COURSE",
+    "time_local": "21:33",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R51C10-orebro-course-10",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R51"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R7",
+    "c_label": "C10",
+    "meeting": "SAN ISIDRO",
+    "time_local": "21:40",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R7C10-san-isidro-premio-numeraux-2021",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R7"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R58",
+    "c_label": "C10",
+    "meeting": "THE MEADOWS",
+    "time_local": "21:45",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R58C10-the-meadows-race-10",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R58"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R6",
+    "c_label": "C7",
+    "meeting": "CHURCHILL DOWNS",
+    "time_local": "21:55",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R6C7-churchill-downs-maiden-special-weight",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R6"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R59",
+    "c_label": "C1",
+    "meeting": "DAYTON RACEWAY",
+    "time_local": "22:00",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R59C1-dayton-raceway-race-1",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R59"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R58",
+    "c_label": "C11",
+    "meeting": "THE MEADOWS",
+    "time_local": "22:05",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R58C11-the-meadows-race-11",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R58"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R7",
+    "c_label": "C11",
+    "meeting": "SAN ISIDRO",
+    "time_local": "22:10",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R7C11-san-isidro-handicap-nigromante",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R7"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R59",
+    "c_label": "C2",
+    "meeting": "DAYTON RACEWAY",
+    "time_local": "22:20",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R59C2-dayton-raceway-race-2",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R59"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R6",
+    "c_label": "C8",
+    "meeting": "CHURCHILL DOWNS",
+    "time_local": "22:25",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R6C8-churchill-downs-claiming",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R6"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R58",
+    "c_label": "C12",
+    "meeting": "THE MEADOWS",
+    "time_local": "22:25",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R58C12-the-meadows-race-12",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R58"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R60",
+    "c_label": "C1",
+    "meeting": "DOVER DOWNS",
+    "time_local": "22:30",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R60C1-dover-downs-race-1",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R60"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R7",
+    "c_label": "C12",
+    "meeting": "SAN ISIDRO",
+    "time_local": "22:40",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R7C12-san-isidro-premio-pulpito-corazon-2022",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R7"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R59",
+    "c_label": "C3",
+    "meeting": "DAYTON RACEWAY",
+    "time_local": "22:40",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R59C3-dayton-raceway-race-3",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R59"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R58",
+    "c_label": "C13",
+    "meeting": "THE MEADOWS",
+    "time_local": "22:45",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R58C13-the-meadows-race-13",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R58"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R60",
+    "c_label": "C2",
+    "meeting": "DOVER DOWNS",
+    "time_local": "22:50",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R60C2-dover-downs-race-2",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R60"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R6",
+    "c_label": "C9",
+    "meeting": "CHURCHILL DOWNS",
+    "time_local": "22:55",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R6C9-churchill-downs-allowance-optional-claiming",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R6"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R59",
+    "c_label": "C4",
+    "meeting": "DAYTON RACEWAY",
+    "time_local": "23:00",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R59C4-dayton-raceway-race-4",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R59"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R58",
+    "c_label": "C14",
+    "meeting": "THE MEADOWS",
+    "time_local": "23:05",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R58C14-the-meadows-race-14",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R58"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R7",
+    "c_label": "C13",
+    "meeting": "SAN ISIDRO",
+    "time_local": "23:10",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R7C13-san-isidro-premio-elveda-2023",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R7"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R60",
+    "c_label": "C3",
+    "meeting": "DOVER DOWNS",
+    "time_local": "23:10",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R60C3-dover-downs-race-3",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R60"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R59",
+    "c_label": "C5",
+    "meeting": "DAYTON RACEWAY",
+    "time_local": "23:20",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R59C5-dayton-raceway-race-5",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R59"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R6",
+    "c_label": "C10",
+    "meeting": "CHURCHILL DOWNS",
+    "time_local": "23:24",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R6C10-churchill-downs-maiden-special-weight",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R6"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R60",
+    "c_label": "C4",
+    "meeting": "DOVER DOWNS",
+    "time_local": "23:30",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R60C4-dover-downs-race-4",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R60"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R61",
+    "c_label": "C1",
+    "meeting": "WOODBINE TB",
+    "time_local": "23:30",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R61C1-woodbine-tb-race-1",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R61"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R59",
+    "c_label": "C6",
+    "meeting": "DAYTON RACEWAY",
+    "time_local": "23:40",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R59C6-dayton-raceway-race-6",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R59"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R7",
+    "c_label": "C14",
+    "meeting": "SAN ISIDRO",
+    "time_local": "23:45",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R7C14-san-isidro-premio-smokeado-2016",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R7"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R60",
+    "c_label": "C5",
+    "meeting": "DOVER DOWNS",
+    "time_local": "23:50",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R60C5-dover-downs-race-5",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R60"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R13",
+    "c_label": "C18",
+    "meeting": "CHILE",
+    "time_local": "23:59",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R13C18-chile-prix-logistico",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R13"
+  },
+  {
+    "date": "2025-11-20",
+    "r_label": "R61",
+    "c_label": "C2",
+    "meeting": "WOODBINE TB",
+    "time_local": "23:59",
+    "course_url": "https://www.zeturf.fr/fr/course/2025-11-20/R61C2-woodbine-tb-race-2",
+    "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-20/R61"
+  }
+]

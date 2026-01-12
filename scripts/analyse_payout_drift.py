@@ -16,13 +16,16 @@ def get_manual_payout(race_id: str, ticket_type: str) -> float | None:
     In a real implementation, you might connect to a results API.
     """
     try:
-        payout_str = input(f"Enter REAL payout for {race_id} [{ticket_type}] (or press Enter to skip): ")
+        payout_str = input(
+            f"Enter REAL payout for {race_id} [{ticket_type}] (or press Enter to skip): "
+        )
         if not payout_str:
             return None
         return float(payout_str)
     except (ValueError, TypeError):
         print("Invalid input. Skipping.")
         return None
+
 
 def analyze_drift(date: str):
     """
@@ -40,7 +43,7 @@ def analyze_drift(date: str):
         print(f"No race documents found for {date}.")
         return
 
-    drifts = {} # { "TRIO": [0.1, -0.05], "ZE4": [0.2] }
+    drifts = {}  # { "TRIO": [0.1, -0.05], "ZE4": [0.2] }
 
     for doc in race_documents:
         race_id = doc.get("id", "UnknownRace")
@@ -52,13 +55,13 @@ def analyze_drift(date: str):
         for ticket in analysis.get("tickets", []):
             ticket_type = ticket.get("type")
             if not ticket_type or ticket_type.startswith("SP_"):
-                continue # Skip Simple Placé bets
+                continue  # Skip Simple Placé bets
 
             estimated_payout = ticket.get("payout_est")
             if not estimated_payout:
                 continue
 
-            print("\n" + "="*30)
+            print("\n" + "=" * 30)
             print(f"Race: {race_id}")
             print(f"Ticket Type: {ticket_type}")
             print(f"Estimated Payout: {estimated_payout:.2f} €")
@@ -75,9 +78,9 @@ def analyze_drift(date: str):
 
                 print(f"  -> Drift: {drift:+.2%}")
 
-    print("\n" + "="*50)
+    print("\n" + "=" * 50)
     print("Drift Analysis Summary")
-    print("="*50)
+    print("=" * 50)
 
     if not drifts:
         print("No combo bets with real payouts were analyzed.")
@@ -90,12 +93,16 @@ def analyze_drift(date: str):
         print(f"  - Average Drift: {avg_drift:+.2%}")
 
         if avg_drift > 0.05:
-            print(f"  - SUGGESTION: Payouts are underestimated. Consider DECREASING the weight for '{ticket_type}' in payout_calibration.yaml.")
+            print(
+                f"  - SUGGESTION: Payouts are underestimated. Consider DECREASING the weight for '{ticket_type}' in payout_calibration.yaml."
+            )
         elif avg_drift < -0.05:
-            print(f"  - SUGGESTION: Payouts are overestimated. Consider INCREASING the weight for '{ticket_type}' in payout_calibration.yaml.")
+            print(
+                f"  - SUGGESTION: Payouts are overestimated. Consider INCREASING the weight for '{ticket_type}' in payout_calibration.yaml."
+            )
         else:
             print("  - SUGGESTION: Calibration seems reasonable.")
-    print("="*50)
+    print("=" * 50)
 
 
 if __name__ == "__main__":
@@ -104,7 +111,7 @@ if __name__ == "__main__":
         "--date",
         type=str,
         default=datetime.now().strftime("%Y-%m-%d"),
-        help="Date to analyze in YYYY-MM-DD format (default: today)."
+        help="Date to analyze in YYYY-MM-DD format (default: today).",
     )
     args = parser.parse_args()
 

@@ -1,0 +1,76 @@
+{
+  "source": "boturfers",
+  "type": "race_details",
+  "url": "https://www.boturfers.fr/course/1089479-r1c1-prix-du-val-profond/partant",
+  "scraped_at": "2025-12-11T22:12:12.005941",
+  "runners": [
+    {
+      "num": "1",
+      "nom": "Alam",
+      "jockey": "Hamelin A.",
+      "entraineur": "Delzangles M."
+    },
+    {
+      "num": "2",
+      "nom": "Bocca Al Lupo",
+      "jockey": "Lemaitre A.",
+      "entraineur": "Bietolini G."
+    },
+    {
+      "num": "3",
+      "nom": "Don Saint Rock",
+      "jockey": "Claudic J.",
+      "entraineur": "Bresson (S) F."
+    },
+    {
+      "num": "4",
+      "nom": "Kendaro",
+      "jockey": "Lecoeuvre C.",
+      "entraineur": "Caullery N."
+    },
+    {
+      "num": "5",
+      "nom": "Menacant",
+      "jockey": "Bazire P.",
+      "entraineur": "Le Roch N."
+    },
+    {
+      "num": "6",
+      "nom": "Etchebaster",
+      "jockey": "Pasquier S.",
+      "entraineur": "Clement & Hermans (S)"
+    },
+    {
+      "num": "7",
+      "nom": "Storm Rider",
+      "jockey": "Bachelot T.",
+      "entraineur": "Botti (S) A."
+    },
+    {
+      "num": "8",
+      "nom": "Kauri",
+      "jockey": "Meury G.",
+      "entraineur": "Meijer Mme G."
+    },
+    {
+      "num": "9",
+      "nom": "Mazaro",
+      "jockey": "Madamet Mr A.",
+      "entraineur": "Decouz (S) P."
+    },
+    {
+      "num": "10",
+      "nom": "Central Pier",
+      "jockey": "Mendizabal I.",
+      "entraineur": "Botti (S) A."
+    },
+    {
+      "num": "11",
+      "nom": "Forest Galore",
+      "jockey": "Marien J.",
+      "entraineur": "Caullery N."
+    }
+  ],
+  "correlation_id": "f5d21d40-b8ca-4ce2-8430-057cde018e91",
+  "trace_id": "test-trace-id"
+}

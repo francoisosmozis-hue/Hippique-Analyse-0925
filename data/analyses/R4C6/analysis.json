@@ -1,0 +1,19 @@
+{
+  "race_id": "R4C6",
+  "status": "no-data",
+  "mode": "hminus5",
+  "budget": 5.0,
+  "inputs": {
+    "h30": "data/snapshots/R4C6/h30.json",
+    "h5": "data/snapshots/R4C6/h5.json",
+    "partants": null,
+    "stats": null,
+    "chronos": null
+  },
+  "reason": "missing_inputs:partants",
+  "notes": [
+    "exotics disabled: stats_je missing",
+    "exotics disabled: chronos missing"
+  ],
+  "exotics_disabled": true
+}

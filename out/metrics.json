@@ -1,0 +1,15 @@
+{
+  "metrics": {
+    "status": "ok",
+    "overround": null,
+    "tickets": {
+      "total": 0,
+      "sp": 0,
+      "combo": 0
+    },
+    "combo": {
+      "decision": "skip",
+      "notes": []
+    }
+  }
+}

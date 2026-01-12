@@ -10,15 +10,16 @@ from typing import Any
 
 try:
     import pandas as pd
+
     PANDAS_AVAILABLE = True
 except ImportError:
     PANDAS_AVAILABLE = False
     pd = None  # type: ignore
 
 
-DRIFT_DELTA = 0.04    # seuil de variation de proba entre H-30 et H-5
-F_STEAM = 1.03        # bonus si le cheval "chauffe"
-F_DRIFT_FAV = 0.97    # malus si le favori H-30 dérive nettement
+DRIFT_DELTA = 0.04  # seuil de variation de proba entre H-30 et H-5
+F_STEAM = 1.03  # bonus si le cheval "chauffe"
+F_DRIFT_FAV = 0.97  # malus si le favori H-30 dérive nettement
 
 
 def apply_drift_steam(p_val, num, p5_map, p30_map, fav30):

@@ -13,8 +13,7 @@ def inspect_firestore(date_str: str):
     project_id = os.environ.get("GCP_PROJECT") or os.environ.get("PROJECT_ID")
     if not project_id:
         raise ValueError(
-            "Project ID not found. Please set the GCP_PROJECT or PROJECT_ID "
-            "environment variable."
+            "Project ID not found. Please set the GCP_PROJECT or PROJECT_ID environment variable."
         )
 
     print(f"Connecting to Firestore for project '{project_id}'...")
@@ -57,9 +56,7 @@ def inspect_firestore(date_str: str):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Inspect Firestore 'races' collection."
-    )
+    parser = argparse.ArgumentParser(description="Inspect Firestore 'races' collection.")
     parser.add_argument(
         "--date",
         default=datetime.now().strftime("%Y-%m-%d"),

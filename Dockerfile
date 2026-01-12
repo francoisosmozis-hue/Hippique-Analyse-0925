@@ -17,8 +17,6 @@ RUN pip install --upgrade pip
 COPY requirements.txt .
 RUN pip wheel --no-cache-dir --wheel-dir /app/wheels -r requirements.txt
 
-# --- Final Stage ---
-# This stage assembles the final, lean image
 FROM base
 
 # Create the non-root user first

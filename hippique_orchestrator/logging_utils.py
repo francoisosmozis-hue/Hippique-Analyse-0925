@@ -1,59 +1,60 @@
-import json
 import logging
 import sys
-import traceback
-from datetime import datetime
+import uuid
+from contextvars import ContextVar
 
-from hippique_orchestrator.config import get_config  # Import get_config
+from pythonjsonlogger import jsonlogger
+
+# Context variables for correlation and trace IDs
+correlation_id_var = ContextVar("correlation_id", default=None)
+trace_id_var = ContextVar("trace_id", default=None)
 
 
-class JsonFormatter(logging.Formatter):
-    """Formats log records as JSON for Cloud Logging."""
+class CustomJsonFormatter(jsonlogger.JsonFormatter):
+    def add_fields(self, log_record, record, message_dict):
+        super().add_fields(log_record, record, message_dict)
+        log_record['correlation_id'] = correlation_id_var.get()
+        log_record['trace_id'] = trace_id_var.get()
+        if not log_record.get('timestamp'):
+            log_record['timestamp'] = record.created
+        if not log_record.get('severity'):
+            log_record['severity'] = record.levelname
 
-    def format(self, record: logging.LogRecord) -> str:
-        log_entry = {
-            "severity": record.levelname,
-            "message": record.getMessage(),
-            "timestamp": datetime.utcfromtimestamp(record.created).isoformat() + "Z",
-            "logger": record.name,
-        }
 
-        # The LogRecord already has 'extra' fields if passed by logger.info(msg, extra={...})
-        # We need to copy these to our log_entry
-        for key, value in record.__dict__.items():
-            if key not in ['name', 'msg', 'levelname', 'levelno', 'pathname', 'filename',
-                           'lineno', 'funcName', 'created', 'msecs', 'relativeCreated',
-                           'thread', 'threadName', 'processName', 'process', 'exc_info',
-                           'exc_text', 'stack_info', 'args', 'module', 'asctime'] and not key.startswith('_'):
-                log_entry[key] = value
+def setup_logging(log_level: str | None = "INFO"):
+    """
+    Configures a structured JSON logger that outputs to stdout.
+    """
+    logger = logging.getLogger()
+    logger.setLevel((log_level or "INFO").upper())
 
-        # Add exception info if present
-        if record.exc_info:
-            log_entry["traceback"] = "".join(traceback.format_exception(*record.exc_info))
+    # Prevent duplicate handlers if called multiple times
+    if logger.hasHandlers():
+        logger.handlers.clear()
 
-        return json.dumps(log_entry)
+    handler = logging.StreamHandler(sys.stdout)
 
-_loggers: dict[str, logging.Logger] = {}
+    # Format for structured logging in Google Cloud
+    # severity and message are standard fields recognized by Cloud Logging
+    formatter = CustomJsonFormatter('%(timestamp)s %(severity)s %(name)s %(message)s')
+
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+
+    # Adjust logging for noisy libraries
+    logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+    logging.getLogger("uvicorn.error").setLevel(logging.WARNING)
+
+    logging.getLogger(__name__).info(
+        f"Structured JSON logging configured at level {(log_level or 'INFO').upper()}."
+    )
+
 
 def get_logger(name: str) -> logging.Logger:
-    """Get or create a logger configured to output structured JSON."""
-    if name not in _loggers:
-        logger = logging.getLogger(name)
+    """Returns a logger with the given name."""
+    return logging.getLogger(name)
 
-        if logger.hasHandlers():
-            logger.handlers.clear()
 
-        handler = logging.StreamHandler(sys.stdout)
-        handler.setFormatter(JsonFormatter())
-
-        logger.addHandler(handler)
-
-        # Dynamically set level from config
-        app_config = get_config() # Get the config
-        logger.setLevel(app_config.LOG_LEVEL.upper()) # Set level based on config
-
-        logger.propagate = False
-
-        _loggers[name] = logger
-
-    return _loggers[name]
+def generate_trace_id():
+    """Generates a unique trace ID."""
+    return str(uuid.uuid4())

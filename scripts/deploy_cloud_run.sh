@@ -155,7 +155,7 @@ echo "✅ Image construite: $IMAGE_TAG"
 echo ""
 echo "📋 Vérification Cloud Tasks Queue..."
 
-QUEUE_ID="${QUEUE_ID:-hippique-tasks}"
+QUEUE_ID="${QUEUE_ID:-hippique-tasks-v2}" # Default to v2
 
 if ! gcloud tasks queues describe "$QUEUE_ID" \
     --location="$REGION" \
@@ -165,8 +165,8 @@ if ! gcloud tasks queues describe "$QUEUE_ID" \
     gcloud tasks queues create "$QUEUE_ID" \
         --location="$REGION" \
         --project="$PROJECT_ID" \
-        --max-concurrent-dispatches=10 \
-        --max-dispatches-per-second=5
+        --max-concurrent-dispatches=1000 \
+        --max-dispatches-per-second=500
 else
     echo "  - Queue Cloud Tasks existe déjà"
 fi
@@ -178,78 +178,49 @@ fi
 echo ""
 echo "☁️  Déploiement sur Cloud Run..."
 
-# Construire la commande de déploiement
-DEPLOY_CMD=(
-    gcloud run deploy "$SERVICE_NAME"
-    --image="$IMAGE_TAG"
-    --platform=managed
-    --region="$REGION"
-    --project="$PROJECT_ID"
-    --service-account="$SERVICE_ACCOUNT_EMAIL"
-    --memory="$MEMORY"
-    --cpu="$CPU"
-    --timeout="${TIMEOUT}s"
-    --max-instances="$MAX_INSTANCES"
-    --min-instances="$MIN_INSTANCES"
-    --no-allow-unauthenticated
-)
+# Générer une clé secrète si elle n'est pas déjà dans l'environnement
+INTERNAL_API_SECRET="${INTERNAL_API_SECRET:-$(openssl rand -hex 16)}"
 
-# Construire la liste des variables d'environnement
-ENV_VARS="PROJECT_ID=$PROJECT_ID,REGION=$REGION,SERVICE_NAME=$SERVICE_NAME,QUEUE_ID=$QUEUE_ID,SERVICE_ACCOUNT_EMAIL=$SERVICE_ACCOUNT_EMAIL,TZ=Europe/Paris"
+# Construire les variables d'environnement
+ENV_VARS="PROJECT_ID=$PROJECT_ID"
+ENV_VARS+=",LOCATION=$REGION"
+ENV_VARS+=",BUCKET_NAME=${GCS_BUCKET:-}"
+ENV_VARS+=",TASK_QUEUE=${QUEUE_ID:-hippique-tasks-v2}"
+ENV_VARS+=",FIRESTORE_COLLECTION=${FIRESTORE_COLLECTION:-races-prod}"
+ENV_VARS+=",INTERNAL_API_SECRET=${INTERNAL_API_SECRET}"
 
-# Ajouter OIDC_AUDIENCE si elle est définie dans l'environnement du script
-if [ -n "${OIDC_AUDIENCE:-}" ]; then
-    ENV_VARS+=",OIDC_AUDIENCE=${OIDC_AUDIENCE}"
-fi
-
-# Ajouter GCS_BUCKET si défini
-if [ -n "$GCS_BUCKET" ]; then
-    ENV_VARS+=",GCS_BUCKET=$GCS_BUCKET,GCS_PREFIX=$GCS_PREFIX"
-fi
-
-DEPLOY_CMD+=(--set-env-vars="$ENV_VARS")
-
-# Exécuter le déploiement
-"${DEPLOY_CMD[@]}"
-
-# ============================================
-# Configurer IAM
-# ============================================
-
-echo ""
-echo "🔐 Configuration IAM..."
-
-# Permettre au service account d'invoquer le service
-# Note : Le service s'invoque lui-même si create_task utilise le même SA.
-gcloud run services add-iam-policy-binding "$SERVICE_NAME" \
+# Déployer le service en mode public avec la clé secrète
+gcloud run deploy "$SERVICE_NAME" \
+    --image="$IMAGE_TAG" \
+    --platform=managed \
     --region="$REGION" \
     --project="$PROJECT_ID" \
-    --member="serviceAccount:$SERVICE_ACCOUNT_EMAIL" \
-    --role="roles/run.invoker" --quiet
+    --service-account="$SERVICE_ACCOUNT_EMAIL" \
+    --memory="$MEMORY" \
+    --cpu="$CPU" \
+    --timeout="${TIMEOUT}s" \
+    --max-instances="$MAX_INSTANCES" \
+    --min-instances="$MIN_INSTANCES" \
+    --allow-unauthenticated \
+    --set-env-vars="$ENV_VARS" \
+    --quiet
 
-# Le script ajoutait la policy deux fois, une seule suffit.
+echo "✅ Déploiement terminé."
 
 # ============================================
-# Récupérer l'URL du service
+# Finalisation
 # ============================================
 
-SERVICE_URL=$(gcloud run services describe "$SERVICE_NAME" \
-    --region="$REGION" \
-    --project="$PROJECT_ID" \
-    --format="value(status.url)")
+SERVICE_URL=$(gcloud run services describe "$SERVICE_NAME" --region="$REGION" --project="$PROJECT_ID" --format="value(status.url)")
 
 echo ""
-echo "✅ Déploiement réussi!"
+echo "🎉 Déploiement terminé avec succès!"
 echo "================================================"
 echo "Service URL: $SERVICE_URL"
+echo "Clé API interne: ${INTERNAL_API_SECRET}"
 echo ""
 echo "📝 Prochaines étapes:"
-echo "1. Mettre à jour .env avec OIDC_AUDIENCE=$SERVICE_URL"
-echo "2. Créer le job Cloud Scheduler:"
-echo "   ./scripts/create_scheduler_0900.sh"
-echo "3. Tester les endpoints:"
-echo "   curl -H \"Authorization: Bearer \$(gcloud auth print-identity-token)\" \\"
-echo "     -X POST $SERVICE_URL/schedule \\"
-echo "     -H \"Content-Type: application/json\" \\"
-echo "     -d '{\"date\":\"today\",\"mode\":\"tasks\"}'"
+echo "1. Mettre à jour le Cloud Scheduler pour inclure la clé secrète dans les appels."
+echo "2. Tester la création de tâches via le endpoint /schedule:"
+echo "   curl -X POST \"${SERVICE_URL}/schedule\" -H \"X-API-KEY: ${INTERNAL_API_SECRET}\" -H \"Content-Type: application/json\" -d '{\"force\": true}'"
 echo ""

@@ -1,0 +1,108 @@
+{
+  "source": "boturfers",
+  "type": "race_details",
+  "url": "https://www.boturfers.fr/quinte-du-jour/partant",
+  "scraped_at": "2025-11-19T20:35:57.460290",
+  "runners": [
+    {
+      "num": "1",
+      "nom": "Helios Si",
+      "jockey": "Hardy S.",
+      "entraineur": "Hardy S."
+    },
+    {
+      "num": "2",
+      "nom": "Furioso Fligny",
+      "jockey": "De Jesus E.",
+      "entraineur": "De Jesus A."
+    },
+    {
+      "num": "3",
+      "nom": "Hannah",
+      "jockey": "Julien Raffestin",
+      "entraineur": "Raffestin J."
+    },
+    {
+      "num": "4",
+      "nom": "Jeannette Priory",
+      "jockey": "Le Beller T.",
+      "entraineur": "Le Beller T."
+    },
+    {
+      "num": "5",
+      "nom": "Hamilton Du Ham",
+      "jockey": "Andre A.",
+      "entraineur": "Desmet Y."
+    },
+    {
+      "num": "6",
+      "nom": "Ilaya",
+      "jockey": "Lagadeuc F.",
+      "entraineur": "Raimbaud C."
+    },
+    {
+      "num": "7",
+      "nom": "Illusion Jipad",
+      "jockey": "Ploquin Pau. Ph.",
+      "entraineur": "Lelievre P."
+    },
+    {
+      "num": "8",
+      "nom": "Jazzman Debailleul",
+      "jockey": "Nivard F.",
+      "entraineur": "Szirmay E."
+    },
+    {
+      "num": "9",
+      "nom": "Harley Gema",
+      "jockey": "Rochard B.",
+      "entraineur": "Sassier M."
+    },
+    {
+      "num": "10",
+      "nom": "Halfa",
+      "jockey": "Gendrot A.",
+      "entraineur": "Levoy S."
+    },
+    {
+      "num": "11",
+      "nom": "Jeroboam D'Erable",
+      "jockey": "Thomain D.",
+      "entraineur": "Thomain C."
+    },
+    {
+      "num": "12",
+      "nom": "Grace Du Digeon",
+      "jockey": "Raffin E.",
+      "entraineur": "Dreux C."
+    },
+    {
+      "num": "13",
+      "nom": "Gendreen",
+      "jockey": "Abrivard L.",
+      "entraineur": "Abrivard L.Cl."
+    },
+    {
+      "num": "14",
+      "nom": "Hannibal Tuilerie",
+      "jockey": "Lenain G.",
+      "entraineur": "Bruneau C.M."
+    },
+    {
+      "num": "15",
+      "nom": "Ibiki De Houelle",
+      "jockey": "Leblanc K.",
+      "entraineur": "Disp. Art. 27§ Viii"
+    },
+    {
+      "num": "16",
+      "nom": "Fulton",
+      "jockey": "Ouvrie T.",
+      "entraineur": "Bazire N."
+    }
+  ],
+  "reunion": "R1",
+  "course": "C1",
+  "rc": "R1C1",
+  "id_course": "1085139"
+}

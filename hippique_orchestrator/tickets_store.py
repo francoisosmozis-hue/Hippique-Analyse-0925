@@ -70,27 +70,38 @@ _INDEX_TMPL = Template("""<!doctype html>
 </body></html>
 """)
 
+
 def _client() -> storage.Client:
     return storage.Client()
+
 
 def _blob_path(date_str: str, rxcy: str) -> str:
     return f"{TICKETS_PREFIX}/{date_str}/{rxcy}.html"
 
+
 def _index_path() -> str:
     return f"{TICKETS_PREFIX}/index.html"
 
-def render_ticket_html(payload: dict[str, Any], *, reunion: str, course: str, phase: str, budget: float) -> str:
+
+def render_ticket_html(
+    payload: dict[str, Any], *, reunion: str, course: str, phase: str, budget: float
+) -> str:
     date_str = datetime.datetime.now().strftime("%Y-%m-%d")
     ev = payload.get("ev") or payload.get("ev_global")
     roi = payload.get("roi") or payload.get("roi_estime")
     tickets = payload.get("tickets") or payload.get("ticket") or []
     return _HTML_TMPL.render(
-        reunion=reunion, course=course, phase=phase, budget=budget,
+        reunion=reunion,
+        course=course,
+        phase=phase,
+        budget=budget,
         date_str=date_str,
-        ev=ev, roi=roi,
+        ev=ev,
+        roi=roi,
         tickets_pre=json.dumps(tickets, ensure_ascii=False, indent=2),
         payload_pre=json.dumps(payload, ensure_ascii=False, indent=2),
     )
+
 
 def save_ticket_html(html: str, *, date_str: str, rxcy: str) -> None:
     assert TICKETS_BUCKET, "TICKETS_BUCKET non défini"
@@ -100,12 +111,16 @@ def save_ticket_html(html: str, *, date_str: str, rxcy: str) -> None:
     blob.content_type = "text/html; charset=utf-8"
     blob.upload_from_string(html, content_type=blob.content_type)
 
-def build_and_save_ticket(payload: dict[str, Any], *, reunion: str, course: str, phase: str, budget: float) -> str:
+
+def build_and_save_ticket(
+    payload: dict[str, Any], *, reunion: str, course: str, phase: str, budget: float
+) -> str:
     date_str = datetime.datetime.now().strftime("%Y-%m-%d")
     rxcy = f"{reunion}{course}"
     html = render_ticket_html(payload, reunion=reunion, course=course, phase=phase, budget=budget)
     save_ticket_html(html, date_str=date_str, rxcy=rxcy)
     return f"{date_str}/{rxcy}.html"
+
 
 def list_ticket_objects(limit: int = 200) -> list[dict]:
     assert TICKETS_BUCKET, "TICKETS_BUCKET non défini"
@@ -127,6 +142,7 @@ def list_ticket_objects(limit: int = 200) -> list[dict]:
     items.sort(key=lambda x: (x["date"], x["key"]), reverse=True)
     return items
 
+
 def rebuild_index() -> None:
     items = list_ticket_objects()
     html = _INDEX_TMPL.render(items=items)
@@ -136,6 +152,7 @@ def rebuild_index() -> None:
     blob.cache_control = "no-cache"
     blob.content_type = "text/html; charset=utf-8"
     blob.upload_from_string(html, content_type=blob.content_type)
+
 
 def load_ticket_html(date_str: str, rxcy: str) -> str:
     assert TICKETS_BUCKET, "TICKETS_BUCKET non défini"

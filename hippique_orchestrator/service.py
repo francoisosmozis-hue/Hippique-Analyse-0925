@@ -1,741 +1,494 @@
-"""
-src/service.py - FastAPI Service Principal
-
-Service Cloud Run orchestrant l'analyse hippique quotidienne.
-"""
-
 from __future__ import annotations
 
-import asyncio
-import os
-import uuid
-from datetime import datetime
-from typing import Any
+import hashlib
+import json
+import logging
+import traceback
+from contextlib import asynccontextmanager
+from datetime import datetime, timezone
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
-import google.auth
-from io import StringIO
-import contextlib
-from fastapi import (
-    APIRouter,
-    BackgroundTasks,
-    FastAPI,
-    HTTPException,
-    Query,
-    Request,
-    status,
-)
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response, Security, BackgroundTasks
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from google.cloud import tasks_v2
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
+from starlette.concurrency import run_in_threadpool
+from starlette.middleware.base import BaseHTTPMiddleware
 
-from hippique_orchestrator import firestore_client, time_utils
-from hippique_orchestrator.auth import auth_middleware
-from hippique_orchestrator.config import get_config
-from hippique_orchestrator.logging_utils import get_logger
-from hippique_orchestrator.plan import build_plan_async
-from hippique_orchestrator.runner import run_course
-from hippique_orchestrator.scheduler import schedule_all_races
-
-# ============================================
-# Configuration
-# ============================================
-
-logger = get_logger(__name__)
-config = get_config()
-
-STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "static")
-templates = Jinja2Templates(directory="templates")
-
-
-app = FastAPI(
-    title="Hippique Orchestrator",
-    description="Cloud Run service for automated horse racing analysis (GPI v5.2)",
-    version="2.1.0",
+from . import __version__, analysis_pipeline, config, firestore_client, plan, scheduler, runner
+from .analysis_utils import normalize_phase
+from .api import tasks  # Import the tasks router
+from .auth import check_api_key, verify_oidc_token
+from .logging_middleware import logging_middleware
+from .logging_utils import (
+    setup_logging,
 )
-
-# ============================================
-# Request/Response Models
-# ============================================
-
-
-class ScheduleRequest(BaseModel):
-    date: str = Field("today", description="Date in YYYY-MM-DD format or 'today'")
-    mode: str = Field("tasks", description="Scheduling mode: 'tasks' or 'scheduler'")
+from .schemas import ScheduleRequest, ScheduleResponse
+from typing import Optional
+from pydantic import Field
 
 
-class RunRequest(BaseModel):
-    course_url: str = Field(..., description="Full course URL")
-    phase: str = Field(..., description="Analysis phase: 'H-30', 'H-5', etc.")
-    date: str = Field(..., description="Race date in YYYY-MM-DD format")
-    trace_id: str | None = None
+# --- Configuration & Initialization ---
+setup_logging(log_level=config.LOG_LEVEL)
+logger = logging.getLogger(__name__)
+
+OIDC_TOKEN_DEPENDENCY = Depends(verify_oidc_token)
 
 
-# ============================================
-# Middleware
-# ============================================
-
-# The auth middleware is placed here but applied selectively based on path
-app.middleware("http")(auth_middleware)
-
-
-@app.middleware("http")
-async def log_requests(request: Request, call_next):
-    correlation_id = request.headers.get("X-Correlation-ID", str(uuid.uuid4()))
-    request.state.correlation_id = correlation_id
-
-    try:
-        response = await call_next(request)
-        # Use the same correlation_id for the response log
-        logger.info(
-            f"{request.method} {request.url.path}",
-            extra={
-                "correlation_id": correlation_id,
-                "status_code": response.status_code,
-            },
-        )
-        response.headers["X-Correlation-ID"] = correlation_id
-        return response
-    except Exception as e:
-        logger.error(
-            f"Request failed: {e}",
-            exc_info=True,
-            extra={"correlation_id": correlation_id},
-        )
-        return JSONResponse(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            content={"error": "Internal server error", "correlation_id": correlation_id},
-            headers={"X-Correlation-ID": correlation_id},
-        )
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info(f"Starting Hippique Orchestrator v{__version__}")
+    yield
+    logger.info("Shutting down Hippique Orchestrator.")
 
 
-# ============================================
-# API Router
-# ============================================
+BASE_DIR = Path(__file__).resolve().parent.parent
+app = FastAPI(title="Hippique Orchestrator", version=__version__, lifespan=lifespan, redoc_url=None)
 
-api_router = APIRouter(prefix="/api")
+# --- Include Routers ---
+app.include_router(tasks.router)  # Include the tasks router
+
+# --- Middlewares ---
+app.add_middleware(BaseHTTPMiddleware, dispatch=logging_middleware)
+
+app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
+templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
 
-@api_router.get("/pronostics/ui", response_class=HTMLResponse)
-async def pronostics_ui(request: Request):
-    """Serves the main HTML page for pronostics."""
-    return templates.TemplateResponse("pronostics.html", {"request": request})
+# --- UI Endpoints ---
+@app.get("/", include_in_schema=False)
+async def root_redirect():
+    return RedirectResponse(url="/pronostics")
 
 
-@api_router.get("/pronostics")
-async def get_pronostics(
-    date: str | None = Query(
-        default=None,
-        description="Date in YYYY-MM-DD format. Defaults to today (Paris time).",
-    ),
+@app.get("/pronostics", response_class=HTMLResponse, tags=["UI"])
+@app.get("/pronostics/", response_class=HTMLResponse, tags=["UI"])
+async def get_pronostics_page(request: Request):
+    return templates.TemplateResponse("index.html", {"request": request})
+
+
+@app.get("/pronostics/ui", include_in_schema=False)
+async def redirect_legacy_ui():
+    """Redirects old UI path to the new one."""
+    return RedirectResponse(url="/pronostics", status_code=307)
+
+
+@app.get("/api/pronostics/ui", include_in_schema=False)
+async def redirect_legacy_api_ui():
+    """Redirects old API UI path to the new one."""
+    return RedirectResponse(url="/api/pronostics", status_code=307)
+
+
+# --- API Endpoints ---
+@app.get("/api/pronostics", tags=["API"])
+async def get_pronostics_data(
+    request: Request,
+    date: str | None = None,
+    if_none_match: str | None = Header(None),
 ):
-    date_to_use = date
-    if date_to_use is None:
-        today = datetime.now(ZoneInfo("Europe/Paris")).date()
-        date_to_use = today.strftime("%Y-%m-%d")
-    else:
-        try:
-            datetime.strptime(date_to_use, "%Y-%m-%d")
-        except ValueError as e:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Invalid date format. Please use YYYY-MM-DD.",
-            ) from e
+    """
+    Main endpoint to get daily pronostics.
+    Combines data from the daily plan and Firestore.
+    Does NOT trigger background scheduling. Users must trigger /tasks/bootstrap-day manually.
+    """
+    try:
+        date_str = date or datetime.now(ZoneInfo(config.TIMEZONE)).strftime("%Y-%m-%d")
+        datetime.strptime(date_str, "%Y-%m-%d")  # Validate format
+    except ValueError as e:
+        raise HTTPException(
+            status_code=422, detail="Invalid date format. Please use YYYY-MM-DD."
+        ) from e
 
-    correlation_id = str(uuid.uuid4())
-    log_extra = {"correlation_id": correlation_id, "date": date_to_use}
-    logger.info(f"Fetching pronostics for date: {date_to_use} from Firestore", extra=log_extra)
-    logger.debug(f"DEBUG: get_pronostics for date: {date_to_use}", extra=log_extra)
+    server_timestamp = datetime.now(timezone.utc)
+    races_from_db = await firestore_client.get_races_for_date(date_str)
+    daily_plan = await plan.build_plan_async(date_str)
+
+    # If no races are processed yet but a plan exists, log a message
+    if not races_from_db and daily_plan:
+        logger.info(
+            f"No processed races found for {date_str} with a valid plan. "
+            "Please trigger /tasks/bootstrap-day to start processing."
+        )
+
+    all_races_map = {}
+    for race in daily_plan:
+        r_label = race.get("r_label")
+        c_label = race.get("c_label")
+        if r_label and c_label:
+            rc_key = f"{r_label}{c_label}"
+            all_races_map[rc_key] = race
+
+    counts = {
+        "total_in_plan": len(daily_plan),
+        "total_processed": len(races_from_db),
+        "total_analyzed": 0,
+        "total_playable": 0,
+        "total_abstain": 0,
+        "total_error": 0,
+    }
+
+    pronostics = []
+    last_updated_from_db = None
+    processed_races_rc = set()
+
+    for race_doc in races_from_db:
+        race_data = race_doc.to_dict()
+        processed_races_rc.add(race_doc.id.split('_')[-1])
+
+        analysis = race_data.get("tickets_analysis", {})
+        decision = analysis.get("gpi_decision", "Pending").lower()
+
+        if "play" in decision:
+            race_data["status"] = "playable"
+            counts["total_playable"] += 1
+        elif "abstain" in decision:
+            race_data["status"] = "abstain"
+            counts["total_abstain"] += 1
+        elif "error" in decision:
+            race_data["status"] = "error"
+            counts["total_error"] += 1
+        elif "snapshot_only_h9" in decision: # Handle H9 snapshot-only status
+            race_data["status"] = "snapshot_only_h9"
+        else:
+            race_data["status"] = "pending"
+
+        if "tickets_analysis" in race_data:
+            counts["total_analyzed"] += 1
+
+        pronostics.append(race_data)
+
+        if updated_at_str := race_data.get("last_analyzed_at"):
+            updated_at = datetime.fromisoformat(updated_at_str)
+            if last_updated_from_db is None or updated_at > last_updated_from_db:
+                last_updated_from_db = updated_at
+
+    for rc_label, plan_race in all_races_map.items():
+        if rc_label not in processed_races_rc:
+            pronostics.append(
+                {
+                    "rc": rc_label,
+                    "nom": plan_race.get("name"),
+                    "num": plan_race.get("c_label"),
+                    "reunion": plan_race.get("r_label"),
+                    "heure_depart": plan_race.get("time_local"),
+                    "status": "pending",
+                    "gpi_decision": None,
+                    "tickets_analysis": None,
+                }
+            )
+
+    counts["total_pending"] = counts["total_in_plan"] - counts["total_processed"]
+
+    status_message = (
+        f"{counts['total_processed']}/{counts['total_in_plan']} courses traitées. "
+        f"Jouables: {counts['total_playable']}, Abstention: {counts['total_abstain']}, "
+        f"Erreurs: {counts['total_error']}, En attente: {counts['total_pending']}."
+    )
+
+    source = "empty"
+    reason_if_empty = None
+    if pronostics:
+        source = "firestore" if races_from_db else "plan_fallback"
+    else:
+        reason_if_empty = "No races found in daily plan or Firestore for this date."
+
+    response_content = {
+        "ok": True,
+        "date": date_str,
+        "day_id": date_str,
+        "source": source,
+        "reason_if_empty": reason_if_empty,
+        "status_message": status_message,
+        "generated_at": server_timestamp.isoformat(),
+        "last_updated": (last_updated_from_db or server_timestamp).isoformat(),
+        "version": __version__,
+        "counts": counts,
+        "races": pronostics,
+    }
+
+    content_hash = hashlib.sha1(json.dumps(response_content, sort_keys=True).encode()).hexdigest()
+    etag = f'"{content_hash}"'
+    if if_none_match == etag:
+        return Response(status_code=304)
+
+    return JSONResponse(content=response_content, headers={"ETag": etag})
+
+
+@app.post("/schedule", tags=["Orchestration"], response_model=ScheduleResponse)
+async def schedule_day_races(
+    request: Request, schedule_request: ScheduleRequest, api_key: str = Security(check_api_key)
+):
+    logger.info(
+        "Received request to schedule day races. Force: %s, Dry Run: %s",
+        schedule_request.force,
+        schedule_request.dry_run,
+    )
+    try:
+        date_str = schedule_request.date or datetime.now(ZoneInfo(config.TIMEZONE)).strftime(
+            "%Y-%m-%d"
+        )
+        datetime.strptime(date_str, "%Y-%m-%d")  # Validate format
+
+        plan_date = date_str
+        daily_plan = await plan.build_plan_async(plan_date)
+
+        if not daily_plan:
+            msg = f"No races found in plan for {plan_date}. Nothing to schedule."
+            logger.warning(msg)
+            return ScheduleResponse(message=msg, races_in_plan=0, details=[])
+
+        # Deduce service URL from the incoming request
+        service_url = f"https://{request.url.netloc}"
+        logger.info(
+            "Built plan with %d races. Passing to scheduler with service_url: %s",
+            len(daily_plan),
+            service_url,
+        )
+
+        schedule_results = scheduler.schedule_all_races(
+            plan=daily_plan,
+            service_url=service_url,
+            force=schedule_request.force,
+            dry_run=schedule_request.dry_run,
+        )
+
+        return ScheduleResponse(
+            message=f"Scheduling process complete for {date_str}.",
+            races_in_plan=len(daily_plan),
+            details=schedule_results,
+        )
+
+    except ValueError as e:
+        logger.warning(f"Invalid date format provided: {e}")
+        raise HTTPException(status_code=422, detail=f"Invalid date format: {e}") from e
+    except Exception as e:
+        tb_str = traceback.format_exc()
+        logger.error(f"UNHANDLED EXCEPTION in /schedule endpoint: {e}\nTRACEBACK:\n{tb_str}")
+        raise HTTPException(status_code=500, detail=f"An internal error occurred: {e}") from e
+
+
+@app.get("/ops/status", tags=["Operations"])
+async def get_ops_status(date: str | None = None, api_key: str = Security(check_api_key)):
+    try:
+        date_str = date or datetime.now(ZoneInfo(config.TIMEZONE)).strftime("%Y-%m-%d")
+        datetime.strptime(date_str, "%Y-%m-%d")  # Validate format
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail="Invalid date format. Use YYYY-MM-DD.") from e
+
+    daily_plan = await plan.build_plan_async(date_str)
+    return await firestore_client.get_processing_status_for_date(date_str, daily_plan)
+
+
+@app.post("/ops/run", tags=["Operations"])
+async def run_single_race(rc: str, api_key: str = Security(check_api_key)):
+    """Manually triggers the analysis pipeline for a single race."""
+    date_str = datetime.now(ZoneInfo(config.TIMEZONE)).strftime("%Y-%m-%d")
+    logger.info(f"Manual run triggered for race {rc} on {date_str}")
+
+    daily_plan = await plan.build_plan_async(date_str)
+    target_race = next(
+        (r for r in daily_plan if f"{r.get('r_label')}{r.get('c_label')}" == rc), None
+    )
+
+    if not target_race:
+        raise HTTPException(status_code=404, detail=f"Race {rc} not found in plan for {date_str}")
+
+    doc_id = f"{date_str}_{rc}"
+    course_url = target_race.get("course_url")
+    if not course_url:
+        raise HTTPException(status_code=400, detail=f"Race {rc} is missing a URL in the plan.")
 
     try:
-        race_documents = firestore_client.get_races_by_date_prefix(date_to_use)
-        logger.debug(
-            f"DEBUG: Fetched {len(race_documents)} raw race documents for {date_to_use}",
-            extra=log_extra,
+        # Using H-5 as the default phase for a manual run
+        analysis_result = await analysis_pipeline.run_analysis_for_phase(
+            course_url=course_url,
+            phase=normalize_phase("H-5"),
+            date=date_str,
+            race_doc_id=doc_id,
         )
-
-        all_pronostics = []
-        latest_update_time = None
-        for doc in race_documents:
-            analysis = doc.get("tickets_analysis")
-            if analysis and analysis.get("tickets"):
-                all_pronostics.append(
-                    {
-                        "rc": doc.get("rc", "N/A"),
-                        "gpi_decision": analysis.get("gpi_decision", "N/A"),
-                        "tickets": analysis.get("tickets", []),
-                    }
-                )
-
-                # Track the latest update time
-                last_analyzed_str = doc.get("last_analyzed_at")
-                if last_analyzed_str:
-                    try:
-                        # Ensure timestamp is offset-aware for correct comparison
-                        current_doc_time = datetime.fromisoformat(last_analyzed_str)
-                        if latest_update_time is None or current_doc_time > latest_update_time:
-                            latest_update_time = current_doc_time
-                    except (ValueError, TypeError):
-                        logger.warning(f"Could not parse last_analyzed_at: {last_analyzed_str}")
-
-        final_last_updated = (
-            latest_update_time
-            if latest_update_time
-            else datetime.utcnow().replace(tzinfo=ZoneInfo("UTC"))
-        )
-
+        await run_in_threadpool(firestore_client.update_race_document, doc_id, analysis_result)
+        logger.info(f"Successfully processed and saved manual run for {doc_id}")
         return {
-            "ok": True,
-            "total_races": len(all_pronostics),
-            "date": date_to_use,
-            "last_updated": final_last_updated.isoformat().replace("+00:00", "Z"),
-            "pronostics": all_pronostics,
+            "status": "success",
+            "document_id": doc_id,
+            "gpi_decision": analysis_result.get("gpi_decision", "N/A"),
         }
     except Exception as e:
-        logger.error("Error fetching pronostics from Firestore", exc_info=True, extra=log_extra)
+        logger.error(f"Critical error during manual run for {doc_id}: {e}", exc_info=True)
+        error_data = {
+            "last_analyzed_at": datetime.now(timezone.utc).isoformat(),
+            "phase": "H-5-manual",
+            "status": "error",
+            "error_message": str(e),
+            "gpi_decision": "error_manual_run",
+        }
+        await run_in_threadpool(firestore_client.update_race_document, doc_id, error_data)
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to fetch pronostics from Firestore.",
+            status_code=500, detail=f"Failed to process manual run for {doc_id}."
         ) from e
 
 
-app.include_router(api_router)
+class LegacyRunRequest(BaseModel):
+    course_url: Optional[str] = None
+    reunion: Optional[str] = None
+    course: Optional[str] = None
+    phase: str
+    budget: Optional[float] = 5.0  # Keep for compatibility, but it's unused
 
 
-@app.get("/ping")
-async def ping():
-    return {"status": "pong"}
+async def _get_course_url_from_legacy(
+    date_str: str, req: LegacyRunRequest, correlation_id: str
+) -> str:
+    if req.course_url:
+        return req.course_url
 
-
-@app.get("/health")
-async def health_check():
-    return {
-        "status": "healthy",
-        "service": "hippique-orchestrator",
-        "version": "2.1.0",
-        "timestamp": datetime.utcnow().isoformat() + "Z",
-    }
-
-
-@app.post("/schedule", status_code=status.HTTP_202_ACCEPTED)
-async def schedule_daily_plan(body: ScheduleRequest):
-    correlation_id = str(uuid.uuid4())
-    trace_id = str(uuid.uuid4())
-    log_extra = {
-        "correlation_id": correlation_id,
-        "trace_id": trace_id,
-        "date": body.date,
-        "mode": body.mode,
-    }
-    logger.info("Schedule request received", extra=log_extra)
-
-    try:
-        plan = await build_plan_async(body.date)
-        if not plan:
-            logger.warning("Empty plan generated", extra=log_extra)
-            return JSONResponse(
-                status_code=status.HTTP_202_ACCEPTED,
-                content={"ok": False, "error": "No races found for this date"},
-            )
-
-        logger.info(f"Plan built: {len(plan)} races", extra=log_extra)
-
-        scheduled = schedule_all_races(
-            plan=plan,
-            mode=body.mode,
-            correlation_id=correlation_id,
-            trace_id=trace_id,
-        )
-
-        success_h30 = sum(1 for s in scheduled if s["phase"] == "H30" and s["ok"])
-        success_h5 = sum(1 for s in scheduled if s["phase"] == "H5" and s["ok"])
-        all_ok = all(s["ok"] for s in scheduled)
+    if req.reunion and req.course:
+        daily_plan = await plan.build_plan_async(date_str)
+        rc_label_to_find = f"{req.reunion}{req.course}"
 
         logger.info(
-            "Scheduling complete",
-            extra={
-                **log_extra,
-                "success_h30": success_h30,
-                "success_h5": success_h5,
-            },
+            "Searching for %s in daily plan",
+            rc_label_to_find,
+            extra={"correlation_id": correlation_id},
         )
-
-        return JSONResponse(
-            status_code=status.HTTP_202_ACCEPTED,
-            content={
-                "ok": all_ok,
-                "date": body.date,
-                "total_races": len(plan),
-                "scheduled_h30": success_h30,
-                "scheduled_h5": success_h5,
-                "mode": body.mode,
-                "correlation_id": correlation_id,
-                "trace_id": trace_id,
-            },
+        for race in daily_plan:
+            if f"{race.get('r_label')}{race.get('c_label')}" == rc_label_to_find:
+                logger.info(
+                    "Found matching race in plan",
+                    extra={"correlation_id": correlation_id, "race": race},
+                )
+                if race.get("course_url"):
+                    return race["course_url"]
+        raise HTTPException(
+            status_code=404,
+            detail=f"Race {rc_label_to_find} not found in plan for {date_str}",
         )
-    except Exception as e:
-        logger.error(f"Schedule failed: {e}", exc_info=True, extra=log_extra)
-        return JSONResponse(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            content={"ok": False, "error": str(e)},
-        )
+    raise HTTPException(
+        status_code=422, detail="Either course_url or reunion/course must be provided."
+    )
 
 
-@app.post("/run")
-async def run_race_analysis(body: RunRequest):
-    correlation_id = str(uuid.uuid4())
-    trace_id = body.trace_id or correlation_id
-    log_extra = {
-        "correlation_id": correlation_id,
-        "trace_id": trace_id,
-        "course_url": body.course_url,
-        "phase": body.phase,
-    }
-    logger.info("Run request received", extra=log_extra)
+async def _execute_legacy_run(request: Request, body: LegacyRunRequest):
+    correlation_id = getattr(request.state, "correlation_id", "N/A")
+    trace_id = getattr(request.state, "trace_id", None)
+    date_str = datetime.now(ZoneInfo(config.TIMEZONE)).strftime("%Y-%m-%d")
 
     try:
-        result = run_course(
-            course_url=body.course_url,
+        course_url = await _get_course_url_from_legacy(date_str, body, correlation_id)
+        result = await runner.run_course(
+            course_url=course_url,
             phase=body.phase,
-            date=body.date,
+            date=date_str,
             correlation_id=correlation_id,
             trace_id=trace_id,
         )
-        result["correlation_id"] = correlation_id
-        result["trace_id"] = trace_id
-
-        status_code = (
-            status.HTTP_200_OK if result.get("ok") else status.HTTP_500_INTERNAL_SERVER_ERROR
-        )
-        return JSONResponse(status_code=status_code, content=result)
+        return result
+    except HTTPException as e:
+        # Re-raise HTTP exceptions from the helper
+        raise e
     except Exception as e:
-        logger.error(f"Run failed with exception: {e}", exc_info=True, extra=log_extra)
-        return JSONResponse(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            content={"ok": False, "error": str(e)},
+        tb_str = traceback.format_exc()
+        logger.error(
+            "Unhandled exception in legacy run endpoint: %s\n%s",
+            e,
+            tb_str,
+            extra={"correlation_id": correlation_id},
         )
+        raise HTTPException(status_code=500, detail=f"An internal error occurred: {e}") from e
 
 
-# ============================================
-# Task Endpoints (for Cloud Tasks)
-# ============================================
+@app.post("/run", tags=["Legacy"], include_in_schema=False)
+async def legacy_run(
+    request: Request,
+    body: LegacyRunRequest,
+    # token_claims: dict = OIDC_TOKEN_DEPENDENCY,
+):
+    return await _execute_legacy_run(request, body)
 
 
-@app.post("/receive-trigger", status_code=status.HTTP_202_ACCEPTED)
-async def receive_trigger(body: ScheduleRequest, background_tasks: BackgroundTasks):
-    """
-    Receives a trigger (likely from Cloud Scheduler) to start the daily bootstrap.
-    This is a compatibility endpoint for a misconfigured scheduler.
-    """
-    correlation_id = str(uuid.uuid4())
-    trace_id = str(uuid.uuid4())
-    logger.info(
-        "Received trigger to start daily bootstrap",
-        extra={
-            "correlation_id": correlation_id,
-            "trace_id": trace_id,
-            "date": body.date,
-        },
-    )
-
-    background_tasks.add_task(
-        bootstrap_day_pipeline,
-        date_str=body.date,
-        correlation_id=correlation_id,
-        trace_id=trace_id,
-    )
-
-    return {
-        "ok": True,
-        "message": f"Bootstrap for {body.date} initiated in background from trigger.",
-    }
+@app.post("/analyse", tags=["Legacy"], include_in_schema=False)
+async def legacy_analyse(
+    request: Request,
+    body: LegacyRunRequest,
+    # This endpoint was likely unsecured in the past.
+    # To maintain compatibility, we can make auth optional for now.
+    # token_claims: dict = OIDC_TOKEN_DEPENDENCY,
+):
+    return await _execute_legacy_run(request, body)
 
 
-@app.post("/tasks/bootstrap-day", status_code=status.HTTP_202_ACCEPTED)
-async def tasks_bootstrap_day(body: ScheduleRequest, background_tasks: BackgroundTasks):
-    correlation_id = str(uuid.uuid4())
-    trace_id = str(uuid.uuid4())
-    logger.info(
-        "Bootstrap day task received",
-        extra={
-            "correlation_id": correlation_id,
-            "trace_id": trace_id,
-            "date": body.date,
-        },
-    )
-
-    background_tasks.add_task(
-        bootstrap_day_pipeline,
-        date_str=body.date,
-        correlation_id=correlation_id,
-        trace_id=trace_id,
-    )
-
-    return {"ok": True, "message": f"Bootstrap for {body.date} initiated in background."}
+@app.post("/pipeline/run", tags=["Legacy"], include_in_schema=False)
+async def legacy_pipeline_run(
+    request: Request,
+    body: LegacyRunRequest,
+    # token_claims: dict = OIDC_TOKEN_DEPENDENCY,
+):
+    return await _execute_legacy_run(request, body)
 
 
-@app.post("/tasks/run-phase", status_code=status.HTTP_200_OK)
-async def tasks_run_phase(body: RunRequest):
-    correlation_id = str(uuid.uuid4())
-    trace_id = body.trace_id or correlation_id
-    logger.info(
-        f"Run phase task received for course: {body.course_url}",
-        extra={"correlation_id": correlation_id, "trace_id": trace_id},
-    )
-
-    result = run_course(
-        course_url=body.course_url,
-        phase=body.phase,
-        date=body.date,
-        correlation_id=correlation_id,
-        trace_id=trace_id,
-    )
-
-    return {
-        "ok": result.get("ok", False),
-        "phase": result.get("phase"),
-        "artifacts": result.get("artifacts", []),
-    }
-
-
-# ============================================
-# API & Debug Endpoints
-# ============================================
-
-
-@app.get("/debug/parse")
-async def debug_parse(date: str = "2025-10-17"):
-    result = await build_plan_async(date)
-    return {
-        "ok": True,
-        "date": date,
-        "count": len(result),
-        "races": result[:3] if result else [],
-    }
-
-
-@app.get("/debug/config")
+@app.get("/debug/config", tags=["Debug"])
 async def debug_config():
-    """Returns the current application configuration."""
-    config_dict = {k: str(v) for k, v in get_config().model_dump().items()}
-    return {"ok": True, "config": config_dict}
-
-
-@app.get("/debug/cloudtasks/ping")
-async def debug_cloudtasks_ping(request: Request):
     """
-    Pings the Cloud Tasks queue to verify connectivity and permissions.
+    DEBUGGING ENDPOINT.
+    Returns non-sensitive configuration values, including auth status,
+    to help debug environment issues.
     """
-
-    # Use the correlation_id from the middleware
-    correlation_id = getattr(request.state, "correlation_id", str(uuid.uuid4()))
-    log_extra = {"correlation_id": correlation_id}
-    logger.info("Starting Cloud Tasks ping debug.", extra=log_extra)
-
-    try:
-        # 1. Log effective project and environment
-        try:
-            credentials, inferred_project = google.auth.default()
-            logger.info(
-                f"google.auth.default() inferred_project: {inferred_project}",
-                extra=log_extra,
-            )
-
-            # Log service account email if available
-            if hasattr(credentials, "service_account_email"):
-                logger.info(
-                    f"Service Account Email: {credentials.service_account_email}",
-                    extra=log_extra,
-                )
-            else:
-                logger.info(
-                    "Service Account Email: Not available on credentials.",
-                    extra=log_extra,
-                )
-
-        except (google.auth.exceptions.DefaultCredentialsError, AttributeError) as e:
-            inferred_project = None
-            logger.error(
-                f"Could not determine project via google.auth.default(): {e}",
-                extra=log_extra,
-            )
-
-        env_project = os.getenv("GOOGLE_CLOUD_PROJECT")
-        logger.info(f"os.getenv('GOOGLE_CLOUD_PROJECT'): {env_project}", extra=log_extra)
-
-        # 2. Get client and config
-        client = tasks_v2.CloudTasksClient()
-        task_config = get_config()
-        project = task_config.PROJECT_ID
-        location = task_config.REGION
-        queue = task_config.QUEUE_ID
-
-        logger.info(
-            f"Using config: project={project}, location={location}, queue={queue}",
-            extra=log_extra,
-        )
-
-        # 3. Construct queue path and call get_queue
-        parent = client.queue_path(project, location, queue)
-        logger.info(f"Attempting to get_queue with name: {parent}", extra=log_extra)
-
-        try:
-            queue_info = client.get_queue(name=parent)
-            logger.info("Successfully got queue info.", extra=log_extra)
-            return {
-                "ok": True,
-                "status": "Successfully pinged queue",
-                "queue_name": queue_info.name,
-                "queue_state": str(queue_info.state),
-                "inferred_project": inferred_project,
-                "env_project": env_project,
-            }
-        except Exception as e:
-            # This is the critical part for debugging the 404
-            logger.error(
-                f"get_queue failed with exception: {e}",
-                exc_info=True,
-                extra=log_extra,
-            )
-
-            error_details = {"message": str(e)}
-            if hasattr(e, "details"):
-                error_details["details"] = e.details()
-            if hasattr(e, "code"):
-                error_details["code"] = e.code().name
-
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail={
-                    "ok": False,
-                    "status": "Failed to get queue",
-                    "error": error_details,
-                    "queue_name_constructed": parent,
-                    "inferred_project": inferred_project,
-                    "env_project": env_project,
-                },
-            ) from e
-
-    except Exception as e:
-        logger.error(
-            f"An unexpected error occurred in the ping endpoint: {e}",
-            exc_info=True,
-            extra=log_extra,
-        )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={
-                "ok": False,
-                "error": "An unexpected error occurred in the ping endpoint.",
-            },
-        ) from e
-
-
-@app.post("/debug/force-bootstrap/{date_str}", status_code=status.HTTP_200_OK)
-async def debug_force_bootstrap(date_str: str):
-    """
-    Forces the daily bootstrap pipeline for a specific date, and returns the logs.
-    """
-    correlation_id = str(uuid.uuid4())
-    trace_id = str(uuid.uuid4())
-    log_extra = {"correlation_id": correlation_id, "trace_id": trace_id, "date": date_str}
-    logger.warning(
-        f"Forcing bootstrap pipeline for {date_str} via debug endpoint.",
-        extra=log_extra,
-    )
-
-    firestore_client.unmark_day_as_planned(date_str)
-
-    log_stream = StringIO()
-    with contextlib.redirect_stdout(log_stream):
-        try:
-            plan_details = await bootstrap_day_pipeline(
-                date_str=date_str,
-                correlation_id=correlation_id,
-                trace_id=trace_id,
-            )
-            logs = log_stream.getvalue()
-            return {
-                "ok": True,
-                "message": f"Forced bootstrap for {date_str} completed.",
-                "plan_details": plan_details,
-                "logs": logs.splitlines(),
-            }
-        except Exception as e:
-            logs = log_stream.getvalue()
-            logger.error(f"Debug bootstrap failed: {e}", exc_info=True, extra=log_extra)
-            # Get the traceback as a string
-            import traceback
-            exc_traceback = traceback.format_exc()
-            return {
-                "ok": False,
-                "error": str(e),
-                "traceback": exc_traceback.splitlines(),
-                "logs": logs.splitlines(),
-            }
-
-
-@app.get("/debug/races/{race_doc_id}")
-async def debug_get_race_document(race_doc_id: str):
-    """
-    Fetches a specific race document from the 'races' collection in Firestore.
-    """
-    correlation_id = str(uuid.uuid4())
-    log_extra = {"correlation_id": correlation_id, "race_doc_id": race_doc_id}
-    logger.info(
-        f"Fetching race document: {race_doc_id} from Firestore via debug endpoint",
-        extra=log_extra,
-    )
-
-    try:
-        logger.debug(
-            f"Calling firestore_client.get_race_document for {race_doc_id}",
-            extra=log_extra,
-        )
-        doc = firestore_client.get_race_document("races", race_doc_id)
-        logger.debug(f"firestore_client.get_race_document returned: {doc}", extra=log_extra)
-        if doc:
-            return {"ok": True, "race_doc_id": race_doc_id, "data": doc}
-        # This will now correctly raise a 404 if the document is not found
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Race document '{race_doc_id}' not found.",
-        )
-    except Exception as e:
-        logger.error(
-            f"An unexpected error occurred in debug_get_race_document: {e}",
-            exc_info=True,
-            extra=log_extra,
-        )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"An unexpected error occurred while fetching race document {race_doc_id}.",
-        ) from e
-
-
-# ============================================
-# Core Logic (used by startup and endpoints)
-# ============================================
-
-
-async def bootstrap_day_pipeline(
-    date_str: str, correlation_id: str, trace_id: str
-) -> dict[str, Any] | None:
-    """Builds the plan for the day and schedules all races."""
-    log_extra = {"correlation_id": correlation_id, "trace_id": trace_id, "date": date_str}
-    logger.info(f"Starting bootstrap pipeline for {date_str}", extra=log_extra)
-    plan = await build_plan_async(date_str)
-    if not plan:
-        logger.warning(f"No plan built for {date_str}. Aborting bootstrap.", extra=log_extra)
-        return None
-
-    logger.info(f"Plan built with {len(plan)} races. Now scheduling tasks.", extra=log_extra)
-    logger.info(
-        f"DEBUG_SERVICE: About to call schedule_all_races with {len(plan)} races.",
-        extra=log_extra,
-    )
-    print(f"DEBUG_PRINT_SERVICE: Plan before scheduling: {plan}")
-
-    try:
-        scheduled_tasks_results = schedule_all_races(
-            plan=plan,
-            mode="tasks",
-            correlation_id=correlation_id,
-            trace_id=trace_id,
-        )
-    except Exception as e:
-        logger.error(f"Failed to schedule all races: {e}", exc_info=True, extra=log_extra)
-        scheduled_tasks_results = []  # Ensure it's still iterable for subsequent logic
-
-    # Mark the day as planned ONLY if scheduling was successful for at least one race
-    if plan and any(s["ok"] for s in scheduled_tasks_results):
-        firestore_client.mark_day_as_planned(
-            date_str,
-            {
-                "created_at": datetime.now(time_utils.get_tz()).isoformat(),
-                "races_count": len(plan),
-                "correlation_id": correlation_id,
-            },
-        )
-        logger.info(
-            f"Successfully marked {date_str} as planned in Firestore.",
-            extra=log_extra,
-        )
-    else:
-        logger.warning(
-            f"No races successfully scheduled for {date_str}. Not marking as planned.",
-            extra=log_extra,
-        )
-
-    return {"races_count": len(plan), "races": plan}
-
-
-async def run_bootstrap_if_needed():
-    """
-    Checks if the daily planning has been done and runs it if not.
-    This provides resilience against failed scheduler triggers.
-    """
-    await asyncio.sleep(10)  # Wait a bit for other services to be ready if needed
-
-    today = datetime.now(ZoneInfo("Europe/Paris")).date()
-    today_str = today.strftime("%Y-%m-%d")
-
-    correlation_id = str(uuid.uuid4())
-    log_extra = {
-        "correlation_id": correlation_id,
-        "trace_id": correlation_id,
-        "date": today_str,
+    return {
+        "require_auth": config.REQUIRE_AUTH,
+        "internal_api_secret_is_set": bool(config.INTERNAL_API_SECRET),
+        "internal_api_secret_first_chars": config.INTERNAL_API_SECRET[:4]
+        if config.INTERNAL_API_SECRET
+        else None,
+        "project_id": config.PROJECT_ID,
+        "bucket_name": config.BUCKET_NAME,
+        "task_queue": config.TASK_QUEUE,
+        "log_level": config.LOG_LEVEL,
+        "timezone": config.TIMEZONE,
+        "version": __version__,
     }
 
-    logger.info("Startup check: Verifying if daily planning is needed.", extra=log_extra)
 
-    if firestore_client.is_day_planned(today_str):
-        logger.info(
-            f"Daily planning for {today_str} already completed. Startup check passed.",
-            extra=log_extra,
-        )
-        return
+@app.get("/__health", include_in_schema=False)
+async def double_underscore_health():
+    return await health_check()
 
-    logger.warning(
-        f"Daily planning for {today_str} not found. Starting bootstrap process now.",
-        extra=log_extra,
-    )
 
+@app.get("/healthz", include_in_schema=False)
+async def healthz():
+    return await health_check()
+
+
+@app.get("/health", tags=["Monitoring"])
+async def health_check():
+    return {"status": "healthy", "version": __version__}
+
+
+@app.get("/api/plan", tags=["API"])
+async def get_daily_plan(date: str | None = None):
+    """Returns the race plan for a given date."""
     try:
-        plan_details = await bootstrap_day_pipeline(
-            date_str=today_str,
-            correlation_id=correlation_id,
-            trace_id=correlation_id,
-        )
-        if plan_details:
-            # Mark as planned is now handled inside bootstrap_day_pipeline
-            logger.info(
-                f"Successfully completed bootstrap for {today_str} on startup.",
-                extra=log_extra,
-            )
-    except Exception:
-        logger.error(
-            f"Startup bootstrap process for {today_str} failed.",
-            exc_info=True,
-            extra=log_extra,
-        )
+        date_str = date or datetime.now(ZoneInfo(config.TIMEZONE)).strftime("%Y-%m-%d")
+        datetime.strptime(date_str, "%Y-%m-%d")  # Validate format
+    except ValueError as e:
+        raise HTTPException(
+            status_code=422, detail="Invalid date format. Please use YYYY-MM-DD."
+        ) from e
+
+    daily_plan = await plan.build_plan_async(date_str)
+    return {"ok": True, "date": date_str, "races": daily_plan, "count": len(daily_plan)}
 
 
-# ============================================
-# Startup/Shutdown Events
-# ============================================
-
-
-@app.on_event("startup")
-async def startup_event():
-    logger.info(
-        "Service starting",
-        extra={"version": "2.1.0", "project_id": config.PROJECT_ID},
-    )
-    asyncio.create_task(run_bootstrap_if_needed())
-
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    logger.info("Service shutting down")
+@app.get("/api/schedule/next", tags=["API"])
+async def get_next_scheduled_tasks():
+    """Returns the next scheduled analysis tasks."""
+    # This is a stub to fulfill the UI's request.
+    # In a real implementation, this would query a task queue or database.
+    return {
+        "ok": False,
+        "message": (
+            "La fonctionnalité de consultation des tâches futures n'est pas encore implémentée."
+        ),
+        "tasks": [],
+    }

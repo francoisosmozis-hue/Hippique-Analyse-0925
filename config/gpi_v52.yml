@@ -10,8 +10,8 @@ roi_min_sp: 0.10              # Minimum ROI for a single pick (SP)
 roi_min_global: 0.15          # Minimum global ROI for the entire set of tickets
 max_vol_per_horse: 0.60       # Maximum volatility per horse
 budget_cap_eur: 100           # Maximum budget to allocate in EUR
-ev_min_combo: 0.20            # Minimum EV for a combo bet
-payout_min_combo: 15          # Minimum expected payout for a combo bet
+ev_min_combo: 0.40            # Minimum EV for a combo bet
+payout_min_combo: 10          # Minimum expected payout for a combo bet
 
 tickets:
   # -- Simple Pick (SP) Dutching configuration --
@@ -25,7 +25,7 @@ tickets:
   # -- Exotic bets configuration --
   exotics:
     type: "TRIO"
-    legs_count: 4
+    legs_count: 3
     stake_eur: 2.0
 
 # -- Probability Adjustments (v5.1 spec) --
@@ -35,13 +35,18 @@ adjustments:
   drift:
     k_d: 0.70
     k_d_fav_drift: 0.90
-    k_d_out_steam: 0.85
-
-# -- Probability adjustment weights --
+  volatility: # New section for volatility adjustments
+    sure_bonus: 1.05
+    volatile_malus: 0.90
+    musique_score_weight: 0.02 # How much each point of musique score affects the factor
 weights:
   base:
     je_bonus: 1.10
     je_malus: 0.90
+    j_rate_bonus_threshold: 12.0
+    e_rate_bonus_threshold: 15.0
+    j_rate_malus_threshold: 6.0
+    e_rate_malus_threshold: 8.0
   horse_stats:
     # Placeholder for future expansion
     some_stat_factor: 1.0

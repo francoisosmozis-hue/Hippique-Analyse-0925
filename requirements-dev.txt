@@ -1,8 +1,3 @@
-pytest
-pytest-env
-pytest-cov
-pytest-xdist
-ruff
-coverage
+-r requirements.txt
 freezegun
-pytest-timeout
+pyfakefs

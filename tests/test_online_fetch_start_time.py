@@ -1,13 +1,9 @@
-"""Tests for start time extraction from Boturfers HTML fragments."""
-
-from __future__ import annotations
-
 import textwrap
 
 import pytest
 from bs4 import BeautifulSoup
 
-from hippique_orchestrator.scrapers.boturfers import BoturfersFetcher
+from hippique_orchestrator.scrapers.boturfers import BoturfersFetcher, RaceProgramEntry
 
 
 @pytest.mark.parametrize(
@@ -53,7 +49,7 @@ def test_extract_start_time_from_programme_row(time_html: str, expected_time: st
     fetcher = BoturfersFetcher("https://www.boturfers.fr/programme-pmu-du-jour")
     fetcher.soup = soup
 
-    races = fetcher._parse_programme()
+    races: list[RaceProgramEntry] = fetcher._parse_programme()
 
     assert len(races) == 1
     assert races[0]["start_time"] == expected_time

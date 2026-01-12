@@ -89,9 +89,7 @@ def _ensure_header_map(ws: Worksheet, headers: Iterable[str]) -> dict[str, int]:
     max_column = ws.max_column
     # ``openpyxl`` initialises empty worksheets with a single ``None`` cell.
     blank_sheet = (
-        ws.max_row <= 1
-        and ws.max_column == 1
-        and ws.cell(row=1, column=1).value in (None, "")
+        ws.max_row <= 1 and ws.max_column == 1 and ws.cell(row=1, column=1).value in (None, "")
     )
     if not blank_sheet:
         for col in range(1, max_column + 1):
@@ -349,4 +347,3 @@ def main(argv: list[str] | None = None) -> None:
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point
     main()
-

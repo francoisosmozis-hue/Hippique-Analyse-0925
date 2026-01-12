@@ -86,97 +86,96 @@ def collect_analyses(data_dir: Path, date: str | None = None) -> list[dict[str, 
         metrics_file = rc_dir / "metrics.json"
         metrics = load_json_safe(metrics_file) if metrics_file.exists() else {}
 
-        analyses.append({
-            "rc": rc_dir.name,
-            "analysis": analysis,
-            "tracking": tracking,
-            "metrics": metrics,
-            "dir": rc_dir
-        })
+        analyses.append(
+            {
+                "rc": rc_dir.name,
+                "analysis": analysis,
+                "tracking": tracking,
+                "metrics": metrics,
+                "dir": rc_dir,
+            }
+        )
 
     return analyses
 
 
-def compute_statistics(analyses: list[dict[str, Any]]) -> dict[str, Any]:
-    """Compute aggregate statistics from analyses."""
+def _process_analysis(item: dict[str, Any]) -> dict[str, Any]:
+    """Process a single analysis item."""
+    analysis = item["analysis"]
+    metrics = item.get("metrics", {})
+    data = {
+        "stake": 0.0,
+        "gain": 0.0,
+        "expected_roi": 0.0,
+        "ev_ratio": 0.0,
+        "clv": None,
+        "sharpe": None,
+        "ror": None,
+        "is_played": False,
+        "is_alerte": False,
+        "by_type": defaultdict(lambda: {"stake": 0, "gain": 0, "count": 0, "wins": 0}),
+    }
 
-    total_stake = 0.0
-    total_gain = 0.0
-    total_expected_roi = 0.0
-    total_ev_ratio = 0.0
+    if analysis.get("abstain"):
+        return data
 
-    count_races = len(analyses)
-    count_played = 0
-    count_abstain = 0
-    count_alerte = 0
+    data["is_played"] = True
+
+    tickets = analysis.get("tickets", [])
+    for ticket in tickets:
+        bet_type = ticket.get("type", "unknown")
+        stake = float(ticket.get("stake", 0) or ticket.get("mise", 0) or 0)
+        gain = float(ticket.get("gain_reel", 0) or ticket.get("gain", 0) or 0)
+
+        data["stake"] += stake
+        data["gain"] += gain
+        data["by_type"][bet_type]["stake"] += stake
+        data["by_type"][bet_type]["gain"] += gain
+        data["by_type"][bet_type]["count"] += 1
+
+        if gain > stake:
+            data["by_type"][bet_type]["wins"] += 1
+
+    validation = analysis.get("validation", {})
+    data["expected_roi"] = validation.get("roi_global_est", 0) or 0
+
+    ev_section = analysis.get("ev", {})
+    data["ev_ratio"] = ev_section.get("ev_ratio", 0) or ev_section.get("ev_global", 0) or 0
+
+    flags = analysis.get("flags", {})
+    if flags.get("ALERTE_VALUE"):
+        data["is_alerte"] = True
+
+    if metrics:
+        data["clv"] = metrics.get("clv_moyen", 0) or metrics.get("clv_median_30", 0)
+        data["sharpe"] = metrics.get("sharpe", 0)
+        data["ror"] = metrics.get("risk_of_ruin", 0)
+
+    return data
+
+
+def _aggregate_results(processed_analyses: list[dict[str, Any]]) -> dict[str, Any]:
+    """Aggregate results from processed analyses."""
+    total_stake = sum(p["stake"] for p in processed_analyses)
+    total_gain = sum(p["gain"] for p in processed_analyses)
+    total_expected_roi = sum(p["expected_roi"] for p in processed_analyses)
+    total_ev_ratio = sum(p["ev_ratio"] for p in processed_analyses)
+
+    count_played = sum(1 for p in processed_analyses if p["is_played"])
+    count_alerte = sum(1 for p in processed_analyses if p["is_alerte"])
+
+    clv_values = [p["clv"] for p in processed_analyses if p["clv"] is not None]
+    sharpe_values = [p["sharpe"] for p in processed_analyses if p["sharpe"] is not None]
+    ror_values = [p["ror"] for p in processed_analyses if p["ror"] is not None]
 
     by_type = defaultdict(lambda: {"stake": 0, "gain": 0, "count": 0, "wins": 0})
+    for p in processed_analyses:
+        for bet_type, data in p["by_type"].items():
+            by_type[bet_type]["stake"] += data["stake"]
+            by_type[bet_type]["gain"] += data["gain"]
+            by_type[bet_type]["count"] += data["count"]
+            by_type[bet_type]["wins"] += data["wins"]
 
-    clv_values = []
-    sharpe_values = []
-    ror_values = []
-
-    for item in analyses:
-        analysis = item["analysis"]
-        metrics = item["metrics"]
-
-        # Meta
-        analysis.get("meta", {})
-
-        # Abstain check
-        if analysis.get("abstain"):
-            count_abstain += 1
-            continue
-
-        count_played += 1
-
-        # Tickets
-        tickets = analysis.get("tickets", [])
-        for ticket in tickets:
-            bet_type = ticket.get("type", "unknown")
-            stake = float(ticket.get("stake", 0) or ticket.get("mise", 0) or 0)
-            gain = float(ticket.get("gain_reel", 0) or ticket.get("gain", 0) or 0)
-
-            total_stake += stake
-            total_gain += gain
-
-            by_type[bet_type]["stake"] += stake
-            by_type[bet_type]["gain"] += gain
-            by_type[bet_type]["count"] += 1
-
-            if gain > stake:
-                by_type[bet_type]["wins"] += 1
-
-        # Validation metrics
-        validation = analysis.get("validation", {})
-        roi_global = validation.get("roi_global_est", 0) or 0
-        total_expected_roi += roi_global
-
-        # EV ratio
-        ev_section = analysis.get("ev", {})
-        ev_ratio = ev_section.get("ev_ratio", 0) or ev_section.get("ev_global", 0) or 0
-        total_ev_ratio += ev_ratio
-
-        # Alerts
-        flags = analysis.get("flags", {})
-        if flags.get("ALERTE_VALUE"):
-            count_alerte += 1
-
-        # Metrics
-        if metrics:
-            clv = metrics.get("clv_moyen", 0) or metrics.get("clv_median_30", 0)
-            if clv:
-                clv_values.append(clv)
-
-            sharpe = metrics.get("sharpe", 0)
-            if sharpe:
-                sharpe_values.append(sharpe)
-
-            ror = metrics.get("risk_of_ruin", 0)
-            if ror:
-                ror_values.append(ror)
-
-    # Compute aggregates
     real_roi = (total_gain - total_stake) / total_stake if total_stake > 0 else 0
     expected_roi_avg = total_expected_roi / count_played if count_played > 0 else 0
     ev_ratio_avg = total_ev_ratio / count_played if count_played > 0 else 0
@@ -186,9 +185,7 @@ def compute_statistics(analyses: list[dict[str, Any]]) -> dict[str, Any]:
     ror_avg = sum(ror_values) / len(ror_values) if ror_values else 0
 
     return {
-        "total_races": count_races,
         "races_played": count_played,
-        "races_abstain": count_abstain,
         "races_alerte": count_alerte,
         "total_stake": round(total_stake, 2),
         "total_gain": round(total_gain, 2),
@@ -200,8 +197,17 @@ def compute_statistics(analyses: list[dict[str, Any]]) -> dict[str, Any]:
         "clv_avg": round(clv_avg, 4),
         "sharpe_avg": round(sharpe_avg, 4),
         "ror_avg": round(ror_avg, 6),
-        "by_type": dict(by_type)
+        "by_type": dict(by_type),
     }
+
+
+def compute_statistics(analyses: list[dict[str, Any]]) -> dict[str, Any]:
+    """Compute aggregate statistics from analyses."""
+    processed_analyses = [_process_analysis(item) for item in analyses]
+    stats = _aggregate_results(processed_analyses)
+    stats["total_races"] = len(analyses)
+    stats["races_abstain"] = len(analyses) - stats["races_played"]
+    return stats
 
 
 def print_report(stats: dict[str, Any], detail: bool = False):
@@ -232,18 +238,18 @@ def print_report(stats: dict[str, Any], detail: bool = False):
     # ROI Metrics
     print("📊 ROI METRICS")
     print("-" * 70)
-    print(f"  Real ROI:           {stats['real_roi']*100:.2f}%")
-    print(f"  Expected ROI (avg): {stats['expected_roi_avg']*100:.2f}%")
-    print(f"  ROI Variance:       {stats['roi_variance']*100:.2f}%")
-    print(f"  EV Ratio (avg):     {stats['ev_ratio_avg']*100:.2f}%")
+    print(f"  Real ROI:           {stats['real_roi'] * 100:.2f}%")
+    print(f"  Expected ROI (avg): {stats['expected_roi_avg'] * 100:.2f}%")
+    print(f"  ROI Variance:       {stats['roi_variance'] * 100:.2f}%")
+    print(f"  EV Ratio (avg):     {stats['ev_ratio_avg'] * 100:.2f}%")
     print()
 
     # Risk Metrics
     print("⚠️  RISK METRICS")
     print("-" * 70)
-    print(f"  CLV Average:        {stats['clv_avg']*100:.2f}%")
+    print(f"  CLV Average:        {stats['clv_avg'] * 100:.2f}%")
     print(f"  Sharpe Ratio (avg): {stats['sharpe_avg']:.3f}")
-    print(f"  Risk of Ruin (avg): {stats['ror_avg']*100:.4f}%")
+    print(f"  Risk of Ruin (avg): {stats['ror_avg'] * 100:.4f}%")
     print()
 
     # By bet type
@@ -263,8 +269,8 @@ def print_report(stats: dict[str, Any], detail: bool = False):
             print(f"    Tickets:    {count}")
             print(f"    Stake:      {stake:.2f} €")
             print(f"    Gain:       {gain:.2f} €")
-            print(f"    ROI:        {roi*100:.2f}%")
-            print(f"    Win Rate:   {win_rate*100:.1f}%")
+            print(f"    ROI:        {roi * 100:.2f}%")
+            print(f"    Win Rate:   {win_rate * 100:.1f}%")
             print()
 
     print("=" * 70)
@@ -278,39 +284,18 @@ def export_json(stats: dict[str, Any], output: Path):
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Monitor ROI performance from analysis files"
-    )
+    parser = argparse.ArgumentParser(description="Monitor ROI performance from analysis files")
     parser.add_argument(
         "--data-dir",
         type=Path,
         default=Path("data"),
-        help="Data directory containing R#C# folders (default: data)"
+        help="Data directory containing R#C# folders (default: data)",
     )
-    parser.add_argument(
-        "--date",
-        help="Filter by specific date (YYYY-MM-DD)"
-    )
-    parser.add_argument(
-        "--last-days",
-        type=int,
-        help="Show stats for last N days"
-    )
-    parser.add_argument(
-        "--detail",
-        action="store_true",
-        help="Show detailed breakdown by bet type"
-    )
-    parser.add_argument(
-        "--json-out",
-        type=Path,
-        help="Export statistics to JSON file"
-    )
-    parser.add_argument(
-        "--watch",
-        action="store_true",
-        help="Watch mode: refresh every 60 seconds"
-    )
+    parser.add_argument("--date", help="Filter by specific date (YYYY-MM-DD)")
+    parser.add_argument("--last-days", type=int, help="Show stats for last N days")
+    parser.add_argument("--detail", action="store_true", help="Show detailed breakdown by bet type")
+    parser.add_argument("--json-out", type=Path, help="Export statistics to JSON file")
+    parser.add_argument("--watch", action="store_true", help="Watch mode: refresh every 60 seconds")
 
     args = parser.parse_args()
 

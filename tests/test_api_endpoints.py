@@ -1,160 +1,185 @@
+from datetime import datetime
+from unittest.mock import MagicMock
+from freezegun import freeze_time
+
+from zoneinfo import ZoneInfo
 
 import pytest
+from bs4 import BeautifulSoup
+import httpx
+from httpx import ASGITransport
 
-# NOTE: The client fixture is now provided by conftest.py
 
-def test_healthz_endpoint(client):
-    """Tests if the /healthz endpoint is reachable and returns OK."""
+# Mock DocumentSnapshot class to simulate Firestore documents
+class MockDocumentSnapshot:
+    def __init__(self, id, data):
+        self._id = id
+        self._data = data
+
+    @property
+    def id(self):
+        return self._id
+
+    def to_dict(self):
+        return self._data
+
+
+@pytest.fixture
+def mock_firestore_client(mocker):
+    """Mocks the Firestore client to return predictable data."""
+    # Mock the main function that the service uses
+    return mocker.patch("hippique_orchestrator.firestore_client.get_races_for_date")
+
+
+def test_health_check_endpoint(client):
+    """Tests the /health endpoint."""
     response = client.get("/health")
     assert response.status_code == 200
     assert response.json()["status"] == "healthy"
 
-def test_api_pronostics_no_data(client, mocker):
-    """
-    Tests that the /pronostics endpoint returns an OK response (but with no data)
-    when no pronostics are found in Firestore for the given date.
-    """
-    mocker.patch("hippique_orchestrator.firestore_client.get_races_by_date_prefix", return_value=[])
-    mock_date_str = "2025-12-07"
 
-    # Test without date parameter (uses default today)
-    response = client.get("/api/pronostics")
+def test_pronostics_ui_endpoint(client):
+    """Tests that /pronostics returns the main HTML page and checks for specific content."""
+    response = client.get("/pronostics")
     assert response.status_code == 200
-    data = response.json()
-    assert data["ok"] is True
-    assert data["total_races"] == 0
-    assert data["pronostics"] == []
-    assert "date" in data # Ensure date used is returned
+    assert "text/html" in response.headers["content-type"]
+    assert "Hippique Orchestrator - Pronostics" in response.text  # Check title tag
 
-    response = client.get(f"/api/pronostics?date={mock_date_str}")
-    assert response.status_code == 200
-    data = response.json()
-    assert data["ok"] is True
-    assert data["total_races"] == 0
-    assert data["pronostics"] == []
-    assert data["date"] == mock_date_str
+    # Further checks for specific HTML structure
+    soup = BeautifulSoup(response.text, "html.parser")
 
+    # Check for the main layout elements
+    assert soup.find("header") is not None, "Should find a header tag"
+    assert soup.find("h1", string="Pronostics Hippiques") is not None, (
+        "Should find the main H1 title"
+    )
+    assert soup.find("main") is not None, "Should find a main tag"
 
-def test_api_pronostics_with_mock_data(client, mocker):
-    """
-    Tests that the /pronostics endpoint successfully returns data
-    when a valid pronostics document is present in Firestore, matching the new API structure.
-    """
-    mock_date_str = "2025-12-07"
+    # Check for core sections and their IDs
+    assert soup.find("div", id="error-container") is not None, "Should find the error container"
+    assert soup.find("section", id="controls-section") is not None, (
+        "Should find the controls section"
+    )
+    assert soup.find("input", id="date-picker") is not None, "Should find the date picker input"
+    assert soup.find("section", id="stats-section") is not None, "Should find the stats section"
+    assert soup.find("strong", id="api-status-message") is not None, (
+        "Should find the API status message"
+    )
+    assert soup.find("section", id="races-section") is not None, "Should find the races section"
+    assert soup.find("table", id="races-table") is not None, "Should find the races table"
+    assert soup.find("tbody", id="races-tbody") is not None, "Should find the races table body"
 
-    mock_firestore_doc = {
-        "id": f"{mock_date_str}_R1C1",
-        "rc": "R1C1",
-        "tickets_analysis": {
-            "gpi_decision": "Play",
-            "tickets": [{"type": "SP", "cheval": "1"}],
-            "roi_global_est": 0.2
-        }
-    }
-    mocker.patch("hippique_orchestrator.firestore_client.get_races_by_date_prefix", return_value=[mock_firestore_doc])
+    # Check for a script tag that references the API endpoint
+    all_script_text = ""
+    for script_tag in soup.find_all("script"):
+        if script_tag.string:
+            all_script_text += script_tag.string
+        elif script_tag.text:
+            all_script_text += script_tag.text
 
-    response = client.get(f"/api/pronostics?date={mock_date_str}")
-    assert response.status_code == 200
-
-    data = response.json()
-    assert data["ok"] is True
-    assert data["total_races"] == 1
-    assert data["date"] == mock_date_str
-
-    pronostic = data["pronostics"][0]
-    assert pronostic["rc"] == "R1C1"
-    assert pronostic["gpi_decision"] == "Play"
-    assert len(pronostic["tickets"]) == 1
-    assert pronostic["tickets"][0]["type"] == "SP"
+    assert all_script_text, "Should have captured script text"
+    assert "document.addEventListener('DOMContentLoaded'" in all_script_text, (
+        "Should find core JS functionality"
+    )
+    assert "/api/pronostics" in all_script_text, (
+        "Should find reference to /api/pronostics endpoint in JS/scripts"
+    )
 
 
-def test_api_pronostics_handles_malformed_doc(client, mocker):
-    """
-    Tests that the /pronostics endpoint gracefully handles Firestore documents
-    that do not contain the expected 'tickets_analysis' field.
-    """
-    mock_date_str = "2025-12-07"
-
-    valid_doc = {
-        "id": f"{mock_date_str}_R1C1",
-        "rc": "R1C1",
-        "tickets_analysis": {"gpi_decision": "Play", "tickets": [{"type": "SP", "horses": ["1"]}]}
-    }
-    malformed_doc = {
-        "id": f"{mock_date_str}_R1C2",
-        "rc": "R1C2",
-        "some_other_field": {} # Missing 'tickets_analysis'
-    }
-    mocker.patch("hippique_orchestrator.firestore_client.get_races_by_date_prefix", return_value=[valid_doc, malformed_doc])
-
-    response = client.get(f"/api/pronostics?date={mock_date_str}")
-
-    assert response.status_code == 200
-    data = response.json()
-    assert data["ok"] is True
-    assert data["total_races"] == 1 # Only the valid doc is processed
-    assert len(data["pronostics"]) == 1
-    assert data["pronostics"][0]["rc"] == "R1C1"
+def test_root_redirect(client):
+    """Tests that the root path redirects to the pronostics UI."""
+    response = client.get("/", follow_redirects=False)
+    assert response.status_code == 307  # FastAPI uses 307 Temporary Redirect by default
+    assert response.headers["location"] == "/pronostics"
 
 
-def test_api_pronostics_aggregates_multiple_docs(client, mocker):
-    """
-    Tests that the /pronostics endpoint correctly aggregates multiple valid
-    documents from Firestore for the same date.
-    """
-    mock_date_str = "2025-12-07"
-
-    doc1 = {"id": f"{mock_date_str}_R1C1", "rc": "R1C1", "tickets_analysis": {"gpi_decision": "Play", "tickets": [{"type": "SP", "horses": ["1"]}]}}
-    doc2 = {"id": f"{mock_date_str}_R1C2", "rc": "R1C2", "tickets_analysis": {"gpi_decision": "Abstain", "tickets": [{"type": "TRIO", "horses": ["1", "2", "3"]}]}}
-
-    mocker.patch("hippique_orchestrator.firestore_client.get_races_by_date_prefix", return_value=[doc1, doc2])
-
-    response = client.get(f"/api/pronostics?date={mock_date_str}")
-
-    assert response.status_code == 200
-    data = response.json()
-    assert data["ok"] is True
-    assert data["total_races"] == 2
-    assert len(data["pronostics"]) == 2
-    assert data["pronostics"][0]["rc"] == "R1C1"
-    assert data["pronostics"][1]["rc"] == "R1C2"
-
-
-def test_api_pronostics_invalid_date_format(client):
-    """
-    Tests that the /pronostics endpoint returns a 422 error for an invalid
-    date format.
-    """
-    response = client.get("/api/pronostics?date=not-a-date")
+def test_api_pronostics_date_validation(client):
+    """Tests that the API returns a 422 for an invalid date format."""
+    response = client.get("/api/pronostics?date=not-a-real-date")
     assert response.status_code == 422
-    assert "invalid date format" in response.json()["detail"].lower()
+    assert "Invalid date format. Please use YYYY-MM-DD." in response.json()["detail"]
+
 
 @pytest.mark.asyncio
-async def test_tasks_bootstrap_day(client, mocker):
-    mocker.patch("hippique_orchestrator.plan.build_plan_async", return_value=[
-        {"date": "2025-11-24", "r_label": "R1", "c_label": "C1", "time_local": "12:00", "course_url": "http://example.com/c1"}
-    ])
-    mocker.patch("hippique_orchestrator.scheduler.schedule_all_races", return_value=[
-        {"race": "R1C1", "phase": "H30", "ok": True, "task_name": "task-r1c1-h30"},
-        {"race": "R1C1", "phase": "H5", "ok": True, "task_name": "task-r1c1-h5"},
-    ])
+@freeze_time("2025-07-15")
+async def test_api_pronostics_default_date_is_today(app, mock_firestore_client, mock_build_plan):
+    """Tests that the API defaults to today's date when none is provided."""
+    mock_firestore_client.return_value = []
+    mock_build_plan.return_value = []
 
-    response = client.post("/tasks/bootstrap-day", json={"date": "2025-11-24", "mode": "tasks"})
-    assert response.status_code == 202
-    assert response.json()["ok"] is True
-    assert "initiated in background" in response.json()["message"]
-
-@pytest.mark.asyncio
-async def test_tasks_run_phase(client, mocker):
-    mocker.patch("hippique_orchestrator.runner.run_course", return_value={"ok": True, "phase": "H30", "artifacts": ["path/to/artifact"]})
-
-    payload = {
-                    "course_url": "http://example.com/r1c1-course",        "phase": "H30",
-        "date": "2025-11-24",
-        "trace_id": "test-trace-id"
-    }
-    response = client.post("/tasks/run-phase", json=payload)
+    async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get("/api/pronostics")
+    
     assert response.status_code == 200
-    assert response.json()["ok"] is True
-    assert response.json()["phase"] == "H30"
-    assert "artifacts" in response.json()
+    assert response.json()["date"] == "2025-07-15"
+
+
+def test_api_pronostics_empty_response(client, mock_firestore_client):
+    """Tests the API response when no races are found."""
+    mock_firestore_client.return_value = []
+    response = client.get("/api/pronostics?date=2025-01-01")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["ok"] is True
+    assert data["date"] == "2025-01-01"
+    assert data["counts"]["total_in_plan"] == 0
+    assert data["races"] == []
+
+
+@pytest.mark.asyncio
+@freeze_time("2025-01-01")
+async def test_api_pronostics_etag_304_not_modified(app, mock_firestore_client, mock_build_plan):
+    """Tests that the API returns a 304 Not Modified when the ETag matches."""
+    mock_firestore_client.return_value = []
+    mock_build_plan.return_value = []
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response1 = await client.get("/api/pronostics?date=2025-01-01")
+        etag = response1.headers["etag"]
+        response2 = await client.get(
+            "/api/pronostics?date=2025-01-01", headers={"if-none-match": etag}
+        )
+    assert response1.status_code == 200
+    assert response2.status_code == 304
+
+
+@pytest.mark.asyncio
+async def test_api_pronostics_rich_response_structure(
+    app, mock_firestore_client, mock_build_plan, mock_race_doc
+):
+    """Tests the structure of the API response when data is present."""
+    mock_firestore_client.return_value = [
+        mock_race_doc("2025-01-01_R1C1", {"gpi_decision": "play"}),
+        mock_race_doc("2025-01-01_R1C2", {"gpi_decision": "abstain"}),
+    ]
+    mock_build_plan.return_value = [
+        {
+            "date": "2025-01-01",
+            "r_label": "R1",
+            "c_label": "C1",
+            "time_local": "13:50",
+            "course_url": "http://example.com/r1c1",
+        },
+        {
+            "date": "2025-01-01",
+            "r_label": "R1",
+            "c_label": "C2",
+            "time_local": "14:20",
+            "course_url": "http://example.com/r1c2",
+        },
+    ]
+    async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get("/api/pronostics?date=2025-01-01")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert "generated_at" in data
+    assert "day_id" in data
+    assert data["day_id"] == "2025-01-01"
+    assert "races" in data
+    assert len(data["races"]) == 2
+    assert data["races"][0]["r_label"] == "R1"
+    assert data["races"][0]["c_label"] == "C1"
+    assert data["races"][0]["gpi_decision"] == "play"
+    assert data["races"][1]["gpi_decision"] == "abstain"
+

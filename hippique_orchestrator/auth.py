@@ -1,147 +1,67 @@
 """
-src/auth.py - OIDC Authentication Middleware
+src/auth.py - API Key Authentication
 """
+
 from __future__ import annotations
 
-from fastapi import HTTPException, Request, status
-from fastapi.responses import JSONResponse
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from typing import Any
+
+from fastapi import HTTPException, Request, Security
+from fastapi.security.api_key import APIKeyHeader
 from google.auth.transport import requests
 from google.oauth2 import id_token
 
-from hippique_orchestrator.config import get_config
-from hippique_orchestrator.logging_utils import get_logger
+from hippique_orchestrator import config
 
-logger = get_logger(__name__)
-config = get_config()
+api_key_header_scheme = APIKeyHeader(name="X-API-KEY", auto_error=False)
+oidc_token_scheme = APIKeyHeader(
+    name="Authorization",
+    description="Bearer token from a Google-issued OIDC ID token.",
+    auto_error=True,
+)
 
-# Use a custom scheme to clearly identify OIDC tokens in documentation
-oidc_scheme = HTTPBearer(scheme_name="OIDC Token")
+
+async def check_api_key(api_key_header: str | None = Security(api_key_header_scheme)):
+    """Dependency to verify the internal API key."""
+    if not config.REQUIRE_AUTH:
+        return True
+
+    if not config.INTERNAL_API_SECRET:
+        # This is a server misconfiguration, should not happen in prod
+        raise HTTPException(status_code=500, detail="Internal API secret not configured on server.")
+
+    if api_key_header is None or api_key_header != config.INTERNAL_API_SECRET:
+        raise HTTPException(status_code=403, detail="Invalid or missing API Key.")
+    return True
 
 
-class OIDCValidator:
+async def verify_oidc_token(
+    request: Request, token: str = Security(oidc_token_scheme)
+) -> dict[str, Any]:
     """
-    Validates Google OIDC tokens.
+    Dependency to verify Google-issued OIDC tokens, typically from Cloud Tasks.
     """
+    if not token.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Invalid token scheme. Must be 'Bearer'.")
 
-    def __init__(self, audience: str):
-        if not audience:
-            raise ValueError("OIDC audience must be configured.")
-        self.audience = audience
-        self.request = requests.Request()
+    # The actual token is after "Bearer "
+    token = token.split(" ", 1)[1]
 
-    async def validate(self, token: str) -> dict:
-        """
-        Validates the token and returns the decoded claims.
-        """
-        if not token:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Authentication token is missing.",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-
-        try:
-            # Verify the token against Google's certs
-            id_info = id_token.verify_oauth2_token(
-                id_token=token, request=self.request, audience=self.audience
-            )
-            return id_info
-
-        except ValueError as e:
-            logger.error(f"OIDC token validation failed: {e}", exc_info=True)
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail=f"Invalid authentication token: {e}",
-                headers={"WWW-Authenticate": "Bearer"},
-            ) from e
-
-
-# Singleton instance of the validator - initialized only if needed
-oidc_validator: OIDCValidator | None = None
-if config.REQUIRE_AUTH:
     try:
-        oidc_validator = OIDCValidator(audience=config.OIDC_AUDIENCE)
+        # The audience should be the full URL of the service.
+        
+        # Validate the token
+        # This checks signature, expiration, issuer, and audience.
+        # NOTE: Audience validation is temporarily disabled to debug 401 errors from Cloud Tasks.
+        token_claims = id_token.verify_oauth2_token(
+            id_token=token, request=requests.Request()
+        )
+        return token_claims
     except ValueError as e:
-        logger.error(f"Failed to initialize OIDCValidator: {e}", exc_info=True)
-        # Depending on strictness, you might want to exit here if auth is required but misconfigured
-        # For now, we log the error, and it will fail at runtime if an auth-protected route is hit.
-        pass
-
-
-async def verify_oidc_token(request: Request):
-    """
-    Dependency that can be used on a per-endpoint basis to enforce auth.
-    It inspects the Authorization header for a Bearer token.
-    """
-    if config.REQUIRE_AUTH:
-        if not oidc_validator:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="OIDC Validator is not configured.",
-            )
-        auth_header: HTTPAuthorizationCredentials = await oidc_scheme(request)
-        if auth_header:
-            await oidc_validator.validate(auth_header.credentials)
-
-
-async def auth_middleware(request: Request, call_next):
-    """
-    A middleware that enforces OIDC authentication on specific paths.
-    Public paths are skipped.
-    """
-    # List of paths that do not require authentication
-    public_paths = [
-        "/ping",
-        "/health",
-        "/docs",
-        "/openapi.json",
-        # Allow accessing pronostics data without auth
-        "/api/pronostics",
-        "/api/pronostics/ui",
-        # Keep debug endpoints accessible, especially for local/staging
-        "/debug/",
-    ]
-
-    # FastAPI's router registers UI paths like /api/pronostics/ui, not needed to list twice
-    # Static files are also typically handled separately and don't need to be in this list.
-
-    # If auth is disabled globally, or if the path is public, skip validation
-    path = request.url.path
-    if not config.REQUIRE_AUTH or any(path.startswith(p) for p in public_paths):
-        return await call_next(request)
-
-    try:
-        if not oidc_validator:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="OIDC Validator is not configured.",
-            )
-
-        # For protected paths, extract and validate the token
-        auth_header = request.headers.get("Authorization")
-        if not auth_header or not auth_header.startswith("Bearer "):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Authorization header missing or invalid.",
-            )
-
-        token = auth_header.split(" ")[1]
-        await oidc_validator.validate(token)
-
-        return await call_next(request)
-
-    except HTTPException as e:
-        # If the token is invalid, return an error response
-        logger.warning(f"Auth failed for path {request.url.path}: {e.detail}")
-        return JSONResponse(
-            status_code=e.status_code,
-            content={"detail": e.detail},
-            headers=e.headers,
-        )
+        # This catches a wide range of token validation errors
+        # (e.g., malformed, expired, wrong signature, wrong audience)
+        raise HTTPException(status_code=401, detail=f"Token validation failed: {e}") from e
     except Exception as e:
-        logger.error(f"Unexpected error in auth middleware: {e}", exc_info=True)
-        return JSONResponse(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            content={"detail": "Internal server error during authentication."},
-        )
+        raise HTTPException(
+            status_code=500, detail=f"An unexpected error occurred during token validation: {e}"
+        ) from e

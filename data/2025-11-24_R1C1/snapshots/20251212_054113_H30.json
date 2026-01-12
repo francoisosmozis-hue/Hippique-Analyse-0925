@@ -1,0 +1,70 @@
+{
+  "source": "boturfers",
+  "type": "race_details",
+  "url": "https://www.boturfers.fr/course/1089578-r1c1-prix-d-ales/partant",
+  "scraped_at": "2025-12-12T05:41:13.590092",
+  "runners": [
+    {
+      "num": "1",
+      "nom": "Mid Dancer",
+      "jockey": "Dromigny T.",
+      "entraineur": "Rouer B."
+    },
+    {
+      "num": "2",
+      "nom": "Manapanis",
+      "jockey": "Lagadeuc F.",
+      "entraineur": "Bridault N."
+    },
+    {
+      "num": "3",
+      "nom": "Milton Ellis",
+      "jockey": "Saussaye V.",
+      "entraineur": "Chalon T."
+    },
+    {
+      "num": "4",
+      "nom": "Mistral De Cerisy",
+      "jockey": "Ploquin Pau. Ph.",
+      "entraineur": "Raimbeaux N."
+    },
+    {
+      "num": "5",
+      "nom": "Michigan",
+      "jockey": "Mottier M.",
+      "entraineur": "Mottier C."
+    },
+    {
+      "num": "6",
+      "nom": "Matisse Du Pont",
+      "jockey": "Abrivard A.",
+      "entraineur": "Bazire N."
+    },
+    {
+      "num": "7",
+      "nom": "Mimo Du Mesnil",
+      "jockey": "Champenois M.",
+      "entraineur": "Ripoll Rigo A."
+    },
+    {
+      "num": "8",
+      "nom": "Maestro Des Gires",
+      "jockey": "Andre A.",
+      "entraineur": "Filograsso J."
+    },
+    {
+      "num": "9",
+      "nom": "Maestro De Forgan",
+      "jockey": "Rochard B.",
+      "entraineur": "Martineau N."
+    },
+    {
+      "num": "10",
+      "nom": "Maximus Dairpet",
+      "jockey": "Ricart J. Y.",
+      "entraineur": "Raffegeau J.P."
+    }
+  ],
+  "correlation_id": "535ea1e6-bd2b-4381-b71a-43e47dc81f86",
+  "trace_id": "test-trace-id"
+}

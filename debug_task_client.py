@@ -6,6 +6,7 @@ from hippique_orchestrator.scheduler import get_tasks_client
 
 logger = get_logger(__name__)
 
+
 def main():
     """
     Tente d'initialiser le client Cloud Tasks et de loguer le résultat.
@@ -38,9 +39,17 @@ def main():
         print("PRINT: Le client Tasks semble fonctionner correctement.")
 
     except Exception as e:
-        logger.error(f"Une erreur est survenue lors de l'initialisation ou de l'utilisation du client Tasks : {e}", exc_info=True)
+        logger.error(
+            (
+                "Une erreur est survenue lors de l'initialisation ou de "
+                "l'utilisation du client Tasks : %s"
+            ),
+            e,
+            exc_info=True,
+        )
         print(f"PRINT: Une erreur est survenue : {e}")
         traceback.print_exc()
+
 
 if __name__ == "__main__":
     main()

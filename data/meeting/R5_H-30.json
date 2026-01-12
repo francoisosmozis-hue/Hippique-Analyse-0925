@@ -1,0 +1,682 @@
+{
+  "provider": "zeturf",
+  "phase": "H-30",
+  "reunion_url": "https://www.zeturf.fr/fr/reunion/2025-11-02/R5-marseille-vivaux",
+  "date": "02/11/2025",
+  "hippodrome": "MARSEILLE VIVAUX",
+  "courses": [
+    {
+      "course_num": "1",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C3-marseille-vivaux-prix-de-la-societe-du-trotteur-francais"
+    },
+    {
+      "course_num": "2",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-03/R1C4-fontainebleau-prix-roland-fougedoire?prefill=39"
+    },
+    {
+      "course_num": "3",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R1C1-deauville-prix-little-manjo"
+    },
+    {
+      "course_num": "4",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R1C2-deauville-prix-zeddaan"
+    },
+    {
+      "course_num": "5",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R1C3-deauville-prix-irish-river-polytrack-challenge"
+    },
+    {
+      "course_num": "6",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R1C4-deauville-prix-la-bamba"
+    },
+    {
+      "course_num": "7",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R1C5-deauville-prix-nonoalco"
+    },
+    {
+      "course_num": "8",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R1C6-deauville-prix-du-pays-de-bray"
+    },
+    {
+      "course_num": "9",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R1C7-deauville-prix-du-pays-de-caux"
+    },
+    {
+      "course_num": "10",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R1C8-deauville-prix-du-plateau-de-madrie"
+    },
+    {
+      "course_num": "11",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R1C9-deauville-prix-du-plateau-d-evreux-saint-andre"
+    },
+    {
+      "course_num": "12",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R2C4-happy-valley-prix-shantou-handicap"
+    },
+    {
+      "course_num": "13",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R2C5-happy-valley-prix-the-hong-kong-country-club-challenge-cup"
+    },
+    {
+      "course_num": "14",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R2C6-happy-valley-prix-shenzhen-handicap"
+    },
+    {
+      "course_num": "15",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R2C7-happy-valley-prix-the-kwangtung-handicap-cup"
+    },
+    {
+      "course_num": "16",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R2C8-happy-valley-prix-zhaoqing-handicap"
+    },
+    {
+      "course_num": "17",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R2C9-happy-valley-prix-guangzhou-handicap"
+    },
+    {
+      "course_num": "18",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R2C10-happy-valley-prix-zhuhai-handicap"
+    },
+    {
+      "course_num": "19",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R3C1-angers-prix-salon-du-cheval-prix-d-ecouflant"
+    },
+    {
+      "course_num": "20",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R3C2-angers-prix-claude-munet-grand-prix-d-angers"
+    },
+    {
+      "course_num": "21",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R3C3-angers-prix-la-koumia"
+    },
+    {
+      "course_num": "22",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R3C4-angers-prix-tello"
+    },
+    {
+      "course_num": "23",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R3C5-angers-prix-rabelais"
+    },
+    {
+      "course_num": "24",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R3C6-angers-handicap-de-la-maine"
+    },
+    {
+      "course_num": "25",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R3C7-angers-prix-mon-audition-prix-point-bleu"
+    },
+    {
+      "course_num": "26",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R3C8-angers-prix-andre-adele"
+    },
+    {
+      "course_num": "27",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R4C1-argentan-prix-general-du-pommeau"
+    },
+    {
+      "course_num": "28",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R4C2-argentan-prix-custom"
+    },
+    {
+      "course_num": "29",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R4C3-argentan-prix-eric-the-eel"
+    },
+    {
+      "course_num": "30",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R4C4-argentan-prix-remi-serais-immobilier"
+    },
+    {
+      "course_num": "31",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R4C5-argentan-prix-fiteco"
+    },
+    {
+      "course_num": "32",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R4C6-argentan-prix-xavier-cavey"
+    },
+    {
+      "course_num": "33",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R4C7-argentan-prix-sancho-panca"
+    },
+    {
+      "course_num": "34",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R4C8-argentan-prix-paul-buquet"
+    },
+    {
+      "course_num": "35",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C1-marseille-vivaux-prix-de-la-provence"
+    },
+    {
+      "course_num": "36",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C2-marseille-vivaux-prix-du-comite-regional-du-trot"
+    },
+    {
+      "course_num": "37",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C4-marseille-vivaux-prix-de-redon"
+    },
+    {
+      "course_num": "38",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C5-marseille-vivaux-prix-de-montolivet"
+    },
+    {
+      "course_num": "39",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C6-marseille-vivaux-prix-de-la-camargue"
+    },
+    {
+      "course_num": "40",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C7-marseille-vivaux-prix-des-gardians"
+    },
+    {
+      "course_num": "41",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C8-marseille-vivaux-prix-koenigsberg"
+    },
+    {
+      "course_num": "42",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R6C1-valparaiso-prix-hoguera"
+    },
+    {
+      "course_num": "43",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R6C2-valparaiso-prix-huingal"
+    },
+    {
+      "course_num": "44",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R6C3-valparaiso-prix-heika"
+    },
+    {
+      "course_num": "45",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R6C4-valparaiso-prix-hegemonia"
+    },
+    {
+      "course_num": "46",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R6C5-valparaiso-prix-jaime-munro-p"
+    },
+    {
+      "course_num": "47",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R6C6-valparaiso-prix-hilandeira"
+    },
+    {
+      "course_num": "48",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R6C7-valparaiso-prix-high-bridge"
+    },
+    {
+      "course_num": "49",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R6C8-valparaiso-prix-hunter-special"
+    },
+    {
+      "course_num": "50",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R6C9-valparaiso-prix-halofresca"
+    },
+    {
+      "course_num": "51",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R6C10-valparaiso-prix-hashimaki"
+    },
+    {
+      "course_num": "52",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R7C2-albany-prix-wellington-reeves-maiden"
+    },
+    {
+      "course_num": "53",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R7C3-albany-prix-west-cape-howe-handicap"
+    },
+    {
+      "course_num": "54",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R7C4-albany-prix-graham-manley-auto-repairs-handicap"
+    },
+    {
+      "course_num": "55",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R7C5-albany-prix-montys-leap-handicap"
+    },
+    {
+      "course_num": "56",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R7C6-albany-prix-albany-stockfeeds-handicap"
+    },
+    {
+      "course_num": "57",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R7C7-albany-prix-western-racepix-handicap"
+    },
+    {
+      "course_num": "58",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R8C8-las-piedras-prix-dr-aureliano-rodriguez-larreta"
+    },
+    {
+      "course_num": "59",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R8C9-las-piedras-prix-timbalero-2024"
+    },
+    {
+      "course_num": "60",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R8C10-las-piedras-prix-barwoman-2022"
+    },
+    {
+      "course_num": "61",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R8C11-las-piedras-prix-hertog-jan-2023"
+    },
+    {
+      "course_num": "62",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R8C12-las-piedras-prix-brillantina-2024"
+    },
+    {
+      "course_num": "63",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R9C1-le-mont-saint-michel-prix-des-benevoles-groupe-a"
+    },
+    {
+      "course_num": "64",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R9C2-le-mont-saint-michel-prix-du-couesnon-groupe-b"
+    },
+    {
+      "course_num": "65",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R9C3-le-mont-saint-michel-prix-emile-croizil"
+    },
+    {
+      "course_num": "66",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R9C4-le-mont-saint-michel-prix-volailles-de-breizh"
+    },
+    {
+      "course_num": "67",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R9C5-le-mont-saint-michel-prix-bernard-esnault"
+    },
+    {
+      "course_num": "68",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R9C6-le-mont-saint-michel-prix-du-cabaret-saint-michel-groupe-a"
+    },
+    {
+      "course_num": "69",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R9C7-le-mont-saint-michel-prix-des-partenaires-groupe-b"
+    },
+    {
+      "course_num": "70",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R9C8-le-mont-saint-michel-prix-du-mont-saint-michel"
+    },
+    {
+      "course_num": "71",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R9C9-le-mont-saint-michel-prix-de-beauvoir"
+    },
+    {
+      "course_num": "72",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R10C1-la-capelle-prix-jean-paul-chapelet"
+    },
+    {
+      "course_num": "73",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R10C2-la-capelle-prix-de-la-pierre-d-haudroy"
+    },
+    {
+      "course_num": "74",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R10C3-la-capelle-prix-jean-francois-pagnon"
+    },
+    {
+      "course_num": "75",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R10C4-la-capelle-prix-de-la-villa-pasques-groupe-a"
+    },
+    {
+      "course_num": "76",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R10C5-la-capelle-prix-michel-landerieux-groupe-b"
+    },
+    {
+      "course_num": "77",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R10C6-la-capelle-prix-du-caporal-clairon-pierre-sellier"
+    },
+    {
+      "course_num": "78",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R10C7-la-capelle-prix-alain-le-guen"
+    },
+    {
+      "course_num": "79",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R10C8-la-capelle-prix-qualitrot"
+    },
+    {
+      "course_num": "80",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R11C1-maure-de-bretagne-prix-de-la-gacilly"
+    },
+    {
+      "course_num": "81",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R11C2-maure-de-bretagne-prix-des-brulais-groupe-a"
+    },
+    {
+      "course_num": "82",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R11C3-maure-de-bretagne-prix-de-la-bataille"
+    },
+    {
+      "course_num": "83",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R11C4-maure-de-bretagne-prix-hippodrome-maure-de-bretagne-groupe-b"
+    },
+    {
+      "course_num": "84",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R11C5-maure-de-bretagne-prix-du-telethon"
+    },
+    {
+      "course_num": "85",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R11C6-maure-de-bretagne-prix-aubrion-du-gers"
+    },
+    {
+      "course_num": "86",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R11C7-maure-de-bretagne-prix-de-chantilly"
+    },
+    {
+      "course_num": "87",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R11C8-maure-de-bretagne-prix-de-la-societe-du-trotteur-francais"
+    },
+    {
+      "course_num": "88",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R12C1-strasbourg-prix-marcel-jung"
+    },
+    {
+      "course_num": "89",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R12C2-strasbourg-prix-alain-derhan"
+    },
+    {
+      "course_num": "90",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R12C3-strasbourg-prix-de-la-fleche"
+    },
+    {
+      "course_num": "91",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R12C4-strasbourg-prix-ourasi"
+    },
+    {
+      "course_num": "92",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R12C5-strasbourg-prix-jean-stern"
+    },
+    {
+      "course_num": "93",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R12C6-strasbourg-prix-de-la-boule"
+    },
+    {
+      "course_num": "94",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R13C10-gulfstream-park-handicap"
+    },
+    {
+      "course_num": "95",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R13C11-gulfstream-park-maiden-claiming"
+    },
+    {
+      "course_num": "96",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C6-marseille-vivaux-prix-de-la-camargue/13"
+    },
+    {
+      "course_num": "97",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C1-marseille-vivaux-prix-de-la-provence/1"
+    },
+    {
+      "course_num": "98",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C3-marseille-vivaux-prix-de-la-societe-du-trotteur-francais/10"
+    },
+    {
+      "course_num": "99",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C7-marseille-vivaux-prix-des-gardians/12"
+    },
+    {
+      "course_num": "100",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C1-marseille-vivaux-prix-de-la-provence/2"
+    },
+    {
+      "course_num": "101",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C4-marseille-vivaux-prix-de-redon/13"
+    },
+    {
+      "course_num": "102",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C4-marseille-vivaux-prix-de-redon/14"
+    },
+    {
+      "course_num": "103",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C4-marseille-vivaux-prix-de-redon/11"
+    },
+    {
+      "course_num": "104",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C4-marseille-vivaux-prix-de-redon/4"
+    },
+    {
+      "course_num": "105",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C4-marseille-vivaux-prix-de-redon/9"
+    },
+    {
+      "course_num": "106",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C4-marseille-vivaux-prix-de-redon?prefill=1"
+    },
+    {
+      "course_num": "107",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C4-marseille-vivaux-prix-de-redon?prefill=2"
+    },
+    {
+      "course_num": "108",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C4-marseille-vivaux-prix-de-redon?prefill=29"
+    },
+    {
+      "course_num": "109",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C4-marseille-vivaux-prix-de-redon?prefill=7"
+    },
+    {
+      "course_num": "110",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C4-marseille-vivaux-prix-de-redon?prefill=3"
+    },
+    {
+      "course_num": "111",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C4-marseille-vivaux-prix-de-redon?prefill=5"
+    },
+    {
+      "course_num": "112",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C4-marseille-vivaux-prix-de-redon?prefill=13"
+    },
+    {
+      "course_num": "113",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C4-marseille-vivaux-prix-de-redon?prefill=6"
+    },
+    {
+      "course_num": "114",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C4-marseille-vivaux-prix-de-redon?prefill=8"
+    },
+    {
+      "course_num": "115",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C5-marseille-vivaux-prix-de-montolivet/13"
+    },
+    {
+      "course_num": "116",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C5-marseille-vivaux-prix-de-montolivet/5"
+    },
+    {
+      "course_num": "117",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C5-marseille-vivaux-prix-de-montolivet/6"
+    },
+    {
+      "course_num": "118",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C5-marseille-vivaux-prix-de-montolivet/8"
+    },
+    {
+      "course_num": "119",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C5-marseille-vivaux-prix-de-montolivet/12"
+    },
+    {
+      "course_num": "120",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C5-marseille-vivaux-prix-de-montolivet?prefill=1"
+    },
+    {
+      "course_num": "121",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C5-marseille-vivaux-prix-de-montolivet?prefill=2"
+    },
+    {
+      "course_num": "122",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C5-marseille-vivaux-prix-de-montolivet?prefill=29"
+    },
+    {
+      "course_num": "123",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C5-marseille-vivaux-prix-de-montolivet?prefill=7"
+    },
+    {
+      "course_num": "124",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C5-marseille-vivaux-prix-de-montolivet?prefill=3"
+    },
+    {
+      "course_num": "125",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C5-marseille-vivaux-prix-de-montolivet?prefill=5"
+    },
+    {
+      "course_num": "126",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C5-marseille-vivaux-prix-de-montolivet?prefill=13"
+    },
+    {
+      "course_num": "127",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C5-marseille-vivaux-prix-de-montolivet?prefill=6"
+    },
+    {
+      "course_num": "128",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C5-marseille-vivaux-prix-de-montolivet?prefill=8"
+    },
+    {
+      "course_num": "129",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C6-marseille-vivaux-prix-de-la-camargue/7"
+    },
+    {
+      "course_num": "130",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C6-marseille-vivaux-prix-de-la-camargue/5"
+    },
+    {
+      "course_num": "131",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C6-marseille-vivaux-prix-de-la-camargue/4"
+    },
+    {
+      "course_num": "132",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C6-marseille-vivaux-prix-de-la-camargue/1"
+    },
+    {
+      "course_num": "133",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C6-marseille-vivaux-prix-de-la-camargue?prefill=1"
+    },
+    {
+      "course_num": "134",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C6-marseille-vivaux-prix-de-la-camargue?prefill=2"
+    },
+    {
+      "course_num": "135",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C6-marseille-vivaux-prix-de-la-camargue?prefill=29"
+    },
+    {
+      "course_num": "136",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C6-marseille-vivaux-prix-de-la-camargue?prefill=7"
+    },
+    {
+      "course_num": "137",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C6-marseille-vivaux-prix-de-la-camargue?prefill=3"
+    },
+    {
+      "course_num": "138",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C6-marseille-vivaux-prix-de-la-camargue?prefill=5"
+    },
+    {
+      "course_num": "139",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C6-marseille-vivaux-prix-de-la-camargue?prefill=13"
+    },
+    {
+      "course_num": "140",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C6-marseille-vivaux-prix-de-la-camargue?prefill=6"
+    },
+    {
+      "course_num": "141",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C6-marseille-vivaux-prix-de-la-camargue?prefill=8"
+    },
+    {
+      "course_num": "142",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C7-marseille-vivaux-prix-des-gardians/8"
+    },
+    {
+      "course_num": "143",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C7-marseille-vivaux-prix-des-gardians/2"
+    },
+    {
+      "course_num": "144",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C7-marseille-vivaux-prix-des-gardians/14"
+    },
+    {
+      "course_num": "145",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C7-marseille-vivaux-prix-des-gardians/7"
+    },
+    {
+      "course_num": "146",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C7-marseille-vivaux-prix-des-gardians?prefill=1"
+    },
+    {
+      "course_num": "147",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C7-marseille-vivaux-prix-des-gardians?prefill=2"
+    },
+    {
+      "course_num": "148",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C7-marseille-vivaux-prix-des-gardians?prefill=29"
+    },
+    {
+      "course_num": "149",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C7-marseille-vivaux-prix-des-gardians?prefill=7"
+    },
+    {
+      "course_num": "150",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C7-marseille-vivaux-prix-des-gardians?prefill=3"
+    },
+    {
+      "course_num": "151",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C7-marseille-vivaux-prix-des-gardians?prefill=5"
+    },
+    {
+      "course_num": "152",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C7-marseille-vivaux-prix-des-gardians?prefill=13"
+    },
+    {
+      "course_num": "153",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C7-marseille-vivaux-prix-des-gardians?prefill=6"
+    },
+    {
+      "course_num": "154",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C7-marseille-vivaux-prix-des-gardians?prefill=8"
+    },
+    {
+      "course_num": "155",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C8-marseille-vivaux-prix-koenigsberg/5"
+    },
+    {
+      "course_num": "156",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C8-marseille-vivaux-prix-koenigsberg/7"
+    },
+    {
+      "course_num": "157",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C8-marseille-vivaux-prix-koenigsberg/4"
+    },
+    {
+      "course_num": "158",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C8-marseille-vivaux-prix-koenigsberg/9"
+    },
+    {
+      "course_num": "159",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C8-marseille-vivaux-prix-koenigsberg/6"
+    },
+    {
+      "course_num": "160",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C8-marseille-vivaux-prix-koenigsberg?prefill=1"
+    },
+    {
+      "course_num": "161",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C8-marseille-vivaux-prix-koenigsberg?prefill=2"
+    },
+    {
+      "course_num": "162",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C8-marseille-vivaux-prix-koenigsberg?prefill=29"
+    },
+    {
+      "course_num": "163",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C8-marseille-vivaux-prix-koenigsberg?prefill=7"
+    },
+    {
+      "course_num": "164",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C8-marseille-vivaux-prix-koenigsberg?prefill=3"
+    },
+    {
+      "course_num": "165",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C8-marseille-vivaux-prix-koenigsberg?prefill=5"
+    },
+    {
+      "course_num": "166",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C8-marseille-vivaux-prix-koenigsberg?prefill=13"
+    },
+    {
+      "course_num": "167",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C8-marseille-vivaux-prix-koenigsberg?prefill=6"
+    },
+    {
+      "course_num": "168",
+      "url": "https://www.zeturf.fr/fr/course/2025-11-02/R5C8-marseille-vivaux-prix-koenigsberg?prefill=8"
+    }
+  ],
+  "generated_at": "2025-11-02T17:25:22"
+}

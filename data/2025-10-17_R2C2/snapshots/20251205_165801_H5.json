@@ -1,0 +1,70 @@
+{
+  "source": "boturfers",
+  "type": "race_details",
+  "url": "https://www.boturfers.fr/course/1088213-r2c2-prix-sarl-perron-travaux-publics/partant",
+  "scraped_at": "2025-12-05T16:58:01.144003",
+  "runners": [
+    {
+      "num": "2",
+      "nom": "Miden De Fontaine",
+      "jockey": "Wiels A.",
+      "entraineur": "Marmion J.P."
+    },
+    {
+      "num": "3",
+      "nom": "Millesime Gwen",
+      "jockey": "Bridault N.",
+      "entraineur": "Bridault N."
+    },
+    {
+      "num": "4",
+      "nom": "Madras",
+      "jockey": "Thomas A.",
+      "entraineur": "Thomas A."
+    },
+    {
+      "num": "5",
+      "nom": "Moon Normandy",
+      "jockey": "Gelormini G.",
+      "entraineur": "Chavatte A."
+    },
+    {
+      "num": "6",
+      "nom": "Madame D'Erable",
+      "jockey": "Thomain Cl.",
+      "entraineur": "Thomain C."
+    },
+    {
+      "num": "7",
+      "nom": "Mick Des Pendants",
+      "jockey": "Delacour P. A.",
+      "entraineur": "Delacour G."
+    },
+    {
+      "num": "8",
+      "nom": "Moonlight Danica",
+      "jockey": "Beauvais T.",
+      "entraineur": "Buhigne C."
+    },
+    {
+      "num": "9",
+      "nom": "Maya Pont Vautier",
+      "jockey": "Anthony Dollion",
+      "entraineur": "Dollion Anthony"
+    },
+    {
+      "num": "10",
+      "nom": "Makita Berry",
+      "jockey": "Gastineau J.",
+      "entraineur": "Blot E.G."
+    },
+    {
+      "num": "11",
+      "nom": "Megafleche",
+      "jockey": "Ott L.",
+      "entraineur": "Duvaldestin Th."
+    }
+  ],
+  "correlation_id": "6de5f46b-11b3-41a3-a326-876f7d3c9640",
+  "trace_id": "6de5f46b-11b3-41a3-a326-876f7d3c9640"
+}

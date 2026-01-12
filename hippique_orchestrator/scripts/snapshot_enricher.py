@@ -18,8 +18,14 @@ def enrich_from_snapshot(snapshot_json: str, out_dir: str, phase: str = "H5", **
         else:
             # fallback : écrit un JSON minimal
             with open(out, "w", encoding="utf-8") as f:
-                json.dump({"phase": phase, "source": snapshot_json, "enriched": False}, f, ensure_ascii=False)
+                json.dump(
+                    {"phase": phase, "source": snapshot_json, "enriched": False},
+                    f,
+                    ensure_ascii=False,
+                )
     except Exception:
         with open(out, "w", encoding="utf-8") as f:
-            json.dump({"phase": phase, "source": snapshot_json, "enriched": False}, f, ensure_ascii=False)
+            json.dump(
+                {"phase": phase, "source": snapshot_json, "enriched": False}, f, ensure_ascii=False
+            )
     return {"snapshot_enriched": out, "enriched": False}

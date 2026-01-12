@@ -1,0 +1,8 @@
+{
+  "status": "no-bet",
+  "decision": "ABSTENTION",
+  "reason": "unplayable-marker",
+  "details": {
+    "marker": "non jouable: data JE/chronos manquante (snapshot-H30)"
+  }
+}

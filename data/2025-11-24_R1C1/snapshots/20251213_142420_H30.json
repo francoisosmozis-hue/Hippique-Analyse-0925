@@ -1,0 +1,100 @@
+{
+  "source": "boturfers",
+  "type": "race_details",
+  "url": "https://www.boturfers.fr/course/1089809-r1c1-prix-de-la-chaise-dieu/partant",
+  "scraped_at": "2025-12-13T14:24:20.965335",
+  "runners": [
+    {
+      "num": "1",
+      "nom": "Mystic Des Forges",
+      "jockey": "Ploquin Pau. Ph.",
+      "entraineur": "Ploquin P."
+    },
+    {
+      "num": "2",
+      "nom": "Miss Story",
+      "jockey": "Rochard B.",
+      "entraineur": "Pou Pou G.A."
+    },
+    {
+      "num": "3",
+      "nom": "Moonlight River",
+      "jockey": "Nivard F.",
+      "entraineur": "Delacour G."
+    },
+    {
+      "num": "4",
+      "nom": "Mia De Simm",
+      "jockey": "Abrivard A.",
+      "entraineur": "Le Bec J.E."
+    },
+    {
+      "num": "5",
+      "nom": "Madone Du Trieux",
+      "jockey": "Thomain D.",
+      "entraineur": "Rousselle Mme S."
+    },
+    {
+      "num": "6",
+      "nom": "Malice Speed",
+      "jockey": "Bossuet F. P.",
+      "entraineur": "Bossuet F.P."
+    },
+    {
+      "num": "7",
+      "nom": "My Love Affair",
+      "jockey": "Bigeon W.",
+      "entraineur": "Bigeon W."
+    },
+    {
+      "num": "8",
+      "nom": "Made In Atalante",
+      "jockey": "Ouvrie F.",
+      "entraineur": "Roger S."
+    },
+    {
+      "num": "9",
+      "nom": "Manzana Era",
+      "jockey": "Abrivard M.",
+      "entraineur": "Le Moel P."
+    },
+    {
+      "num": "10",
+      "nom": "Maline Des Arris",
+      "jockey": "Lagadeuc F.",
+      "entraineur": "Lebarque V."
+    },
+    {
+      "num": "11",
+      "nom": "Miss Belgrave",
+      "jockey": "Gelormini G.",
+      "entraineur": "Lerenard L."
+    },
+    {
+      "num": "12",
+      "nom": "Melody Music",
+      "jockey": "Barrier A.",
+      "entraineur": "Varin M."
+    },
+    {
+      "num": "13",
+      "nom": "Ma Liberté",
+      "jockey": "Mottier M.",
+      "entraineur": "Mottier M."
+    },
+    {
+      "num": "14",
+      "nom": "Milady Madrik",
+      "jockey": "Raffin E.",
+      "entraineur": "Gillot G."
+    },
+    {
+      "num": "15",
+      "nom": "Makarina De Bomo",
+      "jockey": "Verva P. Y.",
+      "entraineur": "Claeyssens M."
+    }
+  ],
+  "correlation_id": "adbbb763-b637-43b8-b84a-4d1ce24fcd24",
+  "trace_id": "test-trace-id"
+}

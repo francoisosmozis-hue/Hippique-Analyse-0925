@@ -10,7 +10,6 @@ os.environ["TZ"] = "Europe/Paris"
 # client = TestClient(app) # Removed
 
 
-
 # @pytest.mark.asyncio
 # async def test_schedule_to_run_flow(client, monkeypatch, mocker): # Added client
 #     # 1) Mock la fonction de construction du plan ASYNCHRONE

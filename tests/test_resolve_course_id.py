@@ -95,4 +95,3 @@ def test_resolve_course_context_supports_fr_course_urls(tmp_path: Path) -> None:
     assert ctx.course_id == "654321"
     assert ctx.meeting == "R1"
     assert ctx.race == "C1"
-

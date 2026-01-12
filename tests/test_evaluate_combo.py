@@ -1,5 +1,4 @@
 from collections import OrderedDict
-from pathlib import Path
 
 from hippique_orchestrator import simulate_wrapper as sw
 from hippique_orchestrator.simulate_wrapper import evaluate_combo
@@ -15,27 +14,30 @@ def test_default_config_path_missing(monkeypatch, tmp_path):
     assert res["status"] == "insufficient_data"
     assert res["calibration_used"] is False
     assert "Calibration" in res["message"]
-    assert str(sw.PAYOUT_CALIBRATION_PATH) in res["requirements"]
-    assert str(Path("config/payout_calibration.yaml")) in res["requirements"]
+    assert "calibration/payout_calibration.yaml" in res["requirements"]
 
 
-def test_env_path_missing(monkeypatch, tmp_path):
-    """Env var pointing to missing file should gate evaluation."""
+def test_env_path_missing(mocker, tmp_path):
+    """A missing calibration file should gate evaluation."""
     calib = tmp_path / "custom_payout.yaml"
     if calib.exists():
         calib.unlink()
-    monkeypatch.delenv("ALLOW_HEURISTIC", raising=False)
-    monkeypatch.setenv("CALIB_PATH", str(calib))
+
+    mocker.patch(
+        "hippique_orchestrator.simulate_wrapper._default_payout_calibration_path",
+        return_value=calib,
+    )
+
     res = evaluate_combo(TICKETS, bankroll=10.0)
     assert res["status"] == "insufficient_data"
-    assert "test/calib/path" in res["requirements"]
+    assert str(calib) in res["requirements"]
 
 
-def test_env_path_present(monkeypatch, tmp_path, mock_config):
+def test_env_path_present(monkeypatch, tmp_path):
     """Env var should be honoured when file exists."""
     calib = tmp_path / "custom_payout.yaml"
     calib.write_text("correlations: {}", encoding="utf-8")
-    monkeypatch.setattr(mock_config, "CALIB_PATH", str(calib)) # Set CALIB_PATH on the mocked config
+    monkeypatch.setenv("CALIB_PATH", str(calib))
 
     prob_calib = tmp_path / "probabilities.yaml"
     prob_calib.write_text(

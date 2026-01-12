@@ -26,7 +26,6 @@ from typing import Any
 
 import yaml
 
-from hippique_orchestrator.config import get_config
 from hippique_orchestrator.ev_calculator import compute_ev_roi
 
 # Explicitly configure logging for this module for debugging purposes
@@ -44,19 +43,13 @@ try:  # pragma: no cover - numpy is optional at runtime
 except Exception:  # pragma: no cover - handled gracefully
     np = None  # type: ignore
 
-config = get_config()
+
 CALIBRATION_PATH = Path("config/probabilities.yaml")
 
 
 def _default_payout_calibration_path() -> Path:
     """Return the payout calibration path configured via ``CALIB_PATH``."""
 
-    env_path = config.CALIB_PATH
-    if env_path:
-        try:
-            return Path(env_path)
-        except TypeError:  # pragma: no cover - defensive
-            pass
     config_candidate = Path("config/payout_calibration.yaml")
     if config_candidate.exists():
         return config_candidate
@@ -65,8 +58,6 @@ def _default_payout_calibration_path() -> Path:
     # calibration remains available even when ``config/`` is not populated.
     return Path("calibration/payout_calibration.yaml")
 
-
-PAYOUT_CALIBRATION_PATH = _default_payout_calibration_path()
 
 # Maximum number of entries to keep in the calibration cache.  When the limit
 # is exceeded, least recently used keys are discarded.  This prevents
@@ -331,17 +322,14 @@ def _find_correlation_groups(legs: Sequence[Any]) -> list[dict[str, Any]]:
 
 
 def _load_correlation_settings() -> None:
-    """Reload correlation settings from :data:`PAYOUT_CALIBRATION_PATH`."""
+    """Reload correlation settings from the payout calibration file."""
 
-    global _correlation_settings, _correlation_mtime, PAYOUT_CALIBRATION_PATH
+    global _correlation_settings, _correlation_mtime
 
-    new_path = _default_payout_calibration_path()
-    if new_path != PAYOUT_CALIBRATION_PATH:
-        PAYOUT_CALIBRATION_PATH = new_path
-        _correlation_mtime = 0.0
+    payout_calib_path = _default_payout_calibration_path()
 
     try:
-        mtime = PAYOUT_CALIBRATION_PATH.stat().st_mtime
+        mtime = payout_calib_path.stat().st_mtime
     except FileNotFoundError:
         _correlation_settings = {}
         _correlation_mtime = 0.0
@@ -349,7 +337,7 @@ def _load_correlation_settings() -> None:
     if mtime <= _correlation_mtime:
         return
 
-    with PAYOUT_CALIBRATION_PATH.open("r", encoding="utf-8") as fh:
+    with payout_calib_path.open("r", encoding="utf-8") as fh:
         data = yaml.safe_load(fh) or {}
 
     section = data.get("correlations") if isinstance(data, Mapping) else None
@@ -748,13 +736,14 @@ def evaluate_combo(
             "[COMBO] allow_heuristic override ignored; payout calibration is "
             "mandatory for combo evaluation."
         )
-        logger.debug(f"[evaluate_combo] allow_heuristic was True, now setting to False. Current value: {allow_heuristic}")
+        logger.debug(
+            f"[evaluate_combo] allow_heuristic was True, now setting to False. Current value: {allow_heuristic}"
+        )
         allow_heuristic = False
 
     # Ensure calib_path is always defined before first use
     if calibration is None:
-        env_calib = config.CALIB_PATH
-        calib_path = Path(env_calib) if env_calib else PAYOUT_CALIBRATION_PATH
+        calib_path = _default_payout_calibration_path()
     else:
         calib_path = Path(calibration)
 
@@ -763,17 +752,25 @@ def evaluate_combo(
     try:
         logger.debug(f"[evaluate_combo] Resolving calib_path: {calib_path}")
         calibration_used = calib_path.is_file()
-        logger.debug(f"[evaluate_combo] calibration_used (calib_path.is_file()): {calibration_used}")
+        logger.debug(
+            f"[evaluate_combo] calibration_used (calib_path.is_file()): {calibration_used}"
+        )
     except OSError as e:
-        logger.error(f"[evaluate_combo] OSError when checking calib_path.is_file(): {e}", exc_info=True)
+        logger.error(
+            f"[evaluate_combo] OSError when checking calib_path.is_file(): {e}", exc_info=True
+        )
         calibration_used = False
 
     if not calibration_used:
-        logger.debug(f"[evaluate_combo] calibration_used is False. allow_heuristic: {allow_heuristic}")
+        logger.debug(
+            f"[evaluate_combo] calibration_used is False. allow_heuristic: {allow_heuristic}"
+        )
         notes.append("no_calibration_yaml")
         requirements.append(str(calib_path))
         if not allow_heuristic:
-            logger.debug("[evaluate_combo] Returning insufficient_data due to no calibration and allow_heuristic is False.")
+            logger.debug(
+                "[evaluate_combo] Returning insufficient_data due to no calibration and allow_heuristic is False."
+            )
             return {
                 "status": "insufficient_data",
                 "message": (
@@ -786,8 +783,10 @@ def evaluate_combo(
                 "notes": notes,
                 "requirements": requirements,
             }
-        else: # calibration_used is False, but allow_heuristic is True. Proceeding with heuristic.
-            logger.debug("[evaluate_combo] Proceeding with heuristic (allow_heuristic is True despite no calibration).")
+        else:  # calibration_used is False, but allow_heuristic is True. Proceeding with heuristic.
+            logger.debug(
+                "[evaluate_combo] Proceeding with heuristic (allow_heuristic is True despite no calibration)."
+            )
 
     # This path continues to execute `compute_ev_roi` and eventually `return result`
 

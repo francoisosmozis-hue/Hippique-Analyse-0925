@@ -1,4 +1,5 @@
 """CLI to rebalance the daily bankroll using analysis artefacts."""
+
 from __future__ import annotations
 
 import argparse
@@ -46,15 +47,10 @@ def _print_plan(plan) -> None:
     )
 
 
-
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "inputs", nargs="+", help="analysis.json files or directories"
-    )
-    parser.add_argument(
-        "--bankroll", type=float, required=True, help="Daily bankroll to allocate"
-    )
+    parser.add_argument("inputs", nargs="+", help="analysis.json files or directories")
+    parser.add_argument("--bankroll", type=float, required=True, help="Daily bankroll to allocate")
     parser.add_argument(
         "--target-ror",
         type=float,

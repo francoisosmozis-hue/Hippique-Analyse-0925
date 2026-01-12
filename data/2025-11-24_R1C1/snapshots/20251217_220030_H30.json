@@ -1,0 +1,100 @@
+{
+  "source": "boturfers",
+  "type": "race_details",
+  "url": "https://www.boturfers.fr/quinte-du-jour/partant",
+  "scraped_at": "2025-12-17T22:00:30.091030",
+  "runners": [
+    {
+      "num": "2",
+      "nom": "Hautbrion Colmi",
+      "jockey": "Abrivard M.",
+      "entraineur": "Mary C.A."
+    },
+    {
+      "num": "3",
+      "nom": "Happy Danover",
+      "jockey": "Gelormini G.",
+      "entraineur": "Provoost S."
+    },
+    {
+      "num": "4",
+      "nom": "Ipalio",
+      "jockey": "Martens Ch.",
+      "entraineur": "Vanberghen A."
+    },
+    {
+      "num": "5",
+      "nom": "Ileo Pierji",
+      "jockey": "Raffin E.",
+      "entraineur": "Mary C.A."
+    },
+    {
+      "num": "6",
+      "nom": "Hold Up Des Ventes",
+      "jockey": "Gilard M.",
+      "entraineur": "Gilard M."
+    },
+    {
+      "num": "7",
+      "nom": "Favici Pasmarick",
+      "jockey": "Barrier A.",
+      "entraineur": "Danet P."
+    },
+    {
+      "num": "8",
+      "nom": "Halma D'Amer",
+      "jockey": "Thomain D.",
+      "entraineur": "Dreux C."
+    },
+    {
+      "num": "9",
+      "nom": "Iron Du Gers",
+      "jockey": "Bazire J. M.",
+      "entraineur": "Bazire N."
+    },
+    {
+      "num": "10",
+      "nom": "Haida Sautonne",
+      "jockey": "Briand Th.",
+      "entraineur": "Sassier M."
+    },
+    {
+      "num": "11",
+      "nom": "Histoire Phils",
+      "jockey": "Desmigneux F.",
+      "entraineur": "Filograsso J."
+    },
+    {
+      "num": "12",
+      "nom": "Feu De Revolte",
+      "jockey": "Nivard F.",
+      "entraineur": "Jajolet R."
+    },
+    {
+      "num": "13",
+      "nom": "Hector De Bassiere",
+      "jockey": "Lagadeuc F.",
+      "entraineur": "Desaunette P.L."
+    },
+    {
+      "num": "14",
+      "nom": "Hors Bord",
+      "jockey": "Verva P. Y.",
+      "entraineur": "Chaineux J.M."
+    },
+    {
+      "num": "15",
+      "nom": "Impulse Julry",
+      "jockey": "Gauvin J. P.",
+      "entraineur": "Gauvin J.P."
+    },
+    {
+      "num": "16",
+      "nom": "Honey King",
+      "jockey": "Ploquin Pau. Ph.",
+      "entraineur": "Izzo M."
+    }
+  ],
+  "correlation_id": "95a708cf-8d3d-4b7c-84ed-8d0155f61bd8",
+  "trace_id": "test-trace-id"
+}

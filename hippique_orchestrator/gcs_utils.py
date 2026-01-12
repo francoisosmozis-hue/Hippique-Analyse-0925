@@ -7,15 +7,15 @@ from pathlib import Path
 
 from google.cloud import storage
 
-from hippique_orchestrator.config import get_config
+from hippique_orchestrator import config
 from hippique_orchestrator.logging_utils import get_logger
 
 logger = get_logger(__name__)
 
-_gcs_client = None
-config = get_config()
+_gcs_client: storage.Client | None = None
 
-def _get_gcs_client():
+
+def _get_gcs_client() -> storage.Client | None:
     """Returns a GCS client, initializing it if necessary."""
     global _gcs_client
     if _gcs_client is None:
@@ -26,14 +26,17 @@ def _get_gcs_client():
             return None
     return _gcs_client
 
+
 def is_gcs_enabled() -> bool:
-    return bool(config.gcs_bucket)
+    return bool(config.BUCKET_NAME)
+
 
 def disabled_reason() -> str | None:
     """Return a reason if GCS is disabled."""
     if not is_gcs_enabled():
         return "GCS_BUCKET_not_set"
     return None
+
 
 def upload_file(local_path: str | os.PathLike[str]) -> None:
     """
@@ -42,13 +45,12 @@ def upload_file(local_path: str | os.PathLike[str]) -> None:
     if not is_gcs_enabled():
         return
 
-
     client = _get_gcs_client()
     if not client:
         return
 
     try:
-        bucket = client.bucket(config.gcs_bucket)
+        bucket = client.bucket(config.BUCKET_NAME)
         local_file = Path(local_path)
 
         if not local_file.exists():
@@ -69,17 +71,20 @@ def upload_file(local_path: str | os.PathLike[str]) -> None:
             try:
                 start_index = parts.index("snapshots")
             except ValueError:
-                start_index = parts.index("analyses")
+                try:
+                    start_index = parts.index("analyses")
+                except ValueError:
+                    # If none of the known folders are found, use the whole path
+                    start_index = 0
         gcs_path_parts = parts[start_index:]
 
         # Construct the GCS path using the configured prefix
-        gcs_path = f"{config.gcs_prefix}/{'/'.join(gcs_path_parts)}"
+        gcs_path = f"prod/{'/'.join(gcs_path_parts)}"
 
         blob = bucket.blob(gcs_path)
         blob.upload_from_filename(str(local_file))
 
-        logger.debug(f"Uploaded {local_path} → gs://{config.gcs_bucket}/{gcs_path}")
+        logger.debug(f"Uploaded {local_path} → gs://{config.BUCKET_NAME}/{gcs_path}")
 
     except Exception as e:
         logger.error(f"Failed to upload {local_path} to GCS: {e}", exc_info=e)
-

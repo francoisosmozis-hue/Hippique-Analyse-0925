@@ -41,26 +41,32 @@ tmp_upload_dir = None
 keyfile = None
 certfile = None
 
+
 # Logging hooks
 def on_starting(server):
     """Called just before the master process is initialized."""
     server.log.info("Starting Hippique Orchestrator")
 
+
 def on_reload(server):
     """Called to recycle workers during a reload via SIGHUP."""
     server.log.info("Reloading workers")
+
 
 def when_ready(server):
     """Called just after the server is started."""
     server.log.info(f"Server ready. Listening on {bind}")
 
+
 def on_exit(server):
     """Called just before exiting Gunicorn."""
     server.log.info("Shutting down Hippique Orchestrator")
 
+
 def worker_int(worker):
     """Called when a worker receives the SIGINT or SIGQUIT signal."""
     worker.log.info(f"Worker {worker.pid} interrupted")
+
 
 def worker_abort(worker):
     """Called when a worker receives the SIGABRT signal."""

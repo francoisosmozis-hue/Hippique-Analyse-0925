@@ -1,0 +1,19 @@
+{
+  "race_id": "R1C1",
+  "status": "no-data",
+  "mode": "hminus5",
+  "budget": 5.0,
+  "inputs": {
+    "h30": null,
+    "h5": "data/snapshots/R1C1/h5.json",
+    "partants": null,
+    "stats": null,
+    "chronos": null
+  },
+  "reason": "missing_inputs:h30,partants",
+  "notes": [
+    "exotics disabled: stats_je missing",
+    "exotics disabled: chronos missing"
+  ],
+  "exotics_disabled": true
+}

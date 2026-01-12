@@ -1,0 +1,77 @@
+{
+  "status": "ok",
+  "rc": "R4C6",
+  "phase": "H30",
+  "fetched_at": "2025-11-11T18:40:04.987491",
+  "payload": {
+    "rc": "R4C6",
+    "hippodrome": null,
+    "discipline": null,
+    "date": "2025-11-11",
+    "runners": [
+      {
+        "num": "1",
+        "nom": "JARDY DES LANDES",
+        "cote": null
+      },
+      {
+        "num": "2",
+        "nom": "HEDJA",
+        "cote": null
+      },
+      {
+        "num": "3",
+        "nom": "JHA",
+        "cote": null
+      },
+      {
+        "num": "4",
+        "nom": "JULIANA DU LOISIR",
+        "cote": null
+      },
+      {
+        "num": "5",
+        "nom": "HELLINE SERVINOISE",
+        "cote": null
+      },
+      {
+        "num": "6",
+        "nom": "JASON D'EOLE",
+        "cote": null
+      },
+      {
+        "num": "7",
+        "nom": "JASMINE DE LYONS\n\t\t\t(NP)",
+        "cote": null
+      },
+      {
+        "num": "8",
+        "nom": "JUAN LES PINS",
+        "cote": null
+      },
+      {
+        "num": "9",
+        "nom": "HYPTIS",
+        "cote": null
+      },
+      {
+        "num": "10",
+        "nom": "JOBERMAN DU HOME",
+        "cote": null
+      }
+    ],
+    "id2name": {
+      "1": "JARDY DES LANDES",
+      "2": "HEDJA",
+      "3": "JHA",
+      "4": "JULIANA DU LOISIR",
+      "5": "HELLINE SERVINOISE",
+      "6": "JASON D'EOLE",
+      "7": "JASMINE DE LYONS\n\t\t\t(NP)",
+      "8": "JUAN LES PINS",
+      "9": "HYPTIS",
+      "10": "JOBERMAN DU HOME"
+    },
+    "odds": {}
+  }
+}

@@ -94,3 +94,10 @@ test_*.py
 *.temp
 *.bak
 *.old
+
+# Caches and artifacts
+.mypy_cache/
+.ruff_cache/
+out/
+.out/
+samples/

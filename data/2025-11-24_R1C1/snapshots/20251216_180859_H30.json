@@ -1,0 +1,52 @@
+{
+  "source": "boturfers",
+  "type": "race_details",
+  "url": "https://www.boturfers.fr/course/1090455-r1c1-prix-de-pardies/partant",
+  "scraped_at": "2025-12-16T18:08:59.248953",
+  "runners": [
+    {
+      "num": "1",
+      "nom": "Bon Conseil",
+      "jockey": "Delepine Mr Y.",
+      "entraineur": "Delaunay (S) J."
+    },
+    {
+      "num": "2",
+      "nom": "Glasgow Du Berlais",
+      "jockey": "Zuliani Mr L.",
+      "entraineur": "Lageneste & Macaire (S)"
+    },
+    {
+      "num": "3",
+      "nom": "Magic Marvel",
+      "jockey": "Chailloleau M.",
+      "entraineur": "Peltier (S) P&c."
+    },
+    {
+      "num": "4",
+      "nom": "Gardons Le Sourire",
+      "jockey": "Dumouch Mr T.",
+      "entraineur": "Leenders Gab."
+    },
+    {
+      "num": "5",
+      "nom": "Losange Vert",
+      "jockey": "Meunier G.",
+      "entraineur": "Bressou D."
+    },
+    {
+      "num": "6",
+      "nom": "Nomade",
+      "jockey": "Lelievre A.",
+      "entraineur": "Leray (S) E."
+    },
+    {
+      "num": "7",
+      "nom": "Diamond Dice",
+      "jockey": "Zuliani Mr A.",
+      "entraineur": "George & A N."
+    }
+  ],
+  "correlation_id": "1b30c14c-ca0d-42fa-ade2-5e2b862a7829",
+  "trace_id": "test-trace-id"
+}

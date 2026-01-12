@@ -1,0 +1,362 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.0.1, pluggy-1.6.0 -- /usr/bin/python
+cachedir: .pytest_cache
+rootdir: /home/francoisosmozis/hippique-orchestrator
+configfile: pytest.ini (WARNING: ignoring pytest config in setup.cfg!)
+testpaths: tests
+plugins: anyio-3.7.1, env-1.2.0, cov-7.0.0, mock-3.14.0, timeout-2.4.0, xdist-3.8.0, asyncio-0.23.7
+timeout: 300.0s
+timeout method: signal
+timeout func_only: False
+asyncio: mode=Mode.AUTO
+collecting ... 
+----------------------------- live log collection ------------------------------
+2025-12-04 21:41:24 [INFO] Loading configuration...
+2025-12-04 21:41:24 [INFO] Configuration loaded: PROJECT_ID=test-project, GCS_BUCKET=None, MODE=tasks
+2025-12-04 21:41:26 [WARNING] One or more core modules not found. Using mock implementations.
+collected 221 items
+
+tests/test_analysis_utils.py::test_normalise_text[None-] 
+-------------------------------- live log setup --------------------------------
+2025-12-04 21:41:28 [INFO] Loading configuration...
+2025-12-04 21:41:28 [INFO] Configuration loaded: PROJECT_ID=test-project, GCS_BUCKET=test-bucket, MODE=tasks
+PASSED                                                                   [  0%]
+tests/test_analysis_utils.py::test_normalise_text[  \xc9curie Sp\xe9ciale  -ecurie speciale] PASSED [  0%]
+tests/test_analysis_utils.py::test_normalise_text[  -] PASSED            [  1%]
+tests/test_analysis_utils.py::test_normalise_text[TROT-trot] PASSED      [  1%]
+tests/test_analysis_utils.py::test_normalise_text[handicap-handicap] PASSED [  2%]
+tests/test_analysis_utils.py::test_coerce_partants[14-14] PASSED         [  2%]
+tests/test_analysis_utils.py::test_coerce_partants[14.0-14] PASSED       [  3%]
+tests/test_analysis_utils.py::test_coerce_partants[14 partants-14] PASSED [  3%]
+tests/test_analysis_utils.py::test_coerce_partants[environ 14-14] PASSED [  4%]
+tests/test_analysis_utils.py::test_coerce_partants[None-None] PASSED     [  4%]
+tests/test_analysis_utils.py::test_coerce_partants[True-None] PASSED     [  4%]
+tests/test_analysis_utils.py::test_coerce_partants[N/A-None] PASSED      [  5%]
+tests/test_analysis_utils.py::test_coerce_partants[-5-None] PASSED       [  5%]
+tests/test_analysis_utils.py::test_compute_overround_cap_default PASSED  [  6%]
+tests/test_analysis_utils.py::test_compute_overround_cap_flat_handicap_large_field PASSED [  6%]
+tests/test_analysis_utils.py::test_compute_overround_cap_flat_large_field_from_label PASSED [  7%]
+tests/test_analysis_utils.py::test_compute_overround_cap_small_field_uses_default PASSED [  7%]
+tests/test_analysis_utils.py::test_compute_overround_cap_updates_context PASSED [  8%]
+tests/test_api_endpoints.py::test_healthz_endpoint 
+-------------------------------- live log call ---------------------------------
+2025-12-04 21:41:29 [INFO] HTTP Request: GET http://testserver/healthz "HTTP/1.1 200 OK"
+PASSED                                                                   [  8%]
+tests/test_api_endpoints.py::test_api_pronostics_no_data 
+-------------------------------- live log call ---------------------------------
+2025-12-04 21:41:29 [INFO] HTTP Request: GET http://testserver/api/pronostics?date=2025-12-04 "HTTP/1.1 200 OK"
+PASSED                                                                   [  9%]
+tests/test_api_endpoints.py::test_api_pronostics_with_mock_data 
+-------------------------------- live log call ---------------------------------
+2025-12-04 21:41:29 [INFO] HTTP Request: GET http://testserver/api/pronostics?date=2025-12-04 "HTTP/1.1 200 OK"
+PASSED                                                                   [  9%]
+tests/test_api_endpoints.py::test_tasks_snapshot_9h 
+-------------------------------- live log call ---------------------------------
+2025-12-04 21:41:29 [INFO] HTTP Request: POST http://testserver/tasks/snapshot-9h "HTTP/1.1 202 Accepted"
+PASSED                                                                   [  9%]
+tests/test_api_endpoints.py::test_tasks_run_phase 
+-------------------------------- live log call ---------------------------------
+2025-12-04 21:41:29 [INFO] HTTP Request: POST http://testserver/tasks/run-phase "HTTP/1.1 200 OK"
+PASSED                                                                   [ 10%]
+tests/test_api_endpoints.py::test_tasks_bootstrap_day 
+-------------------------------- live log call ---------------------------------
+2025-11-24 01:00:00 [INFO] HTTP Request: POST http://testserver/tasks/bootstrap-day "HTTP/1.1 202 Accepted"
+PASSED                                                                   [ 10%]
+tests/test_api_endpoints.py::test_api_pronostics_handles_malformed_json 
+-------------------------------- live log call ---------------------------------
+2025-12-04 21:41:30 [INFO] HTTP Request: GET http://testserver/api/pronostics?date=2025-12-04 "HTTP/1.1 200 OK"
+PASSED                                                                   [ 11%]
+tests/test_api_endpoints.py::test_api_pronostics_aggregates_multiple_files 
+-------------------------------- live log call ---------------------------------
+2025-12-04 21:41:30 [INFO] HTTP Request: GET http://testserver/api/pronostics?date=2025-12-04 "HTTP/1.1 200 OK"
+PASSED                                                                   [ 11%]
+tests/test_api_endpoints.py::test_api_pronostics_invalid_date_format 
+-------------------------------- live log call ---------------------------------
+2025-12-04 21:41:30 [INFO] HTTP Request: GET http://testserver/api/pronostics?date=not-a-date "HTTP/1.1 422 Unprocessable Entity"
+PASSED                                                                   [ 12%]
+tests/test_dutching_allocation.py::test_equal_profit_stakes_sum PASSED   [ 12%]
+tests/test_env_utils.py::test_get_env_missing_warns 
+-------------------------------- live log call ---------------------------------
+2025-12-04 21:41:30 [WARNING] Environment variable FOO not set; using default 'bar'
+PASSED                                                                   [ 13%]
+tests/test_env_utils.py::test_get_env_required_missing_raises PASSED     [ 13%]
+tests/test_env_utils.py::test_get_env_alias_support 
+-------------------------------- live log call ---------------------------------
+2025-12-04 21:41:30 [INFO] Environment variable FOO_ALIAS=42 used as alias for FOO
+2025-12-04 21:41:30 [INFO] Environment variable FOO_ALIAS=42 overrides default 0
+PASSED                                                                   [ 14%]
+tests/test_ev_calculator.py::test_single_bet_ev_positive_and_negative PASSED [ 14%]
+tests/test_ev_calculator.py::test_dutching_group_equal_profit PASSED     [ 14%]
+tests/test_ev_calculator.py::test_combined_bet_with_simulator PASSED     [ 15%]
+tests/test_ev_calculator.py::test_simulate_fn_called_once_for_identical_legs PASSED [ 15%]
+tests/test_ev_calculator.py::test_kelly_cap_respected PASSED             [ 16%]
+tests/test_ev_calculator.py::test_invalid_probability_raises PASSED      [ 16%]
+tests/test_ev_calculator.py::test_invalid_odds_raises PASSED             [ 17%]
+tests/test_ev_calculator.py::test_budget_must_be_positive PASSED         [ 17%]
+tests/test_ev_calculator.py::test_apply_dutching_ignores_invalid_odds PASSED [ 18%]
+tests/test_ev_calculator.py::test_stakes_normalized_when_exceeding_budget PASSED [ 18%]
+tests/test_ev_calculator.py::test_rounded_stakes_sum_to_budget PASSED    [ 19%]
+tests/test_ev_calculator.py::test_ticket_metrics_and_std_dev PASSED      [ 19%]
+tests/test_ev_calculator.py::test_average_clv_from_closing_odds PASSED   [ 19%]
+tests/test_ev_calculator.py::test_enforce_ror_threshold_reduces_high_risk_pack PASSED [ 20%]
+tests/test_ev_calculator.py::test_enforce_ror_threshold_preserves_safe_pack PASSED [ 20%]
+tests/test_ev_calculator.py::test_risk_of_ruin_decreases_with_lower_variance PASSED [ 21%]
+tests/test_ev_calculator.py::test_risk_of_ruin_respects_baseline_variance PASSED [ 21%]
+tests/test_ev_calculator.py::test_covariance_increases_ror_for_shared_runner PASSED [ 22%]
+tests/test_ev_calculator.py::test_optimized_allocation_respects_budget_and_improves_ev PASSED [ 22%]
+tests/test_ev_calculator.py::test_green_flag_true_when_thresholds_met PASSED [ 23%]
+tests/test_ev_calculator.py::test_green_flag_failure_reasons[tickets0-100-expected_reasons0] PASSED [ 23%]
+tests/test_ev_calculator.py::test_green_flag_failure_reasons[tickets1-100-expected_reasons1] PASSED [ 23%]
+tests/test_ev_calculator.py::test_green_flag_failure_reasons[tickets2-10-expected_reasons2] PASSED [ 24%]
+tests/test_ev_calculator.py::test_variance_cap_triggers_failure PASSED   [ 24%]
+tests/test_ev_thresholds.py::test_ev_sp_below_default_threshold 
+-------------------------------- live log call ---------------------------------
+2025-12-04 21:41:30 [INFO] [validate_ev] context {'p_success': None, 'payout_expected': None, 'stake': None, 'EV_ratio': None}
+PASSED                                                                   [ 25%]
+tests/test_ev_thresholds.py::test_ev_global_below_default_threshold 
+-------------------------------- live log call ---------------------------------
+2025-12-04 21:41:30 [INFO] [validate_ev] context {'p_success': None, 'payout_expected': None, 'stake': None, 'EV_ratio': None}
+PASSED                                                                   [ 25%]
+tests/test_ev_thresholds.py::test_validate_policy_roi_below_threshold PASSED [ 26%]
+tests/test_ev_thresholds.py::test_validate_policy_raises_on_low_roi_message PASSED [ 26%]
+tests/test_evaluate_combo.py::test_default_config_path_missing PASSED    [ 27%]
+tests/test_evaluate_combo.py::test_env_path_missing PASSED               [ 27%]
+tests/test_evaluate_combo.py::test_env_path_present PASSED               [ 28%]
+tests/test_evaluate_combo.py::test_gates_when_calibration_missing PASSED [ 28%]
+tests/test_evaluate_combo.py::test_override_missing_calibration 
+-------------------------------- live log call ---------------------------------
+2025-12-04 21:41:30 [WARNING] [COMBO] allow_heuristic override ignored; payout calibration is mandatory for combo evaluation.
+PASSED                                                                   [ 28%]
+tests/test_evaluate_combo.py::test_with_calibration PASSED               [ 29%]
+tests/test_evaluate_combo.py::test_marks_unreliable_probabilities 
+-------------------------------- live log call ---------------------------------
+2025-12-04 21:41:30 [WARNING] [COMBO] allow_heuristic override ignored; payout calibration is mandatory for combo evaluation.
+PASSED                                                                   [ 29%]
+tests/test_fetch_je_stats.py::test_normalise_text[  Test String  -teststring] PASSED [ 30%]
+tests/test_fetch_je_stats.py::test_normalise_text[\xc9curie Sp\xe9ciale-ecuriespeciale] PASSED [ 30%]
+tests/test_fetch_je_stats.py::test_normalise_text[J. VANMEERBECK-jvanmeerbeck] PASSED [ 31%]
+tests/test_fetch_je_stats.py::test_parse_percentage[R\xe9ussite jockey/cheval : 15%-15.0] PASSED [ 31%]
+tests/test_fetch_je_stats.py::test_parse_percentage[Ratio: 3 / 10-30.0] PASSED [ 32%]
+tests/test_fetch_je_stats.py::test_parse_percentage[Victoires : 5-5.0] PASSED [ 32%]
+tests/test_fetch_je_stats.py::test_parse_percentage[Taux de r\xe9ussite : 0.25-25.0] PASSED [ 33%]
+tests/test_fetch_je_stats.py::test_parse_percentage[Just a number 42.5 here-42.5] PASSED [ 33%]
+tests/test_fetch_je_stats.py::test_parse_percentage[No number here-None] PASSED [ 33%]
+tests/test_fetch_je_stats.py::test_parse_percentage[-None] PASSED        [ 34%]
+tests/test_fetch_je_stats.py::test_parse_percentage[Victoires=10-10.0] PASSED [ 34%]
+tests/test_fetch_je_stats.py::test_parse_percentage[12,5%-12.5] PASSED   [ 35%]
+tests/test_fetch_je_stats.py::test_extract_links_from_horse_page PASSED  [ 35%]
+tests/test_fetch_je_stats.py::test_extract_rate_from_profile PASSED      [ 36%]
+tests/test_fetch_je_stats.py::test_discover_horse_url_by_name PASSED     [ 36%]
+tests/test_fetch_je_stats.py::test_discover_horse_url_by_name_http_error 
+-------------------------------- live log call ---------------------------------
+2025-12-04 21:41:30 [WARNING] Failed to fetch Geny search results for Bold Eagle
+PASSED                                                                   [ 37%]
+tests/test_fetch_je_stats.py::test_parse_horse_percentages_success PASSED [ 37%]
+tests/test_fetch_je_stats.py::test_parse_horse_percentages_handles_failures 
+-------------------------------- live log call ---------------------------------
+2025-12-04 21:41:30 [WARNING] Failed to fetch horse page http://horse.url
+PASSED                                                                   [ 38%]
+tests/test_fetch_je_stats.py::test_collect_stats_integration PASSED      [ 38%]
+tests/test_guardrails.py::test_evaluate_guardrail_uses_multiple_paths PASSED [ 38%]
+tests/test_guardrails.py::test_evaluate_guardrail_detects_low_values PASSED [ 39%]
+tests/test_guardrails.py::test_load_json_raises_on_non_object PASSED     [ 39%]
+tests/test_guardrails.py::test_extract_metric_returns_zero_when_missing PASSED [ 40%]
+tests/test_guardrails.py::test_append_env_writes_to_file PASSED          [ 40%]
+tests/test_guardrails.py::test_main_success_path PASSED                  [ 41%]
+tests/test_guardrails.py::test_main_abstention_path_creates_report PASSED [ 41%]
+tests/test_guardrails.py::test_main_file_not_found PASSED                [ 42%]
+tests/test_import_acde.py::test_import_analyse_courses_du_jour_enrichie PASSED [ 42%]
+tests/test_kelly.py::test_kelly_fraction[0.5-3.0-1.0-1.0-0.25] PASSED    [ 42%]
+tests/test_kelly.py::test_kelly_fraction[0.2-3.0-1.0-1.0-0.0] PASSED     [ 43%]
+tests/test_kelly.py::test_kelly_fraction[0.3333333333333333-3.0-1.0-1.0-0.0] PASSED [ 43%]
+tests/test_kelly.py::test_kelly_fraction[0.5-3.0-0.5-1.0-0.125] PASSED   [ 44%]
+tests/test_kelly.py::test_kelly_fraction[0.8-3.0-1.0-0.2-0.2] PASSED     [ 44%]
+tests/test_kelly.py::test_kelly_fraction[0.8-3.0-0.5-0.3-0.3] PASSED     [ 45%]
+tests/test_kelly.py::test_kelly_fraction[1.5-3.0-1.0-1.0-0.0] PASSED     [ 45%]
+tests/test_kelly.py::test_kelly_fraction[0.0-3.0-1.0-1.0-0.0] PASSED     [ 46%]
+tests/test_kelly.py::test_kelly_fraction[-0.5-3.0-1.0-1.0-0.0] PASSED    [ 46%]
+tests/test_kelly.py::test_kelly_fraction[0.5-1.0-1.0-1.0-0.0] PASSED     [ 47%]
+tests/test_kelly.py::test_kelly_fraction[0.5-0.5-1.0-1.0-0.0] PASSED     [ 47%]
+tests/test_kelly.py::test_kelly_fraction[0.5-3.0--0.5-1.0-0.25] PASSED   [ 47%]
+tests/test_kelly.py::test_kelly_fraction[0.8-3.0-1.0-1.5-0.7] PASSED     [ 48%]
+tests/test_kelly.py::test_kelly_stake PASSED                             [ 48%]
+tests/test_kelly_cap.py::test_kelly_cap_limits_stakes PASSED             [ 49%]
+tests/test_kelly_cap.py::test_validate_budget_ok PASSED                  [ 49%]
+tests/test_kelly_cap.py::test_validate_budget_total_exceeded PASSED      [ 50%]
+tests/test_kelly_cap.py::test_validate_budget_horse_cap_exceeded PASSED  [ 50%]
+tests/test_logging_io.py::test_csv_header_and_columns PASSED             [ 51%]
+tests/test_no_vig_ev.py::test_no_vig_sum_to_one PASSED                   [ 51%]
+tests/test_no_vig_ev.py::test_ev_drops_when_margin_higher PASSED         [ 52%]
+tests/test_online_fetch_boturfers.py::test_fetch_boturfers_race_details_success PASSED [ 52%]
+tests/test_online_fetch_boturfers.py::test_fetch_boturfers_race_details_fails PASSED [ 52%]
+tests/test_online_fetch_start_time.py::test_extract_start_time_from_programme_row[<td class='hour'>14h05</td>-14:05] PASSED [ 53%]
+tests/test_online_fetch_start_time.py::test_extract_start_time_from_programme_row[<td class='hour'> 9h30 </td>-09:30] PASSED [ 53%]
+tests/test_online_fetch_start_time.py::test_extract_start_time_from_programme_row[<td class='hour'>21:45</td>-21:45] PASSED [ 54%]
+tests/test_online_fetch_start_time.py::test_extract_start_time_from_programme_row[<td class='hour'>08:15</td>-08:15] PASSED [ 54%]
+tests/test_online_fetch_start_time.py::test_extract_start_time_from_programme_row[<td class='hour'>12h00</td>-12:00] PASSED [ 55%]
+tests/test_online_fetch_start_time.py::test_extract_start_time_from_programme_row[<td class='hour'>No time here</td>-None] PASSED [ 55%]
+tests/test_online_fetch_start_time.py::test_extract_start_time_from_programme_row[<td></td>-None] PASSED [ 56%]
+tests/test_online_fetch_zeturf.py::test_placeholder SKIPPED (All tes...) [ 56%]
+tests/test_p_finale_export.py::test_export_creates_csv_and_excel PASSED  [ 57%]
+tests/test_plan.py::test_build_plan_async PASSED                         [ 57%]
+tests/test_plan.py::test_build_plan_structure PASSED                     [ 57%]
+tests/test_plan.py::test_build_plan_sync_wrapper PASSED                  [ 58%]
+tests/test_plan.py::test_build_plan_sync_wrapper_raises_in_event_loop PASSED [ 58%]
+tests/test_resolve_course_id.py::test_resolve_course_context_with_fallback PASSED [ 59%]
+tests/test_resolve_course_id.py::test_resolve_course_context_picks_closest_future_entry PASSED [ 59%]
+tests/test_resolve_course_id.py::test_resolve_course_context_errors_when_empty PASSED [ 60%]
+tests/test_resolve_course_id.py::test_iter_schedule_entries_supports_fr_course_urls PASSED [ 60%]
+tests/test_resolve_course_id.py::test_resolve_course_context_supports_fr_course_urls PASSED [ 61%]
+tests/test_roi_rebalancer.py::test_compute_allocation_plan_prioritises_high_ev PASSED [ 61%]
+tests/test_roi_rebalancer.py::test_plan_serialisation_round_trip PASSED  [ 61%]
+tests/test_roi_rebalancer.py::test_allocation_plan_requires_positive_bankroll PASSED [ 62%]
+tests/test_schedule_run.py::test_schedule_to_run_flow 
+-------------------------------- live log call ---------------------------------
+2025-12-04 21:41:31 [INFO] HTTP Request: GET https://www.genybet.fr/reunions/04-12-2025 "HTTP/1.1 200 OK"
+2025-12-04 21:41:32 [INFO] Fetching programme from data source via URL: https://www.boturfers.fr/programme-pmu-du-jour
+2025-12-04 21:41:32 [INFO] Début du scraping du programme Boturfers.
+2025-12-04 21:41:32 [INFO] Scraping du programme Boturfers réussi. 49 courses trouvées.
+2025-12-04 21:41:32 [INFO] HTTP Request: POST http://testserver/schedule "HTTP/1.1 202 Accepted"
+PASSED                                                                   [ 62%]
+tests/test_service.py::test_health_check 
+-------------------------------- live log call ---------------------------------
+2025-12-04 21:41:32 [INFO] HTTP Request: GET http://testserver/healthz "HTTP/1.1 200 OK"
+PASSED                                                                   [ 63%]
+tests/test_service.py::test_run_endpoint_success 
+-------------------------------- live log call ---------------------------------
+2025-12-04 21:41:32 [INFO] HTTP Request: POST http://testserver/run "HTTP/1.1 200 OK"
+PASSED                                                                   [ 63%]
+tests/test_service.py::test_schedule_endpoint_success 
+-------------------------------- live log call ---------------------------------
+2025-12-04 21:41:32 [INFO] HTTP Request: POST http://testserver/schedule "HTTP/1.1 202 Accepted"
+PASSED                                                                   [ 64%]
+tests/test_service.py::test_schedule_endpoint_handles_scheduling_error 
+-------------------------------- live log call ---------------------------------
+2025-12-04 21:41:32 [INFO] HTTP Request: POST http://testserver/schedule "HTTP/1.1 202 Accepted"
+PASSED                                                                   [ 64%]
+tests/test_service.py::test_debug_parse_endpoint 
+-------------------------------- live log call ---------------------------------
+2025-12-04 21:41:32 [INFO] HTTP Request: GET http://testserver/debug/parse?date=2025-01-01 "HTTP/1.1 200 OK"
+PASSED                                                                   [ 65%]
+tests/test_service_smoke.py::test_health_check 
+-------------------------------- live log call ---------------------------------
+2025-12-04 21:41:32 [INFO] HTTP Request: GET http://testserver/healthz "HTTP/1.1 200 OK"
+PASSED                                                                   [ 65%]
+tests/test_service_smoke.py::test_pronostics_endpoint_returns_ok_when_no_data 
+-------------------------------- live log call ---------------------------------
+2025-12-04 21:41:32 [INFO] HTTP Request: GET http://testserver/api/pronostics?date=2025-11-28 "HTTP/1.1 200 OK"
+PASSED                                                                   [ 66%]
+tests/test_service_smoke.py::test_pronostics_endpoint_returns_data_when_file_exists 
+-------------------------------- live log call ---------------------------------
+2025-12-04 21:41:32 [INFO] HTTP Request: GET http://testserver/api/pronostics?date=2025-11-28 "HTTP/1.1 200 OK"
+PASSED                                                                   [ 66%]
+tests/test_simulate_ev_module.py::test_implied_probs_normalizes PASSED   [ 66%]
+tests/test_simulate_ev_module.py::test_normalize_overround_balances_dict PASSED [ 67%]
+tests/test_simulate_ev_module.py::test_kelly_fraction_basic PASSED       [ 67%]
+tests/test_simulate_ev_module.py::test_allocate_dutching_sp_cap PASSED   [ 68%]
+tests/test_simulate_ev_module.py::test_allocate_dutching_sp_min_stake_filter PASSED [ 68%]
+tests/test_simulate_ev_module.py::test_allocate_dutching_sp_skips_invalid PASSED [ 69%]
+tests/test_simulate_ev_module.py::test_allocate_dutching_sp_uses_precomputed_implied_probs PASSED [ 69%]
+tests/test_simulate_ev_module.py::test_allocate_dutching_sp_fallbacks_when_probabilities_invalid PASSED [ 70%]
+tests/test_simulate_ev_module.py::test_gate_ev_thresholds PASSED         [ 70%]
+tests/test_simulate_ev_module.py::test_gate_ev_sharpe_min PASSED         [ 71%]
+tests/test_simulate_ev_module.py::test_simulate_ev_batch_uses_simulate_wrapper PASSED [ 71%]
+tests/test_simulate_wrapper.py::test_calibration_details_expose_metadata PASSED [ 71%]
+tests/test_simulate_wrapper.py::test_beta_binomial_fallback PASSED       [ 72%]
+tests/test_simulate_wrapper.py::test_invalid_calibration PASSED          [ 72%]
+tests/test_simulate_wrapper.py::test_combination_order PASSED            [ 73%]
+tests/test_simulate_wrapper.py::test_cache_prevents_recomputation PASSED [ 73%]
+tests/test_simulate_wrapper.py::test_cache_eviction PASSED               [ 74%]
+tests/test_simulate_wrapper.py::test_fallback_uses_leg_probabilities PASSED [ 74%]
+tests/test_simulate_wrapper.py::test_fallback_uses_implied_odds PASSED   [ 75%]
+tests/test_simulate_wrapper.py::test_correlation_penalty_reduces_probability_and_ev PASSED [ 75%]
+tests/test_update_excel_planning.py::test_cli_invalid_phase_raises_error PASSED [ 76%]
+tests/test_update_excel_planning.py::test_extract_common_meta_aliases[nb_partants-10-partants-10] PASSED [ 76%]
+tests/test_update_excel_planning.py::test_extract_common_meta_aliases[runners_count-11 partants-partants-11] PASSED [ 76%]
+tests/test_update_excel_planning.py::test_extract_common_meta_aliases[start-10h30-start_time-10:30] PASSED [ 77%]
+tests/test_update_excel_planning.py::test_extract_common_meta_aliases[heure_depart-11:00-start_time-11:00] PASSED [ 77%]
+tests/test_update_excel_planning.py::test_extract_common_meta_aliases[specialite-Steeple-discipline-Steeple] PASSED [ 78%]
+tests/test_update_excel_planning.py::test_extract_common_meta_aliases[r-R5-reunion-R5] PASSED [ 78%]
+tests/test_update_excel_planning.py::test_extract_common_meta_aliases[c-C6-course-C6] PASSED [ 79%]
+tests/test_update_excel_planning.py::test_summarise_tickets_formats[tickets0-] PASSED [ 79%]
+tests/test_update_excel_planning.py::test_summarise_tickets_formats[tickets1-SG:1@4.5] PASSED [ 80%]
+tests/test_update_excel_planning.py::test_summarise_tickets_formats[tickets2-JUM:2-4@12.1 | TRIO:5-6-7] PASSED [ 80%]
+tests/test_update_excel_planning.py::test_summarise_tickets_formats[tickets3-WEIRD:8-9] PASSED [ 80%]
+tests/test_update_excel_planning.py::test_summarise_tickets_formats[tickets4-2S4:10-11-12] PASSED [ 81%]
+tests/test_update_excel_planning.py::test_h30_updates_existing_row PASSED [ 81%]
+tests/test_update_excel_planning.py::test_h30_populates_planning_sheet PASSED [ 82%]
+tests/test_update_excel_planning.py::test_h5_updates_status_and_tickets PASSED [ 82%]
+tests/test_update_excel_planning.py::test_h5_abstention_uses_reason PASSED [ 83%]
+tests/test_update_excel_planning.py::test_h5_preserves_existing_metadata_when_missing PASSED [ 83%]
+tests/test_update_excel_planning.py::test_h5_converts_timezone_when_tz_env_set PASSED [ 84%]
+tests/test_update_excel_planning.py::test_custom_status_h5_flag PASSED   [ 84%]
+tests/test_update_excel_planning.py::test_custom_status_h30_and_h5 PASSED [ 85%]
+tests/test_update_excel_planning.py::test_h30_preserves_existing_comment PASSED [ 85%]
+tests/test_update_excel_planning.py::test_h30_handles_nested_course_payload PASSED [ 85%]
+tests/test_update_excel_planning.py::test_h30_infers_rc_fields PASSED    [ 86%]
+tests/test_update_excel_planning.py::test_h5_infers_rc_fields PASSED     [ 86%]
+tests/test_update_excel_planning.py::test_h5_compact_ticket_summary PASSED [ 87%]
+tests/test_update_excel_planning.py::test_format_time_respects_input_timezone PASSED [ 87%]
+tests/test_update_excel_planning.py::test_format_time_uses_env_timezone PASSED [ 88%]
+tests/test_update_excel_planning.py::test_format_time_handles_textual_hours[13h05-13:05] PASSED [ 88%]
+tests/test_update_excel_planning.py::test_format_time_handles_textual_hours[7h-07:00] PASSED [ 89%]
+tests/test_update_excel_planning.py::test_format_time_handles_textual_hours[09 heures 30-09:30] PASSED [ 89%]
+tests/test_update_excel_planning.py::test_format_time_handles_textual_hours[18.45-18:45] PASSED [ 90%]
+tests/test_update_excel_planning.py::test_cli_alias_and_dash_phase PASSED [ 90%]
+tests/test_update_excel_with_results.py::test_update_excel_records_observed_roi PASSED [ 90%]
+tests/test_validator_ev.py::test_validate_ev_passes_with_defaults 
+-------------------------------- live log call ---------------------------------
+2025-12-04 21:41:34 [INFO] [validate_ev] context {'p_success': None, 'payout_expected': None, 'stake': None, 'EV_ratio': None}
+PASSED                                                                   [ 91%]
+tests/test_validator_ev.py::test_validate_ev_sp_below_threshold 
+-------------------------------- live log call ---------------------------------
+2025-12-04 21:41:34 [INFO] [validate_ev] context {'p_success': None, 'payout_expected': None, 'stake': None, 'EV_ratio': None}
+PASSED                                                                   [ 91%]
+tests/test_validator_ev.py::test_validate_ev_combo_optional 
+-------------------------------- live log call ---------------------------------
+2025-12-04 21:41:34 [INFO] [validate_ev] context {'p_success': None, 'payout_expected': None, 'stake': None, 'EV_ratio': None}
+PASSED                                                                   [ 92%]
+tests/test_validator_ev.py::test_validate_ev_combo_required 
+-------------------------------- live log call ---------------------------------
+2025-12-04 21:41:34 [INFO] [validate_ev] context {'p_success': None, 'payout_expected': None, 'stake': None, 'EV_ratio': None}
+PASSED                                                                   [ 92%]
+tests/test_validator_ev.py::test_validate_ev_logs_context 
+-------------------------------- live log call ---------------------------------
+2025-12-04 21:41:34 [INFO] [validate_ev] context {'p_success': 0.45, 'payout_expected': 18.0, 'stake': 10.0, 'EV_ratio': 0.35}
+PASSED                                                                   [ 93%]
+tests/test_validator_ev.py::test_validate_ev_invalid_input_for_missing_probability 
+-------------------------------- live log call ---------------------------------
+2025-12-04 21:41:34 [INFO] [validate_ev] context {'p_success': None, 'payout_expected': 25.0, 'stake': None, 'EV_ratio': None}
+PASSED                                                                   [ 93%]
+tests/test_validator_ev.py::test_validate_ev_invalid_input_for_missing_payout 
+-------------------------------- live log call ---------------------------------
+2025-12-04 21:41:34 [INFO] [validate_ev] context {'p_success': 0.45, 'payout_expected': None, 'stake': None, 'EV_ratio': None}
+PASSED                                                                   [ 94%]
+tests/test_validator_ev.py::test_validate_policy_pass PASSED             [ 94%]
+tests/test_validator_ev.py::test_validate_policy_fail_ev PASSED          [ 95%]
+tests/test_validator_ev.py::test_validate_policy_fail_roi PASSED         [ 95%]
+tests/test_validator_ev.py::test_validate_combos_pass PASSED             [ 95%]
+tests/test_validator_ev.py::test_validate_combos_fail_default PASSED     [ 96%]
+tests/test_validator_ev.py::test_combos_allowed_thresholds PASSED        [ 96%]
+tests/test_validator_ev.py::test_validate_inputs_ok PASSED               [ 97%]
+tests/test_validator_ev.py::test_validate_inputs_partants_insuffisants PASSED [ 97%]
+tests/test_validator_ev.py::test_validate_inputs_cote_none PASSED        [ 98%]
+tests/test_validator_ev.py::test_validate_inputs_couverture PASSED       [ 98%]
+tests/test_validator_ev.py::test_summarise_validation_success PASSED     [ 99%]
+tests/test_validator_ev.py::test_summarise_validation_failure_returns_reason PASSED [ 99%]
+tests/test_validator_ev.py::test_validator_cli_returns_non_zero_on_failure PASSED [100%]/home/francoisosmozis/.local/lib/python3.12/site-packages/coverage/inorout.py:521: CoverageWarning: Module src was never imported. (module-not-imported); see https://coverage.readthedocs.io/en/7.11.0/messages.html#warning-module-not-imported
+  self.warn(f"Module {pkg} was never imported.", slug="module-not-imported")
+/home/francoisosmozis/.local/lib/python3.12/site-packages/coverage/control.py:946: CoverageWarning: No data was collected. (no-data-collected); see https://coverage.readthedocs.io/en/7.11.0/messages.html#warning-no-data-collected
+  self._warn("No data was collected.", slug="no-data-collected")
+/home/francoisosmozis/.local/lib/python3.12/site-packages/pytest_cov/plugin.py:363: CovReportWarning: Failed to generate report: No data to report.
+
+  warnings.warn(CovReportWarning(message), stacklevel=1)
+
+WARNING: Failed to generate report: No data to report.
+
+
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.3-final-0 ________________
+
+======================= 220 passed, 1 skipped in 21.02s ========================

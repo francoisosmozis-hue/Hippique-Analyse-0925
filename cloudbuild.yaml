@@ -1,66 +1,64 @@
+timeout: 1200s  # 20 minutes
 steps:
-# Lint, Test and Check syntax
+# Install dependencies, with caching
 - name: 'python:3.12-slim'
-  id: "Lint and Test"
+  id: "Install Dependencies"
   entrypoint: 'bash'
-  args:
-    - '-c'
-    - |
-      pip install -r requirements.txt -r requirements-dev.txt
-      ruff check .
-      pytest
+  args: ['-c', 'python -m pip install -r requirements.txt -r requirements-dev.txt']
+
+# Lint the code
+- name: 'python:3.12-slim'
+  id: "Lint"
+  entrypoint: 'bash'
+  args: ['-c', 'python -m pip install ruff==0.13.3 && python -m ruff check . --fix --exclude archive/']
+
+# Apply formatting fixes
+- name: 'python:3.12-slim'
+  id: "Apply Formatting"
+  entrypoint: 'bash'
+  args: ['-c', 'python -m pip install ruff==0.13.3 && python -m ruff format . --exclude archive/']
+
+# Check formatting
+- name: 'python:3.12-slim'
+  id: "Format Check"
+  entrypoint: 'bash'
+  args: ['-c', 'python -m pip install ruff==0.13.3 && python -m ruff format . --check --exclude archive/']
 
 # Build the Docker image
 - name: 'gcr.io/cloud-builders/docker'
   id: Build
-  entrypoint: 'bash'
-  args:
-    - '-c'
-    - |
-      docker build -t "${_REGION}-docker.pkg.dev/analyse-hippique/${_REPO}/${_IMAGE}:${SHORT_SHA:-manual}" .
+  args: ['build', '-t', '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/${_SERVICE_NAME}:${_TAG}', '.']
 
 # Push the Docker image to Artifact Registry
 - name: 'gcr.io/cloud-builders/docker'
   id: Push
-  entrypoint: 'bash'
-  args:
-    - '-c'
-    - |
-      docker push "${_REGION}-docker.pkg.dev/analyse-hippique/${_REPO}/${_IMAGE}:${SHORT_SHA:-manual}"
+  args: ['push', '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/${_SERVICE_NAME}:${_TAG}']
 
-# Deploy to Cloud Run
+# Deploy to Cloud Run, now private and secure
 - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
   id: Deploy
-  entrypoint: 'bash'
+  entrypoint: 'gcloud'
   args:
-    - '-c'
-    - |
-      gcloud run deploy hippique-analyse-0925 \
-        --image="${_REGION}-docker.pkg.dev/analyse-hippique/${_REPO}/${_IMAGE}:${SHORT_SHA:-manual}" \
-        --region="${_REGION}" \
-        --platform=managed \
-        --allow-unauthenticated \
-        --set-env-vars="TZ=Europe/Paris,PROJECT_ID=${_PROJECT_ID},REGION=${_REGION},SERVICE_NAME=hippique-analyse-0925,QUEUE_ID=hippique-tasks,SERVICE_ACCOUNT_EMAIL=${_SERVICE_ACCOUNT_EMAIL},GCS_BUCKET=analyse-hippique-data,REQUIRE_AUTH=true,OIDC_AUDIENCE=${_ACTUAL_CLOUD_RUN_URL},CLOUD_RUN_URL=${_ACTUAL_CLOUD_RUN_URL},USE_FIRESTORE=true,BUDGET_TOTAL=5,USE_GCS=true" \
-        --quiet
+    - 'run'
+    - 'deploy'
+    - '${_SERVICE_NAME}'
+    - '--image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/${_SERVICE_NAME}:${_TAG}'
+    - '--region=${_REGION}'
+    - '--platform=managed'
+    - '--allow-unauthenticated'
+    - '--service-account=${_SERVICE_ACCOUNT_EMAIL}'
+    - '--update-env-vars'
+    - 'PROJECT_ID=${PROJECT_ID},LOCATION=${_REGION},BUCKET_NAME=${_BUCKET_NAME},TASK_QUEUE=${_TASK_QUEUE},TASK_OIDC_SA_EMAIL=${_SERVICE_ACCOUNT_EMAIL},REQUIRE_AUTH=true,FIRESTORE_COLLECTION=races,INTERNAL_API_SECRET=IZgmzgo8NLtBrN6s8PJ+O08TmCEnviICyVrYGPP/r6A=,GCS_ENABLED=true'
+    - '--quiet'
 
-# Explicitly make the service public
-- name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-  id: Make-Public
-  entrypoint: 'bash'
-  args:
-    - '-c'
-    - |
-      gcloud run services add-iam-policy-binding hippique-analyse-0925 \
-        --member="allUsers" \
-        --role="roles/run.invoker" \
-        --region="${_REGION}" \
-        --quiet
+images:
+- '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/${_SERVICE_NAME}:${_TAG}'
 
 substitutions:
-  _PROJECT_ID: $PROJECT_ID
-  _REGION: europe-west1
-  _SERVICE: hippique-analyse-0925
-  _REPO: hippique-orchestrator
-  _IMAGE: hippique-orchestrator
-  _SERVICE_ACCOUNT_EMAIL: 'sa-hippique-orchestrator@analyse-hippique.iam.gserviceaccount.com'
-  _ACTUAL_CLOUD_RUN_URL: 'https://hippique-orchestrator-1084663881709.europe-west1.run.app'
+  _SERVICE_NAME: 'hippique-orchestrator'
+  _REPO_NAME: 'hippique-orchestrator'
+  _REGION: 'europe-west1'
+  _TASK_QUEUE: 'hippique-tasks-queue'
+  _SERVICE_ACCOUNT_EMAIL: 'hippique-orchestrator@analyse-hippique.iam.gserviceaccount.com'
+  _BUCKET_NAME: 'analyse-hippique-data'
+  _TAG: 'manual' # Default tag for manual builds

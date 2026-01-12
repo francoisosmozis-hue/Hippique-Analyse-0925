@@ -1,0 +1,25 @@
+nohup: ignoring input
+[STARTUP] PYTHONPATH: ['/app', '/home/francoisosmozis/hippique-orchestrator', '']
+[STARTUP] CWD: /home/francoisosmozis/hippique-orchestrator
+[STARTUP] Config loaded: analyse-hippique
+[STARTUP] Logger loaded
+[STARTUP] FastAPI app created
+[STARTUP] Registered 12 routes:
+[STARTUP]   ['GET', 'HEAD'] /openapi.json
+[STARTUP]   ['GET', 'HEAD'] /docs
+[STARTUP]   ['GET', 'HEAD'] /docs/oauth2-redirect
+[STARTUP]   ['GET', 'HEAD'] /redoc
+[STARTUP]   ['GET'] /
+[STARTUP]   ['GET'] /health
+[STARTUP]   ['GET'] /healthz
+[STARTUP]   ['GET'] /ping
+[STARTUP]   ['GET'] /debug/info
+[STARTUP]   ['GET'] /debug/parse
+[STARTUP]   ['POST'] /schedule
+[STARTUP]   ['POST'] /run
+INFO:     Started server process [7508]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+ERROR:    [Errno 98] error while attempting to bind on address ('0.0.0.0', 8080): address already in use
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.

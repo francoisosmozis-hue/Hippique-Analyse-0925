@@ -1,0 +1,13 @@
+{
+  "meta": {
+    "rc": "R1C1",
+    "hippodrome": null,
+    "date": null,
+    "discipline": null
+  },
+  "ev": {
+    "roi_global": 0
+  },
+  "tickets": [],
+  "p_true": {}
+}

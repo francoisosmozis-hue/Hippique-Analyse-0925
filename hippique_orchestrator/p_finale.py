@@ -8,9 +8,9 @@ from __future__ import annotations
 
 from typing import Any
 
-DRIFT_DELTA = 0.04    # Probability variation threshold between H-30 and H-5
-F_STEAM = 1.03        # Bonus factor if a horse's probability "steams" (increases)
-F_DRIFT_FAV = 0.97    # Penalty factor if the H-30 favorite "drifts" (probability decreases)
+DRIFT_DELTA = 0.04  # Probability variation threshold between H-30 and H-5
+F_STEAM = 1.03  # Bonus factor if a horse's probability "steams" (increases)
+F_DRIFT_FAV = 0.97  # Penalty factor if the H-30 favorite "drifts" (probability decreases)
 
 
 def apply_drift_steam(p_val, num, p5_map, p30_map, fav30):
@@ -19,9 +19,14 @@ def apply_drift_steam(p_val, num, p5_map, p30_map, fav30):
     """
     if not p_val:
         return 0.0
+
+    # If either probability map is missing, do not apply drift/steam.
+    if p5_map is None or p30_map is None:
+        return p_val
+
     try:
-        p5v = float(p5_map.get(str(num), 0.0)) if p5_map else 0.0
-        p30v = float(p30_map.get(str(num), 0.0)) if p30_map else 0.0
+        p5v = float(p5_map.get(str(num), 0.0))
+        p30v = float(p30_map.get(str(num), 0.0))
     except (ValueError, TypeError):
         return p_val
 
@@ -81,9 +86,9 @@ def generate_p_finale_data(
 
         # Apply drift/steam factor if context is provided
         if p_finale_val and p30_odds_map and p5_odds_map:
-             p_finale_val = apply_drift_steam(
-                 p_finale_val, num, p5_odds_map, p30_odds_map, fav30_runner_id
-             )
+            p_finale_val = apply_drift_steam(
+                p_finale_val, num, p5_odds_map, p30_odds_map, fav30_runner_id
+            )
 
         row = {
             'num': num,

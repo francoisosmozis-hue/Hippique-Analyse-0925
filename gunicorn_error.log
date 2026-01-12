@@ -1,0 +1,8 @@
+nohup: ignoring input
+[2026-01-09 22:07:29 +0100] [5797] [INFO] Starting gunicorn 21.2.0
+[2026-01-09 22:07:29 +0100] [5797] [INFO] Starting Hippique Orchestrator
+[2026-01-09 22:07:29 +0100] [5797] [INFO] Listening at: http://0.0.0.0:8080 (5797)
+[2026-01-09 22:07:29 +0100] [5797] [INFO] Using worker: uvicorn.workers.UvicornWorker
+[2026-01-09 22:07:29 +0100] [5797] [INFO] Server ready. Listening on 0.0.0.0:8080
+[2026-01-09 22:07:29 +0100] [5800] [INFO] Booting worker with pid: 5800
+[2026-01-09 22:07:29 +0100] [5801] [INFO] Booting worker with pid: 5801

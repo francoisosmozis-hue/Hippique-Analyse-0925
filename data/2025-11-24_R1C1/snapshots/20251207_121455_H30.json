@@ -1,0 +1,82 @@
+{
+  "source": "boturfers",
+  "type": "race_details",
+  "url": "https://www.boturfers.fr/course/1089006-r1c1-prix-de-villeroy/partant",
+  "scraped_at": "2025-12-07T12:14:55.763497",
+  "runners": [
+    {
+      "num": "1",
+      "nom": "L'Oncle Sam",
+      "jockey": "Pasquier S. E.",
+      "entraineur": "Seguin V."
+    },
+    {
+      "num": "2",
+      "nom": "Lovi Cadence",
+      "jockey": "Bonne D.",
+      "entraineur": "Roig Balaguer G."
+    },
+    {
+      "num": "3",
+      "nom": "Lerwick Perrine",
+      "jockey": "Verva P. Y.",
+      "entraineur": "Verva P.Y."
+    },
+    {
+      "num": "4",
+      "nom": "Lensois Du Dollar",
+      "jockey": "Clea Roger",
+      "entraineur": "Senet F."
+    },
+    {
+      "num": "5",
+      "nom": "Lascaux Del Phedo",
+      "jockey": "Mottier M.",
+      "entraineur": "Touvais P."
+    },
+    {
+      "num": "6",
+      "nom": "Label De Tillard",
+      "jockey": "Rochard B.",
+      "entraineur": "Ripoll Rigo A."
+    },
+    {
+      "num": "7",
+      "nom": "Lityge De Cym",
+      "jockey": "Lagadeuc F.",
+      "entraineur": "Weska K."
+    },
+    {
+      "num": "8",
+      "nom": "Lucifer Du Caieu",
+      "jockey": "Mathias-Maisonnette T.",
+      "entraineur": "Bazire N."
+    },
+    {
+      "num": "9",
+      "nom": "Lukas D'Oliverie",
+      "jockey": "Lamy A.",
+      "entraineur": "Levesque T."
+    },
+    {
+      "num": "10",
+      "nom": "Loti Solo",
+      "jockey": "Collette A.",
+      "entraineur": "Monthule P."
+    },
+    {
+      "num": "11",
+      "nom": "Le Best Madrik",
+      "jockey": "Mlle Callier E.",
+      "entraineur": "Raffegeau Th."
+    },
+    {
+      "num": "12",
+      "nom": "Leader De Sevre",
+      "jockey": "Abrivard A.",
+      "entraineur": "Grimault A."
+    }
+  ],
+  "correlation_id": "cfac7d5f-b613-45c8-8feb-bf9837192d44",
+  "trace_id": "test-trace-id"
+}

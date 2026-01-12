@@ -12,14 +12,25 @@ BASE_URL = "https://www.zone-turf.fr"
 # Simple in-memory cache. A persistent cache (like Firestore) is recommended for production.
 ID_CACHE: dict[str, str | None] = {}
 CHRONO_CACHE: dict[str, dict[str, Any] | None] = {}
+PERSON_ID_CACHE: dict[str, str | None] = {}
+PERSON_STATS_CACHE: dict[str, dict[str, Any] | None] = {}
 
 
 def _normalize_name(s: str) -> str:
-    """Normalizes a horse name for comparison."""
+    """Normalizes a horse name for comparison by removing parentheses, apostrophes,
+    replacing hyphens with spaces, converting to lowercase, and handling unicode."""
     if not s:
         return ""
+    # Remove content within parentheses
+    s = re.sub(r"\(.*\)", "", s)
+    # Remove apostrophes
+    s = s.replace("'", "")
+    # Replace hyphens with spaces
+    s = s.replace("-", " ")
+    # Normalize unicode characters
     s = unicodedata.normalize("NFKD", s)
     s = "".join(c for c in s if not unicodedata.combining(c))
+    # Convert to lowercase, strip leading/trailing whitespace, and collapse multiple spaces
     return " ".join(s.lower().strip().split())
 
 
@@ -38,7 +49,7 @@ def _parse_rk_string(rk_string: str) -> float | None:
         return None
 
 
-def resolve_horse_id(horse_name: str, session: requests.Session, max_pages: int = 20) -> str | None:
+def resolve_horse_id(horse_name: str, max_pages: int = 20) -> str | None:
     """
     Finds the Zone-Turf ID for a horse by scraping the alphabetical search pages.
     Uses a cache to avoid repeated lookups.
@@ -56,144 +67,312 @@ def resolve_horse_id(horse_name: str, session: requests.Session, max_pages: int 
         return None
 
     logger.info(f"Resolving Zone-Turf ID for '{horse_name}' via alphabetical pages...")
-    for page_num in range(1, max_pages + 1):
-        url = f"{BASE_URL}/cheval/lettre-{first_letter}.html?p={page_num}"
-        try:
-            response = session.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
-            if response.status_code != 200:
+    with requests.Session() as session:
+        for page_num in range(1, max_pages + 1):
+            url = f"{BASE_URL}/cheval/lettre-{first_letter}.html?p={page_num}"
+            try:
+                response = session.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
+                if response.status_code != 200:
+                    logger.warning(
+                        f"Received non-200 status code {response.status_code} for URL: {url}"
+                    )
+                    break
+
+                soup = BeautifulSoup(response.text, "html.parser")
+                for a_tag in soup.find_all("a", href=True):
+                    tag_text = _normalize_name(a_tag.get_text(" ", strip=True))
+                    if tag_text == normalized_name and "/cheval/" in a_tag["href"]:
+                        match = re.search(r"-(\d+)/?$", a_tag["href"])
+                        if match:
+                            found_id = match.group(1)
+                            logger.info(f"Resolved '{horse_name}' to ID: {found_id}")
+                            ID_CACHE[normalized_name] = found_id
+                            return found_id
+            except requests.exceptions.RequestException as e:
+                logger.warning(f"Failed to fetch page {url}: {e}")
                 break
-
-            soup = BeautifulSoup(response.text, "html.parser")
-            for a_tag in soup.find_all("a", href=True):
-                tag_text = _normalize_name(a_tag.get_text(" ", strip=True))
-                if tag_text == normalized_name and "/cheval/" in a_tag["href"]:
-                    match = re.search(r"-(\d+)/?$", a_tag["href"])
-                    if match:
-                        found_id = match.group(1)
-                        logger.info(f"Resolved '{horse_name}' to ID: {found_id}")
-                        ID_CACHE[normalized_name] = found_id
-                        return found_id
-
-            if not soup.find(string=re.compile("page suivante", re.I)):
-                break
-        except requests.RequestException as e:
-            logger.warning(f"Failed to resolve Zone-Turf ID for {horse_name} due to network error: {e}")
-            break
-
-    logger.warning(f"Could not find Zone-Turf ID for '{horse_name}' after searching pages.")
-    ID_CACHE[normalized_name] = None # Cache failure to avoid retries
+    ID_CACHE[normalized_name] = None
     return None
 
 
-def fetch_chrono_from_html(html_content: str) -> dict[str, Any] | None:
+def fetch_chrono_from_html(html_content: str, horse_name: str) -> dict[str, Any] | None:
     """
-    Parses the HTML content of a Zone-Turf horse page to extract chrono data.
+    Parses the HTML of a horse's page to extract chrono information.
     """
     if not html_content:
         return None
 
-    soup = BeautifulSoup(html_content, 'html.parser')
+    soup = BeautifulSoup(html_content, "html.parser")
+    result: dict[str, Any] = {"last_3_chrono": []}
+    normalized_horse_name = _normalize_name(horse_name)
 
-    record_attele = None
-    last_3_chronos: list[float] = []
+    # Locate the "Informations générales" card-body for the record
+    info_card_header = soup.find(
+        "div", class_="card-header", string=re.compile(r"\s*Informations générales\s*")
+    )
+    if info_card_header:
+        info_card_body = info_card_header.find_next_sibling("div", class_="card-body")
+        if info_card_body:
+            record_tag = None
+            for p_tag in info_card_body.find_all("p"):
+                if p_tag.strong and "Record Attelé" in p_tag.strong.get_text():
+                    record_tag = p_tag
+                    break
 
-    # 1. Find the record ("Record Attelé")
-    # It's in a <p> tag within a <div class="card-body">
-    card_bodies = soup.find_all('div', class_='card-body')
-    for body in card_bodies:
-        p_tags = body.find_all('p')
-        for p in p_tags:
-            strong_tag = p.find('strong')
-            if strong_tag and 'Record Attelé' in strong_tag.text:
-                # The value is the text immediately after the <strong> tag
-                record_str = strong_tag.next_sibling
-                if record_str:
-                    record_attele = _parse_rk_string(record_str.strip())
+            if record_tag and record_tag.strong:
+                record_text = (
+                    record_tag.strong.next_sibling
+                )  # Use next_sibling to get the text after the strong tag
+                if record_text:  # Add a check to ensure record_text is not None before stripping
+                    result["record_attele"] = _parse_rk_string(record_text.strip())
+
+    # Locate the "Performances détaillées" section
+    performance_card_header = soup.find(
+        "div", class_="card-header", string=re.compile(r"\s*Performances détaillées\s*")
+    )
+    if performance_card_header:
+        performance_card_body = performance_card_header.find_next_sibling("div", class_="card-body")
+        if performance_card_body:
+            performance_list = performance_card_body.find("ul", class_="list-group")
+            if performance_list:
+                for li in performance_list.find_all("li", class_="list-group-item"):
+                    # Check if it's an "Attelé" race within the list item's text
+                    if "Attelé" in li.get_text():
+                        table = li.find("table")
+                        if table:
+                            # Find the index of the 'Red.Km' column
+                            headers = [
+                                th.get_text(strip=True) for th in table.find("thead").find_all("th")
+                            ]
+                            try:
+                                red_km_idx = headers.index("Red.Km")
+                            except ValueError:
+                                logger.debug(
+                                    "Red.Km column not found in table headers. Skipping this table."
+                                )
+                                continue
+
+                            for row in table.find("tbody").find_all("tr"):
+                                cells = row.find_all("td")
+                                if len(cells) > 1:  # Ensure there's at least a horse name column
+                                    name_in_row = _normalize_name(cells[1].get_text(strip=True))
+                                    if name_in_row == normalized_horse_name:
+                                        if len(cells) > red_km_idx:
+                                            chrono_str = cells[red_km_idx].get_text(strip=True)
+                                            chrono = _parse_rk_string(chrono_str)
+                                            if chrono is not None:
+                                                result["last_3_chrono"].append(chrono)
+                                        # Stop searching if we have found 3 chronos for this horse
+                                        if len(result["last_3_chrono"]) >= 3:
+                                            break  # Breaks the inner 'for row' loop
+
+                    if len(result["last_3_chrono"]) >= 3:
+                        break  # Breaks the outer 'for li' loop
+
+    # Filter to the first 3 chronos (most recent)
+    result["last_3_chrono"] = result["last_3_chrono"][:3]
+
+    # Return result even if mostly empty, so subsequent calls don't fail on NoneType
+    return result
+
+
+def resolve_person_id(person_name: str, person_type: str, max_pages: int = 20) -> str | None:
+    """
+    Finds the Zone-Turf ID for a person (jockey or entraineur) by scraping the alphabetical search pages.
+    Uses a cache to avoid repeated lookups.
+    """
+    normalized_name = _normalize_name(person_name)
+    if not normalized_name:
+        return None
+
+    cache_key = f"{person_type}_{normalized_name}"
+    if cache_key in PERSON_ID_CACHE:
+        return PERSON_ID_CACHE[cache_key]
+
+    first_letter = next((c for c in normalized_name if c.isalpha()), None)
+    if not first_letter:
+        PERSON_ID_CACHE[cache_key] = None
+        return None
+
+    logger.info(
+        f"Resolving Zone-Turf ID for '{person_name}' ({person_type}) via alphabetical pages..."
+    )
+    with requests.Session() as session:
+        for page_num in range(1, max_pages + 1):
+            url = f"{BASE_URL}/{person_type}/lettre-{first_letter}.html?p={page_num}"
+            try:
+                response = session.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
+                if response.status_code != 200:
+                    logger.warning(
+                        f"Received non-200 status code {response.status_code} for URL: {url}"
+                    )
+                    break
+
+                soup = BeautifulSoup(response.text, "html.parser")
+                for a_tag in soup.find_all("a", href=True):
+                    tag_text = _normalize_name(a_tag.get_text(" ", strip=True))
+                    if tag_text == normalized_name and f"/{person_type}/" in a_tag["href"]:
+                        match = re.search(r"-(\d+)/?$", a_tag["href"])
+                        if match:
+                            found_id = match.group(1)
+                            logger.info(f"Resolved '{person_name}' to ID: {found_id}")
+                            PERSON_ID_CACHE[cache_key] = found_id
+                            return found_id
+            except requests.exceptions.RequestException as e:
+                logger.warning(f"Failed to fetch page {url}: {e}")
                 break
-        if record_attele:
-            break
 
-    # 2. Find the last 3 chronos from the performance tables
-    # The performances are in a list of `li` tags, each with its own table
-    perf_list = soup.find('ul', class_='list-group')
-    if perf_list:
-        list_items = perf_list.find_all('li', class_='list-group-item')
-        for item in list_items:
-            if len(last_3_chronos) >= 3:
-                break
+    PERSON_ID_CACHE[cache_key] = None
+    return None
 
-            # Check if the race is "Attelé"
-            # The discipline is in a <p> tag like "19 000€ - Prix Axius - Attelé - ..."
-            discipline_p = item.find('p', string=re.compile(r'Attelé'))
-            if not discipline_p:
-                continue
 
-            perf_table = item.find('table', class_='table')
-            if perf_table and perf_table.thead and perf_table.tbody:
-                header_cells = perf_table.thead.find_all('th')
-                rk_index = -1
-                for i, cell in enumerate(header_cells):
-                    if 'Red.Km' in cell.text:
-                        rk_index = i
-                        break
+def fetch_person_stats_from_html(html_content: str, person_type: str) -> dict[str, Any] | None:
+    """
+    Parses the HTML of a person's page to extract their stats.
+    """
+    if not html_content:
+        return None
 
-                if rk_index != -1:
-                    rows = perf_table.tbody.find_all('tr')
-                    for row in rows:
-                        cells = row.find_all('td')
-                        if len(cells) > rk_index:
-                            # Check if this row is for the horse "Jullou"
-                            if 'Jullou' in row.text:
-                                chrono_str = cells[rk_index].text.strip()
-                                parsed_chrono = _parse_rk_string(chrono_str)
-                                if parsed_chrono:
-                                    last_3_chronos.append(parsed_chrono)
-                                    # Found the chrono for this race, break from inner loop
-                                    break
+    soup = BeautifulSoup(html_content, "html.parser")
+    stats_div = soup.find("div", class_="card-body")
+    if not stats_div:
+        return None
 
-    if not record_attele and not last_3_chronos:
+    win_rate = None
+    place_rate = None
+
+    for p_tag in stats_div.find_all("p"):
+        p_text = p_tag.get_text().strip()
+        win_rate_match = re.search(r"Taux de réussite\s*:\s*(\d+[.,]\d+)%", p_text)
+        if win_rate_match:
+            win_rate = float(win_rate_match.group(1).replace(",", "."))
+
+        place_rate_match = re.search(r"Taux de réussite Place\s*:\s*(\d+[.,]\d+)%", p_text)
+        if place_rate_match:
+            place_rate = float(place_rate_match.group(1).replace(",", "."))
+
+    num_races = None
+    num_wins = None
+    num_places = None
+
+    stats_table = stats_div.find("table")
+    if stats_table:
+        headers = [th.get_text(strip=True) for th in stats_table.find("thead").find_all("th")]
+        data_row = stats_table.find("tbody").find("tr")
+        if data_row:
+            cells = [td.get_text(strip=True) for td in data_row.find_all("td")]
+
+            try:
+                num_races_idx = headers.index("Courses")
+                if len(cells) > num_races_idx:
+                    num_races = int(cells[num_races_idx])
+            except (ValueError, IndexError):
+                pass
+
+            try:
+                num_wins_idx = headers.index("Victoires")
+                if len(cells) > num_wins_idx:
+                    num_wins = int(cells[num_wins_idx])
+            except (ValueError, IndexError):
+                pass
+
+            try:
+                num_places_idx = headers.index("Places")
+                if len(cells) > num_places_idx:
+                    num_places = int(cells[num_places_idx])
+            except (ValueError, IndexError):
+                pass
+
+    if not all(
+        [
+            win_rate is not None,
+            place_rate is not None,
+            num_races is not None,
+            num_wins is not None,
+            num_places is not None,
+        ]
+    ):
         return None
 
     return {
-        'record_attele': record_attele,
-        'last_3_chrono': last_3_chronos
+        "win_rate": win_rate,
+        "place_rate": place_rate,
+        "num_races": num_races,
+        "num_wins": num_wins,
+        "num_places": num_places,
     }
 
-def get_chrono_stats(horse_name: str, horse_id: str | None = None) -> dict[str, Any] | None:
+
+def get_chrono_stats(horse_name: str) -> dict[str, Any] | None:
     """
-    Orchestrator function to get chrono stats for a horse.
-    Resolves ID if not provided, then scrapes the page. Caches results.
+    Fetches chrono stats for a given horse.
     """
-    cache_key = f"{horse_name}|{horse_id}"
-    if cache_key in CHRONO_CACHE:
-        return CHRONO_CACHE[cache_key]
+    normalized_name = _normalize_name(horse_name)
+    if not normalized_name:
+        return None
+
+    if normalized_name in CHRONO_CACHE:
+        return CHRONO_CACHE[normalized_name]
 
     with requests.Session() as session:
-        # Use provided ID or resolve it
-        zt_id = horse_id or resolve_horse_id(horse_name, session)
-
-        if not zt_id:
+        horse_id = resolve_horse_id(horse_name)
+        if not horse_id:
             logger.warning(f"Could not get Zone-Turf ID for horse: {horse_name}")
-            CHRONO_CACHE[cache_key] = None
+            CHRONO_CACHE[normalized_name] = None
             return None
 
-        # Slugify name for URL, simple version
-        slug_name = _normalize_name(horse_name).replace(' ', '-')
-        url = f"{BASE_URL}/cheval/{slug_name}-{zt_id}/"
-
+        url = f"{BASE_URL}/cheval/{normalized_name.replace(' ', '-')}-{horse_id}/"
         try:
-            logger.info(f"Fetching chrono stats from Zone-Turf for {horse_name} at {url}")
             response = session.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
             if response.status_code != 200:
-                logger.error(f"Failed to fetch Zone-Turf page for {horse_name} (ID: {zt_id}) with status {response.status_code}")
-                CHRONO_CACHE[cache_key] = None
+                logger.warning(
+                    f"Failed to fetch Zone-Turf page for {horse_name} (ID: {horse_id}) with status {response.status_code}"
+                )
+                CHRONO_CACHE[normalized_name] = None
                 return None
+            stats = fetch_chrono_from_html(response.text, horse_name)
+            CHRONO_CACHE[normalized_name] = stats
+            return stats
+        except requests.RequestException:
+            logger.warning(f"Failed to fetch Zone-Turf page for {horse_name} due to network error")
+            CHRONO_CACHE[normalized_name] = None
+            return None
 
-            chrono_data = fetch_chrono_from_html(response.text)
-            CHRONO_CACHE[cache_key] = chrono_data
-            return chrono_data
 
-        except requests.RequestException as e:
-            logger.error(f"Failed to fetch Zone-Turf page for {horse_name} due to network error: {e}")
-            CHRONO_CACHE[cache_key] = None
+def get_jockey_trainer_stats(person_name: str, person_type: str) -> dict[str, Any] | None:
+    """
+    Fetches stats for a given jockey or trainer.
+    """
+    normalized_name = _normalize_name(person_name)
+    if not normalized_name:
+        return None
+
+    cache_key = f"{person_type}_{normalized_name}"
+    if cache_key in PERSON_STATS_CACHE:
+        return PERSON_STATS_CACHE[cache_key]
+
+    with requests.Session() as session:
+        person_id = resolve_person_id(person_name, person_type)
+        if not person_id:
+            logger.warning(f"Could not get Zone-Turf ID for {person_type}: {person_name}")
+            PERSON_STATS_CACHE[cache_key] = None
+            return None
+
+        url = f"{BASE_URL}/{person_type}/{normalized_name.replace(' ', '-')}-{person_id}/"
+        try:
+            response = session.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
+            if response.status_code != 200:
+                logger.warning(
+                    f"Failed to fetch Zone-Turf page for {person_type} {person_name} (ID: {person_id}) with status {response.status_code}"
+                )
+                PERSON_STATS_CACHE[cache_key] = None
+                return None
+            stats = fetch_person_stats_from_html(response.text, person_type)
+            PERSON_STATS_CACHE[cache_key] = stats
+            return stats
+        except requests.RequestException:
+            logger.warning(
+                f"Failed to fetch Zone-Turf page for {person_type} {person_name} due to network error"
+            )
+            PERSON_STATS_CACHE[cache_key] = None
             return None

@@ -16,98 +16,75 @@ Corrections v3:
 """
 
 from __future__ import annotations
+from typing import Any
 
 import asyncio
 import re
-import time
-from datetime import datetime
-from typing import Any
+from datetime import datetime, timedelta, date as date_obj
+from hippique_orchestrator.analysis_utils import coerce_partants
+from zoneinfo import ZoneInfo
 
-from hippique_orchestrator import data_source
-from hippique_orchestrator.config import get_config
+from hippique_orchestrator import config
+from hippique_orchestrator.source_registry import source_registry
 from hippique_orchestrator.logging_utils import get_logger
-
-config = get_config()
+from hippique_orchestrator.programme_provider import programme_provider
 
 logger = get_logger(__name__)
 
 
-
-# ============================================
-# Rate Limiter Global
-# ============================================
-
-_rate_limiter_lock = asyncio.Lock()
-_last_request_time = 0
-
-async def _rate_limited_request():
+async def build_plan_async(date_str: str) -> list[dict[str, Any]]:
     """
-    Rate limiter global partagé entre toutes les tâches asyncio.
-
-    Garantit qu'il y a au moins 1/requests_per_second secondes entre chaque requête.
-
-    Correction bug #5: Lock global plutôt que await asyncio.sleep() dans chaque tâche.
+    Construit le plan complet du jour en utilisant la stratégie multi-sources du ProgrammeProvider.
     """
-    global _last_request_time
-
-    async with _rate_limiter_lock:
-        now = time.time()
-        min_interval = 1.0 / config.requests_per_second
-        time_since_last = now - _last_request_time
-
-        if time_since_last < min_interval:
-            wait_time = min_interval - time_since_last
-            await asyncio.sleep(wait_time)
-
-        _last_request_time = time.time()
-
-# ============================================
-# Public API
-# ============================================
-
-async def build_plan_async(date: str) -> list[dict[str, Any]]:
-    """
-    Construit le plan complet du jour en utilisant Boturfers comme unique source.
-    """
-    if date == "today":
-        date = datetime.now().strftime("%Y-%m-%d")
-
-    logger.info(f"Building plan for {date} using Boturfers as the single source.")
-
-    # 1. Obtenir le programme depuis la source de données (Boturfers)
-    if date == datetime.now().strftime("%Y-%m-%d"):
-        programme_url = "https://www.boturfers.fr/programme-pmu-du-jour"
+    if date_str == "today":
+        date_obj_req = datetime.now(ZoneInfo(config.TIMEZONE)).date()
     else:
-        programme_url = f"https://www.boturfers.fr/courses/{date}"
-    source_data = await asyncio.to_thread(data_source.fetch_programme, programme_url)
+        try:
+            date_obj_req = date_obj.fromisoformat(date_str)
+        except (ValueError, TypeError):
+            logger.warning(f"Invalid date string format: '{date_str}'. Defaulting to today.")
+            date_obj_req = datetime.now(ZoneInfo(config.TIMEZONE)).date()
+    
+    date_str = date_obj_req.isoformat()
+    logger.info(f"Building plan for {date_str} using ProgrammeProvider.")
 
-    if not source_data or not source_data.get("races"):
-        logger.warning("Failed to fetch programme from Boturfers or it was empty.")
+    # 1. Obtenir le programme via le ProgrammeProvider
+    source_data = await programme_provider.get_programme(date_obj_req)
+
+    if not source_data:
+        logger.warning(f"Failed to fetch programme for {date_str} from any source.")
         return []
 
-    logger.info(f"Successfully fetched {len(source_data.get('races', []))} races from Boturfers.")
+    logger.info(f"Successfully fetched {len(source_data)} races for {date_str}.")
 
-    # 2. Construire le plan directement depuis les données Boturfers
+    # 2. Construire le plan directement depuis les données du programme
     enriched_plan = []
-    for race_source in source_data["races"]:
+    for race_source in source_data:
         if race_source.get("start_time"):
             # Extrait R et C de "R1 C1"
             rc_match = re.match(r"(R\d+)\s*(C\d+)", race_source.get("rc", ""))
             if not rc_match:
-                logger.warning(f"Could not parse R/C from '{race_source.get('rc')}'. Skipping race.")
+                logger.warning(
+                    f"Could not parse R/C from '{race_source.get('rc')}'. Skipping race."
+                )
                 continue
             r_label, c_label = rc_match.groups()
 
-            enriched_plan.append({
-                "date": date,
-                "r_label": r_label,
-                "c_label": c_label,
-                "course_id": None,  # Geny ID n'est plus disponible
-                "meeting": race_source.get("name", ""), # Le nom de la course est utilisé comme meeting
-                "time_local": race_source["start_time"],
-                "course_url": race_source["url"],
-                "reunion_url": None, # L'URL de la réunion n'est plus disponible
-            })
+            enriched_plan.append(
+                {
+                    "date": date_str,
+                    "r_label": r_label,
+                    "c_label": c_label,
+                    "course_id": None,  # Geny ID n'est plus disponible
+                    "meeting": race_source.get(
+                        "name", ""
+                    ),  # Le nom de la course est utilisé comme meeting
+                    "time_local": race_source["start_time"].replace('h', ':'),
+                    "course_url": race_source["url"],
+                    "reunion_url": None,  # L'URL de la réunion n'est plus disponible
+                    "partants": coerce_partants(race_source.get("runners_count"))
+                }
+            )
 
     # 3. Trier par heure
     if enriched_plan:
@@ -115,6 +92,7 @@ async def build_plan_async(date: str) -> list[dict[str, Any]]:
 
     logger.info(f"Plan complete: {len(enriched_plan)} races with times")
     return enriched_plan
+
 
 def build_plan(date: str) -> list[dict[str, Any]]:
     """
@@ -131,6 +109,8 @@ def build_plan(date: str) -> list[dict[str, Any]]:
         return asyncio.run(build_plan_async(date))
     except RuntimeError as e:
         if "cannot run" in str(e).lower():
-            logger.error("Cannot use build_plan() from within event loop. Use build_plan_async() instead.")
+            logger.error(
+                "Cannot use build_plan() from within event loop. Use build_plan_async() instead."
+            )
             raise RuntimeError("Use build_plan_async() in async context") from e
         raise

@@ -6,6 +6,7 @@ current local time in Paris and invokes ``runner_chain.py`` for races
 that fall within the H-30 or H-5 windows. ``ALLOW_HEURISTIC`` is forced
 to ``0`` for reproducible computations.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -18,9 +19,7 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
-from hippique_orchestrator.config import get_config
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 from config.env_utils import get_env
 
@@ -29,7 +28,7 @@ try:  # Python 3.9+
 except ImportError:  # pragma: no cover - Python <3.9 fallback
     from backports.zoneinfo import ZoneInfo  # type: ignore
 
-config = get_config()
+# config = get_config()
 PARIS = ZoneInfo("Europe/Paris")
 
 WINDOWS = {
@@ -85,21 +84,21 @@ def _invoke_runner(reunion: str, course: str, phase: str) -> None:
         "--phase",
         phase,
     ]
-    if config.runner_snap_dir:
-        cmd.extend(["--snap-dir", config.runner_snap_dir])
-    if config.runner_analysis_dir:
-        cmd.extend(["--analysis-dir", config.runner_analysis_dir])
-    if config.runner_output_dir:
-        cmd.extend(["--output", config.runner_output_dir])
+    # if config.runner_snap_dir:
+    #     cmd.extend(["--snap-dir", config.runner_snap_dir])
+    # if config.runner_analysis_dir:
+    #     cmd.extend(["--analysis-dir", config.runner_analysis_dir])
+    # if config.runner_output_dir:
+    #     cmd.extend(["--output", config.runner_output_dir])
     env = os.environ.copy()
     env["ALLOW_HEURISTIC"] = get_env("ALLOW_HEURISTIC", "0")
     subprocess.run(cmd, check=True, env=env)
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description="Trigger runner_chain phases based on timing")
     ap.add_argument("--meetings", default="meetings.json", help="Planning JSON file")
-    args = ap.parse_args()
+    args = ap.parse_args(argv)
 
     meetings_path = Path(args.meetings)
     if not meetings_path.exists():
@@ -114,8 +113,19 @@ def main() -> None:
         date_hint = meeting.get("date") or meeting.get("jour")
         courses = meeting.get("courses") or meeting.get("races") or []
         for course in courses:
-            c_label = course.get("c") or course.get("course") or course.get("num") or course.get("id") or ""
-            start = course.get("start") or course.get("time") or course.get("hour") or course.get("start_time")
+            c_label = (
+                course.get("c")
+                or course.get("course")
+                or course.get("num")
+                or course.get("id")
+                or ""
+            )
+            start = (
+                course.get("start")
+                or course.get("time")
+                or course.get("hour")
+                or course.get("start_time")
+            )
             if not r_label or not c_label or not start:
                 continue
             dtstart = _parse_start(date_hint, start)
