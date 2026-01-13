@@ -88,7 +88,7 @@ class SourceRegistry:
             logger.info(f"Attempting snapshot with fallback provider: {fallback_provider.name}")
             try:
                 snapshot = await fallback_provider.fetch_snapshot(
-                    race_url, phase=phase, date=date, correlation_id=correlation_id, trace_id=trace_id
+                    race_url, phase=phase, date_str=date, correlation_id=correlation_id, trace_id=trace_id
                 )
             except Exception as e:
                 logger.critical(f"All snapshot providers failed for {race_url}: {e}", exc_info=True)

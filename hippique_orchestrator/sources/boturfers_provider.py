@@ -147,7 +147,7 @@ class BoturfersProvider(SourceProvider):
         race_url: str,
         *,
         phase: str = "H30",
-        date: str | None = None,
+        date_str: str | None = None,
         correlation_id: str | None = None,
         trace_id: str | None = None,
     ) -> RaceSnapshotNormalized:
