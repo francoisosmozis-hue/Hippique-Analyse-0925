@@ -179,6 +179,20 @@ class SourceRegistry:
             if geny_stats.driver_rate or geny_stats.trainer_rate:
                 stats = geny_stats
 
+        # --- Chrono stats ---
+        # ZoneTurf is a good source for chronos, call it regardless of discipline.
+        chrono_stats = await self._zoneturf_chrono.fetch_stats_for_runner(
+            runner_name=runner_name,
+            discipline=discipline_lower,
+            runner_data=runner_data,
+            correlation_id=correlation_id,
+            trace_id=trace_id,
+        )
+        if chrono_stats.best_chrono:
+            stats.best_chrono = chrono_stats.best_chrono
+        if chrono_stats.previous_chronos:
+            stats.previous_chronos = chrono_stats.previous_chronos
+
         return stats
 
 
