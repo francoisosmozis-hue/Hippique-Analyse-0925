@@ -147,10 +147,10 @@ class BoturfersProvider(SourceProvider):
         race_url: str,
         *,
         phase: str = "H30",
-        date_str: str | None = None, # Changed 'date' to 'date_str'
+        date: str | None = None,
         correlation_id: str | None = None,
         trace_id: str | None = None,
-    ) -> RaceSnapshotNormalized: # Changed return type
+    ) -> RaceSnapshotNormalized:
         logger.info(
             "Début du scraping des détails de course Boturfers.", # Changed log message
             extra={"url": race_url, "phase": phase, "correlation_id": correlation_id},
