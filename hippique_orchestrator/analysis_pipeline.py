@@ -88,7 +88,7 @@ async def _run_gpi_pipeline(
     # Convert back to dict for pipeline processing
     # Extract only the stats into je_stats dictionary for backward compatibility
     gpi_config["je_stats"] = {
-        runner.name: runner.stats.model_dump()
+        runner.nom: runner.stats.model_dump()
         for runner in enriched_snapshot.runners if runner.stats
     }
     # Update snapshot_data with enriched runners

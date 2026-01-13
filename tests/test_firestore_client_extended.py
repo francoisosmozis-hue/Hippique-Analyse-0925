@@ -10,7 +10,7 @@ from google.cloud import firestore
 from hippique_orchestrator import firestore_client
 
 
-def test_get_processing_status_for_date_processing_stalled():
+async def test_get_processing_status_for_date_processing_stalled():
     """
     Covers the 'PROCESSING_STALLED' case in get_processing_status_for_date.
     This happens when there are no races for the given date, but there are races
@@ -45,7 +45,7 @@ def test_get_processing_status_for_date_processing_stalled():
         patch("hippique_orchestrator.firestore_client._get_firestore_client", return_value=mock_db),
         patch("hippique_orchestrator.firestore_client.get_races_for_date", return_value=[]),
     ):
-        status = firestore_client.get_processing_status_for_date("2025-01-02", daily_plan)
+        status = await firestore_client.get_processing_status_for_date("2025-01-02", daily_plan)
 
     # Assert
     assert status["reason_if_empty"] == "PROCESSING_STALLED"
@@ -54,7 +54,7 @@ def test_get_processing_status_for_date_processing_stalled():
     assert status["firestore_metadata"]["last_update_ts"] is not None
 
 
-def test_get_processing_status_for_date_db_empty():
+async def test_get_processing_status_for_date_db_empty():
     """
     Tests get_processing_status_for_date when the database is completely empty.
     """
@@ -77,7 +77,7 @@ def test_get_processing_status_for_date_db_empty():
         patch("hippique_orchestrator.firestore_client._get_firestore_client", return_value=mock_db),
         patch("hippique_orchestrator.firestore_client.get_races_for_date", return_value=[]),
     ):
-        status = firestore_client.get_processing_status_for_date("2025-01-01", daily_plan)
+        status = await firestore_client.get_processing_status_for_date("2025-01-01", daily_plan)
 
     # Assert
     assert status["reason_if_empty"] == "NO_TASKS_PROCESSED_OR_FIRESTORE_EMPTY"

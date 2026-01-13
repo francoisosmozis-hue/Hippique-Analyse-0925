@@ -295,7 +295,7 @@ def _detect_real_favorites(runners: list[dict[str, Any]], threshold: float) -> l
         is_real_favorite_place = runner.get("p_place", 0.0) > threshold
         runner["is_real_favorite_place"] = is_real_favorite_place
         if is_real_favorite_place:
-            real_favorites_place.append(runner.get("name", f"N°{runner.get('num')}"))
+            real_favorites_place.append(runner.get("nom", f"N°{runner.get('num')}"))
     return real_favorites_place
 
 
@@ -468,7 +468,7 @@ def _generate_sp_dutching_tickets(
                 all_profitable_sp_candidates.append(
                     {
                         "num": r["num"],
-                        "name": r["name"],
+                        "name": r["nom"],
                         "odds": odds,
                         "prob": r["p_finale"],
                         "roi": roi,
@@ -706,7 +706,7 @@ def generate_tickets(snapshot_data: dict[str, Any], gpi_config: dict[str, Any]) 
             {
                 "rank": i + 1,
                 "num": runner.get("num"),
-                "name": runner.get("name"),
+                "nom": runner.get("nom"),
                 "p_finale": runner.get("p_finale"),
                 "odds_place": runner.get("odds_place"),
             }
@@ -719,7 +719,7 @@ def generate_tickets(snapshot_data: dict[str, Any], gpi_config: dict[str, Any]) 
         market_analysis_table.append(
             {
                 "num": runner.get("num"),
-                "name": runner.get("name"),
+                "nom": runner.get("nom"),
                 "odds_win": runner.get("odds_win"),
                 "odds_place": runner.get("odds_place"),
                 "p_no_vig": runner.get("p_no_vig"),

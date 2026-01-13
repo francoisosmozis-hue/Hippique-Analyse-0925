@@ -16,7 +16,7 @@ class RunnerStats(BaseModel):
 class RunnerData(BaseModel):
     """Contrat de données pour un partant."""
     num: int
-    name: str
+    nom: str
     musique: Optional[str] = None
     odds_place: Optional[float] = None
     odds_win: Optional[float] = None

@@ -135,7 +135,13 @@ async def get_pronostics_data(
 
     for race_doc in races_from_db:
         race_data = race_doc.to_dict()
-        processed_races_rc.add(race_doc.id.split('_')[-1])
+        rc_key = race_doc.id.split("_")[-1]
+        processed_races_rc.add(rc_key)
+
+        if plan_race_data := all_races_map.get(rc_key):
+            merged_data = plan_race_data.copy()
+            merged_data.update(race_data)
+            race_data = merged_data
 
         analysis = race_data.get("tickets_analysis", {})
         decision = analysis.get("gpi_decision", "Pending").lower()
@@ -149,7 +155,7 @@ async def get_pronostics_data(
         elif "error" in decision:
             race_data["status"] = "error"
             counts["total_error"] += 1
-        elif "snapshot_only_h9" in decision: # Handle H9 snapshot-only status
+        elif "snapshot_only_h9" in decision:  # Handle H9 snapshot-only status
             race_data["status"] = "snapshot_only_h9"
         else:
             race_data["status"] = "pending"

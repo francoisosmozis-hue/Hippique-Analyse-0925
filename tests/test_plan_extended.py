@@ -6,8 +6,8 @@ from hippique_orchestrator import plan
 
 
 @pytest.mark.asyncio
-@patch("hippique_orchestrator.plan.source_registry.fetch_programme", new_callable=AsyncMock)
-async def test_build_plan_handles_various_invalid_rc_formats(mock_fetch_programme, caplog):
+@patch("hippique_orchestrator.plan.programme_provider")
+async def test_build_plan_handles_various_invalid_rc_formats(mock_programme_provider, caplog):
     """
     Tests that various invalid RC formats are skipped.
     """
@@ -38,7 +38,7 @@ async def test_build_plan_handles_various_invalid_rc_formats(mock_fetch_programm
             "url": "http://example.com/r1c4",
         },
     ]
-    mock_fetch_programme.return_value = mock_programme_data
+    mock_programme_provider.get_programme = AsyncMock(return_value=mock_programme_data)
 
     # Act
     result_plan = await plan.build_plan_async("2025-12-20")
@@ -52,8 +52,8 @@ async def test_build_plan_handles_various_invalid_rc_formats(mock_fetch_programm
 
 
 @pytest.mark.asyncio
-@patch("hippique_orchestrator.plan.source_registry.fetch_programme", new_callable=AsyncMock)
-async def test_build_plan_data_types(mock_fetch_programme):
+@patch("hippique_orchestrator.plan.programme_provider")
+async def test_build_plan_data_types(mock_programme_provider):
     """
     Tests that the data types in the returned plan are correct.
     """
@@ -67,7 +67,7 @@ async def test_build_plan_data_types(mock_fetch_programme):
             "runners_count": "10",  # runners_count is a string
         }
     ]
-    mock_fetch_programme.return_value = mock_programme_data
+    mock_programme_provider.get_programme = AsyncMock(return_value=mock_programme_data)
 
     # Act
     result_plan = await plan.build_plan_async("2025-12-20")
@@ -85,8 +85,8 @@ async def test_build_plan_data_types(mock_fetch_programme):
 
 
 @pytest.mark.asyncio
-@patch("hippique_orchestrator.plan.source_registry.fetch_programme", new_callable=AsyncMock)
-async def test_build_plan_invalid_runners_count(mock_fetch_programme):
+@patch("hippique_orchestrator.plan.programme_provider")
+async def test_build_plan_invalid_runners_count(mock_programme_provider):
     """
     Tests that `partants` is None when `runners_count` is not a valid integer.
     """
@@ -100,7 +100,7 @@ async def test_build_plan_invalid_runners_count(mock_fetch_programme):
             "runners_count": "N/A",
         }
     ]
-    mock_fetch_programme.return_value = mock_programme_data
+    mock_programme_provider.get_programme = AsyncMock(return_value=mock_programme_data)
 
     # Act
     result_plan = await plan.build_plan_async("2025-12-20")
@@ -111,8 +111,8 @@ async def test_build_plan_invalid_runners_count(mock_fetch_programme):
 
 
 @pytest.mark.asyncio
-@patch("hippique_orchestrator.plan.source_registry.fetch_programme", new_callable=AsyncMock)
-async def test_build_plan_mandatory_keys(mock_fetch_programme):
+@patch("hippique_orchestrator.plan.programme_provider")
+async def test_build_plan_mandatory_keys(mock_programme_provider):
     """
     Tests that all mandatory keys are present in the returned plan.
     """
@@ -126,7 +126,7 @@ async def test_build_plan_mandatory_keys(mock_fetch_programme):
             "runners_count": "10",
         }
     ]
-    mock_fetch_programme.return_value = mock_programme_data
+    mock_programme_provider.get_programme = AsyncMock(return_value=mock_programme_data)
 
     # Act
     result_plan = await plan.build_plan_async("2025-12-20")

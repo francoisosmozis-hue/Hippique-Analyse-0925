@@ -11,15 +11,15 @@ from hippique_orchestrator import analysis_pipeline
 
 # Sample odds data showing a significant drift for horse #5
 H30_RUNNERS = [
-    {"num": 1, "name": "Horse A", "odds_place": 3.0},
-    {"num": 5, "name": "Horse B", "odds_place": 8.0},  # Original odds
-    {"num": 8, "name": "Horse C", "odds_place": 12.0},
+    {"num": 1, "nom": "Horse A", "odds_place": 3.0},
+    {"num": 5, "nom": "Horse B", "odds_place": 8.0},  # Original odds
+    {"num": 8, "nom": "Horse C", "odds_place": 12.0},
 ]
 
 H5_RUNNERS = [
-    {"num": 1, "name": "Horse A", "odds_place": 3.2},
-    {"num": 5, "name": "Horse B", "odds_place": 5.5},  # Odds have steamed (decreased)
-    {"num": 8, "name": "Horse C", "odds_place": 12.0},
+    {"num": 1, "nom": "Horse A", "odds_place": 3.2},
+    {"num": 5, "nom": "Horse B", "odds_place": 5.5},  # Odds have steamed (decreased)
+    {"num": 8, "nom": "Horse C", "odds_place": 12.0},
 ]
 
 # Minimal snapshot structure adhering to RaceSnapshotNormalized

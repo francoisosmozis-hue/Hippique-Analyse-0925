@@ -171,7 +171,7 @@ def test_gcs_manager_list_files_success(gcs_manager, mocker):
         {"name": "test-bucket/dir/file2.txt", "type": "file"},
     ]
     path = "dir/"
-    expected_files = ["gs://test-bucket/test-bucket/dir/file1.json", "gs://test-bucket/test-bucket/dir/file2.txt"] # build_gcs_path gets applied to the name
+    expected_files = ["gs://test-bucket/dir/file1.json", "gs://test-bucket/dir/file2.txt"]
 
     files = gcs_manager.list_files(path)
     assert files == expected_files

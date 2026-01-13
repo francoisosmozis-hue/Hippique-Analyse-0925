@@ -67,7 +67,7 @@ def test_update_race_document_skips_if_db_not_available(mock_warning, mock_get_f
     mock_warning.assert_called_once_with("Firestore is not available, skipping update.")
 
 
-def test_get_races_for_date_success(mock_db):
+async def test_get_races_for_date_success(mock_db):
     """Test `get_races_for_date` returns a list of document snapshots."""
 
     # Create mock documents
@@ -80,7 +80,7 @@ def test_get_races_for_date_success(mock_db):
     mock_db.collection.return_value.order_by.return_value.start_at.return_value.end_at.return_value = mock_query
 
     date_str = "2025-12-30"
-    results = firestore_client.get_races_for_date(date_str)
+    results = await firestore_client.get_races_for_date(date_str)
 
     assert len(results) == 2
     assert results[0] == doc1_mock
@@ -88,7 +88,7 @@ def test_get_races_for_date_success(mock_db):
     mock_db.collection.return_value.order_by.assert_called_with("__name__")
 
 
-def test_get_races_for_date_empty(mock_db):
+async def test_get_races_for_date_empty(mock_db):
     """Test `get_races_for_date` returns an empty list when no documents are found."""
 
     mock_query = MagicMock()
@@ -96,17 +96,17 @@ def test_get_races_for_date_empty(mock_db):
 
     mock_db.collection.return_value.order_by.return_value.start_at.return_value.end_at.return_value = mock_query
 
-    results = firestore_client.get_races_for_date("2025-12-30")
+    results = await firestore_client.get_races_for_date("2025-12-30")
 
     assert results == []
 
 
-def test_get_races_for_date_handles_exception(mock_db, caplog):
+async def test_get_races_for_date_handles_exception(mock_db, caplog):
     """Test that exceptions during race query are logged and return an empty list."""
 
     mock_db.collection.side_effect = Exception("Query failed")
 
-    results = firestore_client.get_races_for_date("2025-12-30")
+    results = await firestore_client.get_races_for_date("2025-12-30")
 
     assert "Failed to query races by date 2025-12-30" in caplog.text
     assert "Query failed" in caplog.text
@@ -115,11 +115,11 @@ def test_get_races_for_date_handles_exception(mock_db, caplog):
 
 @patch("hippique_orchestrator.firestore_client._get_firestore_client", return_value=None)
 @patch("hippique_orchestrator.firestore_client.logger.warning")
-def test_get_races_for_date_skips_if_db_not_available(mock_warning, mock_get_firestore_client):
+async def test_get_races_for_date_skips_if_db_not_available(mock_warning, mock_get_firestore_client):
     """Test that `get_races_for_date` skips if the db client is None."""
 
     date_str = "2025-12-30"
-    results = firestore_client.get_races_for_date(date_str)
+    results = await firestore_client.get_races_for_date(date_str)
     assert results == []
     mock_warning.assert_called_once_with("Firestore is not available, cannot query races.")
 
@@ -159,7 +159,7 @@ def create_mock_doc(doc_id, update_time_str, data=None):
     return mock_doc
 
 
-def test_get_processing_status_for_date_success(mock_db):
+async def test_get_processing_status_for_date_success(mock_db):
     """Test `get_processing_status_for_date` for a nominal case with processed data."""
 
     date_str = "2025-12-30"
@@ -186,7 +186,7 @@ def test_get_processing_status_for_date_success(mock_db):
     mock_query.stream.return_value = mock_docs
     mock_db.collection.return_value.order_by.return_value.start_at.return_value.end_at.return_value = mock_query
 
-    status = firestore_client.get_processing_status_for_date(date_str, daily_plan)
+    status = await firestore_client.get_processing_status_for_date(date_str, daily_plan)
 
     assert status["date"] == date_str
     assert status["config"]["project_id"] == "test-project"
@@ -203,15 +203,15 @@ def test_get_processing_status_for_date_success(mock_db):
 
 
 @patch(FIRESTORE_CLIENT_PATH, return_value=None)
-def test_get_processing_status_for_date_db_not_available(caplog):
+async def test_get_processing_status_for_date_db_not_available(caplog):
     """Test `get_processing_status_for_date` when Firestore client is None."""
     with caplog.at_level(logging.WARNING):
-        status = firestore_client.get_processing_status_for_date("2025-12-30", [])
+        status = await firestore_client.get_processing_status_for_date("2025-12-30", [])
     assert status["error"] == "Firestore client is not available."
     assert status["reason_if_empty"] == "FIRESTORE_CONNECTION_FAILED"
 
 
-def test_get_processing_status_for_date_empty_daily_plan(mock_db):
+async def test_get_processing_status_for_date_empty_daily_plan(mock_db):
     """Test `get_processing_status_for_date` with an empty daily plan."""
 
     date_str = "2025-12-30"
@@ -221,13 +221,13 @@ def test_get_processing_status_for_date_empty_daily_plan(mock_db):
     mock_query.stream.return_value = []  # No races in DB
     mock_db.collection.return_value.order_by.return_value.start_at.return_value.end_at.return_value = mock_query
 
-    status = firestore_client.get_processing_status_for_date(date_str, daily_plan)
+    status = await firestore_client.get_processing_status_for_date(date_str, daily_plan)
     assert status["counts"]["total_in_plan"] == 0
     assert status["counts"]["total_processed"] == 0
     assert status["reason_if_empty"] == "PLAN_SCRAPING_FAILED_OR_NO_RACES_TODAY"
 
 
-def test_get_processing_status_for_date_explicit_empty_plan_reason(mock_db):
+async def test_get_processing_status_for_date_explicit_empty_plan_reason(mock_db):
     """Test `get_processing_status_for_date` explicitly covers the empty plan reason."""
 
     date_str = "2025-01-01"
@@ -237,11 +237,11 @@ def test_get_processing_status_for_date_explicit_empty_plan_reason(mock_db):
     mock_query.stream.return_value = []
     mock_db.collection.return_value.order_by.return_value.start_at.return_value.end_at.return_value = mock_query
 
-    status = firestore_client.get_processing_status_for_date(date_str, daily_plan)
+    status = await firestore_client.get_processing_status_for_date(date_str, daily_plan)
     assert status["reason_if_empty"] == "PLAN_SCRAPING_FAILED_OR_NO_RACES_TODAY"
 
 
-def test_get_processing_status_for_date_unprocessed_races(mock_db):
+async def test_get_processing_status_for_date_unprocessed_races(mock_db):
     """Test `get_processing_status_for_date` when daily plan has races but none are processed."""
 
     date_str = "2025-12-30"
@@ -254,13 +254,13 @@ def test_get_processing_status_for_date_unprocessed_races(mock_db):
     mock_query.stream.return_value = []  # No races in DB
     mock_db.collection.return_value.order_by.return_value.start_at.return_value.end_at.return_value = mock_query
 
-    status = firestore_client.get_processing_status_for_date(date_str, daily_plan)
+    status = await firestore_client.get_processing_status_for_date(date_str, daily_plan)
     assert status["counts"]["total_in_plan"] == 2
     assert status["counts"]["total_processed"] == 0
     assert status["reason_if_empty"] == "NO_TASKS_PROCESSED_OR_FIRESTORE_EMPTY"
 
 
-def test_get_processing_status_for_date_error_decision(mock_db):
+async def test_get_processing_status_for_date_error_decision(mock_db):
     """Test `get_processing_status_for_date` correctly counts error decisions."""
 
     date_str = "2025-12-30"
@@ -276,13 +276,13 @@ def test_get_processing_status_for_date_error_decision(mock_db):
     mock_query.stream.return_value = mock_docs
     mock_db.collection.return_value.order_by.return_value.start_at.return_value.end_at.return_value = mock_query
 
-    status = firestore_client.get_processing_status_for_date(date_str, daily_plan)
+    status = await firestore_client.get_processing_status_for_date(date_str, daily_plan)
     assert status["counts"]["total_error"] == 1
     assert status["counts"]["total_playable"] == 0
     assert status["counts"]["total_abstain"] == 0
 
 
-def test_get_processing_status_for_date_unknown_decision(mock_db):
+async def test_get_processing_status_for_date_unknown_decision(mock_db):
     """Test `get_processing_status_for_date` correctly handles unknown decisions (not counted in specific buckets)."""
 
     date_str = "2025-12-30"
@@ -298,7 +298,7 @@ def test_get_processing_status_for_date_unknown_decision(mock_db):
     mock_query.stream.return_value = mock_docs
     mock_db.collection.return_value.order_by.return_value.start_at.return_value.end_at.return_value = mock_query
 
-    status = firestore_client.get_processing_status_for_date(date_str, daily_plan)
+    status = await firestore_client.get_processing_status_for_date(date_str, daily_plan)
     assert status["counts"]["total_error"] == 0
     assert status["counts"]["total_playable"] == 0
     assert status["counts"]["total_abstain"] == 0
@@ -374,10 +374,10 @@ def test_set_document_exception(mock_db, caplog):
 
 @patch("hippique_orchestrator.firestore_client._get_firestore_client", return_value=None)
 @patch("hippique_orchestrator.firestore_client.logger.warning")
-def test_get_races_for_date_db_unavailable(mock_warning, mock_get_firestore_client):
+async def test_get_races_for_date_db_unavailable(mock_warning, mock_get_firestore_client):
     """Test get_races_for_date when the database is unavailable."""
 
-    races = firestore_client.get_races_for_date("2025-12-30")
+    races = await firestore_client.get_races_for_date("2025-12-30")
     assert races == []
     mock_warning.assert_called_once_with("Firestore is not available, cannot query races.")
 

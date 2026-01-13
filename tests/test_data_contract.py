@@ -12,7 +12,7 @@ def create_test_runner(
 ) -> RunnerData:
     runner = RunnerData(
         num=num,
-        name=f"Cheval {num}",
+        nom=f"Cheval {num}",
         odds_place=1.5 + num * 0.1 if with_odds else None,
         musique="1p2p3p" if with_musique else None,
     )

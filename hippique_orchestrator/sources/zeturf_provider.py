@@ -129,7 +129,7 @@ class ZeturfProvider(SourceProvider):
                 if num_cell := cells[0]:
                     runner_data["num"] = _clean_text(num_cell.text)
                 if name_cell := cells[1].find("a", class_="horse-name"):
-                    runner_data["name"] = _clean_text(name_cell.get("title"))
+                    runner_data["nom"] = _clean_text(name_cell.get("title"))
 
                 # Get odds from visible table first as a fallback
                 if odds_cell := row.find("td", class_="cotes"):
@@ -198,7 +198,7 @@ class ZeturfProvider(SourceProvider):
 
         return RunnerData(
             num=num,
-            name=entry.get("name", f"Runner {num}"),
+            nom=entry.get("nom", f"Runner {num}"),
             odds_win=self._parse_float_fr(entry.get("odds_win")),
             odds_place=self._parse_float_fr(entry.get("odds_place")),
         )

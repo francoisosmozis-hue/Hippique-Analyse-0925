@@ -49,13 +49,13 @@ async def test_fetch_snapshot_returns_normalized_data(zeturf_provider):
     
     runner1 = snapshot.runners[0]
     assert runner1.num == 1
-    assert runner1.name == "Gagnant"
+    assert runner1.nom == "Gagnant"
     assert runner1.odds_win == pytest.approx(2.5)
     assert runner1.odds_place == pytest.approx(1.35)
 
     runner2 = snapshot.runners[1]
     assert runner2.num == 2
-    assert runner2.name == "Placé"
+    assert runner2.nom == "Placé"
     assert runner2.odds_win == pytest.approx(5.0)
     assert runner2.odds_place == pytest.approx(2.0)
 
