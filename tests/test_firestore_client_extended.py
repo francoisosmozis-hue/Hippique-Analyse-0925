@@ -10,7 +10,7 @@ from google.cloud import firestore
 from hippique_orchestrator import firestore_client
 
 
-async def test_get_processing_status_for_date_processing_stalled():
+async def test_get_processing_status_for_date_processing_stalled(race_document_factory):
     """
     Covers the 'PROCESSING_STALLED' case in get_processing_status_for_date.
     This happens when there are no races for the given date, but there are races
@@ -25,13 +25,15 @@ async def test_get_processing_status_for_date_processing_stalled():
     mock_collection.order_by.return_value.limit.return_value = mock_latest_doc_query
 
     # Simulate a non-empty database, but with no races for the given date
-    mock_doc = MagicMock(spec=firestore.DocumentSnapshot)
-    mock_doc.id = "2025-01-01_R1C1"
-    mock_doc.to_dict.return_value = {
-        "gpi_decision": "PLAY",
-        "last_modified_at": datetime(2025, 1, 1, 12, 0, 0, tzinfo=timezone.utc).isoformat(),
-    }
-    mock_doc.update_time = datetime(2025, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+    update_time = datetime(2025, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+    mock_doc = race_document_factory(
+        "2025-01-01_R1C1",
+        {
+            "gpi_decision": "PLAY",
+            "last_modified_at": update_time.isoformat(),
+        },
+    )
+    mock_doc.update_time = update_time  # Set update_time separately if needed
 
     mock_latest_doc_query.stream.return_value = [mock_doc]
 

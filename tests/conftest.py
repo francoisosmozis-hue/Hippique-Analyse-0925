@@ -160,3 +160,44 @@ def mock_firestore(mocker):
     mocker.patch("hippique_orchestrator.service.firestore_client.get_processing_status_for_date", new=mock_get_status)
 
     return (mock_get_races, mock_get_status)
+
+@pytest.fixture
+def mock_cloud_tasks(mocker):
+    """
+    Centralized mock for the Cloud Tasks client.
+    Patches the client at the source and returns a mock instance.
+    """
+    mock_client_instance = mocker.MagicMock()
+    mock_client_instance.create_task.return_value = mocker.MagicMock(
+        name="projects/p/locations/l/queues/q/tasks/t"
+    )
+
+    # Patch the client where it is imported and used in the scheduler
+    mocker.patch(
+        "hippique_orchestrator.scheduler.tasks_v2.CloudTasksClient",
+        return_value=mock_client_instance,
+    )
+    return mock_client_instance
+
+
+@pytest.fixture
+def race_document_factory(mocker):
+    """
+    Factory fixture to create consistent mock Firestore documents for race data.
+    Ensures that essential keys like 'last_modified_at' are always present.
+    """
+    from datetime import datetime
+    def _factory(doc_id: str, data: dict):
+        mock_doc = mocker.MagicMock()
+        mock_doc.id = doc_id
+
+        # Ensure essential keys are present
+        if last_modified_at not in data:
+            data[last_modified_at] = datetime.now()
+
+        mock_doc.to_dict.return_value = data
+        mock_doc.exists = True
+        return mock_doc
+
+    return _factory
+

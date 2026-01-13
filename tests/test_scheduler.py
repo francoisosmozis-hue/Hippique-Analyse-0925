@@ -68,18 +68,10 @@ def test_schedule_all_races_dry_run_with_force():
     assert all("Forced schedule" in task["reason"] for task in candidate_tasks)
 
 
-@patch("hippique_orchestrator.scheduler.tasks_v2.CloudTasksClient")
-def test_schedule_all_races_real_run_with_force(mock_cloud_tasks_client):
+def test_schedule_all_races_real_run_with_force(mock_cloud_tasks):
     """
     A real run with force=True should attempt to create tasks for all races.
     """
-    # Mock the client instance and its create_task method
-    mock_client_instance = MagicMock()
-    mock_cloud_tasks_client.return_value = mock_client_instance
-    mock_client_instance.create_task.return_value = MagicMock(
-        name="projects/p/locations/l/queues/q/tasks/t"
-    )
-
     results = scheduler.schedule_all_races(
         plan=SAMPLE_PLAN, force=True, dry_run=False, service_url="http://test.service"
     )
@@ -87,22 +79,15 @@ def test_schedule_all_races_real_run_with_force(mock_cloud_tasks_client):
     # All 4 potential tasks should have been processed
     assert len(results) == 4
     # The client's create_task method should have been called for each of the 4 candidate tasks
-    assert mock_client_instance.create_task.call_count == 4
+    assert mock_cloud_tasks.create_task.call_count == 4
     # All results should indicate success
     assert all(r["ok"] for r in results)
 
 
-@patch("hippique_orchestrator.scheduler.tasks_v2.CloudTasksClient")
-def test_schedule_all_races_real_run_no_force(mock_cloud_tasks_client):
+def test_schedule_all_races_real_run_no_force(mock_cloud_tasks):
     """
     A real run without force should only create tasks for future races.
     """
-    mock_client_instance = MagicMock()
-    mock_cloud_tasks_client.return_value = mock_client_instance
-    mock_client_instance.create_task.return_value = MagicMock(
-        name="projects/p/locations/l/queues/q/tasks/t"
-    )
-
     results = scheduler.schedule_all_races(
         plan=SAMPLE_PLAN, force=False, dry_run=False, service_url="http://test.service"
     )
@@ -111,7 +96,7 @@ def test_schedule_all_races_real_run_no_force(mock_cloud_tasks_client):
     assert len(results) == 4
 
     # But create_task is only called for the 2 future tasks
-    assert mock_client_instance.create_task.call_count == 2
+    assert mock_cloud_tasks.create_task.call_count == 2
 
     # Check that the skipped tasks are marked as not "ok"
     skipped_results = [r for r in results if not r["ok"]]
