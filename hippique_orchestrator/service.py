@@ -9,7 +9,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response, Security, BackgroundTasks
+from fastapi import (
+    Depends,
+    FastAPI,
+    Header,
+    HTTPException,
+    Request,
+    Response,
+    Security,
+)
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -17,7 +25,7 @@ from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from . import __version__, analysis_pipeline, config, firestore_client, plan, scheduler, runner
+from . import __version__, analysis_pipeline, config, firestore_client, plan, runner, scheduler
 from .analysis_utils import normalize_phase
 from .api import tasks  # Import the tasks router
 from .auth import check_api_key, verify_oidc_token
@@ -26,9 +34,6 @@ from .logging_utils import (
     setup_logging,
 )
 from .schemas import ScheduleRequest, ScheduleResponse
-from typing import Optional
-from pydantic import Field
-
 
 # --- Configuration & Initialization ---
 setup_logging(log_level=config.LOG_LEVEL)
@@ -337,11 +342,11 @@ async def run_single_race(rc: str, api_key: str = Security(check_api_key)):
 
 
 class LegacyRunRequest(BaseModel):
-    course_url: Optional[str] = None
-    reunion: Optional[str] = None
-    course: Optional[str] = None
+    course_url: str | None = None
+    reunion: str | None = None
+    course: str | None = None
     phase: str
-    budget: Optional[float] = 5.0  # Keep for compatibility, but it's unused
+    budget: float | None = 5.0  # Keep for compatibility, but it's unused
 
 
 async def _get_course_url_from_legacy(

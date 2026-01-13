@@ -11,21 +11,22 @@ Exemple d'utilisation :
 python tools/discover_endpoints.py https://www.letrot.com/fiche-personne/1234-nom-jockey
 """
 
+import argparse
 import asyncio
 import json
 import re
-import argparse
-from urllib.parse import urljoin # Moved import to top
+from urllib.parse import urljoin  # Moved import to top
 
 import httpx
 from bs4 import BeautifulSoup
+
 
 async def discover_page_data(url: str):
     """
     Tlcharge une URL et analyse son contenu  la recherche de donnes structures.
     """
     print(f"[*] Analyse de l'URL : {url}")
-    
+
     async with httpx.AsyncClient(headers={"User-Agent": "EndpointDiscoverer/1.0"}, follow_redirects=True) as client:
         try:
             response = await client.get(url, timeout=20.0)
@@ -41,7 +42,7 @@ async def discover_page_data(url: str):
     # 1. Rechercher les balises <script type="application/json"> ou <script type="application/ld+json">
     print("\n[*] Recherche de JSON embarqu dans les balises <script>...")
     json_scripts = soup.find_all('script', type=["application/json", "application/ld+json"])
-    
+
     if not json_scripts:
         print("[-] Aucune balise <script> avec du JSON trouve.")
     else:
@@ -59,7 +60,7 @@ async def discover_page_data(url: str):
     # 2. Rechercher des URL d'API dans le code JavaScript inline ou externe
     print("\n[*] Recherche d'URL d'API dans le code JavaScript...")
     js_urls_found = set()
-    
+
     # Regex pour trouver des chemins d'API courants
     api_pattern = re.compile(r"['\"](/api/v\d+|/graphql|/json-rpc)['\"]")
 
@@ -74,7 +75,7 @@ async def discover_page_data(url: str):
             src_url = script.get('src')
             if not src_url.startswith(('http:', 'https:')):
                 src_url = urljoin(url, src_url)
-            
+
             # On pourrait aussi télécharger et analyser ces scripts, mais c'est plus complexe
             # print(f"    - Script externe trouvé : {src_url}")
 

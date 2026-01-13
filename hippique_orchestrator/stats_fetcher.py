@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
-from typing import Any
 
 from . import gcs_client
 from .source_registry import source_registry
@@ -52,7 +51,7 @@ async def collect_stats(
 
     # 2. Loop through runners and fetch their stats using SourceRegistry
     stat_rows = []
-    
+
     for runner in runners:
         runner_num = runner.get("num")
         runner_name = runner.get("name", "").strip() # Use 'name' key for consistency
@@ -65,7 +64,7 @@ async def collect_stats(
             f"Fetching stats for runner {runner_name} (discipline: {discipline})",
             extra={**log_extra, "runner_name": runner_name, "discipline": discipline},
         )
-        
+
         # Call the SourceRegistry to fetch all relevant stats for the runner
         all_runner_stats = await source_registry.fetch_stats_for_runner(
             runner_name=runner_name,
@@ -74,7 +73,7 @@ async def collect_stats(
             correlation_id=correlation_id,
             trace_id=trace_id,
         )
-        
+
         # Combine base runner info with fetched stats
         combined_stats = {
             "num": runner_num,

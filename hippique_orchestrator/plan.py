@@ -16,16 +16,16 @@ Corrections v3:
 """
 
 from __future__ import annotations
-from typing import Any
 
 import asyncio
 import re
-from datetime import datetime, timedelta, date as date_obj
-from hippique_orchestrator.analysis_utils import coerce_partants
+from datetime import date as date_obj
+from datetime import datetime
+from typing import Any
 from zoneinfo import ZoneInfo
 
 from hippique_orchestrator import config
-from hippique_orchestrator.source_registry import source_registry
+from hippique_orchestrator.analysis_utils import coerce_partants
 from hippique_orchestrator.logging_utils import get_logger
 from hippique_orchestrator.programme_provider import programme_provider
 
@@ -44,7 +44,7 @@ async def build_plan_async(date_str: str) -> list[dict[str, Any]]:
         except (ValueError, TypeError):
             logger.warning(f"Invalid date string format: '{date_str}'. Defaulting to today.")
             date_obj_req = datetime.now(ZoneInfo(config.TIMEZONE)).date()
-    
+
     date_str = date_obj_req.isoformat()
     logger.info(f"Building plan for {date_str} using ProgrammeProvider.")
 

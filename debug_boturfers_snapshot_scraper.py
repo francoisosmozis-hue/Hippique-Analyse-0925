@@ -1,10 +1,12 @@
-import sys
-import re
-from urllib.parse import urljoin
-from bs4 import BeautifulSoup
 import json
+import re
+import sys
 from datetime import datetime
 from typing import Any
+from urllib.parse import urljoin
+
+from bs4 import BeautifulSoup
+
 
 # Mimic the structure of BoturfersProvider for debugging
 class MockBoturfersProvider:
@@ -27,7 +29,7 @@ class MockBoturfersProvider:
             metadata["rc_label"] = rc_match.group(1)
             metadata["r_label"] = rc_match.group(1).split('C')[0]
             metadata["c_label"] = rc_match.group(1).split('C')[1]
-        
+
         date_match = re.search(r'courses/(\d{4}-\d{2}-\d{2})', race_url)
         if date_match:
             metadata["date"] = date_match.group(1)
@@ -35,11 +37,11 @@ class MockBoturfersProvider:
         info_block = soup.find("div", class_="card-body text-center mb-3")
         if info_block:
             metadata_text = info_block.get_text(strip=True).replace("\n", " ")
-            
+
             discipline_match = re.search(r"(Trot|Plat|Obstacle|Steeple|Haies|Cross)", metadata_text, re.IGNORECASE)
             if discipline_match:
                 metadata["discipline"] = discipline_match.group(1)
-            
+
             distance_match = re.search(r"(\d{3,4})\s*mètres", metadata_text)
             if distance_match:
                 metadata["distance"] = int(distance_match.group(1))
@@ -71,7 +73,7 @@ class MockBoturfersProvider:
         if not partants_div:
             print("WARNING: Could not find 'div' with id 'partants'.")
             return []
-        
+
         runners_table = partants_div.find("table", class_="table")
         if not runners_table:
             print("WARNING: Could not find 'table' with class 'table' within 'div#partants'.")
@@ -105,7 +107,7 @@ class MockBoturfersProvider:
                 gains_span = cols[5]
                 gains_text = gains_span.get_text(strip=True).replace(" ", "").replace("\xa0", "")
                 runner_info["gains"] = float(gains_text) if gains_text.replace('.', '', 1).isdigit() else None
-                
+
                 cote_span = cols[6].find("span", class_="cote")
                 cote_text = cote_span.get_text(strip=True).replace(",", ".") if cote_span else None
                 runner_info["odds_win"] = float(cote_text) if cote_text and cote_text.replace('.', '', 1).isdigit() else None
@@ -126,11 +128,11 @@ def main():
     html_file_path = sys.argv[1]
     race_url = sys.argv[2]
 
-    with open(html_file_path, 'r', encoding='utf-8') as f:
+    with open(html_file_path, encoding='utf-8') as f:
         html_content = f.read()
 
     soup = BeautifulSoup(html_content, "html.parser")
-    
+
     mock_provider = MockBoturfersProvider()
     snapshot = mock_provider._parse_race_details_page(soup, race_url)
 

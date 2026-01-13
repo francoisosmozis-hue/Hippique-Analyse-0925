@@ -1,8 +1,10 @@
-import sys
-import re
-from urllib.parse import urljoin
-from bs4 import BeautifulSoup
 import json
+import re
+import sys
+from urllib.parse import urljoin
+
+from bs4 import BeautifulSoup
+
 
 def main():
     if len(sys.argv) < 2:
@@ -10,7 +12,7 @@ def main():
         sys.exit(1)
 
     file_path = sys.argv[1]
-    with open(file_path, 'r', encoding='utf-8') as f:
+    with open(file_path, encoding='utf-8') as f:
         html_content = f.read()
 
     soup = BeautifulSoup(html_content, "html.parser")
@@ -82,7 +84,7 @@ def main():
             except Exception as e:
                 print(f"Error parsing row: {e}")
                 print(row)
-    
+
     print(f"Scraped {len(races_data)} races.")
     print(json.dumps(races_data, indent=2, ensure_ascii=False))
 

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-import asyncio
-from datetime import date, time as dt_time
-from unittest.mock import patch, MagicMock
+from datetime import date
+from datetime import time as dt_time
+from unittest.mock import patch
 
 import pytest
 
@@ -17,9 +17,9 @@ def zeturf_provider():
     that returns content from a static offline fixture file.
     This ensures tests are deterministic and do not perform network calls.
     """
-    with open("tests/fixtures/zeturf/2024-01-11_R1C1.html", "r") as f:
+    with open("tests/fixtures/zeturf/2024-01-11_R1C1.html") as f:
         html_content = f.read()
-    
+
     with patch("hippique_orchestrator.sources.zeturf_provider.ZeturfProvider._http_get_sync", return_value=html_content) as mock_http_get:
         provider = ZeturfProvider()
         provider._http_get_sync_mock = mock_http_get  # Attach mock for inspection if needed
@@ -37,7 +37,7 @@ async def test_fetch_snapshot_returns_normalized_data(zeturf_provider):
 
     assert isinstance(snapshot, RaceSnapshotNormalized)
     assert snapshot.source_snapshot == "Zeturf"
-    
+
     # Test RaceData
     assert snapshot.race.date == date(2024, 1, 11)
     assert snapshot.race.rc_label == "R1C1"
@@ -46,7 +46,7 @@ async def test_fetch_snapshot_returns_normalized_data(zeturf_provider):
 
     # Test RunnerData
     assert len(snapshot.runners) == 2
-    
+
     runner1 = snapshot.runners[0]
     assert runner1.num == 1
     assert runner1.nom == "Gagnant"
@@ -63,10 +63,10 @@ async def test_fetch_snapshot_returns_normalized_data(zeturf_provider):
 @pytest.mark.asyncio
 async def test_fetch_snapshot_handles_http_error(zeturf_provider):
     zeturf_provider._http_get_sync_mock.side_effect = RuntimeError("HTTP 404")
-    
+
     race_url = "https://www.zeturf.fr/fr/course/2024-01-11/R1C1-prix-de-la-course"
     snapshot = await zeturf_provider.fetch_snapshot(race_url)
-    
+
     assert snapshot.source_snapshot == "Zeturf_Failed"
     assert len(snapshot.runners) == 0
 
@@ -74,10 +74,10 @@ async def test_fetch_snapshot_handles_http_error(zeturf_provider):
 @pytest.mark.asyncio
 async def test_fetch_snapshot_handles_empty_runners(zeturf_provider):
     zeturf_provider._http_get_sync_mock.return_value = "<html><body></body></html>"
-    
+
     race_url = "https://www.zeturf.fr/fr/course/2024-01-11/R1C1-prix-de-la-course"
     snapshot = await zeturf_provider.fetch_snapshot(race_url)
-    
+
     assert snapshot.source_snapshot == "Zeturf_Failed"
     assert len(snapshot.runners) == 0
 

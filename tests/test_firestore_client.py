@@ -22,7 +22,6 @@ def reset_firestore_client():
 def mock_db():
     """Fixture to mock the firestore client returned by _get_firestore_client."""
     # Import firestore here to ensure it's defined in the fixture's scope
-    from google.cloud import firestore
     mock_firestore_client = MagicMock()
     with patch(FIRESTORE_CLIENT_PATH, return_value=mock_firestore_client):
         yield mock_firestore_client
@@ -54,7 +53,6 @@ def test_update_race_document_handles_exception(mock_db, caplog):
     assert "Firestore unavailable" in caplog.text
 
 
-from unittest.mock import call
 
 # ... (rest of the file)
 

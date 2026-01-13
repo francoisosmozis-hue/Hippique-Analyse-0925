@@ -1,17 +1,16 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 import re
 from datetime import date
-from typing import Any, Optional
+from typing import Any
 
 import httpx
 from bs4 import BeautifulSoup
 
-from hippique_orchestrator.data_contract import RaceData, RunnerStats, RaceSnapshotNormalized
-from hippique_orchestrator.sources_interfaces import SourceProvider
+from hippique_orchestrator.data_contract import RaceData, RaceSnapshotNormalized, RunnerStats
 from hippique_orchestrator.logging_utils import get_logger
+from hippique_orchestrator.sources_interfaces import SourceProvider
 
 logger = get_logger(__name__)
 
@@ -24,7 +23,7 @@ class GenyProvider(SourceProvider):
 
     BASE_URL = "https://www.geny.com"
 
-    def __init__(self, client: Optional[httpx.AsyncClient] = None):
+    def __init__(self, client: httpx.AsyncClient | None = None):
         self._client = client or httpx.AsyncClient(
             base_url=self.BASE_URL,
             timeout=15.0,
@@ -35,7 +34,7 @@ class GenyProvider(SourceProvider):
         self._rate_limiter = asyncio.Semaphore(1)  # 1 requête à la fois vers geny.com
         logger.info("GenyProvider initialized.")
 
-    async def _fetch_page(self, url: str) -> Optional[str]:
+    async def _fetch_page(self, url: str) -> str | None:
         """Effectue un appel HTTP pour récupérer une page."""
         async with self._rate_limiter:
             try:
@@ -65,11 +64,11 @@ class GenyProvider(SourceProvider):
                     cells = row.find_all("td")
                     if len(cells) < 2:
                         continue
-                    
+
                     label = cells[0].get_text(strip=True).lower()
                     value = cells[1].get_text(strip=True)
 
-                    
+
                     # Taux de réussite Jockey/Driver
                     if "% vict." in label: # Corrected parsing condition
                         rate_match = re.search(r"(\d[\d,.]*)", value)
@@ -79,7 +78,7 @@ class GenyProvider(SourceProvider):
                     # Taux de réussite Entraîneur
                     # Cette section sera traitée par une détection spécifique d'une page entraîneur si implémenté.
                     # Pour l'instant, le test ne couvre que le jockey.
-            
+
             logger.info(f"Stats parsées depuis Geny: {stats}")
 
         except Exception as e:
@@ -117,12 +116,12 @@ class GenyProvider(SourceProvider):
 
         logger.info(f"Fetching Geny stats for: {entity_name}")
 
-        # Hypothèse: l'URL est constructible à partir du nom. 
+        # Hypothèse: l'URL est constructible à partir du nom.
         # En réalité, une recherche serait nécessaire.
         # e.g., https://www.geny.com/jockey/y-lebourgeois_c518
         entity_slug = re.sub(r'[^\w\s-]', '', entity_name).lower().replace(" ", "-") # Corrected slug generation
         # On suppose que "jockey" est le type d'entité, à affiner
-        entity_url = f"/jockey/{entity_slug}" 
+        entity_url = f"/jockey/{entity_slug}"
 
         html_content = await self._fetch_page(entity_url)
         if not html_content:

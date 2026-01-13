@@ -4,16 +4,13 @@ conftest.py - Global test configuration and fixtures for pytest.
 
 import subprocess
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
+
 import pytest
 from fastapi.testclient import TestClient
-from fastapi import FastAPI
 
 # Import the app and the config module to be mocked
 from hippique_orchestrator.service import app as fastapi_app
-
-from hippique_orchestrator import firestore_client
-from hippique_orchestrator import plan
 
 
 @pytest.fixture(scope="session")

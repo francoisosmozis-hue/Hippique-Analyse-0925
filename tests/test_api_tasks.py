@@ -298,7 +298,7 @@ async def test_bootstrap_day_task_success(mock_dependencies, mock_get_correlatio
         },
     ]
     mock_build_plan.return_value = mock_plan
-    
+
     headers = {"Authorization": "Bearer fake-token"}
     response = client.post(
         "/tasks/bootstrap-day", json={"date": datetime.now().strftime("%Y-%m-%d")}, headers=headers
@@ -336,5 +336,5 @@ async def test_bootstrap_day_task_empty_plan(mock_dependencies, mock_get_correla
     assert response.status_code == 404
     assert response.json()["ok"] is False
     assert "No races found for this date" in response.json()["error"]
-    
+
     mock_run_in_threadpool.assert_not_called() # No call to run_in_threadpool if plan is empty

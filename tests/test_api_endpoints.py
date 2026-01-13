@@ -1,12 +1,7 @@
-from datetime import datetime
-from unittest.mock import MagicMock
-from freezegun import freeze_time
-
-from zoneinfo import ZoneInfo
-
+import httpx
 import pytest
 from bs4 import BeautifulSoup
-import httpx
+from freezegun import freeze_time
 from httpx import ASGITransport
 
 
@@ -109,7 +104,7 @@ async def test_api_pronostics_default_date_is_today(app, mock_firestore_client, 
 
     async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.get("/api/pronostics")
-    
+
     assert response.status_code == 200
     assert response.json()["date"] == "2025-07-15"
 

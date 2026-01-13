@@ -6,14 +6,13 @@ despuis le site Boturfers.fr.
 """
 from __future__ import annotations
 
-import logging
 import re
 from datetime import datetime
 from typing import Any, TypedDict
 from urllib.parse import urljoin, urlparse
 
 import httpx
-from bs4 import BeautifulSoup # type: ignore
+from bs4 import BeautifulSoup  # type: ignore
 
 from hippique_orchestrator.logging_utils import correlation_id_var, get_logger
 

@@ -1,14 +1,13 @@
 import argparse
 import json
 import logging
-import shutil
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
 import yaml
+
 from hippique_orchestrator.pipeline_run import generate_tickets
-from hippique_orchestrator.simulate_wrapper import evaluate_combo
 
 logging.basicConfig(level=logging.INFO)
 
@@ -49,7 +48,7 @@ def run_backtest_on_race(race_dir: Path, gpi_config: dict[str, Any]) -> dict[str
         if ticket["type"] == "SP_DUTCHING":
             total_profit += calculate_sp_profit(ticket, results, snapshot_data['runners'])
         # TODO: Add other ticket types
-    
+
     return {"race": race_dir.name, "tickets": tickets, "profit": total_profit}
 
 
@@ -102,13 +101,13 @@ def main() -> None:
         if race_dir.is_dir():
             race_results = run_backtest_on_race(race_dir, gpi_config)
             results.append(race_results)
-            
+
             profit = race_results.get("profit", 0)
             total_profit += profit
-            
+
             for ticket in race_results.get("tickets", []):
                 total_stake += ticket.get("stake", 0)
-            
+
             if race_results.get("tickets"):
                 num_bets += 1
 

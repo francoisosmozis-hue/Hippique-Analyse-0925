@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -92,7 +91,7 @@ async def test_fetch_stats_for_runner_handles_fetch_failure(geny_provider):
 @pytest.mark.asyncio
 async def test_fetch_stats_uses_cache(geny_provider):
     runner_data = {"driver": "Y. LEBOURGEOIS", "trainer": "T. DUVALDESTIN"}
-    
+
     with patch.object(
         geny_provider, "_fetch_page", AsyncMock(return_value=SAMPLE_GENY_JOCKEY_HTML)
     ) as mock_fetch:

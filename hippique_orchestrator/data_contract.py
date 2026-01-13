@@ -1,30 +1,30 @@
 import datetime
-from typing import List, Optional, Literal
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
 
 class RunnerStats(BaseModel):
     """Stats normalisées pour un jockey ou un entraîneur."""
-    driver_rate: Optional[float] = Field(None, description="Taux de réussite du jockey/driver")
-    trainer_rate: Optional[float] = Field(None, description="Taux de réussite de l'entraîneur")
-    last_3_chrono: List[float] = Field(default_factory=list, description="Liste des 3 derniers chronos")
-    record_rk: Optional[float] = Field(None, description="Record sur la distance ou parcours")
-    source_stats: Optional[str] = Field(None, description="Provider qui a fourni ces stats (e.g., 'LeTrot')")
+    driver_rate: float | None = Field(None, description="Taux de réussite du jockey/driver")
+    trainer_rate: float | None = Field(None, description="Taux de réussite de l'entraîneur")
+    last_3_chrono: list[float] = Field(default_factory=list, description="Liste des 3 derniers chronos")
+    record_rk: float | None = Field(None, description="Record sur la distance ou parcours")
+    source_stats: str | None = Field(None, description="Provider qui a fourni ces stats (e.g., 'LeTrot')")
 
 
 class RunnerData(BaseModel):
     """Contrat de données pour un partant."""
     num: int
     nom: str
-    musique: Optional[str] = None
-    odds_place: Optional[float] = None
-    odds_win: Optional[float] = None
-    driver: Optional[str] = None
-    trainer: Optional[str] = None
-    age: Optional[int] = None
-    gains: Optional[str] = None
-    draw: Optional[int] = Field(None, description="Numéro de corde ou de couloir")
+    musique: str | None = None
+    odds_place: float | None = None
+    odds_win: float | None = None
+    driver: str | None = None
+    trainer: str | None = None
+    age: int | None = None
+    gains: str | None = None
+    draw: int | None = Field(None, description="Numéro de corde ou de couloir")
     stats: RunnerStats = Field(default_factory=RunnerStats)
 
 
@@ -32,20 +32,20 @@ class RaceData(BaseModel):
     """Contrat de données pour une course."""
     date: datetime.date
     rc_label: str  # e.g., "R1C1"
-    discipline: Optional[Literal["Trot Attelé", "Trot Monté", "Plat", "Obstacle", "Haies", "Steeple-Chase"]] = None
-    distance: Optional[int] = None
-    corde: Optional[Literal["D", "G"]] = None
-    type_course: Optional[str] = None
-    prize: Optional[str] = None
-    start_time_local: Optional[datetime.time] = None
+    discipline: Literal["Trot Attelé", "Trot Monté", "Plat", "Obstacle", "Haies", "Steeple-Chase"] | None = None
+    distance: int | None = None
+    corde: Literal["D", "G"] | None = None
+    type_course: str | None = None
+    prize: str | None = None
+    start_time_local: datetime.time | None = None
 
 
 class RaceSnapshotNormalized(BaseModel):
     """Le Data Contract complet pour un snapshot de course."""
     race: RaceData
-    runners: List[RunnerData]
+    runners: list[RunnerData]
     source_snapshot: str  # Provider qui a fourni le snapshot principal (e.g., 'Zeturf')
-    
+
 
 QualityStatus = Literal["OK", "DEGRADED", "FAILED"]
 

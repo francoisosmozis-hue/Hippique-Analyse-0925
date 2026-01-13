@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-
-import logging
 import re
 import unicodedata
 from datetime import datetime, timedelta
@@ -11,8 +9,8 @@ from typing import Any
 import requests
 from bs4 import BeautifulSoup
 
-from hippique_orchestrator.sources_interfaces import SourceProvider
 from hippique_orchestrator.logging_utils import get_logger
+from hippique_orchestrator.sources_interfaces import SourceProvider
 
 logger = get_logger(__name__)
 

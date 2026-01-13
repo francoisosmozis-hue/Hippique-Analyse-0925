@@ -1,8 +1,7 @@
+import glob
 import json
 import logging
 import os
-import glob
-from functools import cache
 from typing import Any
 
 import gcsfs
@@ -38,7 +37,7 @@ class GCSManager:
             self._client = None
             self._fs = None
             return
-        
+
         if not self._bucket_name:
             logger.warning("GCS_BUCKET is not set in the configuration, but GCS_ENABLED is True. GCS operations will fail.")
             raise ValueError("GCS_BUCKET must be set when GCS_ENABLED is True.")
@@ -83,7 +82,7 @@ class GCSManager:
         """
         if relative_path.startswith("gs://"):
             return relative_path
-        
+
         # Strip leading bucket name if it's accidentally included
         path_to_join = relative_path
         if path_to_join.startswith(self.bucket_name + "/"):
@@ -198,7 +197,7 @@ def get_gcs_manager() -> GCSManager | None:
         logger.info("GCS operations are disabled because BUCKET_NAME is not set.")
         _gcs_manager_instance = None # Ensure no stale manager is kept
         return None
-    
+
     if _gcs_manager_instance is None:
         try:
             _gcs_manager_instance = GCSManager()
@@ -255,7 +254,7 @@ def list_files(path: str) -> list[str]:
         local_path = path.replace("gs://", "").replace(f"{config.BUCKET_NAME}/", "")
         if not local_path.startswith("data/"): # Ensure it's in a data directory
             local_path = os.path.join("data", local_path)
-        
+
         # Add a glob pattern to list files within the directory
         # e.g., data/R1C1/snapshots/*
         files = glob.glob(os.path.join(local_path, "*"))
@@ -283,7 +282,7 @@ def read_file_from_gcs(gcs_path: str) -> str | None:
             if not os.path.exists(local_path):
                 logger.warning(f"Local file not found: {local_path}")
                 return None
-            with open(local_path, 'r') as f:
+            with open(local_path) as f:
                 content = f.read()
             return content
         except Exception as e:

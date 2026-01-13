@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import logging
 from typing import Any
-from urllib.parse import urlparse
 
 from hippique_orchestrator.source_registry import source_registry
 

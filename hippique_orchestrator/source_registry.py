@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 from typing import Any
 
 from hippique_orchestrator.data_contract import (
@@ -12,11 +11,10 @@ from hippique_orchestrator.data_contract import (
 from hippique_orchestrator.logging_utils import get_logger
 from hippique_orchestrator.sources.boturfers_provider import BoturfersProvider
 from hippique_orchestrator.sources.france_galop_provider import FranceGalopProvider
+from hippique_orchestrator.sources.geny_provider import GenyProvider  # Added import
 from hippique_orchestrator.sources.letrot_provider import LeTrotProvider
 from hippique_orchestrator.sources.zeturf_provider import ZeturfProvider
 from hippique_orchestrator.sources.zoneturf_chrono_provider import ZoneTurfChronoProvider
-from hippique_orchestrator.sources.geny_provider import GenyProvider # Added import
-
 
 logger = get_logger(__name__)
 
@@ -127,7 +125,7 @@ class SourceRegistry:
                     runner_name, discipline_lower, runner_data_dict, correlation_id, trace_id
                 )
             )
-        
+
         all_runners_stats: list[RunnerStats] = await asyncio.gather(*stats_tasks)
 
         for i, runner_stats in enumerate(all_runners_stats):
@@ -148,7 +146,7 @@ class SourceRegistry:
         It uses a fallback strategy if the primary stats provider returns no data.
         """
         stats = RunnerStats()
-        
+
         # Primary stats provider based on discipline
         if "trot" in discipline_lower:
             stats = await self._letrot.fetch_stats_for_runner(
@@ -166,7 +164,7 @@ class SourceRegistry:
                 correlation_id=correlation_id,
                 trace_id=trace_id,
             )
-        
+
         # Fallback to Geny if no stats were found from the primary provider
         if not stats.driver_rate and not stats.trainer_rate:
             logger.info(f"No stats from primary provider for {runner_name}, trying Geny as fallback.")

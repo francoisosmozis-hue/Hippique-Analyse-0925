@@ -1,7 +1,10 @@
 import logging
 from unittest.mock import AsyncMock
+
 import pytest
+
 from hippique_orchestrator import stats_fetcher
+
 
 @pytest.fixture
 def mock_storage(mocker):

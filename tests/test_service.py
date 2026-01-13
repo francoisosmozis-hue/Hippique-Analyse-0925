@@ -4,8 +4,8 @@ import logging
 from datetime import datetime, timezone
 from unittest.mock import ANY, AsyncMock, MagicMock, Mock
 
-import pytest
 import httpx
+import pytest
 
 
 def test_get_pronostics_page(client):

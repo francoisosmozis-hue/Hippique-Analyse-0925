@@ -49,7 +49,7 @@ async def verify_oidc_token(
 
     try:
         # The audience should be the full URL of the service.
-        
+
         # Validate the token
         # This checks signature, expiration, issuer, and audience.
         # NOTE: Audience validation is temporarily disabled to debug 401 errors from Cloud Tasks.

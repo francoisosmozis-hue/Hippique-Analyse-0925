@@ -2,20 +2,24 @@ from __future__ import annotations
 
 import asyncio
 import json
-import logging
-import math
 import re
 import unicodedata
 from collections.abc import Mapping
-from datetime import datetime, date, time as dt_time
-from typing import Any, Sequence
+from datetime import date
+from datetime import time as dt_time
+from typing import Any
 
 import requests
 from bs4 import BeautifulSoup
 
-from hippique_orchestrator.data_contract import RaceData, RaceSnapshotNormalized, RunnerData, RunnerStats
-from hippique_orchestrator.sources_interfaces import SourceProvider
+from hippique_orchestrator.data_contract import (
+    RaceData,
+    RaceSnapshotNormalized,
+    RunnerData,
+    RunnerStats,
+)
 from hippique_orchestrator.logging_utils import get_logger
+from hippique_orchestrator.sources_interfaces import SourceProvider
 
 logger = get_logger(__name__)
 
@@ -55,7 +59,7 @@ class ZeturfProvider(SourceProvider):
             race_date = date.fromisoformat(race_date_str) if race_date_str else date.today()
 
             rc_label = self._extract_rc_label_from_url(race_url) or f"R_C_{hash(race_url)}"
-            
+
             start_time_local = None
             if start_time_str := raw_snapshot_dict.get("start_time"):
                 if time_match := _TIME_RE.search(start_time_str):
@@ -73,7 +77,7 @@ class ZeturfProvider(SourceProvider):
                 runner for raw_runner in raw_snapshot_dict.get("runners", [])
                 if (runner := self._coerce_runner_entry(raw_runner)) is not None
             ]
-            
+
             return RaceSnapshotNormalized(
                 race=race_data,
                 runners=runners_data,
@@ -176,14 +180,14 @@ class ZeturfProvider(SourceProvider):
     def _parse_float_fr(self, value: Any) -> float | None:
         if value is None:
             return None
-        
+
         s_value = str(value).strip()
         if not s_value or s_value == "-":
             return None
-        
+
         # Replace comma with dot and remove non-breaking spaces
         s_value = s_value.replace(",", ".").replace("\xa0", "")
-        
+
         try:
             return float(s_value)
         except (ValueError, TypeError):

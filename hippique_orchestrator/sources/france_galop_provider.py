@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-import logging
 from typing import Any
 
-from hippique_orchestrator.sources_interfaces import SourceProvider
 from hippique_orchestrator.logging_utils import get_logger
+from hippique_orchestrator.sources_interfaces import SourceProvider
 
 logger = get_logger(__name__)
 
@@ -60,7 +59,7 @@ class FranceGalopProvider(SourceProvider):
                 extra={"runner_name": runner_name, "discipline": discipline, "correlation_id": correlation_id},
             )
             return {}
-        
+
         # Dummy implementation: In a real scenario, this would involve scraping France-Galop.com
         # for jockey, trainer, and horse stats relevant to galop/obstacle races.
         logger.info(

@@ -1,10 +1,12 @@
 import datetime
+
 from hippique_orchestrator.data_contract import (
     RaceData,
-    RunnerData,
     RaceSnapshotNormalized,
+    RunnerData,
     calculate_quality_score,
 )
+
 
 # Fonctions utilitaires pour créer des données de test
 def create_test_runner(
@@ -28,7 +30,7 @@ def create_test_snapshot(
     runners_with_musique: int,
     runners_with_stats: int = 0,
 ) -> RaceSnapshotNormalized:
-    
+
     runners = []
     for i in range(1, num_runners + 1):
         has_odds = i <= runners_with_odds
@@ -58,7 +60,7 @@ def test_quality_score_ok():
         num_runners=10, runners_with_odds=10, runners_with_musique=10, runners_with_stats=10
     )
     quality = calculate_quality_score(snapshot)
-    
+
     assert quality["score"] == 1.0
     assert quality["status"] == "OK"
 
@@ -73,7 +75,7 @@ def test_quality_score_degraded_missing_odds():
     # Score = 0.6 * 0.7 + 0.2 * 1.0 = 0.42 + 0.2 = 0.62
     snapshot = create_test_snapshot(num_runners=10, runners_with_odds=7, runners_with_musique=10)
     quality = calculate_quality_score(snapshot)
-    
+
     assert quality["status"] == "DEGRADED"
     assert 0.5 <= quality["score"] < 0.85
 
@@ -86,7 +88,7 @@ def test_quality_score_failed_too_many_missing_odds():
     # Score = 0.6 * 0.4 + 0.2 * 1.0 = 0.24 + 0.2 = 0.44
     snapshot = create_test_snapshot(num_runners=10, runners_with_odds=4, runners_with_musique=10)
     quality = calculate_quality_score(snapshot)
-    
+
     assert quality["status"] == "FAILED"
     assert quality["score"] < 0.5
 
@@ -100,7 +102,7 @@ def test_quality_score_failed_no_runners():
         source_snapshot="test_provider",
     )
     quality = calculate_quality_score(snapshot)
-    
+
     assert quality["status"] == "FAILED"
     assert quality["score"] == 0.0
 
@@ -113,6 +115,6 @@ def test_quality_score_degraded_missing_musique():
     # Score = 0.6 * 1.0 + 0.2 * 0.5 = 0.6 + 0.1 = 0.7
     snapshot = create_test_snapshot(num_runners=10, runners_with_odds=10, runners_with_musique=5)
     quality = calculate_quality_score(snapshot)
-    
+
     assert quality["status"] == "DEGRADED"
     assert 0.5 <= quality["score"] < 0.85

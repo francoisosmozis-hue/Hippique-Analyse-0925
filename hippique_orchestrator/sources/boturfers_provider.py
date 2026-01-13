@@ -1,17 +1,22 @@
 from __future__ import annotations
 
-import logging
 import re
-from datetime import datetime, date, time as dt_time
+from datetime import date
+from datetime import time as dt_time
 from typing import Any
 from urllib.parse import urljoin
 
 import httpx
 from bs4 import BeautifulSoup
 
-from hippique_orchestrator.data_contract import RaceData, RaceSnapshotNormalized, RunnerData, RunnerStats
-from hippique_orchestrator.sources_interfaces import SourceProvider
+from hippique_orchestrator.data_contract import (
+    RaceData,
+    RaceSnapshotNormalized,
+    RunnerData,
+    RunnerStats,
+)
 from hippique_orchestrator.logging_utils import get_logger
+from hippique_orchestrator.sources_interfaces import SourceProvider
 
 logger = get_logger(__name__)
 
@@ -76,7 +81,7 @@ class BoturfersProvider(SourceProvider):
             race_table = tab.find("table", class_="table")
             if not race_table:
                 continue
-            
+
             # Corrected regex for date in title to avoid double escaping
             date_match = re.search(r'(\d{2}/\d{2}/\d{4})', soup.title.string if soup.title else '')
             race_date = date_match.group(1) if date_match else "N/A"
@@ -124,7 +129,7 @@ class BoturfersProvider(SourceProvider):
 
                     race_info["reunion_name"] = reunion_name
                     race_info["date"] = race_date
-                    
+
                     races_data.append(race_info)
                 except Exception as e:
                     logger.error(
@@ -159,7 +164,7 @@ class BoturfersProvider(SourceProvider):
             )
 
         soup = BeautifulSoup(html_content, "html.parser")
-        
+
         # Extract general race metadata
         metadata = self._parse_race_metadata(soup, race_url)
         if not metadata:
@@ -210,7 +215,7 @@ class BoturfersProvider(SourceProvider):
         h1_tag = soup.find("h1", class_="my-3")
         if h1_tag:
             metadata["race_name"] = h1_tag.get_text(strip=True)
-        
+
         # Date (from URL)
         date_match = re.search(r'courses/(\d{4}-\d{2}-\d{2})', race_url)
         if date_match:
@@ -220,17 +225,17 @@ class BoturfersProvider(SourceProvider):
         rc_match = re.search(r"/(R\d+C\d+)(?:-|$)", race_url)
         if rc_match:
             metadata["rc_label"] = rc_match.group(1)
-        
+
         # Basic Info Block (e.g., Discipline, Distance, Prize, Start Time)
         info_block = soup.find("div", class_="card-body text-center mb-3")
         if info_block:
             metadata_text = info_block.get_text(strip=True).replace("\n", " ")
-            
+
             # Discipline
             discipline_match = re.search(r"(Trot|Plat|Obstacle|Steeple|Haies|Cross|Attelé|Monté)", metadata_text, re.IGNORECASE)
             if discipline_match:
                 metadata["discipline"] = discipline_match.group(1)
-            
+
             # Distance
             distance_match = re.search(r"(\d{3,4})\s*mètres", metadata_text)
             if distance_match:
@@ -252,7 +257,7 @@ class BoturfersProvider(SourceProvider):
                 corde_match = re.search(r"corde (à gauche|à droite)", conditions_text, re.IGNORECASE)
                 if corde_match:
                     metadata["corde"] = "Gauche" if "gauche" in corde_match.group(1) else "Droite"
-            
+
             # Start Time
             time_match = re.search(r'(\d{1,2}h\d{2})', metadata_text)
             if time_match:
@@ -266,7 +271,7 @@ class BoturfersProvider(SourceProvider):
         if not partants_div:
             logger.warning("Could not find 'div' with id 'partants' on the page.")
             return []
-        
+
         runners_table = partants_div.find("table", class_="table")
         if not runners_table:
             logger.warning("Could not find 'table' with class 'table' within 'div#partants' on the page.")
@@ -290,10 +295,10 @@ class BoturfersProvider(SourceProvider):
                 jockey = cols[2].find("a").get_text(strip=True) if cols[2].find("a") else None
                 trainer = cols[3].find("a").get_text(strip=True) if cols[3].find("a") else None
                 musique = cols[4].get_text(strip=True)
-                
+
                 gains_text = cols[5].get_text(strip=True).replace(" ", "").replace("\xa0", "")
                 gains = float(gains_text) if gains_text.replace('.', '', 1).isdigit() else None
-                
+
                 cote_span = cols[6].find("span", class_="cote")
                 cote_text = cote_span.get_text(strip=True).replace(",", ".") if cote_span else None
                 odds_win = float(cote_text) if cote_text and cote_text.replace('.', '', 1).isdigit() else None

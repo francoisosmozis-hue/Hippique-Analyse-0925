@@ -1,5 +1,5 @@
 import logging
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -114,7 +114,7 @@ def test_gcs_manager_save_json_to_gcs_exception(gcs_manager, mocker):
 
     with pytest.raises(Exception, match="Mock GCS write error"):
         gcs_manager.save_json_to_gcs(gcs_path, data)
-    
+
     mock_fs_open.assert_called_once_with(gcs_path, 'w')
 
 
@@ -231,7 +231,7 @@ def test_global_list_files_gcs_disabled_local_fallback(monkeypatch, mocker, tmp_
     local_dir.mkdir(parents=True)
     (local_dir / "file1.json").write_text("content1")
     (local_dir / "file2.txt").write_text("content2")
-    
+
     # Mock glob to return predictable local paths
     mocker.patch('glob.glob', return_value=[str(local_dir / "file1.json"), str(local_dir / "file2.txt")])
     mocker.patch('os.path.isfile', side_effect=lambda x: True) # Ensure mocked files are treated as files

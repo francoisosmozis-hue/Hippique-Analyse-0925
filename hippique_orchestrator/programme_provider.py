@@ -5,7 +5,7 @@ import asyncio
 import datetime
 import logging
 from abc import ABC, abstractmethod
-from typing import List, Dict, Any
+from typing import Any
 
 from hippique_orchestrator.source_registry import source_registry
 
@@ -18,7 +18,7 @@ class BaseProgrammeProvider(ABC):
         self.source_registry = registry
 
     @abstractmethod
-    async def get_programme(self, target_date: datetime.date) -> List[Dict[str, Any]]:
+    async def get_programme(self, target_date: datetime.date) -> list[dict[str, Any]]:
         """
         Récupère le programme pour une date donnée.
         Doit retourner une liste de dictionnaires, chacun représentant une course.
@@ -32,10 +32,10 @@ class BaseProgrammeProvider(ABC):
 
 class BoturfersProgrammeProvider(BaseProgrammeProvider):
     """Récupère le programme depuis Boturfers (aujourd'hui/demain uniquement)."""
-    async def get_programme(self, target_date: datetime.date) -> List[Dict[str, Any]]:
+    async def get_programme(self, target_date: datetime.date) -> list[dict[str, Any]]:
         today = datetime.datetime.now(datetime.timezone.utc).date()
         tomorrow = today + datetime.timedelta(days=1)
-        
+
         url = None
         if target_date == today:
             url = "https://www.boturfers.fr/programme-pmu-du-jour"
@@ -59,7 +59,7 @@ class PmuProgrammeProvider(BaseProgrammeProvider):
     Récupère le programme depuis PMU.fr. (STUB)
     C'est la cible prioritaire.
     """
-    async def get_programme(self, target_date: datetime.date) -> List[Dict[str, Any]]:
+    async def get_programme(self, target_date: datetime.date) -> list[dict[str, Any]]:
         logger.info(f"[{self.name}] Tentative de récupération pour le {target_date.isoformat()} (implémentation factice).")
         # TODO: Implémenter le scraping de PMU, potentiellement via une API "privée"
         # découverte en analysant le trafic réseau du site.
@@ -73,7 +73,7 @@ class GenyProgrammeProvider(BaseProgrammeProvider):
     Récupère le programme depuis Geny.com. (STUB)
     Bonne source de fallback.
     """
-    async def get_programme(self, target_date: datetime.date) -> List[Dict[str, Any]]:
+    async def get_programme(self, target_date: datetime.date) -> list[dict[str, Any]]:
         logger.info(f"[{self.name}] Tentative de récupération pour le {target_date.isoformat()} (implémentation factice).")
         # TODO: Implémenter le scraping de Geny.
         await asyncio.sleep(0.1) # Simule un appel réseau
@@ -92,7 +92,7 @@ class ProgrammeProvider:
             BoturfersProgrammeProvider(registry),  # En dernier recours
         ]
 
-    async def get_programme(self, target_date: datetime.date) -> List[Dict[str, Any]]:
+    async def get_programme(self, target_date: datetime.date) -> list[dict[str, Any]]:
         """
         Essaie chaque provider jusqu'à obtenir un programme non vide.
         """
@@ -105,7 +105,7 @@ class ProgrammeProvider:
                     return programme
             except Exception as e:
                 logger.error(f"Le provider de programme {provider.name} a échoué: {e}", exc_info=True)
-        
+
         logger.warning("Aucun provider de programme n'a pu fournir de plan.")
         return []
 

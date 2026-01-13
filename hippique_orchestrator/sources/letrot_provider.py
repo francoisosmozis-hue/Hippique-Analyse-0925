@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 import re
-from typing import Any, Dict, Optional
+from typing import Any
 
 import httpx
 from bs4 import BeautifulSoup
@@ -23,7 +22,7 @@ class LeTrotProvider(SourceProvider):
 
     BASE_URL = "https://www.letrot.com"
 
-    def __init__(self, client: Optional[httpx.AsyncClient] = None):
+    def __init__(self, client: httpx.AsyncClient | None = None):
         self._client = client or httpx.AsyncClient(
             base_url=self.BASE_URL,
             timeout=15.0,
@@ -34,7 +33,7 @@ class LeTrotProvider(SourceProvider):
         self._rate_limiter = asyncio.Semaphore(1)  # 1 requête à la fois vers le domaine
         logger.info("LeTrotProvider initialized with real scraping logic.")
 
-    async def _fetch_page(self, url: str) -> Optional[str]:
+    async def _fetch_page(self, url: str) -> str | None:
         """Effectue un appel HTTP respectueux pour récupérer une page."""
         async with self._rate_limiter:
             try:
@@ -78,7 +77,7 @@ class LeTrotProvider(SourceProvider):
                     rate_match = re.search(r"(\d{1,2})%", rate_cell.text)
                     if rate_match:
                         stats["trainer_rate"] = float(rate_match.group(1)) / 100.0
-            
+
             logger.info(f"Stats parsées pour {runner_name}: {stats}")
 
         except Exception as e:

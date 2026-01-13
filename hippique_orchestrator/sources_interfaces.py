@@ -3,7 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any, Protocol
 
-from hippique_orchestrator.data_contract import RaceSnapshotNormalized, RunnerStats # Added import
+from hippique_orchestrator.data_contract import RaceSnapshotNormalized, RunnerStats  # Added import
 
 
 class ProgrammeFetcher(Protocol):

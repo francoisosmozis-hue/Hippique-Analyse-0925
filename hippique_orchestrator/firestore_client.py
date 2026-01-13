@@ -197,7 +197,7 @@ async def get_processing_status_for_date(date_str: str, daily_plan: list[dict]) 
             counts["total_abstain"] += 1
         elif "error" in decision:
             counts["total_error"] += 1
-        
+
         # Track latest modification timestamp for processed races
         if last_mod_at := race_data.get("last_modified_at"):
             last_mod_dt = datetime.fromisoformat(last_mod_at)
@@ -244,7 +244,7 @@ async def get_processing_status_for_date(date_str: str, daily_plan: list[dict]) 
         reason_if_empty = "NO_PLAN_FOR_DATE"
     elif not races_from_db:
         reason_if_empty = "NO_TASKS_PROCESSED_OR_FIRESTORE_EMPTY"
-    
+
     return {
         "ok": True,
         "date": date_str,

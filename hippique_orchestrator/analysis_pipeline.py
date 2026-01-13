@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import asyncio
-
 import json
 import logging
 import traceback
@@ -10,7 +8,7 @@ from typing import Any
 
 import yaml
 
-from . import config, data_source, firestore_client, gcs_client
+from . import data_source, firestore_client, gcs_client
 from .analysis_utils import (
     calculate_volatility,
     identify_outsider_reparable,
@@ -19,8 +17,8 @@ from .analysis_utils import (
     parse_musique,
 )
 from .data_contract import RaceSnapshotNormalized
-from .source_registry import source_registry
 from .pipeline_run import generate_tickets
+from .source_registry import source_registry
 
 logger = logging.getLogger(__name__)
 
@@ -71,20 +69,21 @@ async def _run_gpi_pipeline(
     gpi_config = yaml.safe_load(gpi_config_content) if gpi_config_content else {}
 
     calibration_content = gcs_client.read_file_from_gcs("config/payout_calibration.yaml")
-    calibration_data = yaml.safe_load(calibration_content) if calibration_content else {}
+    if calibration_content:
+        yaml.safe_load(calibration_content)
 
     # Enrich the snapshot with stats using SourceRegistry
     # Assuming snapshot_data can be converted to RaceSnapshotNormalized for enrichment
     # Note: For simplicity, converting dict to RaceSnapshotNormalized here.
     # A more robust solution might involve proper data modeling upstream.
     snapshot_normalized = RaceSnapshotNormalized.model_validate(snapshot_data)
-    
+
     enriched_snapshot = await source_registry.enrich_snapshot_with_stats(
         snapshot=snapshot_normalized,
         correlation_id=log_extra.get("correlation_id"),
         trace_id=log_extra.get("trace_id"),
     )
-    
+
     # Convert back to dict for pipeline processing
     # Extract only the stats into je_stats dictionary for backward compatibility
     gpi_config["je_stats"] = {
