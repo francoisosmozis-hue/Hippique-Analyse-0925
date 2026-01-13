@@ -27,7 +27,6 @@ def mock_dependencies():
         patch(
             "hippique_orchestrator.api.tasks.build_plan_async", new_callable=AsyncMock
         ) as mock_build_plan,
-        patch("hippique_orchestrator.api.tasks.config", autospec=True) as mock_config,
         patch(
             "starlette.concurrency.run_in_threadpool",
             new_callable=AsyncMock,
@@ -44,15 +43,12 @@ def mock_dependencies():
             "google.oauth2.id_token.verify_oauth2_token", return_value={"email": "test@example.com"}
         ) as mock_verify_oidc_token,
     ):
-        mock_config.h30_offset = timedelta(minutes=30)
-        mock_config.h5_offset = timedelta(minutes=5)
         yield {
             "mock_write_snapshot": mock_write_snapshot,
             "mock_run_course": mock_run_course,
             "mock_build_plan": mock_build_plan,
             "mock_run_in_threadpool": mock_run_in_threadpool,
             "mock_schedule_all_races": mock_schedule_all_races,
-            "mock_config": mock_config,
             "mock_verify_oidc_token": mock_verify_oidc_token,
         }
 

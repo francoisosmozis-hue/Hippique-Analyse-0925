@@ -142,8 +142,6 @@ def mock_firestore(mocker):
     Fixture attendue par tests/test_service.py: (mock_get_races, mock_get_status).
     Patch le symbole dans firestore_client ET dans service.firestore_client (robuste aux imports).
     """
-    from unittest.mock import AsyncMock
-
     mock_get_races = AsyncMock(return_value=[])
     mock_get_status = AsyncMock(return_value={
         "processed": 0,

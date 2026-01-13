@@ -6,19 +6,24 @@ from unittest.mock import MagicMock, patch
 from hippique_orchestrator import scheduler
 
 # A sample plan with one race in the past and one in the future
+# Use a fixed 'now' to avoid race conditions when tests run near midnight
+now = datetime.now()
+future_time = now + timedelta(hours=1)
+past_time = now - timedelta(hours=1)
+
 SAMPLE_PLAN = [
     {
         "r_label": "R1",
         "c_label": "C1",
-        "time_local": (datetime.now() - timedelta(hours=1)).strftime("%H:%M"),
-        "date": datetime.now().strftime("%Y-%m-%d"),
+        "time_local": past_time.strftime("%H:%M"),
+        "date": past_time.strftime("%Y-%m-%d"),
         "course_url": "http://example.com/r1c1",
     },
     {
         "r_label": "R1",
         "c_label": "C2",
-        "time_local": (datetime.now() + timedelta(hours=1)).strftime("%H:%M"),
-        "date": datetime.now().strftime("%Y-%m-%d"),
+        "time_local": future_time.strftime("%H:%M"),
+        "date": future_time.strftime("%Y-%m-%d"),
         "course_url": "http://example.com/r1c2",
     },
 ]
