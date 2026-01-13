@@ -1,2 +1,3 @@
 credentials.json
 *.json
+\n# Test & coverage reports\n.coverage\ncoverage.xml\nhtmlcov/
