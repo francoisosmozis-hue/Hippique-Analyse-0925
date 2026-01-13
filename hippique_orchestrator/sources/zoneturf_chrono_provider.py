@@ -28,6 +28,8 @@ class ZoneTurfChronoProvider(SourceProvider):
     Implements StatsFetcher for chrono stats.
     """
 
+    name = "ZoneTurfChrono"
+
     def __init__(self):
         self._session = requests.Session()
         self._session.headers.update({"User-Agent": "Mozilla/5.0"})

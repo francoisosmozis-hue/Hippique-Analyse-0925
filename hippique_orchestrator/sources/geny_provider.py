@@ -21,6 +21,7 @@ class GenyProvider(SourceProvider):
     en se basant sur Geny.com.
     """
 
+    name = "Geny"
     BASE_URL = "https://www.geny.com"
 
     def __init__(self, client: httpx.AsyncClient | None = None):

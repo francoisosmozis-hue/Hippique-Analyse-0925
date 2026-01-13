@@ -28,6 +28,8 @@ class BoturfersProvider(SourceProvider):
     Provides racing data from Boturfers (programme and race snapshots).
     """
 
+    name = "Boturfers"
+
     def __init__(self):
         self._http_client = httpx.AsyncClient(headers=HTTP_HEADERS, timeout=20)
 

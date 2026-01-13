@@ -20,6 +20,7 @@ class LeTrotProvider(SourceProvider):
     Cette implémentation simule le scraping pour être testable et montrer la logique.
     """
 
+    name = "LeTrot"
     BASE_URL = "https://www.letrot.com"
 
     def __init__(self, client: httpx.AsyncClient | None = None):

@@ -14,6 +14,8 @@ class FranceGalopProvider(SourceProvider):
     (Currently returns dummy data as actual scraping logic needs to be implemented).
     """
 
+    name = "FranceGalop"
+
     def __init__(self):
         logger.info("FranceGalopProvider initialized.")
 
