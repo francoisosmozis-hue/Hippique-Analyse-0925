@@ -1,5 +1,0 @@
-config
-hippique
-hippique_orchestrator
-sklearn
-tests
