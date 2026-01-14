@@ -63,6 +63,9 @@ class BoturfersProvider(SourceProvider):
 
         logger.info("Début du scraping du programme Boturfers.", extra={"url": url, "correlation_id": correlation_id})
         html_content = await self._fetch_html(url)
+        if html_content:
+            with open("/home/francoisosmozis/hippique-orchestrator/debug_boturfers_content.log", "w") as f:
+                f.write(html_content)
         if not html_content:
             logger.error("Le scraping du programme a échoué ou n'a retourné aucune course.", extra={"correlation_id": correlation_id})
             return []
@@ -212,117 +215,87 @@ class BoturfersProvider(SourceProvider):
 
     def _parse_race_metadata(self, soup: BeautifulSoup, race_url: str) -> dict[str, Any]:
         metadata: dict[str, Any] = {}
-
-        # Race Name (from <h1> tag)
-        h1_tag = soup.find("h1", class_="my-3")
-        if h1_tag:
-            metadata["race_name"] = h1_tag.get_text(strip=True)
-
-        # Date (from URL)
-        date_match = re.search(r'courses/(\d{4}-\d{2}-\d{2})', race_url)
-        if date_match:
-            metadata["date"] = date_match.group(1)
-
-        # RC Label from URL
-        rc_match = re.search(r"/(R\d+C\d+)(?:-|$)", race_url)
-        if rc_match:
-            metadata["rc_label"] = rc_match.group(1)
-
-        # Basic Info Block (e.g., Discipline, Distance, Prize, Start Time)
-        info_block = soup.find("div", class_="card-body text-center mb-3")
+        info_block = soup.select_one("div.col-md-6 p.text-center")
         if info_block:
             metadata_text = info_block.get_text(strip=True).replace("\n", " ")
-
-            # Discipline
-            discipline_match = re.search(r"(Trot|Plat|Obstacle|Steeple|Haies|Cross|Attelé|Monté)", metadata_text, re.IGNORECASE)
+            
+            # Discipline et Type
+            discipline_match = re.search(r"(Trot Attelé|Trot Monté|Plat|Obstacle|Haies|Steeple-Chase|Cross)", metadata_text, re.IGNORECASE)
             if discipline_match:
                 metadata["discipline"] = discipline_match.group(1)
+                metadata["course_type"] = discipline_match.group(1)
 
             # Distance
-            distance_match = re.search(r"(\d{3,4})\s*mètres", metadata_text)
+            distance_match = re.search(r"(\d{3,4})\s*m", metadata_text)
             if distance_match:
                 metadata["distance"] = int(distance_match.group(1))
 
             # Prize
-            prize_match = re.search(r"(\d{1,3}(?:\s?\d{3})*)\s*euros", metadata_text, re.IGNORECASE)
+            prize_match = re.search(r"([\d\s]+)€", metadata_text)
             if prize_match:
-                metadata["prize"] = int(prize_match.group(1).replace(" ", ""))
+                metadata["prize"] = prize_match.group(1).replace(" ", "")
 
-            # Course Type (e.g. Attelé, Monté, Plat, Obstacle) and Corde (e.g. à gauche, à droite)
-            conditions_tag = info_block.find("p", class_="card-text")
-            if conditions_tag:
-                conditions_text = conditions_tag.get_text(strip=True)
-                type_match = re.search(r"(Attelé|Monté|Plat|Obstacle)", conditions_text, re.IGNORECASE)
-                if type_match:
-                    metadata["course_type"] = type_match.group(1)
+            # Corde
+            corde_match = re.search(r"Corde à (gauche|droite)", metadata_text, re.IGNORECASE)
+            if corde_match:
+                metadata["corde"] = "G" if "gauche" in corde_match.group(1).lower() else "D"
 
-                corde_match = re.search(r"corde (à gauche|à droite)", conditions_text, re.IGNORECASE)
-                if corde_match:
-                    metadata["corde"] = "Gauche" if "gauche" in corde_match.group(1) else "Droite"
-
-            # Start Time
-            time_match = re.search(r'(\d{1,2}h\d{2})', metadata_text)
-            if time_match:
-                metadata["start_time"] = time_match.group(1)
+        # Date et RC Label depuis l'URL
+        date_match = re.search(r'/(\d{4}-\d{2}-\d{2})/', race_url)
+        if date_match:
+            metadata["date"] = date_match.group(1)
+        
+        rc_match = re.search(r"/(R\d+C\d+)", race_url)
+        if rc_match:
+            metadata["rc_label"] = rc_match.group(1)
+            
+        # Heure de départ
+        time_tag = soup.select_one("span.text-danger.fw-bold")
+        if time_tag and (time_match := re.search(r'(\d{1,2}h\d{2})', time_tag.text)):
+            metadata["start_time"] = time_match.group(1)
 
         return metadata
 
     def _parse_race_runners_from_details_page(self, soup: BeautifulSoup) -> list[RunnerData]:
         runners_data: list[RunnerData] = []
-        partants_div = soup.find("div", id="partants")
-        if not partants_div:
-            logger.warning("Could not find 'div' with id 'partants' on the page.")
+        partants_table = soup.select_one("div#partants table.table-striped")
+        if not partants_table:
+            logger.warning("Could not find runners table ('div#partants table.table-striped') on the page.")
             return []
 
-        runners_table = partants_div.find("table", class_="table")
-        if not runners_table:
-            logger.warning("Could not find 'table' with class 'table' within 'div#partants' on the page.")
-            return []
-
-        for row in runners_table.select("tbody tr"):
+        for i, row in enumerate(partants_table.select("tbody tr"), 1):
             try:
-                cols = row.find_all(["th", "td"])
-                if len(cols) < 8: # 1 th + 7 tds
-                    logger.warning(f"Ligne de partant incomplète: {row.get_text()}. Skipping.", extra={"row_html": str(row)})
+                cols = row.find_all("td")
+                if len(cols) < 4:
+                    logger.warning(f"Ligne de partant incomplète (cols={len(cols)}): {row.get_text()}. Skipping.")
                     continue
 
-                num_text = cols[0].get_text(strip=True)
-                num = int(num_text) if num_text.isdigit() else None
-                if num is None:
-                    continue
+                # Le numéro est implicite
+                num = i
 
-                name_link = cols[1].find("a")
-                name = name_link.get_text(strip=True) if name_link else ""
+                name_div = cols[0].find("div", class_="runner-name")
+                name = name_div.get_text(strip=True) if name_div else ""
                 
-                # The "musique" is often in the same cell as the name
-                musique_text_container = cols[1].get_text(strip=True)
-                musique_match = re.search(r'\((?P<musique>[\dapDAI\s]+)\)', musique_text_container)
-                musique = musique_match.group('musique').strip() if musique_match else None
+                musique = cols[1].get_text(strip=True) if len(cols) > 1 else None
+                driver = cols[2].get_text(strip=True) if len(cols) > 2 else None
+                trainer = cols[3].get_text(strip=True) if len(cols) > 3 else None
 
-                jockey_col = cols[3]
-                trainer_col = cols[3]
-                
-                jockey = jockey_col.find("a", href=lambda href: href and "/jockey/" in href)
-                jockey = jockey.get_text(strip=True) if jockey else None
-                
-                trainer = trainer_col.find("a", href=lambda href: href and "/entraineur/" in href)
-                trainer = trainer.get_text(strip=True) if trainer else None
-                
+                # Les cotes ne sont pas sur la page principale des partants de boturfers.fr
                 odds_win = None
+                odds_place = None
 
-                runners_data.append(
-                    RunnerData(
-                        num=num,
-                        nom=name,
-                        musique=musique,
-                        odds_win=odds_win,
-                        odds_place=None,
-                        driver=jockey,
-                        trainer=trainer,
-                        gains=None, 
-                        stats=RunnerStats(),
+                if name:
+                    runners_data.append(
+                        RunnerData(
+                            num=num,
+                            nom=name,
+                            musique=musique,
+                            odds_win=odds_win,
+                            odds_place=odds_place,
+                            driver=driver,
+                            trainer=trainer,
+                        )
                     )
-                )
             except Exception as e:
                 logger.warning(
                     f"Failed to parse a runner row: {e}. Row skipped.",

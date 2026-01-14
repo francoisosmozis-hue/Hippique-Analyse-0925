@@ -117,6 +117,24 @@ class ZeturfProvider(SourceProvider):
             return text.lower() if lowercase else text
 
         runners = []
+        runners_map = {}
+
+        # First, parse the main runners table to get base data (num, name)
+        partants_block = soup.find("div", id="block-partants")
+        if partants_block:
+            if table := partants_block.find("table", class_="table-data"):
+                for row in table.select("tbody tr"):
+                    num_cell = row.find("td", class_="numero")
+                    name_cell = row.find("td", class_="cheval")
+                    if num_cell and name_cell:
+                        num = _clean_text(num_cell.get_text())
+                        name = _clean_text(name_cell.get_text())
+                        if num and name:
+                            runner_data = {"num": num, "nom": name, "odds_win": None, "odds_place": None}
+                            runners.append(runner_data)
+                            runners_map[num] = runner_data
+        
+        # Second, try to enrich with odds from cotesInfos JSON
         cotes_infos = {}
         script_tag = soup.find("script", string=re.compile("cotesInfos"))
         if script_tag:
@@ -128,47 +146,15 @@ class ZeturfProvider(SourceProvider):
 
         if cotes_infos:
             for num_key, data in cotes_infos.items():
-                if not isinstance(data, dict) or not data.get("odds"):
+                if not isinstance(data, dict) or not data.get("odds") or not num_key.isdigit():
                     continue
 
-                # The horse number is the key, but we need to validate it's a number
-                if not num_key.isdigit():
-                    continue
-
-                odds_data = data.get("odds", {})
-                
-                runner_data = {
-                    "num": _clean_text(num_key),
-                    # Name is not in cotesInfos, so we must parse the table or use a placeholder
-                    "nom": f"Cheval {num_key}", 
-                    "odds_win": odds_data.get("SG"),
-                    "odds_place": None,
-                }
-                if "SPMin" in odds_data and "SPMax" in odds_data and odds_data["SPMin"] and odds_data["SPMax"]:
-                    runner_data["odds_place"] = (odds_data["SPMin"] + odds_data["SPMax"]) / 2
-                
-                runners.append(runner_data)
-        
-        # Even if we get odds from script, we need names from the table.
-        # This part will likely fail on JS-rendered pages, but we try anyway.
-        partants_block = soup.find("div", id="block-partants")
-        if partants_block:
-            if table := partants_block.find("table", class_="table-data"):
-                # Create a map of num -> name from the HTML table
-                name_map = {}
-                for row in table.select("tbody tr"):
-                    num_cell = row.find("td", class_="numero")
-                    name_cell = row.find("td", class_="cheval")
-                    if num_cell and name_cell:
-                        num = _clean_text(num_cell.get_text())
-                        name = _clean_text(name_cell.get_text())
-                        if num and name:
-                            name_map[num] = name
-                
-                # Update runners with correct names
-                for runner in runners:
-                    if runner.get("num") in name_map:
-                        runner["nom"] = name_map[runner["num"]]
+                if num_key in runners_map:
+                    runner_data = runners_map[num_key]
+                    odds_data = data.get("odds", {})
+                    runner_data["odds_win"] = odds_data.get("SG")
+                    if "SPMin" in odds_data and "SPMax" in odds_data and odds_data["SPMin"] and odds_data["SPMax"]:
+                        runner_data["odds_place"] = (odds_data["SPMin"] + odds_data["SPMax"]) / 2
 
         discipline_raw = None
         start_time_str = None

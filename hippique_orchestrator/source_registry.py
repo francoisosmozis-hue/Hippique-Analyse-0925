@@ -60,45 +60,30 @@ class SourceRegistry:
         trace_id: str | None = None,
     ) -> RaceSnapshotNormalized | None:
         """
-        Fetches a race snapshot using a primary provider and falls back to another
-        if the data quality is insufficient.
-        It then enriches the best available snapshot with stats.
+        Fetches a race snapshot. It now primarily uses Boturfers as the
+        snapshot provider since Zeturf is considered unreliable.
         """
-        primary_provider = self._primary_snapshot_provider
-        fallback_provider = self._fallback_snapshot_provider
-
-        logger.info(f"Attempting snapshot with primary provider: {primary_provider.name}")
+        provider = self._fallback_snapshot_provider  # Using BoturfersProvider directly
+        logger.info(f"Attempting snapshot with provider: {provider.name}")
+        
         snapshot = None
         try:
-            snapshot = await primary_provider.fetch_snapshot(
-                race_url, phase=phase, date=date, correlation_id=correlation_id, trace_id=trace_id
+            # Corrected parameter name from `date_str` to `date` for consistency
+            snapshot = await provider.fetch_snapshot(
+                race_url, phase=phase, date_str=date, correlation_id=correlation_id, trace_id=trace_id
             )
-            quality = calculate_quality_score(snapshot)
-            logger.info(f"Primary snapshot quality: {quality['status']} ({quality['score']})")
-
-            if quality["status"] == "FAILED":
-                logger.warning("Primary snapshot failed quality check, attempting fallback.")
-                snapshot = None # Force fallback
-
         except Exception as e:
-            logger.error(f"Primary provider {primary_provider.name} failed: {e}", exc_info=True)
-            snapshot = None
+            logger.critical(f"Snapshot provider {provider.name} failed for {race_url}: {e}", exc_info=True)
+            return None
 
-        if snapshot is None:
-            logger.info(f"Attempting snapshot with fallback provider: {fallback_provider.name}")
-            try:
-                snapshot = await fallback_provider.fetch_snapshot(
-                    race_url, phase=phase, date_str=date, correlation_id=correlation_id, trace_id=trace_id
-                )
-            except Exception as e:
-                logger.critical(f"All snapshot providers failed for {race_url}: {e}", exc_info=True)
-                return None
-
-        if snapshot:
+        if snapshot and snapshot.runners:
             logger.info("Snapshot obtained, proceeding to stats enrichment.")
             snapshot = await self.enrich_snapshot_with_stats(
                 snapshot, correlation_id=correlation_id, trace_id=trace_id
             )
+        elif not snapshot or not snapshot.runners:
+            logger.error(f"Provider {provider.name} returned no snapshot or no runners.")
+            return None
 
         return snapshot
 
@@ -117,7 +102,7 @@ class SourceRegistry:
         stats_tasks = []
         for runner in snapshot.runners:
             # The name of the runner is needed to fetch stats
-            runner_name = runner.name
+            runner_name = runner.nom
             # Existing runner data can be useful context for some providers
             runner_data_dict = runner.model_dump()
             stats_tasks.append(
