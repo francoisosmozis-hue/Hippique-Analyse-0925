@@ -118,52 +118,65 @@ class ZeturfProvider(SourceProvider):
 
         runners = []
         cotes_infos = {}
-        if script_tag := soup.find("script", string=re.compile("cotesInfos")):
+        script_tag = soup.find("script", string=re.compile("cotesInfos"))
+        if script_tag:
             if cotes_match := re.search(r'cotesInfos:\s*(\{.*\})', script_tag.string):
                 try:
                     cotes_infos = json.loads(cotes_match.group(1))
                 except json.JSONDecodeError:
                     logger.warning(f"Failed to decode cotesInfos JSON for {url}")
 
-        if table := soup.find("table", class_="table-runners"):
-            for row in table.select("tbody tr"):
-                cells = row.find_all("td")
-                if len(cells) < 2:
+        if cotes_infos:
+            for num_key, data in cotes_infos.items():
+                if not isinstance(data, dict) or not data.get("odds"):
                     continue
 
-                runner_data = {}
-                if num_cell := cells[0]:
-                    runner_data["num"] = _clean_text(num_cell.text)
-                if name_cell := cells[1].find("a", class_="horse-name"):
-                    runner_data["nom"] = _clean_text(name_cell.get("title"))
+                # The horse number is the key, but we need to validate it's a number
+                if not num_key.isdigit():
+                    continue
 
-                # Get odds from visible table first as a fallback
-                if odds_cell := row.find("td", class_="cotes"):
-                    if odds_span := odds_cell.find("span", class_="cote"):
-                        runner_data["odds_win"] = _clean_text(odds_span.text)
-                    # Fallback for place odds from table
-                    if odds_place_span := odds_cell.find("span", class_="cote_place"):
-                        runner_data["odds_place"] = _clean_text(odds_place_span.text)
-
-                # If cotesInfos script exists, it has priority and more details
-                num_key = str(runner_data.get("num"))
-                if num_key and num_key in cotes_infos:
-                    odds_data = cotes_infos[num_key].get("odds", {})
-                    # Override with SG (Simple Gagnant) from script if available
-                    runner_data["odds_win"] = odds_data.get("SG", runner_data.get("odds_win"))
-                    # Get place odds, prefering script data
-                    if "SPMin" in odds_data and "SPMax" in odds_data:
-                        runner_data["odds_place"] = (odds_data["SPMin"] + odds_data["SPMax"]) / 2
-                    else:
-                        # If place odds are not in the script, ensure we don't carry over table data if script exists
-                        runner_data.setdefault("odds_place", None)
-
-
+                odds_data = data.get("odds", {})
+                
+                runner_data = {
+                    "num": _clean_text(num_key),
+                    # Name is not in cotesInfos, so we must parse the table or use a placeholder
+                    "nom": f"Cheval {num_key}", 
+                    "odds_win": odds_data.get("SG"),
+                    "odds_place": None,
+                }
+                if "SPMin" in odds_data and "SPMax" in odds_data and odds_data["SPMin"] and odds_data["SPMax"]:
+                    runner_data["odds_place"] = (odds_data["SPMin"] + odds_data["SPMax"]) / 2
+                
                 runners.append(runner_data)
+        
+        # Even if we get odds from script, we need names from the table.
+        # This part will likely fail on JS-rendered pages, but we try anyway.
+        partants_block = soup.find("div", id="block-partants")
+        if partants_block:
+            if table := partants_block.find("table", class_="table-data"):
+                # Create a map of num -> name from the HTML table
+                name_map = {}
+                for row in table.select("tbody tr"):
+                    num_cell = row.find("td", class_="numero")
+                    name_cell = row.find("td", class_="cheval")
+                    if num_cell and name_cell:
+                        num = _clean_text(num_cell.get_text())
+                        name = _clean_text(name_cell.get_text())
+                        if num and name:
+                            name_map[num] = name
+                
+                # Update runners with correct names
+                for runner in runners:
+                    if runner.get("num") in name_map:
+                        runner["nom"] = name_map[runner["num"]]
 
         discipline_raw = None
+        start_time_str = None
         if p_infos := soup.find("p", class_="infos"):
-            discipline_raw = _clean_text(p_infos.get_text(), lowercase=True)
+            infos_text = _clean_text(p_infos.get_text(), lowercase=True)
+            discipline_raw = infos_text
+            if time_match := _TIME_RE.search(infos_text):
+                start_time_str = time_match.group(0)
 
         discipline_mapping = {
             "attelé": "Trot Attelé", "trot": "Trot Attelé", "monté": "Trot Monté",
@@ -174,8 +187,6 @@ class ZeturfProvider(SourceProvider):
         date_str = None
         if date_match := re.search(r"/(\d{4}-\d{2}-\d{2})/", url):
             date_str = date_match.group(1)
-
-        start_time_str = _clean_text(soup.find('time', class_='time').text if soup.find('time', class_='time') else None)
 
         return {"date": date_str, "discipline": discipline, "start_time": start_time_str, "runners": runners}
 

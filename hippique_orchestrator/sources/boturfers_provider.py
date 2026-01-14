@@ -20,7 +20,7 @@ from hippique_orchestrator.sources_interfaces import SourceProvider
 
 logger = get_logger(__name__)
 
-HTTP_HEADERS = {"User-Agent": "Hippique-Analyse/1.0 (contact: ops@hippique.local)"}
+HTTP_HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 
 class BoturfersProvider(SourceProvider):
@@ -267,7 +267,7 @@ class BoturfersProvider(SourceProvider):
 
         return metadata
 
-    def _parse_race_runners_from_details_page(self, soup: BeautifulSoup) -> list[RunnerData]: # Changed return type
+    def _parse_race_runners_from_details_page(self, soup: BeautifulSoup) -> list[RunnerData]:
         runners_data: list[RunnerData] = []
         partants_div = soup.find("div", id="partants")
         if not partants_div:
@@ -281,8 +281,8 @@ class BoturfersProvider(SourceProvider):
 
         for row in runners_table.select("tbody tr"):
             try:
-                cols = row.find_all("td")
-                if len(cols) < 7:
+                cols = row.find_all(["th", "td"])
+                if len(cols) < 8: # 1 th + 7 tds
                     logger.warning(f"Ligne de partant incomplète: {row.get_text()}. Skipping.", extra={"row_html": str(row)})
                     continue
 
@@ -293,29 +293,34 @@ class BoturfersProvider(SourceProvider):
 
                 name_link = cols[1].find("a")
                 name = name_link.get_text(strip=True) if name_link else ""
+                
+                # The "musique" is often in the same cell as the name
+                musique_text_container = cols[1].get_text(strip=True)
+                musique_match = re.search(r'\((?P<musique>[\dapDAI\s]+)\)', musique_text_container)
+                musique = musique_match.group('musique').strip() if musique_match else None
 
-                jockey = cols[2].find("a").get_text(strip=True) if cols[2].find("a") else None
-                trainer = cols[3].find("a").get_text(strip=True) if cols[3].find("a") else None
-                musique = cols[4].get_text(strip=True)
-
-                gains_text = cols[5].get_text(strip=True).replace(" ", "").replace("\xa0", "")
-                gains = float(gains_text) if gains_text.replace('.', '', 1).isdigit() else None
-
-                cote_span = cols[6].find("span", class_="cote")
-                cote_text = cote_span.get_text(strip=True).replace(",", ".") if cote_span else None
-                odds_win = float(cote_text) if cote_text and cote_text.replace('.', '', 1).isdigit() else None
+                jockey_col = cols[3]
+                trainer_col = cols[3]
+                
+                jockey = jockey_col.find("a", href=lambda href: href and "/jockey/" in href)
+                jockey = jockey.get_text(strip=True) if jockey else None
+                
+                trainer = trainer_col.find("a", href=lambda href: href and "/entraineur/" in href)
+                trainer = trainer.get_text(strip=True) if trainer else None
+                
+                odds_win = None
 
                 runners_data.append(
                     RunnerData(
                         num=num,
-                        name=name,
+                        nom=name,
                         musique=musique,
                         odds_win=odds_win,
-                        odds_place=None, # Boturfers does not provide place odds directly in snapshot
+                        odds_place=None,
                         driver=jockey,
                         trainer=trainer,
-                        gains=str(gains) if gains is not None else None,
-                        stats=RunnerStats(), # Initialize empty stats
+                        gains=None, 
+                        stats=RunnerStats(),
                     )
                 )
             except Exception as e:
