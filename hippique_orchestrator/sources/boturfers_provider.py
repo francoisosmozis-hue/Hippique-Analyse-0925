@@ -82,7 +82,7 @@ class BoturfersProvider(SourceProvider):
             if not meeting_match:
                 continue
             
-            reunion_r_label = meeting_match.group(1)
+
             reunion_name = meeting_match.group(2)
 
             race_table = tab_content.find("table", class_="table data prgm")
