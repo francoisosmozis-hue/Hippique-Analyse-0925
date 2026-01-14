@@ -52,7 +52,9 @@ def setup_logging(log_level: str | None = "INFO"):
 
 def get_logger(name: str) -> logging.Logger:
     """Returns a logger with the given name."""
-    return logging.getLogger(name)
+    logger = logging.getLogger(name)
+    logger.setLevel(logging.DEBUG) # Explicitly set level to DEBUG
+    return logger
 
 
 def generate_trace_id():
