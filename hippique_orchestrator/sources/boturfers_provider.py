@@ -63,77 +63,79 @@ class BoturfersProvider(SourceProvider):
 
         logger.info("Début du scraping du programme Boturfers.", extra={"url": url, "correlation_id": correlation_id})
         html_content = await self._fetch_html(url)
-        if html_content:
-            with open("/home/francoisosmozis/hippique-orchestrator/debug_boturfers_content.log", "w") as f:
-                f.write(html_content)
         if not html_content:
             logger.error("Le scraping du programme a échoué ou n'a retourné aucune course.", extra={"correlation_id": correlation_id})
             return []
 
-        soup = BeautifulSoup(html_content, "html.parser")
+        soup = BeautifulSoup(html_content, "lxml")
         races_data = []
 
-        reunion_tabs = soup.select("div.tab-pane[id^=r]")
+        reunion_tabs_content = soup.select("div.tab-content#reunions-content div.tab-pane")
 
-        for tab in reunion_tabs:
-            reunion_id = tab.get("id")
-            reunion_label_element = tab.find_previous_sibling("a", {"data-bs-target": f"#{reunion_id}"})
-            if reunion_label_element:
-                reunion_name = reunion_label_element.get_text(strip=True)
-            else:
-                reunion_name = f"Réunion {reunion_id.upper()}"
+        for tab_content in reunion_tabs_content:
+            meeting_title_tag = tab_content.select_one("h3.reu-title")
+            if not meeting_title_tag:
+                continue
+            
+            meeting_full_title = meeting_title_tag.get_text(strip=True)
+            meeting_match = re.match(r"(R\d+)\s*-\s*(.+)", meeting_full_title)
+            if not meeting_match:
+                continue
+            
+            reunion_r_label = meeting_match.group(1)
+            reunion_name = meeting_match.group(2)
 
-            race_table = tab.find("table", class_="table")
+            race_table = tab_content.find("table", class_="table data prgm")
             if not race_table:
                 continue
-
-            # Corrected regex for date in title to avoid double escaping
-            date_match = re.search(r'(\d{2}/\d{2}/\d{4})', soup.title.string if soup.title else '')
-            race_date = date_match.group(1) if date_match else "N/A"
 
             for row in race_table.select("tbody tr"):
                 race_info = {}
                 try:
-                    # Get all cells, including th
-                    cols = row.find_all(['td', 'th'])
-                    if len(cols) < 4:
-                        continue
-
-                    # RC Label
-                    rc_span = cols[1].find('span', class_='rxcx')
-                    if rc_span:
-                        rc_text = rc_span.get_text(strip=True)
-                        race_info["rc"] = rc_text
-                        if ' ' in rc_text:
-                            race_info["r_label"], race_info["c_label"] = rc_text.split(' ')
-                        else: # fallback for R1C1 format
-                            match = re.match(r"(R\d+)(C\d+)", rc_text)
-                            if match:
-                                race_info["r_label"], race_info["c_label"] = match.groups()
-
-
-                    # Time
-                    time_span = cols[0].find('span', class_='txt')
+                    time_span = row.select_one("td.hour span.txt")
                     if time_span:
                         race_info['start_time'] = time_span.get_text(strip=True)
 
-                    # Name and URL
-                    name_link = cols[2].find('a', class_='link')
+                    rc_span = row.select_one("th.num span.rxcx")
+                    if rc_span:
+                        rc_text = rc_span.get_text(strip=True)
+                        rc_match = re.match(r"(R\d+)\s*(C\d+)", rc_text)
+                        if rc_match:
+                            race_info["r_label"] = rc_match.group(1)
+                            race_info["c_label"] = rc_match.group(2)
+                            race_info["rc"] = f"{race_info['r_label']}{race_info['c_label']}"
+                        else:
+                            rc_match_no_space = re.match(r"(R\d+)(C\d+)", rc_text)
+                            if rc_match_no_space:
+                                race_info["r_label"] = rc_match_no_space.group(1)
+                                race_info["c_label"] = rc_match_no_space.group(2)
+                                race_info["rc"] = rc_text
+                            else:
+                                logger.warning(f"Could not parse RC label from '{rc_text}'. Skipping.")
+                                continue
+                    else:
+                        logger.warning(f"No RC span found in row. Skipping.")
+                        continue
+                    
+                    name_link = row.select_one("td.crs span.name a.link")
                     if name_link:
                         race_info['name'] = name_link.get_text(strip=True)
                         race_info['url'] = urljoin("https://www.boturfers.fr", name_link.get('href'))
+                    else:
+                        logger.warning(f"Could not find name_link for a race. Skipping.")
+                        continue
 
-                    # Runners count
-                    runners_cell = cols[3]
-                    runners_text = runners_cell.get_text(strip=True)
-                    if runners_text.isdigit():
-                        race_info['runners_count'] = int(runners_text)
+                    runners_cell = row.select_one("td.nb")
+                    if runners_cell:
+                        runners_text = runners_cell.get_text(strip=True)
+                        if runners_text.isdigit():
+                            race_info['runners_count'] = int(runners_text)
+                        else:
+                            race_info['runners_count'] = None
                     else:
                         race_info['runners_count'] = None
 
-
                     race_info["reunion_name"] = reunion_name
-                    race_info["date"] = race_date
 
                     races_data.append(race_info)
                 except Exception as e:
