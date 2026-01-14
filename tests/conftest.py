@@ -180,20 +180,22 @@ def mock_cloud_tasks(mocker):
     return mock_client_instance
 
 
+from datetime import datetime # Moved to top-level
+
+
 @pytest.fixture
 def race_document_factory(mocker):
     """
     Factory fixture to create consistent mock Firestore documents for race data.
     Ensures that essential keys like 'last_modified_at' are always present.
     """
-    from datetime import datetime
     def _factory(doc_id: str, data: dict):
         mock_doc = mocker.MagicMock()
         mock_doc.id = doc_id
 
         # Ensure essential keys are present
-        if last_modified_at not in data:
-            data[last_modified_at] = datetime.now()
+        if 'last_modified_at' not in data:
+            data['last_modified_at'] = datetime.now()
 
         mock_doc.to_dict.return_value = data
         mock_doc.exists = True

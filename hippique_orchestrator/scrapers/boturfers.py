@@ -200,39 +200,79 @@ class BoturfersFetcher:
         if not self.soup:
             return {}
 
-        metadata = {}
-        distance = self._parse_distance()
-        if distance:
-            metadata["distance"] = distance
+        metadata: dict[str, Any] = {}
 
-        race_info_block = self.soup.select_one("div.info-race")
-        if race_info_block:
-            text_content = race_info_block.get_text(" ", strip=True).lower()
-            course_types = {
-                "attelé": "Attelé",
-                "monté": "Monté",
-                "plat": "Plat",
-                "obstacle": "Obstacle",
-            }
-            for key, value in course_types.items():
-                if key in text_content:
-                    metadata["type_course"] = value
-                    break
+        # Race Name
+        h1_tag = self.soup.find("h1", class_="title")
+        if h1_tag:
+            race_full_name = h1_tag.get_text(strip=True)
+            # For H1 tag, just get the race name. RC label comes from URL.
+            # Remove leading RC label if present (e.g., "C7 Prix De La Croisette")
+            race_name_match = re.match(r"^(R\d+C\d+|C\d+)\s(.+)$", race_full_name)
+            if race_name_match:
+                metadata["race_name"] = race_name_match.group(2)
+            else:
+                metadata["race_name"] = race_full_name
 
-            if "corde à gauche" in text_content:
+        # RC Label, R Label, C Label from URL
+        rc_from_url_match = re.search(r"/\d+-([Rr]\d+C\d+)-", self.race_url, re.IGNORECASE) # Match numeric ID before RC label
+        if rc_from_url_match:
+            metadata["rc_label"] = rc_from_url_match.group(1).upper() # Store as uppercase
+            metadata["r_label"] = metadata["rc_label"].split('C')[0]
+            metadata["c_label"] = metadata["rc_label"].split('C')[1]
+
+        # Date
+        date_tag = self.soup.find("div", class_="dep")
+        if date_tag:
+            date_text = date_tag.get_text(strip=True)
+            # Example: "Départ à 16h50 le 14 jan. 2026"
+            date_match = re.search(r"le (\d{1,2})\s(jan|fév|mar|avr|mai|juin|juil|aoû|sep|oct|nov|déc)\.\s(\d{4})", date_text)
+            if date_match:
+                day = date_match.group(1)
+                month_abbr = date_match.group(2)
+                year = date_match.group(3)
+
+                month_mapping = {
+                    "jan": "01", "fév": "02", "mar": "03", "avr": "04", "mai": "05", "juin": "06",
+                    "juil": "07", "aoû": "08", "sep": "09", "oct": "10", "nov": "11", "déc": "12"
+                }
+                month = month_mapping.get(month_abbr, "")
+                if month:
+                    metadata["date"] = f"{year}-{month}-{day.zfill(2)}"
+
+        # Discipline, Distance, Nb Partants, Corde
+        dot_separated_div = self.soup.find("div", class_="dot-separated")
+        if dot_separated_div:
+            # Discipline
+            dot_separated_text_raw = dot_separated_div.get_text()
+            discipline_match = re.search(r"(Plat|Trot|Monté|Obstacle)", dot_separated_text_raw, re.IGNORECASE)
+            if discipline_match:
+                # Prioritize 'Monté' as a specific type of 'Trot' if both are present in text
+                if 'Monté' in dot_separated_text_raw: # Check original text to avoid case issues
+                    metadata["discipline"] = "Monté"
+                elif 'Trot' in dot_separated_text_raw:
+                    metadata["discipline"] = "Trot"
+                else:
+                    metadata["discipline"] = discipline_match.group(1) # Fallback to matched group
+
+            # Distance
+            dot_separated_text_raw = dot_separated_div.get_text()
+            # Remove all spaces and non-breaking spaces for a clean number match
+            dot_separated_text_cleaned = re.sub(r'[\s\xa0]+', '', dot_separated_text_raw)
+            distance_match = re.search(r"(\d+)m", dot_separated_text_cleaned)
+            if distance_match:
+                metadata["distance"] = int(distance_match.group(1))            # Nb Partants
+            partants_match = re.search(r"(\d+)\s*partants", dot_separated_div.get_text())
+            if partants_match:
+                metadata["nb_partants"] = int(partants_match.group(1))
+
+            # Corde
+            if "Corde à gauche" in dot_separated_div.get_text():
                 metadata["corde"] = "Gauche"
-            elif "corde à droite" in text_content:
+            elif "Corde à droite" in dot_separated_div.get_text():
                 metadata["corde"] = "Droite"
             else:
                 metadata["corde"] = "N/A"
-
-            conditions_tag = self.soup.select_one("div.conditions-course")
-            if conditions_tag:
-                metadata["conditions"] = conditions_tag.get_text(" ", strip=True)
-            else:
-                snippet_start = text_content.find("conditions")
-                if snippet_start != -1:
-                    metadata["conditions"] = text_content[snippet_start:].split("\n")[0].strip()
 
         if not metadata:
             logger.warning(
@@ -248,65 +288,138 @@ class BoturfersFetcher:
             return []
 
         runners: list[Runner] = []
-        runners_table = self.soup.select_one("table.data")
+        # Find the div with id="partants" and then the table within it
+        partants_div = self.soup.find("div", id="partants")
+        if not partants_div:
+            logger.warning("Could not find 'div' with id 'partants'.", extra=self.log_extra)
+            return []
+
+        runners_table = partants_div.find("table", class_="table data")
         if not runners_table:
             logger.warning(
-                "Could not find runners table ('table.data') on the page.", extra=self.log_extra
+                "Could not find 'table' with class 'table data' within 'div#partants'.",
+                extra=self.log_extra,
             )
             return []
 
         for row in runners_table.select("tbody tr"):
             try:
-                num = int(row.select_one("th.num").text.strip())
-                nom_tag = row.select_one("td.tl > a.link")
-                nom = nom_tag.text.strip()
+                # Num
+                num_tag = row.select_one("th.num")
+                num = int(num_tag.text.strip()) if num_tag else None
 
-                jockey = "N/A"
-                trainer = "N/A"
+                # Name and Horse URL
+                name_link = row.select_one("td a.link")
+                nom = name_link.text.strip() if name_link else ""
+                horse_url = urljoin(self.race_url, name_link["href"]) if name_link and "href" in name_link.attrs else ""
 
-                all_links_in_td_tl = row.select("td.tl a.link")
-                # The first link is always the horse name itself, so start from the second link
-                for link in all_links_in_td_tl[1:]:
-                    href = link.get("href", "")
+                # Jockey and Trainer
+                td_jockey_trainer = row.find_all('td')[2] # Get the 3rd td element (index 2)
+                jockey = ""
+                trainer = ""
+
+                # Get all 'a' tags that are direct or indirect children
+                all_links_in_td = td_jockey_trainer.find_all('a')
+                for link in all_links_in_td:
+                    href = link.get('href', '')
                     if "/jockey/" in href:
-                        jockey = link.text.strip()
+                        jockey = link.get_text(strip=True)
                     elif "/entraineur/" in href:
-                        trainer = link.text.strip()
+                        trainer = link.get_text(strip=True)
 
+                # Musique
+                musique_td = row.find_all('td')[0] # Get the 1st td element (index 0)
+                musique = ""
+                div_size_m = musique_td.select_one("div.size-m")
+                if div_size_m and div_size_m.next_sibling:
+                    musique = str(div_size_m.next_sibling).strip()
+                musique = musique.replace("p", "").replace("d", "D").strip() # Clean up 'p' for place, 'd' for disqualifié
 
-                odds_win_tag = row.select_one("td.cote-gagnant span.c")
-                odds_win = float(odds_win_tag.text.replace(",", ".")) if odds_win_tag else None
-
-                odds_place_tag = row.select_one("td.cote-place span.c")
-                odds_place = (
-                    float(odds_place_tag.text.replace(",", ".")) if odds_place_tag else None
-                )
-
-                musique_tag = row.select_one("td.musique")
-                musique = str(musique_tag.text.strip()) if musique_tag else None
-
-                gains_tag = row.select_one("td.gains")
-                gains = str(gains_tag.text.strip().replace(" ", "")) if gains_tag else None
+                # Gains (This column is not directly visible in the "Partants" table, keeping as None for now)
+                gains = None # Placeholder, will need to be scraped from another section if available and required
 
                 runners.append(
-                    Runner(  # Explicitly use the TypedDict
+                    Runner(
                         num=num,
                         nom=nom,
+                        horse_url=horse_url,
                         jockey=jockey,
                         entraineur=trainer,
-                        odds_win=odds_win,
-                        odds_place=odds_place,
+                        odds_win=None,  # Placeholder, will be populated from 'cotes' tab
+                        odds_place=None,  # Placeholder, will be populated from 'cotes' tab
                         musique=musique,
                         gains=gains,
                     )
                 )
             except (AttributeError, ValueError, IndexError) as e:
                 logger.warning(
-                    f"Failed to parse a runner row: {e}. Row skipped.", extra=self.log_extra
+                    f"Failed to parse a runner row: {e}. Row skipped. HTML: {row}", extra=self.log_extra
                 )
                 continue
 
         return runners
+
+    def _parse_odds_from_cotes_tab(self) -> dict[int, dict[str, float]]:
+        """Parses odds from the 'Cotes' tab."""
+        if not self.soup:
+            return {}
+
+        odds_data: dict[int, dict[str, float]] = {}
+        cotes_tab_content = self.soup.find("div", id="cotes")
+        if not cotes_tab_content:
+            logger.warning("Could not find 'div' with id 'cotes'.", extra=self.log_extra)
+            return odds_data
+
+        odds_table = cotes_tab_content.find("table", class_="table data")
+        if not odds_table:
+            logger.warning(
+                "Could not find 'table' with class 'table data' within 'div#cotes'.",
+                extra=self.log_extra,
+            )
+            return odds_data
+
+        for row in odds_table.select("tbody tr"):
+            try:
+                num_tag = row.select_one("th.num")
+                runner_num = int(num_tag.text.strip()) if num_tag else None
+                if runner_num is None:
+                    continue
+
+                # Odds Win - Let's take the PMU.fr odds as an example (5th td, then div.coteval for the current value)
+                # This needs careful indexing. Let's re-examine the HTML
+                # <th colspan="2" class="bs size-s sort" data-label="pmu"> (3rd section, so td index 4 and 5)
+                # <th colspan="2" class="bs size-s sort" data-label="pmufr"> (4th section, so td index 6 and 7)
+                # <th colspan="2" class="bs size-s sort" data-label="zeturf"> (5th section, so td index 8 and 9)
+
+                # Assuming PMU.fr is desired for odds_win
+                # The td containing the current odds for PMU.fr is the 7th td (index 6)
+                pmufr_odds_td = row.select_one("td:nth-of-type(7)")
+                odds_win = None
+                if pmufr_odds_td:
+                    coteval_div = pmufr_odds_td.find("div", class_="coteval")
+                    if coteval_div and coteval_div.get("data-val"):
+                        odds_win = float(coteval_div["data-val"])
+                    else: # Fallback to direct text if no data-val (for the first cote value)
+                        try:
+                            odds_win = float(pmufr_odds_td.get_text(strip=True).replace(",", "."))
+                        except ValueError:
+                            pass
+
+
+                # Odds Place - Often not directly available, but derived. For now, let's look for a specific element
+                # If there's a dedicated 'place' odds, it would be in its own span/div.
+                # Boturfers seems to only show Win odds on the cotes tab directly.
+                # So, for now, we'll keep odds_place as None. If required, a more complex derivation or source might be needed.
+                odds_place = None # Not directly available from the current "Cotes" tab structure as explicit 'place' odds
+
+                odds_data[runner_num] = {"odds_win": odds_win, "odds_place": odds_place}
+
+            except (AttributeError, ValueError, IndexError) as e:
+                logger.warning(
+                    f"Failed to parse odds row: {e}. Row skipped. HTML: {row}", extra=self.log_extra
+                )
+                continue
+        return odds_data
 
     async def get_snapshot(self) -> dict[str, Any]:
         """Orchestre le scraping du programme et retourne la liste des courses."""
@@ -331,6 +444,14 @@ class BoturfersFetcher:
             return {"error": "Failed to fetch HTML"}
         race_metadata = self._parse_race_metadata()
         runners = self._parse_race_runners_from_details_page()
+        odds_data = self._parse_odds_from_cotes_tab()
+
+        # Merge odds data into runners
+        for runner in runners:
+            if runner["num"] in odds_data:
+                runner["odds_win"] = odds_data[runner["num"]]["odds_win"]
+                runner["odds_place"] = odds_data[runner["num"]]["odds_place"]
+
         if not runners:
             logger.error(
                 "Aucun partant n'a pu être extrait de %s.", self.race_url, extra=self.log_extra

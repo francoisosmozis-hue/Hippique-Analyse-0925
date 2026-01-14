@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import sys # Import sys
 from datetime import datetime
 
 from hippique_orchestrator.source_registry import source_registry
@@ -112,10 +113,10 @@ async def run_acceptance_test():
     
     if not all_tests_ok:
         print("\nSome tests failed. Exiting with status 1.")
-        exit(1)
+        sys.exit(1) # Replaced exit(1) with sys.exit(1)
     else:
         print("\nAll tests passed. Exiting with status 0.")
-        exit(0)
+        sys.exit(0) # Replaced exit(0) with sys.exit(0)
 
 if __name__ == "__main__":
     asyncio.run(run_acceptance_test())
