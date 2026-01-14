@@ -9,6 +9,7 @@ from typing import Any
 import requests
 from bs4 import BeautifulSoup
 
+from hippique_orchestrator.data_contract import RunnerStats
 from hippique_orchestrator.logging_utils import get_logger
 from hippique_orchestrator.sources_interfaces import SourceProvider
 
@@ -68,38 +69,48 @@ class ZoneTurfChronoProvider(SourceProvider):
         runner_data: dict[str, Any],
         correlation_id: str | None = None,
         trace_id: str | None = None,
-    ) -> dict[str, Any]:
+    ) -> RunnerStats:
         """
         Fetches chrono stats for a given horse (runner_name).
         Discipline is not used for chrono stats from Zone-Turf.
         """
         normalized_name = self._normalize_name(runner_name)
         if not normalized_name:
-            return {}
+            return RunnerStats()
 
         cache_key = f"chrono_{normalized_name}"
         cached_data = self._get_from_cache(cache_key)
         if cached_data:
-            return cached_data
+            return RunnerStats(
+                record_rk=cached_data.get("record_attele"),
+                last_3_chrono=cached_data.get("last_3_chrono", []),
+                source_stats=self.name,
+            )
 
         horse_id = await self._resolve_horse_id(runner_name)
         if not horse_id:
             logger.warning(f"Could not get Zone-Turf ID for horse: {runner_name}", extra={"correlation_id": correlation_id})
-            return {}
+            return RunnerStats()
 
         url = f"{BASE_URL}/cheval/{normalized_name.replace(' ', '-')}-{horse_id}/"
         try:
             response = await asyncio.to_thread(self._session.get, url, timeout=15)
             response.raise_for_status()
-            stats = self._fetch_chrono_from_html(response.text, runner_name)
-            self._set_to_cache(cache_key, stats)
-            return stats
+            stats_dict = self._fetch_chrono_from_html(response.text, runner_name)
+            if stats_dict:
+                self._set_to_cache(cache_key, stats_dict)
+                return RunnerStats(
+                    record_rk=stats_dict.get("record_attele"),
+                    last_3_chrono=stats_dict.get("last_3_chrono", []),
+                    source_stats=self.name,
+                )
+            return RunnerStats()
         except requests.exceptions.RequestException as e:
             logger.warning(f"Failed to fetch Zone-Turf page for {runner_name} due to network error: {e}", extra={"correlation_id": correlation_id, "url": url})
-            return {}
+            return RunnerStats()
         except Exception as e:
             logger.error(f"An unexpected error occurred while fetching chrono stats for {runner_name}: {e}", exc_info=True, extra={"correlation_id": correlation_id})
-            return {}
+            return RunnerStats()
 
     def _normalize_name(self, s: str) -> str:
         """Normalizes a horse name for comparison."""

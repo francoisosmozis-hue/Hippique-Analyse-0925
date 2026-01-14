@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from hippique_orchestrator.data_contract import RunnerStats
 from hippique_orchestrator.logging_utils import get_logger
 from hippique_orchestrator.sources_interfaces import SourceProvider
 
@@ -50,7 +51,7 @@ class FranceGalopProvider(SourceProvider):
         runner_data: dict[str, Any],
         correlation_id: str | None = None,
         trace_id: str | None = None,
-    ) -> dict[str, Any]:
+    ) -> RunnerStats:
         """
         Fetches statistics for a specific runner for Galop/Obstacle disciplines from France-Galop.com.
         (Currently returns dummy data as actual scraping logic needs to be implemented).
@@ -60,7 +61,7 @@ class FranceGalopProvider(SourceProvider):
                 f"FranceGalopProvider called for non-galop/obstacle discipline: {discipline}. Returning empty stats.",
                 extra={"runner_name": runner_name, "discipline": discipline, "correlation_id": correlation_id},
             )
-            return {}
+            return RunnerStats()
 
         # Dummy implementation: In a real scenario, this would involve scraping France-Galop.com
         # for jockey, trainer, and horse stats relevant to galop/obstacle races.
@@ -68,9 +69,9 @@ class FranceGalopProvider(SourceProvider):
             f"Fetching dummy galop/obstacle stats for runner: {runner_name} (Discipline: {discipline})",
             extra={"runner_name": runner_name, "discipline": discipline, "correlation_id": correlation_id},
         )
-        return {
-            "jockey_galop_rate": 0.28, # Example dummy stat
-            "trainer_galop_rate": 0.32, # Example dummy stat
-            "horse_galop_form_score": 8.1, # Example dummy stat
-            "source": "FranceGalop",
-        }
+        # Encapsulate dummy data in a RunnerStats object
+        return RunnerStats(
+            driver_rate=0.28, # Using driver_rate as a substitute for jockey_galop_rate
+            trainer_rate=0.32,
+            source_stats="FranceGalop_Dummy",
+        )

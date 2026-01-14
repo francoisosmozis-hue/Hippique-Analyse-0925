@@ -215,32 +215,34 @@ class BoturfersProvider(SourceProvider):
 
     def _parse_race_metadata(self, soup: BeautifulSoup, race_url: str) -> dict[str, Any]:
         metadata: dict[str, Any] = {}
-        info_block = soup.select_one("div.col-md-6 p.text-center")
+        
+        # Main info block
+        info_block = soup.select_one("div.dot-separated")
         if info_block:
-            metadata_text = info_block.get_text(strip=True).replace("\n", " ")
+            metadata_text = info_block.get_text(" | ", strip=True)
+            parts = [p.strip() for p in metadata_text.split('|')]
             
-            # Discipline et Type
-            discipline_match = re.search(r"(Trot Attelé|Trot Monté|Plat|Obstacle|Haies|Steeple-Chase|Cross)", metadata_text, re.IGNORECASE)
+            discipline_match = re.search(r"(Attelé|Monté|Plat|Obstacle|Haies|Steeple-Chase|Cross)", metadata_text, re.IGNORECASE)
             if discipline_match:
-                metadata["discipline"] = discipline_match.group(1)
-                metadata["course_type"] = discipline_match.group(1)
+                discipline = discipline_match.group(1)
+                if discipline.lower() in ["attelé", "monté"]:
+                    metadata["discipline"] = f"Trot {discipline.capitalize()}"
+                else:
+                    metadata["discipline"] = discipline.capitalize()
+                metadata["course_type"] = metadata["discipline"]
+            if len(parts) > 1 and "m" in parts[1]:
+                metadata["distance"] = int(re.search(r"(\d+)", parts[1]).group(1))
+            if len(parts) > 2 and "partants" in parts[2]:
+                metadata["partants"] = int(re.search(r"(\d+)", parts[2]).group(1))
+            if len(parts) > 5 and "Corde" in parts[5]:
+                metadata["corde"] = "G" if "gauche" in parts[5] else "D"
+        
+        # Prize money
+        if info_block and (prize_match := re.search(r"([\d\s]+)€", info_block.get_text())):
+             metadata["prize"] = prize_match.group(1).replace('\xa0', '').replace(' ', '')
 
-            # Distance
-            distance_match = re.search(r"(\d{3,4})\s*m", metadata_text)
-            if distance_match:
-                metadata["distance"] = int(distance_match.group(1))
 
-            # Prize
-            prize_match = re.search(r"([\d\s]+)€", metadata_text)
-            if prize_match:
-                metadata["prize"] = prize_match.group(1).replace(" ", "")
-
-            # Corde
-            corde_match = re.search(r"Corde à (gauche|droite)", metadata_text, re.IGNORECASE)
-            if corde_match:
-                metadata["corde"] = "G" if "gauche" in corde_match.group(1).lower() else "D"
-
-        # Date et RC Label depuis l'URL
+        # Date and RC Label from URL
         date_match = re.search(r'/(\d{4}-\d{2}-\d{2})/', race_url)
         if date_match:
             metadata["date"] = date_match.group(1)
@@ -248,54 +250,50 @@ class BoturfersProvider(SourceProvider):
         rc_match = re.search(r"/(R\d+C\d+)", race_url)
         if rc_match:
             metadata["rc_label"] = rc_match.group(1)
-            
-        # Heure de départ
-        time_tag = soup.select_one("span.text-danger.fw-bold")
-        if time_tag and (time_match := re.search(r'(\d{1,2}h\d{2})', time_tag.text)):
+
+        # Start Time
+        dep_tag = soup.select_one("div.dep")
+        if dep_tag and (time_match := re.search(r'(\d{1,2}h\d{2})', dep_tag.text)):
             metadata["start_time"] = time_match.group(1)
 
         return metadata
 
     def _parse_race_runners_from_details_page(self, soup: BeautifulSoup) -> list[RunnerData]:
         runners_data: list[RunnerData] = []
-        partants_table = soup.select_one("div#partants table.table-striped")
+        partants_table = soup.select_one("div#partants table.data")
         if not partants_table:
-            logger.warning("Could not find runners table ('div#partants table.table-striped') on the page.")
+            logger.warning("Could not find runners table ('div#partants table.data') on the page.")
             return []
 
-        for i, row in enumerate(partants_table.select("tbody tr"), 1):
+        for row in partants_table.select("tbody tr"):
             try:
+                num_th = row.find("th", class_="num")
+                if not num_th:
+                    continue
+                
+                num = int(num_th.get_text(strip=True))
+
                 cols = row.find_all("td")
-                if len(cols) < 4:
-                    logger.warning(f"Ligne de partant incomplète (cols={len(cols)}): {row.get_text()}. Skipping.")
+                if len(cols) < 3:
                     continue
 
-                # Le numéro est implicite
-                num = i
+                name_cell = cols[0]
+                name = name_cell.find("a", class_="link").get_text(strip=True)
+                musique_raw = name_cell.get_text(" ", strip=True).replace(name, "").strip()
 
-                name_div = cols[0].find("div", class_="runner-name")
-                name = name_div.get_text(strip=True) if name_div else ""
-                
-                musique = cols[1].get_text(strip=True) if len(cols) > 1 else None
-                driver = cols[2].get_text(strip=True) if len(cols) > 2 else None
-                trainer = cols[3].get_text(strip=True) if len(cols) > 3 else None
+                jockey_trainer_cell = cols[2]
+                driver = jockey_trainer_cell.find("a", href=lambda h: h and "/jockey/" in h).get_text(strip=True)
+                trainer = jockey_trainer_cell.find("a", href=lambda h: h and "/entraineur/" in h).get_text(strip=True)
 
-                # Les cotes ne sont pas sur la page principale des partants de boturfers.fr
-                odds_win = None
-                odds_place = None
-
-                if name:
-                    runners_data.append(
-                        RunnerData(
-                            num=num,
-                            nom=name,
-                            musique=musique,
-                            odds_win=odds_win,
-                            odds_place=odds_place,
-                            driver=driver,
-                            trainer=trainer,
-                        )
+                runners_data.append(
+                    RunnerData(
+                        num=num,
+                        nom=name,
+                        musique=musique_raw,
+                        driver=driver,
+                        trainer=trainer,
                     )
+                )
             except Exception as e:
                 logger.warning(
                     f"Failed to parse a runner row: {e}. Row skipped.",
