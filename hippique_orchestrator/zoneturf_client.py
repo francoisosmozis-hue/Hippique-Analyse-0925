@@ -250,7 +250,7 @@ def fetch_person_stats_from_html(html_content: str, person_type: str) -> dict[st
         stats_card_header = stats_h2.find_parent("div", class_="card-header")
         if stats_card_header:
             stats_div = stats_card_header.find_next_sibling("div", class_="card-body")
-            if stats_div and "infos-personne" in stats_div.get("class", []):
+            if stats_div:
                 pass
             else:
                 stats_div = None

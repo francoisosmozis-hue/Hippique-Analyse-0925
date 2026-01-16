@@ -422,40 +422,41 @@ def _fallback_parse_html(html: Any) -> dict[str, Any]:
     
     # Merge logic: prioritize cotes_map for odds.
     # If cotes_map has odds, use it to create runners and enrich with table info if available.
-    # If cotes_map is empty, create runners from table_runners_data, but with no odds.
-    final_runners_map: dict[str, dict[str, Any]] = {}
-
-    # 1. Populate initial runners from cotes_map (these have odds)
-    for num, cote_info in cotes_map.items():
-        runner_data = {
-            "num": num,
-            "name": _clean_text(cote_info.get("nom")),
-            "cote": _normalize_decimal(cote_info.get("cote")),
-            "odds_place": _normalize_decimal(cote_info.get("cote_place")),
-        }
-        final_runners_map[num] = runner_data
+        # If cotes_map is empty, create runners from table_runners_data, but with no odds.
+        final_runners_map: dict[str, dict[str, Any]] = {}
     
-    # 2. Incorporate runners found in the table.
-    #    If a runner is already in final_runners_map (from cotes_map), update its name if better.
-    #    If a runner is only in table_runners_data, add it to final_runners_map WITHOUT odds.
-    for num, table_runner_info in table_runners_data.items():
-        if num in final_runners_map:
-            # Runner exists from cotes_map. Enrich its name if table has a better one.
-            if table_runner_info.get("name") and not final_runners_map[num].get("name"):
-                final_runners_map[num]["name"] = table_runner_info["name"]
-            # If name from script was just the number, use table name
-            elif table_runner_info.get("name") and final_runners_map[num].get("name") == num:
-                final_runners_map[num]["name"] = table_runner_info["name"]
-        else:
-            # Runner only in table_runners_data (not in cotes_map). Add it, but no odds.
-            final_runners_map[num] = {
+        # 1. Populate initial runners from cotes_map (these have odds)
+        for num, cote_info in cotes_map.items():
+            runner_data = {
                 "num": num,
-                "name": table_runner_info.get("name"),
-                "cote": None,
-                "odds_place": None,
+                "name": _clean_text(cote_info.get("nom")),
+                "cote": _normalize_decimal(cote_info.get("cote")),
+                "odds_place": _normalize_decimal(cote_info.get("cote_place")),
+                "musique": _clean_text(cote_info.get("musique")),
             }
-
-    runners = list(final_runners_map.values())
+            final_runners_map[num] = runner_data
+        
+        # 2. Incorporate runners found in the table.
+        #    If a runner is already in final_runners_map (from cotes_map), update its name if better.
+        #    If a runner is only in table_runners_data, add it to final_runners_map WITHOUT odds.
+        for num, table_runner_info in table_runners_data.items():
+            if num in final_runners_map:
+                # Runner exists from cotes_map. Enrich its name if table has a better one.
+                if table_runner_info.get("name") and not final_runners_map[num].get("name"):
+                    final_runners_map[num]["name"] = table_runner_info["name"]
+                # If name from script was just the number, use table name
+                elif table_runner_info.get("name") and final_runners_map[num].get("name") == num:
+                    final_runners_map[num]["name"] = table_runner_info["name"]
+            else:
+                # Runner only in table_runners_data (not in cotes_map). Add it, but no odds.
+                final_runners_map[num] = {
+                    "num": num,
+                    "name": table_runner_info.get("name"),
+                    "cote": None,
+                    "odds_place": None,
+                }
+    
+        runners = list(final_runners_map.values())
 
     partants: int | None = None
     partants_match = _PARTANTS_RE.search(html)
@@ -471,15 +472,15 @@ def _fallback_parse_html(html: Any) -> dict[str, Any]:
     )
     if infos_paragraph_match:
         discipline = _clean_text(
-            infos_paragraph_match.group(1), lowercase=True, strip_accents=False
+            infos_paragraph_match.group(1), lowercase=False, strip_accents=False
         )  # Changed to False
     else:
         # Fallback to the general _DISCIPLINE_RE if the specific infos paragraph is not found
         discipline_match = _DISCIPLINE_RE.search(html)
         if discipline_match:
-            discipline = _clean_text(
-                discipline_match.group(1), lowercase=True, strip_accents=False
-            )  # Changed to False
+                    discipline = _clean_text(
+                        discipline_match.group(1), lowercase=False, strip_accents=False
+                    )  # Changed to False
 
     meeting: str | None = None
     meeting_match = _MEETING_RE.search(html)
@@ -1488,7 +1489,9 @@ def _normalise_snapshot_result(
     if isinstance(runners_raw, Iterable) and not isinstance(runners_raw, (str, bytes)):
         for entry in runners_raw:
             if isinstance(entry, Mapping):
-                runners.append(dict(entry))
+                parsed = _coerce_runner_entry(entry)
+                if parsed:
+                    runners.append(parsed)
     result["runners"] = runners
 
     existing_meta = result.get("meta") if isinstance(result.get("meta"), Mapping) else {}
@@ -1663,6 +1666,8 @@ def fetch_race_snapshot_full(
         course_arg = _safe_normalise(str(course), "C") or str(course).strip() or None
 
     fetch_kwargs = dict(kwargs)
+
+    sources_config: Mapping[str, Any] | None = None # Initialize sources_config
 
     if course_url is None and "course_url" in fetch_kwargs:
         maybe_url = fetch_kwargs.pop("course_url")

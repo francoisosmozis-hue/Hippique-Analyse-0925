@@ -1,7 +1,4 @@
-from __future__ import annotations
-
 import asyncio
-import logging
 import re
 from datetime import datetime
 from typing import Any
@@ -14,6 +11,10 @@ from hippique_orchestrator.data_contract import (
 )
 from hippique_orchestrator.scripts.online_fetch_zeturf import fetch_race_snapshot_full
 from hippique_orchestrator.sources_interfaces import SourceProvider
+from hippique_orchestrator.zoneturf_client import (
+    get_chrono_stats,
+    get_jockey_trainer_stats,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -61,18 +62,20 @@ class ZeturfSource(SourceProvider):
         if not m:
             raise ValueError(f"[{self.name}] Could not extract R?C? from URL: {race_url}")
 
-        rc = m.group(1).upper()
+        rc_label = m.group(1).upper()  # e.g., "R1C1"
+        reunion = rc_label[:2]  # e.g., "R1"
+        course = rc_label[2:]  # e.g., "C1"
         ph = _phase_norm(phase)
 
         logger.info(
-            f"[{self.name}] Fetching snapshot for {rc} at phase {ph} from {race_url}",
+            f"[{self.name}] Fetching snapshot for {rc_label} at phase {ph} from {race_url}",
             extra=log_extra,
         )
-
+        
         raw_snapshot = await asyncio.to_thread(
             fetch_race_snapshot_full,
-            rc,
-            None,
+            reunion,  # Pass reunion separately
+            course,   # Pass course separately
             ph,
             course_url=race_url,
             date=date_str,
@@ -94,7 +97,7 @@ class ZeturfSource(SourceProvider):
 
         race_data = RaceData(
             date=race_date,
-            rc_label=raw_snapshot.get("rc", rc),
+            rc_label=raw_snapshot.get("rc", rc_label),
             name=raw_snapshot.get("meeting"),
             url=raw_snapshot.get("source_url", race_url),
             discipline=raw_snapshot.get("discipline"),
@@ -102,18 +105,48 @@ class ZeturfSource(SourceProvider):
             corde=raw_snapshot.get("corde"),
         )
 
-        runners_data = [
-            RunnerData(
-                num=r["num"],
-                nom=r.get("name", ""),
-                musique=r.get("musique"),
-                odds_win=r.get("cote"),
-                odds_place=r.get("odds_place"),
-                driver=r.get("jokey") or r.get("driver"),
-                trainer=r.get("entraineur"),
+        runners_data = []
+        for raw_runner in raw_snapshot.get("runners", []):
+            runner_name = raw_runner.get("name", "")
+            driver_name = raw_runner.get("jokey") or raw_runner.get("driver")
+            trainer_name = raw_runner.get("entraineur")
+
+            # Fetch chrono stats (synchronous, needs to be run in thread)
+            horse_stats_raw = await asyncio.to_thread(get_chrono_stats, runner_name)
+            
+            # Fetch driver stats (synchronous, needs to be run in thread)
+            driver_stats_raw = {}
+            if driver_name:
+                driver_stats_raw = await asyncio.to_thread(get_jockey_trainer_stats, driver_name, "jockey")
+
+            # Fetch trainer stats (synchronous, needs to be run in thread)
+            trainer_stats_raw = {}
+            if trainer_name:
+                trainer_stats_raw = await asyncio.to_thread(get_jockey_trainer_stats, trainer_name, "entraineur")
+            
+            # Populate RunnerStats
+            runner_stats = RunnerStats(source_stats="zoneturf")
+            if horse_stats_raw:
+                runner_stats.last_3_chrono = horse_stats_raw.get("last_3_chrono", [])
+                runner_stats.record_rk = horse_stats_raw.get("record_attele")
+            if driver_stats_raw:
+                runner_stats.driver_rate = driver_stats_raw.get("win_rate") # Assuming driver rate is win_rate
+            if trainer_stats_raw:
+                runner_stats.trainer_rate = trainer_stats_raw.get("win_rate") # Assuming trainer rate is win_rate
+
+
+            runner = RunnerData(
+                num=raw_runner["num"],
+                nom=runner_name,
+                musique=raw_runner.get("musique"),
+                odds_win=raw_runner.get("cote"),
+                odds_place=raw_runner.get("odds_place"),
+                driver=driver_name,
+                trainer=trainer_name,
+                gains=raw_runner.get("gains"),
+                stats=runner_stats, # Assign the populated RunnerStats
             )
-            for r in raw_snapshot.get("runners", [])
-        ]
+            runners_data.append(runner)
 
         return RaceSnapshotNormalized(
             race=race_data,
