@@ -32,6 +32,8 @@ class RaceData(BaseModel):
     """Contrat de données pour une course."""
     date: datetime.date
     rc_label: str  # e.g., "R1C1"
+    name: str | None = None # e.g., "Prix d'Amérique"
+    url: str | None = None # The unique URL to the race page
     discipline: Literal["Trot Attelé", "Trot Monté", "Plat", "Obstacle", "Haies", "Steeple-Chase", "Attelé"] | None = None
     distance: int | None = None
     corde: Literal["D", "G"] | None = None

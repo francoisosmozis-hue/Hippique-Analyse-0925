@@ -502,44 +502,99 @@ async def fetch_boturfers_programme(
         )
         return {}
 
+from hippique_orchestrator.data_contract import RaceData, RunnerData
+from hippique_orchestrator.sources.interfaces import DataSourceInterface
 
-async def fetch_boturfers_race_details(
-    url: str,
-    correlation_id: str | None = None,
-    trace_id: str | None = None,
-    *args,
-    **kwargs,
-) -> dict:
-    """Fonction principale pour scraper les détails d'une course sur Boturfers."""
-    log_extra = {"correlation_id": correlation_id, "trace_id": trace_id, "url": url}
-    logger.info("Début du scraping des détails de course.", extra=log_extra)
-    if not url:
-        logger.error("Aucune URL fournie pour le scraping des détails de course.", extra=log_extra)
-        return {}
-    host = urlparse(url).netloc.lower()
-    # Boturfers: endpoint /partant ; ZEturf/autres: ne pas modifier l'URL
-    if 'boturfers.fr' in host:
-        if not url.endswith('/partant'):
-            url = url.rstrip('/') + '/partant'
-    else:
-        url = url.rstrip('/')
-    try:
-        fetcher = BoturfersFetcher(race_url=url, correlation_id=correlation_id, trace_id=trace_id)
-        raw_snapshot = await fetcher.get_race_snapshot()
-        if "error" in raw_snapshot or not raw_snapshot.get("runners"):
-            logger.error("Le scraping des détails a échoué.", extra=log_extra)
-            return {}
-        logger.info(
-            "Scraping des détails réussi. %s partants trouvés.",
-            len(raw_snapshot.get("runners", [])),
-            extra=log_extra,
-        )
-        return raw_snapshot
-    except Exception as e:
-        logger.exception(
-            ("Une erreur inattendue est survenue lors du scraping des détails de %s: %s"),
-            url,
-            e,
-            extra=log_extra,
-        )
-        return {}
+
+class BoturfersProvider(DataSourceInterface):
+    """
+    Provider pour Boturfers qui implémente la nouvelle DataSourceInterface.
+    """
+
+    @property
+    def name(self) -> str:
+        return "Boturfers"
+
+    async def get_races_for_date(self, target_date: datetime) -> list[RaceData]:
+        """
+        Récupère le programme des courses pour une date et le transforme
+        en une liste d'objets RaceData.
+        """
+        today = datetime.now(datetime.timezone.utc).date()
+        tomorrow = today + datetime.timedelta(days=1)
+
+        url = None
+        if target_date == today:
+            url = "https://www.boturfers.fr/programme-pmu-du-jour"
+        elif target_date == tomorrow:
+            url = "https://www.boturfers.fr/programme-pmu-demain"
+
+        if not url:
+            logger.debug(f"{self.name} ne supporte pas la date {target_date}.")
+            return []
+
+        fetcher = BoturfersFetcher(race_url=url)
+        snapshot = await fetcher.get_snapshot()
+
+        if not snapshot or "races" not in snapshot:
+            return []
+
+        races = []
+        for race_entry in snapshot["races"]:
+            start_time = None
+            if race_entry.get("start_time"):
+                try:
+                    start_time = datetime.strptime(race_entry["start_time"], "%H:%M").time()
+                except (ValueError, TypeError):
+                    logger.warning(f"Impossible de parser l'heure de départ: {race_entry.get('start_time')}")
+
+
+            race = RaceData(
+                date=target_date,
+                rc_label=race_entry.get("rc", "N/A"),
+                name=race_entry.get("name"),
+                url=race_entry.get("url"),
+                start_time_local=start_time
+                # Les autres champs (discipline, distance, etc.) ne sont pas
+                # disponibles sur la page programme, ils seront remplis
+                # lors de la récupération des détails.
+            )
+            races.append(race)
+        return races
+
+    async def get_runners_for_race(self, race: RaceData) -> list[RunnerData]:
+        """
+        Récupère les détails d'une course (partants) et les transforme
+        en une liste d'objets RunnerData.
+        """
+        if not race.url:
+            logger.error(f"Impossible de récupérer les partants pour {race.rc_label} car l'URL est manquante.")
+            return []
+
+        fetcher = BoturfersFetcher(race_url=race.url)
+        snapshot = await fetcher.get_race_snapshot()
+
+        if not snapshot or "runners" not in snapshot:
+            return []
+        
+        # Optionnel: Mettre à jour l'objet race avec les métadonnées scrapées
+        meta = snapshot.get("race_metadata", {})
+        if meta.get("distance"):
+            race.distance = int(meta["distance"])
+        # ... on pourrait faire de même pour la discipline, corde, etc.
+
+        runners = []
+        for runner_entry in snapshot["runners"]:
+            runner = RunnerData(
+                num=runner_entry["num"],
+                nom=runner_entry["nom"],
+                musique=runner_entry.get("musique"),
+                odds_place=runner_entry.get("odds_place"),
+                odds_win=runner_entry.get("odds_win"),
+                driver=runner_entry.get("jockey"),
+                trainer=runner_entry.get("entraineur"),
+                gains=runner_entry.get("gains")
+            )
+            runners.append(runner)
+        return runners
+

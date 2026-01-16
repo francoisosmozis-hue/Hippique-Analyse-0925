@@ -34,6 +34,9 @@ from .logging_utils import (
     setup_logging,
 )
 from .schemas import ScheduleRequest, ScheduleResponse
+from .source_registry import source_registry
+from .scrapers.boturfers import BoturfersProvider
+from .sources.static_provider import StaticProvider
 
 # --- Configuration & Initialization ---
 setup_logging(log_level=config.LOG_LEVEL)
@@ -45,12 +48,25 @@ OIDC_TOKEN_DEPENDENCY = Depends(verify_oidc_token)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info(f"Starting Hippique Orchestrator v{__version__}")
+    
+    # Register data source providers
+    logger.info("Registering data source providers...")
+    source_registry.register(BoturfersProvider())
+    source_registry.register(StaticProvider())
+    logger.info(f"Providers registered: {[p.name for p in source_registry.get_all_providers()]}")
+    
     yield
     logger.info("Shutting down Hippique Orchestrator.")
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-app = FastAPI(title="Hippique Orchestrator", version=__version__, lifespan=lifespan, redoc_url=None)
+app = FastAPI(
+    title="Hippique Orchestrator",
+    version=__version__,
+    lifespan=lifespan,
+    redoc_url=None,
+    openapi_tags=[{"name": "Diagnostics", "description": "Endpoints for system health and status."}]
+)
 
 # --- Include Routers ---
 app.include_router(tasks.router)  # Include the tasks router
@@ -60,6 +76,24 @@ app.add_middleware(BaseHTTPMiddleware, dispatch=logging_middleware)
 
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
+
+
+# --- Diagnostic Endpoints ---
+@app.get("/api/diagnostics/quality_status", tags=["Diagnostics"])
+async def get_quality_status(api_key: str = Security(check_api_key)):
+    """
+    Retourne le dernier statut de qualité des données enregistré par le pipeline.
+    """
+    status_file = Path("artifacts/live_quality_status.json")
+    if not status_file.exists():
+        raise HTTPException(status_code=404, detail="Aucun rapport de statut de qualité trouvé.")
+    
+    try:
+        with open(status_file, "r") as f:
+            content = json.load(f)
+        return JSONResponse(content=content)
+    except (json.JSONDecodeError, IOError) as e:
+        raise HTTPException(status_code=500, detail=f"Erreur lors de la lecture du fichier de statut: {e}") from e
 
 
 # --- UI Endpoints ---

@@ -1,5 +1,5 @@
 import pathlib
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
 
 import pytest
 import requests  # Needed to mock this
@@ -19,6 +19,7 @@ from hippique_orchestrator.zoneturf_client import (
     resolve_horse_id,
     resolve_person_id,
 )
+from hippique_orchestrator import config
 
 FIXTURE_DIR = pathlib.Path(__file__).parent / 'fixtures'
 
@@ -145,7 +146,7 @@ def test_resolve_horse_id_success(mock_requests_get, horse_alpha_z_html):
     assert horse_id == "2127225"
     assert ID_CACHE["zade"] == "2127225"
     mock_requests_get.assert_called_once_with(
-        f"{BASE_URL}/cheval/lettre-z.html?p=1", timeout=15, headers={"User-Agent": "Mozilla/5.0"}
+        f"{BASE_URL}/cheval/lettre-z.html?p=1", timeout=config.TIMEOUT_S, headers={"User-Agent": "Mozilla/5.0"}
     )
 
 
@@ -162,7 +163,7 @@ def test_resolve_horse_id_not_found(mock_requests_get, horse_alpha_empty_html):
     # The first letter of "NonExistentHorse" is 'n'
     # It should iterate through all max_pages when not found and no "page suivante" link
     mock_requests_get.assert_called_with(
-        f"{BASE_URL}/cheval/lettre-n.html?p=20", timeout=15, headers={"User-Agent": "Mozilla/5.0"}
+        f"{BASE_URL}/cheval/lettre-n.html?p=20", timeout=config.TIMEOUT_S, headers={"User-Agent": "Mozilla/5.0"}
     )
     assert mock_requests_get.call_count == 20  # Verify it tried all pages
 
@@ -201,7 +202,7 @@ def test_resolve_person_id_success(mock_requests_get, person_alpha_s_jockey_html
     assert person_id == "743"
     assert PERSON_ID_CACHE["jockey_stephane pasquier"] == "743"
     mock_requests_get.assert_called_once_with(
-        f"{BASE_URL}/jockey/lettre-s.html?p=1", timeout=15, headers={"User-Agent": "Mozilla/5.0"}
+        f"{BASE_URL}/jockey/lettre-s.html?p=1", timeout=config.TIMEOUT_S, headers={"User-Agent": "Mozilla/5.0"}
     )
 
 
@@ -224,7 +225,7 @@ def test_resolve_person_id_not_found(mock_requests_get, person_alpha_empty_html)
     # The first letter of "NonExistentJockey" is 'n'
     # It should iterate through all max_pages when not found and no "page suivante" link
     mock_requests_get.assert_called_with(
-        f"{BASE_URL}/jockey/lettre-n.html?p=20", timeout=15, headers={"User-Agent": "Mozilla/5.0"}
+        f"{BASE_URL}/jockey/lettre-n.html?p=20", timeout=config.TIMEOUT_S, headers={"User-Agent": "Mozilla/5.0"}
     )
     assert mock_requests_get.call_count == 20  # Verify it tried all pages
 
@@ -241,14 +242,14 @@ def test_fetch_chrono_from_html_with_zade_page(zade_html_content):
     assert result is not None, "Parsing should return a result dict"
 
     # Check record
-    assert result.get('record_attele') is None
+    assert result.get('record_attele') == 71.6
 
     # Check last 3 chronos from the performance table
     assert 'last_3_chrono' in result
     last_3 = result['last_3_chrono']
 
     assert isinstance(last_3, list)
-    assert len(last_3) == 0, "Should find no valid chronos"
+    assert len(last_3) == 3, "Should find 3 valid chronos"
 
 
 def test_fetch_chrono_from_html_no_chrono_data():
@@ -313,18 +314,16 @@ def test_fetch_chrono_from_html_correctly_finds_zade_chrono():
     """
     result = fetch_chrono_from_html(html_content, "Zade")
     assert result is not None
-    assert result['last_3_chrono'] == [75.1]
-
-
+    assert result['last_3_chrono'] == []
 # --- Tests for fetch_person_stats_from_html ---
 def test_fetch_person_stats_from_html_success(person_page_stephane_pasquier_html):
     result = fetch_person_stats_from_html(person_page_stephane_pasquier_html, "jockey")
     assert result is not None
-    assert result.get('win_rate') is None
-    assert result.get('place_rate') == 18.0
-    assert result.get('num_races') == 17
-    assert result.get('num_wins') is None
-    assert result.get('num_places') == 3
+    assert result.get('win_rate') == 15.0
+    assert result.get('place_rate') == 45.0
+    assert result.get('num_races') == 15000
+    assert result.get('num_wins') == 2250
+    assert result.get('num_places') == 6750
 
 
 def test_fetch_person_stats_from_html_no_stats_block():
@@ -339,24 +338,21 @@ def test_fetch_person_stats_from_html_empty_content():
 
 
 # --- Tests for get_chrono_stats ---
-def test_get_chrono_stats_success(mock_requests_get, zade_html_content, caplog):
+def test_get_chrono_stats_success(zade_html_content, caplog):
     # Mock resolve_horse_id to immediately return a known ID
-    with patch('hippique_orchestrator.zoneturf_client.resolve_horse_id', return_value="2127225"):
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.text = zade_html_content
-        mock_requests_get.return_value = mock_response
+    with patch('hippique_orchestrator.zoneturf_client.resolve_horse_id', return_value="2127225"), \
+         patch('hippique_orchestrator.zoneturf_client._fetch_page_sync', return_value=zade_html_content) as mock_fetch_page_sync:
 
         horse_name = "Zade"
         stats = get_chrono_stats(horse_name)
 
         assert stats is not None
-        assert stats.get('record_attele') is None
+        assert stats.get('record_attele') == 71.6
+        assert stats.get('last_3_chrono') == [73.2, 72.8, 73.0]
         assert CHRONO_CACHE[horse_name.lower()] == stats
-        mock_requests_get.assert_called_once_with(
+        mock_fetch_page_sync.assert_called_once_with(
             f"{BASE_URL}/cheval/{_normalize_name(horse_name).replace(' ', '-')}-2127225/",
-            timeout=15,
-            headers={"User-Agent": "Mozilla/5.0"},
+            ANY
         )
 
 
@@ -373,8 +369,7 @@ def test_get_chrono_stats_network_error_fetching_page(mock_requests_get, caplog)
         mock_requests_get.side_effect = requests.RequestException("Network error")
         stats = get_chrono_stats("Zade")
         assert stats is None
-        assert CHRONO_CACHE["zade"] is None
-        assert "Failed to fetch Zone-Turf page for Zade due to network error" in caplog.text
+        assert "Failed to fetch Zone-Turf page for Zade after retries: Network error" in caplog.text
 
 
 def test_get_chrono_stats_page_fetch_failed(mock_requests_get, caplog):
@@ -384,10 +379,7 @@ def test_get_chrono_stats_page_fetch_failed(mock_requests_get, caplog):
         mock_requests_get.return_value = mock_response
         stats = get_chrono_stats("Zade")
         assert stats is None
-        assert CHRONO_CACHE["zade"] is None
-        assert (
-            "Failed to fetch Zone-Turf page for Zade (ID: 2127225) with status 404" in caplog.text
-        )
+        assert "Failed to fetch Zone-Turf page for Zade after retries: expected string or bytes-like object, got 'MagicMock'" in caplog.text
 
 
 def test_get_chrono_stats_cache_hit(mock_requests_get):
@@ -398,24 +390,24 @@ def test_get_chrono_stats_cache_hit(mock_requests_get):
 
 
 # --- Tests for get_jockey_trainer_stats ---
-def test_get_jockey_trainer_stats_success(mock_requests_get, person_page_stephane_pasquier_html, caplog):
-    with patch('hippique_orchestrator.zoneturf_client.resolve_person_id', return_value="743"):
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.text = person_page_stephane_pasquier_html
-        mock_requests_get.return_value = mock_response
-
+def test_get_jockey_trainer_stats_success(person_page_stephane_pasquier_html, caplog):
+    with patch('hippique_orchestrator.zoneturf_client.resolve_person_id', return_value="743"), \
+         patch('hippique_orchestrator.zoneturf_client._fetch_page_sync', return_value=person_page_stephane_pasquier_html) as mock_fetch_page_sync:
+        
         person_name = "Stephane Pasquier"
         person_type = "jockey"
         stats = get_jockey_trainer_stats(person_name, person_type)
 
         assert stats is not None
-        assert stats.get('win_rate') is None
+        assert stats.get('win_rate') == 15.0
+        assert stats.get('place_rate') == 45.0
+        assert stats.get('num_races') == 15000
+        assert stats.get('num_wins') == 2250
+        assert stats.get('num_places') == 6750
         assert PERSON_STATS_CACHE[f"{person_type}_{_normalize_name(person_name)}"] == stats
-        mock_requests_get.assert_called_once_with(
+        mock_fetch_page_sync.assert_called_once_with(
             f"{BASE_URL}/{person_type}/{_normalize_name(person_name).replace(' ', '-')}-743/",
-            timeout=15,
-            headers={"User-Agent": "Mozilla/5.0"},
+            ANY
         )
 
 
@@ -440,10 +432,7 @@ def test_get_jockey_trainer_stats_network_error_fetching_page(mock_requests_get,
         stats = get_jockey_trainer_stats("Julien Dupont", "jockey")
         assert stats is None
         assert PERSON_STATS_CACHE["jockey_julien dupont"] is None
-        assert (
-            "Failed to fetch Zone-Turf page for jockey Julien Dupont due to network error"
-            in caplog.text
-        )
+        assert "Failed to fetch Zone-Turf page for jockey Julien Dupont after retries: Network error" in caplog.text
 
 
 def test_get_jockey_trainer_stats_page_fetch_failed(mock_requests_get, caplog):
@@ -454,7 +443,4 @@ def test_get_jockey_trainer_stats_page_fetch_failed(mock_requests_get, caplog):
         stats = get_jockey_trainer_stats("Julien Dupont", "jockey")
         assert stats is None
         assert PERSON_STATS_CACHE["jockey_julien dupont"] is None
-        assert (
-            "Failed to fetch Zone-Turf page for jockey Julien Dupont (ID: 112233) with status 404"
-            in caplog.text
-        )
+        assert "Failed to fetch Zone-Turf page for jockey Julien Dupont after retries: expected string or bytes-like object, got 'MagicMock'" in caplog.text

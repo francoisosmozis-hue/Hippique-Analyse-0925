@@ -1,113 +1,57 @@
 """
 Fournit une stratégie multi-sources pour récupérer le programme des courses.
 """
-import asyncio
 import datetime
 import logging
-from abc import ABC, abstractmethod
 from typing import Any
 
+from hippique_orchestrator.data_contract import RaceData
 from hippique_orchestrator.source_registry import source_registry
 
 logger = logging.getLogger(__name__)
 
 
-class BaseProgrammeProvider(ABC):
-    """Classe de base abstraite pour un fournisseur de programme."""
-    def __init__(self, registry):
-        self.source_registry = registry
-
-    @abstractmethod
-    async def get_programme(self, target_date: datetime.date) -> list[dict[str, Any]]:
-        """
-        Récupère le programme pour une date donnée.
-        Doit retourner une liste de dictionnaires, chacun représentant une course.
-        """
-        pass
-
-    @property
-    def name(self):
-        return self.__class__.__name__
-
-
-class BoturfersProgrammeProvider(BaseProgrammeProvider):
-    """Récupère le programme depuis Boturfers (aujourd'hui/demain uniquement)."""
-    async def get_programme(self, target_date: datetime.date) -> list[dict[str, Any]]:
-        today = datetime.datetime.now(datetime.timezone.utc).date()
-        tomorrow = today + datetime.timedelta(days=1)
-
-        url = None
-        if target_date == today:
-            url = "https://www.boturfers.fr/programme-pmu-du-jour"
-        elif target_date == tomorrow:
-            url = "https://www.boturfers.fr/programme-pmu-demain"
-
-        if not url:
-            logger.debug(f"{self.name} ne supporte pas la date {target_date}.")
-            return []
-
-        logger.info(f"[{self.name}] Récupération du programme depuis {url}")
-        # On suppose que la source_registry a une méthode pour ça
-        programme = await self.source_registry.fetch_programme(url)
-        if programme:
-            logger.info(f"[{self.name}] {len(programme)} courses trouvées.")
-        return programme
-
-
-class PmuProgrammeProvider(BaseProgrammeProvider):
-    """
-    Récupère le programme depuis PMU.fr. (STUB)
-    C'est la cible prioritaire.
-    """
-    async def get_programme(self, target_date: datetime.date) -> list[dict[str, Any]]:
-        logger.info(f"[{self.name}] Tentative de récupération pour le {target_date.isoformat()} (implémentation factice).")
-        # TODO: Implémenter le scraping de PMU, potentiellement via une API "privée"
-        # découverte en analysant le trafic réseau du site.
-        # Exemple d'URL à analyser : https://www.pmu.fr/turf/{target_date.strftime('%d%m%Y')}
-        await asyncio.sleep(0.1) # Simule un appel réseau
-        return []
-
-
-class GenyProgrammeProvider(BaseProgrammeProvider):
-    """
-    Récupère le programme depuis Geny.com. (STUB)
-    Bonne source de fallback.
-    """
-    async def get_programme(self, target_date: datetime.date) -> list[dict[str, Any]]:
-        logger.info(f"[{self.name}] Tentative de récupération pour le {target_date.isoformat()} (implémentation factice).")
-        # TODO: Implémenter le scraping de Geny.
-        await asyncio.sleep(0.1) # Simule un appel réseau
-        return []
-
-
 class ProgrammeProvider:
     """
     Orchestre la récupération du programme en essayant plusieurs sources
-    dans un ordre de priorité défini.
+    enregistrées dans le `source_registry`, selon un ordre de priorité.
     """
-    def __init__(self, registry):
-        self.providers = [
-            PmuProgrammeProvider(registry),
-            GenyProgrammeProvider(registry),
-            BoturfersProgrammeProvider(registry),  # En dernier recours
-        ]
+    def __init__(self, registry, provider_priority: list[str] | None = None):
+        """
+        Initialise le provider avec le registre de sources.
 
-    async def get_programme(self, target_date: datetime.date) -> list[dict[str, Any]]:
+        :param registry: L'instance de SourceRegistry.
+        :param provider_priority: Liste ordonnée des noms de providers à essayer.
         """
-        Essaie chaque provider jusqu'à obtenir un programme non vide.
+        self.registry = registry
+        # En production, on voudra peut-être une liste comme ["PMU", "Geny", "Boturfers"]
+        # Pour l'instant, on se contente de ce qui est disponible.
+        self.provider_priority = provider_priority or ["Boturfers", "StaticProvider"]
+        logger.info(f"ProgrammeProvider initialized with provider priority: {self.provider_priority}")
+
+    async def get_races_for_date(self, target_date: datetime.date) -> list[RaceData]:
         """
-        for provider in self.providers:
+        Essaie chaque provider du registre pour obtenir le programme.
+        L'ordre est défini par `provider_priority`.
+        """
+        for provider_name in self.provider_priority:
+            provider = self.registry.get_provider(provider_name)
+            if not provider:
+                logger.warning(f"Le provider de programme '{provider_name}' n'est pas enregistré.")
+                continue
+
             try:
-                logger.info(f"Tentative avec le provider de programme: {provider.name}")
-                programme = await provider.get_programme(target_date)
-                if programme:
-                    logger.info(f"Programme obtenu avec succès via {provider.name} ({len(programme)} courses).")
-                    return programme
+                logger.info(f"Tentative de récupération du programme avec: {provider.name}")
+                races = await provider.get_races_for_date(target_date)
+                if races:
+                    logger.info(f"Programme ({len(races)} courses) obtenu avec succès via {provider.name}.")
+                    return races
             except Exception as e:
-                logger.error(f"Le provider de programme {provider.name} a échoué: {e}", exc_info=True)
+                logger.error(f"Le provider '{provider.name}' a échoué: {e}", exc_info=True)
 
-        logger.warning("Aucun provider de programme n'a pu fournir de plan.")
+        logger.warning(f"Aucun provider n'a pu fournir le programme pour la date {target_date}.")
         return []
 
 # Instance unique pour être utilisée dans l'application
+# La priorité peut être surchargée à l'initialisation de l'app.
 programme_provider = ProgrammeProvider(source_registry)

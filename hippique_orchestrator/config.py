@@ -37,3 +37,9 @@ FIRESTORE_COLLECTION = os.getenv("FIRESTORE_COLLECTION", "races-dev")
 # Task Scheduling Offsets
 h30_offset = timedelta(minutes=30)
 h5_offset = timedelta(minutes=5)
+
+
+# Retry/Fallback Configuration for HTTP requests
+RETRIES = int(os.getenv("RETRIES", "2"))  # 2 retries = 3 total attempts
+TIMEOUT_S = int(os.getenv("TIMEOUT_S", "8"))
+BACKOFF_BASE_S = float(os.getenv("BACKOFF_BASE_S", "1.0"))

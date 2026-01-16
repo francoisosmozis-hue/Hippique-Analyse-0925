@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import re
 from typing import Any
+import random
 
 import httpx
 from bs4 import BeautifulSoup
@@ -10,6 +11,12 @@ from bs4 import BeautifulSoup
 from hippique_orchestrator.data_contract import RunnerStats
 from hippique_orchestrator.logging_utils import get_logger
 from hippique_orchestrator.sources_interfaces import SourceProvider
+from hippique_orchestrator.utils.retry import (
+    async_http_retry,
+    check_for_antibot,
+    check_for_retriable_status,
+)
+from hippique_orchestrator import config
 
 logger = get_logger(__name__)
 
@@ -23,31 +30,31 @@ class LeTrotProvider(SourceProvider):
     name = "LeTrot"
     BASE_URL = "https://www.letrot.com"
 
-    def __init__(self, client: httpx.AsyncClient | None = None):
-        self._client = client or httpx.AsyncClient(
+    def __init__(self):
+        self._client = httpx.AsyncClient(
             base_url=self.BASE_URL,
-            timeout=15.0,
+            timeout=config.TIMEOUT_S,
             headers={"User-Agent": "HippiqueOrchestrator/1.0"},
+            follow_redirects=True,
         )
-        # Cache en mémoire simple pour éviter de scraper la même page N fois
         self._runner_cache = {}
-        self._rate_limiter = asyncio.Semaphore(1)  # 1 requête à la fois vers le domaine
+        self._rate_limiter = asyncio.Semaphore(1)
         logger.info("LeTrotProvider initialized with real scraping logic.")
 
-    async def _fetch_page(self, url: str) -> str | None:
+    @async_http_retry
+    async def _fetch_page(self, url: str) -> str:
         """Effectue un appel HTTP respectueux pour récupérer une page."""
         async with self._rate_limiter:
-            try:
-                # Simule un délai pour le rate limiting
-                await asyncio.sleep(1)
-                response = await self._client.get(url)
-                response.raise_for_status()
-                return response.text
-            except httpx.HTTPStatusError as e:
-                logger.error(f"HTTP error fetching {e.request.url}: {e.response.status_code}")
-            except httpx.RequestError as e:
-                logger.error(f"Request error for {e.request.url}: {e}")
-        return None
+            await asyncio.sleep(random.uniform(0.5, 1.5))  # Be respectful
+            response = await self._client.get(url)
+            
+            check_for_retriable_status(response)
+            response.raise_for_status()
+
+            html_content = response.text
+            check_for_antibot(html_content)
+            
+            return html_content
 
     def _parse_runner_stats_from_html(self, html_content: str, runner_name: str) -> RunnerStats:
         """
@@ -112,26 +119,23 @@ class LeTrotProvider(SourceProvider):
 
         logger.info(f"Fetching LeTrot stats for runner: {runner_name}")
 
-        # 1. Simuler la recherche du coureur pour obtenir son URL
-        # Dans un cas réel, on appellerait un endpoint de recherche
-        # search_url = f"/recherche/resultats?q={runner_name}"
-        # search_page_html = await self._fetch_page(search_url)
-        # runner_url = _parse_search_result(search_page_html) # à implémenter
+        runner_url = f"/fiche-personne/{runner_name.lower().replace(' ', '-')}"
 
-        # Pour cet exemple, on suppose qu'on a trouvé l'URL du coureur
-        # (c'est souvent la partie la plus complexe)
-        runner_url = f"/fiche-personne/{runner_name.lower().replace(' ', '-')}" # URL hypothétique
-
-        # 2. Récupérer la page du coureur
-        html_content = await self._fetch_page(runner_url)
-        if not html_content:
-            logger.warning(f"Impossible de récupérer la page pour {runner_name} sur LeTrot.")
+        try:
+            html_content = await self._fetch_page(runner_url)
+        except Exception as e:
+            logger.critical(
+                f"Échec final de la récupération de la page pour {runner_name} sur LeTrot: {e}",
+                exc_info=True
+            )
             return RunnerStats()
 
-        # 3. Parser les stats
+        if not html_content:
+            logger.warning(f"Aucun contenu HTML pour {runner_name} sur LeTrot après les tentatives.")
+            return RunnerStats()
+        
         runner_stats = self._parse_runner_stats_from_html(html_content, runner_name)
 
-        # 4. Mettre en cache le résultat
         if runner_stats.driver_rate or runner_stats.trainer_rate:
             self._runner_cache[cache_key] = runner_stats
 

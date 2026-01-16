@@ -1,0 +1,58 @@
+{
+  "race": {
+    "date": "2026-01-16",
+    "rc_label": "R1C1",
+    "name": "Prix d'Exemple",
+    "url": "https://www.example.com/races/2026-01-16/R1C1",
+    "discipline": "Trot Attelé",
+    "distance": 2700,
+    "corde": "G",
+    "type_course": "Course A",
+    "prize": "100000 €",
+    "start_time_local": "13:50:00"
+  },
+  "runners": [
+    {
+      "num": 1,
+      "nom": "BOLIDE DU TEST",
+      "musique": "1a Da 2a",
+      "odds_place": 2.5,
+      "odds_win": 7.0,
+      "driver": "F. NIVARD",
+      "trainer": "F. NIVARD",
+      "age": 6,
+      "gains": "500000 €",
+      "draw": 1,
+      "stats": {
+        "driver_rate": 0.15,
+        "trainer_rate": 0.12,
+        "last_3_chrono": [1.12, 1.11, 1.13],
+        "record_rk": 1.10,
+        "source_stats": "Static"
+      }
+    },
+    {
+      "num": 2,
+      "nom": "COMETE DE DEMO",
+      "musique": "Da 3a 1a",
+      "odds_place": 1.8,
+      "odds_win": 4.5,
+      "driver": "E. RAFFIN",
+      "trainer": "J.M. BAZIRE",
+      "age": 7,
+      "gains": "750000 €",
+      "draw": 2,
+      "stats": {
+        "driver_rate": 0.20,
+        "trainer_rate": 0.25,
+        "last_3_chrono": [1.10, 1.11, 1.10],
+        "record_rk": 1.09,
+        "source_stats": "Static"
+      }
+    }
+  ],
+  "source_snapshot": "StaticProvider",
+  "meta": {
+    "comment": "This is a sample snapshot for CI testing."
+  }
+}

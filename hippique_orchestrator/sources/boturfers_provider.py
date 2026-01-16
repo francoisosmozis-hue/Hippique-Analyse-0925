@@ -17,6 +17,14 @@ from hippique_orchestrator.data_contract import (
 )
 from hippique_orchestrator.logging_utils import get_logger
 from hippique_orchestrator.sources_interfaces import SourceProvider
+from hippique_orchestrator.utils.retry import (
+    AntiBotError,
+    async_http_retry,
+    check_for_antibot,
+    check_for_retriable_status,
+)
+from hippique_orchestrator import config
+
 
 logger = get_logger(__name__)
 
@@ -31,25 +39,37 @@ class BoturfersProvider(SourceProvider):
     name = "Boturfers"
 
     def __init__(self):
-        self._http_client = httpx.AsyncClient(headers=HTTP_HEADERS, timeout=20)
+        self._http_client = httpx.AsyncClient(
+            headers=HTTP_HEADERS, timeout=config.TIMEOUT_S
+        )
 
-    async def _fetch_html(self, url: str) -> str | None:
+    @async_http_retry
+    async def _fetch_html(self, url: str) -> str:
+        """
+        Fetches HTML content from a URL with retry logic.
+        Raises RetriableHTTPErrors or AntiBotError on failure.
+        """
         try:
             response = await self._http_client.get(url)
+            check_for_retriable_status(response)
             response.raise_for_status()
-            return response.text
+            
+            html_content = response.text
+            check_for_antibot(html_content)
+            
+            return html_content
         except httpx.HTTPStatusError as e:
             logger.error(
-                f"Erreur HTTP lors du téléchargement de {url}: {e.response.status_code}",
+                f"HTTP status error while fetching {url}: {e.response.status_code}",
                 extra={"url": url, "status_code": e.response.status_code},
             )
-            return None
-        except httpx.RequestError as e:
+            raise  # Re-raise to be caught by the retry decorator if applicable
+        except (httpx.RequestError, AntiBotError) as e:
             logger.error(
-                f"Erreur inattendue lors du fetch HTML de {url}: {e}",
+                f"Request failed for {url}: {e}",
                 extra={"url": url, "error": str(e)},
             )
-            return None
+            raise
 
     async def fetch_programme(
         self,
@@ -62,7 +82,16 @@ class BoturfersProvider(SourceProvider):
             return []
 
         logger.info("Début du scraping du programme Boturfers.", extra={"url": url, "correlation_id": correlation_id})
-        html_content = await self._fetch_html(url)
+        try:
+            html_content = await self._fetch_html(url)
+        except Exception as e:
+            logger.critical(
+                f"Scraping du programme Boturfers a échoué définitivement pour {url}: {e}",
+                exc_info=True,
+                extra={"url": url, "correlation_id": correlation_id}
+            )
+            html_content = None
+        
         if not html_content:
             logger.error("Le scraping du programme a échoué ou n'a retourné aucune course.", extra={"correlation_id": correlation_id})
             return []
@@ -160,7 +189,16 @@ class BoturfersProvider(SourceProvider):
             "Début du scraping des détails de course Boturfers.", # Changed log message
             extra={"url": race_url, "phase": phase, "correlation_id": correlation_id},
         )
-        html_content = await self._fetch_html(race_url)
+        try:
+            html_content = await self._fetch_html(race_url)
+        except Exception as e:
+            logger.critical(
+                f"Scraping des détails de la course Boturfers a échoué définitivement pour {race_url}: {e}",
+                exc_info=True,
+                extra={"url": race_url, "correlation_id": correlation_id}
+            )
+            html_content = None
+
         if not html_content:
             logger.error("Le scraping des détails Boturfers a échoué.", extra={"url": race_url}) # Changed log message
             # Return an empty or minimal snapshot to allow fallback
