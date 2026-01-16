@@ -401,50 +401,61 @@ def _fallback_parse_html(html: Any) -> dict[str, Any]:
             except json.JSONDecodeError as e:
                 logger.warning(f"[ZEturf] Failed to parse cotesInfos JSON: {e}")
 
-
     # Find the main table of runners
     table = soup.find("table", class_="table-runners")
+    table_runners_data: dict[str, dict[str, Any]] = {}
     if table:
-        tbody = table.find("tbody")
-        rows = tbody.find_all("tr") if tbody else table.find_all("tr")
-        for row in rows:
+        # If there's a table, parse basic runner info (num, name) from it
+        for row in table.select("tbody tr"):
             runner_data = {}
             num_cell = row.find("td", class_="numero")
             if num_cell:
-                runner_data["num"] = _clean_text(num_cell.text)
+                runner_num = _clean_text(num_cell.text)
+                if runner_num:
+                    runner_data["num"] = runner_num
+                    name_cell = row.find("td", class_="cheval")
+                    if name_cell:
+                        name_anchor = name_cell.find("a", class_="horse-name")
+                        if name_anchor:
+                            runner_data["name"] = _clean_text(name_anchor.get("title"))
+                    table_runners_data[runner_num] = runner_data
+    
+    # Merge logic: prioritize cotes_map for odds.
+    # If cotes_map has odds, use it to create runners and enrich with table info if available.
+    # If cotes_map is empty, create runners from table_runners_data, but with no odds.
+    final_runners_map: dict[str, dict[str, Any]] = {}
 
-            name_cell = row.find("td", class_="cheval")
-            if name_cell:
-                name_anchor = name_cell.find("a", class_="horse-name")
-                if name_anchor:
-                    runner_data["name"] = _clean_text(name_anchor.get("title"))
-
-            odds_cell = row.find("td", class_="cotes")
-            if odds_cell:
-                odds_span = odds_cell.find("span", class_="cote")
-                if odds_span:
-                    runner_data["cote"] = _clean_text(odds_span.text)
-
-            if runner_data:
-                runners.append(runner_data)
-
-        # Enrich runners from table with odds from cotes_map
-        for runner in runners:
-            num = runner.get("num")
-            if num and num in cotes_map:
-                cote_info = cotes_map[num]
-                runner["cote"] = _normalize_decimal(cote_info.get("cote"))
-                runner["odds_place"] = _normalize_decimal(cote_info.get("cote_place"))
-    elif cotes_map:
-        # If no runners table, create runners directly from cotes_map
-        for num, cote_info in cotes_map.items():
-            runner_data = {
+    # 1. Populate initial runners from cotes_map (these have odds)
+    for num, cote_info in cotes_map.items():
+        runner_data = {
+            "num": num,
+            "name": _clean_text(cote_info.get("nom")),
+            "cote": _normalize_decimal(cote_info.get("cote")),
+            "odds_place": _normalize_decimal(cote_info.get("cote_place")),
+        }
+        final_runners_map[num] = runner_data
+    
+    # 2. Incorporate runners found in the table.
+    #    If a runner is already in final_runners_map (from cotes_map), update its name if better.
+    #    If a runner is only in table_runners_data, add it to final_runners_map WITHOUT odds.
+    for num, table_runner_info in table_runners_data.items():
+        if num in final_runners_map:
+            # Runner exists from cotes_map. Enrich its name if table has a better one.
+            if table_runner_info.get("name") and not final_runners_map[num].get("name"):
+                final_runners_map[num]["name"] = table_runner_info["name"]
+            # If name from script was just the number, use table name
+            elif table_runner_info.get("name") and final_runners_map[num].get("name") == num:
+                final_runners_map[num]["name"] = table_runner_info["name"]
+        else:
+            # Runner only in table_runners_data (not in cotes_map). Add it, but no odds.
+            final_runners_map[num] = {
                 "num": num,
-                "name": _clean_text(cote_info.get("nom")),
-                "cote": _normalize_decimal(cote_info.get("cote")),
-                "odds_place": _normalize_decimal(cote_info.get("cote_place")),
+                "name": table_runner_info.get("name"),
+                "cote": None,
+                "odds_place": None,
             }
-            runners.append(runner_data)
+
+    runners = list(final_runners_map.values())
 
     partants: int | None = None
     partants_match = _PARTANTS_RE.search(html)
