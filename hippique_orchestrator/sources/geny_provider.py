@@ -12,14 +12,42 @@ from bs4 import BeautifulSoup
 from hippique_orchestrator.data_contract import RaceData, RaceSnapshotNormalized, RunnerStats
 from hippique_orchestrator.logging_utils import get_logger
 from hippique_orchestrator.sources_interfaces import SourceProvider
-from hippique_orchestrator.utils.retry import (
-    async_http_retry,
-    check_for_antibot,
-    check_for_retriable_status,
-)
+from hippique_orchestrator.utils.retry import retry_async, RetryableParsingError, NonRetryableError
 from hippique_orchestrator import config
 
 logger = get_logger(__name__)
+
+# --- Anti-bot detection patterns (copied for consistency) ---
+_SUSPICIOUS_HTML_PATTERNS = (
+    "too many requests",
+    "captcha",
+    "temporarily unavailable",
+    "access denied",
+    "service unavailable",
+    "cloudflare",
+)
+
+def _looks_like_suspicious_html(payload: Any) -> bool:
+    """Return ``True`` when a payload resembles throttled anti-bot HTML."""
+    if isinstance(payload, bytes):
+        try:
+            payload = payload.decode("utf-8", errors="ignore")
+        except Exception:  # pragma: no cover - defensive conversion
+            payload = ""
+    if not isinstance(payload, str):
+        payload = str(payload or "")
+    if not payload:
+        return True
+
+    lowered = payload.lower()
+    if "<html" not in lowered:
+        return False
+    if any(marker in lowered for marker in _SUSPICIOUS_HTML_PATTERNS):
+        return True
+    stripped = lowered.strip()
+    if stripped.startswith("<html") and len(stripped) < 512:
+        return True
+    return False
 
 
 class GenyProvider(SourceProvider):
@@ -42,18 +70,21 @@ class GenyProvider(SourceProvider):
         self._rate_limiter = asyncio.Semaphore(1)
         logger.info("GenyProvider initialized.")
 
-    @async_http_retry
+    @retry_async() # Apply the new retry decorator
     async def _fetch_page(self, url: str) -> str:
         """Effectue un appel HTTP pour récupérer une page."""
         async with self._rate_limiter:
             await asyncio.sleep(random.uniform(0.5, 1.5))
             response = await self._client.get(url)
 
-            check_for_retriable_status(response)
+            # Raise HTTPError for bad responses (4xx or 5xx), which @retry_async will classify
             response.raise_for_status()
 
             html_content = response.text
-            check_for_antibot(html_content)
+            
+            # Check for antibot patterns
+            if _looks_like_suspicious_html(html_content):
+                raise RetryableParsingError(f"Geny anti-bot detected for {url}")
 
             return html_content
 

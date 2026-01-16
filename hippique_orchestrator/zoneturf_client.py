@@ -3,19 +3,49 @@ import logging
 import re
 import unicodedata
 from typing import Any
+from collections.abc import Mapping
 
 import requests
 from bs4 import BeautifulSoup
 
 from hippique_orchestrator import config
-from hippique_orchestrator.utils.retry import (
-    sync_http_retry,
-    check_for_retriable_status,
-    check_for_antibot,
-)
+from hippique_orchestrator.utils.retry import retry, RetryableParsingError, NonRetryableError
 
 logger = logging.getLogger(__name__)
 BASE_URL = "https://www.zone-turf.fr"
+
+# --- Anti-bot detection patterns (copied from online_fetch_zeturf.py for consistency) ---
+_SUSPICIOUS_HTML_PATTERNS = (
+    "too many requests",
+    "captcha",
+    "temporarily unavailable",
+    "access denied",
+    "service unavailable",
+    "cloudflare",
+)
+
+def _looks_like_suspicious_html(payload: Any) -> bool:
+    """Return ``True`` when a payload resembles throttled anti-bot HTML."""
+    if isinstance(payload, bytes):
+        try:
+            payload = payload.decode("utf-8", errors="ignore")
+        except Exception:  # pragma: no cover - defensive conversion
+            payload = ""
+    if not isinstance(payload, str):
+        payload = str(payload or "")
+    if not payload:
+        return True
+
+    lowered = payload.lower()
+    if "<html" not in lowered:
+        return False
+    if any(marker in lowered for marker in _SUSPICIOUS_HTML_PATTERNS):
+        return True
+    stripped = lowered.strip()
+    if stripped.startswith("<html") and len(stripped) < 512:
+        return True
+    return False
+
 # Simple in-memory cache. A persistent cache (like Firestore) is recommended for production.
 ID_CACHE: dict[str, str | None] = {}
 CHRONO_CACHE: dict[str, dict[str, Any] | None] = {}
@@ -23,18 +53,21 @@ PERSON_ID_CACHE: dict[str, str | None] = {}
 PERSON_STATS_CACHE: dict[str, dict[str, Any] | None] = {}
 
 
-@sync_http_retry
+@retry() # Apply the new retry decorator
 def _fetch_page_sync(url: str, session: requests.Session) -> str:
     """
     Performs a synchronous HTTP GET request with retry logic.
     """
     response = session.get(url, timeout=config.TIMEOUT_S, headers={"User-Agent": "Mozilla/5.0"})
     
-    check_for_retriable_status(response)
+    # Raise HTTPError for bad responses (4xx or 5xx), which @retry will classify
     response.raise_for_status()
     
     html_content = response.text
-    check_for_antibot(html_content)
+    
+    # Check for antibot patterns
+    if _looks_like_suspicious_html(html_content):
+        raise RetryableParsingError(f"Zone-Turf anti-bot detected for {url}")
     
     return html_content
 

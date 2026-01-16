@@ -82,10 +82,48 @@ async def test_drift_is_detected_and_applied(mocker):
 
     mock_gcs_client.read_file_from_gcs.side_effect = mock_read_file
 
-    mocker.patch(
-        "hippique_orchestrator.analysis_pipeline.source_registry.enrich_snapshot_with_stats",
-        side_effect=lambda snapshot, **kwargs: snapshot,
+
+H5_STATS = {
+    "rows": [
+        {"num": 1, "driver_rate": 0.2},
+        {"num": 5, "driver_rate": 0.15},  # Example stat
+        {"num": 8, "driver_rate": 0.1},
+    ]
+}
+
+
+@pytest.mark.asyncio
+async def test_drift_is_detected_and_applied(mocker):
+    """
+    Ensures that when an H-5 analysis is run, it finds the H-30 snapshot,
+    loads it, and the final analysis shows a non-stable drift status.
+    """
+    # 1. Mock GCS client and related functions
+    mock_gcs_client = mocker.patch("hippique_orchestrator.analysis_pipeline.gcs_client")
+    mock_stats_fetcher_collect_stats = mocker.patch(
+        "hippique_orchestrator.analysis_pipeline.stats_fetcher.collect_stats",
+        return_value="data/2025-01-01_R1C1/stats/stats_H5.json",
     )
+
+    # Mock file listing to find the H-30 snapshot
+    mock_gcs_client.list_files.return_value = ["data/2025-01-01_R1C1/snapshots/20250101_120000_H-30.json"]
+
+    # Mock file reading to return different content based on path
+    def mock_read_file(path):
+        if "_H-30.json" in path:
+            return json.dumps(H30_SNAPSHOT)
+        if "gpi_v52.yml" in path:
+            return GPI_CONFIG_YAML
+        if "stats/stats_H5.json" in path: # Return H5_STATS for stats path
+            return json.dumps(H5_STATS)
+        # For the H-5 snapshot itself, return the H-5 data
+        return json.dumps(H5_SNAPSHOT)
+
+    mock_gcs_client.read_file_from_gcs.side_effect = mock_read_file
+
+    # Mock source_registry.enrich_snapshot_with_stats has been removed as it does not exist.
+    # The stats collection and merging is done within _run_gpi_pipeline now.
+    
     mocker.patch("hippique_orchestrator.data_source.fetch_race_details", return_value=H5_SNAPSHOT)
 
     # 2. Run the analysis for the H-5 phase
@@ -102,6 +140,13 @@ async def test_drift_is_detected_and_applied(mocker):
 
     # Check that the H-30 snapshot was found
     mock_gcs_client.list_files.assert_called_with("data/2025-01-01_R1C1/snapshots/")
+    mock_stats_fetcher_collect_stats.assert_called_once_with(
+        race_doc_id="2025-01-01_R1C1",
+        phase="H5",
+        date="2025-01-01",
+        correlation_id=None,
+        trace_id=None,
+    )
 
     # Check the analysis table for the horse that had drift
     market_table = analysis_result.get("tickets_analysis", {}).get("market_analysis_table", [])
@@ -113,7 +158,8 @@ async def test_drift_is_detected_and_applied(mocker):
     assert horse_5_analysis["drift_status"] == "Steam", (
         "Drift status for horse #5 should be 'Steam'"
     )
-    assert horse_5_analysis["drift_percent"] < 0, "Drift percentage should be negative for steam"
+    assert horse_5_analysis["drift_percent"] > 0, "Drift percentage should be positive for steam (odds decreased)"
+
 
 
 @pytest.mark.asyncio

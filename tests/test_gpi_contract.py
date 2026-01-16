@@ -4,7 +4,7 @@ import pytest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from hippique_orchestrator.data_contract import RaceSnapshotNormalized, RaceData, RunnerData, RunnerStats, calculate_quality_score, compute_odds_place_ratio
+from hippique_orchestrator.data_contract import RaceSnapshotNormalized, RaceData, RunnerData, RunnerStats, compute_odds_place_ratio
 from hippique_orchestrator.scripts.online_fetch_zeturf import _fallback_parse_html as parse_zeturf_html
 
 FIXTURE_DIR = Path(__file__).parent / 'fixtures'
@@ -64,13 +64,13 @@ def test_gpi_contract_validation(zeturf_race_html_content):
     )
 
     # Calculate Quality Score
-    quality_score_result = calculate_quality_score(snapshot)
-    assert quality_score_result["score"] >= 0.85, f"Quality score {quality_score_result['score']} is below required 0.85"
-    assert quality_score_result["status"] == "OK", f"Quality status is {quality_score_result['status']}, expected OK"
+    quality = snapshot.quality
+    assert quality["score"] >= 0.85, f"Quality score {quality['score']} is below required 0.85"
+    assert quality["status"] == "OK", f"Quality status is {quality['status']}, expected OK"
 
     # Calculate Odds Place Ratio
     place_odds = {str(runner.num): runner.odds_place for runner in snapshot.runners if runner.odds_place is not None}
-    partants = snapshot.meta["partants"]
-    odds_place_ratio = compute_odds_place_ratio(place_odds, partants)
+    total_runners = len(snapshot.runners) # Use len(snapshot.runners)
+    odds_place_ratio = compute_odds_place_ratio(place_odds, total_runners)
     assert odds_place_ratio >= 0.90, f"Odds place ratio {odds_place_ratio} is below required 0.90"
 

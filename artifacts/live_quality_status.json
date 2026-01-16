@@ -1,0 +1,7 @@
+{
+    "unknown_race": {
+        "status": "DEGRADED",
+        "reason": "OK (DEGRADED) - Missing H30 data, cannot compute drift. Proceeding without drift adjustment.",
+        "timestamp": "2026-01-16T23:13:40.450120"
+    }
+}

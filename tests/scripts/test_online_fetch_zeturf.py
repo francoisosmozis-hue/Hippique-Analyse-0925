@@ -42,12 +42,12 @@ def test_fallback_parse_html_extracts_data(zeturf_course_html):
     runner_1 = next((r for r in runners if r.get("num") == "1"), None)
     assert runner_1 is not None
     assert runner_1["name"] == "Gagnant"
-    assert runner_1["cote"] == "2,5"
+    assert runner_1["cote"] == 2.5
 
     runner_12 = next((r for r in runners if r.get("num") == "2"), None)
     assert runner_12 is not None
     assert runner_12["name"] == "Placé"
-    assert runner_12["cote"] == "5,0"
+    assert runner_12["cote"] == 5.0
 
 @pytest.mark.parametrize(
     "reunion, course, expected",

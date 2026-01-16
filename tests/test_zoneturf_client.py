@@ -69,7 +69,7 @@ def test_fetch_chrono_from_html_with_jullou_page(jullou_html_content):
     """
     assert jullou_html_content is not None, "Fixture content should not be None"
     
-    result = fetch_chrono_from_html(jullou_html_content)
+    result = fetch_chrono_from_html(jullou_html_content, horse_name='Jullou')
 
     assert result is not None, "Parsing should return a result dict"
     

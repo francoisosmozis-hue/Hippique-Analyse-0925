@@ -222,6 +222,7 @@ def _apply_drift_adjustment(
             runner["drift_status"] = "Drift"
         elif odds_change_percent < -drift_threshold * 100:  # Odds decreased, "steam"
             runner["drift_status"] = "Steam"
+            runner["drift_percent"] = round(abs(odds_change_percent), 2) # Make it positive for Steam
         else:
             runner["drift_status"] = "Stable"
 

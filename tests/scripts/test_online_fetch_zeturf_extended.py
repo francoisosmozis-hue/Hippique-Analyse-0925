@@ -3,8 +3,10 @@ import re
 from pathlib import Path
 
 import pytest
+import requests
 
 from hippique_orchestrator.scripts import online_fetch_zeturf
+from hippique_orchestrator.utils.retry import RetryableParsingError
 
 
 @pytest.fixture
@@ -63,7 +65,7 @@ def test_fallback_parse_html_runner_missing_data(zeturf_course_html):
     runner_1 = next((r for r in runners if r.get("num") == "1"), None)
     assert runner_1 is not None
     assert runner_1["name"] == "Gagnant"
-    assert "cote" not in runner_1
+    assert runner_1["cote"] is None
 
 
 @pytest.mark.parametrize(
@@ -72,41 +74,41 @@ def test_fallback_parse_html_runner_missing_data(zeturf_course_html):
         # Simple case
         (
             {"num": "1", "name": "HORSE A", "cote": "12,5"},
-            {"num": "1", "name": "HORSE A", "cote": 12.5},
+            {"num": "1", "name": "HORSE A", "cote": 12.5, "odds_place": None},
         ),
         # Different keys
         (
             {"number": "2", "horse": "HORSE B", "odds": 5.0},
-            {"num": "2", "name": "HORSE B", "cote": 5.0, "odds": 5.0},
+            {"num": "2", "name": "HORSE B", "cote": 5.0, "odds": 5.0, "odds_place": None},
         ),
         (
             {"id": 3, "label": "HORSE C", "price": "2.3"},
-            {"num": "3", "name": "HORSE C", "id": "3", "cote": 2.3},
+            {"num": "3", "name": "HORSE C", "id": "3", "cote": 2.3, "odds_place": None},
         ),
         # Nested odds
         (
             {"num": 4, "name": "HORSE D", "odds": {"place": "3,3"}},
-            {"num": "4", "name": "HORSE D", "odds_place": 3.3},
+            {"num": "4", "name": "HORSE D", "cote": None, "odds_place": 3.3},
         ),
         (
             {"num": 5, "name": "HORSE E", "market": {"place": {"5": 4.0}}},
-            {"num": "5", "name": "HORSE E", "odds_place": 4.0},
+            {"num": "5", "name": "HORSE E", "cote": None, "odds_place": 4.0},
         ),
         # Missing values
-        ({"num": 6, "name": "HORSE F"}, {"num": "6", "name": "HORSE F"}),
+        ({"num": 6, "name": "HORSE F"}, {"num": "6", "name": "HORSE F", "cote": None, "odds_place": None}),
         # Empty values
-        ({"num": 7, "name": "HORSE G", "cote": ""}, {"num": "7", "name": "HORSE G"}),
+        ({"num": 7, "name": "HORSE G", "cote": ""}, {"num": "7", "name": "HORSE G", "cote": None, "odds_place": None}),
         # Extra metadata
         (
             {"num": 8, "name": "HORSE H", "driver": "DRIVER H"},
-            {"num": "8", "name": "HORSE H", "driver": "DRIVER H"},
+            {"num": "8", "name": "HORSE H", "driver": "DRIVER H", "cote": None, "odds_place": None},
         ),
         # No number
         ({"name": "HORSE I", "cote": 9.0}, None),
         # Nested odds dictionary with 'gagnant'
         (
             {"num": "10", "name": "HORSE J", "odds": {"gagnant": "8,0"}},
-            {"num": "10", "name": "HORSE J", "cote": 8.0},
+            {"num": "10", "name": "HORSE J", "cote": 8.0, "odds_place": None},
         ),
     ],
 )
@@ -192,18 +194,18 @@ def test_http_get_raises_on_403(mocker):
     mock_response.status_code = 403
     mocker.patch("requests.get", return_value=mock_response)
 
-    with pytest.raises(RuntimeError, match="HTTP 403 returned by http://example.com"):
+    with pytest.raises(requests.exceptions.HTTPError, match="403 Client Error"):
         online_fetch_zeturf._http_get("http://example.com")
 
 
 def test_http_get_raises_on_suspicious_html(mocker):
     """
-    Tests that _http_get raises a RuntimeError on suspicious HTML content.
+    Tests that _http_get raises a RetryableParsingError on suspicious HTML content.
     """
     mock_response = mocker.MagicMock()
     mock_response.status_code = 200
     mock_response.text = "<html><body>captcha</body></html>"
     mocker.patch("requests.get", return_value=mock_response)
 
-    with pytest.raises(RuntimeError, match="Payload suspect reçu de http://example.com"):
+    with pytest.raises(online_fetch_zeturf.RetryableParsingError, match="Payload suspect reçu de http://example.com"):
         online_fetch_zeturf._http_get("http://example.com")

@@ -27,6 +27,7 @@ import yaml
 from bs4 import BeautifulSoup
 
 from hippique_orchestrator import config
+from hippique_orchestrator.utils.retry import retry, RetryableParsingError
 
 logger = logging.getLogger(__name__)
 
@@ -384,79 +385,98 @@ def _fallback_parse_html(html: Any) -> dict[str, Any]:
     # First, try to extract odds and runner names from the cotesInfos script
     cotes_infos_script = soup.find("script", string=re.compile("cotesInfos"))
     if cotes_infos_script:
-        # Correct regex to match 'var cotesInfos = [...];'
-        cotes_infos_str_match = re.search(r'var cotesInfos = (\[.*?\]);', cotes_infos_script.string, re.DOTALL)
-        if cotes_infos_str_match:
+        # Try to match both dictionary and list formats for cotesInfos
+        cotes_infos_dict_match = re.search(r'var cotesInfos = (\{.*?});', cotes_infos_script.string, re.DOTALL)
+        cotes_infos_list_match = re.search(r'var cotesInfos = (\[.*?\]);', cotes_infos_script.string, re.DOTALL)
+
+        if cotes_infos_dict_match:
+            json_str = cotes_infos_dict_match.group(1)
+        elif cotes_infos_list_match:
+            json_str = cotes_infos_list_match.group(1)
+        else:
+            json_str = None
+
+        if json_str:
             try:
                 # Replace single quotes with double quotes for valid JSON parsing
-                json_str = cotes_infos_str_match.group(1).replace("'", '"')
-                # Further clean up if there are unquoted keys (unlikely in valid JSON but good to guard)
+                json_str = json_str.replace("'", '"')
+                # Replace unquoted keys with double quotes if necessary
                 json_str = re.sub(r'([{,]\s*)([a-zA-Z0-9_]+?)\s*:', r'\1"\2":', json_str)
+                
+                parsed_cotes_data = json.loads(json_str)
 
-                cotes_list = json.loads(json_str)
-                for item in cotes_list:
-                    num = str(item.get("num")).strip() if item.get("num") is not None else None
-                    if num:
-                        cotes_map[num] = item
+                processed_cotes_map: dict[str, dict[str, Any]] = {}
+                if isinstance(parsed_cotes_data, Mapping): # Dictionary format
+                    for num_key, odds_data in parsed_cotes_data.items():
+                        cote_val = _normalize_decimal(odds_data.get("odds", {}).get("SG") or odds_data.get("odds", {}).get("PMU"))
+                        place_val = _normalize_decimal(odds_data.get("odds", {}).get("SP"))
+                        if cote_val is not None or place_val is not None:
+                            entry = {}
+                            if cote_val is not None: entry["cote"] = cote_val
+                            if place_val is not None: entry["odds_place"] = place_val
+                            processed_cotes_map[num_key] = entry
+                elif isinstance(parsed_cotes_data, list): # List format
+                    for item in parsed_cotes_data:
+                        if isinstance(item, Mapping):
+                            num_key = str(item.get("num")).strip() if item.get("num") is not None else None
+                            if num_key:
+                                cote_val = _normalize_decimal(item.get("cote"))
+                                place_val = _normalize_decimal(item.get("cote_place"))
+                                name_val = _clean_text(item.get("nom")) # Get name from script data if available
+                                if cote_val is not None or place_val is not None or name_val is not None:
+                                    entry = {}
+                                    if cote_val is not None: entry["cote"] = cote_val
+                                    if place_val is not None: entry["odds_place"] = place_val
+                                    if name_val is not None: entry["name"] = name_val
+                                    processed_cotes_map[num_key] = entry
+                cotes_map = processed_cotes_map # Update cotes_map to the processed version
             except json.JSONDecodeError as e:
                 logger.warning(f"[ZEturf] Failed to parse cotesInfos JSON: {e}")
 
-    # Find the main table of runners
+    runners: list[dict[str, Any]] = []
+    processed_nums = set()
+
+    # Prioritize runners from the HTML table if available, preserving order
     table = soup.find("table", class_="table-runners")
-    table_runners_data: dict[str, dict[str, Any]] = {}
     if table:
-        # If there's a table, parse basic runner info (num, name) from it
         for row in table.select("tbody tr"):
-            runner_data = {}
             num_cell = row.find("td", class_="numero")
             if num_cell:
                 runner_num = _clean_text(num_cell.text)
-                if runner_num:
-                    runner_data["num"] = runner_num
+                if runner_num and runner_num not in processed_nums:
+                    runner_data: dict[str, Any] = {"num": runner_num}
                     name_cell = row.find("td", class_="cheval")
                     if name_cell:
                         name_anchor = name_cell.find("a", class_="horse-name")
                         if name_anchor:
-                            runner_data["name"] = _clean_text(name_anchor.get("title"))
-                    table_runners_data[runner_num] = runner_data
-    
-    # Merge logic: prioritize cotes_map for odds.
-    # If cotes_map has odds, use it to create runners and enrich with table info if available.
-        # If cotes_map is empty, create runners from table_runners_data, but with no odds.
-        final_runners_map: dict[str, dict[str, Any]] = {}
-    
-        # 1. Populate initial runners from cotes_map (these have odds)
-        for num, cote_info in cotes_map.items():
-            runner_data = {
-                "num": num,
-                "name": _clean_text(cote_info.get("nom")),
-                "cote": _normalize_decimal(cote_info.get("cote")),
-                "odds_place": _normalize_decimal(cote_info.get("cote_place")),
-                "musique": _clean_text(cote_info.get("musique")),
-            }
-            final_runners_map[num] = runner_data
-        
-        # 2. Incorporate runners found in the table.
-        #    If a runner is already in final_runners_map (from cotes_map), update its name if better.
-        #    If a runner is only in table_runners_data, add it to final_runners_map WITHOUT odds.
-        for num, table_runner_info in table_runners_data.items():
-            if num in final_runners_map:
-                # Runner exists from cotes_map. Enrich its name if table has a better one.
-                if table_runner_info.get("name") and not final_runners_map[num].get("name"):
-                    final_runners_map[num]["name"] = table_runner_info["name"]
-                # If name from script was just the number, use table name
-                elif table_runner_info.get("name") and final_runners_map[num].get("name") == num:
-                    final_runners_map[num]["name"] = table_runner_info["name"]
-            else:
-                # Runner only in table_runners_data (not in cotes_map). Add it, but no odds.
-                final_runners_map[num] = {
-                    "num": num,
-                    "name": table_runner_info.get("name"),
-                    "cote": None,
-                    "odds_place": None,
-                }
-    
-        runners = list(final_runners_map.values())
+                            runner_data["name"] = _clean_text(name_anchor.get("title") or name_anchor.text)
+                    
+                    # Merge odds from cotes_map if available
+                    if runner_num in cotes_map:
+                        cote_info = cotes_map[runner_num]
+                        if "cote" in cote_info:
+                            runner_data["cote"] = cote_info["cote"]
+                        if "odds_place" in cote_info:
+                            runner_data["odds_place"] = cote_info["odds_place"]
+                        if "name" in cote_info and not runner_data.get("name"): # Use script name if table name is missing
+                            runner_data["name"] = cote_info["name"]
+
+                    runners.append(runner_data)
+                    processed_nums.add(runner_num)
+
+    # Add any runners only present in cotes_map (e.g., if no runners table, or additional runners)
+    for num in cotes_map.keys():
+        if num not in processed_nums:
+            runner_data: dict[str, Any] = {"num": num}
+            cote_info = cotes_map[num]
+            if "cote" in cote_info:
+                runner_data["cote"] = cote_info["cote"]
+            if "odds_place" in cote_info:
+                runner_data["odds_place"] = cote_info["odds_place"]
+            if "name" in cote_info:
+                runner_data["name"] = cote_info["name"]
+            runners.append(runner_data)
+            processed_nums.add(num)
 
     partants: int | None = None
     partants_match = _PARTANTS_RE.search(html)
@@ -472,15 +492,15 @@ def _fallback_parse_html(html: Any) -> dict[str, Any]:
     )
     if infos_paragraph_match:
         discipline = _clean_text(
-            infos_paragraph_match.group(1), lowercase=False, strip_accents=False
-        )  # Changed to False
+            infos_paragraph_match.group(1), lowercase=True, strip_accents=False
+        )
     else:
         # Fallback to the general _DISCIPLINE_RE if the specific infos paragraph is not found
         discipline_match = _DISCIPLINE_RE.search(html)
         if discipline_match:
                     discipline = _clean_text(
-                        discipline_match.group(1), lowercase=False, strip_accents=False
-                    )  # Changed to False
+                        discipline_match.group(1), lowercase=True, strip_accents=False
+                    )
 
     meeting: str | None = None
     meeting_match = _MEETING_RE.search(html)
@@ -526,6 +546,7 @@ def _looks_like_suspicious_html(payload: Any) -> bool:
     return False
 
 
+@retry()
 def _http_get(
     url: str,
     *,
@@ -546,14 +567,15 @@ def _http_get(
         resp = session.get(url, headers=headers, timeout=timeout)
     else:
         resp = requests.get(url, headers=headers, timeout=timeout)
+    
     if resp.status_code in (403, 429) or 500 <= resp.status_code < 600:
-        raise RuntimeError(f"HTTP {resp.status_code} returned by {url}")
+        resp.raise_for_status() # Raise requests.exceptions.HTTPError
+    
     text = resp.text
     if _looks_like_suspicious_html(text):
-        raise RuntimeError(f"Payload suspect reçu de {url}")
-    if not text or len(text) < 512:
-        raise RuntimeError(f"Payload trop court reçu de {url}")
-    return text
+        raise RetryableParsingError(f"Payload suspect reçu de {url}")
+            if not text or len(text) < 512:
+                raise RetryableParsingError(f"Payload trop court reçu de {url}")    return text
 
 
 def _double_extract(
@@ -874,13 +896,11 @@ def _normalise_phase_alias(value: str) -> str:
     return text.upper().replace("-", "")
 
 
-def _coerce_runner_entry(entry: Mapping[str, Any]) -> dict[str, Any] | None:
-    """Normalise a runner payload into the structure expected downstream."""
+    def _coerce_runner_entry(entry: Mapping[str, Any]) -> dict[str, Any] | None:
+        if not isinstance(entry, Mapping):
+            return None
 
-    if not isinstance(entry, Mapping):
-        return None
-
-    identifiers = (
+        identifiers = (
         entry.get("num"),
         entry.get("number"),
         entry.get("id"),
@@ -899,7 +919,7 @@ def _coerce_runner_entry(entry: Mapping[str, Any]) -> dict[str, Any] | None:
     name_raw = entry.get("name") or entry.get("horse") or entry.get("label") or entry.get("runner")
     name = str(name_raw).strip() if name_raw not in (None, "") else number
 
-    runner: dict[str, Any] = {"num": number, "name": name}
+    runner: dict[str, Any] = {"num": number, "name": name, "cote": None, "odds_place": None}
 
     def _coerce_metadata_value(value: Any) -> Any:
         if value in (None, ""):
@@ -927,17 +947,17 @@ def _coerce_runner_entry(entry: Mapping[str, Any]) -> dict[str, Any] | None:
         if isinstance(odds_candidate, Mapping):
             gagnant_val = _coerce_float(odds_candidate.get("gagnant"))
             if gagnant_val is not None:
-                runner.setdefault("cote", gagnant_val)
+                runner["cote"] = gagnant_val
                 break
         odds_val = _coerce_float(odds_candidate)
         if odds_val is not None:
-            runner.setdefault("cote", odds_val)
+            runner["cote"] = odds_val
             break
 
     for place_key in ("odds_place", "place_odds", "placeOdds", "place", "cote_place"):
         place_val = _coerce_float(entry.get(place_key))
         if place_val is not None:
-            runner.setdefault("odds_place", place_val)
+            runner["odds_place"] = place_val
             break
 
     for prob_key in ("p", "probability", "p_imp", "p_imp_h5", "p_true"):
@@ -981,6 +1001,10 @@ def _coerce_runner_entry(entry: Mapping[str, Any]) -> dict[str, Any] | None:
                     runner["odds_place"] = place_val
     if "cote" not in runner and "odds" in runner:
         runner["cote"] = runner["odds"]
+
+    # Ensure 'cote' and 'odds_place' are always present, even if None
+    runner.setdefault("cote", None)
+    runner.setdefault("odds_place", None)
 
     handled_keys = {
         "num",
@@ -1574,8 +1598,11 @@ def _normalise_snapshot_result(
     if phase_norm == "H5":
         _merge_h30_odds(runners, reunion_meta, course_meta)
 
-    market_block = result.get("market") if isinstance(result.get("market"), Mapping) else {}
-    market: dict[str, Any] = dict(market_block) if isinstance(market_block, Mapping) else {}
+    # Ensure market dict exists and populate initial values
+    market: dict[str, Any] = result.get("market") if isinstance(result.get("market"), Mapping) else {}
+    if not market:
+        market = {} # Initialize if it was missing or not a dict
+
     slots_hint = (
         market.get("slots_place")
         or meta.get("slots_place")
@@ -1590,19 +1617,24 @@ def _normalise_snapshot_result(
 
     overround_win = _estimate_overround_from_runners(runners, use_place=False)
     overround_place = _estimate_overround_from_runners(runners, use_place=True)
+
     if overround_win is not None:
         market["overround_win"] = overround_win
-        market["overround"] = overround_win
+        # Only set general 'overround' if it hasn't been explicitly set or if it's None
+        if market.get("overround") is None:
+            market["overround"] = overround_win
+    
     if overround_place is not None:
         market["overround_place"] = overround_place
-        market.setdefault("overround", overround_place)
+        # If overround_win was None, then overround might still be None, so set it from place
+        if market.get("overround") is None: 
+            market["overround"] = overround_place
 
-    if market:
-        result["market"] = market
-        if market.get("overround") is not None:
-            result.setdefault("overround", market.get("overround"))
-        meta.setdefault("overround_win", market.get("overround_win"))
-        meta.setdefault("overround_place", market.get("overround_place"))
+    result["market"] = market # Assign the fully constructed market back to result
+    if result["market"].get("overround") is not None:
+        result.setdefault("overround", result["market"].get("overround"))
+    meta.setdefault("overround_win", result["market"].get("overround_win"))
+    meta.setdefault("overround_place", result["market"].get("overround_place"))
 
     # resolver = resolve_source_url
     # if callable(resolver) and isinstance(sources_config, Mapping):

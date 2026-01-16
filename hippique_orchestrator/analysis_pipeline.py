@@ -8,7 +8,7 @@ from typing import Any
 
 import yaml
 
-from . import data_source, firestore_client, gcs_client
+from . import data_source, firestore_client, gcs_client, stats_fetcher
 from .analysis_utils import (
     calculate_volatility,
     identify_outsider_reparable,
@@ -72,26 +72,37 @@ async def _run_gpi_pipeline(
     if calibration_content:
         yaml.safe_load(calibration_content)
 
-    # Enrich the snapshot with stats using SourceRegistry
-    # Assuming snapshot_data can be converted to RaceSnapshotNormalized for enrichment
-    # Note: For simplicity, converting dict to RaceSnapshotNormalized here.
-    # A more robust solution might involve proper data modeling upstream.
-    snapshot_normalized = RaceSnapshotNormalized.model_validate(snapshot_data)
-
-    enriched_snapshot = await source_registry.enrich_snapshot_with_stats(
-        snapshot=snapshot_normalized,
+    # Collect stats and merge into snapshot_data
+    stats_gcs_path = await stats_fetcher.collect_stats(
+        race_doc_id=race_doc_id,
+        phase=phase,
+        date=log_extra.get("date"),
         correlation_id=log_extra.get("correlation_id"),
         trace_id=log_extra.get("trace_id"),
     )
 
-    # Convert back to dict for pipeline processing
+    collected_stats_content = gcs_client.read_file_from_gcs(stats_gcs_path)
+    collected_stats = json.loads(collected_stats_content) if collected_stats_content else {}
+
+    if collected_stats and collected_stats.get("rows"):
+        stats_by_num = {str(s.get("num")): s for s in collected_stats["rows"]}
+        for runner_data in snapshot_data.get("runners", []):
+            runner_num = str(runner_data.get("num"))
+            if runner_num in stats_by_num:
+                runner_data["stats"] = stats_by_num[runner_num]
+                # Merge individual stat fields into runner_data for direct access
+                for k, v in stats_by_num[runner_num].items():
+                    if k not in ["num", "name"]: # Avoid overwriting base runner info
+                        runner_data[k] = v
+
     # Extract only the stats into je_stats dictionary for backward compatibility
+    # Assuming runner_data in snapshot_data now has 'stats' key
     gpi_config["je_stats"] = {
-        runner.nom: runner.stats.model_dump()
-        for runner in enriched_snapshot.runners if runner.stats
+        str(runner.get("num")): runner.get("stats", {})
+        for runner in snapshot_data.get("runners", []) if runner.get("stats")
     }
-    # Update snapshot_data with enriched runners
-    snapshot_data["runners"] = [runner.model_dump() for runner in enriched_snapshot.runners]
+    
+    # Update snapshot_data with enriched runners is done in the loop above.
 
     # --- DRIFT LOGIC IMPLEMENTATION ---
     h30_snapshot_data = {}

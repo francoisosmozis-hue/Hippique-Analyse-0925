@@ -59,7 +59,7 @@ async def lifespan(app: FastAPI):
     # Set the provider order (primary, then fallbacks)
     source_registry.set_provider_order(["boturfers", "zeturf", "static"])
     
-    logger.info(f"Providers registered: {[p.name for p in source_registry.get_all_providers()]}")
+    logger.info(f"Providers registered: {[p.name for p in source_registry._providers.values()]}")
     logger.info(f"Provider order set: {source_registry._provider_order}")
     
     yield

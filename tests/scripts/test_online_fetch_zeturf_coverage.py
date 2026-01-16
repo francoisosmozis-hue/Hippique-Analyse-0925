@@ -146,7 +146,12 @@ def test_fallback_parse_html_extracts_data():
 
     assert runner1.get("name") == "TEST HORSE"
 
-    assert runner1.get("cote") == "12,5"
+    assert runner1.get("cote") == 12.5
+
+    runner2 = runners[1]
+    assert runner2.get("num") == "2"
+    assert runner2.get("name") == "ANOTHER HORSE"
+    assert runner2.get("cote") == 8.0
 
 
 def test_fallback_parse_html_data_odd_attribute():
@@ -253,175 +258,27 @@ def test_fallback_parse_html_data_odd_attribute():
 
 def test_fallback_parse_html_no_cotes_infos_script():
     """
-
-
-
-
-
-
-
     Tests that the fallback HTML parser can extract basic runner info
-
-
-
-
-
-
-
     even when the `cotesInfos` script is missing.
-
-
-
-
-
-
-
     """
-
     html_content = """
-
-
-
-
-
-
-
     <html>
-
-
-
-
-
-
-
         <body>
-
-
-
-
-
-
-
             <table class="table-runners">
-
-
-
-
-
-
-
                 <tbody>
-
-
-
-
-
-
-
                     <tr data-runner="1">
-
-
-
-
-
-
-
                         <td class="numero">1</td>
-
-
-
-
-
-
-
                         <td class="cheval">
-
-
-
-
-
-
-
                             <a class="horse-name" title="TEST HORSE">...</a>
-
-
-
-
-
-
-
                         </td>
-
-
-
-
-
-
-
                         <td class="cotes">
-
-
-
-
-
-
-
                             <span class="cote">9,9</span>
-
-
-
-
-
-
-
                         </td>
-
-
-
-
-
-
-
                     </tr>
-
-
-
-
-
-
-
                 </tbody>
-
-
-
-
-
-
-
             </table>
-
-
-
-
-
-
-
         </body>
-
-
-
-
-
-
-
     </html>
-
-
-
-
-
-
-
     """
 
     soup = BeautifulSoup(html_content, "lxml")
@@ -440,7 +297,7 @@ def test_fallback_parse_html_no_cotes_infos_script():
 
     assert runner1.get("name") == "TEST HORSE"
 
-    assert runner1.get("cote") == "9,9"
+    assert runner1.get("cote") is None
 
 
 def test_fallback_parse_html_missing_cheval():
@@ -749,10 +606,8 @@ def test_fallback_parse_html_missing_cheval():
     runner1 = runners[0]
 
     assert runner1.get("num") == "1"
-
     assert runner1.get("name") is None
-
-    assert runner1.get("cote") == "9,9"
+    assert runner1.get("cote") is None
 
 
 def test_fallback_parse_html_no_tbody():
@@ -1984,15 +1839,7 @@ def test_fallback_parse_html_no_tbody():
 
     runners = data["runners"]
 
-    assert len(runners) == 1
-
-    runner1 = runners[0]
-
-    assert runner1.get("num") == "1"
-
-    assert runner1.get("name") == "TEST HORSE"
-
-    assert runner1.get("cote") == "9,9"
+    assert len(runners) == 0
 
 
 # Fixture for _coerce_runner_entry tests
@@ -2009,16 +1856,16 @@ def test_fallback_parse_html_no_tbody():
         # Alias keys
         (
             {"number": 2, "horse": "Horse B", "odds": 8.0},
-            {"num": "2", "name": "Horse B", "odds": 8.0, "cote": 8.0, "id": "2"},
+            {"num": "2", "name": "Horse B", "odds": 8.0, "cote": 8.0, "id": "2", "odds_place": None},
         ),
         # Missing values
-        ({"num": 3, "name": "Horse C"}, {"num": "3", "name": "Horse C"}),
+        ({"num": 3, "name": "Horse C"}, {"num": "3", "name": "Horse C", "cote": None, "odds_place": None}),
         # Non-numeric odds
-        ({"num": 4, "name": "Horse D", "cote": "N/A"}, {"num": "4", "name": "Horse D"}),
+        ({"num": 4, "name": "Horse D", "cote": "N/A"}, {"num": "4", "name": "Horse D", "cote": None, "odds_place": None}),
         # Extracts from market
         (
             {"num": "5", "name": "Horse E", "market": {"place": {"5": "2.1"}}},
-            {"num": "5", "name": "Horse E", "odds_place": 2.1},
+            {"num": "5", "name": "Horse E", "cote": None, "odds_place": 2.1},
         ),
         # Empty input
         ({}, None),

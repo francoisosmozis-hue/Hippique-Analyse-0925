@@ -448,7 +448,7 @@ def test_apply_drift_adjustment_steam_detected(mock_snapshot_data, mock_gpi_conf
     assert factors[1] > 1.0
     assert runners[0]["drift_status"] == "Steam"
     assert runners[1]["drift_status"] == "Steam"
-    assert runners[0]["drift_percent"] < -mock_gpi_config["adjustments"]["drift"]["threshold"] * 100
+    assert runners[0]["drift_percent"] > mock_gpi_config["adjustments"]["drift"]["threshold"] * 100
 
 
 def test_apply_drift_adjustment_favorite_drift_factor(mock_snapshot_data, mock_gpi_config):
