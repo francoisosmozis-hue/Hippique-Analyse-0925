@@ -65,6 +65,12 @@ class SourceProvider(ABC):
     Combines ProgrammeFetcher, SnapshotFetcher, and StatsFetcher interfaces.
     """
 
+    @property
+    @abstractmethod
+    def name(self) -> str:
+        """The unique name of the provider (e.g., 'boturfers', 'zeturf')."""
+        pass
+
     @abstractmethod
     async def fetch_programme(
         self, url: str, correlation_id: str | None = None, trace_id: str | None = None

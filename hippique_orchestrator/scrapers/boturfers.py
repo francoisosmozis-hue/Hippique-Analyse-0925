@@ -466,135 +466,104 @@ class BoturfersFetcher:
         }
 
 
-async def fetch_boturfers_programme(
-    url: str,
-    correlation_id: str | None = None,
-    trace_id: str | None = None,
-    *args,
-    **kwargs,
-) -> dict:
-    """Fonction principale pour scraper le programme des courses sur Boturfers."""
-    log_extra = {"correlation_id": correlation_id, "trace_id": trace_id, "url": url}
-    logger.info("Début du scraping du programme Boturfers.", extra=log_extra)
-    if not url:
-        logger.error("Aucune URL fournie pour le scraping Boturfers.", extra=log_extra)
-        return {}
-    try:
-        fetcher = BoturfersFetcher(race_url=url, correlation_id=correlation_id, trace_id=trace_id)
-        raw_snapshot = await fetcher.get_snapshot()
-        if "error" in raw_snapshot or not raw_snapshot.get("races"):
-            logger.error(
-                "Le scraping du programme a échoué ou n'a retourné aucune course.", extra=log_extra
-            )
-            return {}
-        logger.info(
-            ("Scraping du programme Boturfers réussi. %s courses trouvées."),
-            len(raw_snapshot.get("races", [])),
-            extra=log_extra,
-        )
-        return raw_snapshot
-    except Exception as e:
-        logger.exception(
-            "Une erreur inattendue est survenue lors du scraping de %s: %s",
-            url,
-            e,
-            extra=log_extra,
-        )
-        return {}
-
-from hippique_orchestrator.data_contract import RaceData, RunnerData
-from hippique_orchestrator.sources.interfaces import DataSourceInterface
+from hippique_orchestrator.data_contract import RaceData, RunnerData, RaceSnapshotNormalized, RunnerStats
+from hippique_orchestrator.sources_interfaces import SourceProvider
 
 
-class BoturfersProvider(DataSourceInterface):
+class BoturfersSource(SourceProvider):
     """
-    Provider pour Boturfers qui implémente la nouvelle DataSourceInterface.
+    SourceProvider implementation for Boturfers.fr.
+    Complies with the abstract interface for data sources.
     """
 
     @property
     def name(self) -> str:
-        return "Boturfers"
+        return "boturfers"
 
-    async def get_races_for_date(self, target_date: datetime) -> list[RaceData]:
+    async def fetch_programme(self, url: str, **kwargs) -> list[dict[str, Any]]:
         """
-        Récupère le programme des courses pour une date et le transforme
-        en une liste d'objets RaceData.
+        Fetches the daily race programme from the given URL.
         """
-        today = datetime.now(datetime.timezone.utc).date()
-        tomorrow = today + datetime.timedelta(days=1)
+        correlation_id = kwargs.get("correlation_id")
+        trace_id = kwargs.get("trace_id")
+        log_extra = {"correlation_id": correlation_id, "trace_id": trace_id, "url": url}
+        logger.info(f"[{self.name}] Fetching programme from URL: {url}", extra=log_extra)
 
-        url = None
-        if target_date == today:
-            url = "https://www.boturfers.fr/programme-pmu-du-jour"
-        elif target_date == tomorrow:
-            url = "https://www.boturfers.fr/programme-pmu-demain"
-
-        if not url:
-            logger.debug(f"{self.name} ne supporte pas la date {target_date}.")
-            return []
-
-        fetcher = BoturfersFetcher(race_url=url)
+        fetcher = BoturfersFetcher(race_url=url, correlation_id=correlation_id, trace_id=trace_id)
         snapshot = await fetcher.get_snapshot()
 
         if not snapshot or "races" not in snapshot:
+            logger.error(f"[{self.name}] Failed to get a valid programme snapshot from {url}", extra=log_extra)
             return []
 
-        races = []
-        for race_entry in snapshot["races"]:
-            start_time = None
-            if race_entry.get("start_time"):
-                try:
-                    start_time = datetime.strptime(race_entry["start_time"], "%H:%M").time()
-                except (ValueError, TypeError):
-                    logger.warning(f"Impossible de parser l'heure de départ: {race_entry.get('start_time')}")
+        logger.info(f"[{self.name}] Successfully fetched {len(snapshot['races'])} races from {url}", extra=log_extra)
+        return snapshot["races"]
 
-
-            race = RaceData(
-                date=target_date,
-                rc_label=race_entry.get("rc", "N/A"),
-                name=race_entry.get("name"),
-                url=race_entry.get("url"),
-                start_time_local=start_time
-                # Les autres champs (discipline, distance, etc.) ne sont pas
-                # disponibles sur la page programme, ils seront remplis
-                # lors de la récupération des détails.
-            )
-            races.append(race)
-        return races
-
-    async def get_runners_for_race(self, race: RaceData) -> list[RunnerData]:
+    async def fetch_snapshot(self, race_url: str, **kwargs) -> RaceSnapshotNormalized:
         """
-        Récupère les détails d'une course (partants) et les transforme
-        en une liste d'objets RunnerData.
+        Fetches the detailed snapshot for a single race and transforms it
+        into the normalized RaceSnapshotNormalized data contract.
         """
-        if not race.url:
-            logger.error(f"Impossible de récupérer les partants pour {race.rc_label} car l'URL est manquante.")
-            return []
+        correlation_id = kwargs.get("correlation_id")
+        trace_id = kwargs.get("trace_id")
+        log_extra = {"correlation_id": correlation_id, "trace_id": trace_id, "url": race_url}
+        logger.info(f"[{self.name}] Fetching snapshot from URL: {race_url}", extra=log_extra)
 
-        fetcher = BoturfersFetcher(race_url=race.url)
-        snapshot = await fetcher.get_race_snapshot()
+        fetcher = BoturfersFetcher(race_url=race_url, correlation_id=correlation_id, trace_id=trace_id)
+        raw_snapshot = await fetcher.get_race_snapshot()
 
-        if not snapshot or "runners" not in snapshot:
-            return []
-        
-        # Optionnel: Mettre à jour l'objet race avec les métadonnées scrapées
-        meta = snapshot.get("race_metadata", {})
-        if meta.get("distance"):
-            race.distance = int(meta["distance"])
-        # ... on pourrait faire de même pour la discipline, corde, etc.
+        if "error" in raw_snapshot or "race_metadata" not in raw_snapshot:
+            raise ValueError(f"Failed to fetch or parse race snapshot from {race_url}")
 
-        runners = []
-        for runner_entry in snapshot["runners"]:
+        meta = raw_snapshot["race_metadata"]
+
+        race_date = None
+        if meta.get("date"):
+            try:
+                race_date = datetime.strptime(meta["date"], "%Y-%m-%d").date()
+            except ValueError:
+                raise ValueError(f"Invalid date format in scraped metadata: {meta.get('date')}")
+        else:
+            raise ValueError("Date is missing from scraped metadata")
+
+        race_data = RaceData(
+            date=race_date,
+            rc_label=meta.get("rc_label", "N/A"),
+            name=meta.get("race_name"),
+            url=race_url,
+            discipline=meta.get("discipline"),
+            distance=meta.get("distance"),
+            corde=meta.get("corde"),
+        )
+
+        runners_data = []
+        for raw_runner in raw_snapshot.get("runners", []):
             runner = RunnerData(
-                num=runner_entry["num"],
-                nom=runner_entry["nom"],
-                musique=runner_entry.get("musique"),
-                odds_place=runner_entry.get("odds_place"),
-                odds_win=runner_entry.get("odds_win"),
-                driver=runner_entry.get("jockey"),
-                trainer=runner_entry.get("entraineur"),
-                gains=runner_entry.get("gains")
+                num=raw_runner["num"],
+                nom=raw_runner["nom"],
+                musique=raw_runner.get("musique"),
+                odds_place=raw_runner.get("odds_place"),
+                odds_win=raw_runner.get("odds_win"),
+                driver=raw_runner.get("jockey"),
+                trainer=raw_runner.get("entraineur"),
+                gains=raw_runner.get("gains"),
             )
-            runners.append(runner)
-        return runners
+            runners_data.append(runner)
+
+        return RaceSnapshotNormalized(
+            race=race_data,
+            runners=runners_data,
+            source_snapshot=self.name,
+            meta=meta,
+        )
+
+    async def fetch_stats_for_runner(self, runner_name: str, **kwargs) -> RunnerStats:
+        """
+        Boturfers does not provide detailed runner stats. This is a placeholder.
+        """
+        correlation_id = kwargs.get("correlation_id")
+        trace_id = kwargs.get("trace_id")
+        log_extra = {"correlation_id": correlation_id, "trace_id": trace_id, "runner_name": runner_name}
+        logger.warning(f"[{self.name}] Does not provide stats. Returning empty stats object for {runner_name}.", extra=log_extra)
+        return RunnerStats(source_stats=self.name)
 

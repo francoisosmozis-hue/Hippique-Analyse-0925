@@ -1,7 +1,10 @@
 import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, computed_field
+
+
+QualityStatus = Literal["OK", "DEGRADED", "FAILED"]
 
 
 class RunnerStats(BaseModel):
@@ -27,6 +30,15 @@ class RunnerData(BaseModel):
     draw: int | None = Field(None, description="Numéro de corde ou de couloir")
     stats: RunnerStats = Field(default_factory=RunnerStats)
 
+    @field_validator("odds_place", "odds_win")
+    @classmethod
+    def check_odds_value(cls, v: float | None) -> float | None:
+        """Valide que les cotes sont supérieures ou égales à 1.0 si elles existent."""
+        if v is not None and v < 1.0:
+            # On ne lève pas d'erreur, on invalide la donnée car le scraping est imparfait.
+            return None
+        return v
+
 
 class RaceData(BaseModel):
     """Contrat de données pour une course."""
@@ -49,40 +61,39 @@ class RaceSnapshotNormalized(BaseModel):
     source_snapshot: str  # Provider qui a fourni le le snapshot principal (e.g., 'Zeturf')
     meta: dict[str, Any] = Field(default_factory=dict) # Added meta field for additional metadata
 
+    @computed_field
+    @property
+    def quality(self) -> dict[str, Any]:
+        """
+        Calcule le score de qualité d'un snapshot.
+        - FAILED: Pas de partants.
+        - DEGRADED: Données partielles (ex: cotes manquantes).
+        - OK: Données jugées complètes.
+        """
+        if not self.runners:
+            return {"score": 0.0, "status": "FAILED", "reason": "No runners in snapshot"}
 
-QualityStatus = Literal["OK", "DEGRADED", "FAILED"]
+        total_runners = len(self.runners)
+        runners_with_place_odds = sum(1 for r in self.runners if r.odds_place is not None)
+        runners_with_musique = sum(1 for r in self.runners if r.musique)
+        runners_with_stats = sum(1 for r in self.runners if r.stats.driver_rate or r.stats.trainer_rate)
 
-def calculate_quality_score(snapshot: RaceSnapshotNormalized) -> dict:
-    """
-    Calcule le score de qualité d'un snapshot.
-    - FAILED: Pas de partants ou infos de course manquantes.
-    - DEGRADED: Données partielles (ex: cotes manquantes).
-    - OK: Données jugées complètes.
-    """
-    if not snapshot.runners:
-        return {"score": 0.0, "status": "FAILED", "reason": "No runners in snapshot"}
+        # Pondération simple : les cotes sont les plus importantes
+        score = (
+            0.6 * (runners_with_place_odds / total_runners) +
+            0.2 * (runners_with_musique / total_runners) +
+            0.2 * (runners_with_stats / total_runners)
+        )
 
-    total_runners = len(snapshot.runners)
-    runners_with_place_odds = sum(1 for r in snapshot.runners if r.odds_place is not None and r.odds_place > 1.0)
-    runners_with_musique = sum(1 for r in snapshot.runners if r.musique)
-    runners_with_stats = sum(1 for r in snapshot.runners if r.stats.driver_rate or r.stats.trainer_rate)
+        status: QualityStatus
+        if score < 0.5:
+            status = "FAILED"
+        elif score < 0.85:
+            status = "DEGRADED"
+        else:
+            status = "OK"
 
-    # Pondération simple : les cotes sont les plus importantes
-    score = (
-        0.6 * (runners_with_place_odds / total_runners) +
-        0.2 * (runners_with_musique / total_runners) +
-        0.2 * (runners_with_stats / total_runners)
-    )
-
-    status: QualityStatus
-    if score < 0.5:
-        status = "FAILED"
-    elif score < 0.85:
-        status = "DEGRADED"
-    else:
-        status = "OK"
-
-    return {"score": round(score, 2), "status": status, "reason": f"{runners_with_place_odds}/{total_runners} place_odds"}
+        return {"score": round(score, 2), "status": status, "reason": f"{runners_with_place_odds}/{total_runners} place_odds"}
 
 
 def compute_odds_place_ratio(place_odds: dict[str, float], num_partants: int) -> float:

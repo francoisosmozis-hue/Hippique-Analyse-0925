@@ -3,7 +3,9 @@ import math
 import pathlib
 import statistics
 from itertools import combinations
-from typing import Any
+from typing import Any, Optional
+import json
+import datetime
 
 from hippique_orchestrator.analysis_utils import (
     convert_odds_to_implied_probabilities,
@@ -26,6 +28,7 @@ MAX_SP_DUTCHING_CANDIDATES = 3
 logger = logging.getLogger(__name__)
 
 CALIB_PATH = pathlib.Path(__file__).resolve().parent / "config" / "payout_calibration.yaml"
+STATUS_FILE_PATH = pathlib.Path("artifacts/live_quality_status.json")
 
 
 # ==============================================================================
@@ -669,16 +672,96 @@ def _finalize_and_decide(
     }
 
 
+def _store_quality_status(race_id: str, status: str, reason: str):
+    """
+    Stocke le statut de qualité pour une course donnée dans un fichier JSON.
+    """
+    STATUS_FILE_PATH.parent.mkdir(exist_ok=True)
+    
+    try:
+        with open(STATUS_FILE_PATH, "r") as f:
+            all_statuses = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        all_statuses = {}
+
+    all_statuses[race_id] = {
+        "status": status,
+        "reason": reason,
+        "timestamp": datetime.datetime.utcnow().isoformat()
+    }
+
+    try:
+        with open(STATUS_FILE_PATH, "w") as f:
+            json.dump(all_statuses, f, indent=4)
+        logger.info(f"DATA_QUALITY_STATUS race_id={race_id} status={status} reason='{reason}'")
+    except IOError as e:
+        logger.error(f"Impossible d'écrire dans le fichier de statut {STATUS_FILE_PATH}: {e}")
+
+
+def _check_data_quality(
+    runners: list[dict[str, Any]], h30_snapshot_data: Optional[dict[str, Any]]
+) -> tuple[bool, str]:
+    """
+    Vérifie la qualité des données de cotes (H-5 et H-30).
+
+    Returns:
+        Tuple[bool, str]: (is_ok, reason_string)
+    """
+    # 1. Vérification de la couverture des cotes H-5 (cotes actuelles)
+    partants_count = len(runners)
+    if partants_count == 0:
+        return False, "No runners in snapshot."
+
+    runners_with_odds_h5 = sum(1 for r in runners if r.get("odds_place") and r["odds_place"] > 0)
+    odds_coverage_h5 = runners_with_odds_h5 / partants_count
+    
+    if odds_coverage_h5 < 0.90:
+        return False, f"LIVE_ODDS_INCOMPLETE ({odds_coverage_h5:.0%}) - H5 odds coverage too low."
+
+    # 2. Vérification de la couverture du drift (comparaison H-30 / H-5)
+    if not h30_snapshot_data or not h30_snapshot_data.get("runners"):
+        # Qualité dégradée mais on peut continuer sans drift.
+        return True, "OK (DEGRADED) - Missing H30 data, cannot compute drift. Proceeding without drift adjustment."
+
+    h30_runners_map = {r["num"]: r for r in h30_snapshot_data["runners"]}
+    
+    runners_with_both_odds = 0
+    for r in runners:
+        if r.get("odds_place") and r.get("num") in h30_runners_map and h30_runners_map[r["num"]].get("odds_place"):
+            runners_with_both_odds += 1
+            
+    drift_coverage = runners_with_both_odds / partants_count
+    
+    if drift_coverage < 0.80:
+        return False, f"LIVE_ODDS_POOR_QUALITY ({drift_coverage:.0%}) - Drift coverage too low."
+
+    return True, "OK"
+
+
 def generate_tickets(snapshot_data: dict[str, Any], gpi_config: dict[str, Any]) -> dict[str, Any]:
     """
     Génère des tickets de paris basés sur les règles GPI v5.2,
     incluant les ajustements Chrono et Drift.
     """
     analysis_messages = []
+    race_id = snapshot_data.get("race_id", "unknown_race") # Assurez-vous que race_id est disponible
+
     try:
         runners, config = _initialize_and_validate(snapshot_data, gpi_config)
+        
+        # --- GUARDRAIL DE QUALITÉ DES DONNÉES ---
+        is_quality_ok, quality_reason = _check_data_quality(runners, config.get("h30_snapshot_data"))
+        
+        if not is_quality_ok:
+            _store_quality_status(race_id, "FAILED", quality_reason)
+            return {"gpi_decision": f"Abstain: {quality_reason}", "tickets": [], "roi_global_est": 0}
+        
+        _store_quality_status(race_id, "OK" if "OK (DEGRADED)" not in quality_reason else "DEGRADED", quality_reason)
+        # --- FIN DU GUARDRAIL ---
+
         runners, analysis_messages = _calculate_adjusted_probabilities(runners, config)
     except ValueError as e:
+        _store_quality_status(race_id, "FAILED", str(e))
         return {"gpi_decision": f"Abstain: {e}", "tickets": [], "roi_global_est": 0}
 
     final_tickets = []

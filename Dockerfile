@@ -29,6 +29,8 @@ RUN pip install --no-cache /wheels/*
 
 # Copy the application source code
 COPY . .
+COPY templates /app/hippique_orchestrator/templates
+COPY static /app/static
 
 # Set permissions for the entrypoint BEFORE changing user
 RUN chmod +x /app/entrypoint.sh

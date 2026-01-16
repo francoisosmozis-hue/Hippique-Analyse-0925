@@ -1,57 +1,57 @@
 """
-Fournit une stratégie multi-sources pour récupérer le programme des courses.
+Fournit une stratégie multi-sources pour récupérer le programme des courses
+en s'appuyant sur la résilience du source_registry.
 """
 import datetime
 import logging
 from typing import Any
 
-from hippique_orchestrator.data_contract import RaceData
-from hippique_orchestrator.source_registry import source_registry
+from hippique_orchestrator.source_registry import AllSourcesFailedError, source_registry
 
 logger = logging.getLogger(__name__)
 
 
 class ProgrammeProvider:
     """
-    Orchestre la récupération du programme en essayant plusieurs sources
-    enregistrées dans le `source_registry`, selon un ordre de priorité.
+    Orchestre la récupération du programme en déléguant la logique de fallback
+    au `source_registry`. Construit l'URL du programme pour une date donnée.
     """
-    def __init__(self, registry, provider_priority: list[str] | None = None):
+
+    def __init__(self, registry, base_programme_url: str = "https://www.boturfers.fr/courses"):
         """
         Initialise le provider avec le registre de sources.
 
         :param registry: L'instance de SourceRegistry.
-        :param provider_priority: Liste ordonnée des noms de providers à essayer.
+        :param base_programme_url: L'URL de base pour le programme (devrait venir d'une config).
         """
         self.registry = registry
-        # En production, on voudra peut-être une liste comme ["PMU", "Geny", "Boturfers"]
-        # Pour l'instant, on se contente de ce qui est disponible.
-        self.provider_priority = provider_priority or ["Boturfers", "StaticProvider"]
-        logger.info(f"ProgrammeProvider initialized with provider priority: {self.provider_priority}")
+        self.base_programme_url = base_programme_url
+        logger.info("ProgrammeProvider initialized.")
 
-    async def get_races_for_date(self, target_date: datetime.date) -> list[RaceData]:
+    async def get_races_for_date(self, target_date: datetime.date) -> list[dict[str, Any]]:
         """
-        Essaie chaque provider du registre pour obtenir le programme.
-        L'ordre est défini par `provider_priority`.
+        Récupère le programme pour une date en appelant le mécanisme de
+        fallback du source_registry.
         """
-        for provider_name in self.provider_priority:
-            provider = self.registry.get_provider(provider_name)
-            if not provider:
-                logger.warning(f"Le provider de programme '{provider_name}' n'est pas enregistré.")
-                continue
+        # La construction de l'URL est la responsabilité de ce provider.
+        # Le format exact dépend de la source primaire (ex: Boturfers).
+        url = f"{self.base_programme_url}/{target_date.strftime('%Y-%m-%d')}"
+        logger.info(f"Requesting programme for date {target_date} via registry (URL: {url})")
 
-            try:
-                logger.info(f"Tentative de récupération du programme avec: {provider.name}")
-                races = await provider.get_races_for_date(target_date)
-                if races:
-                    logger.info(f"Programme ({len(races)} courses) obtenu avec succès via {provider.name}.")
-                    return races
-            except Exception as e:
-                logger.error(f"Le provider '{provider.name}' a échoué: {e}", exc_info=True)
+        try:
+            # On délègue toute la complexité (fetch, validation, fallback) au registre.
+            programme = await self.registry.fetch_programme_with_fallback(url)
+            logger.info(
+                f"Programme ({len(programme)} courses) retrieved successfully via source_registry."
+            )
+            return programme
+        except AllSourcesFailedError as e:
+            logger.critical(
+                f"All sources failed to provide the programme for {target_date}: {e}"
+            )
+            return []
 
-        logger.warning(f"Aucun provider n'a pu fournir le programme pour la date {target_date}.")
-        return []
 
-# Instance unique pour être utilisée dans l'application
-# La priorité peut être surchargée à l'initialisation de l'app.
+# Instance unique pour être utilisée dans l'application.
+# La configuration (ordre des providers, URL) se fait au démarrage de l'app.
 programme_provider = ProgrammeProvider(source_registry)

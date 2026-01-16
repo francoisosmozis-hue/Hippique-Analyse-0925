@@ -122,7 +122,7 @@ def fetch_chrono_from_html(html_content: str, horse_name: str) -> dict[str, Any]
 
     soup = BeautifulSoup(html_content, "html.parser")
     result: dict[str, Any] = {"last_3_chrono": []}
-    normalized_horse_name = _normalize_name(horse_name)
+    _normalized_horse_name = _normalize_name(horse_name)
 
     # Locate the "Informations générales" card-body for the record
     info_h2 = soup.find("h2", string=re.compile(r"\s*Informations générales\s*"))

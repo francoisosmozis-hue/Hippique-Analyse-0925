@@ -35,8 +35,9 @@ from .logging_utils import (
 )
 from .schemas import ScheduleRequest, ScheduleResponse
 from .source_registry import source_registry
-from .scrapers.boturfers import BoturfersProvider
-from .sources.static_provider import StaticProvider
+from .scrapers.boturfers import BoturfersSource
+from .scrapers.zeturf import ZeturfSource
+from .scrapers.static_provider import StaticProvider
 
 # --- Configuration & Initialization ---
 setup_logging(log_level=config.LOG_LEVEL)
@@ -51,9 +52,15 @@ async def lifespan(app: FastAPI):
     
     # Register data source providers
     logger.info("Registering data source providers...")
-    source_registry.register(BoturfersProvider())
+    source_registry.register(BoturfersSource())
+    source_registry.register(ZeturfSource())
     source_registry.register(StaticProvider())
+    
+    # Set the provider order (primary, then fallbacks)
+    source_registry.set_provider_order(["boturfers", "zeturf", "static"])
+    
     logger.info(f"Providers registered: {[p.name for p in source_registry.get_all_providers()]}")
+    logger.info(f"Provider order set: {source_registry._provider_order}")
     
     yield
     logger.info("Shutting down Hippique Orchestrator.")
