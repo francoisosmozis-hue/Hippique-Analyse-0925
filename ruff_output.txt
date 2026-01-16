@@ -1,0 +1,432 @@
+I001 [*] Import block is un-sorted or un-formatted
+ --> debug_boturfers_snapshot_scraper.py:1:1
+  |
+1 | / import json
+2 | | import sys
+3 | | import asyncio
+4 | | from typing import Any
+5 | | from urllib.parse import urljoin
+6 | |
+7 | | from bs4 import BeautifulSoup
+8 | |
+9 | | from hippique_orchestrator.scrapers.boturfers import BoturfersFetcher
+  | |_____________________________________________________________________^
+  |
+help: Organize imports
+
+F401 [*] `typing.Any` imported but unused
+ --> debug_boturfers_snapshot_scraper.py:4:20
+  |
+2 | import sys
+3 | import asyncio
+4 | from typing import Any
+  |                    ^^^
+5 | from urllib.parse import urljoin
+  |
+help: Remove unused import: `typing.Any`
+
+F401 [*] `urllib.parse.urljoin` imported but unused
+ --> debug_boturfers_snapshot_scraper.py:5:26
+  |
+3 | import asyncio
+4 | from typing import Any
+5 | from urllib.parse import urljoin
+  |                          ^^^^^^^
+6 |
+7 | from bs4 import BeautifulSoup
+  |
+help: Remove unused import: `urllib.parse.urljoin`
+
+I001 [*] Import block is un-sorted or un-formatted
+ --> debug_get_boturfers_urls.py:1:1
+  |
+1 | / import asyncio
+2 | |
+3 | | from hippique_orchestrator.sources.boturfers_provider import BoturfersProvider
+  | |______________________________________________________________________________^
+4 |
+5 |   async def main():
+  |
+help: Organize imports
+
+W293 [*] Blank line contains whitespace
+  --> debug_get_boturfers_urls.py:12:1
+   |
+10 |     programme_url = "https://www.boturfers.fr/programme-pmu-du-jour"
+11 |     races = await provider.fetch_programme(programme_url)
+12 |     
+   | ^^^^
+13 |     if races:
+14 |         print("Races found:")
+   |
+help: Remove whitespace from blank line
+
+F401 [*] `hippique_orchestrator.data_contract.calculate_quality_score` imported but unused
+  --> hippique_orchestrator/source_registry.py:9:5
+   |
+ 7 |     RaceSnapshotNormalized,
+ 8 |     RunnerStats,
+ 9 |     calculate_quality_score,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^
+10 | )
+11 | from hippique_orchestrator.logging_utils import get_logger
+   |
+help: Remove unused import: `hippique_orchestrator.data_contract.calculate_quality_score`
+
+W293 [*] Blank line contains whitespace
+  --> hippique_orchestrator/source_registry.py:68:1
+   |
+66 |         provider = self._fallback_snapshot_provider  # Using BoturfersProvider directly
+67 |         logger.info(f"Attempting snapshot with provider: {provider.name}")
+68 |         
+   | ^^^^^^^^
+69 |         snapshot = None
+70 |         try:
+   |
+help: Remove whitespace from blank line
+
+W293 [*] Blank line contains whitespace
+  --> hippique_orchestrator/sources/boturfers_provider.py:79:1
+   |
+77 |             if not meeting_title_tag:
+78 |                 continue
+79 |             
+   | ^^^^^^^^^^^^
+80 |             meeting_full_title = meeting_title_tag.get_text(strip=True)
+81 |             meeting_match = re.match(r"(R\d+)\s*-\s*(.+)", meeting_full_title)
+   |
+help: Remove whitespace from blank line
+
+W293 [*] Blank line contains whitespace
+  --> hippique_orchestrator/sources/boturfers_provider.py:84:1
+   |
+82 |             if not meeting_match:
+83 |                 continue
+84 |             
+   | ^^^^^^^^^^^^
+85 |
+86 |             reunion_name = meeting_match.group(2)
+   |
+help: Remove whitespace from blank line
+
+F541 [*] f-string without any placeholders
+   --> hippique_orchestrator/sources/boturfers_provider.py:117:40
+    |
+115 |                                 continue
+116 |                     else:
+117 |                         logger.warning(f"No RC span found in row. Skipping.")
+    |                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+118 |                         continue
+    |
+help: Remove extraneous `f` prefix
+
+W293 [*] Blank line contains whitespace
+   --> hippique_orchestrator/sources/boturfers_provider.py:119:1
+    |
+117 |                         logger.warning(f"No RC span found in row. Skipping.")
+118 |                         continue
+119 |                     
+    | ^^^^^^^^^^^^^^^^^^^^
+120 |                     name_link = row.select_one("td.crs span.name a.link")
+121 |                     if name_link:
+    |
+help: Remove whitespace from blank line
+
+F541 [*] f-string without any placeholders
+   --> hippique_orchestrator/sources/boturfers_provider.py:125:40
+    |
+123 |                         race_info['url'] = urljoin("https://www.boturfers.fr", name_link.get('href'))
+124 |                     else:
+125 |                         logger.warning(f"Could not find name_link for a race. Skipping.")
+    |                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+126 |                         continue
+    |
+help: Remove extraneous `f` prefix
+
+W293 [*] Blank line contains whitespace
+   --> hippique_orchestrator/sources/boturfers_provider.py:220:1
+    |
+218 |     def _parse_race_metadata(self, soup: BeautifulSoup, race_url: str) -> dict[str, Any]:
+219 |         metadata: dict[str, Any] = {}
+220 |         
+    | ^^^^^^^^
+221 |         # Main info block
+222 |         info_block = soup.select_one("div.dot-separated")
+    |
+help: Remove whitespace from blank line
+
+W293 [*] Blank line contains whitespace
+   --> hippique_orchestrator/sources/boturfers_provider.py:226:1
+    |
+224 |             metadata_text = info_block.get_text(" | ", strip=True)
+225 |             parts = [p.strip() for p in metadata_text.split('|')]
+226 |             
+    | ^^^^^^^^^^^^
+227 |             discipline_match = re.search(r"(Attelé|Monté|Plat|Obstacle|Haies|Steeple-Chase|Cross)", metadata_text, re.IGNORECASE)
+228 |             if discipline_match:
+    |
+help: Remove whitespace from blank line
+
+W293 [*] Blank line contains whitespace
+   --> hippique_orchestrator/sources/boturfers_provider.py:241:1
+    |
+239 |             if len(parts) > 5 and "Corde" in parts[5]:
+240 |                 metadata["corde"] = "G" if "gauche" in parts[5] else "D"
+241 |         
+    | ^^^^^^^^
+242 |         # Prize money
+243 |         if info_block and (prize_match := re.search(r"([\d\s]+)€", info_block.get_text())):
+    |
+help: Remove whitespace from blank line
+
+W293 [*] Blank line contains whitespace
+   --> hippique_orchestrator/sources/boturfers_provider.py:251:1
+    |
+249 |         if date_match:
+250 |             metadata["date"] = date_match.group(1)
+251 |         
+    | ^^^^^^^^
+252 |         rc_match = re.search(r"/(R\d+C\d+)", race_url)
+253 |         if rc_match:
+    |
+help: Remove whitespace from blank line
+
+W293 [*] Blank line contains whitespace
+   --> hippique_orchestrator/sources/boturfers_provider.py:275:1
+    |
+273 |                 if not num_th:
+274 |                     continue
+275 |                 
+    | ^^^^^^^^^^^^^^^^
+276 |                 num = int(num_th.get_text(strip=True))
+    |
+help: Remove whitespace from blank line
+
+W293 [*] Blank line contains whitespace
+   --> hippique_orchestrator/sources/zeturf_provider.py:136:1
+    |
+134 |                             runners.append(runner_data)
+135 |                             runners_map[num] = runner_data
+136 |         
+    | ^^^^^^^^
+137 |         # Second, try to enrich with odds from cotesInfos JSON
+138 |         cotes_infos = {}
+    |
+help: Remove whitespace from blank line
+
+I001 [*] Import block is un-sorted or un-formatted
+  --> scripts/smoke_scrape_acceptance.py:1:1
+   |
+ 1 | / from __future__ import annotations
+ 2 | |
+ 3 | | import asyncio
+ 4 | | import json
+ 5 | | import sys # Import sys
+ 6 | | from datetime import datetime
+ 7 | |
+ 8 | | from hippique_orchestrator.source_registry import source_registry
+ 9 | | from hippique_orchestrator.data_contract import RaceSnapshotNormalized
+   | |______________________________________________________________________^
+10 |
+11 |   RACE_URLS = {
+   |
+help: Organize imports
+
+W293 [*] Blank line contains whitespace
+  --> scripts/smoke_scrape_acceptance.py:44:1
+   |
+42 |                 race_url=url, phase="H30"
+43 |             )
+44 |             
+   | ^^^^^^^^^^^^
+45 |             duration = asyncio.get_event_loop().time() - start_time
+46 |             result_entry["duration_seconds"] = round(duration, 2)
+   |
+help: Remove whitespace from blank line
+
+W293 [*] Blank line contains whitespace
+  --> scripts/smoke_scrape_acceptance.py:63:1
+   |
+61 |             kpi_place_odds = sum(1 for r in snapshot.runners if r.odds_place and r.odds_place > 1.0) / total_runners
+62 |             kpi_musique = sum(1 for r in snapshot.runners if r.musique) / total_runners
+63 |             
+   | ^^^^^^^^^^^^
+64 |             # For this initial test, we check stats from any source
+65 |             kpi_stats = sum(1 for r in snapshot.runners if r.stats.driver_rate or r.stats.trainer_rate) / total_runners
+   |
+help: Remove whitespace from blank line
+
+W293 [*] Blank line contains whitespace
+  --> scripts/smoke_scrape_acceptance.py:67:1
+   |
+65 |             kpi_stats = sum(1 for r in snapshot.runners if r.stats.driver_rate or r.stats.trainer_rate) / total_runners
+66 |             kpi_chrono = sum(1 for r in snapshot.runners if r.stats.last_3_chrono or r.stats.record_rk) / total_runners
+67 |             
+   | ^^^^^^^^^^^^
+68 |             # Drift KPI cannot be calculated with a single snapshot, so it's omitted here.
+   |
+help: Remove whitespace from blank line
+
+W293 [*] Blank line contains whitespace
+  --> scripts/smoke_scrape_acceptance.py:85:1
+   |
+83 |                 result_entry["errors"].append(f"Place odds coverage ({kpi_place_odds:.2f}) is below the 0.90 threshold.")
+84 |                 test_passed = False
+85 |             
+   | ^^^^^^^^^^^^
+86 |             if discipline == "trot" and kpi_musique < 0.60:
+87 |                 result_entry["errors"].append(f"Musique coverage for trot ({kpi_musique:.2f}) is below the 0.60 threshold.")
+   |
+help: Remove whitespace from blank line
+
+W293 [*] Blank line contains whitespace
+  --> scripts/smoke_scrape_acceptance.py:89:1
+   |
+87 |                 result_entry["errors"].append(f"Musique coverage for trot ({kpi_musique:.2f}) is below the 0.60 threshold.")
+88 |                 test_passed = False
+89 |             
+   | ^^^^^^^^^^^^
+90 |             result_entry["passed"] = test_passed
+91 |             if not test_passed:
+   |
+help: Remove whitespace from blank line
+
+W293 [*] Blank line contains whitespace
+   --> scripts/smoke_scrape_acceptance.py:104:1
+    |
+102 |             result_entry["duration_seconds"] = round(duration, 2)
+103 |             all_tests_ok = False
+104 |         
+    | ^^^^^^^^
+105 |         report["results"].append(result_entry)
+    |
+help: Remove whitespace from blank line
+
+W293 [*] Blank line contains whitespace
+   --> scripts/smoke_scrape_acceptance.py:113:1
+    |
+111 |     print("\n--- Acceptance Test Summary ---")
+112 |     print(json.dumps(report, indent=2))
+113 |     
+    | ^^^^
+114 |     if not all_tests_ok:
+115 |         print("\nSome tests failed. Exiting with status 1.")
+    |
+help: Remove whitespace from blank line
+
+I001 [*] Import block is un-sorted or un-formatted
+  --> smoke_test_scraper.py:11:1
+   |
+ 9 |   """
+10 |
+11 | / import asyncio
+12 | | import json
+13 | | import sys
+14 | |
+15 | | from hippique_orchestrator.source_registry import source_registry
+16 | | from hippique_orchestrator.logging_utils import get_logger
+   | |__________________________________________________________^
+17 |
+18 |   # Configure a basic logger for this script
+   |
+help: Organize imports
+
+I001 [*] Import block is un-sorted or un-formatted
+  --> tests/conftest.py:5:1
+   |
+ 3 |   """
+ 4 |
+ 5 | / from datetime import datetime
+ 6 | | import subprocess
+ 7 | | from pathlib import Path
+ 8 | | from unittest.mock import AsyncMock
+ 9 | |
+10 | | import pytest
+11 | | from fastapi.testclient import TestClient
+12 | |
+13 | | # Import the app and the config module to be mocked
+14 | | from hippique_orchestrator.service import app as fastapi_app
+   | |____________________________________________________________^
+   |
+help: Organize imports
+
+F401 [*] `datetime.date` imported but unused
+ --> tests/providers/test_zeturf_provider.py:3:22
+  |
+1 | from __future__ import annotations
+2 |
+3 | from datetime import date
+  |                      ^^^^
+4 | from datetime import time as dt_time
+5 | from unittest.mock import patch
+  |
+help: Remove unused import: `datetime.date`
+
+F401 [*] `datetime.time` imported but unused
+ --> tests/providers/test_zeturf_provider.py:4:30
+  |
+3 | from datetime import date
+4 | from datetime import time as dt_time
+  |                              ^^^^^^^
+5 | from unittest.mock import patch
+  |
+help: Remove unused import: `datetime.time`
+
+F401 [*] `hippique_orchestrator.data_contract.RaceSnapshotNormalized` imported but unused
+  --> tests/providers/test_zeturf_provider.py:9:49
+   |
+ 7 | import pytest
+ 8 |
+ 9 | from hippique_orchestrator.data_contract import RaceSnapshotNormalized, RunnerStats
+   |                                                 ^^^^^^^^^^^^^^^^^^^^^^
+10 | from hippique_orchestrator.sources.zeturf_provider import ZeturfProvider
+   |
+help: Remove unused import: `hippique_orchestrator.data_contract.RaceSnapshotNormalized`
+
+F401 [*] `google.cloud.firestore` imported but unused
+  --> tests/test_firestore_client_extended.py:8:26
+   |
+ 6 | from unittest.mock import MagicMock, patch
+ 7 |
+ 8 | from google.cloud import firestore
+   |                          ^^^^^^^^^
+ 9 |
+10 | from hippique_orchestrator import firestore_client
+   |
+help: Remove unused import: `google.cloud.firestore`
+
+F401 [*] `unittest.mock.MagicMock` imported but unused
+ --> tests/test_scheduler.py:4:27
+  |
+3 | from datetime import datetime, timedelta
+4 | from unittest.mock import MagicMock, patch
+  |                           ^^^^^^^^^
+5 |
+6 | from hippique_orchestrator import scheduler
+  |
+help: Remove unused import
+
+F401 [*] `unittest.mock.patch` imported but unused
+ --> tests/test_scheduler.py:4:38
+  |
+3 | from datetime import datetime, timedelta
+4 | from unittest.mock import MagicMock, patch
+  |                                      ^^^^^
+5 |
+6 | from hippique_orchestrator import scheduler
+  |
+help: Remove unused import
+
+F401 [*] `unittest.mock.MagicMock` imported but unused
+ --> tests/test_scheduler_extended.py:4:27
+  |
+3 | from datetime import datetime, timedelta, timezone
+4 | from unittest.mock import MagicMock, patch
+  |                           ^^^^^^^^^
+5 |
+6 | from google.api_core import exceptions as gexc
+  |
+help: Remove unused import: `unittest.mock.MagicMock`
+
+Found 35 errors.
+[*] 35 fixable with the `--fix` option.

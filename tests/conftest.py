@@ -2,6 +2,7 @@
 conftest.py - Global test configuration and fixtures for pytest.
 """
 
+from datetime import datetime
 import subprocess
 from pathlib import Path
 from unittest.mock import AsyncMock
@@ -178,9 +179,6 @@ def mock_cloud_tasks(mocker):
         return_value=mock_client_instance,
     )
     return mock_client_instance
-
-
-from datetime import datetime # Moved to top-level
 
 
 @pytest.fixture

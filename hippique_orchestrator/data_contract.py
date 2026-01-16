@@ -1,5 +1,5 @@
 import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -32,7 +32,7 @@ class RaceData(BaseModel):
     """Contrat de données pour une course."""
     date: datetime.date
     rc_label: str  # e.g., "R1C1"
-    discipline: Literal["Trot Attelé", "Trot Monté", "Plat", "Obstacle", "Haies", "Steeple-Chase"] | None = None
+    discipline: Literal["Trot Attelé", "Trot Monté", "Plat", "Obstacle", "Haies", "Steeple-Chase", "Attelé"] | None = None
     distance: int | None = None
     corde: Literal["D", "G"] | None = None
     type_course: str | None = None
@@ -44,7 +44,8 @@ class RaceSnapshotNormalized(BaseModel):
     """Le Data Contract complet pour un snapshot de course."""
     race: RaceData
     runners: list[RunnerData]
-    source_snapshot: str  # Provider qui a fourni le snapshot principal (e.g., 'Zeturf')
+    source_snapshot: str  # Provider qui a fourni le le snapshot principal (e.g., 'Zeturf')
+    meta: dict[str, Any] = Field(default_factory=dict) # Added meta field for additional metadata
 
 
 QualityStatus = Literal["OK", "DEGRADED", "FAILED"]
@@ -80,3 +81,14 @@ def calculate_quality_score(snapshot: RaceSnapshotNormalized) -> dict:
         status = "OK"
 
     return {"score": round(score, 2), "status": status, "reason": f"{runners_with_place_odds}/{total_runners} place_odds"}
+
+
+def compute_odds_place_ratio(place_odds: dict[str, float], num_partants: int) -> float:
+    """
+    Calcule le ratio de couverture des cotes de place.
+    """
+    if not place_odds or num_partants <= 0:
+        return 0.0
+
+    covered_runners = len(place_odds)
+    return covered_runners / num_partants

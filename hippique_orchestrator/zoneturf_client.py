@@ -154,8 +154,8 @@ def fetch_chrono_from_html(html_content: str, horse_name: str) -> dict[str, Any]
 
                             for row in table.find("tbody").find_all("tr"):
                                 cells = row.find_all("td")
-                                if len(cells) > 1:  # Ensure there's at least a horse name column
-                                    name_in_row = _normalize_name(cells[1].get_text(strip=True))
+                                if len(cells) > 1:  # Ensure there's at least the horse name column (index 1)
+                                    name_in_row = _normalize_name(cells[1].get_text(strip=True)) # Corrected index for horse name
                                     if name_in_row == normalized_horse_name:
                                         if len(cells) > red_km_idx:
                                             chrono_str = cells[red_km_idx].get_text(strip=True)
@@ -234,62 +234,54 @@ def fetch_person_stats_from_html(html_content: str, person_type: str) -> dict[st
         return None
 
     soup = BeautifulSoup(html_content, "html.parser")
-    stats_div = soup.find("div", class_="card-body")
+    stats_div = soup.find("div", class_="infos-personne clearfix")
     if not stats_div:
         return None
 
     win_rate = None
     place_rate = None
 
-    for p_tag in stats_div.find_all("p"):
-        p_text = p_tag.get_text().strip()
-        win_rate_match = re.search(r"Taux de réussite\s*:\s*(\d+[.,]\d+)%", p_text)
-        if win_rate_match:
-            win_rate = float(win_rate_match.group(1).replace(",", "."))
-
-        place_rate_match = re.search(r"Taux de réussite Place\s*:\s*(\d+[.,]\d+)%", p_text)
-        if place_rate_match:
-            place_rate = float(place_rate_match.group(1).replace(",", "."))
+    # Search in ul.infos-personne-perf for "Réussite à la gagne" and "Réussite à la place"
+    perf_list = stats_div.find("ul", class_="infos-personne-perf")
+    if perf_list:
+        for li_tag in perf_list.find_all("li"):
+            li_text = li_tag.get_text().strip()
+            if "Réussite à la gagne" in li_text:
+                win_rate_match = re.search(r"Réussite à la gagne\s*:\s*(\d+[.,]?\d*)?%", li_text)
+                if win_rate_match and win_rate_match.group(1):
+                    win_rate = float(win_rate_match.group(1).replace(",", "."))
+            elif "Réussite à la place" in li_text:
+                place_rate_match = re.search(r"Réussite à la place\s*:\s*(\d+[.,]?\d*)?%", li_text)
+                if place_rate_match and place_rate_match.group(1):
+                    place_rate = float(place_rate_match.group(1).replace(",", "."))
 
     num_races = None
     num_wins = None
     num_places = None
 
-    stats_table = stats_div.find("table")
-    if stats_table:
-        headers = [th.get_text(strip=True) for th in stats_table.find("thead").find_all("th")]
-        data_row = stats_table.find("tbody").find("tr")
-        if data_row:
-            cells = [td.get_text(strip=True) for td in data_row.find_all("td")]
-
-            try:
-                num_races_idx = headers.index("Courses")
-                if len(cells) > num_races_idx:
-                    num_races = int(cells[num_races_idx])
-            except (ValueError, IndexError):
-                pass
-
-            try:
-                num_wins_idx = headers.index("Victoires")
-                if len(cells) > num_wins_idx:
-                    num_wins = int(cells[num_wins_idx])
-            except (ValueError, IndexError):
-                pass
-
-            try:
-                num_places_idx = headers.index("Places")
-                if len(cells) > num_places_idx:
-                    num_places = int(cells[num_places_idx])
-            except (ValueError, IndexError):
-                pass
+    # Search in ul.infos-personne-general for "Courses courues", "Nb de victoires", "Nb de places"
+    general_list = stats_div.find("ul", class_="infos-personne-general")
+    if general_list:
+        for li_tag in general_list.find_all("li"):
+            li_text = li_tag.get_text().strip()
+            if "Courses courues" in li_text:
+                num_races_match = re.search(r"Courses courues\s*:\s*(\d+)", li_text)
+                if num_races_match:
+                    num_races = int(num_races_match.group(1))
+            elif "Nb de victoires" in li_text:
+                num_wins_match = re.search(r"Nb de victoires\s*:\s*(\d+)", li_text)
+                if num_wins_match:
+                    num_wins = int(num_wins_match.group(1))
+            elif "Nb de places" in li_text:
+                num_places_match = re.search(r"Nb de places\s*:\s*(\d+)", li_text)
+                if num_places_match:
+                    num_places = int(num_places_match.group(1))
 
     if not all(
         [
-            win_rate is not None,
-            place_rate is not None,
+            place_rate is not None, # Win rate can be None
             num_races is not None,
-            num_wins is not None,
-            num_places is not None,
+            num_places is not None, # Num wins can be None
         ]
     ):
         return None

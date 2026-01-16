@@ -379,6 +379,28 @@ def _fallback_parse_html(html: Any) -> dict[str, Any]:
         return text
 
     runners: list[dict[str, Any]] = []
+    cotes_map: dict[str, dict[str, Any]] = {}
+
+    # First, try to extract odds and runner names from the cotesInfos script
+    cotes_infos_script = soup.find("script", string=re.compile("cotesInfos"))
+    if cotes_infos_script:
+        # Correct regex to match 'var cotesInfos = [...];'
+        cotes_infos_str_match = re.search(r'var cotesInfos = (\[.*?\]);', cotes_infos_script.string, re.DOTALL)
+        if cotes_infos_str_match:
+            try:
+                # Replace single quotes with double quotes for valid JSON parsing
+                json_str = cotes_infos_str_match.group(1).replace("'", '"')
+                # Further clean up if there are unquoted keys (unlikely in valid JSON but good to guard)
+                json_str = re.sub(r'([{,]\s*)([a-zA-Z0-9_]+?)\s*:', r'\1"\2":', json_str)
+
+                cotes_list = json.loads(json_str)
+                for item in cotes_list:
+                    num = str(item.get("num")).strip() if item.get("num") is not None else None
+                    if num:
+                        cotes_map[num] = item
+            except json.JSONDecodeError as e:
+                logger.warning(f"[ZEturf] Failed to parse cotesInfos JSON: {e}")
+
 
     # Find the main table of runners
     table = soup.find("table", class_="table-runners")
@@ -403,23 +425,26 @@ def _fallback_parse_html(html: Any) -> dict[str, Any]:
                 if odds_span:
                     runner_data["cote"] = _clean_text(odds_span.text)
 
-            # This data is in a script tag, so we need to find it and parse it.
-            cotes_infos_script = soup.find("script", string=re.compile("cotesInfos"))
-            if cotes_infos_script:
-                cotes_infos_str = re.search(r'cotesInfos: (\{.*\})', cotes_infos_script.string)
-                if cotes_infos_str:
-                    cotes_infos = json.loads(cotes_infos_str.group(1))
-                    if runner_data.get("num") in cotes_infos:
-                        odds_data = cotes_infos[runner_data["num"]].get("odds", {})
-                        if odds_data.get("SG"):
-                            runner_data["cote"] = odds_data["SG"]
-                        if odds_data.get("SPMin") and odds_data.get("SPMax"):
-                            runner_data["odds_place"] = (
-                                odds_data["SPMin"] + odds_data["SPMax"]
-                            ) / 2
-
             if runner_data:
                 runners.append(runner_data)
+
+        # Enrich runners from table with odds from cotes_map
+        for runner in runners:
+            num = runner.get("num")
+            if num and num in cotes_map:
+                cote_info = cotes_map[num]
+                runner["cote"] = _normalize_decimal(cote_info.get("cote"))
+                runner["odds_place"] = _normalize_decimal(cote_info.get("cote_place"))
+    elif cotes_map:
+        # If no runners table, create runners directly from cotes_map
+        for num, cote_info in cotes_map.items():
+            runner_data = {
+                "num": num,
+                "name": _clean_text(cote_info.get("nom")),
+                "cote": _normalize_decimal(cote_info.get("cote")),
+                "odds_place": _normalize_decimal(cote_info.get("cote_place")),
+            }
+            runners.append(runner_data)
 
     partants: int | None = None
     partants_match = _PARTANTS_RE.search(html)
@@ -540,19 +565,12 @@ def _double_extract(
         return fallback_data
 
     snapshot_mode = "H-30" if str(snapshot).upper().replace("-", "") == "H30" else "H-5"
-    # The original implementation called parse_course_page recursively,
-    # causing a crash. This was likely a copy-paste error during refactoring.
-    # The logic is simplified to directly attempt a fallback parse.
-    data = None
-    logger.debug("[ZEturf] Skipping primary parser due to recursion bug, using fallback.")
+    data = _ensure_fallback() # Directly use fallback for now, as primary parser is complex and may be buggy
 
     if not data or not data.get("runners"):
-        fallback = _ensure_fallback()
-        if fallback.get("runners"):
-            data = {**(data or {}), **fallback}
-            fallback_used = True
-        elif data is None:
-            data = fallback
+        if data is None:
+            data = _ensure_fallback()
+        if data.get("runners"):
             fallback_used = True
 
     if not data:
