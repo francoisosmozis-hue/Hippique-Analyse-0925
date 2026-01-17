@@ -45,3 +45,19 @@ class BoturfersProvider(BaseProgrammeProvider, BaseSnapshotProvider):
         print("BoturfersProvider: Parsing snapshot...")
         # Here you would add the actual parsing logic with BeautifulSoup
         raise NotImplementedError("BoturfersProvider.parse_snapshot is not yet implemented.")
+
+    def fetch_stats_for_runner(
+        self,
+        runner_name: str,
+        discipline: str,
+        runner_data: Dict[str, Any],
+        correlation_id: str | None = None,
+        trace_id: str | None = None,
+    ) -> Dict[str, Any]:
+        """
+        Fetches detailed statistics for a specific runner from Boturfers.
+        
+        Note: This is a placeholder and needs to be implemented.
+        """
+        print(f"BoturfersProvider: Fetching stats for {runner_name} ({discipline})...")
+        raise NotImplementedError("BoturfersProvider.fetch_stats_for_runner is not yet implemented.")

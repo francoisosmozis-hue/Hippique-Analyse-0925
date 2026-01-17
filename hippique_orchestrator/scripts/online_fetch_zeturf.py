@@ -445,6 +445,8 @@ def _fallback_parse_html(html: Any) -> dict[str, Any]:
                 runner_num = _clean_text(num_cell.text)
                 if runner_num and runner_num not in processed_nums:
                     runner_data: dict[str, Any] = {"num": runner_num}
+                    runner_data.setdefault("cote", None)
+                    runner_data.setdefault("odds_place", None)
                     name_cell = row.find("td", class_="cheval")
                     if name_cell:
                         name_anchor = name_cell.find("a", class_="horse-name")
@@ -468,6 +470,8 @@ def _fallback_parse_html(html: Any) -> dict[str, Any]:
     for num in cotes_map.keys():
         if num not in processed_nums:
             runner_data: dict[str, Any] = {"num": num}
+            runner_data.setdefault("cote", None)
+            runner_data.setdefault("odds_place", None)
             cote_info = cotes_map[num]
             if "cote" in cote_info:
                 runner_data["cote"] = cote_info["cote"]
@@ -573,9 +577,10 @@ def _http_get(
     
     text = resp.text
     if _looks_like_suspicious_html(text):
+        if not text or len(text) < 512:
+            raise RetryableParsingError(f"Payload trop court reçu de {url}")    
         raise RetryableParsingError(f"Payload suspect reçu de {url}")
-            if not text or len(text) < 512:
-                raise RetryableParsingError(f"Payload trop court reçu de {url}")    return text
+    return text
 
 
 def _double_extract(
@@ -979,16 +984,7 @@ def _normalise_phase_alias(value: str) -> str:
             if coerced_odds is not None:
                 runner["odds"] = coerced_odds
 
-    if "odds_place" not in runner:
-        odds_block = entry.get("odds") if isinstance(entry.get("odds"), Mapping) else None
-        if isinstance(odds_block, Mapping):
-            place_val = _coerce_float(
-                odds_block.get("place")
-                or odds_block.get("place_odds")
-                or odds_block.get("placeOdds")
-            )
-            if place_val is not None:
-                runner["odds_place"] = place_val
+
 
     if "odds_place" not in runner:
         market_block = entry.get("market") if isinstance(entry.get("market"), Mapping) else None
@@ -999,8 +995,7 @@ def _normalise_phase_alias(value: str) -> str:
                 place_val = _coerce_float(candidate)
                 if place_val is not None:
                     runner["odds_place"] = place_val
-    if "cote" not in runner and "odds" in runner:
-        runner["cote"] = runner["odds"]
+
 
     # Ensure 'cote' and 'odds_place' are always present, even if None
     runner.setdefault("cote", None)

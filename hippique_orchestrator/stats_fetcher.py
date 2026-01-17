@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
+from typing import Any, Dict, List
 
 from . import gcs_client
 from .source_registry import source_registry
@@ -21,7 +22,7 @@ async def collect_stats(
     trace_id: str | None = None,
 ) -> str:
     """
-    Orchestrates the collection of all stats for the runners in a race using SourceRegistry.
+    Orchestrates the collection of all stats for the runners in a race using the primary snapshot provider.
     Saves the aggregated stats to GCS and returns the path.
     """
     log_extra = {"correlation_id": correlation_id, "trace_id": trace_id, "race_doc_id": race_doc_id}
@@ -40,24 +41,36 @@ async def collect_stats(
 
     snapshot_path = latest_snapshot_meta["gcs_snapshot_path"]
     snapshot_data = await gcs_client.load_snapshot_from_gcs(snapshot_path, correlation_id, trace_id)
-    runners = snapshot_data.get("runners", [])
+    runners_data = snapshot_data.get("runners", [])
     discipline = snapshot_data.get("discipline", "unknown") # Get discipline from snapshot
 
-    if not runners:
+    if not runners_data:
         LOGGER.warning(
             f"No runners found in snapshot {snapshot_path}, cannot collect stats.", extra=log_extra
         )
         return "dummy_gcs_path_for_stats"
 
-    # 2. Loop through runners and fetch their stats using SourceRegistry
+    # Get the primary snapshot provider
+    try:
+        provider = source_registry.get_primary_snapshot_provider()
+    except (ValueError, TypeError) as e:
+        LOGGER.error(f"Failed to get primary snapshot provider for stats collection: {e}", extra=log_extra)
+        return "dummy_gcs_path_for_stats"
+    
+    if not provider:
+        LOGGER.error("No primary snapshot provider available for stats collection.", extra=log_extra)
+        return "dummy_gcs_path_for_stats"
+
+
+    # 2. Loop through runners and fetch their stats using the primary snapshot provider
     stat_rows = []
 
-    for runner in runners:
-        runner_num = runner.get("num")
-        runner_name = runner.get("name", "").strip() # Use 'name' key for consistency
+    for runner_raw_data in runners_data:
+        runner_num = runner_raw_data.get("num")
+        runner_name = runner_raw_data.get("name", "").strip() # Use 'name' key for consistency
 
         if not (runner_num and runner_name):
-            LOGGER.warning(f"Skipping runner due to missing num or name: {runner}", extra=log_extra)
+            LOGGER.warning(f"Skipping runner due to missing num or name: {runner_raw_data}", extra=log_extra)
             continue
 
         LOGGER.info(
@@ -65,11 +78,11 @@ async def collect_stats(
             extra={**log_extra, "runner_name": runner_name, "discipline": discipline},
         )
 
-        # Call the SourceRegistry to fetch all relevant stats for the runner
-        all_runner_stats = await source_registry.fetch_stats_for_runner(
+        # Call the primary snapshot provider to fetch all relevant stats for the runner
+        all_runner_stats: Dict[str, Any] = await provider.fetch_stats_for_runner(
             runner_name=runner_name,
             discipline=discipline,
-            runner_data=runner, # Pass full runner data
+            runner_data=runner_raw_data, # Pass full runner data
             correlation_id=correlation_id,
             trace_id=trace_id,
         )
@@ -83,7 +96,7 @@ async def collect_stats(
         stat_rows.append(combined_stats)
 
     # 3. Assemble and save the final stats payload
-    total_runners = len(runners) if runners else 1
+    total_runners = len(runners_data) if runners_data else 1
 
     # Basic coverage: count how many runners have any stats beyond basic info
     covered_runners_count = sum(

@@ -39,18 +39,62 @@ class MockProvider(BaseProgrammeProvider, BaseSnapshotProvider):
         print(f"MockProvider: Fetching snapshot for {course_id} ({meeting_id}/{race_id})...")
         return f"<html><body>Mock snapshot for {course_id}</body></html>"
 
-    def parse_snapshot(self, snapshot_content: str) -> Dict[str, Any]:
-        """
-        Parses the mock snapshot content.
-        """
-        print(f"MockProvider: Parsing snapshot content: '{snapshot_content}'...")
-        return {
-            "metadata": {
-                "source": "mock",
-                "content": snapshot_content
-            },
-            "runners": [
-                {"name": "Cheval Un", "odds": "5.0"},
-                {"name": "Cheval Deux", "odds": "3.5"},
-            ]
-        }
+        def parse_snapshot(self, snapshot_content: str) -> Dict[str, Any]:
+
+            """
+
+            Parses the mock snapshot content.
+
+            """
+
+            print(f"MockProvider: Parsing snapshot content: '{snapshot_content}'...")
+
+            return {
+
+                "metadata": {
+
+                    "source": "mock",
+
+                    "content": snapshot_content
+
+                },
+
+                "runners": [
+
+                    {"name": "Cheval Un", "odds": "5.0"},
+
+                    {"name": "Cheval Deux", "odds": "3.5"},
+
+                ]
+
+            }
+
+    
+
+        def fetch_stats_for_runner(
+
+            self,
+
+            runner_name: str,
+
+            discipline: str,
+
+            runner_data: Dict[str, Any],
+
+            correlation_id: str | None = None,
+
+            trace_id: str | None = None,
+
+        ) -> Dict[str, Any]:
+
+            """
+
+            Returns mock stats for a runner.
+
+            """
+
+            print(f"MockProvider: Fetching stats for {runner_name} ({discipline})...")
+
+            return {"mock_stat_key": f"value_for_{runner_name}"}
+
+    

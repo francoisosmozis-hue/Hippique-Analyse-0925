@@ -1,97 +1,48 @@
 """
 src/plan.py - Construction du Plan du Jour
 
-Combine Geny (R/C/ID) + ZEturf (heures) pour construire le planning complet.
-
-Architecture:
-  - discover_geny_today.py (subprocess) → liste R/C/ID
-  - online_fetch_zeturf._extract_start_time() (import) → heures ZEturf
-  - Asyncio + aiohttp pour fetch parallèle (40s → 8s)
-  - Rate limiter global partagé (respect 1 req/s par hôte)
-
-Corrections v3:
-  - ✅ Asyncio avec build_plan_async() pour FastAPI
-  - ✅ Rate limiter global (lock partagé)
-  - ✅ Import _extract_start_time depuis online_fetch_zeturf.py
+This module builds the complete daily race schedule by fetching data from the
+configured providers via the programme_provider.
 """
 
 from __future__ import annotations
 
 import asyncio
-import re
-from datetime import date as date_obj
-from datetime import datetime
-from typing import Any
-from zoneinfo import ZoneInfo
+from datetime import date as date_obj, datetime
+from typing import Any, List
+from starlette.concurrency import run_in_threadpool
 
-from hippique_orchestrator import config
-from hippique_orchestrator.analysis_utils import coerce_partants
+from hippique_orchestrator.data_contract import Race
 from hippique_orchestrator.logging_utils import get_logger
-from hippique_orchestrator.programme_provider import programme_provider
+from hippique_orchestrator.programme_provider import get_races_for_date
 
 logger = get_logger(__name__)
 
 
-async def build_plan_async(date_str: str) -> list[dict[str, Any]]:
+async def build_plan_async(date_str: str) -> List[Dict[str, Any]]:
     """
-    Construit le plan complet du jour en utilisant la stratégie multi-sources du ProgrammeProvider.
+    Builds the daily race plan by fetching data using the new provider architecture.
+    This version runs the synchronous get_races_for_date in a thread pool.
     """
-    if date_str == "today":
-        date_obj_req = datetime.now(ZoneInfo(config.TIMEZONE)).date()
-    else:
-        try:
-            date_obj_req = date_obj.fromisoformat(date_str)
-        except (ValueError, TypeError):
-            logger.warning(f"Invalid date string format: '{date_str}'. Defaulting to today.")
-            date_obj_req = datetime.now(ZoneInfo(config.TIMEZONE)).date()
-
-    date_str = date_obj_req.isoformat()
-    logger.info(f"Building plan for {date_str} using ProgrammeProvider.")
-
-    # 1. Obtenir le programme via le ProgrammeProvider
-    source_data = await programme_provider.get_programme(date_obj_req)
-
-    if not source_data:
-        logger.warning(f"Failed to fetch programme for {date_str} from any source.")
+    logger.info(f"Building race plan for date: {date_str}")
+    try:
+        target_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+    except ValueError:
+        logger.error(f"Invalid date format for build_plan_async: '{date_str}'")
         return []
 
-    logger.info(f"Successfully fetched {len(source_data)} races for {date_str}.")
+    # Use run_in_threadpool to call the synchronous get_races_for_date
+    # without blocking the asyncio event loop.
+    races: List[Race] = await run_in_threadpool(get_races_for_date, target_date)
 
-    # 2. Construire le plan directement depuis les données du programme
-    enriched_plan = []
-    for race_source in source_data:
-        if race_source.get("start_time"):
-            # Extrait R et C de "R1 C1"
-            rc_match = re.match(r"(R\d+)\s*(C\d+)", race_source.get("rc", ""))
-            if not rc_match:
-                logger.warning(
-                    f"Could not parse R/C from '{race_source.get('rc')}'. Skipping race."
-                )
-                continue
-            r_label, c_label = rc_match.groups()
+    if not races:
+        logger.warning(f"No races found for {date_str}. Returning empty plan.")
+        return []
 
-            enriched_plan.append(
-                {
-                    "date": date_str,
-                    "r_label": r_label,
-                    "c_label": c_label,
-                    "course_id": None,  # Geny ID n'est plus disponible
-                    "meeting": race_source.get(
-                        "name", ""
-                    ),  # Le nom de la course est utilisé comme meeting
-                    "time_local": race_source["start_time"].replace('h', ':'),
-                    "course_url": race_source["url"],
-                    "reunion_url": None,  # L'URL de la réunion n'est plus disponible
-                    "partants": coerce_partants(race_source.get("runners_count"))
-                }
-            )
-
-    # 3. Trier par heure
-    if enriched_plan:
-        enriched_plan.sort(key=lambda x: x["time_local"])
-
-    logger.info(f"Plan complete: {len(enriched_plan)} races with times")
-    return enriched_plan
+    # Convert Race objects to dictionaries for the response
+    plan = [race.model_dump(mode='json') for race in races]
+    logger.info(f"Successfully built plan with {len(plan)} races for {date_str}.")
+    return plan
 
 
 def build_plan(date: str) -> list[dict[str, Any]]:
@@ -106,11 +57,9 @@ def build_plan(date: str) -> list[dict[str, Any]]:
     logger.warning("build_plan() is deprecated, use build_plan_async() instead")
 
     try:
+        # If an event loop is running, delegate to it.
+        loop = asyncio.get_running_loop()
+        return loop.run_until_complete(build_plan_async(date))
+    except RuntimeError:
+        # If no event loop is running, create one.
         return asyncio.run(build_plan_async(date))
-    except RuntimeError as e:
-        if "cannot run" in str(e).lower():
-            logger.error(
-                "Cannot use build_plan() from within event loop. Use build_plan_async() instead."
-            )
-            raise RuntimeError("Use build_plan_async() in async context") from e
-        raise

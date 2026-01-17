@@ -52,16 +52,13 @@ weights:
     some_stat_factor: 1.0
 
 
-data_sources:
-  programme_url: "https://www.boturfers.fr/programme-pmu-du-jour"
-  zoneturf:
-    base_url: "https://www.zone-turf.fr"
-    horse_path: "/cheval/{slug}-{id}/"
-    jockey_path: "/jockey/{slug}-{id}/"
-    trainer_path: "/entraineur/{slug}-{id}/"
-    horse_letter_index_path: "/cheval/lettre-{letter}.html?p={page}"
-    jockey_letter_index_path: "/jockey/lettre-{letter}.html?p={page}"
-    trainer_letter_index_path: "/entraineur/lettre-{letter}.html?p={page}"
+# -- Provider Configuration --
+providers:
+  strategy:
+    - "boturfers"
+    - "filesystem"
+  filesystem:
+    base_path: "data/ci_sample"
 
 
 # -- Probability adjustment weights --

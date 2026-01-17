@@ -1,6 +1,51 @@
 # hippique_orchestrator/config.py
 import os
 from datetime import timedelta
+from typing import List, Dict, Any
+from pathlib import Path
+import yaml
+
+# --- YAML Configuration Loading ---
+
+_config = None
+CONFIG_PATH = Path(os.getenv("GPI_CONFIG_PATH", "config/gpi_v52.yml"))
+
+def load_config() -> Dict[str, Any]:
+    """
+    Loads, caches, and returns the application configuration from the YAML file.
+    """
+    global _config
+    if _config is None:
+        if not CONFIG_PATH.exists():
+            raise FileNotFoundError(f"Configuration file not found at {CONFIG_PATH.resolve()}")
+        with open(CONFIG_PATH, "r") as f:
+            _config = yaml.safe_load(f)
+            if not _config:
+                raise ValueError("Configuration file is empty or invalid.")
+    return _config
+
+
+def get_provider_strategy() -> List[str]:
+    """
+    Returns the configured provider strategy from the YAML config.
+    e.g., ['boturfers', 'filesystem']
+    """
+    config = load_config()
+    strategy = config.get("providers", {}).get("strategy", [])
+    if not isinstance(strategy, list):
+        raise TypeError("Provider strategy in config must be a list.")
+    return strategy
+
+
+def get_provider_config(name: str) -> Dict[str, Any]:
+    """
+    Returns the specific configuration for a given provider.
+    """
+    config = load_config()
+    return config.get("providers", {}).get(name, {})
+
+
+# --- Environment Variable Configuration ---
 
 # GCP Configuration
 PROJECT_ID = os.getenv("PROJECT_ID")

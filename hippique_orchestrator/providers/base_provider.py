@@ -40,16 +40,78 @@ class BaseSnapshotProvider(ABC):
         """
         pass
 
-    @abstractmethod
-    def parse_snapshot(self, snapshot_content: str) -> Dict[str, Any]:
-        """
-        Parses the raw snapshot data into a structured dictionary.
+        @abstractmethod
 
-        Args:
-            snapshot_content (str): The raw snapshot data.
+        def parse_snapshot(self, snapshot_content: str) -> Dict[str, Any]:
 
-        Returns:
-            Dict[str, Any]: A dictionary containing structured data about the race,
-                            including runners, odds, etc.
-        """
-        pass
+            """
+
+            Parses the raw snapshot data into a structured dictionary.
+
+    
+
+            Args:
+
+                snapshot_content (str): The raw snapshot data.
+
+    
+
+            Returns:
+
+                Dict[str, Any]: A dictionary containing structured data about the race,
+
+                                including runners, odds, etc.
+
+            """
+
+            pass
+
+    
+
+        @abstractmethod
+
+        def fetch_stats_for_runner(
+
+            self,
+
+            runner_name: str,
+
+            discipline: str,
+
+            runner_data: Dict[str, Any],
+
+            correlation_id: str | None = None,
+
+            trace_id: str | None = None,
+
+        ) -> Dict[str, Any]:
+
+            """
+
+            Fetches detailed statistics for a specific runner.
+
+    
+
+            Args:
+
+                runner_name (str): The name of the runner.
+
+                discipline (str): The discipline of the race (e.g., 'Plat', 'Trot Attelé').
+
+                runner_data (Dict[str, Any]): The existing data for the runner from the snapshot.
+
+                correlation_id (str | None): Optional correlation ID for logging.
+
+                trace_id (str | None): Optional trace ID for logging.
+
+    
+
+            Returns:
+
+                Dict[str, Any]: A dictionary containing the fetched statistics for the runner.
+
+            """
+
+            pass
+
+    
