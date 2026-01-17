@@ -1,106 +1,154 @@
+"""Unit tests for the refactored Programme Provider."""
+
 import datetime
 import logging
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from hippique_orchestrator.data_contract import Race, Meeting
-from hippique_orchestrator.programme_provider import get_races_for_date, get_meetings_for_date
-from hippique_orchestrator.source_registry import source_registry
+from hippique_orchestrator.data_contract import Programme
+from hippique_orchestrator.programme_provider import get_programme_for_date
 
-# Sample data returned by a mock provider's get_programme method
-MOCK_RACES_DATA = [
-    {
-        "race_id": "R1C1",
-        "reunion_id": 1,
-        "course_id": 1,
-        "hippodrome": "VINCENNES",
-        "date": "2024-01-01",
-        "url": "http://example.com/r1c1"
-    },
-    {
-        "race_id": "R1C2",
-        "reunion_id": 1,
-        "course_id": 2,
-        "hippodrome": "VINCENNES",
-        "date": "2024-01-01",
-        "url": "http://example.com/r1c2"
-    },
-]
 
-@pytest.fixture
-def mock_primary_provider():
-    """Mocks the primary programme provider in the source registry."""
-    # We create a MagicMock that simulates an instantiated provider
-    mock_provider = MagicMock()
-    mock_provider.get_programme.return_value = MOCK_RACES_DATA
-    
-    # We patch the registry's method to return our mock provider
-    with patch.object(source_registry, 'get_primary_programme_provider', return_value=mock_provider) as mock_method:
-        yield mock_provider
+# Sample valid data structure for a programme
+VALID_PROGRAMME_DATA = {
+    "races": [
+        {
+            "race_id": "R1C1",
+            "hippodrome": "VINCENNES",
+            "date": "2024-01-01",
+            "url": "http://example.com/r1c1",
+            "country_code": "FR",
+        }
+    ]
+}
 
-def test_get_races_for_date_calls_primary_provider(mock_primary_provider):
+# Another valid programme from a different source
+FALLBACK_PROGRAMME_DATA = {
+    "races": [
+        {
+            "race_id": "R1C1_fallback",
+            "hippodrome": "ENGHIEN",
+            "date": "2024-01-01",
+            "url": "http://fallback.com/r1c1",
+            "country_code": "FR",
+        }
+    ]
+}
+
+
+@patch("hippique_orchestrator.programme_provider.source_registry")
+def test_get_programme_successful_from_primary(mock_registry):
     """
-    Verify that get_races_for_date calls the get_programme method of the
-    primary provider returned by the registry.
+    Tests that the programme is returned from the primary provider if it succeeds.
     """
+    primary_provider = MagicMock()
+    primary_provider.get_programme.return_value = VALID_PROGRAMME_DATA
+    primary_provider.__class__.__name__ = "MockPrimaryProvider"
+
+    # Registry returns only the primary provider
+    mock_registry.get_providers_by_capability.return_value = [primary_provider]
+
     target_date = datetime.date(2024, 1, 1)
-    
-    races = get_races_for_date(target_date)
+    programme = get_programme_for_date(target_date)
 
-    # Check that the provider's method was called correctly
-    mock_primary_provider.get_programme.assert_called_once_with(target_date.strftime("%Y-%m-%d"))
+    # Assertions
+    mock_registry.get_providers_by_capability.assert_called_once()
+    primary_provider.get_programme.assert_called_once_with(target_date.strftime("%Y-%m-%d"))
     
-    # Check that the data returned is the mock data
-    assert len(races) == 2
-    assert races[0]["race_id"] == "R1C1"
+    assert programme is not None
+    assert isinstance(programme, Programme)
+    assert programme.races[0].race_id == "R1C1"
 
-def test_get_meetings_for_date_groups_races_correctly(mock_primary_provider):
+
+@patch("hippique_orchestrator.programme_provider.source_registry")
+def test_get_programme_falls_back_on_primary_failure(mock_registry, caplog):
     """
-    Verify that get_meetings_for_date correctly groups races into meetings.
+    Tests that the system correctly falls back to the secondary provider
+    if the primary one fails (e.g., raises an exception).
     """
-    target_date = datetime.date(2024, 1, 1)
-    
-    meetings = get_meetings_for_date(target_date)
+    primary_provider = MagicMock()
+    primary_provider.get_programme.side_effect = Exception("Connection Timeout")
+    primary_provider.__class__.__name__ = "MockPrimaryProvider"
 
-    # Check that the provider was called
-    mock_primary_provider.get_programme.assert_called_once()
-    
-    # Check the meeting grouping logic
-    assert len(meetings) == 1
-    meeting = meetings[0]
-    assert isinstance(meeting, Meeting)
-    assert meeting.hippodrome == "VINCENNES"
-    assert meeting.races_count == 2
-    assert meeting.races[0].race_id == "R1C1"
-    assert meeting.races[1].race_id == "R1C2"
+    fallback_provider = MagicMock()
+    fallback_provider.get_programme.return_value = FALLBACK_PROGRAMME_DATA
+    fallback_provider.__class__.__name__ = "MockFallbackProvider"
 
-def test_get_races_for_date_handles_provider_failure(caplog):
+    # Registry returns both providers in order
+    mock_registry.get_providers_by_capability.return_value = [primary_provider, fallback_provider]
+
+    with caplog.at_level(logging.ERROR):
+        target_date = datetime.date(2024, 1, 1)
+        programme = get_programme_for_date(target_date)
+
+        # Assertions
+        assert "Provider 'MockPrimaryProvider' failed" in caplog.text
+        primary_provider.get_programme.assert_called_once()
+        fallback_provider.get_programme.assert_called_once()
+
+        assert programme is not None
+        assert isinstance(programme, Programme)
+        assert programme.races[0].race_id == "R1C1_fallback"
+
+
+@patch("hippique_orchestrator.programme_provider.source_registry")
+def test_get_programme_falls_back_on_empty_data(mock_registry, caplog):
     """
-    Verify that an empty list is returned if the provider fails (e.g., raises an exception).
+    Tests that the system falls back if the primary provider returns empty or invalid data.
     """
-    caplog.set_level(logging.ERROR)
-    target_date = datetime.date(2024, 1, 1)
-    
-    mock_provider = MagicMock()
-    mock_provider.get_programme.side_effect = Exception("Provider connection failed")
+    primary_provider = MagicMock()
+    primary_provider.get_programme.return_value = {}  # Empty data
+    primary_provider.__class__.__name__ = "MockPrimaryProvider"
 
-    with patch.object(source_registry, 'get_primary_programme_provider', return_value=mock_provider):
-        races = get_races_for_date(target_date)
+    fallback_provider = MagicMock()
+    fallback_provider.get_programme.return_value = FALLBACK_PROGRAMME_DATA
+    fallback_provider.__class__.__name__ = "MockFallbackProvider"
 
-    assert races == []
-    assert "Provider 'MagicMock' failed to fetch race data" in caplog.text
-    assert "Provider connection failed" in caplog.text
+    mock_registry.get_providers_by_capability.return_value = [primary_provider, fallback_provider]
 
-def test_get_races_for_date_handles_no_provider(caplog):
+    with caplog.at_level(logging.WARNING):
+        target_date = datetime.date(2024, 1, 1)
+        programme = get_programme_for_date(target_date)
+
+        assert "Provider 'MockPrimaryProvider' returned no data" in caplog.text
+        assert programme is not None
+        assert programme.races[0].hippodrome == "ENGHIEN"
+
+
+@patch("hippique_orchestrator.programme_provider.source_registry")
+def test_get_programme_returns_none_if_all_providers_fail(mock_registry, caplog):
     """
-    Verify that an empty list is returned if the registry has no primary provider.
+    Tests that the function returns None if all configured providers fail.
     """
-    caplog.set_level(logging.CRITICAL)
-    target_date = datetime.date(2024, 1, 1)
-    
-    with patch.object(source_registry, 'get_primary_programme_provider', side_effect=ValueError("No provider configured")):
-        races = get_races_for_date(target_date)
-    
-    assert races == []
-    assert "Could not get a primary programme provider: No provider configured" in caplog.text
+    primary_provider = MagicMock()
+    primary_provider.get_programme.side_effect = Exception("Primary Failure")
+    primary_provider.__class__.__name__ = "MockPrimaryProvider"
+
+    fallback_provider = MagicMock()
+    fallback_provider.get_programme.side_effect = Exception("Fallback Failure")
+    fallback_provider.__class__.__name__ = "MockFallbackProvider"
+
+    mock_registry.get_providers_by_capability.return_value = [primary_provider, fallback_provider]
+
+    with caplog.at_level(logging.CRITICAL):
+        target_date = datetime.date(2024, 1, 1)
+        programme = get_programme_for_date(target_date)
+
+        assert programme is None
+        assert "All configured providers failed to deliver a programme" in caplog.text
+
+
+@patch("hippique_orchestrator.programme_provider.source_registry")
+def test_get_programme_handles_no_providers(mock_registry, caplog):
+    """
+    Tests that the function returns None if no providers are configured.
+    """
+    mock_registry.get_providers_by_capability.return_value = []
+
+    with caplog.at_level(logging.CRITICAL):
+        target_date = datetime.date(2024, 1, 1)
+        programme = get_programme_for_date(target_date)
+
+        assert programme is None
+        assert "No programme providers are configured or loaded" in caplog.text

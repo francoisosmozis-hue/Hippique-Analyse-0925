@@ -1,110 +1,164 @@
-import pytest
+"""Unit tests for the SourceRegistry."""
+
+import unittest
+from unittest.mock import MagicMock, patch
 import yaml
-from unittest.mock import patch, mock_open
 
 from hippique_orchestrator.source_registry import SourceRegistry
-from hippique_orchestrator.providers.base_provider import BaseProgrammeProvider, BaseSnapshotProvider
-from hippique_orchestrator.providers.mock_provider import MockProvider
+from hippique_orchestrator.providers.base_provider import (
+    BaseProgrammeProvider,
+    BaseSnapshotProvider,
+)
 
-# Sample YAML config for testing
-SAMPLE_CONFIG = {
-    "strategy": {"primary": "mock"},
-    "providers": {
-        "mock": {
-            "class": "hippique_orchestrator.providers.mock_provider.MockProvider",
-            "config": {}
-        },
-        "boturfers": {
-            "class": "hippique_orchestrator.providers.boturfers_provider.BoturfersProvider",
-            "config": {"base_url": "https://example.com", "timeout_seconds": 5}
+
+class MockPrimaryProgrammeProvider(BaseProgrammeProvider):
+    def get_programme(self, date_str: str):
+        return {"races": [{"name": "Primary Race"}]}
+
+
+class MockFallbackProgrammeProvider(BaseProgrammeProvider):
+    def get_programme(self, date_str: str):
+        return {"races": [{"name": "Fallback Race"}]}
+
+
+class MockSnapshotProvider(BaseSnapshotProvider):
+    def fetch_snapshot(self, url: str, retries: int = 1) -> dict:
+        return {"snapshot": "data"}
+
+
+class MockBrokenProvider:
+    pass
+
+
+# A mock that implements both capabilities
+class MockDualProvider(BaseProgrammeProvider, BaseSnapshotProvider):
+    def get_programme(self, date_str: str):
+        return {"races": [{"name": "Dual Race"}]}
+
+    def fetch_snapshot(self, url: str, retries: int = 1) -> dict:
+        return {"snapshot": "dual_data"}
+
+
+class TestSourceRegistry(unittest.TestCase):
+    """Test suite for the SourceRegistry."""
+
+    def setUp(self):
+        """Reset the singleton instance before each test."""
+        SourceRegistry._instance = None
+
+    def test_get_providers_by_capability_returns_correct_order(self):
+        """
+        Tests that providers are returned in the correct primary -> fallback order.
+        """
+        mock_config = {
+            "strategy": {"primary": "primary_prog", "fallback": ["fallback_prog"]},
+            "providers": {
+                "primary_prog": {
+                    "class": "tests.test_source_registry.MockPrimaryProgrammeProvider"
+                },
+                "fallback_prog": {
+                    "class": "tests.test_source_registry.MockFallbackProgrammeProvider"
+                },
+            },
         }
-    }
-}
+        with patch("builtins.open", unittest.mock.mock_open(read_data=yaml.dump(mock_config))):
+            registry = SourceRegistry(config_path="dummy_path")
+            
+            providers = registry.get_providers_by_capability(BaseProgrammeProvider)
+            
+            self.assertEqual(len(providers), 2)
+            self.assertIsInstance(providers[0], MockPrimaryProgrammeProvider)
+            self.assertIsInstance(providers[1], MockFallbackProgrammeProvider)
 
-@pytest.fixture(autouse=True)
-def clear_registry_singleton():
-    """Ensures the SourceRegistry singleton is reset before each test."""
-    SourceRegistry._instance = None
-    yield
-    SourceRegistry._instance = None
-
-def test_registry_loads_providers_correctly():
-    """Tests that the registry correctly loads and instantiates providers from config."""
-    m = mock_open(read_data=yaml.dump(SAMPLE_CONFIG))
-    with patch("builtins.open", m):
-        registry = SourceRegistry()
-        
-        assert "mock" in registry.providers
-        assert "boturfers" in registry.providers
-        assert isinstance(registry.providers["mock"], MockProvider)
-        # The BoturfersProvider will raise NotImplementedError, so we just check its existence
-        assert registry.get_provider("boturfers") is not None
-
-def test_get_primary_programme_provider():
-    """Tests that the correct primary programme provider is returned."""
-    m = mock_open(read_data=yaml.dump(SAMPLE_CONFIG))
-    with patch("builtins.open", m):
-        registry = SourceRegistry()
-        provider = registry.get_primary_programme_provider()
-        assert isinstance(provider, BaseProgrammeProvider)
-        assert isinstance(provider, MockProvider)
-
-def test_get_primary_snapshot_provider():
-    """Tests that the correct primary snapshot provider is returned."""
-    m = mock_open(read_data=yaml.dump(SAMPLE_CONFIG))
-    with patch("builtins.open", m):
-        registry = SourceRegistry()
-        provider = registry.get_primary_snapshot_provider()
-        assert isinstance(provider, BaseSnapshotProvider)
-        assert isinstance(provider, MockProvider)
-
-def test_raises_error_if_primary_provider_missing():
-    """Tests that a ValueError is raised if the strategy.primary key is missing."""
-    config_missing_primary = {"strategy": {}, "providers": {}}
-    m = mock_open(read_data=yaml.dump(config_missing_primary))
-    with patch("builtins.open", m):
-        with pytest.raises(ValueError, match="Primary programme provider not defined in strategy."):
-            SourceRegistry().get_primary_programme_provider()
-
-def test_raises_error_if_provider_class_not_found():
-    """Tests that an ImportError is raised for a non-existent provider class."""
-    config_bad_class = {
-        "strategy": {"primary": "bad"},
-        "providers": {
-            "bad": {"class": "non.existent.ClassName", "config": {}}
+    def test_get_providers_filters_by_capability(self):
+        """
+        Tests that only providers implementing the specified capability are returned.
+        """
+        mock_config = {
+            "strategy": {"primary": "prog_provider", "fallback": ["snap_provider"]},
+            "providers": {
+                "prog_provider": {
+                    "class": "tests.test_source_registry.MockPrimaryProgrammeProvider"
+                },
+                "snap_provider": {
+                    "class": "tests.test_source_registry.MockSnapshotProvider"
+                },
+            },
         }
-    }
-    m = mock_open(read_data=yaml.dump(config_bad_class))
-    with patch("builtins.open", m):
-        with pytest.raises(ImportError, match="Could not load provider 'bad'"):
-            SourceRegistry()
+        with patch("builtins.open", unittest.mock.mock_open(read_data=yaml.dump(mock_config))):
+            registry = SourceRegistry(config_path="dummy_path")
+            
+            programme_providers = registry.get_providers_by_capability(BaseProgrammeProvider)
+            snapshot_providers = registry.get_providers_by_capability(BaseSnapshotProvider)
 
-def test_raises_type_error_for_wrong_provider_type():
-    """
-    Tests that a TypeError is raised if the configured primary provider
-    does not implement the correct base class.
-    """
-    # Create a dummy class that doesn't inherit from the base classes
-    class WrongProvider:
-        pass
+            self.assertEqual(len(programme_providers), 1)
+            self.assertIsInstance(programme_providers[0], MockPrimaryProgrammeProvider)
+            
+            self.assertEqual(len(snapshot_providers), 1)
+            self.assertIsInstance(snapshot_providers[0], MockSnapshotProvider)
 
-    config_wrong_type = {
-        "strategy": {"primary": "wrong"},
-        "providers": {
-            "wrong": {"class": "tests.test_source_registry.WrongProvider", "config": {}}
+    def test_get_providers_handles_dual_capability_provider(self):
+        """
+        Tests that a single provider implementing multiple capabilities is returned for each.
+        """
+        mock_config = {
+            "strategy": {"primary": "dual"},
+            "providers": {
+                "dual": {"class": "tests.test_source_registry.MockDualProvider"}
+            },
         }
-    }
-    # This test needs the WrongProvider class to be importable
-    m = mock_open(read_data=yaml.dump(config_wrong_type))
-    with patch("builtins.open", m), patch("importlib.import_module") as mock_import:
-        # Mock the import system to return our dummy class
-        mock_module = mock_import.return_value
-        setattr(mock_module, "WrongProvider", WrongProvider)
+        with patch("builtins.open", unittest.mock.mock_open(read_data=yaml.dump(mock_config))):
+            registry = SourceRegistry(config_path="dummy_path")
+            
+            programme_providers = registry.get_providers_by_capability(BaseProgrammeProvider)
+            snapshot_providers = registry.get_providers_by_capability(BaseSnapshotProvider)
 
-        registry = SourceRegistry() # Instantiation should work
+            self.assertEqual(len(programme_providers), 1)
+            self.assertIsInstance(programme_providers[0], MockDualProvider)
+            
+            self.assertEqual(len(snapshot_providers), 1)
+            self.assertIsInstance(snapshot_providers[0], MockDualProvider)
 
-        with pytest.raises(TypeError, match="Primary provider 'wrong' does not implement BaseProgrammeProvider."):
-            registry.get_primary_programme_provider()
-        
-        with pytest.raises(TypeError, match="Primary provider 'wrong' does not implement BaseSnapshotProvider."):
-            registry.get_primary_snapshot_provider()
+    def test_get_providers_skips_misconfigured_providers(self):
+        """
+        Tests that the registry gracefully skips providers that don't match the capability.
+        """
+        mock_config = {
+            "strategy": {"primary": "good_provider", "fallback": ["broken_provider"]},
+            "providers": {
+                "good_provider": {
+                    "class": "tests.test_source_registry.MockPrimaryProgrammeProvider"
+                },
+                "broken_provider": {
+                    "class": "tests.test_source_registry.MockBrokenProvider"
+                },
+            },
+        }
+        with patch("builtins.open", unittest.mock.mock_open(read_data=yaml.dump(mock_config))):
+            with self.assertLogs('hippique_orchestrator.source_registry', level='WARNING') as cm:
+                registry = SourceRegistry(config_path="dummy_path")
+                providers = registry.get_providers_by_capability(BaseProgrammeProvider)
+                
+                self.assertEqual(len(providers), 1)
+                self.assertIsInstance(providers[0], MockPrimaryProgrammeProvider)
+                # Check that a warning was logged for the broken provider
+                self.assertIn(
+                    "WARNING:hippique_orchestrator.source_registry:Provider 'broken_provider' from strategy does not implement the required capability 'BaseProgrammeProvider'.",
+                    cm.output
+                )
+
+    def test_get_providers_handles_empty_strategy(self):
+        """
+        Tests that an empty list is returned if the strategy is missing or empty.
+        """
+        mock_config = {"strategy": {}, "providers": {}}
+        with patch("builtins.open", unittest.mock.mock_open(read_data=yaml.dump(mock_config))):
+             with self.assertLogs('hippique_orchestrator.source_registry', level='WARNING') as cm:
+                registry = SourceRegistry(config_path="dummy_path")
+                providers = registry.get_providers_by_capability(BaseProgrammeProvider)
+                self.assertEqual(len(providers), 0)
+                self.assertIn("No provider strategy defined", cm.output[0])
+
+
+if __name__ == "__main__":
+    unittest.main()

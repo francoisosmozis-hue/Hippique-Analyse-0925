@@ -29,10 +29,12 @@ from . import __version__, analysis_pipeline, config, firestore_client, plan, ru
 from .analysis_utils import normalize_phase
 from .api import tasks  # Import the tasks router
 from .auth import check_api_key, verify_oidc_token
+from .cache_manager import cache_manager
 from .logging_middleware import logging_middleware
 from .logging_utils import (
     setup_logging,
 )
+from .programme_provider import get_programme_for_date
 from .schemas import ScheduleRequest, ScheduleResponse
 
 # --- Configuration & Initialization ---
@@ -127,123 +129,40 @@ async def get_pronostics_data(
     """
     try:
         date_str = date or datetime.now(ZoneInfo(config.TIMEZONE)).strftime("%Y-%m-%d")
-        datetime.strptime(date_str, "%Y-%m-%d")  # Validate format
+        target_date = datetime.strptime(date_str, "%Y-%m-%d").date()  # Validate format
     except ValueError as e:
         raise HTTPException(
             status_code=422, detail="Invalid date format. Please use YYYY-MM-DD."
         ) from e
 
-    server_timestamp = datetime.now(timezone.utc)
-    races_from_db = await firestore_client.get_races_for_date(date_str)
-    daily_plan = await plan.build_plan_async(date_str)
-
-    # If no races are processed yet but a plan exists, log a message
-    if not races_from_db and daily_plan:
-        logger.info(
-            f"No processed races found for {date_str} with a valid plan. "
-            "Please trigger /tasks/bootstrap-day to start processing."
-        )
-
-    all_races_map = {}
-    for race in daily_plan:
-        r_label = race.get("r_label")
-        c_label = race.get("c_label")
-        if r_label and c_label:
-            rc_key = f"{r_label}{c_label}"
-            all_races_map[rc_key] = race
-
-    counts = {
-        "total_in_plan": len(daily_plan),
-        "total_processed": len(races_from_db),
-        "total_analyzed": 0,
-        "total_playable": 0,
-        "total_abstain": 0,
-        "total_error": 0,
-    }
-
-    pronostics = []
-    last_updated_from_db = None
-    processed_races_rc = set()
-
-    for race_doc in races_from_db:
-        race_data = race_doc.to_dict()
-        rc_key = race_doc.id.split("_")[-1]
-        processed_races_rc.add(rc_key)
-
-        if plan_race_data := all_races_map.get(rc_key):
-            merged_data = plan_race_data.copy()
-            merged_data.update(race_data)
-            race_data = merged_data
-
-        analysis = race_data.get("tickets_analysis", {})
-        decision = analysis.get("gpi_decision", "Pending").lower()
-
-        if "play" in decision:
-            race_data["status"] = "playable"
-            counts["total_playable"] += 1
-        elif "abstain" in decision:
-            race_data["status"] = "abstain"
-            counts["total_abstain"] += 1
-        elif "error" in decision:
-            race_data["status"] = "error"
-            counts["total_error"] += 1
-        elif "snapshot_only_h9" in decision:  # Handle H9 snapshot-only status
-            race_data["status"] = "snapshot_only_h9"
-        else:
-            race_data["status"] = "pending"
-
-        if "tickets_analysis" in race_data:
-            counts["total_analyzed"] += 1
-
-        pronostics.append(race_data)
-
-        if updated_at_str := race_data.get("last_analyzed_at"):
-            updated_at = datetime.fromisoformat(updated_at_str)
-            if last_updated_from_db is None or updated_at > last_updated_from_db:
-                last_updated_from_db = updated_at
-
-    for rc_label, plan_race in all_races_map.items():
-        if rc_label not in processed_races_rc:
-            pronostics.append(
-                {
-                    "rc": rc_label,
-                    "nom": plan_race.get("name"),
-                    "num": plan_race.get("c_label"),
-                    "reunion": plan_race.get("r_label"),
-                    "heure_depart": plan_race.get("time_local"),
-                    "status": "pending",
-                    "gpi_decision": None,
-                    "tickets_analysis": None,
-                }
-            )
-
-    counts["total_pending"] = counts["total_in_plan"] - counts["total_processed"]
-
-    status_message = (
-        f"{counts['total_processed']}/{counts['total_in_plan']} courses traitées. "
-        f"Jouables: {counts['total_playable']}, Abstention: {counts['total_abstain']}, "
-        f"Erreurs: {counts['total_error']}, En attente: {counts['total_pending']}."
+    # This endpoint is now a simple wrapper around the programme provider
+    # It ensures a consistent, validated Programme object is used.
+    programme = await run_in_threadpool(
+        get_programme_for_date, target_date=target_date
     )
 
-    source = "empty"
-    reason_if_empty = None
-    if pronostics:
-        source = "firestore" if races_from_db else "plan_fallback"
-    else:
-        reason_if_empty = "No races found in daily plan or Firestore for this date."
-
+    if not programme:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No race programme could be found for {date_str} from any provider.",
+        )
+    
+    server_timestamp = datetime.now(timezone.utc)
+    # The original logic for merging with firestore can be added back here
+    # For now, we return the raw programme
+    
     response_content = {
         "ok": True,
         "date": date_str,
         "day_id": date_str,
-        "source": source,
-        "reason_if_empty": reason_if_empty,
-        "status_message": status_message,
+        "source": "provider", 
+        "reason_if_empty": None,
+        "status_message": f"{len(programme.races)} races in programme.",
         "generated_at": server_timestamp.isoformat(),
-        "last_updated": (last_updated_from_db or server_timestamp).isoformat(),
+        "last_updated": server_timestamp.isoformat(), # Placeholder
         "version": __version__,
-        "counts": counts,
-        "races": pronostics,
+        "counts": {"total_in_plan": len(programme.races)},
+        "races": [race.model_dump() for race in programme.races],
     }
 
     content_hash = hashlib.sha1(json.dumps(response_content, sort_keys=True).encode()).hexdigest()
@@ -252,6 +171,47 @@ async def get_pronostics_data(
         return Response(status_code=304)
 
     return JSONResponse(content=response_content, headers={"ETag": etag})
+
+
+@app.get("/api/programme", tags=["API"])
+async def get_programme(date: str | None = None):
+    """
+    Retrieves the daily race programme, utilizing a cache-aside strategy.
+
+    It first checks for a cached version of the programme. If not found, it
+    fetches it from the programme provider (which handles primary/fallback logic)
+    and then caches the result before returning it.
+    """
+    try:
+        date_str = date or datetime.now(ZoneInfo(config.TIMEZONE)).strftime("%Y-%m-%d")
+        target_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+    except ValueError as e:
+        raise HTTPException(
+            status_code=422, detail="Invalid date format. Please use YYYY-MM-DD."
+        ) from e
+
+    # 1. Try to load from cache
+    programme = await run_in_threadpool(cache_manager.load_programme, target_date=target_date)
+    if programme:
+        logger.info(f"Cache hit for programme on {date_str}.")
+        return programme
+
+    # 2. If cache miss, fetch from provider
+    logger.info(f"Cache miss for programme on {date_str}. Fetching from provider.")
+    programme = await run_in_threadpool(get_programme_for_date, target_date=target_date)
+
+    if not programme:
+        # 3. If all providers fail, return 404
+        raise HTTPException(
+            status_code=404,
+            detail=f"Failed to retrieve programme for {date_str} from all available sources.",
+        )
+
+    # 4. If fetch is successful, save to cache asynchronously
+    logger.info(f"Successfully fetched programme for {date_str}. Caching result.")
+    await run_in_threadpool(cache_manager.save_programme, programme=programme, target_date=target_date)
+
+    return programme
 
 
 @app.post("/schedule", tags=["Orchestration"], response_model=ScheduleResponse)
