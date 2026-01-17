@@ -141,3 +141,14 @@ class RaceSnapshot(BaseModel):
             source_provider=provider_name,
             meta=meta or {}
         )
+
+
+class Programme(BaseModel):
+    """Data contract for a full day's programme of races."""
+    date: datetime.date
+    races: List[Race] = Field(default_factory=list)
+
+    @computed_field
+    @property
+    def races_count(self) -> int:
+        return len(self.races)

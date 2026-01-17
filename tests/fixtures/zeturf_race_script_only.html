@@ -1,37 +1,46 @@
 <html>
+<head>
+    <title>Test Race</title>
+</head>
 <body>
     <div id="race-info">
+        <span class="hippodrome">VIRTUAL HIPPODROME - </span>
         <span class="partants">4 Partants</span>
+        <p class="infos">
+            Plat - 2400m
+        </p>
     </div>
-    <script type="text/javascript">
-        var cotesInfos = [
-            {"num": 1, "nom": "Cheval Un", "cote": "2.5", "cote_place": "1.3"},
-            {"num": 2, "nom": "Cheval Deux", "cote": "3.0", "cote_place": "1.5"}
-        ];
-    </script>
+
     <table class="table-runners">
         <tbody>
             <tr>
                 <td class="numero">1</td>
-                <td class="cheval"><a class="horse-name" title="Cheval Un">Cheval Un</a></td>
-                <td class="cotes"><span class="cote"></span></td> <!-- Empty cote to ensure script is primary -->
+                <td class="cheval"><a class="horse-name" title="Cheval Un">...</a></td>
             </tr>
             <tr>
                 <td class="numero">2</td>
-                <td class="cheval"><a class="horse-name" title="Cheval Deux">Cheval Deux</a></td>
-                <td class="cotes"><span class="cote"></span></td>
+                <td class="cheval"><a class="horse-name" title="Cheval Deux">...</a></td>
             </tr>
             <tr>
                 <td class="numero">3</td>
-                <td class="cheval"><a class="horse-name" title="Cheval Trois">Cheval Trois</a></td>
-                <td class="cotes"><span class="cote"></span></td>
+                <td class="cheval"><a class="horse-name" title="Cheval Trois">...</a></td>
             </tr>
             <tr>
                 <td class="numero">4</td>
-                <td class="cheval"><a class="horse-name" title="Cheval Quatre">Cheval Quatre</a></td>
-                <td class="cotes"><span class="cote"></span></td>
+                <td class="cheval"><a class="horse-name" title="Cheval Quatre">...</a></td>
             </tr>
         </tbody>
     </table>
+
+    <script type="text/javascript">
+        // Some other script
+        var unrelated = {};
+    </script>
+    <script type="text/javascript">
+      var cotesInfos = [
+        {"num": 1, "nom": "Cheval Un", "cote": "2,5", "cote_place": "1,3"},
+        {"num": 2, "nom": "Cheval Deux", "cote": "3,0", "cote_place": "1,5"}
+      ];
+    </script>
 </body>
 </html>

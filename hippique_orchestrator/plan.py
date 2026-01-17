@@ -14,7 +14,7 @@ from starlette.concurrency import run_in_threadpool
 
 from hippique_orchestrator.data_contract import Race
 from hippique_orchestrator.logging_utils import get_logger
-from hippique_orchestrator.programme_provider import get_races_for_date
+from hippique_orchestrator.programme_provider import get_programme_for_date
 
 logger = get_logger(__name__)
 
@@ -22,7 +22,7 @@ logger = get_logger(__name__)
 async def build_plan_async(date_str: str) -> List[Dict[str, Any]]:
     """
     Builds the daily race plan by fetching data using the new provider architecture.
-    This version runs the synchronous get_races_for_date in a thread pool.
+    This version runs the synchronous get_programme_for_date in a thread pool.
     """
     logger.info(f"Building race plan for date: {date_str}")
     try:
@@ -31,16 +31,16 @@ async def build_plan_async(date_str: str) -> List[Dict[str, Any]]:
         logger.error(f"Invalid date format for build_plan_async: '{date_str}'")
         return []
 
-    # Use run_in_threadpool to call the synchronous get_races_for_date
+    # Use run_in_threadpool to call the synchronous get_programme_for_date
     # without blocking the asyncio event loop.
-    races: List[Race] = await run_in_threadpool(get_races_for_date, target_date)
+    programme = await run_in_threadpool(get_programme_for_date, target_date)
 
-    if not races:
-        logger.warning(f"No races found for {date_str}. Returning empty plan.")
+    if not programme or not programme.races:
+        logger.warning(f"No programme or races found for {date_str}. Returning empty plan.")
         return []
 
     # Convert Race objects to dictionaries for the response
-    plan = [race.model_dump(mode='json') for race in races]
+    plan = [race.model_dump(mode='json') for race in programme.races]
     logger.info(f"Successfully built plan with {len(plan)} races for {date_str}.")
     return plan
 

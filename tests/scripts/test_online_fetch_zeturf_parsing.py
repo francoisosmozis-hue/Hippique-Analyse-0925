@@ -25,7 +25,7 @@ def test_fallback_parse_html_script_only_odds(zeturf_race_script_only_content):
     result = online_fetch_zeturf._fallback_parse_html(zeturf_race_script_only_content)
 
     assert result is not None
-    assert result.get("meeting") is None # Not present in this minimal fixture
+    assert result.get("meeting") == "VIRTUAL HIPPODROME"
     runners = result["runners"]
     assert len(runners) == 4 # Now expects 4 runners (2 from script + 2 unique from table)
 
@@ -56,7 +56,7 @@ def test_fallback_parse_html_script_only_odds(zeturf_race_script_only_content):
     assert runner4.get("odds_place") is None
 
     assert result.get("partants") == 4 # Based on partants span in fixture
-    assert result.get("discipline") is None # No discipline in this minimal fixture
+    assert result.get("discipline") == "plat"
 
 
 def test_fallback_parse_no_runners_table_finds_no_runners(zeturf_race_script_only_content):
