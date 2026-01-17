@@ -1,0 +1,33 @@
+# Configuration for data providers
+#
+# This file defines the available data providers and the strategy for using them.
+# The system uses a primary/fallback mechanism. It will always try the 'primary'
+# provider first. If it fails (health check fails, returns no data, or returns
+# data that doesn't match the contract), it will try the 'fallback' providers
+# in the order they are listed.
+
+# The 'strategy' key defines which providers to use and in what order.
+strategy:
+  primary: boturfers # The main provider to use in production.
+  fallback:
+    - mock        # A fallback provider, in this case, the mock one for demonstration.
+
+# The 'providers' key lists all known provider implementations.
+# Each key here must correspond to a provider's `get_name()` output.
+providers:
+  mock:
+    # Class path to the provider's implementation.
+    # The registry will use this to dynamically import and instantiate the provider.
+    class: hippique_orchestrator.providers.mock_provider.MockProvider
+    # Provider-specific settings can be added here if needed.
+    # For the mock provider, no settings are required.
+    config: {}
+
+  boturfers:
+    # Placeholder for the real Boturfers provider.
+    # We will create this class in a later step.
+    class: hippique_orchestrator.providers.boturfers_provider.BoturfersProvider
+    config:
+      # Example of provider-specific configuration
+      base_url: "https://www.boturfers.fr"
+      timeout_seconds: 15

@@ -1,57 +1,105 @@
 """
-Fournit une stratégie multi-sources pour récupérer le programme des courses
-en s'appuyant sur la résilience du source_registry.
-"""
-import datetime
-import logging
-from typing import Any
+Provides a high-level, simplified interface for fetching race programs.
 
-from hippique_orchestrator.source_registry import AllSourcesFailedError, source_registry
+This module acts as the primary entry point for the application to obtain the
+day's race schedule. It uses the SourceRegistry to abstract away the
+complexities of data source selection and fallbacks.
+"""
+import logging
+from datetime import date
+from typing import List, Dict, Any
+
+from .source_registry import source_registry
+from .data_contract import Race, Meeting
+# Assuming data_contract.py will define Pydantic models, but for now, we handle dicts.
+# from .data_contract import Race 
 
 logger = logging.getLogger(__name__)
 
 
-class ProgrammeProvider:
+def get_races_for_date(target_date: date) -> List[Dict[str, Any]]:
     """
-    Orchestre la récupération du programme en déléguant la logique de fallback
-    au `source_registry`. Construit l'URL du programme pour une date donnée.
+    Fetches the race program for a given date using the active provider
+    from the source registry.
+
+    Args:
+        target_date: The date for which to fetch the program.
+
+    Returns:
+        A list of race dictionaries. Returns an empty list if no provider is
+        available or if the provider fails.
     """
+    logger.info(f"Requesting race program for date: {target_date}")
+    
+    try:
+        provider = source_registry.get_primary_programme_provider()
+    except (ValueError, TypeError) as e:
+        logger.critical(f"Could not get a primary programme provider: {e}")
+        return []
 
-    def __init__(self, registry, base_programme_url: str = "https://www.boturfers.fr/courses"):
-        """
-        Initialise le provider avec le registre de sources.
+    if not provider:
+        logger.critical("No active provider available to fetch race program.")
+        return []
 
-        :param registry: L'instance de SourceRegistry.
-        :param base_programme_url: L'URL de base pour le programme (devrait venir d'une config).
-        """
-        self.registry = registry
-        self.base_programme_url = base_programme_url
-        logger.info("ProgrammeProvider initialized.")
+    date_str = target_date.strftime("%Y-%m-%d")
+    
+    try:
+        races_data = provider.get_programme(date_str)
+    except NotImplementedError:
+        logger.error(f"Provider '{provider.__class__.__name__}' has not implemented get_programme.")
+        return []
+    except Exception as e:
+        logger.error(f"Provider '{provider.__class__.__name__}' failed to fetch race data for {date_str}: {e}", exc_info=True)
+        return []
 
-    async def get_races_for_date(self, target_date: datetime.date) -> list[dict[str, Any]]:
-        """
-        Récupère le programme pour une date en appelant le mécanisme de
-        fallback du source_registry.
-        """
-        # La construction de l'URL est la responsabilité de ce provider.
-        # Le format exact dépend de la source primaire (ex: Boturfers).
-        url = f"{self.base_programme_url}/{target_date.strftime('%Y-%m-%d')}"
-        logger.info(f"Requesting programme for date {target_date} via registry (URL: {url})")
 
-        try:
-            # On délègue toute la complexité (fetch, validation, fallback) au registre.
-            programme = await self.registry.fetch_programme_with_fallback(url)
-            logger.info(
-                f"Programme ({len(programme)} courses) retrieved successfully via source_registry."
+    if not races_data:
+        logger.warning(f"Provider '{provider.__class__.__name__}' returned no race data for {date_str}.")
+        return []
+
+    # The plan builder expects a list of dicts. If the provider returns objects, they need to be converted.
+    # For now, we assume the mock provider returns dicts.
+    logger.info(f"Successfully retrieved {len(races_data)} races for {target_date} via provider '{provider.__class__.__name__}'.")
+    return races_data
+
+
+def get_meetings_for_date(target_date: date) -> List[Meeting]:
+    """
+    Fetches the race program for a given date and organizes it into meetings.
+
+    Args:
+        target_date: The date for which to fetch the program.
+
+    Returns:
+        A list of Meeting objects, each containing its respective races.
+        Returns an empty list on failure.
+    """
+    logger.info(f"Requesting meetings for date: {target_date}")
+    races_dicts = get_races_for_date(target_date)
+
+    if not races_dicts:
+        return []
+
+    # Convert dicts to Race models for processing
+    races = [Race(**race_dict) for race_dict in races_dicts]
+
+    meetings: Dict[str, Meeting] = {}
+    for race in races:
+        # Create a unique key for the meeting based on hippodrome and country
+        if not race.hippodrome:
+            continue
+        meeting_key = f"{race.hippodrome.upper()}_{race.country_code}"
+
+        if meeting_key not in meetings:
+            meetings[meeting_key] = Meeting(
+                hippodrome=race.hippodrome,
+                country_code=race.country_code,
+                date=target_date,
             )
-            return programme
-        except AllSourcesFailedError as e:
-            logger.critical(
-                f"All sources failed to provide the programme for {target_date}: {e}"
-            )
-            return []
 
+        meetings[meeting_key].races.append(race)
+        meetings[meeting_key].races_count += 1
 
-# Instance unique pour être utilisée dans l'application.
-# La configuration (ordre des providers, URL) se fait au démarrage de l'app.
-programme_provider = ProgrammeProvider(source_registry)
+    meeting_list = list(meetings.values())
+    logger.info(f"Organized races into {len(meeting_list)} meetings for {target_date}.")
+    return meeting_list

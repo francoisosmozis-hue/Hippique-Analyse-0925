@@ -1,107 +1,143 @@
 import datetime
-from typing import Any, Literal
+from typing import Any, Dict, List, Literal, Optional, TypeAlias
 
 from pydantic import BaseModel, Field, field_validator, computed_field
 
+# --- Enums and Literals ---
 
 QualityStatus = Literal["OK", "DEGRADED", "FAILED"]
+Discipline = Literal["Trot Attelé", "Trot Monté", "Plat", "Obstacle", "Haies", "Steeple-Chase", "Attelé"]
+Corde = Literal["D", "G"]
 
 
-class RunnerStats(BaseModel):
-    """Stats normalisées pour un jockey ou un entraîneur."""
-    driver_rate: float | None = Field(None, description="Taux de réussite du jockey/driver")
-    trainer_rate: float | None = Field(None, description="Taux de réussite de l'entraîneur")
-    last_3_chrono: list[float] = Field(default_factory=list, description="Liste des 3 derniers chronos")
-    record_rk: float | None = Field(None, description="Record sur la distance ou parcours")
-    source_stats: str | None = Field(None, description="Provider qui a fourni ces stats (e.g., 'LeTrot')")
+# --- Core Data Models ---
 
-
-class RunnerData(BaseModel):
-    """Contrat de données pour un partant."""
+class Runner(BaseModel):
+    """Data contract for a single runner in a race."""
     num: int
     nom: str
-    musique: str | None = None
-    odds_place: float | None = None
-    odds_win: float | None = None
-    driver: str | None = None
-    trainer: str | None = None
-    age: int | None = None
-    gains: str | None = None
-    draw: int | None = Field(None, description="Numéro de corde ou de couloir")
-    stats: RunnerStats = Field(default_factory=RunnerStats)
+    age: Optional[int] = None
+    sexe: Optional[str] = None
+    musique: Optional[str] = None
+    driver: Optional[str] = None
+    trainer: Optional[str] = None
+    gains: Optional[str] = None
+    draw: Optional[int] = Field(None, description="Corridor number or rope")
+
+    # Odds - often fetched separately or later
+    odds_win: Optional[float] = None
+    odds_place: Optional[float] = None
 
     @field_validator("odds_place", "odds_win")
     @classmethod
-    def check_odds_value(cls, v: float | None) -> float | None:
-        """Valide que les cotes sont supérieures ou égales à 1.0 si elles existent."""
+    def check_odds_value(cls, v: Optional[float]) -> Optional[float]:
+        """Validate that odds are >= 1.0 if they exist."""
         if v is not None and v < 1.0:
-            # On ne lève pas d'erreur, on invalide la donnée car le scraping est imparfait.
-            return None
+            return None  # Invalidate data instead of raising an error
         return v
 
+class Race(BaseModel):
+    """Data contract for a single race."""
+    # Core identifiers
+    race_id: str # Natural key, e.g., "R1C1"
+    reunion_id: int
+    course_id: int
+    hippodrome: Optional[str] = None
+    country_code: str = "FR"
 
-class RaceData(BaseModel):
-    """Contrat de données pour une course."""
+    # Date and time
     date: datetime.date
-    rc_label: str  # e.g., "R1C1"
-    name: str | None = None # e.g., "Prix d'Amérique"
-    url: str | None = None # The unique URL to the race page
-    discipline: Literal["Trot Attelé", "Trot Monté", "Plat", "Obstacle", "Haies", "Steeple-Chase", "Attelé"] | None = None
-    distance: int | None = None
-    corde: Literal["D", "G"] | None = None
-    type_course: str | None = None
-    prize: str | None = None
-    start_time_local: datetime.time | None = None
+    start_time: Optional[datetime.time] = None
 
+    # Race specifics
+    name: Optional[str] = None
+    discipline: Optional[Discipline] = None
+    distance: Optional[int] = None
+    corde: Optional[Corde] = None
+    type_course: Optional[str] = None
+    prize: Optional[str] = None
+    partants: Optional[int] = None
 
-class RaceSnapshotNormalized(BaseModel):
-    """Le Data Contract complet pour un snapshot de course."""
-    race: RaceData
-    runners: list[RunnerData]
-    source_snapshot: str  # Provider qui a fourni le le snapshot principal (e.g., 'Zeturf')
-    meta: dict[str, Any] = Field(default_factory=dict) # Added meta field for additional metadata
+    # Linked data
+    runners: List[Runner] = Field(default_factory=list)
+    url: Optional[str] = None  # The unique URL to the race page
 
     @computed_field
     @property
-    def quality(self) -> dict[str, Any]:
-        """
-        Calcule le score de qualité d'un snapshot.
-        - FAILED: Pas de partants.
-        - DEGRADED: Données partielles (ex: cotes manquantes).
-        - OK: Données jugées complètes.
-        """
-        if not self.runners:
-            return {"score": 0.0, "status": "FAILED", "reason": "No runners in snapshot"}
+    def id(self) -> str:
+        """Computes a unique, persistent ID for the race."""
+        return f"{self.date.strftime('%Y-%m-%d')}_R{self.reunion_id}C{self.course_id}"
 
-        total_runners = len(self.runners)
-        runners_with_place_odds = sum(1 for r in self.runners if r.odds_place is not None)
-        runners_with_musique = sum(1 for r in self.runners if r.musique)
-        runners_with_stats = sum(1 for r in self.runners if r.stats.driver_rate or r.stats.trainer_rate)
+# Type alias for backward compatibility
+RaceData: TypeAlias = Race
 
-        # Pondération simple : les cotes sont les plus importantes
-        score = (
-            0.6 * (runners_with_place_odds / total_runners) +
-            0.2 * (runners_with_musique / total_runners) +
-            0.2 * (runners_with_stats / total_runners)
-        )
+class Meeting(BaseModel):
+    """Data contract for a meeting, which is a collection of races."""
+    hippodrome: str
+    country_code: str = "FR"
+    date: datetime.date
 
-        status: QualityStatus
-        if score < 0.5:
-            status = "FAILED"
-        elif score < 0.85:
-            status = "DEGRADED"
+    # Computed fields
+    races_count: int = 0
+    races: List[Race] = Field(default_factory=list)
+
+    @computed_field
+    @property
+    def id(self) -> str:
+        """Computes a unique, persistent ID for the meeting."""
+        return f"{self.date.strftime('%Y-%m-%d')}_{self.hippodrome.upper().replace(' ', '-')}"
+
+
+# --- Quality and Snapshot Models ---
+
+class QualityReport(BaseModel):
+    """Provides a quality assessment of the data for a race."""
+    score: float
+    status: QualityStatus
+    reason: str
+
+class RaceSnapshot(BaseModel):
+    """
+    Represents the complete data for a race at a point in time,
+    including a quality assessment.
+    """
+    race: Race
+    quality: QualityReport
+    source_provider: str  # The provider that generated this snapshot (e.g., 'boturfers')
+    meta: Dict[str, Any] = Field(default_factory=dict) # For additional metadata
+
+    @classmethod
+    def from_race(cls, race: Race, provider_name: str, meta: Optional[Dict] = None) -> "RaceSnapshot":
+        """Factory method to create a snapshot from a Race object and assess its quality."""
+        if not race.runners:
+            quality = QualityReport(score=0.0, status="FAILED", reason="No runners in snapshot")
         else:
-            status = "OK"
+            total_runners = len(race.runners)
+            runners_with_odds = sum(1 for r in race.runners if r.odds_win and r.odds_place)
+            runners_with_musique = sum(1 for r in race.runners if r.musique)
 
-        return {"score": round(score, 2), "status": status, "reason": f"{runners_with_place_odds}/{total_runners} place_odds"}
+            # Simple weighted scoring
+            score = (
+                0.7 * (runners_with_odds / total_runners) +
+                0.3 * (runners_with_musique / total_runners)
+            )
 
+            if score < 0.4:
+                status: QualityStatus = "FAILED"
+            elif score < 0.8:
+                status: QualityStatus = "DEGRADED"
+            else:
+                status: QualityStatus = "OK"
 
-def compute_odds_place_ratio(place_odds: dict[str, float], num_partants: int) -> float:
-    """
-    Calcule le ratio de couverture des cotes de place.
-    """
-    if not place_odds or num_partants <= 0:
-        return 0.0
+            quality = QualityReport(
+                score=round(score, 2),
+                status=status,
+                reason=f"{runners_with_odds}/{total_runners} runners with complete odds"
+            )
 
-    covered_runners = len(place_odds)
-    return covered_runners / num_partants
+        return cls(
+            race=race,
+            quality=quality,
+            source_provider=provider_name,
+            meta=meta or {}
+        )

@@ -2,13 +2,16 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import traceback
 from datetime import datetime, timezone
 from typing import Any
 
 import yaml
+from starlette.concurrency import run_in_threadpool
 
-from . import data_source, firestore_client, gcs_client, stats_fetcher
+from . import firestore_client, gcs_client, stats_fetcher
+from .source_registry import source_registry
 from .analysis_utils import (
     calculate_volatility,
     identify_outsider_reparable,
@@ -16,9 +19,8 @@ from .analysis_utils import (
     normalize_phase,
     parse_musique,
 )
-from .data_contract import RaceSnapshotNormalized
+from .data_contract import Race, RaceSnapshot, Runner
 from .pipeline_run import generate_tickets
-from .source_registry import source_registry
 
 logger = logging.getLogger(__name__)
 
@@ -132,16 +134,45 @@ def _enrich_snapshot(snapshot_data: dict[str, Any]):
 
 
 async def _fetch_and_save_snapshot(
-    course_url: str, race_doc_id: str, phase: str, log_extra: dict
+    race: Race, race_doc_id: str, phase: str, log_extra: dict
 ) -> tuple[dict[str, Any] | None, str | None]:
-    """Fetches race details and saves the snapshot to GCS."""
-    logger.info("Fetching race details from data source.", extra=log_extra)
-    snapshot_data = await data_source.fetch_race_details(course_url)
+    """Fetches race details via the source registry, parses, and saves the snapshot to GCS."""
+    logger.info("Fetching race details from source registry.", extra=log_extra)
+    
+    try:
+        provider = source_registry.get_primary_snapshot_provider()
+        if not provider:
+            logger.error("No primary snapshot provider is configured in the registry.", extra=log_extra)
+            return None, None
+
+        # Reconstruct identifiers for the provider
+        meeting_id = f"R{race.reunion_id}"
+        race_id_num = f"C{race.course_id}"
+        
+        # Run synchronous provider methods in a thread pool
+        raw_snapshot = await run_in_threadpool(
+            provider.fetch_snapshot,
+            meeting_id=meeting_id,
+            race_id=race_id_num,
+            course_id=race_doc_id,
+        )
+
+        if not raw_snapshot:
+            logger.warning("Provider returned no raw snapshot data.", extra=log_extra)
+            return None, None
+
+        snapshot_data = await run_in_threadpool(provider.parse_snapshot, raw_snapshot)
+
+    except (NotImplementedError, Exception) as e:
+        logger.error(f"Failed to fetch or parse snapshot from provider: {e}", exc_info=True, extra=log_extra)
+        return None, None
+
     if not snapshot_data or not snapshot_data.get("runners"):
+        logger.warning("Parsed snapshot data is empty or contains no runners.", extra=log_extra)
         return None, None
 
     logger.info(
-        "Snapshot fetched successfully.",
+        "Snapshot fetched and parsed successfully.",
         extra={
             **log_extra,
             "race_name": snapshot_data.get("race_name"),
@@ -184,6 +215,35 @@ async def run_analysis_for_phase(
     }
     logger.info("Starting analysis pipeline for phase.", extra=log_extra)
 
+    # --- Construct a Race object to pass to the provider ---
+    try:
+        match = re.match(r"(\d{4}-\d{2}-\d{2})_R(\d+)C(\d+)", race_doc_id)
+        if not match:
+            raise ValueError("race_doc_id format is invalid")
+        
+        race_date_str, reunion_id_str, course_id_str = match.groups()
+        
+        race_for_provider = Race(
+            date=datetime.strptime(race_date_str, "%Y-%m-%d").date(),
+            reunion_id=int(reunion_id_str),
+            race_id=f"R{int(reunion_id_str)}C{int(course_id_str)}",
+            course_id=int(course_id_str),
+            url=course_url,
+            # The following fields are not strictly necessary for get_race_details,
+            # but are part of the contract.
+            name=None,
+            discipline=None,
+            distance=None,
+            corde=None,
+            type_course=None,
+            prize=None,
+            start_time_local=None,
+        )
+    except (ValueError, TypeError) as e:
+        logger.error(f"Failed to construct Race object from race_doc_id '{race_doc_id}': {e}", extra=log_extra)
+        raise ValueError(f"Could not parse race_doc_id '{race_doc_id}'") from e
+    # --- End Race object construction ---
+
     analysis_content = {
         "ok": True,  # analysis completed (even if abstention); set to False only on error
         "race_doc_id": race_doc_id,
@@ -196,7 +256,7 @@ async def run_analysis_for_phase(
         # H9 phase is snapshot-only
         if phase == "H9":
             snapshot_data, gcs_path = await _fetch_and_save_snapshot(
-                course_url, race_doc_id, phase, log_extra
+                race_for_provider, race_doc_id, phase, log_extra
             )
             analysis_content.update(
                 {
@@ -213,7 +273,7 @@ async def run_analysis_for_phase(
 
         # For H5 and H30 phases, continue with full analysis
         snapshot_data, gcs_path = await _fetch_and_save_snapshot(
-            course_url, race_doc_id, phase, log_extra
+            race_for_provider, race_doc_id, phase, log_extra
         )
         if not snapshot_data:
             reason = "NO_DATA: snapshot missing or runners empty"

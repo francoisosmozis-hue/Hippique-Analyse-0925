@@ -1,135 +1,82 @@
-from __future__ import annotations
-
-import logging
-from typing import Any
-
-from hippique_orchestrator.data_contract import RaceSnapshotNormalized
-from hippique_orchestrator.sources_interfaces import SourceProvider
-
-
-logger = logging.getLogger(__name__)
-
-
-class AllSourcesFailedError(Exception):
-    """Raised when all data sources fail to provide valid data."""
-
-    pass
-
+import yaml
+import importlib
+from typing import Dict, Any, Optional, Type
+from hippique_orchestrator.providers.base_provider import BaseProgrammeProvider, BaseSnapshotProvider
 
 class SourceRegistry:
     """
-    Manages data source providers with a primary/fallback mechanism.
+    Manages and provides access to data providers based on a YAML configuration.
     """
+    _instance = None
 
-    def __init__(self):
-        self._providers: dict[str, SourceProvider] = {}
-        self._provider_order: list[str] = []
-        logger.info("SourceRegistry initialized.")
+    def __new__(cls, config_path="config/providers.yaml"):
+        if cls._instance is None:
+            cls._instance = super(SourceRegistry, cls).__new__(cls)
+            cls._instance._initialized = False
+        return cls._instance
 
-    def set_provider_order(self, order: list[str]):
-        """
-        Sets the preferred order of providers (primary first, then fallbacks).
-        Example: ['boturfers', 'zeturf']
-        """
-        logger.info(f"Setting provider order: {order}")
-        self._provider_order = order
-
-    def register(self, provider: SourceProvider, overwrite: bool = False):
-        """Registers a data source provider."""
-        if provider.name in self._providers and not overwrite:
-            logger.warning(
-                f"Provider '{provider.name}' is already registered. Use overwrite=True to replace it."
-            )
+    def __init__(self, config_path="config/providers.yaml"):
+        if self._initialized:
             return
+        
+        with open(config_path, 'r') as f:
+            self.config = yaml.safe_load(f)
+        
+        self.providers: Dict[str, Any] = {}
+        self._load_providers()
+        self._initialized = True
 
-        logger.info(f"Registering provider: {provider.name}")
-        self._providers[provider.name] = provider
-
-    def get_provider(self, name: str) -> SourceProvider | None:
-        """Gets a provider by name."""
-        provider = self._providers.get(name)
-        if not provider:
-            logger.error(f"Provider '{name}' not found in registry.")
-        return provider
-
-    async def fetch_snapshot_with_fallback(
-        self, race_url: str, **kwargs
-    ) -> RaceSnapshotNormalized:
-        """
-        Tries to fetch a snapshot from sources in the configured order.
-        It validates data quality before returning and falls back to the next source on failure.
-        """
-        if not self._provider_order:
-            msg = "Provider order is not configured in SourceRegistry."
-            logger.error(msg)
-            raise AllSourcesFailedError(msg)
-
-        last_error: Exception | None = None
-        for provider_name in self._provider_order:
-            provider = self.get_provider(provider_name)
-            if not provider:
-                logger.warning(
-                    f"Provider '{provider_name}' from order list not found in registry. Skipping."
-                )
-                continue
-
+    def _load_providers(self):
+        """Dynamically imports and instantiates providers from the config."""
+        provider_configs = self.config.get("providers", {})
+        for name, config in provider_configs.items():
             try:
-                logger.info(f"Attempting snapshot fetch from source: {provider.name}")
-                snapshot = await provider.fetch_snapshot(race_url, **kwargs)
+                module_path, class_name = config["class"].rsplit('.', 1)
+                module = importlib.import_module(module_path)
+                provider_class = getattr(module, class_name)
+                # We instantiate the provider with its specific config, if any
+                provider_instance = provider_class(**config.get("config", {}))
+                self.providers[name] = provider_instance
+            except (ImportError, AttributeError, KeyError) as e:
+                raise ImportError(f"Could not load provider '{name}' from class '{config.get('class')}': {e}")
 
-                if snapshot.quality["status"] != "FAILED":
-                    logger.info(f"OK | Fetched and validated snapshot from '{provider.name}'.")
-                    snapshot.meta["succeeded_source"] = provider.name
-                    return snapshot
-                else:
-                    reason = snapshot.quality["reason"]
-                    logger.warning(
-                        f"DEGRADED/FAILED | Source '{provider.name}' returned low quality snapshot: {reason}"
-                    )
-                    last_error = ValueError(f"Provider '{provider.name}' returned FAILED quality snapshot.")
+    def get_provider(self, name: str) -> Optional[Any]:
+        """Gets an instantiated provider by its name."""
+        return self.providers.get(name)
 
-            except Exception as e:
-                logger.error(f"CRITICAL | Source '{provider.name}' failed to fetch snapshot: {e}", exc_info=True)
-                last_error = e
-
-        logger.critical(f"All sources failed to provide a valid snapshot for url: {race_url}")
-        raise AllSourcesFailedError(f"All sources failed. Last error: {last_error}")
-
-    async def fetch_programme_with_fallback(self, url: str, **kwargs) -> list[dict[str, Any]]:
+    def get_primary_programme_provider(self) -> Optional[BaseProgrammeProvider]:
         """
-        Tries to fetch a day's programme from sources in the configured order.
-        Falls back to the next source on failure.
+        Returns the primary provider for fetching the race programme.
         """
-        if not self._provider_order:
-            msg = "Provider order is not configured in SourceRegistry."
-            logger.error(msg)
-            raise AllSourcesFailedError(msg)
+        primary_name = self.config.get("strategy", {}).get("primary")
+        if not primary_name:
+            raise ValueError("Primary programme provider not defined in strategy.")
+        
+        provider = self.get_provider(primary_name)
+        if provider and isinstance(provider, BaseProgrammeProvider):
+            return provider
+        
+        if provider:
+             raise TypeError(f"Primary provider '{primary_name}' does not implement BaseProgrammeProvider.")
+        
+        raise ValueError(f"Primary provider '{primary_name}' could not be found or instantiated.")
 
-        last_error: Exception | None = None
-        for provider_name in self._provider_order:
-            provider = self.get_provider(provider_name)
-            if not provider:
-                logger.warning(f"Provider '{provider_name}' from order list not found in registry. Skipping.")
-                continue
+    def get_primary_snapshot_provider(self) -> Optional[BaseSnapshotProvider]:
+        """
+        Returns the primary provider for fetching race snapshots.
+        """
+        primary_name = self.config.get("strategy", {}).get("primary")
+        if not primary_name:
+            raise ValueError("Primary snapshot provider not defined in strategy.")
+        
+        provider = self.get_provider(primary_name)
+        if provider and isinstance(provider, BaseSnapshotProvider):
+            return provider
 
-            try:
-                logger.info(f"Attempting programme fetch from source: {provider.name}")
-                programme = await provider.fetch_programme(url, **kwargs)
+        if provider:
+            raise TypeError(f"Primary provider '{primary_name}' does not implement BaseSnapshotProvider.")
+            
+        raise ValueError(f"Primary provider '{primary_name}' could not be found or instantiated.")
 
-                if programme:  # Basic validation: is the list non-empty?
-                    logger.info(f"OK | Fetched programme from '{provider.name}'.")
-                    return programme
-                else:
-                    logger.warning(f"EMPTY | Source '{provider.name}' returned an empty programme.")
-                    last_error = ValueError(f"Provider '{provider.name}' returned an empty programme.")
-
-            except Exception as e:
-                logger.error(f"CRITICAL | Source '{provider.name}' failed to fetch programme: {e}", exc_info=True)
-                last_error = e
-
-        logger.critical(f"All sources failed to provide a valid programme for url: {url}")
-        raise AllSourcesFailedError(f"All sources failed. Last error: {last_error}")
-
-
-# Create a singleton instance
+# Singleton instance for easy access across the application
 source_registry = SourceRegistry()
