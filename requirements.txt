@@ -49,3 +49,4 @@ tzdata==2023.3
 urllib3==2.1.0
 # Utilities
 uvicorn[standard]==0.31.0
+html5lib==1.1

@@ -108,4 +108,3 @@ anti_flaky_check*.log
 *_report.json
 *.patch
 *.zip
-*.html
