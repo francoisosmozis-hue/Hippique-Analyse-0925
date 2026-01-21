@@ -67,10 +67,11 @@ def mock_get_correlation_id(mocker):
 
 
 @pytest.mark.asyncio
-async def test_snapshot_9h_task_success(mock_dependencies, mock_get_correlation_id):
+async def test_snapshot_9h_task_success(mock_dependencies, mocker):
     """
     Test successful H9 snapshot task with default date.
     """
+    mocker.patch("hippique_orchestrator.logging_utils.uuid.uuid4", return_value=uuid.UUID("12345678-1234-5678-1234-567812345678"))
     mock_write_snapshot = mock_dependencies["mock_write_snapshot"]
 
     headers = {"Authorization": "Bearer fake-token"}
@@ -93,11 +94,9 @@ async def test_snapshot_9h_task_success(mock_dependencies, mock_get_correlation_
 
 @pytest.mark.asyncio
 async def test_snapshot_9h_task_with_specific_date_and_urls(
-    mock_dependencies, mock_get_correlation_id
+    mock_dependencies, mocker
 ):
-    """
-    Test successful H9 snapshot task with a specific date and meeting URLs.
-    """
+    mocker.patch("hippique_orchestrator.logging_utils.uuid.uuid4", return_value=uuid.UUID("12345678-1234-5678-1234-567812345678"))
     mock_write_snapshot = mock_dependencies["mock_write_snapshot"]
     test_date = "2025-10-26"
     test_urls = ["http://example.com/r1c1", "http://example.com/r1c2"]
@@ -125,10 +124,11 @@ async def test_snapshot_9h_task_with_specific_date_and_urls(
 
 
 @pytest.mark.asyncio
-async def test_run_phase_task_success(mock_dependencies, mock_get_correlation_id, mocker):
+async def test_run_phase_task_success(mock_dependencies, mocker):
     """
     Test successful run-phase task.
     """
+    mocker.patch("hippique_orchestrator.logging_utils.uuid.uuid4", return_value=uuid.UUID("12345678-1234-5678-1234-567812345678"))
     headers = {"Authorization": "Bearer fake-token"}
 
     test_course_url = "http://example.com/race/2025-12-29/R1C1-prix-de-la-course"
@@ -166,7 +166,7 @@ async def test_run_phase_task_success(mock_dependencies, mock_get_correlation_id
 
 @pytest.mark.asyncio
 async def test_run_phase_task_runner_returns_error(
-    mock_dependencies, mock_get_correlation_id, mocker
+    mock_dependencies, mocker
 ):
     """
     Test run-phase when the runner returns a non-OK status.
@@ -189,7 +189,7 @@ async def test_run_phase_task_runner_returns_error(
 
 @pytest.mark.asyncio
 async def test_run_phase_task_exception_handling(
-    mock_dependencies, mock_get_correlation_id, mocker
+    mock_dependencies, mocker
 ):
     """
     Test run-phase task when an unexpected exception occurs.
@@ -213,7 +213,7 @@ async def test_run_phase_task_exception_handling(
 
 
 @pytest.mark.asyncio
-async def test_snapshot_9h_task_exception(mock_dependencies, mock_get_correlation_id):
+async def test_snapshot_9h_task_exception(mock_dependencies):
     """Test exception handling in the snapshot-9h task."""
     mock_dependencies["mock_write_snapshot"].side_effect = Exception("Storage error")
 
@@ -225,7 +225,7 @@ async def test_snapshot_9h_task_exception(mock_dependencies, mock_get_correlatio
 
 
 @pytest.mark.asyncio
-async def test_bootstrap_day_task_exception(mock_dependencies, mock_get_correlation_id):
+async def test_bootstrap_day_task_exception(mock_dependencies):
     """Test exception handling in the bootstrap-day task."""
     mock_dependencies["mock_build_plan"].side_effect = Exception("Plan build failed")
 
@@ -237,7 +237,7 @@ async def test_bootstrap_day_task_exception(mock_dependencies, mock_get_correlat
 
 
 @pytest.mark.asyncio
-async def test_run_phase_task_infers_doc_id(mock_dependencies, mock_get_correlation_id, mocker):
+async def test_run_phase_task_infers_doc_id(mock_dependencies, mocker):
     """Test that run-phase task correctly infers doc_id if not provided."""
     headers = {"Authorization": "Bearer fake-token"}
     mock_run_course = mock_dependencies["mock_run_course"]
@@ -269,7 +269,7 @@ async def test_run_phase_task_infers_doc_id(mock_dependencies, mock_get_correlat
 
 
 @pytest.mark.asyncio
-async def test_bootstrap_day_task_success(mock_dependencies, mock_get_correlation_id):
+async def test_bootstrap_day_task_success(mock_dependencies):
     """
     Test successful bootstrap-day task where tasks are scheduled.
     """
@@ -315,7 +315,7 @@ async def test_bootstrap_day_task_success(mock_dependencies, mock_get_correlatio
 
 
 @pytest.mark.asyncio
-async def test_bootstrap_day_task_empty_plan(mock_dependencies, mock_get_correlation_id):
+async def test_bootstrap_day_task_empty_plan(mock_dependencies):
     """
     Test bootstrap-day task when build_plan_async returns an empty plan.
     """

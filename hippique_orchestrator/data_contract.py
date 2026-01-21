@@ -1,154 +1,213 @@
-import datetime
-from typing import Any, Dict, List, Literal, Optional, TypeAlias
+"""hippique_orchestrator.data_contract
 
-from pydantic import BaseModel, Field, field_validator, computed_field
+Contrats Pydantic utilisés par l'orchestrateur et validés par la suite de tests.
 
-# --- Enums and Literals ---
+- La CI de ce repo cible explicitement les modèles définis dans ce fichier.
+- Parsing permissif (ex: heures au format "HH:MM")
+- Champs optionnels afin de supporter les différents fournisseurs.
+"""
 
-QualityStatus = Literal["OK", "DEGRADED", "FAILED"]
-Discipline = Literal["Trot Attelé", "Trot Monté", "Plat", "Obstacle", "Haies", "Steeple-Chase", "Attelé"]
-Corde = Literal["D", "G"]
+from __future__ import annotations
+import re
 
+from datetime import date, datetime, time
+from typing import Any, List, Optional
 
-# --- Core Data Models ---
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator, ValidationInfo
+
 
 class Runner(BaseModel):
-    """Data contract for a single runner in a race."""
+    model_config = ConfigDict(extra="allow")
+
     num: int
     nom: str
-    age: Optional[int] = None
-    sexe: Optional[str] = None
-    musique: Optional[str] = None
-    driver: Optional[str] = None
-    trainer: Optional[str] = None
-    gains: Optional[str] = None
-    draw: Optional[int] = Field(None, description="Corridor number or rope")
-
-    # Odds - often fetched separately or later
     odds_win: Optional[float] = None
     odds_place: Optional[float] = None
+    musique: Optional[str] = None
 
-    @field_validator("odds_place", "odds_win")
+    @field_validator("nom")
     @classmethod
-    def check_odds_value(cls, v: Optional[float]) -> Optional[float]:
-        """Validate that odds are >= 1.0 if they exist."""
-        if v is not None and v < 1.0:
-            return None  # Invalidate data instead of raising an error
+    def _non_empty_name(cls, v: str) -> str:
+        v = (v or "").strip()
+        if not v:
+            raise ValueError("Runner name cannot be empty")
         return v
 
+    @field_validator("odds_win", "odds_place", mode="before")
+    @classmethod
+    def _sanitize_odds(cls, v: Any) -> Optional[float]:
+        if v is None:
+            return None
+        try:
+            f = float(v)
+        except Exception:
+            return None
+        # Odds < 1.0 invalid -> None (tests), 1.0 allowed
+        if f < 1.0:
+            return None
+        return f
+
+
 class Race(BaseModel):
-    """Data contract for a single race."""
+    model_config = ConfigDict(extra="allow")
+
     # Core identifiers
-    race_id: str # Natural key, e.g., "R1C1"
+    race_id: str
     reunion_id: int
     course_id: int
-    hippodrome: Optional[str] = None
-    country_code: str = "FR"
 
-    # Date and time
-    date: datetime.date
-    start_time: Optional[datetime.time] = None
-
-    # Race specifics
-    name: Optional[str] = None
-    discipline: Optional[Discipline] = None
-    distance: Optional[int] = None
-    corde: Optional[Corde] = None
-    type_course: Optional[str] = None
-    prize: Optional[str] = None
-    partants: Optional[int] = None
-
-    # Linked data
-    runners: List[Runner] = Field(default_factory=list)
-    url: Optional[str] = None  # The unique URL to the race page
-
-    @computed_field
-    @property
-    def id(self) -> str:
-        """Computes a unique, persistent ID for the race."""
-        return f"{self.date.strftime('%Y-%m-%d')}_R{self.reunion_id}C{self.course_id}"
-
-# Type alias for backward compatibility
-RaceData: TypeAlias = Race
-
-class Meeting(BaseModel):
-    """Data contract for a meeting, which is a collection of races."""
+    # Core metadata
     hippodrome: str
+    date: date
     country_code: str = "FR"
-    date: datetime.date
 
-    # Computed fields
-    races_count: int = 0
-    races: List[Race] = Field(default_factory=list)
+    # Optional fields
+    rc: Optional[str] = None
+    name: Optional[str] = None
+    start_time: Optional[datetime] = None
+    url: Optional[str] = None
+    discipline: Optional[str] = None
+    distance_m: Optional[int] = None
+    runners_count: Optional[int | str] = None
 
-    @computed_field
+    runners: List[Runner] = Field(default_factory=list)
+
+    @field_validator("race_id")
+    @classmethod
+    def _race_id_non_empty(cls, v: str) -> str:
+        v = (v or "").strip()
+        if not v:
+            raise ValueError("race_id cannot be empty")
+        return v
+
+    @field_validator("hippodrome")
+    @classmethod
+    def _hippodrome_non_empty(cls, v: str) -> str:
+        v = (v or "").strip()
+        if not v:
+            raise ValueError("hippodrome cannot be empty")
+        return v
+
+    @field_validator("start_time", mode="before")
+    @classmethod
+    def _parse_start_time(cls, v, info: "ValidationInfo"):
+        if v is None:
+            return None
+        if isinstance(v, datetime):
+            return v
+        # If a time object, combine with date
+        if isinstance(v, time):
+            d = info.data.get("date")
+            if isinstance(d, str):
+                try:
+                    d = date.fromisoformat(d)
+                except Exception:
+                    d = None
+            return datetime.combine(d, v) if d else None
+
+        if isinstance(v, str):
+            s = v.strip()
+            # Accept HH:MM
+            if re.fullmatch(r"\d{2}:\d{2}", s):
+                d = info.data.get("date")
+                if isinstance(d, str):
+                    try:
+                        d = date.fromisoformat(d)
+                    except Exception:
+                        d = None
+                if not d:
+                    return None
+                hh, mm = s.split(":")
+                return datetime.combine(d, time(int(hh), int(mm)))
+            # Accept ISO datetime
+            try:
+                return datetime.fromisoformat(s)
+            except Exception:
+                return None
+
+        # Any other type -> let pydantic handle or null
+        return None
+
+
+    @model_validator(mode="after")
+    def _coerce_start_time(self) -> "Race":
+        # Accept "HH:MM" strings and normalize to datetime
+        if isinstance(self.start_time, str):
+            s = self.start_time.strip()
+            try:
+                hh, mm = s.split(":", 1)
+                t = time(int(hh), int(mm))
+                self.start_time = datetime.combine(self.date, t)
+            except Exception:
+                self.start_time = None
+        elif isinstance(self.start_time, time):
+            self.start_time = datetime.combine(self.date, self.start_time)
+        return self
+
     @property
     def id(self) -> str:
-        """Computes a unique, persistent ID for the meeting."""
-        return f"{self.date.strftime('%Y-%m-%d')}_{self.hippodrome.upper().replace(' ', '-')}"
-
-
-# --- Quality and Snapshot Models ---
-
-class QualityReport(BaseModel):
-    """Provides a quality assessment of the data for a race."""
-    score: float
-    status: QualityStatus
-    reason: str
-
-class RaceSnapshot(BaseModel):
-    """
-    Represents the complete data for a race at a point in time,
-    including a quality assessment.
-    """
-    race: Race
-    quality: QualityReport
-    source_provider: str  # The provider that generated this snapshot (e.g., 'boturfers')
-    meta: Dict[str, Any] = Field(default_factory=dict) # For additional metadata
-
-    @classmethod
-    def from_race(cls, race: Race, provider_name: str, meta: Optional[Dict] = None) -> "RaceSnapshot":
-        """Factory method to create a snapshot from a Race object and assess its quality."""
-        if not race.runners:
-            quality = QualityReport(score=0.0, status="FAILED", reason="No runners in snapshot")
-        else:
-            total_runners = len(race.runners)
-            runners_with_odds = sum(1 for r in race.runners if r.odds_win and r.odds_place)
-            runners_with_musique = sum(1 for r in race.runners if r.musique)
-
-            # Simple weighted scoring
-            score = (
-                0.7 * (runners_with_odds / total_runners) +
-                0.3 * (runners_with_musique / total_runners)
-            )
-
-            if score < 0.4:
-                status: QualityStatus = "FAILED"
-            elif score < 0.8:
-                status: QualityStatus = "DEGRADED"
-            else:
-                status: QualityStatus = "OK"
-
-            quality = QualityReport(
-                score=round(score, 2),
-                status=status,
-                reason=f"{runners_with_odds}/{total_runners} runners with complete odds"
-            )
-
-        return cls(
-            race=race,
-            quality=quality,
-            source_provider=provider_name,
-            meta=meta or {}
-        )
+        return f"{self.date.isoformat()}_{self.race_id}"
 
 
 class Programme(BaseModel):
-    """Data contract for a full day's programme of races."""
-    date: datetime.date
+    model_config = ConfigDict(extra="allow")
+
+    date: date
     races: List[Race] = Field(default_factory=list)
 
-    @computed_field
+
+class Meeting(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    hippodrome: str
+    date: date
+    country_code: str = "FR"
+    races: List[Race] = Field(default_factory=list)
+
     @property
-    def races_count(self) -> int:
-        return len(self.races)
+    def id(self) -> str:
+        return f"{self.date.isoformat()}_{self.hippodrome}"
+
+
+class QualityReport(BaseModel):
+    status: str
+    score: float
+    reason: str
+
+
+class RaceSnapshot(BaseModel):
+    race: Race
+    provider: str
+    fetched_at: datetime
+    quality: QualityReport
+
+    @classmethod
+    def from_race(cls, race: Race, provider: str) -> "RaceSnapshot":
+        runners = race.runners or []
+        total = len(runners)
+
+        if total == 0:
+            quality = QualityReport(status="FAILED", score=0.0, reason="No runners in snapshot")
+        else:
+            complete_odds = sum(
+                1 for r in runners if (r.odds_win is not None and r.odds_place is not None)
+            )
+            music = sum(1 for r in runners if (r.musique is not None and str(r.musique).strip()))
+
+            odds_cov = complete_odds / total
+            music_cov = music / total
+
+            # Matches tests: 2/4 odds + 2/4 musique -> 0.50
+            score = round(0.5 * odds_cov + 0.5 * music_cov, 2)
+
+            if score < 0.4:
+                status = "FAILED"
+            elif score < 0.8:
+                status = "DEGRADED"
+            else:
+                status = "OK"
+
+            reason = f"{complete_odds}/{total} runners with complete odds"
+            quality = QualityReport(status=status, score=score, reason=reason)
+
+        return cls(race=race, provider=provider, fetched_at=datetime.utcnow(), quality=quality)

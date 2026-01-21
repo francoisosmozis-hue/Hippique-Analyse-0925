@@ -1,64 +1,35 @@
 # hippique_orchestrator/providers/base.py
-
+"""
+Defines the abstract interface for all data providers.
+"""
 from abc import ABC, abstractmethod
 from datetime import date
-from typing import List, Dict, Any
+from typing import List, Tuple, Optional, Dict
 
-from hippique_orchestrator.data_contract import RaceData
+from hippique_orchestrator.contracts.models import Race, Runner, OddsSnapshot, Meeting
 
-
-class AbstractProvider(ABC):
+class Provider(ABC):
     """
-    Abstract base class for all data providers.
-
-    It defines the contract that concrete providers must implement to fetch
-    race programs and runner details.
+    Abstract Base Class for any data provider.
     """
-
+    
     @property
     @abstractmethod
     def name(self) -> str:
-        """
-        Returns the unique name of the provider (e.g., 'boturfers', 'filesystem').
-        """
-        raise NotImplementedError
+        """The unique name of this provider, e.g., 'Boturfers-Live'."""
+        pass
 
     @abstractmethod
-    def get_races_for_date(self, for_date: date) -> List[RaceData]:
+    def fetch_programme(self, for_date: date) -> List[Race]:
         """
-        Fetches the list of races for a given date.
-
-        Args:
-            for_date: The date for which to fetch the races.
-
-        Returns:
-            A list of Race objects, compliant with the data contract.
-            Returns an empty list if no races are found or if an error occurs.
+        Fetches all races for a given date.
         """
-        raise NotImplementedError
+        pass
 
     @abstractmethod
-    def get_race_details(self, race: RaceData) -> Dict[str, Any]:
+    def fetch_race_details(self, race: Race, phase: str) -> Tuple[List[Runner], OddsSnapshot]:
         """
-        Fetches detailed information for a single race, including runners.
-
-        Args:
-            race: The Race object for which to fetch details.
-
-        Returns:
-            A dictionary containing detailed race information.
-            The structure should be compliant with extended data needs.
-            Returns an empty dictionary if details cannot be fetched.
+        Fetches the detailed runners list and odds for a specific race and phase.
+        Returns a tuple of (runners, odds_snapshot).
         """
-        raise NotImplementedError
-
-    def health_check(self) -> bool:
-        """
-        Performs a simple health check to verify the provider's availability.
-        Default implementation always returns True.
-        Concrete providers should override this for more specific checks.
-
-        Returns:
-            True if the provider is healthy, False otherwise.
-        """
-        return True
+        pass

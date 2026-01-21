@@ -22,9 +22,8 @@ def mock_active_provider(mocker):
     """Mocks the active provider obtained from the ProviderRegistry."""
     # Mock the get_active_provider function from the registry
     mock_get_active_provider_fn = mocker.patch(
-        "hippique_orchestrator.stats_fetcher.get_active_provider", autospec=True
-    )
-    # Create a mock provider instance that get_active_provider will return
+        "hippique_orchestrator.stats_fetcher.source_registry.get_primary_snapshot_provider", autospec=True
+    )    # Create a mock provider instance that get_active_provider will return
     mock_provider_instance = mocker.create_autospec(ProviderInterface)
     mock_provider_instance.get_name.return_value = "mock_stat_provider"
     mock_provider_instance.fetch_stats_for_runner = AsyncMock(return_value={})
@@ -97,7 +96,7 @@ async def test_collect_stats_successful_run(mock_storage, mock_active_provider):
 async def test_collect_stats_no_active_provider(mock_storage, mocker, caplog):
     """Test that collect_stats handles the case where no active provider is found."""
     mocker.patch(
-        "hippique_orchestrator.stats_fetcher.get_active_provider",
+        "hippique_orchestrator.stats_fetcher.source_registry.get_primary_snapshot_provider",
         return_value=None,
     )
     mock_storage.get_latest_snapshot_metadata.return_value = {"gcs_snapshot_path": "path/to/snapshot.json"}
@@ -105,7 +104,7 @@ async def test_collect_stats_no_active_provider(mock_storage, mocker, caplog):
 
     with caplog.at_level(logging.ERROR):
         result = await stats_fetcher.collect_stats("race_id", "H-5", "2025-01-01")
-        assert "No active provider available to fetch stats." in caplog.text
+        assert any("No primary snapshot provider available for stats collection." in record.message for record in caplog.records)
     assert result == "dummy_gcs_path_for_stats"
     mock_storage.save_snapshot.assert_not_called()
 

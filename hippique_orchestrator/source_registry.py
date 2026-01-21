@@ -127,6 +127,19 @@ class SourceRegistry:
         )
         return capable_providers
 
+    def get_primary_programme_provider(self) -> Optional[BaseProgrammeProvider]:
+        """Returns the primary programme provider, or None if not found."""
+        providers = self.get_providers_by_capability(BaseProgrammeProvider)
+        if providers:
+            return providers[0]
+        return None
+
+    def get_primary_snapshot_provider(self) -> Optional[BaseSnapshotProvider]:
+        """Returns the primary snapshot provider, or None if not found."""
+        providers = self.get_providers_by_capability(BaseSnapshotProvider)
+        if providers:
+            return providers[0]
+        return None
 
 # Singleton instance for easy access across the application
 source_registry = SourceRegistry()

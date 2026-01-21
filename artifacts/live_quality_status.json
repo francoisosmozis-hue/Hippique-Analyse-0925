@@ -2,6 +2,16 @@
     "unknown_race": {
         "status": "DEGRADED",
         "reason": "OK (DEGRADED) - Missing H30 data, cannot compute drift. Proceeding without drift adjustment.",
-        "timestamp": "2026-01-17T20:19:15.364390"
+        "timestamp": "2026-01-21T10:12:31.627920"
+    },
+    "b3c02163854afc18631ca31358ea6ebbb60cd778": {
+        "status": "FAILED",
+        "reason": "Configuration file is missing a critical key: 'tickets'",
+        "timestamp": "2026-01-21T10:12:31.813559"
+    },
+    "TEST_R1C1": {
+        "status": "FAILED",
+        "reason": "Configuration file is missing a critical key: 'tickets'",
+        "timestamp": "2026-01-20T00:19:22.775831"
     }
 }

@@ -14,6 +14,8 @@ from bs4 import BeautifulSoup
 
 from hippique_orchestrator.logging_utils import get_logger
 
+from hippique_orchestrator.utils.retry import http_retry
+
 logger = get_logger(__name__)
 
 
@@ -25,6 +27,7 @@ def _slugify(value: str) -> str:
     return value.strip("-")
 
 
+@http_retry
 def fetch_geny_programme() -> dict[str, Any]:
     """
     Fetches the Geny page for today's races and returns them as a dictionary.
@@ -52,16 +55,11 @@ def fetch_geny_programme() -> dict[str, Any]:
     empty_response = {"date": datetime.today().strftime("%Y-%m-%d"), "meetings": []}
 
     try:
-        response = httpx.get(url, follow_redirects=True, timeout=10.0)
+        response = httpx.get(url, follow_redirects=True)
         response.raise_for_status()
         html_content = response.text
-    except httpx.RequestError as e:
-        logger.error(f"An error occurred while requesting {e.request.url!r}: {e}")
-        return empty_response
-    except httpx.HTTPStatusError as e:
-        logger.error(
-            f"Error response {e.response.status_code} while requesting {e.request.url!r}: {e}"
-        )
+    except Exception as e:
+        logger.error(f"Failed to fetch Geny programme after retries: {e}")
         return empty_response
 
     soup = BeautifulSoup(html_content, "html.parser")

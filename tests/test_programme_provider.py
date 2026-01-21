@@ -11,29 +11,44 @@ from hippique_orchestrator.programme_provider import get_programme_for_date
 
 
 # Sample valid data structure for a programme
+import datetime # Ensure datetime is imported
+
+# Sample valid data structure for a programme
 VALID_PROGRAMME_DATA = {
+    "date": datetime.date(2024, 1, 1), # Added
     "races": [
         {
             "race_id": "R1C1",
+            "reunion_id": 1, # Added
+            "course_id": 1, # Added
             "hippodrome": "VINCENNES",
-            "date": "2024-01-01",
-            "url": "http://example.com/r1c1",
+            "date": datetime.date(2024, 1, 1), # Converted to datetime.date object
+            "start_time": datetime.time(13, 50), # Added
+            "name": "Prix d'Essai", # Added
+            "discipline": "Trot Attelé", # Added
             "country_code": "FR",
+            "url": "http://example.com/r1c1",
         }
-    ]
+    ],
 }
 
 # Another valid programme from a different source
 FALLBACK_PROGRAMME_DATA = {
+    "date": datetime.date(2024, 1, 1), # Added
     "races": [
         {
             "race_id": "R1C1_fallback",
+            "reunion_id": 1, # Added
+            "course_id": 1, # Added
             "hippodrome": "ENGHIEN",
-            "date": "2024-01-01",
-            "url": "http://fallback.com/r1c1",
+            "date": datetime.date(2024, 1, 1), # Converted to datetime.date object
+            "start_time": datetime.time(14, 00), # Added
+            "name": "Grand Prix Fallback", # Added
+            "discipline": "Plat", # Added
             "country_code": "FR",
+            "url": "http://fallback.com/r1c1",
         }
-    ]
+    ],
 }
 
 

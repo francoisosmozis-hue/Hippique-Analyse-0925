@@ -75,7 +75,7 @@ GCS_ENABLED = os.getenv("GCS_ENABLED", "False").lower() in ("true", "1", "t")
 INTERNAL_API_SECRET = os.getenv("INTERNAL_API_SECRET")
 
 # --- Variables manquantes ajoutées ---
-REQUIRE_AUTH = True # Hardcode for debugging
+REQUIRE_AUTH = os.getenv("AUTH_REQUIRED", "true").lower() in ("true", "1", "t")
 BUDGET_CAP_EUR = float(os.getenv("BUDGET_CAP_EUR", "5.0"))
 FIRESTORE_COLLECTION = os.getenv("FIRESTORE_COLLECTION", "races-dev")
 

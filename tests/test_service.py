@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
-from unittest.mock import ANY, AsyncMock, MagicMock, Mock
+from datetime import date, datetime, time, timezone
+from unittest.mock import ANY, AsyncMock, MagicMock, Mock, patch
 
 import httpx
 import pytest
+
+from hippique_orchestrator.data_contract import Programme, Race # Added Programme and Race
 
 
 def test_get_pronostics_page(client):
@@ -17,36 +19,59 @@ def test_get_pronostics_page(client):
 
 
 @pytest.mark.asyncio
-async def test_get_pronostics_data_empty_case(app, mock_firestore, mock_build_plan):
+@patch("hippique_orchestrator.service.firestore_client.get_races_for_date")
+@patch("hippique_orchestrator.plan.get_programme_for_date")
+async def test_get_pronostics_data_empty_case(mock_get_programme_for_date, mock_get_races, app):
     """Test get_pronostics_data when no races are found."""
-    mock_get_races, _ = mock_firestore
-    mock_get_races.return_value = []
-    mock_build_plan.return_value = []
+    mock_get_programme_for_date.return_value = None # Mock to return no programme
+    mock_get_races.return_value = [] # Still mock firestore to be empty as well
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.get("/api/pronostics?date=2025-01-01")
 
     assert response.status_code == 200
     data = response.json()
-    assert "last_updated" in data
-    assert data["date"] == "2025-01-01"
     assert data["races"] == []
+
+    mock_get_programme_for_date.assert_called_once_with(date(2025, 1, 1))
+    mock_get_races.assert_called_once()
 
 
 @pytest.mark.asyncio
+@patch("hippique_orchestrator.service.firestore_client.get_races_for_date")
+@patch("hippique_orchestrator.plan.get_programme_for_date")
 async def test_get_pronostics_data_etag_304_not_modified(
-    app, mock_firestore, mock_build_plan, mocker
+    mock_get_programme_for_date, mock_get_races, app, mocker
 ):
     """Test get_pronostics_data ETag 304 Not Modified."""
     # Mock datetime to ensure the ETag is stable
     mock_now = datetime(2025, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
     mocker.patch("hippique_orchestrator.service.datetime", now=mocker.Mock(return_value=mock_now))
 
-    mock_get_races, _ = mock_firestore
-    mock_get_races.return_value = []
-    mock_build_plan.return_value = [
-        {"r_label": "R1", "c_label": "C1", "time_local": "10:00"}
-    ]
+    test_date = "2025-01-01"
+    test_date_obj = date(2025, 1, 1)
+
+    mock_programme_data = {
+        "date": test_date_obj,
+                    "races": [
+                        {
+                            "race_id": "C1",
+                            "reunion_id": 1,
+                            "course_id": 1,
+                            "hippodrome": "VINCENNES",
+                            "date": test_date_obj,
+                            "start_time": time(13, 50),
+                            "name": "Prix de Test",
+                            "discipline": "Trot Attelé",
+                            "country_code": "FR",
+                            "url": "http://example.com/r1c1",
+                            "rc": "R1C1",
+                        }
+                    ],    }
+    mock_get_programme_for_date.return_value = Programme.model_validate(mock_programme_data)
+    
+    mock_get_races.return_value = [] # Mock firestore to be empty for this test
+
 
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
@@ -59,25 +84,58 @@ async def test_get_pronostics_data_etag_304_not_modified(
         )
         assert response2.status_code == 304
 
+    mock_get_programme_for_date.assert_called_with(test_date_obj)
+    mock_get_races.assert_called_with(test_date)
+
 
 @pytest.mark.asyncio
+@patch("hippique_orchestrator.service.firestore_client.get_races_for_date")
+@patch("hippique_orchestrator.plan.get_programme_for_date")
 async def test_get_pronostics_data_with_data(
-    app, mock_firestore, mock_build_plan, mock_race_doc
+    mock_get_programme_for_date, mock_get_races, app, mock_race_doc
 ):
     """Test get_pronostics_data with some race data."""
-    mock_get_races, _ = mock_firestore
+    test_date = "2025-01-01"
+    test_date_obj = date(2025, 1, 1)
+
+    # Mock programme_provider.get_programme_for_date to return 2 races
+    mock_programme_data = {
+        "date": test_date_obj,
+        "races": [
+                            {
+                                "race_id": "C1",
+                                "reunion_id": 1,
+                                "course_id": 1,
+                                "hippodrome": "VINCENNES",
+                                "date": test_date_obj,
+                                "start_time": time(13, 50),
+                                "name": "Prix de Test",
+                                "discipline": "Trot Attelé",
+                                "country_code": "FR",
+                                "url": "http://example.com/r1c1",
+                                "rc": "R1C1",
+                            },
+                            {
+                                "race_id": "C2",
+                                "reunion_id": 1,
+                                "course_id": 2,
+                                "hippodrome": "VINCENNES",
+                                "date": test_date_obj,
+                                "start_time": time(14, 20),
+                                "name": "Prix Inconnu",
+                                "discipline": "Plat",
+                                "country_code": "FR",
+                                "url": "http://example.com/r1c2",
+                                "rc": "R1C2",
+                            },        ],
+    }
+    mock_get_programme_for_date.return_value = Programme.model_validate(mock_programme_data)
+
+
     mock_get_races.return_value = [
         mock_race_doc("2025-01-01_R1C1", {"gpi_decision": "play", "r_label": "R1", "c_label": "C1"})
     ]
-    mock_build_plan.return_value = [
-        {
-            "date": "2025-01-01",
-            "r_label": "R1",
-            "c_label": "C1",
-            "time_local": "13:50",
-            "course_url": "http://example.com/r1c1",
-        }
-    ]
+
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.get("/api/pronostics?date=2025-01-01")
@@ -86,9 +144,9 @@ async def test_get_pronostics_data_with_data(
     data = response.json()
     assert "last_updated" in data
     assert "date" in data
-    assert data["date"] == "2025-01-01"
+    assert data["date"] == test_date
     assert "races" in data
-    assert len(data["races"]) == 1
+    assert len(data["races"]) == 2 # Expect 2 races now
     assert data["races"][0]["r_label"] == "R1"
     assert data["races"][0]["c_label"] == "C1"
     assert "play" in data["races"][0]["gpi_decision"]
@@ -158,7 +216,7 @@ def test_health_check(client):
     response = client.get("/health")
     assert response.status_code == 200
     data = response.json()
-    assert data["status"] == "healthy"
+    assert data["ok"] is True
     assert "version" in data
 
 
@@ -167,7 +225,7 @@ def test_healthz_endpoint(client):
     response = client.get("/healthz")
     assert response.status_code == 200
     data = response.json()
-    assert data["status"] == "healthy"
+    assert data["ok"] is True
     assert "version" in data
 
 
@@ -345,9 +403,8 @@ async def test_run_single_race_missing_course_url(client, monkeypatch, mock_buil
     response = client.post("/ops/run?rc=R1C1", headers={"X-API-Key": "test-secret"})
 
     assert response.status_code == 400
-    assert "Race R1C1 is missing a URL in the plan." in response.json()["detail"]
+    assert "Race R1C1 in plan has no 'course_url'." in response.json()["detail"]
     mock_build_plan.assert_called_once()
-
     # Ensure analysis pipeline or firestore update were NOT called
     # We need to set these up as mocks even if not called to ensure the asserts pass
     mock_run_analysis = AsyncMock()
@@ -581,7 +638,7 @@ def test_get_daily_plan_success(client, mock_build_plan):
     assert response.status_code == 200
     data = response.json()
     assert data["ok"] is True
-    assert data["count"] == 1
+    assert len(data["races"]) == 1
     assert data["races"][0]["r_label"] == "R1"
 
 

@@ -7,17 +7,11 @@ from hippique_orchestrator import config
 
 def is_gcs_enabled(*, default: bool = True) -> bool:
     """Return ``True`` when Google Cloud synchronisation should run."""
-    if config.use_gcs is not None:
-        return config.use_gcs
-    if config.use_drive is not None:
-        return config.use_drive
-    return default
+    return config.GCS_ENABLED
 
 
 def disabled_reason() -> str | None:
     """Return the environment variable responsible for disabling uploads."""
-    if config.use_gcs is False:
-        return "USE_GCS"
-    if config.use_drive is False:
-        return "USE_DRIVE"
+    if not config.GCS_ENABLED:
+        return "GCS_ENABLED is False"
     return None

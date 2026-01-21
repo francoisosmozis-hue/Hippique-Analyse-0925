@@ -62,6 +62,20 @@ async def verify_oidc_token(
         # (e.g., malformed, expired, wrong signature, wrong audience)
         raise HTTPException(status_code=401, detail=f"Token validation failed: {e}") from e
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"An unexpected error occurred during token validation: {e}"
-        ) from e
+        raise HTTPException(status_code=500, detail="An unexpected error occurred during token validation: {e}") from e
+
+
+def _require_api_key(request: Request):
+    """
+    Checks for the presence and validity of the X-API-KEY header if authentication is required.
+    If authentication is not required, it allows the request to pass.
+    """
+    if not config.REQUIRE_AUTH:
+        return
+
+    if not config.INTERNAL_API_SECRET:
+        raise HTTPException(status_code=500, detail="Internal API secret not configured on server.")
+
+    api_key = request.headers.get("X-API-KEY")
+    if api_key is None or api_key != config.INTERNAL_API_SECRET:
+        raise HTTPException(status_code=403, detail="Invalid or missing API Key.")

@@ -1,0 +1,70 @@
+{
+  "source": "boturfers",
+  "type": "race_details",
+  "url": "https://www.boturfers.fr/course/1090365-r1c1-prix-de-la-vesubie/partant",
+  "scraped_at": "2025-12-15T15:23:46.037726",
+  "runners": [
+    {
+      "num": "1",
+      "nom": "Major Star",
+      "jockey": "Claudic B.",
+      "entraineur": "Cottin (S) D."
+    },
+    {
+      "num": "2",
+      "nom": "Ades",
+      "jockey": "Charron J.",
+      "entraineur": "Cottin (S) D."
+    },
+    {
+      "num": "3",
+      "nom": "Chateau La Barre",
+      "jockey": "Beaurain T.",
+      "entraineur": "Merienne J."
+    },
+    {
+      "num": "4",
+      "nom": "Alastor Maugrey",
+      "jockey": "Chevillard T.",
+      "entraineur": "Pitart M."
+    },
+    {
+      "num": "5",
+      "nom": "Victory Wind",
+      "jockey": "Faivre-Picon G.",
+      "entraineur": "Foucher S."
+    },
+    {
+      "num": "6",
+      "nom": "Madison Ransom",
+      "jockey": "Philipperon L.",
+      "entraineur": "Seror (S) M."
+    },
+    {
+      "num": "7",
+      "nom": "Meursault Charme",
+      "jockey": "Nabet K.",
+      "entraineur": "Fouin Y."
+    },
+    {
+      "num": "8",
+      "nom": "Little Perfect",
+      "jockey": "Phelippe J.",
+      "entraineur": "Seror (S) M."
+    },
+    {
+      "num": "9",
+      "nom": "Whisky Max",
+      "jockey": "Ubeda D.",
+      "entraineur": "Seror (S) M."
+    },
+    {
+      "num": "10",
+      "nom": "Brun De Tzar",
+      "jockey": "Gelhay B.",
+      "entraineur": "Leenders Gab."
+    }
+  ],
+  "correlation_id": "7f324540-43aa-438a-b69f-05283236486d",
+  "trace_id": "7f324540-43aa-438a-b69f-05283236486d"
+}

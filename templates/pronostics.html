@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Pronostics - {{ analysis_date.strftime('%d/%m/%Y') }}</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; background-color: #f3f4f6; color: #111827; }
+        header { background-color: #1f2937; color: white; padding: 1.5rem; text-align: center; }
+        main { max-width: 1200px; margin: 2rem auto; display: grid; gap: 2rem; padding: 0 1rem; }
+        .race-card { background: white; border-radius: 0.5rem; box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06); }
+        .race-header { padding: 1rem 1.5rem; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center; }
+        .race-title { font-size: 1.125rem; font-weight: 600; }
+        .race-uid { font-family: monospace; font-size: 0.8rem; color: #6b7280; }
+        .status-badge { padding: 0.25rem 0.75rem; border-radius: 9999px; font-weight: 500; font-size: 0.875rem; }
+        .status-playable { background-color: #dcfce7; color: #166534; }
+        .status-abstain { background-color: #fee2e2; color: #991b1b; }
+        .race-body { display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 1.5rem; padding: 1.5rem; }
+        .section { padding: 1rem; border: 1px solid #e5e7eb; border-radius: 0.375rem; }
+        .section-title { font-size: 1rem; font-weight: 600; margin-bottom: 1rem; }
+        .quality-score { font-size: 2rem; font-weight: 700; color: #1f2937; }
+        .details-list { list-style: none; padding: 0; font-size: 0.875rem; color: #4b5563; }
+        .details-list li { margin-bottom: 0.5rem; }
+        .drift-value { font-weight: 600; }
+        .drift-up { color: #c0392b; }
+        .drift-down { color: #27ae60; }
+    </style>
+</head>
+<body>
+    <header><h1>Pronostics du {{ analysis_date.strftime('%d/%m/%Y') }}</h1></header>
+    <main>
+        {% for result in results %}
+        <div class="race-card">
+            <div class="race-header">
+                <div>
+                    <div class="race-title">Course (UID)</div>
+                    <div class="race-uid">{{ result.race_uid }}</div>
+                </div>
+                <div class="status-badge {{ 'status-playable' if result.playable else 'status-abstain' }}">
+                    {{ "Jouable" if result.playable else "Abstention" }}
+                </div>
+            </div>
+            <div class="race-body">
+                <div class="section">
+                    <h3 class="section-title">Diagnostic Qualité</h3>
+                    <p><span class="quality-score">{{ result.quality_report.score }}</span>/100</p>
+                    <ul class="details-list">
+                        <li><strong>Sources:</strong> {{ result.quality_report.sources_used | join(', ') }}</li>
+                        <li><strong>Phases:</strong> {{ result.quality_report.phase_coverage | join(', ') }}</li>
+                        {% if not result.playable %}
+                        <li><strong>Raisons:</strong> {{ result.abstention_reasons | join(', ') }}</li>
+                        {% endif %}
+                    </ul>
+                </div>
+                <div class="section">
+                    <h3 class="section-title">Tickets &amp; ROI</h3>
+                    {% if result.playable and result.tickets %}
+                        <p>ROI Global Estimé : {{ "%.2f"|format(result.roi_estimate * 100) }}%</p>
+                        <!-- Ticket rendering logic here -->
+                    {% else %}
+                        <p>Aucun ticket proposé.</p>
+                    {% endif %}
+                </div>
+                {% if result.derived_data and result.derived_data.drift %}
+                <div class="section" style="grid-column: 1 / -1;">
+                    <h3 class="section-title">Analyse du Drift (H-30 &rarr; H-5)</h3>
+                     <ul class="details-list">
+                        {% for runner_uid, drift_value in result.derived_data.drift.items() %}
+                            <li>
+                                Runner {{ runner_uid[:8] }}... : 
+                                <span class="drift-value {{ 'drift-up' if drift_value > 0 else 'drift-down' }}">
+                                    {{ "{:+.2f}".format(drift_value) }}
+                                </span>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% else %}
+            <p>Aucune analyse disponible pour cette date.</p>
+        {% endfor %}
+    </main>
+</body>
+</html>

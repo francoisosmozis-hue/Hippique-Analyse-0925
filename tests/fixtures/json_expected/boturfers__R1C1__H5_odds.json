@@ -1,0 +1,9 @@
+{
+    "race_uid": "mock_race_uid_r1c1",
+    "phase": "H5",
+    "odds_place": {
+        "mock_runner_uid_1": 2.5,
+        "mock_runner_uid_2": 4.1
+    },
+    "source": "Boturfers-File"
+}

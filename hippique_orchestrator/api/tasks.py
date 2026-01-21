@@ -10,7 +10,7 @@ from starlette.concurrency import run_in_threadpool
 
 from hippique_orchestrator import firestore_client, scheduler
 from hippique_orchestrator.auth import verify_oidc_token
-from hippique_orchestrator.logging_utils import get_logger
+from hippique_orchestrator.logging_utils import get_logger, get_correlation_id
 from hippique_orchestrator.plan import build_plan_async
 from hippique_orchestrator.runner import run_course
 from hippique_orchestrator.schemas import BootstrapDayRequest, RunPhaseRequest, Snapshot9HRequest
@@ -37,7 +37,7 @@ async def run_phase_task(
     Executes the analysis for a single race for a given phase (H9, H30, H5).
     This endpoint is the target for Cloud Tasks.
     """
-    correlation_id = getattr(request.state, "correlation_id", "N/A")
+    correlation_id = get_correlation_id(request.headers)
 
     logger.info(
         f"Received run-phase request for {body.course_url} (phase: {body.phase})",
@@ -91,7 +91,7 @@ async def snapshot_9h_task(
     """
     Triggers an H9 snapshot for the specified date and meeting URLs.
     """
-    correlation_id = getattr(request.state, "correlation_id", "N/A")
+    correlation_id = get_correlation_id(request.headers)
     target_date_str = body.date if body.date else datetime.now().strftime("%Y-%m-%d")
 
     logger.info(
@@ -146,7 +146,7 @@ async def bootstrap_day_task(
     Reads the day's plan, and for each race, creates two Cloud Tasks (H-30, H-5)
     to call /tasks/run-phase at the appropriate times.
     """
-    correlation_id = getattr(request.state, "correlation_id", "N/A")
+    correlation_id = get_correlation_id(request.headers)
 
     target_date_str = body.date if body.date else datetime.now().strftime("%Y-%m-%d")
 

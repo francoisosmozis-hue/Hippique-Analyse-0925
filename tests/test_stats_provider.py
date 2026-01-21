@@ -205,7 +205,7 @@ class TestZoneTurfProviderParsing:
 
         # 3. Assertions
         assert result is None
-        assert "HTTP error while fetching" in caplog.text
+        assert "An error occurred while fetching" in caplog.text
 
     @pytest.mark.parametrize(
         "mock_html, expected_stats",
@@ -464,7 +464,7 @@ class TestZoneTurfIdResolution:
         result = zt_provider._resolve_entity_id("horse", "My Horse")
 
         assert result is None
-        assert "HTTP error while resolving ID" in caplog.text
+        assert "An error occurred while resolving ID" in caplog.text
 
     def test_resolve_entity_id_handles_non_letter_name(self, zt_provider: ZoneTurfProvider, mocker):
         """Tests ID resolution for names that don't start with a letter."""

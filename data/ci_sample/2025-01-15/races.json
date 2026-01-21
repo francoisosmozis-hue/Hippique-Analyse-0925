@@ -1,0 +1,16 @@
+[
+    {
+        "reunion": "R1",
+        "race_number": 1,
+        "race_name": "PRIX DE TEST",
+        "race_url": "https://www.boturfers.fr/c/2025-01-15/r1c1-prix-de-test",
+        "start_time": "13:50"
+    },
+    {
+        "reunion": "R1",
+        "race_number": 2,
+        "race_name": "PRIX D'ESSAI",
+        "race_url": "https://www.boturfers.fr/c/2025-01-15/r1c2-prix-d-essai",
+        "start_time": "14:20"
+    }
+]

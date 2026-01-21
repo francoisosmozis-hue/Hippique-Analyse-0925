@@ -17,6 +17,7 @@ from bs4 import BeautifulSoup
 from pydantic import BaseModel, Field
 
 from . import firestore_client
+from .utils.retry import http_retry
 
 logger = logging.getLogger(__name__)
 
@@ -191,6 +192,7 @@ class ZoneTurfProvider:
         except Exception as e:
             logger.error(f"Failed to write to cache for {doc_id}: {e}")
 
+    @http_retry
     def _resolve_entity_id(self, entity_type: str, name: str) -> str | None:
         """
         Resolves an entity's name to its Zone-Turf ID.
@@ -242,15 +244,6 @@ class ZoneTurfProvider:
                             self._set_id_to_cache(entity_type, name, entity_id)
                             return entity_id
 
-            except httpx.HTTPStatusError as e:
-                # 404 is acceptable if a page doesn't exist (e.g., page 2 for a letter)
-                if e.response.status_code == 404:
-                    logger.debug(
-                        f"Page {page_num} not found for letter '{first_letter}', stopping pagination."
-                    )
-                    break
-                logger.error(f"HTTP error while resolving ID for '{name}' at page {page_num}: {e}")
-                break
             except Exception as e:
                 logger.error(f"An error occurred while resolving ID for '{name}': {e}")
                 return None
@@ -288,6 +281,7 @@ class ZoneTurfProvider:
         logger.warning(f"Unhandled chrono format: {chrono_str}")
         return None
 
+    @http_retry
     def fetch_horse_chrono(self, horse_name: str, known_id: str | None = None) -> Chrono | None:
         logger.debug(f"Fetching horse chrono for '{horse_name}' (ID: {known_id})")
         entity_id = known_id or self._resolve_entity_id("horse", horse_name)
@@ -345,15 +339,13 @@ class ZoneTurfProvider:
 
             return Chrono(**chrono_data)
 
-        except httpx.HTTPStatusError as e:
-            logger.error(f"HTTP error while fetching chrono for '{horse_name}': {e}")
-            return None
         except Exception as e:
             logger.error(
                 f"An error occurred while fetching chrono for '{horse_name}': {e}", exc_info=True
             )
             return None
 
+    @http_retry
     def fetch_jockey_stats(self, jockey_name: str, known_id: str | None = None) -> JEStats | None:
         logger.debug(f"Fetching jockey stats for '{jockey_name}' (ID: {known_id})")
         # For now, we assume ID resolution is not needed for jockeys, or a known_id is passed
@@ -410,9 +402,6 @@ class ZoneTurfProvider:
 
             return JEStats(**stats)
 
-        except httpx.HTTPStatusError as e:
-            logger.error(f"HTTP error while fetching stats for jockey '{jockey_name}': {e}")
-            return None
         except Exception as e:
             logger.error(
                 f"An error occurred while fetching stats for jockey '{jockey_name}': {e}",
@@ -420,6 +409,7 @@ class ZoneTurfProvider:
             )
             return None
 
+    @http_retry
     def fetch_trainer_stats(self, trainer_name: str, known_id: str | None = None) -> JEStats | None:
         logger.debug(f"Fetching trainer stats for '{trainer_name}' (ID: {known_id})")
         entity_id = known_id or self._resolve_entity_id("trainer", trainer_name)
@@ -474,9 +464,6 @@ class ZoneTurfProvider:
 
             return JEStats(**stats)
 
-        except httpx.HTTPStatusError as e:
-            logger.error(f"HTTP error while fetching stats for trainer '{trainer_name}': {e}")
-            return None
         except Exception as e:
             logger.error(
                 f"An error occurred while fetching stats for trainer '{trainer_name}': {e}",

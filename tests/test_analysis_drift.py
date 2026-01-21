@@ -1,118 +1,159 @@
 """
-Test the analysis pipeline's ability to handle H-30/H-5 drift.
+Tests for the analysis pipeline's drift calculation and quality gates.
 """
-
-import json
-from unittest.mock import AsyncMock
-
 import pytest
+from unittest.mock import MagicMock, patch
+from datetime import date, datetime
 
-from hippique_orchestrator import analysis_pipeline
-from hippique_orchestrator.data_contract import Race
-import datetime
+from hippique_orchestrator.analysis_pipeline import run_analysis_for_race
+from hippique_orchestrator.providers.base import Provider
+from hippique_orchestrator.contracts.models import Race, Runner, OddsSnapshot, GPIOutput
 
-# Sample odds data showing a significant drift for horse #5
-H30_RUNNERS = [
-    {"num": 1, "nom": "Horse A", "odds_place": 3.0},
-    {"num": 5, "nom": "Horse B", "odds_place": 8.0},  # Original odds
-    {"num": 8, "nom": "Horse C", "odds_place": 12.0},
-]
+# A concrete, minimal mock provider for testing purposes
+class MockProvider(Provider):
+    def __init__(self):
+        self.mock_data = {}
 
-H5_RUNNERS = [
-    {"num": 1, "nom": "Horse A", "odds_place": 3.2},
-    {"num": 5, "nom": "Horse B", "odds_place": 5.5},  # Odds have steamed (decreased)
-    {"num": 8, "nom": "Horse C", "odds_place": 12.0},
-]
+    @property
+    def name(self) -> str:
+        return "MockProvider"
 
-# Minimal snapshot structure adhering to RaceSnapshotNormalized
-H30_SNAPSHOT = {
-    "race": {"date": "2025-01-01", "race_id": "R1C1", "hippodrome": "TEST_HIPPODROME", "country_code": "FR", "discipline": "Plat"},
-    "runners": H30_RUNNERS,
-    "source_snapshot": "TestH30Provider",
-}
-H5_SNAPSHOT = {
-    "race": {"date": "2025-01-01", "race_id": "R1C1", "hippodrome": "TEST_HIPPODROME", "country_code": "FR", "discipline": "Plat"},
-    "runners": H5_RUNNERS,
-    "source_snapshot": "TestH5Provider",
-}
+    def set_mock_data(self, phase: str, runners: list[Runner], snapshot: OddsSnapshot):
+        self.mock_data[phase] = (runners, snapshot)
 
-# Minimal GPI config
-GPI_CONFIG_YAML = """
-budget: 5
-weights:
-  base: {}
-  horse_stats: {}
-adjustments:
-  chrono: {}
-  drift: {}
-  volatility: {}
-tickets:
-  sp_dutching:
-    budget_ratio: 0.6
-    odds_range: [5.0, 20.0]
-    legs_max: 5
-    legs_min: 2
-    kelly_frac: 0.5
-  exotics: {}
-roi_min_global: 0.05
-roi_min_sp: 0.05
-overround_max_exotics: 1.30
-ev_min_combo: 0.10
-payout_min_combo: 2.0
-"""
+    def fetch_programme(self, for_date: date) -> list[Race]:
+        return []
 
+    def fetch_race_details(self, race: Race, phase: str) -> tuple[list[Runner], OddsSnapshot | None]:
+        return self.mock_data.get(phase, ([], None))
+    
+    # Required abstract methods
+    def get_programme_for_date(self, for_date: date) -> dict:
+        return {}
+    
+    def fetch_race_page_content(self, race_url: str) -> str:
+        return ""
 
-H5_STATS = {
-    "rows": [
-        {"num": 1, "driver_rate": 0.2},
-        {"num": 5, "driver_rate": 0.15},  # Example stat
-        {"num": 8, "driver_rate": 0.1},
-    ]
-}
 
 @pytest.fixture
-def mock_programme_provider(mocker):
-    """Mocks programme_provider.get_race_details to return a complete Race object."""
-    mock_race_object = Race(
-        date=datetime.date(2025, 1, 1),
-        reunion_id=1,
-        race_id="R1C1",
-        course_id=1,
-        hippodrome="TEST_HIPPODROME",
-        country_code="FR",
-        url="http://example.com/race/1",
+def sample_race():
+    """Provides a default Race object for tests."""
+    return Race(
+        race_uid="TEST_R1C1",
+        meeting_ref="TEST_M1",
+        race_number=1,
+        scheduled_time_local=datetime.now(),
+        discipline="Plat",
+        distance_m=2400,
+        runners_count=3
     )
-    mock = mocker.patch(
-        "hippique_orchestrator.analysis_pipeline.programme_provider.get_race_details",
-        return_value=mock_race_object,
-    )
-    return mock
 
+@pytest.fixture
+def sample_runners(sample_race):
+    """Provides a default list of Runner objects."""
+    return [
+        Runner(runner_uid="R1C1-1", race_uid=sample_race.race_uid, program_number=1, name_norm="HORSE A"),
+        Runner(runner_uid="R1C1-2", race_uid=sample_race.race_uid, program_number=2, name_norm="HORSE B"),
+        Runner(runner_uid="R1C1-3", race_uid=sample_race.race_uid, program_number=3, name_norm="HORSE C"),
+    ]
 
-@pytest.mark.asyncio
-async def test_drift_is_detected_and_applied(mocker, mock_programme_provider):
+def test_run_analysis_for_race_calculates_drift(sample_race, sample_runners):
     """
-    Ensures that when an H-5 analysis is run, it finds the H-30 snapshot,
-    loads it, and the final analysis shows a non-stable drift status.
+    Ensures the pipeline correctly calculates drift between H-30 and H-5 snapshots.
     """
-    # 1. Mock GCS client
-    mock_gcs_client = mocker.patch("hippique_orchestrator.analysis_pipeline.gcs_client")
+    # 1. Setup
+    provider = MockProvider()
+    gpi_config = {"budget": 10} # Minimal config
 
-    # Mock file listing to find the H-30 snapshot
-    mock_gcs_client.list_files.return_value = ["data/R1C1/snapshots/20250101_120000_H-30.json"]
-
-    # Mock file reading to return different content based on path
-    def mock_read_file(path):
-        if "_H-30.json" in path:
-            return json.dumps(H30_SNAPSHOT)
-        if "gpi_v52.yml" in path:
-            return GPI_CONFIG_YAML
-        # For the H-5 snapshot itself and stats, return the H-5 data
-        return json.dumps(H5_SNAPSHOT)
-
-    mock_gcs_client.read_file_from_gcs.side_effect = mock_read_file
-
-    mocker.patch(
-        "hippique_orchestrator.analysis_pipeline.source_registry.fetch_stats_for_runner",
-        return_value={"mock_stats": "stats.json"},
+    # H-30 Snapshot
+    h30_snapshot = OddsSnapshot(
+        snapshot_uid="SNAP_H30",
+        race_uid=sample_race.race_uid,
+        source="TestProvider",
+        phase="H30",
+        odds_place={
+            "R1C1-1": 3.0,
+            "R1C1-2": 8.0,
+            "R1C1-3": 12.0
+        }
     )
+    provider.set_mock_data("H30", sample_runners, h30_snapshot)
+
+    # H-5 Snapshot
+    h5_snapshot = OddsSnapshot(
+        snapshot_uid="SNAP_H5",
+        race_uid=sample_race.race_uid,
+        source="TestProvider",
+        phase="H5",
+        odds_place={
+            "R1C1-1": 3.2,  # Drifted
+            "R1C1-2": 5.5,  # Drifted significantly
+            "R1C1-3": 12.0 # Stable
+        }
+    )
+    provider.set_mock_data("H5", sample_runners, h5_snapshot)
+    
+    # Mock quality gate and legacy GPI logic to isolate drift calculation
+    with patch("hippique_orchestrator.analysis_pipeline.is_playable", return_value=(True, [])), \
+         patch("hippique_orchestrator.analysis_pipeline.legacy_gpi_logic", return_value={"gpi_decision": "Play"}):
+        # 2. Execute
+        result: GPIOutput = run_analysis_for_race(sample_race, provider, gpi_config)
+
+    # 3. Assert
+    assert result.playable is True
+    assert result.derived_data is not None
+    assert result.derived_data.drift is not None
+    
+    # Check drift values (floats require approx)
+    assert result.derived_data.drift["R1C1-1"] == pytest.approx(3.2 - 3.0)
+    assert result.derived_data.drift["R1C1-2"] == pytest.approx(5.5 - 8.0)
+    assert result.derived_data.drift["R1C1-3"] == pytest.approx(12.0 - 12.0)
+    assert len(result.derived_data.drift) == 3
+
+
+def test_run_analysis_abstains_if_data_is_missing(sample_race):
+    """
+    Ensures the pipeline abstains when the provider fails to return data.
+    """
+    # 1. Setup
+    provider = MockProvider() # No data is set
+    gpi_config = {}
+
+    # 2. Execute
+    result: GPIOutput = run_analysis_for_race(sample_race, provider, gpi_config)
+
+    # 3. Assert
+    assert result.playable is False
+    assert result.abstention_reasons is not None
+    # We expect the quality gate to be the reason for abstention
+    assert any("no_data_collected" in reason for reason in result.abstention_reasons)
+    assert result.derived_data is None # No data, no drift
+
+
+def test_run_analysis_abstains_if_quality_gate_fails(sample_race, sample_runners):
+    """
+    Ensures the pipeline abstains if the quality gate explicitly fails,
+    even if data is present.
+    """
+    # 1. Setup
+    provider = MockProvider()
+    gpi_config = {}
+    
+    # Provide H5 data, but the quality gate will fail it
+    h5_snapshot = OddsSnapshot(
+        snapshot_uid="SNAP_H5",
+        race_uid=sample_race.race_uid,
+        source="TestProvider",
+        phase="H5",
+        odds_place={"R1C1-1": 3.2}
+    )
+    provider.set_mock_data("H5", sample_runners, h5_snapshot)
+
+    # Mock the quality gate to fail
+    with patch("hippique_orchestrator.analysis_pipeline.is_playable", return_value=(False, ["custom_reason"])):
+        # 2. Execute
+        result: GPIOutput = run_analysis_for_race(sample_race, provider, gpi_config)
+
+    # 3. Assert
+    assert result.playable is False
+    assert result.abstention_reasons == ["custom_reason"]

@@ -1,0 +1,107 @@
+--- a/tests/test_analysis_drift.py
++++ b/tests/test_analysis_drift.py
+@@ -10,25 +10,26 @@
+ 
+ # A concrete, minimal mock provider for testing purposes
+ class MockProvider(Provider):
++    @property
++    def name(self) -> str:
++        return "MockProvider"
++
+     def __init__(self):
+         self.mock_data = {}
+ 
+     def set_mock_data(self, phase: str, runners: list[Runner], snapshot: OddsSnapshot):
+         self.mock_data[phase] = (runners, snapshot)
+ 
++    def fetch_programme(self, for_date: date) -> list[Race]:
++        return []
++
+     def fetch_race_details(self, race: Race, phase: str) -> tuple[list[Runner], OddsSnapshot | None]:
+         return self.mock_data.get(phase, ([], None))
+-    
+-    # Required abstract methods
+-    def get_programme_for_date(self, for_date: date) -> dict:
+-        return {}
+-    
+-    def fetch_race_page_content(self, race_url: str) -> str:
+-        return ""
++
+ 
+ @pytest.fixture
+def sample_race():
+     """Provides a default Race object for tests."""
+     return Race(
+         race_uid="TEST_R1C1",
+-        race_name="Prix d'Exemple",
+-        start_time=datetime.now(),
++        meeting_ref="TEST_M1",
++        scheduled_time_local=datetime.now(),
+         discipline="Plat",
+         race_number=1,
+-        meeting_number=1,
+-        meeting_name="TEST_MEETING",
+-        hippodrome_name="TEST_HIPPODROME",
+-        country_code="FR"
++        distance_m=2400,
++        runners_count=3
+     )
+ 
+ @pytest.fixture
+def sample_runners():
+     """Provides a default list of Runner objects."""
+     return [
+-        Runner(runner_uid="R1C1-1", program_number=1, name="Horse A"),
+-        Runner(runner_uid="R1C1-2", program_number=2, name="Horse B"),
+-        Runner(runner_uid="R1C1-3", program_number=3, name="Horse C"),
++        Runner(runner_uid="R1C1-1", race_uid=sample_race.race_uid, program_number=1, name_norm="HORSE A"),
++        Runner(runner_uid="R1C1-2", race_uid=sample_race.race_uid, program_number=2, name_norm="HORSE B"),
++        Runner(runner_uid="R1C1-3", race_uid=sample_race.race_uid, program_number=3, name_norm="HORSE C"),
+     ]
+ 
+def test_run_analysis_for_race_calculates_drift(sample_race, sample_runners):
+@@ -43,6 +44,7 @@
+         snapshot_uid="SNAP_H30",
+         race_uid=sample_race.race_uid,
+         source="TestProvider",
++        phase="H30",
+         odds_place={
+             "R1C1-1": 3.0,
+             "R1C1-2": 8.0,
+@@ -56,6 +58,7 @@
+         snapshot_uid="SNAP_H5",
+         race_uid=sample_race.race_uid,
+         source="TestProvider",
++        phase="H5",
+         odds_place={
+             "R1C1-1": 3.2,  # Drifted
+             "R1C1-2": 5.5,  # Drifted significantly
+@@ -64,8 +67,9 @@
+     )
+     provider.set_mock_data("H5", sample_runners, h5_snapshot)
+     
+-    # Mock quality gate to always return playable to isolate drift calculation
+-    with patch("hippique_orchestrator.analysis_pipeline.is_playable", return_value=(True, [])):
++    # Mock quality gate and legacy GPI logic to isolate drift calculation
++    with patch("hippique_orchestrator.analysis_pipeline.is_playable", return_value=(True, [])), \
++         patch("hippique_orchestrator.analysis_pipeline.legacy_gpi_logic", return_value={"gpi_decision": "Play"}):
+         # 2. Execute
+         result: GPIOutput = run_analysis_for_race(sample_race, provider, gpi_config)
+ 
+@@ -93,7 +97,7 @@
+     assert result.playable is False
+     assert result.abstention_reasons is not None
+     # We expect the quality gate to be the reason for abstention
+-    assert any("snapshot_quality" in reason for reason in result.abstention_reasons)
++    assert any("no_data_collected" in reason for reason in result.abstention_reasons)
+     assert result.derived_data is None # No data, no drift
+ 
+ 
+@@ -109,6 +113,7 @@
+         snapshot_uid="SNAP_H5",
+         race_uid=sample_race.race_uid,
+         source="TestProvider",
++        phase="H5",
+         odds_place={"R1C1-1": 3.2}
+     )
+ 

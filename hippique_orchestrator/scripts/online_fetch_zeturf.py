@@ -27,7 +27,7 @@ import yaml
 from bs4 import BeautifulSoup
 
 from hippique_orchestrator import config
-from hippique_orchestrator.utils.retry import retry, RetryableParsingError
+from hippique_orchestrator.utils.retry import http_retry as retry_decorator, ParsingError as RetryableParsingError
 
 logger = logging.getLogger(__name__)
 
@@ -550,7 +550,7 @@ def _looks_like_suspicious_html(payload: Any) -> bool:
     return False
 
 
-@retry()
+@retry_decorator
 def _http_get(
     url: str,
     *,

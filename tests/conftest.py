@@ -2,7 +2,10 @@
 conftest.py - Global test configuration and fixtures for pytest.
 """
 
-from datetime import datetime
+from datetime import datetime, date
+from typing import List, Dict, Any
+
+from hippique_orchestrator.data_contract import Programme, Race
 import subprocess
 from pathlib import Path
 from unittest.mock import AsyncMock
@@ -83,11 +86,36 @@ def mock_config_values(mocker):
 
 
 @pytest.fixture(scope="function")
-def client():
+def client(mocker):
     """
     Test client for the FastAPI app. It's function-scoped to ensure
     that mocks applied in one test don't leak into others.
+
+    This fixture also applies a default mock for the plan builder to prevent
+    widespread test failures when the API is called.
     """
+    # Default mock for the plan builder to return one valid race
+    mock_plan_data = [
+        {
+            "race_uid": "TEST_R1C1_UID",
+            "meeting_ref": "TEST_M1",
+            "race_number": 1,
+            "scheduled_time_local": datetime.now(),
+            "discipline": "Plat",
+            "distance_m": 2400,
+            "runners_count": 16,
+            "status": "SCHEDULED",
+            "course_url": "http://example.com/r1c1",
+            "r_label": "R1",
+            "c_label": "C1",
+        }
+    ]
+    mocker.patch(
+        "hippique_orchestrator.service.plan.build_plan_async",
+        new_callable=AsyncMock,
+        return_value=mock_plan_data,
+    )
+
     with TestClient(fastapi_app) as client_instance:
         yield client_instance
 
@@ -114,7 +142,41 @@ def mock_build_plan(mocker):
     mock_plan = mocker.patch(
         "hippique_orchestrator.plan.build_plan_async", new_callable=AsyncMock
     )
-    mock_plan.return_value = []
+    # Define a mock Programme data structure conforming to the Pydantic model
+    mock_programme_data = {
+        "date": date(2025, 1, 1),
+        "races": [
+            {
+                "race_id": "C1",
+                "reunion_id": 1,
+                "course_id": 1,
+                "hippodrome": "Mockdrome",
+                "date": date(2025, 1, 1),
+                "name": "Prix Gemini",
+                "discipline": "Trot Attelé",
+                "url": "http://mock.url/R1C1",
+                "runners": [
+                    {"num": 1, "nom": "Mock Horse A", "odds_win": 2.5, "odds_place": 1.2},
+                    {"num": 2, "nom": "Mock Horse B", "odds_win": 5.0, "odds_place": 1.5},
+                ],
+            },
+            {
+                "race_id": "C2",
+                "reunion_id": 1,
+                "course_id": 2,
+                "hippodrome": "Mockdrome",
+                "date": date(2025, 1, 1),
+                "name": "Prix Agent",
+                "discipline": "Plat",
+                "url": "http://mock.url/R1C2",
+                "runners": [
+                    {"num": 1, "nom": "Mock Horse C", "odds_win": 3.0, "odds_place": 1.3},
+                    {"num": 2, "nom": "Mock Horse D", "odds_win": 6.0, "odds_place": 1.6},
+                ],
+            },
+        ],
+    }
+    mock_plan.return_value = Programme.model_validate(mock_programme_data) # Return validated Programme object
     return mock_plan
 
 

@@ -3,6 +3,8 @@
 import unittest
 from unittest.mock import MagicMock, patch
 import yaml
+import datetime # Added
+from datetime import time # Added
 
 from hippique_orchestrator.source_registry import SourceRegistry
 from hippique_orchestrator.providers.base_provider import (
@@ -22,8 +24,24 @@ class MockFallbackProgrammeProvider(BaseProgrammeProvider):
 
 
 class MockSnapshotProvider(BaseSnapshotProvider):
-    def fetch_snapshot(self, url: str, retries: int = 1) -> dict:
-        return {"snapshot": "data"}
+    def fetch_snapshot(self, meeting_id: str, race_id: str, course_id: str) -> str:
+        return f"<html><body>Mock snapshot for {course_id}</body></html>"
+
+    def parse_snapshot(self, snapshot_content: str) -> dict:
+        return {
+            "metadata": {"source": "mock_snapshot", "content": snapshot_content},
+            "runners": [{"name": "Mock Runner Snap", "odds": "2.0"}],
+        }
+
+    async def fetch_stats_for_runner(
+        self,
+        runner_name: str,
+        discipline: str,
+        runner_data: dict,
+        correlation_id: str | None = None,
+        trace_id: str | None = None,
+    ) -> dict:
+        return {"mock_stat": "snap_value"}
 
 
 class MockBrokenProvider:
@@ -32,11 +50,44 @@ class MockBrokenProvider:
 
 # A mock that implements both capabilities
 class MockDualProvider(BaseProgrammeProvider, BaseSnapshotProvider):
-    def get_programme(self, date_str: str):
-        return {"races": [{"name": "Dual Race"}]}
+    def get_programme(self, date_str: str) -> dict:
+        # Return a dictionary that matches the Programme Pydantic model
+        return {
+            "date": datetime.date(2024, 1, 1),
+            "races": [
+                {
+                    "race_id": "DR1",
+                    "reunion_id": 1,
+                    "course_id": 1,
+                    "hippodrome": "DUAL TRACK",
+                    "date": datetime.date(2024, 1, 1),
+                    "start_time": datetime.time(15, 0),
+                    "name": "Dual Race",
+                    "discipline": "Plat",
+                    "country_code": "FR",
+                    "url": "http://dual.com/dr1",
+                }
+            ],
+        }
 
-    def fetch_snapshot(self, url: str, retries: int = 1) -> dict:
-        return {"snapshot": "dual_data"}
+    def fetch_snapshot(self, meeting_id: str, race_id: str, course_id: str) -> str:
+        return f"<html><body>Mock dual snapshot for {course_id}</body></html>"
+
+    def parse_snapshot(self, snapshot_content: str) -> dict:
+        return {
+            "metadata": {"source": "mock_dual_snapshot", "content": snapshot_content},
+            "runners": [{"name": "Mock Runner Dual", "odds": "3.0"}],
+        }
+
+    async def fetch_stats_for_runner(
+        self,
+        runner_name: str,
+        discipline: str,
+        runner_data: dict,
+        correlation_id: str | None = None,
+        trace_id: str | None = None,
+    ) -> dict:
+        return {"mock_stat": "dual_value"}
 
 
 class TestSourceRegistry(unittest.TestCase):
