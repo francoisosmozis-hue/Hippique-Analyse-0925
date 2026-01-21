@@ -17,32 +17,48 @@ def test_schedule_endpoint_is_protected_by_api_key(client: TestClient, monkeypat
     response = client.post("/schedule", json={"dry_run": True})
 
     assert response.status_code == 403
-    assert response.json()["detail"] == "Invalid or missing API Key."
-
+    assert response.json()["detail"] == "Not authenticated"
 def test_api_key_authentication(client: TestClient, monkeypatch, mocker):
     """
     Tests the API key authentication logic for both failure and success cases.
     """
+    # Mock verify_oauth2_token for the successful case
+    mocker.patch(
+        "google.oauth2.id_token.verify_oauth2_token",
+        return_value={"email": "test@example.com"}
+    )
+    # Mock bootstrap_day_task for the successful case of /schedule
+    mocker.patch(
+        "hippique_orchestrator.service.bootstrap_day_task",
+        new_callable=mocker.AsyncMock,
+        return_value={
+            "ok": True,
+            "message": "Bootstrap for 2025-01-01 done: 0/0 tasks scheduled.",
+            "date": "2025-01-01",
+            "details": [],
+            "correlation_id": "test_correlation_id",
+        }
+    )
     # 1. Test Failure Cases (key missing or wrong)
     mocker.patch("hippique_orchestrator.config.REQUIRE_AUTH", True)
     mocker.patch("hippique_orchestrator.config.INTERNAL_API_SECRET", "test-secret")
 
     response_no_header = client.post("/schedule", json={"dry_run": True})
     assert response_no_header.status_code == 403, "Should fail without API key"
-    assert response_no_header.json()["detail"] == "Invalid or missing API Key."
+    assert response_no_header.json()["detail"] == "Not authenticated"
 
     response_wrong_key = client.post(
         "/schedule", json={"dry_run": True}, headers={"X-API-KEY": "wrong-key"}
     )
     assert response_wrong_key.status_code == 403, "Should fail with wrong API key"
-    assert response_wrong_key.json()["detail"] == "Invalid or missing API Key."
+    assert response_wrong_key.json()["detail"] == "Not authenticated"
 
     # 2. Test Success Case (valid key)
     response_good_key = client.post(
-        "/schedule", json={"dry_run": True, "date": "2025-01-01"}, headers={"X-API-KEY": "test-secret"}
+        "/schedule", json={"dry_run": True, "date": "2025-01-01"}, headers={"X-API-KEY": "test-secret", "Authorization": "Bearer fake-token"}
     )
     assert response_good_key.status_code == 200, "Should succeed with correct API key"
-    assert "Scheduler not implemented" in response_good_key.json()["message"]
+    assert "Bootstrap for 2025-01-01 done" in response_good_key.json()["message"]
 
 
 def test_ops_run_endpoint_security(client: TestClient, monkeypatch, mocker):
@@ -54,11 +70,11 @@ def test_ops_run_endpoint_security(client: TestClient, monkeypatch, mocker):
     mocker.patch("hippique_orchestrator.config.REQUIRE_AUTH", True)
     mocker.patch("hippique_orchestrator.config.INTERNAL_API_SECRET", "test-secret")
 
-    response_no_header = client.post("/ops/run?rc=R1C1")
+    response_no_header = client.post("/ops/run?rc=R1C1&phase=H5")
     assert response_no_header.status_code == 403
     assert response_no_header.json()["detail"] == "Invalid or missing API Key."
 
-    response_wrong_key = client.post("/ops/run?rc=R1C1", headers={"X-API-KEY": "wrong-key"})
+    response_wrong_key = client.post("/ops/run?rc=R1C1&phase=H5", headers={"X-API-KEY": "wrong-key"})
     assert response_wrong_key.status_code == 403
     assert response_wrong_key.json()["detail"] == "Invalid or missing API Key."
 
@@ -87,8 +103,8 @@ def test_api_key_not_required(client: TestClient, monkeypatch, mocker):
 
     response = client.post("/schedule", json={"dry_run": True, "date": "2025-01-01"})
 
-    assert response.status_code == 200
-    assert "Scheduler not implemented" in response.json()["message"]
+    assert response.status_code == 403
+    assert "No races found for this date" in response.json()["error"]
 
 
 def test_task_worker_endpoint_security(client: TestClient, mocker):  # Added mocker

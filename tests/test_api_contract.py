@@ -94,20 +94,20 @@ def test_get_pronostics_api_with_phase_filter(client: TestClient, mocker):
     mocker.patch(
         "hippique_orchestrator.plan.build_plan_async",
         new_callable=AsyncMock,
-        return_value=[
-            {
-                "race_uid": "c1f7178c1a687542fe13434d285038083b8b7077",
-                "meeting_ref": "TEST_M1",
-                "race_number": 1,
-                "scheduled_time_local": datetime.now(),
-                "discipline": "Plat",
-                "distance_m": 2400,
-                "runners_count": 16,
-                "r_label": "R1",
-                "c_label": "C1",
-            }
-        ],
-    )
+                    return_value=[
+                        {
+                            "race_uid": "c1f7178c1a687542fe13434d285038083b8b7077",
+                            "meeting_ref": "TEST_M1",
+                            "race_number": 1,
+                            "scheduled_time_local": datetime.now(),
+                            "discipline": "Plat",
+                            "distance_m": 2400,
+                            "runners_count": 16,
+                            "r_label": "R1",
+                            "c_label": "C1",
+                            "tickets_analysis": {"gpi_decision": "play"},
+                        }
+                    ],    )
     mocker.patch(
         "hippique_orchestrator.firestore_client.get_races_for_date",
         new_callable=AsyncMock,

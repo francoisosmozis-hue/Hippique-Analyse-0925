@@ -8,7 +8,6 @@ import hashlib
 import json
 import os
 import logging
-import inspect
 from datetime import date, datetime, time, timezone
 from zoneinfo import ZoneInfo
 from typing import Any, Optional
@@ -112,10 +111,6 @@ def create_app() -> FastAPI:
         merged_races = []
         if programme and programme.races:
             for race_in_plan in programme.races:
-                # Debug print statement to inspect the model_dump method
-                print(f"Calling model_dump on: {type(race_in_plan)}")
-                print(f"model_dump method: {getattr(race_in_plan, 'model_dump', None)}")
-                print(f"model_dump signature: {inspect.signature(race_in_plan.model_dump)}")
                 fs_race_data = next(
                     (
                         r.to_dict()
@@ -124,7 +119,7 @@ def create_app() -> FastAPI:
                     ),
                     {},
                 )
-                merged_race = {**race_in_plan.model_dump(json_mode=True), **fs_race_data}
+                merged_race = {**race_in_plan.model_dump(mode='json'), **fs_race_data}
                 if phase:
                     if (
                         "gpi_decision" in merged_race
@@ -134,7 +129,7 @@ def create_app() -> FastAPI:
                 else:
                     merged_races.append(merged_race)
 
-        response_content = {"date": date.isoformat(), "races": merged_races}
+        response_content = {"ok": True, "date": date.isoformat(), "races": merged_races}
         response = JSONResponse(content=response_content)
         response.headers["ETag"] = etag
         return response
@@ -145,8 +140,9 @@ def create_app() -> FastAPI:
             date = datetime.now(timezone.utc).date()
         daily_plan = await run_in_threadpool(get_programme_for_date, date)
         if daily_plan:
-            return JSONResponse(content=daily_plan.model_dump(by_alias=True, json_mode=True))
-        return JSONResponse(content={"date": date.isoformat(), "races": []})
+            response_content = {"ok": True, **daily_plan.model_dump(by_alias=True, mode='json')}
+            return JSONResponse(content=response_content)
+        return JSONResponse(content={"ok": True, "date": date.isoformat(), "races": []})
 
     # --- Operational Endpoints ---
     @app.post("/ops/run", tags=["Operational"])
@@ -154,8 +150,8 @@ def create_app() -> FastAPI:
         _require_api_key(request)
         course_url = f"http://example.com/races/{rc}"
         gpi_output = await run_course_analysis_pipeline(course_url, phase)
-        await update_race_document(rc, gpi_output.model_dump(json_mode=True))
-        return {"status": "ok", "rc": rc, "gpi_decision": gpi_output.gpi_decision}
+        await update_race_document(rc, gpi_output.model_dump(mode='json'))
+        return {"ok": True, "status": "ok", "rc": rc, "gpi_decision": gpi_output.gpi_decision}
 
     @app.get("/ops/status", tags=["Operational"])
     async def get_ops_status(request: Request, date: Optional[date] = None):
@@ -163,7 +159,8 @@ def create_app() -> FastAPI:
         if date is None:
             date = datetime.now(timezone.utc).date()
         daily_plan = await run_in_threadpool(get_programme_for_date, date)
-        status_data = await firestore_client.get_processing_status_for_date(date.isoformat(), [r.model_dump(json_mode=True) for r in daily_plan.races] if daily_plan else [])
+        status_data = await firestore_client.get_processing_status_for_date(date.isoformat(), [r.model_dump(mode='json') for r in daily_plan.races] if daily_plan else [])
+        status_data["ok"] = True # Add ok: True to status_data
         return status_data
 
     # --- Debug Endpoints ---
@@ -171,6 +168,7 @@ def create_app() -> FastAPI:
     async def debug_config(request: Request):
         _require_api_key(request)
         return {
+            "ok": True,
             "project_id": PROJECT_ID,
             "location": LOCATION,
             "gcs_bucket_name": BUCKET_NAME,

@@ -79,7 +79,7 @@ def test_debug_config_returns_ok_and_has_expected_keys(client: TestClient):
         assert key in json_response
 
 @patch("hippique_orchestrator.service.firestore_client.get_races_for_date")
-@patch("hippique_orchestrator.programme_provider.get_programme_for_date")
+@patch("hippique_orchestrator.service.get_programme_for_date")
 def test_get_pronostics_api_with_mocked_data(mock_get_programme_for_date, mock_get_races, client: TestClient):
     """
     Tests the /api/pronostics endpoint with mocked data sources to verify
@@ -140,8 +140,7 @@ def test_get_pronostics_api_with_mocked_data(mock_get_programme_for_date, mock_g
     # 3. Assertions
     assert response.status_code == 200
     mock_get_programme_for_date.assert_called_once_with(test_date_obj)
-    mock_get_races.assert_called_once_with(test_date)
-
+    mock_get_races.assert_called_once_with(test_date_obj)
     data = response.json()
     assert "date" in data
     assert "races" in data
