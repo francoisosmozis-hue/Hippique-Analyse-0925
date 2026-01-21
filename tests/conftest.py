@@ -14,7 +14,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 # Import the app and the config module to be mocked
-from hippique_orchestrator.service import app as fastapi_app
+from service_app import create_app
 
 
 @pytest.fixture(scope="session")
@@ -84,6 +84,11 @@ def mock_config_values(mocker):
     # Mock the firestore client at the source to prevent real connections during import
     mocker.patch("google.cloud.firestore.Client", return_value=mocker.MagicMock())
 
+@pytest.fixture(name="oidc_token_header")
+def fixture_oidc_token_header():
+    """Provides a mock OIDC token header for testing authenticated endpoints."""
+    return {"Authorization": "Bearer fake-token"}
+
 
 @pytest.fixture(scope="function")
 def client(mocker):
@@ -116,12 +121,13 @@ def client(mocker):
         return_value=mock_plan_data,
     )
 
-    with TestClient(fastapi_app) as client_instance:
+    app = create_app()
+    with TestClient(app) as client_instance:
         yield client_instance
 
 
 @pytest.fixture
-def disable_auth(mocker):
+def disable_auth(client): # Changed signature to accept client fixture
     """Fixture to disable authentication for specific tests."""
     from hippique_orchestrator.auth import check_api_key  # noqa: PLC0415
 
@@ -130,10 +136,10 @@ def disable_auth(mocker):
         return
 
     # Override the dependency for the duration of the test
-    fastapi_app.dependency_overrides[check_api_key] = override_check_api_key
+    client.app.dependency_overrides[check_api_key] = override_check_api_key # Use client.app
     yield
     # Clean up the override after the test is done
-    fastapi_app.dependency_overrides.clear()
+    client.app.dependency_overrides.clear() # Use client.app
 
 
 @pytest.fixture
@@ -196,7 +202,7 @@ def mock_race_doc(mocker):
 @pytest.fixture
 def app():
     """ASGI app fixture for httpx.ASGITransport tests."""
-    return fastapi_app
+    return create_app()
 
 
 @pytest.fixture

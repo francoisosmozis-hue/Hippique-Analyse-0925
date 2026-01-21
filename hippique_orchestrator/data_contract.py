@@ -10,14 +10,20 @@ Contrats Pydantic utilisés par l'orchestrateur et validés par la suite de test
 from __future__ import annotations
 import re
 
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timezone
 from typing import Any, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator, ValidationInfo
 
 
 class Runner(BaseModel):
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(
+        extra="allow",
+        json_encoders={
+            date: lambda v: v.isoformat(),
+            datetime: lambda v: v.isoformat(),
+        }
+    )
 
     num: int
     nom: str
@@ -49,15 +55,20 @@ class Runner(BaseModel):
 
 
 class Race(BaseModel):
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(
+        extra="allow",
+        json_encoders={
+            date: lambda v: v.isoformat(),
+            datetime: lambda v: v.isoformat(),
+        }
+    )
 
     # Core identifiers
     race_id: str
     reunion_id: int
     course_id: int
 
-    # Core metadata
-    hippodrome: str
+    hippodrome: Optional[str] = None
     date: date
     country_code: str = "FR"
 
@@ -80,13 +91,7 @@ class Race(BaseModel):
             raise ValueError("race_id cannot be empty")
         return v
 
-    @field_validator("hippodrome")
-    @classmethod
-    def _hippodrome_non_empty(cls, v: str) -> str:
-        v = (v or "").strip()
-        if not v:
-            raise ValueError("hippodrome cannot be empty")
-        return v
+
 
     @field_validator("start_time", mode="before")
     @classmethod
@@ -150,14 +155,26 @@ class Race(BaseModel):
 
 
 class Programme(BaseModel):
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(
+        extra="allow",
+        json_encoders={
+            date: lambda v: v.isoformat(),
+            datetime: lambda v: v.isoformat(),
+        }
+    )
 
     date: date
     races: List[Race] = Field(default_factory=list)
 
 
 class Meeting(BaseModel):
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(
+        extra="allow",
+        json_encoders={
+            date: lambda v: v.isoformat(),
+            datetime: lambda v: v.isoformat(),
+        }
+    )
 
     hippodrome: str
     date: date
@@ -210,4 +227,4 @@ class RaceSnapshot(BaseModel):
             reason = f"{complete_odds}/{total} runners with complete odds"
             quality = QualityReport(status=status, score=score, reason=reason)
 
-        return cls(race=race, provider=provider, fetched_at=datetime.utcnow(), quality=quality)
+        return cls(race=race, provider=provider, fetched_at=datetime.now(timezone.utc), quality=quality)

@@ -111,11 +111,11 @@ async def get_races_for_date(date_str: str) -> list[firestore.DocumentSnapshot]:
     try:
         races_ref = db_client.collection(config.FIRESTORE_COLLECTION)
         # Firestore __name__ queries require this format
-        query = races_ref.order_by("__name__").start_at([date_str]).end_at([date_str + "\uf8ff"])
+        query = races_ref.order_by("__name__").start_at([date_str.isoformat()]).end_at([date_str.isoformat() + "\uf8ff"])
 
         logger.debug(
             "Executing Firestore query.",
-            extra={"date_queried": date_str, "collection": config.FIRESTORE_COLLECTION, "query_start": date_str, "query_end": date_str + "\uf8ff"}
+            extra={"date_queried": date_str.isoformat(), "collection": config.FIRESTORE_COLLECTION, "query_start": date_str.isoformat(), "query_end": date_str.isoformat() + "\uf8ff"}
         )
 
         # Iterate through the stream explicitly to log yielded documents
@@ -130,7 +130,7 @@ async def get_races_for_date(date_str: str) -> list[firestore.DocumentSnapshot]:
         if not docs:
             logger.warning(
                 "No documents found for date query.",
-                extra={"date_queried": date_str, "collection": config.FIRESTORE_COLLECTION, "query_start": date_str, "query_end": date_str + "\uf8ff"}
+                extra={"date_queried": date_str.isoformat(), "collection": config.FIRESTORE_COLLECTION, "query_start": date_str.isoformat(), "query_end": date_str.isoformat() + "\uf8ff"}
             )
         else:
             logger.debug(
