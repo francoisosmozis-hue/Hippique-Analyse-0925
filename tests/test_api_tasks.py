@@ -154,11 +154,44 @@ async def test_snapshot_9h_task_with_specific_date_and_urls(
 
 
 # ============================================
+
+
 # /tasks/run-phase Tests
+
+
 # ============================================
 
 
+
+
+
+def test_tasks_reachability(client: TestClient):
+
+
+    """
+
+
+    Temporary test to check if /tasks endpoints are reachable.
+
+
+    """
+
+
+    response = client.get("/tasks/test-reachability")
+
+
+    assert response.status_code == 200
+
+
+    assert response.json() == {"message": "Reached"}
+
+
+
+
+
 @pytest.mark.asyncio
+
+
 async def test_run_phase_task_success(client: TestClient, mock_dependencies, mocker, oidc_token_header):
     """
     Test successful run-phase task.

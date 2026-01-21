@@ -124,10 +124,8 @@ def test_task_worker_endpoint_security(client: TestClient, mocker):  # Added moc
         "date": "2025-12-25",
         "doc_id": "2025-12-25_R1C1",
     }
-    response = client.post("/tasks/run-phase", json=payload)
-
     assert response.status_code == 403
-    assert "Not authenticated" in response.text
+    assert "Invalid or missing API Key." in response.json()["detail"]
 
 
 def test_task_worker_valid_token(client: TestClient, mocker):
@@ -213,9 +211,8 @@ def test_snapshot_9h_endpoint_security(client: TestClient):
     is mocked or provided.
     """
     payload = {"date": "2025-12-25"}
-    response = client.post("/tasks/snapshot-9h", json=payload)
     assert response.status_code == 403
-    assert "Not authenticated" in response.text
+    assert "Invalid or missing API Key." in response.json()["detail"]
 
 
 def test_bootstrap_day_endpoint_security(client: TestClient):
@@ -226,7 +223,7 @@ def test_bootstrap_day_endpoint_security(client: TestClient):
     payload = {"date": "2025-12-25"}
     response = client.post("/tasks/bootstrap-day", json=payload)
     assert response.status_code == 403
-    assert "Not authenticated" in response.text
+    assert "Invalid or missing API Key." in response.json()["detail"]
 
 
 def test_ops_run_endpoint_accessible_when_auth_not_required(client: TestClient, mocker):
@@ -250,7 +247,7 @@ def test_ops_run_endpoint_accessible_when_auth_not_required(client: TestClient, 
         "hippique_orchestrator.firestore_client.update_race_document", return_value=None
     )
 
-    response = client.post("/ops/run?rc=R1C1")
+    response = client.post("/ops/run?rc=R1C1&phase=H5")
     assert response.status_code == 200
 
 

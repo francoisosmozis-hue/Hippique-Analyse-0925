@@ -18,11 +18,15 @@ from hippique_orchestrator.snapshot_manager import (
     write_snapshot_for_day_async,  # Added this import
 )
 
-router = APIRouter(prefix="/tasks", tags=["Tasks"])
+router = APIRouter(tags=["Tasks"])
 
 logger = get_logger(__name__)
 
 OIDC_TOKEN_DEPENDENCY = Depends(verify_oidc_token)
+
+@router.get("/test-reachability")
+async def test_reachability():
+    return {"message": "Reached"}
 
 # ... (rest of the file remains the same until run_phase_task)
 
