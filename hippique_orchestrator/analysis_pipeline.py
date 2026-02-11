@@ -72,6 +72,7 @@ async def _run_gpi_pipeline(
 
     calibration_content = gcs_client.read_file_from_gcs("config/payout_calibration.yaml")
     calibration_data = yaml.safe_load(calibration_content) if calibration_content else {}
+    gpi_config["payout_calibration"] = calibration_data
 
     # Enrich the snapshot with stats using SourceRegistry
     # Assuming snapshot_data can be converted to RaceSnapshotNormalized for enrichment
