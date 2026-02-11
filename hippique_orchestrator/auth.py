@@ -2,8 +2,7 @@
 src/auth.py - API Key Authentication
 """
 
-from __future__ import annotations
-
+import logging
 from typing import Any
 
 from fastapi import HTTPException, Request, Security
@@ -12,6 +11,8 @@ from google.auth.transport import requests
 from google.oauth2 import id_token
 
 from hippique_orchestrator import config
+
+logger = logging.getLogger(__name__)
 
 api_key_header_scheme = APIKeyHeader(name="X-API-KEY", auto_error=False)
 oidc_token_scheme = APIKeyHeader(
@@ -28,9 +29,14 @@ async def check_api_key(api_key_header: str | None = Security(api_key_header_sch
 
     if not config.INTERNAL_API_SECRET:
         # This is a server misconfiguration, should not happen in prod
+        logger.error("Internal API secret not configured on server.")
         raise HTTPException(status_code=500, detail="Internal API secret not configured on server.")
+    
+    logger.debug(f"API Key Header: '{api_key_header}'")
+    logger.debug(f"Internal API Secret (configured): '{config.INTERNAL_API_SECRET}'")
 
     if api_key_header is None or api_key_header != config.INTERNAL_API_SECRET:
+        logger.warning(f"Invalid or missing API Key. Provided: '{api_key_header}', Expected: '****{config.INTERNAL_API_SECRET[-4:]}'")
         raise HTTPException(status_code=403, detail="Invalid or missing API Key.")
     return True
 
