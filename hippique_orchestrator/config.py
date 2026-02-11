@@ -27,12 +27,18 @@ MAX_CONCURRENT_SNAPSHOT_TASKS = int(os.getenv("MAX_CONCURRENT_SNAPSHOT_TASKS", "
 GCS_ENABLED = os.getenv("GCS_ENABLED", "False").lower() in ("true", "1", "t")
 
 # Secret key for internal API authentication
-INTERNAL_API_SECRET = os.getenv("INTERNAL_API_SECRET")
+_secret_path = "/run/secrets/hippique-internal-api-secret-v1"
+if os.path.exists(_secret_path):
+    with open(_secret_path, "r") as f:
+        INTERNAL_API_SECRET = f.read().strip()
+else:
+    INTERNAL_API_SECRET = os.getenv("INTERNAL_API_SECRET")
 
 # --- Variables manquantes ajoutées ---
-REQUIRE_AUTH = True # Hardcode for debugging
+# Determine if authentication is required based on the environment
+REQUIRE_AUTH = os.getenv("ENV_NAME") == "production"
 BUDGET_CAP_EUR = float(os.getenv("BUDGET_CAP_EUR", "5.0"))
-FIRESTORE_COLLECTION = os.getenv("FIRESTORE_COLLECTION", "races-dev")
+FIRESTORE_COLLECTION = os.getenv("FIRESTORE_COLLECTION", "races")
 
 # Task Scheduling Offsets
 h30_offset = timedelta(minutes=30)
