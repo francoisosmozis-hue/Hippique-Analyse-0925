@@ -135,8 +135,8 @@ async def _fetch_and_save_snapshot(
         "Snapshot fetched successfully.",
         extra={
             **log_extra,
-            "race_name": snapshot_data.race.nom, # Access race.nom from RaceSnapshotNormalized "num_runners": len(snapshot_data.runners), # Access runners from RaceSnapshotNormalized
-            "num_runners": len(snapshot_data.get("runners", [])),
+            "race_name": snapshot_data.race.nom, # Access race.nom from RaceSnapshotNormalized
+            "num_runners": len(snapshot_data.runners), # Access runners from RaceSnapshotNormalized
         },
     )
 

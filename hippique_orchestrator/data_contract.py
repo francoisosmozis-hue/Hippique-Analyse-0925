@@ -228,3 +228,19 @@ class RaceSnapshot(BaseModel):
             quality = QualityReport(status=status, score=score, reason=reason)
 
         return cls(race=race, provider=provider, fetched_at=datetime.now(timezone.utc), quality=quality)
+class RaceSnapshotNormalized(BaseModel):
+    # This class should mirror the structure of a normalized snapshot
+    # for race and runner data.
+    # It's intended to be a robust, validated representation of the scraped data.
+    race: Race
+    runners: List[Runner]
+    source_snapshot: str  # e.g., "Boturfers", "Zeturf"
+    fetched_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    model_config = ConfigDict(
+        extra="allow",
+        json_encoders={
+            date: lambda v: v.isoformat(),
+            datetime: lambda v: v.isoformat(),
+        }
+    )
