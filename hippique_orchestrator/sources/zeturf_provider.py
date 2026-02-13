@@ -30,6 +30,8 @@ _SUSPICIOUS_HTML_PATTERNS = ("too many requests", "captcha", "access denied", "s
 class ZeturfProvider(SourceProvider):
     """Provides racing data from ZEturf (primarily race snapshots, used as fallback)."""
 
+    name = "Zeturf"
+
     def __init__(self):
         self._session = requests.Session()
         self._session.headers.update(DEFAULT_HEADERS)
