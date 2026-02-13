@@ -197,3 +197,6 @@ def create_app() -> FastAPI:
         return {"ok": True, "message": "Pipeline runner not implemented"}
 
     return app
+
+
+app = create_app()
