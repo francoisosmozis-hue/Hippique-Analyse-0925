@@ -1,51 +1,6 @@
 # hippique_orchestrator/config.py
 import os
 from datetime import timedelta
-from typing import List, Dict, Any
-from pathlib import Path
-import yaml
-
-# --- YAML Configuration Loading ---
-
-_config = None
-CONFIG_PATH = Path(os.getenv("GPI_CONFIG_PATH", "config/gpi_v52.yml"))
-
-def load_config() -> Dict[str, Any]:
-    """
-    Loads, caches, and returns the application configuration from the YAML file.
-    """
-    global _config
-    if _config is None:
-        if not CONFIG_PATH.exists():
-            raise FileNotFoundError(f"Configuration file not found at {CONFIG_PATH.resolve()}")
-        with open(CONFIG_PATH, "r") as f:
-            _config = yaml.safe_load(f)
-            if not _config:
-                raise ValueError("Configuration file is empty or invalid.")
-    return _config
-
-
-def get_provider_strategy() -> List[str]:
-    """
-    Returns the configured provider strategy from the YAML config.
-    e.g., ['boturfers', 'filesystem']
-    """
-    config = load_config()
-    strategy = config.get("providers", {}).get("strategy", [])
-    if not isinstance(strategy, list):
-        raise TypeError("Provider strategy in config must be a list.")
-    return strategy
-
-
-def get_provider_config(name: str) -> Dict[str, Any]:
-    """
-    Returns the specific configuration for a given provider.
-    """
-    config = load_config()
-    return config.get("providers", {}).get(name, {})
-
-
-# --- Environment Variable Configuration ---
 
 # GCP Configuration
 PROJECT_ID = os.getenv("PROJECT_ID")
@@ -72,19 +27,19 @@ MAX_CONCURRENT_SNAPSHOT_TASKS = int(os.getenv("MAX_CONCURRENT_SNAPSHOT_TASKS", "
 GCS_ENABLED = os.getenv("GCS_ENABLED", "False").lower() in ("true", "1", "t")
 
 # Secret key for internal API authentication
-INTERNAL_API_SECRET = os.getenv("INTERNAL_API_SECRET")
+_secret_path = "/run/secrets/hippique-internal-api-secret-v1"
+if os.path.exists(_secret_path):
+    with open(_secret_path, "r") as f:
+        INTERNAL_API_SECRET = f.read().strip()
+else:
+    INTERNAL_API_SECRET = os.getenv("INTERNAL_API_SECRET")
 
 # --- Variables manquantes ajoutées ---
-REQUIRE_AUTH = os.getenv("AUTH_REQUIRED", "true").lower() in ("true", "1", "t")
+# Determine if authentication is required based on the environment
+REQUIRE_AUTH = os.getenv("ENV_NAME") == "production"
 BUDGET_CAP_EUR = float(os.getenv("BUDGET_CAP_EUR", "5.0"))
-FIRESTORE_COLLECTION = os.getenv("FIRESTORE_COLLECTION", "races-dev")
+FIRESTORE_COLLECTION = os.getenv("FIRESTORE_COLLECTION", "races")
 
 # Task Scheduling Offsets
 h30_offset = timedelta(minutes=30)
 h5_offset = timedelta(minutes=5)
-
-
-# Retry/Fallback Configuration for HTTP requests
-RETRIES = int(os.getenv("RETRIES", "2"))  # 2 retries = 3 total attempts
-TIMEOUT_S = int(os.getenv("TIMEOUT_S", "8"))
-BACKOFF_BASE_S = float(os.getenv("BACKOFF_BASE_S", "1.0"))

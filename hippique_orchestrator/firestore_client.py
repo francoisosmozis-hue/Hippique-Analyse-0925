@@ -119,10 +119,9 @@ async def get_races_for_date(date_str: str) -> list[firestore.DocumentSnapshot]:
         )
 
         # Iterate through the stream explicitly to log yielded documents
-        docs = []
-        async for doc in query.stream():
-            docs.append(doc)
-            logger.debug(f"Document yielded from stream: {doc.id}")
+        races = {}
+        for doc in await query.get():
+            races[doc.id] = doc.to_dict()
 
         logger.debug(f"Firestore query stream finished. Collected {len(docs)} documents.")
 
