@@ -203,7 +203,7 @@ async def run_analysis_for_phase(
             return analysis_content
 
         # For H5 and H30 phases, continue with full analysis
-        snapshot_data, gcs_path = await _fetch_and_save_snapshot(
+        snapshot_data_dict, gcs_path = await _fetch_and_save_snapshot(
             course_url, race_doc_id, phase, log_extra
         )
         if not snapshot_data:
