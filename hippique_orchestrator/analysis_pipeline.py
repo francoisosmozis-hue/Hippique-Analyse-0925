@@ -236,7 +236,7 @@ async def run_analysis_for_phase(
 
         _enrich_snapshot(snapshot_data_dict)
 
-        tickets_analysis = await _run_gpi_pipeline(snapshot_data, gcs_path, race_doc_id, phase, log_extra)
+        tickets_analysis = await _run_gpi_pipeline(snapshot_data_dict, gcs_path, race_doc_id, phase, log_extra)
 
         analysis_content["tickets_analysis"] = tickets_analysis
         gpi_decision = tickets_analysis.get("gpi_decision", "error_in_analysis")
