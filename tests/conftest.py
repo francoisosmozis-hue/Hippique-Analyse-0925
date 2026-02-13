@@ -43,6 +43,21 @@ def mock_network_calls(session_mocker):
     mock_async_client.get.return_value = mock_httpx_response
     session_mocker.patch("httpx.AsyncClient", return_value=mock_async_client)
 
+
+    @pytest.fixture
+    def mock_boto3_client():
+        """Mocks the boto3 client to avoid actual AWS calls."""
+        with patch("boto3.client") as mock_client:
+            mock_s3_instance = MagicMock()
+            mock_client.return_value = mock_s3_instance
+
+            # Mock the specific get_object call
+            mock_s3_instance.get_object.return_value = {
+                'Body': MagicMock(read=lambda: b'{"key": "value"}')
+            }
+            yield mock_client
+
+
     # --- Legacy mock for 'requests' library ---
     mock_requests_response = session_mocker.Mock()
     mock_requests_response.content = html_content

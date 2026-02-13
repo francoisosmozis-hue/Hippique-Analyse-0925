@@ -10,7 +10,7 @@ from typing import Any
 
 import yaml
 
-from . import config, data_source, firestore_client, gcs_client
+from . import config, firestore_client, gcs_client
 from .analysis_utils import (
     calculate_volatility,
     identify_outsider_reparable,
@@ -79,13 +79,13 @@ async def _run_gpi_pipeline(
     # Note: For simplicity, converting dict to RaceSnapshotNormalized here.
     # A more robust solution might involve proper data modeling upstream.
     snapshot_normalized = RaceSnapshotNormalized.model_validate(snapshot_data)
-    
+
     enriched_snapshot = await source_registry.enrich_snapshot_with_stats(
         snapshot=snapshot_normalized,
         correlation_id=log_extra.get("correlation_id"),
         trace_id=log_extra.get("trace_id"),
     )
-    
+
     # Convert back to dict for pipeline processing
     # Extract only the stats into je_stats dictionary for backward compatibility
     gpi_config["je_stats"] = {
@@ -127,7 +127,7 @@ async def _fetch_and_save_snapshot(
 ) -> tuple[dict[str, Any] | None, str | None]:
     """Fetches race details and saves the snapshot to GCS."""
     logger.info("Fetching race details from data source.", extra=log_extra)
-    snapshot_data = await data_source.fetch_race_details(course_url)
+    snapshot_data = await source_registry.get_snapshot(course_url, date=log_extra["date"], phase=phase, correlation_id=log_extra["correlation_id"], trace_id=log_extra["trace_id"])
     if not snapshot_data or not snapshot_data.get("runners"):
         return None, None
 
@@ -135,7 +135,7 @@ async def _fetch_and_save_snapshot(
         "Snapshot fetched successfully.",
         extra={
             **log_extra,
-            "race_name": snapshot_data.get("race_name"),
+            "race_name": snapshot_data.race.nom, # Access race.nom from RaceSnapshotNormalized "num_runners": len(snapshot_data.runners), # Access runners from RaceSnapshotNormalized
             "num_runners": len(snapshot_data.get("runners", [])),
         },
     )
@@ -143,10 +143,10 @@ async def _fetch_and_save_snapshot(
     snapshot_id = f"{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}_{phase}"
     gcs_path = f"data/{race_doc_id}/snapshots/{snapshot_id}.json"
 
-    gcs_client.save_json_to_gcs(gcs_path, snapshot_data)
+    gcs_client.save_json_to_gcs(gcs_path, snapshot_data.model_dump_json()) # Save Pydantic model as JSON string
     logger.info(f"Snapshot saved to GCS at {gcs_path}", extra=log_extra)
 
-    return snapshot_data, gcs_path
+    return snapshot_data.model_dump(), gcs_path # Return dict version of snapshot_data
 
 
 async def run_analysis_for_phase(
@@ -186,7 +186,7 @@ async def run_analysis_for_phase(
     try:
         # H9 phase is snapshot-only
         if phase == "H9":
-            snapshot_data, gcs_path = await _fetch_and_save_snapshot(
+            snapshot_data_dict, gcs_path = await _fetch_and_save_snapshot(
                 course_url, race_doc_id, phase, log_extra
             )
             analysis_content.update(
@@ -234,7 +234,7 @@ async def run_analysis_for_phase(
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
 
-        _enrich_snapshot(snapshot_data)
+        _enrich_snapshot(snapshot_data_dict)
 
         tickets_analysis = await _run_gpi_pipeline(snapshot_data, gcs_path, race_doc_id, phase, log_extra)
 
