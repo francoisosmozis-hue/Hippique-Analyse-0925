@@ -25,7 +25,6 @@ class ZeturfProvider(BaseProvider):
     def get_races_for_date(self, target_date: date) -> List[RaceProgram]:
         """
         Fetches the race program for a specific date from Zeturf.
-        
         This functionality is not present in the original `zoneturf_client.py`.
         """
         logger.warning(

@@ -12,6 +12,8 @@ from datetime import date, datetime, time, timezone
 from zoneinfo import ZoneInfo
 from typing import Any, Optional
 
+from fastapi.middleware.cors import CORSMiddleware
+
 from fastapi import FastAPI, HTTPException, Request, Response, status
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from starlette.concurrency import run_in_threadpool
@@ -59,6 +61,19 @@ app = FastAPI(
 )
 
 app.include_router(tasks_router, prefix="/tasks")
+
+from fastapi.middleware.cors import CORSMiddleware
+
+# Configure CORS
+origins = ["*"]  # Allow all origins for now, restrict in production
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # --- Root and UI Endpoints ---
 @app.get("/", include_in_schema=False)
@@ -180,9 +195,9 @@ async def debug_config(request: Request):
 
 # Legacy stubs (for compatibility)
 @app.post("/schedule", include_in_schema=False)
-async def legacy_schedule_stub(request: Request, body: BootstrapDayRequest, token_claims: dict = OIDC_TOKEN_DEPENDENCY):
+async def legacy_schedule_stub(request: Request, body: BootstrapDayRequest):
     _require_api_key(request)
-    return await bootstrap_day_task(request, body, token_claims)
+    return await bootstrap_day_task(request, body)
 
 @app.post("/analyse", include_in_schema=False)
 async def legacy_analyse_stub(request: Request):

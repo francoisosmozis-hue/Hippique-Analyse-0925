@@ -1,1 +1,65 @@
-<html><head><title>Hippique Orchestrator - Pronostics</title></head><body><table id='races-table'></table></body></html>
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hippique Orchestrator - Pronostics</title>
+    <style>
+        body { font-family: sans-serif; margin: 2em; background-color: #f4f4f9; }
+        h1 { color: #333; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { padding: 12px; border: 1px solid #ddd; text-align: left; }
+        th { background-color: #4CAF50; color: white; }
+        tr:nth-child(even) { background-color: #f2f2f2; }
+        .race-header { background-color: #e8e8e8; font-weight: bold; }
+        .runner-row td { padding-left: 30px; }
+    </style>
+</head>
+<body>
+    <h1>Pronostics du Jour</h1>
+    <div id="races-container">
+        <p>Chargement des pronostics...</p>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const today = new Date().toISOString().split('T')[0];
+            fetch(`/api/pronostics?date=${today}`)
+                .then(response => response.json())
+                .then(data => {
+                    const container = document.getElementById('races-container');
+                    if (data && data.races && data.races.length > 0) {
+                        let html = '<table>';
+                        html += '<tr><th>Course</th><th>Heure</th><th>Discipline</th><th>Gagnant (Cote)</th><th>Placé (Cote)</th></tr>';
+
+                        data.races.forEach(race => {
+                            html += `<tr class="race-header"><td colspan="5">${race.name} - ${race.hippodrome || 'N/A'}</td></tr>`;
+                            if (race.runners && race.runners.length > 0) {
+                                race.runners.forEach(runner => {
+                                    html += `<tr class="runner-row">`;
+                                    html += `<td>${runner.nom} (#${runner.num})</td>`;
+                                    html += `<td>${race.start_time ? new Date(race.start_time).toLocaleTimeString() : 'N/A'}</td>`;
+                                    html += `<td>${race.discipline || 'N/A'}</td>`;
+                                    html += `<td>${runner.odds_win || 'N/A'}</td>`;
+                                    html += `<td>${runner.odds_place || 'N/A'}</td>`;
+                                    html += `</tr>`;
+                                });
+                            } else {
+                                html += '<tr><td colspan="5">Aucun partant pour cette course.</td></tr>';
+                            }
+                        });
+                        html += '</table>';
+                        container.innerHTML = html;
+                    } else {
+                        container.innerHTML = '<p>Aucune course ou pronostic disponible pour aujourd\'hui.</p>';
+                    }
+                })
+                .catch(error => {
+                    console.error('Erreur lors de la récupération des pronostics:', error);
+                    const container = document.getElementById('races-container');
+                    container.innerHTML = '<p>Une erreur est survenue lors du chargement des pronostics.</p>';
+                });
+        });
+    </script>
+</body>
+</html>

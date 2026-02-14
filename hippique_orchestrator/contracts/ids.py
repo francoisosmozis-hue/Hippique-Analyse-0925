@@ -6,32 +6,7 @@ import hashlib
 import re
 import unicodedata
 
-def normalize_name(name: str) -> str:
-    """
-    Normalizes a name for ID generation:
-    - Uppercase
-    - Remove accents
-    - Replace non-alphanumeric with a single space
-    - Strip leading/trailing spaces
-    """
-    if not name:
-        return ""
-    
-    # NFD normalization splits characters and their accents
-    nfkd_form = unicodedata.normalize('NFD', name)
-    # Filter out non-spacing marks (the accents)
-    only_ascii = "".join([c for c in nfkd_form if not unicodedata.combining(c)])
-    
-    # To uppercase
-    upper_case = only_ascii.upper()
-    
-    # Replace punctuation/multiple spaces with a single space
-    # and remove any character that is not a letter, a number or a space
-    no_punct = re.sub(r'[^A-Z0-9 ]+', '', upper_case)
-    # Collapse multiple spaces into one
-    single_space = re.sub(r'\s+', ' ', no_punct)
-    
-    return single_space.strip()
+
 
 def make_race_uid(
     race_date: str, 
@@ -62,8 +37,7 @@ def normalize_name(name: str) -> str:
     """Normalize horse/race strings into a stable, readable identifier.
     Expected by tests: preserve word boundaries (CHEVAL UN), uppercase, strip accents.
     """
-    import unicodedata
-    if name is None:
+    if not name:
         return ""
     s = str(name).strip()
 

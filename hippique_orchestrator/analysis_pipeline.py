@@ -206,7 +206,7 @@ async def run_analysis_for_phase(
         snapshot_data_dict, gcs_path = await _fetch_and_save_snapshot(
             course_url, race_doc_id, phase, log_extra
         )
-        if not snapshot_data:
+        if not snapshot_data_dict:
             reason = "NO_DATA: snapshot missing or runners empty"
             logger.warning(
                 "Snapshot invalid or runners empty -> abstention.",

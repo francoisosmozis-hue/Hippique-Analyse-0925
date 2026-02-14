@@ -5,6 +5,8 @@ from freezegun import freeze_time
 from datetime import date, datetime
 from typing import List, Optional
 
+from hippique_orchestrator.data_contract import Race as RealRace
+
 from httpx import ASGITransport
 from unittest.mock import AsyncMock
 

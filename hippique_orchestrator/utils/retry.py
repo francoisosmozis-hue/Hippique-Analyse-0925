@@ -11,14 +11,14 @@ from tenacity.wait import wait_base
 # --- Configuration from Environment Variables ---
 
 # Total number of attempts (1 initial + RETRIES)
-RETRIES = int(os.getenv("RETRIES", 2))
+RETRIES = int(os.getenv("RETRIES", "2"))
 TOTAL_ATTEMPTS = RETRIES + 1
 
 # Request timeout in seconds
-TIMEOUT_S = int(os.getenv("TIMEOUT_S", 8))
+TIMEOUT_S = int(os.getenv("TIMEOUT_S", "8"))
 
 # Base for exponential backoff in seconds
-BACKOFF_BASE_S = float(os.getenv("BACKOFF_BASE_S", 1.0))
+BACKOFF_BASE_S = float(os.getenv("BACKOFF_BASE_S", "1.0"))
 
 # --- Custom Exception Classes for Error Classification ---
 

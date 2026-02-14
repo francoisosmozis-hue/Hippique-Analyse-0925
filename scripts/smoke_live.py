@@ -4,14 +4,17 @@ import os
 import sys
 import logging
 from datetime import date
-
-# Add project root to path
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-sys.path.insert(0, project_root)
+from typing import List # Added for List type hint
 
 from hippique_orchestrator.analysis_pipeline import run_analysis_for_race
 from hippique_orchestrator.providers.base import Provider
 from hippique_orchestrator.providers.aggregate import AggregateProvider
+from hippique_orchestrator.providers.boturfers_provider import BoturfersProvider
+from tests.providers.file_based_provider import FileBasedProvider
+
+# Add project root to path
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, project_root)
 
 # --- Guardrails ---
 if os.getenv('CI'):
@@ -27,17 +30,13 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 TARGET_DATE = date.fromisoformat(os.getenv('DATE', date.today().isoformat()))
 PROVIDER_NAME = os.getenv('PROVIDER', 'file').lower() # Default to file for safety
-N_RACES = int(os.getenv('N_RACES', 3))
-DUMMY_GPI_CONFIG = {"budget": 100, "roi_min_global": 0.05} 
+N_RACES = int(os.getenv('N_RACES', '3'))
+DUMMY_GPI_CONFIG = {"budget": 100, "roi_min_global": 0.05}
 
 # --- Provider Factory ---
 def get_providers(name: str) -> List[Provider]:
     if name == 'boturfers':
-        from hippique_orchestrator.providers.boturfers_provider import BoturfersProvider
         return [BoturfersProvider()]
-    elif name == 'file':
-        from tests.providers.file_based_provider import FileBasedProvider
-        return [FileBasedProvider()]
     else:
         raise ValueError(f"Unknown provider: {name}")
 
@@ -70,7 +69,7 @@ def main():
             if not result.race_uid:
                 logging.error("FAIL: race_uid is empty.")
                 failures += 1
-            
+
             if not result.playable and not result.abstention_reasons:
                 logging.error("FAIL: Abstention without explicit reason.")
                 failures += 1

@@ -187,7 +187,6 @@ ENV_VARS+=",LOCATION=$REGION"
 ENV_VARS+=",BUCKET_NAME=${GCS_BUCKET:-}"
 ENV_VARS+=",TASK_QUEUE=${QUEUE_ID:-hippique-tasks-v2}"
 ENV_VARS+=",FIRESTORE_COLLECTION=${FIRESTORE_COLLECTION:-races-prod}"
-ENV_VARS+=",INTERNAL_API_SECRET=${INTERNAL_API_SECRET}"
 
 # Déployer le service en mode public avec la clé secrète
 gcloud run deploy "$SERVICE_NAME" \

@@ -124,6 +124,7 @@ def test_task_worker_endpoint_security(client: TestClient, mocker):  # Added moc
         "date": "2025-12-25",
         "doc_id": "2025-12-25_R1C1",
     }
+    response = client.post("/tasks/run-phase", json=payload)
     assert response.status_code == 403
     assert "Invalid or missing API Key." in response.json()["detail"]
 
@@ -206,11 +207,8 @@ def test_task_worker_invalid_token_scheme(client: TestClient, mocker):  # Added 
 
 
 def test_snapshot_9h_endpoint_security(client: TestClient):
-    """
-    Tests that POST /tasks/snapshot-9h returns 403 Forbidden when no OIDC token
-    is mocked or provided.
-    """
     payload = {"date": "2025-12-25"}
+    response = client.post("/tasks/snapshot-9h", json=payload)
     assert response.status_code == 403
     assert "Invalid or missing API Key." in response.json()["detail"]
 

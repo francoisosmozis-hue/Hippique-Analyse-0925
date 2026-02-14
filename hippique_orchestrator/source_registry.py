@@ -29,7 +29,7 @@ class SourceRegistry:
 
     def __new__(cls, config_path: str = "config/providers.yaml"):
         if cls._instance is None:
-            cls._instance = super(SourceRegistry, cls).__new__(cls)
+            cls._instance = super().__new__(cls)
             cls._instance._initialized = False
         return cls._instance
 
